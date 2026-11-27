@@ -19258,3 +19258,1361 @@ GRANT EXECUTE ON FUNCTION public.rag_cache_resolve_sources(text, uuid[]) TO serv
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;
+
+------------------------------------------
+-- Phase 4.1.1: Terminology dictionary (migrations 0471-0473, plan 04.1.1-14, after 0442 in migration order)
+------------------------------------------
+
+-- >>> supabase/migrations/0471_terminology_schema.sql
+-- 0471: Phase 4.1.1 terminology dictionary storage and the effective-dictionary read (D-01, D-02, D-04, D-06, D-07, D-22, D-32, D-35).
+-- rag_term_layers holds one row per layer ('shared' for the deployment, or a tenant key) with the version every write bumps.
+-- rag_term_entries holds the entries of every layer; a workspace row with suppresses_entry_id set hides that shared entry for its tenant.
+-- rag_term_audit is append-only. No entry id is a foreign key there, so audit rows outlive deleted entries.
+-- Languages are checked by shape only (the literal any or a lower-case code); whether a code is enabled is checked in the app (D-35).
+-- Translation pairs (kind translation) carry source_language and target_language; no other kind does (D-04, D-32).
+-- Server role only: RLS on without policies, nothing granted to PUBLIC, anon or authenticated, service_role may SELECT. Writes go through
+-- the SECURITY DEFINER writers of 0472.
+-- rag_term_effective(p_tenant_key) is SECURITY INVOKER with an empty search_path, executable by service_role only, and checks the tenant
+-- key with rag_assert_tenant_key first. It returns the enabled shared entries the tenant does not suppress plus the tenant's enabled
+-- entries, translation pairs included, with both layer versions (0 when the layer row does not exist).
+-- Idempotent: IF NOT EXISTS, guarded constraints, DROP and CREATE of the read function, then REVOKE and GRANT.
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.rag_term_layers (
+  layer_key text PRIMARY KEY
+    CONSTRAINT rag_term_layers_layer_key_check
+    CHECK (layer_key = 'shared' OR layer_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  version bigint NOT NULL DEFAULT 0 CONSTRAINT rag_term_layers_version_check CHECK (version >= 0),
+  entries_sha256 text CONSTRAINT rag_term_layers_sha_check CHECK (entries_sha256 IS NULL OR entries_sha256 ~ '^[0-9a-f]{64}$'),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid
+);
+
+CREATE TABLE IF NOT EXISTS public.rag_term_entries (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  layer_key text NOT NULL
+    CONSTRAINT rag_term_entries_layer_key_check
+    CHECK (layer_key = 'shared' OR layer_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  canonical text NOT NULL CONSTRAINT rag_term_entries_canonical_check CHECK (char_length(canonical) BETWEEN 1 AND 64),
+  variants text[] NOT NULL DEFAULT '{}'::text[],
+  normalized_variants text[] NOT NULL DEFAULT '{}'::text[],
+  language text NOT NULL
+    CONSTRAINT rag_term_entries_language_check CHECK (language = 'any' OR language ~ '^[a-z]{2,3}(-[a-z0-9]{2,8})*$'),
+  kind text NOT NULL
+    CONSTRAINT rag_term_entries_kind_check
+    CHECK (kind IN ('synonym', 'abbreviation', 'alias', 'identifier', 'translation', 'misspelling')),
+  source_language text CONSTRAINT rag_term_entries_source_language_check CHECK (source_language ~ '^[a-z]{2,3}(-[a-z0-9]{2,8})*$'),
+  target_language text CONSTRAINT rag_term_entries_target_language_check CHECK (target_language ~ '^[a-z]{2,3}(-[a-z0-9]{2,8})*$'),
+  mode text NOT NULL DEFAULT 'one_way' CONSTRAINT rag_term_entries_mode_check CHECK (mode IN ('one_way', 'equivalent')),
+  enabled boolean NOT NULL DEFAULT true,
+  note text CONSTRAINT rag_term_entries_note_check CHECK (note IS NULL OR char_length(note) <= 500),
+  suppresses_entry_id uuid REFERENCES public.rag_term_entries (id) ON DELETE CASCADE,
+  created_by uuid,
+  updated_by uuid,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  -- A suppression row lives on a tenant layer and has no variants; every other row has 1 to 16 non-empty variants.
+  CONSTRAINT rag_term_entries_suppression_check CHECK (
+    suppresses_entry_id IS NULL OR (layer_key <> 'shared' AND cardinality(variants) = 0 AND cardinality(normalized_variants) = 0)
+  ),
+  CONSTRAINT rag_term_entries_variants_check CHECK (
+    suppresses_entry_id IS NOT NULL OR (cardinality(variants) BETWEEN 1 AND 16 AND array_position(variants, NULL) IS NULL AND NOT ('' = ANY (variants)))
+  ),
+  CONSTRAINT rag_term_entries_normalized_variants_check CHECK (
+    array_position(normalized_variants, NULL) IS NULL AND NOT ('' = ANY (normalized_variants))
+  ),
+  -- Translation pair (D-04, D-32): both languages set exactly for kind translation; they differ, neither is any, the entry language is the
+  -- source language and the mode is one_way.
+  CONSTRAINT rag_term_entries_translation_check CHECK (
+    (kind <> 'translation' AND source_language IS NULL AND target_language IS NULL)
+    OR (
+      kind = 'translation'
+      AND source_language IS NOT NULL
+      AND target_language IS NOT NULL
+      AND source_language <> 'any'
+      AND target_language <> 'any'
+      AND source_language <> target_language
+      AND language = source_language
+      AND mode = 'one_way'
+    )
+  )
+);
+
+-- One non-suppression entry per layer, language, target language and canonical; one suppression per tenant layer and suppressed entry.
+CREATE UNIQUE INDEX IF NOT EXISTS rag_term_entries_canonical_key
+  ON public.rag_term_entries (layer_key, language, (COALESCE(target_language, '')), lower(canonical))
+  WHERE suppresses_entry_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS rag_term_entries_suppression_key
+  ON public.rag_term_entries (layer_key, suppresses_entry_id)
+  WHERE suppresses_entry_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS rag_term_entries_layer_idx ON public.rag_term_entries (layer_key);
+CREATE INDEX IF NOT EXISTS rag_term_entries_normalized_variants_idx ON public.rag_term_entries USING gin (normalized_variants);
+
+CREATE TABLE IF NOT EXISTS public.rag_term_audit (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  layer_key text NOT NULL
+    CONSTRAINT rag_term_audit_layer_key_check
+    CHECK (layer_key = 'shared' OR layer_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  entry_id uuid,
+  action text NOT NULL
+    CONSTRAINT rag_term_audit_action_check
+    CHECK (action IN ('create', 'update', 'delete', 'import', 'suppress', 'unsuppress', 'candidate_accept', 'candidate_dismiss')),
+  actor uuid NOT NULL,
+  before jsonb,
+  after jsonb,
+  layer_version bigint NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS rag_term_audit_layer_time_idx ON public.rag_term_audit (layer_key, created_at DESC);
+CREATE INDEX IF NOT EXISTS rag_term_audit_entry_idx ON public.rag_term_audit (entry_id);
+
+ALTER TABLE public.rag_term_layers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rag_term_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rag_term_audit ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.rag_term_layers FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON public.rag_term_entries FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON public.rag_term_audit FROM PUBLIC, anon, authenticated, service_role;
+GRANT SELECT ON public.rag_term_layers TO service_role;
+GRANT SELECT ON public.rag_term_entries TO service_role;
+GRANT SELECT ON public.rag_term_audit TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_term_audit_immutable() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $fn$
+BEGIN
+  RAISE EXCEPTION 'rag_term_audit is append-only';
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_term_audit_immutable() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS rag_term_audit_immutable ON public.rag_term_audit;
+CREATE TRIGGER rag_term_audit_immutable
+  BEFORE UPDATE OR DELETE ON public.rag_term_audit
+  FOR EACH ROW EXECUTE FUNCTION public.rag_term_audit_immutable();
+
+DROP TRIGGER IF EXISTS rag_term_audit_no_truncate ON public.rag_term_audit;
+CREATE TRIGGER rag_term_audit_no_truncate
+  BEFORE TRUNCATE ON public.rag_term_audit
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_term_audit_immutable();
+
+DROP FUNCTION IF EXISTS public.rag_term_effective(text);
+
+CREATE FUNCTION public.rag_term_effective(p_tenant_key text)
+RETURNS TABLE (
+  entry_id uuid,
+  layer text,
+  canonical text,
+  variants text[],
+  normalized_variants text[],
+  language text,
+  kind text,
+  mode text,
+  source_language text,
+  target_language text,
+  shared_version bigint,
+  tenant_version bigint
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_shared bigint;
+  v_tenant bigint;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+
+  SELECT l.version INTO v_shared FROM public.rag_term_layers l WHERE l.layer_key = 'shared';
+  SELECT l.version INTO v_tenant FROM public.rag_term_layers l WHERE l.layer_key = p_tenant_key;
+
+  RETURN QUERY
+  SELECT e.id,
+         CASE WHEN e.layer_key = 'shared' THEN 'shared' ELSE 'workspace' END,
+         e.canonical,
+         e.variants,
+         e.normalized_variants,
+         e.language,
+         e.kind,
+         e.mode,
+         e.source_language,
+         e.target_language,
+         COALESCE(v_shared, 0::bigint),
+         COALESCE(v_tenant, 0::bigint)
+    FROM public.rag_term_entries e
+   WHERE e.enabled
+     AND e.suppresses_entry_id IS NULL
+     AND (
+       e.layer_key = p_tenant_key
+       OR (
+         e.layer_key = 'shared'
+         AND NOT EXISTS (
+           SELECT 1
+             FROM public.rag_term_entries s
+            WHERE s.layer_key = p_tenant_key
+              AND s.suppresses_entry_id = e.id
+              AND s.enabled
+         )
+       )
+     )
+   ORDER BY (e.layer_key = 'shared') DESC, e.language, pg_catalog.lower(e.canonical), e.target_language NULLS FIRST, e.id;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_term_effective(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_term_effective(text) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0472_terminology_writers.sql
+-- 0472: Phase 4.1.1 terminology writers, suppression, atomic import and the admin reads (D-03, D-04, D-05, D-06, D-07, D-23, D-32, D-35).
+-- Every dictionary change goes through these functions; the tables of 0471 grant service_role SELECT only.
+-- Who may act (D-03): p_actor is the guard-verified admin id from the route layer. The shared layer needs admin_users membership; a tenant
+-- layer needs the key in rag_admin_tenant_keys(p_actor); in single-tenant mode a tenant layer is refused with workspace_layer_unavailable.
+-- An entry id of another layer answers not_found, so ids are not probed.
+-- Versions (D-05): each successful write locks the layer row, checks p_expected_version (version_conflict when stale, the current version in
+-- DETAIL), increments the version by exactly one (creating the layer row at 1), recomputes entries_sha256 and writes one rag_term_audit row
+-- per changed entry with before and after JSON and the new layer version, all in the caller's transaction.
+-- entries_sha256 is the sha256 of the layer's entries as canonical JSON without the row id, sorted, so equal content gives an equal hash.
+-- Deleting a shared entry removes every tenant suppression of it (ON DELETE CASCADE in 0471); those rows are audited as unsuppress on their
+-- tenant layer first, and each such tenant layer is bumped too.
+-- Entries (D-04, D-32): the entry JSON carries canonical, variants, normalized_variants, language, kind, mode, enabled, note,
+-- source_language and target_language. The writers do not normalize text: normalized_variants are stored as sent and must have the length of
+-- variants. A row the table CHECKs or the writer rules reject raises invalid_entry. No language code is named here (D-35).
+-- Import (D-23): all-or-nothing, keyed by (language, target_language or empty, lower(canonical)); replace also deletes absent entries.
+-- At most 5,000 rows per import and 20,000 entries per layer (limit).
+-- Errors are P0001 with the code as the whole message: not_admin, not_admin_of_layer, workspace_layer_unavailable, not_found,
+-- version_conflict, invalid_entry, limit.
+-- The six rag_term_ functions run with definer rights and are executable by service_role only. The internal rag_term__ helpers are SECURITY INVOKER
+-- with no grant at all: they run only inside those functions, as the owner. Lock order: shared layer, shared entry, tenant layers.
+-- Idempotent: CREATE OR REPLACE with fixed signatures, then REVOKE and GRANT.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_term__authorize(p_actor uuid, p_layer_key text)
+RETURNS void
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_multi_tenant boolean;
+BEGIN
+  IF p_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.admin_users a WHERE a.id = p_actor) THEN
+    RAISE EXCEPTION 'not_admin' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_layer_key = 'shared' THEN
+    RETURN;
+  END IF;
+  v_multi_tenant := EXISTS (
+    SELECT 1 FROM pg_catalog.pg_attribute
+    WHERE attrelid = 'public.documents'::pg_catalog.regclass AND attname = 'user_id' AND attnotnull AND NOT attisdropped
+  );
+  IF NOT v_multi_tenant THEN
+    RAISE EXCEPTION 'workspace_layer_unavailable' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_layer_key IS NULL OR NOT (p_layer_key = ANY (public.rag_admin_tenant_keys(p_actor))) THEN
+    RAISE EXCEPTION 'not_admin_of_layer' USING ERRCODE = 'P0001';
+  END IF;
+END
+$fn$;
+
+-- Locks the layer row (creating it at version 0), checks the expected version when p_check, and returns the incremented version.
+CREATE OR REPLACE FUNCTION public.rag_term__bump(p_layer_key text, p_actor uuid, p_expected bigint, p_check boolean DEFAULT true)
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_current bigint;
+BEGIN
+  INSERT INTO public.rag_term_layers (layer_key, version) VALUES (p_layer_key, 0) ON CONFLICT (layer_key) DO NOTHING;
+  SELECT l.version INTO v_current FROM public.rag_term_layers l WHERE l.layer_key = p_layer_key FOR UPDATE;
+  IF p_check AND (p_expected IS NULL OR p_expected <> v_current) THEN
+    RAISE EXCEPTION 'version_conflict' USING ERRCODE = 'P0001',
+      DETAIL = pg_catalog.jsonb_build_object('current_version', v_current)::text;
+  END IF;
+  UPDATE public.rag_term_layers l
+     SET version = v_current + 1, updated_at = pg_catalog.now(), updated_by = p_actor
+   WHERE l.layer_key = p_layer_key;
+  RETURN v_current + 1;
+END
+$fn$;
+
+-- The canonical JSON of one entry, used for the audit and (without id) for entries_sha256.
+CREATE OR REPLACE FUNCTION public.rag_term__entry_json(p_row public.rag_term_entries)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+  SELECT pg_catalog.jsonb_build_object(
+    'id', p_row.id,
+    'layer_key', p_row.layer_key,
+    'canonical', p_row.canonical,
+    'variants', pg_catalog.to_jsonb(p_row.variants),
+    'normalized_variants', pg_catalog.to_jsonb(p_row.normalized_variants),
+    'language', p_row.language,
+    'kind', p_row.kind,
+    'mode', p_row.mode,
+    'source_language', p_row.source_language,
+    'target_language', p_row.target_language,
+    'enabled', p_row.enabled,
+    'note', p_row.note,
+    'suppresses_entry_id', p_row.suppresses_entry_id
+  )
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_term__refresh_sha(p_layer_key text)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_sha text;
+BEGIN
+  SELECT pg_catalog.encode(
+           pg_catalog.sha256(pg_catalog.convert_to(COALESCE(pg_catalog.string_agg(c.doc, E'\n' ORDER BY c.doc COLLATE "C"), ''), 'UTF8')),
+           'hex')
+    INTO v_sha
+    FROM (
+      SELECT (public.rag_term__entry_json(e.*) - 'id')::text AS doc
+        FROM public.rag_term_entries e
+       WHERE e.layer_key = p_layer_key
+    ) c;
+  UPDATE public.rag_term_layers l SET entries_sha256 = v_sha WHERE l.layer_key = p_layer_key;
+  RETURN v_sha;
+END
+$fn$;
+
+-- Parses an entry JSON into a row (no id, no layer). Shape errors raise invalid_entry; the table CHECKs run when the row is written.
+CREATE OR REPLACE FUNCTION public.rag_term__parse_entry(p_entry jsonb)
+RETURNS public.rag_term_entries
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  r public.rag_term_entries;
+  k text;
+BEGIN
+  IF p_entry IS NULL OR pg_catalog.jsonb_typeof(p_entry) <> 'object' THEN
+    RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+  END IF;
+  FOREACH k IN ARRAY ARRAY['canonical', 'language', 'kind'] LOOP
+    IF pg_catalog.jsonb_typeof(p_entry -> k) IS DISTINCT FROM 'string' THEN
+      RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+    END IF;
+  END LOOP;
+  FOREACH k IN ARRAY ARRAY['mode', 'note', 'source_language', 'target_language'] LOOP
+    IF p_entry ? k AND pg_catalog.jsonb_typeof(p_entry -> k) NOT IN ('string', 'null') THEN
+      RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+    END IF;
+  END LOOP;
+  IF p_entry ? 'enabled' AND pg_catalog.jsonb_typeof(p_entry -> 'enabled') NOT IN ('boolean', 'null') THEN
+    RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+  END IF;
+  FOREACH k IN ARRAY ARRAY['variants', 'normalized_variants'] LOOP
+    IF pg_catalog.jsonb_typeof(p_entry -> k) IS DISTINCT FROM 'array'
+       OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(p_entry -> k) x WHERE pg_catalog.jsonb_typeof(x) <> 'string') THEN
+      RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+    END IF;
+  END LOOP;
+
+  r.canonical := p_entry ->> 'canonical';
+  r.variants := ARRAY(SELECT t.v FROM pg_catalog.jsonb_array_elements_text(p_entry -> 'variants') WITH ORDINALITY AS t(v, n) ORDER BY t.n);
+  r.normalized_variants := ARRAY(
+    SELECT t.v FROM pg_catalog.jsonb_array_elements_text(p_entry -> 'normalized_variants') WITH ORDINALITY AS t(v, n) ORDER BY t.n
+  );
+  IF pg_catalog.cardinality(r.variants) <> pg_catalog.cardinality(r.normalized_variants)
+     OR EXISTS (SELECT 1 FROM pg_catalog.unnest(r.variants) AS u(v) WHERE pg_catalog.char_length(u.v) > 64) THEN
+    RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+  END IF;
+  r.language := p_entry ->> 'language';
+  r.kind := p_entry ->> 'kind';
+  r.mode := COALESCE(p_entry ->> 'mode', 'one_way');
+  r.enabled := COALESCE((p_entry ->> 'enabled')::boolean, true);
+  r.note := p_entry ->> 'note';
+  r.source_language := p_entry ->> 'source_language';
+  r.target_language := p_entry ->> 'target_language';
+  r.suppresses_entry_id := NULL;
+  RETURN r;
+END
+$fn$;
+
+-- Refuses a layer whose entries (suppressions not counted) would exceed 20,000.
+CREATE OR REPLACE FUNCTION public.rag_term__assert_layer_size(p_layer_key text, p_adding integer)
+RETURNS void
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  IF (SELECT pg_catalog.count(*) FROM public.rag_term_entries e WHERE e.layer_key = p_layer_key AND e.suppresses_entry_id IS NULL) + p_adding > 20000 THEN
+    RAISE EXCEPTION 'limit' USING ERRCODE = 'P0001';
+  END IF;
+END
+$fn$;
+
+-- Before shared entries are deleted: audits, per tenant layer, the suppressions the cascade will remove, bumps that layer and removes them.
+CREATE OR REPLACE FUNCTION public.rag_term__release_suppressions(p_entry_ids uuid[], p_actor uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_layer text;
+  v_version bigint;
+BEGIN
+  FOR v_layer IN
+    SELECT DISTINCT s.layer_key FROM public.rag_term_entries s WHERE s.suppresses_entry_id = ANY (p_entry_ids) ORDER BY s.layer_key
+  LOOP
+    v_version := public.rag_term__bump(v_layer, p_actor, NULL, false);
+    INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+    SELECT s.layer_key, s.suppresses_entry_id, 'unsuppress', p_actor, public.rag_term__entry_json(s.*), NULL, v_version
+      FROM public.rag_term_entries s
+     WHERE s.layer_key = v_layer AND s.suppresses_entry_id = ANY (p_entry_ids)
+     ORDER BY s.id;
+    DELETE FROM public.rag_term_entries s WHERE s.layer_key = v_layer AND s.suppresses_entry_id = ANY (p_entry_ids);
+    PERFORM public.rag_term__refresh_sha(v_layer);
+  END LOOP;
+END
+$fn$;
+
+-- Creates an entry (no id in p_entry) or replaces the content of an entry of this layer (id given).
+CREATE OR REPLACE FUNCTION public.rag_term_upsert_entry(
+  p_actor uuid,
+  p_layer_key text,
+  p_entry jsonb,
+  p_expected_version bigint
+)
+RETURNS TABLE (entry_id uuid, layer_version bigint, entries_sha256 text, action text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_id uuid;
+  v_row public.rag_term_entries;
+  v_old public.rag_term_entries;
+  v_new public.rag_term_entries;
+  v_version bigint;
+  v_action text;
+  v_sha text;
+BEGIN
+  PERFORM public.rag_term__authorize(p_actor, p_layer_key);
+  IF p_entry IS NOT NULL AND pg_catalog.jsonb_typeof(p_entry) = 'object' AND p_entry ? 'id'
+     AND pg_catalog.jsonb_typeof(p_entry -> 'id') <> 'null' THEN
+    IF pg_catalog.jsonb_typeof(p_entry -> 'id') <> 'string'
+       OR (p_entry ->> 'id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+    END IF;
+    v_id := (p_entry ->> 'id')::uuid;
+  END IF;
+  v_row := public.rag_term__parse_entry(p_entry);
+  v_version := public.rag_term__bump(p_layer_key, p_actor, p_expected_version);
+
+  IF v_id IS NOT NULL THEN
+    SELECT * INTO v_old
+      FROM public.rag_term_entries e
+     WHERE e.id = v_id AND e.layer_key = p_layer_key AND e.suppresses_entry_id IS NULL
+       FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0001';
+    END IF;
+    BEGIN
+      UPDATE public.rag_term_entries e
+         SET canonical = v_row.canonical,
+             variants = v_row.variants,
+             normalized_variants = v_row.normalized_variants,
+             language = v_row.language,
+             kind = v_row.kind,
+             mode = v_row.mode,
+             enabled = v_row.enabled,
+             note = v_row.note,
+             source_language = v_row.source_language,
+             target_language = v_row.target_language,
+             updated_by = p_actor,
+             updated_at = pg_catalog.now()
+       WHERE e.id = v_id
+      RETURNING * INTO v_new;
+    EXCEPTION WHEN check_violation OR not_null_violation OR unique_violation THEN
+      RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+    END;
+    v_action := 'update';
+  ELSE
+    PERFORM public.rag_term__assert_layer_size(p_layer_key, 1);
+    BEGIN
+      INSERT INTO public.rag_term_entries
+        (layer_key, canonical, variants, normalized_variants, language, kind, mode, enabled, note, source_language, target_language,
+         created_by, updated_by)
+      VALUES
+        (p_layer_key, v_row.canonical, v_row.variants, v_row.normalized_variants, v_row.language, v_row.kind, v_row.mode, v_row.enabled,
+         v_row.note, v_row.source_language, v_row.target_language, p_actor, p_actor)
+      RETURNING * INTO v_new;
+    EXCEPTION WHEN check_violation OR not_null_violation OR unique_violation THEN
+      RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+    END;
+    v_action := 'create';
+  END IF;
+
+  INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+  VALUES (
+    p_layer_key,
+    v_new.id,
+    v_action,
+    p_actor,
+    CASE WHEN v_old.id IS NULL THEN NULL ELSE public.rag_term__entry_json(v_old) END,
+    public.rag_term__entry_json(v_new),
+    v_version
+  );
+  v_sha := public.rag_term__refresh_sha(p_layer_key);
+  RETURN QUERY SELECT v_new.id, v_version, v_sha, v_action;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_term_delete_entry(
+  p_actor uuid,
+  p_layer_key text,
+  p_entry_id uuid,
+  p_expected_version bigint
+)
+RETURNS TABLE (layer_version bigint, entries_sha256 text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_old public.rag_term_entries;
+  v_version bigint;
+  v_sha text;
+BEGIN
+  PERFORM public.rag_term__authorize(p_actor, p_layer_key);
+  v_version := public.rag_term__bump(p_layer_key, p_actor, p_expected_version);
+  SELECT * INTO v_old
+    FROM public.rag_term_entries e
+   WHERE e.id = p_entry_id AND e.layer_key = p_layer_key AND e.suppresses_entry_id IS NULL
+     FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_layer_key = 'shared' THEN
+    PERFORM public.rag_term__release_suppressions(ARRAY[p_entry_id], p_actor);
+  END IF;
+  INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+  VALUES (p_layer_key, v_old.id, 'delete', p_actor, public.rag_term__entry_json(v_old), NULL, v_version);
+  DELETE FROM public.rag_term_entries e WHERE e.id = v_old.id;
+  v_sha := public.rag_term__refresh_sha(p_layer_key);
+  RETURN QUERY SELECT v_version, v_sha;
+END
+$fn$;
+
+-- Suppresses (or unsuppresses) a shared entry for one tenant layer. The suppression row copies the shared entry's canonical, languages and
+-- kind and has no variants (the 0471 suppression CHECK). The audit row's entry_id is the shared entry id.
+CREATE OR REPLACE FUNCTION public.rag_term_set_suppression(
+  p_actor uuid,
+  p_layer_key text,
+  p_shared_entry_id uuid,
+  p_suppressed boolean,
+  p_expected_version bigint
+)
+RETURNS TABLE (layer_version bigint, entries_sha256 text, suppressed boolean)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_shared public.rag_term_entries;
+  v_old public.rag_term_entries;
+  v_new public.rag_term_entries;
+  v_version bigint;
+  v_sha text;
+BEGIN
+  PERFORM public.rag_term__authorize(p_actor, p_layer_key);
+  IF p_layer_key = 'shared' OR p_suppressed IS NULL THEN
+    RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+  END IF;
+  SELECT * INTO v_shared
+    FROM public.rag_term_entries e
+   WHERE e.id = p_shared_entry_id AND e.layer_key = 'shared' AND e.suppresses_entry_id IS NULL
+     FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0001';
+  END IF;
+  v_version := public.rag_term__bump(p_layer_key, p_actor, p_expected_version);
+  SELECT * INTO v_old
+    FROM public.rag_term_entries s
+   WHERE s.layer_key = p_layer_key AND s.suppresses_entry_id = p_shared_entry_id
+     FOR UPDATE;
+
+  IF p_suppressed THEN
+    IF v_old.id IS NULL THEN
+      INSERT INTO public.rag_term_entries
+        (layer_key, canonical, variants, normalized_variants, language, kind, mode, enabled, source_language, target_language,
+         suppresses_entry_id, created_by, updated_by)
+      VALUES
+        (p_layer_key, v_shared.canonical, '{}'::text[], '{}'::text[], v_shared.language, v_shared.kind, v_shared.mode, true,
+         v_shared.source_language, v_shared.target_language, v_shared.id, p_actor, p_actor)
+      RETURNING * INTO v_new;
+      INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+      VALUES (p_layer_key, v_shared.id, 'suppress', p_actor, NULL, public.rag_term__entry_json(v_new), v_version);
+    ELSIF NOT v_old.enabled THEN
+      UPDATE public.rag_term_entries s SET enabled = true, updated_by = p_actor, updated_at = pg_catalog.now()
+       WHERE s.id = v_old.id
+      RETURNING * INTO v_new;
+      INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+      VALUES (p_layer_key, v_shared.id, 'suppress', p_actor, public.rag_term__entry_json(v_old), public.rag_term__entry_json(v_new), v_version);
+    END IF;
+  ELSIF v_old.id IS NOT NULL THEN
+    INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+    VALUES (p_layer_key, v_shared.id, 'unsuppress', p_actor, public.rag_term__entry_json(v_old), NULL, v_version);
+    DELETE FROM public.rag_term_entries s WHERE s.id = v_old.id;
+  END IF;
+
+  v_sha := public.rag_term__refresh_sha(p_layer_key);
+  RETURN QUERY SELECT v_version, v_sha, p_suppressed;
+END
+$fn$;
+
+-- All-or-nothing import (D-23). p_rows is a JSON array of entry objects without ids; p_mode is merge or replace. A rejected row raises
+-- invalid_entry with its 1-based position as DETAIL {"row": n}; nothing is written.
+CREATE OR REPLACE FUNCTION public.rag_term_apply_import(
+  p_actor uuid,
+  p_layer_key text,
+  p_rows jsonb,
+  p_mode text,
+  p_expected_version bigint
+)
+RETURNS TABLE (layer_version bigint, entries_sha256 text, created integer, updated integer, unchanged integer, deleted integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_rows public.rag_term_entries[] := '{}'::public.rag_term_entries[];
+  v_keys text[] := '{}'::text[];
+  v_elem jsonb;
+  v_n bigint;
+  v_i integer;
+  v_row public.rag_term_entries;
+  v_old public.rag_term_entries;
+  v_new public.rag_term_entries;
+  v_key text;
+  v_version bigint;
+  v_delete uuid[];
+  v_created integer := 0;
+  v_updated integer := 0;
+  v_unchanged integer := 0;
+  v_deleted integer := 0;
+  v_sha text;
+BEGIN
+  PERFORM public.rag_term__authorize(p_actor, p_layer_key);
+  IF p_mode IS NULL OR p_mode NOT IN ('merge', 'replace') OR p_rows IS NULL OR pg_catalog.jsonb_typeof(p_rows) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+  END IF;
+  IF pg_catalog.jsonb_array_length(p_rows) > 5000 THEN
+    RAISE EXCEPTION 'limit' USING ERRCODE = 'P0001';
+  END IF;
+
+  BEGIN
+    FOR v_elem, v_n IN SELECT t.value, t.n FROM pg_catalog.jsonb_array_elements(p_rows) WITH ORDINALITY AS t(value, n) ORDER BY t.n LOOP
+      v_row := public.rag_term__parse_entry(v_elem);
+      v_key := v_row.language || E'\x1f' || COALESCE(v_row.target_language, '') || E'\x1f' || pg_catalog.lower(v_row.canonical);
+      IF v_key = ANY (v_keys) THEN
+        RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+      END IF;
+      v_keys := v_keys || v_key;
+      v_rows := v_rows || v_row;
+    END LOOP;
+    v_n := NULL;
+
+    v_version := public.rag_term__bump(p_layer_key, p_actor, p_expected_version);
+
+    FOR v_i IN 1 .. COALESCE(pg_catalog.cardinality(v_rows), 0) LOOP
+      v_n := v_i;
+      v_row := v_rows[v_i];
+      v_old := NULL;
+      SELECT * INTO v_old
+        FROM public.rag_term_entries e
+       WHERE e.layer_key = p_layer_key
+         AND e.suppresses_entry_id IS NULL
+         AND e.language = v_row.language
+         AND COALESCE(e.target_language, '') = COALESCE(v_row.target_language, '')
+         AND pg_catalog.lower(e.canonical) = pg_catalog.lower(v_row.canonical)
+         FOR UPDATE;
+      IF v_old.id IS NOT NULL THEN
+        v_row.id := v_old.id;
+        v_row.layer_key := p_layer_key;
+        IF public.rag_term__entry_json(v_row) = public.rag_term__entry_json(v_old) THEN
+          v_unchanged := v_unchanged + 1;
+          CONTINUE;
+        END IF;
+        UPDATE public.rag_term_entries e
+           SET canonical = v_row.canonical,
+               variants = v_row.variants,
+               normalized_variants = v_row.normalized_variants,
+               language = v_row.language,
+               kind = v_row.kind,
+               mode = v_row.mode,
+               enabled = v_row.enabled,
+               note = v_row.note,
+               source_language = v_row.source_language,
+               target_language = v_row.target_language,
+               updated_by = p_actor,
+               updated_at = pg_catalog.now()
+         WHERE e.id = v_old.id
+        RETURNING * INTO v_new;
+        INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+        VALUES (p_layer_key, v_new.id, 'import', p_actor, public.rag_term__entry_json(v_old), public.rag_term__entry_json(v_new), v_version);
+        v_updated := v_updated + 1;
+      ELSE
+        INSERT INTO public.rag_term_entries
+          (layer_key, canonical, variants, normalized_variants, language, kind, mode, enabled, note, source_language, target_language,
+           created_by, updated_by)
+        VALUES
+          (p_layer_key, v_row.canonical, v_row.variants, v_row.normalized_variants, v_row.language, v_row.kind, v_row.mode, v_row.enabled,
+           v_row.note, v_row.source_language, v_row.target_language, p_actor, p_actor)
+        RETURNING * INTO v_new;
+        INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+        VALUES (p_layer_key, v_new.id, 'import', p_actor, NULL, public.rag_term__entry_json(v_new), v_version);
+        v_created := v_created + 1;
+      END IF;
+    END LOOP;
+    v_n := NULL;
+  EXCEPTION
+    WHEN check_violation OR not_null_violation OR unique_violation THEN
+      IF v_n IS NULL THEN
+        RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+      END IF;
+      RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('row', v_n)::text;
+    WHEN raise_exception THEN
+      IF SQLERRM = 'invalid_entry' AND v_n IS NOT NULL THEN
+        RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('row', v_n)::text;
+      END IF;
+      RAISE;
+  END;
+
+  IF p_mode = 'replace' THEN
+    SELECT pg_catalog.array_agg(e.id ORDER BY e.id) INTO v_delete
+      FROM public.rag_term_entries e
+     WHERE e.layer_key = p_layer_key
+       AND e.suppresses_entry_id IS NULL
+       AND NOT ((e.language || E'\x1f' || COALESCE(e.target_language, '') || E'\x1f' || pg_catalog.lower(e.canonical)) = ANY (v_keys));
+    IF v_delete IS NOT NULL THEN
+      PERFORM 1 FROM public.rag_term_entries e WHERE e.id = ANY (v_delete) ORDER BY e.id FOR UPDATE;
+      IF p_layer_key = 'shared' THEN
+        PERFORM public.rag_term__release_suppressions(v_delete, p_actor);
+      END IF;
+      INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+      SELECT p_layer_key, e.id, 'import', p_actor, public.rag_term__entry_json(e.*), NULL, v_version
+        FROM public.rag_term_entries e
+       WHERE e.id = ANY (v_delete)
+       ORDER BY e.id;
+      DELETE FROM public.rag_term_entries e WHERE e.id = ANY (v_delete);
+      v_deleted := pg_catalog.cardinality(v_delete);
+    END IF;
+  END IF;
+
+  PERFORM public.rag_term__assert_layer_size(p_layer_key, 0);
+  v_sha := public.rag_term__refresh_sha(p_layer_key);
+  RETURN QUERY SELECT v_version, v_sha, v_created, v_updated, v_unchanged, v_deleted;
+END
+$fn$;
+
+-- One page of a layer's entries (suppression rows included, marked by suppresses_entry_id), with the layer version and total_count before
+-- the page is cut. p_search matches canonical or any variant, case-insensitively, as a plain substring.
+CREATE OR REPLACE FUNCTION public.rag_term_list_entries(
+  p_actor uuid,
+  p_layer_key text,
+  p_limit integer DEFAULT 50,
+  p_offset integer DEFAULT 0,
+  p_search text DEFAULT NULL
+)
+RETURNS TABLE (
+  id uuid,
+  layer_key text,
+  canonical text,
+  variants text[],
+  normalized_variants text[],
+  language text,
+  kind text,
+  mode text,
+  source_language text,
+  target_language text,
+  enabled boolean,
+  note text,
+  suppresses_entry_id uuid,
+  created_by uuid,
+  updated_by uuid,
+  created_at timestamptz,
+  updated_at timestamptz,
+  layer_version bigint,
+  total_count bigint
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_page integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 100);
+  v_skip integer := GREATEST(COALESCE(p_offset, 0), 0);
+  v_search text := pg_catalog.lower(NULLIF(pg_catalog.btrim(p_search), ''));
+  v_version bigint;
+BEGIN
+  PERFORM public.rag_term__authorize(p_actor, p_layer_key);
+  SELECT l.version INTO v_version FROM public.rag_term_layers l WHERE l.layer_key = p_layer_key;
+  RETURN QUERY
+  SELECT e.id, e.layer_key, e.canonical, e.variants, e.normalized_variants, e.language, e.kind, e.mode, e.source_language,
+         e.target_language, e.enabled, e.note, e.suppresses_entry_id, e.created_by, e.updated_by, e.created_at, e.updated_at,
+         COALESCE(v_version, 0::bigint), pg_catalog.count(*) OVER ()
+    FROM public.rag_term_entries e
+   WHERE e.layer_key = p_layer_key
+     AND (
+       v_search IS NULL
+       OR pg_catalog.strpos(pg_catalog.lower(e.canonical), v_search) > 0
+       OR EXISTS (SELECT 1 FROM pg_catalog.unnest(e.variants) AS u(v) WHERE pg_catalog.strpos(pg_catalog.lower(u.v), v_search) > 0)
+     )
+   ORDER BY pg_catalog.lower(e.canonical), e.language, COALESCE(e.target_language, ''), e.id
+   LIMIT v_page OFFSET v_skip;
+END
+$fn$;
+
+-- One page of a layer's audit, newest first. Actors are ids only; nothing joins auth.users.
+CREATE OR REPLACE FUNCTION public.rag_term_list_audit(
+  p_actor uuid,
+  p_layer_key text,
+  p_limit integer DEFAULT 50,
+  p_offset integer DEFAULT 0
+)
+RETURNS TABLE (
+  id uuid,
+  layer_key text,
+  entry_id uuid,
+  action text,
+  actor uuid,
+  before jsonb,
+  after jsonb,
+  layer_version bigint,
+  created_at timestamptz,
+  total_count bigint
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_page integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 100);
+  v_skip integer := GREATEST(COALESCE(p_offset, 0), 0);
+BEGIN
+  PERFORM public.rag_term__authorize(p_actor, p_layer_key);
+  RETURN QUERY
+  SELECT a.id, a.layer_key, a.entry_id, a.action, a.actor, a.before, a.after, a.layer_version, a.created_at, pg_catalog.count(*) OVER ()
+    FROM public.rag_term_audit a
+   WHERE a.layer_key = p_layer_key
+   ORDER BY a.layer_version DESC, a.created_at DESC, a.id
+   LIMIT v_page OFFSET v_skip;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_term__authorize(uuid, text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rag_term__bump(text, uuid, bigint, boolean) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rag_term__entry_json(public.rag_term_entries) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rag_term__refresh_sha(text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rag_term__parse_entry(jsonb) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rag_term__assert_layer_size(text, integer) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rag_term__release_suppressions(uuid[], uuid) FROM PUBLIC, anon, authenticated, service_role;
+
+REVOKE ALL ON FUNCTION public.rag_term_upsert_entry(uuid, text, jsonb, bigint) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_delete_entry(uuid, text, uuid, bigint) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_apply_import(uuid, text, jsonb, text, bigint) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_list_audit(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_term_upsert_entry(uuid, text, jsonb, bigint) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_delete_entry(uuid, text, uuid, bigint) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_apply_import(uuid, text, jsonb, text, bigint) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_list_audit(uuid, text, integer, integer) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0473_terminology_mining.sql
+-- 0473: Phase 4.1.1 terminology mining: the miss log, the candidate table, corpus document frequency and candidate decisions
+-- (D-01, D-07, D-25, D-26, PO-3, PO-4).
+-- rag_term_misses holds masked missed queries per tenant (source miss_log; feedback and langfuse are reserved for Phase 5.1.1).
+-- rag_term_candidates holds mined terms per tenant, language and term; a dismissed or accepted candidate keeps its status when mined again.
+-- Retention is 30 days without any schedule (PO-4): rag_term_record_miss deletes the tenant's older rows before it inserts,
+-- rag_term_read_misses never returns older rows, rag_term_upsert_candidates clears the examples of the tenant's candidates not seen for
+-- 30 days, and rag_term_purge_misses lets the miner purge every tenant.
+-- rag_term_corpus_df counts, per token, the tenant's distinct documents with a current, ready chunk whose lexical_tsv matches, with the
+-- current-and-ready filter of the newest hybrid_search_chunks (0802: tenant_key, is_current, status ready or variant) and the same
+-- rag_lexical_tsquery builder (D-26, D-38).
+-- Candidate decisions check the actor like 0472: admin_users membership, then the candidate's tenant key in rag_admin_tenant_keys(p_actor);
+-- a candidate or entry of another tenant answers not_found. Each decision writes one candidate_accept or candidate_dismiss row to
+-- rag_term_audit with the layer's current version (a decision does not change the dictionary, so no version is bumped).
+-- Errors are P0001 with the code as the whole message: invalid_miss, invalid_window, invalid_candidate, invalid_action, not_admin,
+-- not_admin_of_layer, not_found, not_pending. A malformed or wrong-mode tenant key raises 22023 from rag_assert_tenant_key.
+-- Server role only: RLS on without policies, nothing granted to PUBLIC, anon or authenticated, service_role may SELECT; every function is
+-- SECURITY DEFINER with an empty search_path and executable by service_role only.
+-- Idempotent: IF NOT EXISTS, CREATE OR REPLACE with fixed signatures, then REVOKE and GRANT.
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.rag_term_misses (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_key text NOT NULL
+    CONSTRAINT rag_term_misses_tenant_key_check
+    CHECK (tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  source text NOT NULL DEFAULT 'miss_log'
+    CONSTRAINT rag_term_misses_source_check CHECK (source IN ('miss_log', 'feedback', 'langfuse')),
+  query_masked text NOT NULL CONSTRAINT rag_term_misses_query_check CHECK (char_length(query_masked) BETWEEN 1 AND 500),
+  language text CONSTRAINT rag_term_misses_language_check CHECK (language IS NULL OR language ~ '^[a-z]{2,3}(-[a-z0-9]{2,8})*$'),
+  status text NOT NULL CONSTRAINT rag_term_misses_status_check CHECK (status IN ('ok', 'empty', 'degraded', 'error')),
+  reason text CONSTRAINT rag_term_misses_reason_check CHECK (reason IS NULL OR char_length(reason) <= 120),
+  top_score real,
+  dictionary_version text
+    CONSTRAINT rag_term_misses_dictionary_version_check CHECK (dictionary_version IS NULL OR dictionary_version ~ '^s[0-9]+(\.w[0-9]+)?$'),
+  retrieval_config_hash text NOT NULL
+    CONSTRAINT rag_term_misses_config_hash_check CHECK (char_length(retrieval_config_hash) BETWEEN 1 AND 128),
+  profile text NOT NULL CONSTRAINT rag_term_misses_profile_check CHECK (profile IN ('chat', 'embed', 'voice')),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS rag_term_misses_tenant_time_idx ON public.rag_term_misses (tenant_key, created_at DESC);
+CREATE INDEX IF NOT EXISTS rag_term_misses_time_idx ON public.rag_term_misses (created_at);
+
+CREATE TABLE IF NOT EXISTS public.rag_term_candidates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_key text NOT NULL
+    CONSTRAINT rag_term_candidates_tenant_key_check
+    CHECK (tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  term text NOT NULL CONSTRAINT rag_term_candidates_term_check CHECK (char_length(term) BETWEEN 1 AND 64),
+  language text NOT NULL
+    CONSTRAINT rag_term_candidates_language_check CHECK (language = 'any' OR language ~ '^[a-z]{2,3}(-[a-z0-9]{2,8})*$'),
+  support integer NOT NULL DEFAULT 0 CONSTRAINT rag_term_candidates_support_check CHECK (support >= 0),
+  examples text[] NOT NULL DEFAULT '{}'::text[]
+    CONSTRAINT rag_term_candidates_examples_check CHECK (
+      cardinality(examples) <= 3
+      AND array_position(examples, NULL) IS NULL
+      AND NOT ('' = ANY (examples))
+      AND char_length(array_to_string(examples, '')) <= 1500
+    ),
+  corpus_df integer NOT NULL DEFAULT 0 CONSTRAINT rag_term_candidates_corpus_df_check CHECK (corpus_df >= 0),
+  status text NOT NULL DEFAULT 'pending'
+    CONSTRAINT rag_term_candidates_status_check CHECK (status IN ('pending', 'accepted', 'dismissed')),
+  source text NOT NULL DEFAULT 'miss_log'
+    CONSTRAINT rag_term_candidates_source_check CHECK (source IN ('miss_log', 'feedback', 'langfuse')),
+  entry_id uuid,
+  first_seen timestamptz NOT NULL DEFAULT now(),
+  last_seen timestamptz NOT NULL DEFAULT now(),
+  decided_by uuid,
+  decided_at timestamptz,
+  CONSTRAINT rag_term_candidates_accepted_check CHECK (status <> 'accepted' OR entry_id IS NOT NULL),
+  CONSTRAINT rag_term_candidates_key UNIQUE (tenant_key, language, term)
+);
+
+CREATE INDEX IF NOT EXISTS rag_term_candidates_tenant_status_idx ON public.rag_term_candidates (tenant_key, status, last_seen DESC);
+
+ALTER TABLE public.rag_term_misses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rag_term_candidates ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.rag_term_misses FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON public.rag_term_candidates FROM PUBLIC, anon, authenticated, service_role;
+GRANT SELECT ON public.rag_term_misses TO service_role;
+GRANT SELECT ON public.rag_term_candidates TO service_role;
+
+-- Inserts one miss for the tenant after deleting that tenant's rows older than 30 days. Returns the new id.
+CREATE OR REPLACE FUNCTION public.rag_term_record_miss(p_tenant_key text, p_row jsonb)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_id uuid;
+  v_query text;
+  v_profile text;
+  v_source text;
+  v_status text;
+  k text;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_row IS NULL OR pg_catalog.jsonb_typeof(p_row) <> 'object' THEN
+    RAISE EXCEPTION 'invalid_miss' USING ERRCODE = 'P0001';
+  END IF;
+  FOREACH k IN ARRAY ARRAY['query_masked', 'status', 'retrieval_config_hash', 'profile'] LOOP
+    IF pg_catalog.jsonb_typeof(p_row -> k) IS DISTINCT FROM 'string' THEN
+      RAISE EXCEPTION 'invalid_miss' USING ERRCODE = 'P0001';
+    END IF;
+  END LOOP;
+  FOREACH k IN ARRAY ARRAY['source', 'language', 'reason', 'dictionary_version'] LOOP
+    IF p_row ? k AND pg_catalog.jsonb_typeof(p_row -> k) NOT IN ('string', 'null') THEN
+      RAISE EXCEPTION 'invalid_miss' USING ERRCODE = 'P0001';
+    END IF;
+  END LOOP;
+  IF p_row ? 'top_score' AND pg_catalog.jsonb_typeof(p_row -> 'top_score') NOT IN ('number', 'null') THEN
+    RAISE EXCEPTION 'invalid_miss' USING ERRCODE = 'P0001';
+  END IF;
+
+  v_query := p_row ->> 'query_masked';
+  v_profile := p_row ->> 'profile';
+  v_status := p_row ->> 'status';
+  v_source := COALESCE(p_row ->> 'source', 'miss_log');
+  IF pg_catalog.char_length(v_query) NOT BETWEEN 1 AND 500
+     OR v_profile NOT IN ('chat', 'embed', 'voice')
+     OR v_source NOT IN ('miss_log', 'feedback', 'langfuse')
+     OR v_status NOT IN ('ok', 'empty', 'degraded', 'error') THEN
+    RAISE EXCEPTION 'invalid_miss' USING ERRCODE = 'P0001';
+  END IF;
+
+  DELETE FROM public.rag_term_misses m
+   WHERE m.tenant_key = p_tenant_key AND m.created_at < pg_catalog.now() - pg_catalog.make_interval(days => 30);
+
+  BEGIN
+    INSERT INTO public.rag_term_misses (
+      tenant_key, source, query_masked, language, status, reason, top_score, dictionary_version, retrieval_config_hash, profile
+    ) VALUES (
+      p_tenant_key,
+      v_source,
+      v_query,
+      p_row ->> 'language',
+      v_status,
+      p_row ->> 'reason',
+      (p_row ->> 'top_score')::real,
+      p_row ->> 'dictionary_version',
+      p_row ->> 'retrieval_config_hash',
+      v_profile
+    )
+    RETURNING id INTO v_id;
+  EXCEPTION WHEN check_violation OR not_null_violation OR numeric_value_out_of_range THEN
+    RAISE EXCEPTION 'invalid_miss' USING ERRCODE = 'P0001';
+  END;
+  RETURN v_id;
+END
+$fn$;
+
+-- Deletes every tenant's misses older than p_older_than_days (at least 1) and returns the count.
+CREATE OR REPLACE FUNCTION public.rag_term_purge_misses(p_older_than_days integer)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_count integer;
+BEGIN
+  IF p_older_than_days IS NULL OR p_older_than_days < 1 THEN
+    RAISE EXCEPTION 'invalid_window' USING ERRCODE = 'P0001';
+  END IF;
+  DELETE FROM public.rag_term_misses m WHERE m.created_at < pg_catalog.now() - pg_catalog.make_interval(days => p_older_than_days);
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END
+$fn$;
+
+-- The tenant's misses of the last p_window_days (1 to 30; larger windows read 30 days), newest first.
+CREATE OR REPLACE FUNCTION public.rag_term_read_misses(p_tenant_key text, p_window_days integer DEFAULT 14)
+RETURNS TABLE (
+  id uuid,
+  source text,
+  query_masked text,
+  language text,
+  status text,
+  reason text,
+  top_score real,
+  dictionary_version text,
+  retrieval_config_hash text,
+  profile text,
+  created_at timestamptz
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_days integer;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_window_days IS NULL OR p_window_days < 1 THEN
+    RAISE EXCEPTION 'invalid_window' USING ERRCODE = 'P0001';
+  END IF;
+  v_days := LEAST(p_window_days, 30);
+  RETURN QUERY
+  SELECT m.id, m.source, m.query_masked, m.language, m.status, m.reason, m.top_score, m.dictionary_version, m.retrieval_config_hash,
+         m.profile, m.created_at
+    FROM public.rag_term_misses m
+   WHERE m.tenant_key = p_tenant_key
+     AND m.created_at >= pg_catalog.now() - pg_catalog.make_interval(days => v_days)
+   ORDER BY m.created_at DESC, m.id;
+END
+$fn$;
+
+-- Per distinct token (at most 200), the number of the tenant's documents with a current, ready chunk whose lexical_tsv matches it.
+CREATE OR REPLACE FUNCTION public.rag_term_corpus_df(p_tenant_key text, p_tokens text[])
+RETURNS TABLE (token text, df bigint)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  RETURN QUERY
+  WITH toks AS (
+    SELECT DISTINCT u.tok
+      FROM pg_catalog.unnest(COALESCE(p_tokens, '{}'::text[])) AS u(tok)
+     WHERE u.tok IS NOT NULL AND u.tok <> ''
+     LIMIT 200
+  )
+  SELECT t.tok,
+         COALESCE((
+           SELECT pg_catalog.count(DISTINCT c.document_id)
+             FROM public.document_chunks c
+            WHERE c.tenant_key = p_tenant_key
+              AND c.is_current
+              AND c.status IN ('ready', 'variant')
+              AND c.lexical_tsv OPERATOR(pg_catalog.@@) public.rag_lexical_tsquery(ARRAY[t.tok])
+         ), 0::bigint)
+    FROM toks t
+   ORDER BY t.tok;
+END
+$fn$;
+
+-- Upserts mined candidates (at most 1,000 rows) keyed by (tenant, language, term). A new row is pending; an existing row keeps its status
+-- and takes the new support, examples, corpus_df and last_seen. Clears the examples of the tenant's candidates not seen for 30 days.
+CREATE OR REPLACE FUNCTION public.rag_term_upsert_candidates(p_tenant_key text, p_rows jsonb)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_row jsonb;
+  v_count integer := 0;
+  v_examples text[];
+  v_source text;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_rows IS NULL OR pg_catalog.jsonb_typeof(p_rows) <> 'array' OR pg_catalog.jsonb_array_length(p_rows) > 1000 THEN
+    RAISE EXCEPTION 'invalid_candidate' USING ERRCODE = 'P0001';
+  END IF;
+
+  UPDATE public.rag_term_candidates c
+     SET examples = '{}'::text[]
+   WHERE c.tenant_key = p_tenant_key
+     AND c.last_seen < pg_catalog.now() - pg_catalog.make_interval(days => 30)
+     AND pg_catalog.cardinality(c.examples) > 0;
+
+  FOR v_row IN SELECT x FROM pg_catalog.jsonb_array_elements(p_rows) AS x LOOP
+    IF pg_catalog.jsonb_typeof(v_row) <> 'object'
+       OR pg_catalog.jsonb_typeof(v_row -> 'term') IS DISTINCT FROM 'string'
+       OR pg_catalog.jsonb_typeof(v_row -> 'language') IS DISTINCT FROM 'string'
+       OR pg_catalog.jsonb_typeof(v_row -> 'support') IS DISTINCT FROM 'number'
+       OR (v_row ? 'corpus_df' AND pg_catalog.jsonb_typeof(v_row -> 'corpus_df') NOT IN ('number', 'null'))
+       OR (v_row ? 'source' AND pg_catalog.jsonb_typeof(v_row -> 'source') NOT IN ('string', 'null'))
+       OR (v_row ? 'status')
+       OR (v_row ? 'entry_id')
+       OR pg_catalog.jsonb_typeof(COALESCE(v_row -> 'examples', '[]'::jsonb)) <> 'array'
+       OR EXISTS (
+         SELECT 1 FROM pg_catalog.jsonb_array_elements(COALESCE(v_row -> 'examples', '[]'::jsonb)) e
+          WHERE pg_catalog.jsonb_typeof(e) <> 'string' OR pg_catalog.char_length(e #>> '{}') NOT BETWEEN 1 AND 500
+       ) THEN
+      RAISE EXCEPTION 'invalid_candidate' USING ERRCODE = 'P0001';
+    END IF;
+    v_examples := ARRAY(
+      SELECT t.v FROM pg_catalog.jsonb_array_elements_text(COALESCE(v_row -> 'examples', '[]'::jsonb)) WITH ORDINALITY AS t(v, n) ORDER BY t.n
+    );
+    v_source := COALESCE(v_row ->> 'source', 'miss_log');
+    BEGIN
+      INSERT INTO public.rag_term_candidates AS c (tenant_key, term, language, support, examples, corpus_df, source)
+      VALUES (
+        p_tenant_key,
+        v_row ->> 'term',
+        v_row ->> 'language',
+        (v_row ->> 'support')::integer,
+        v_examples,
+        COALESCE((v_row ->> 'corpus_df')::integer, 0),
+        v_source
+      )
+      ON CONFLICT ON CONSTRAINT rag_term_candidates_key DO UPDATE
+        SET support = EXCLUDED.support,
+            examples = EXCLUDED.examples,
+            corpus_df = EXCLUDED.corpus_df,
+            last_seen = pg_catalog.now();
+    EXCEPTION WHEN check_violation OR not_null_violation OR invalid_text_representation OR numeric_value_out_of_range THEN
+      RAISE EXCEPTION 'invalid_candidate' USING ERRCODE = 'P0001';
+    END;
+    v_count := v_count + 1;
+  END LOOP;
+  RETURN v_count;
+END
+$fn$;
+
+-- One page of a tenant's candidates for an admin of that tenant: pending first, then by support and recency, with total_count.
+CREATE OR REPLACE FUNCTION public.rag_term_list_candidates(
+  p_actor uuid,
+  p_layer_key text,
+  p_limit integer DEFAULT 50,
+  p_offset integer DEFAULT 0
+)
+RETURNS TABLE (
+  id uuid,
+  tenant_key text,
+  term text,
+  language text,
+  support integer,
+  examples text[],
+  corpus_df integer,
+  status text,
+  source text,
+  entry_id uuid,
+  first_seen timestamptz,
+  last_seen timestamptz,
+  decided_by uuid,
+  decided_at timestamptz,
+  total_count bigint
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_page integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 100);
+  v_skip integer := GREATEST(COALESCE(p_offset, 0), 0);
+BEGIN
+  IF p_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.admin_users a WHERE a.id = p_actor) THEN
+    RAISE EXCEPTION 'not_admin' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_layer_key IS NULL OR NOT (p_layer_key = ANY (public.rag_admin_tenant_keys(p_actor))) THEN
+    RAISE EXCEPTION 'not_admin_of_layer' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN QUERY
+  SELECT c.id, c.tenant_key, c.term, c.language, c.support,
+         CASE WHEN c.last_seen < pg_catalog.now() - pg_catalog.make_interval(days => 30) THEN '{}'::text[] ELSE c.examples END,
+         c.corpus_df, c.status, c.source, c.entry_id, c.first_seen, c.last_seen, c.decided_by, c.decided_at,
+         pg_catalog.count(*) OVER ()
+    FROM public.rag_term_candidates c
+   WHERE c.tenant_key = p_layer_key
+   ORDER BY (c.status = 'pending') DESC, c.support DESC, c.last_seen DESC, c.id
+   LIMIT v_page OFFSET v_skip;
+END
+$fn$;
+
+-- Dismisses a pending candidate, or accepts it with an entry of the candidate's tenant layer or of the shared layer; writes one audit row.
+CREATE OR REPLACE FUNCTION public.rag_term_decide_candidate(
+  p_actor uuid,
+  p_candidate_id uuid,
+  p_action text,
+  p_entry_id uuid DEFAULT NULL
+)
+RETURNS TABLE (candidate_id uuid, status text, entry_id uuid)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_keys text[];
+  v_cand public.rag_term_candidates;
+  v_after public.rag_term_candidates;
+  v_version bigint;
+BEGIN
+  IF p_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.admin_users a WHERE a.id = p_actor) THEN
+    RAISE EXCEPTION 'not_admin' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_action IS NULL OR p_action NOT IN ('dismiss', 'accept') THEN
+    RAISE EXCEPTION 'invalid_action' USING ERRCODE = 'P0001';
+  END IF;
+  v_keys := public.rag_admin_tenant_keys(p_actor);
+
+  SELECT c.* INTO v_cand FROM public.rag_term_candidates c WHERE c.id = p_candidate_id FOR UPDATE;
+  IF v_cand.id IS NULL OR NOT (v_cand.tenant_key = ANY (v_keys)) THEN
+    RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0001';
+  END IF;
+  IF v_cand.status <> 'pending' THEN
+    RAISE EXCEPTION 'not_pending' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_action = 'accept' THEN
+    IF p_entry_id IS NULL OR NOT EXISTS (
+      SELECT 1 FROM public.rag_term_entries e
+       WHERE e.id = p_entry_id AND e.suppresses_entry_id IS NULL AND (e.layer_key = v_cand.tenant_key OR e.layer_key = 'shared')
+    ) THEN
+      RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0001';
+    END IF;
+    UPDATE public.rag_term_candidates c
+       SET status = 'accepted', entry_id = p_entry_id, decided_by = p_actor, decided_at = pg_catalog.now()
+     WHERE c.id = v_cand.id
+     RETURNING c.* INTO v_after;
+  ELSE
+    UPDATE public.rag_term_candidates c
+       SET status = 'dismissed', decided_by = p_actor, decided_at = pg_catalog.now()
+     WHERE c.id = v_cand.id
+     RETURNING c.* INTO v_after;
+  END IF;
+
+  SELECT l.version INTO v_version FROM public.rag_term_layers l WHERE l.layer_key = v_cand.tenant_key;
+  INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+  VALUES (
+    v_cand.tenant_key,
+    v_after.entry_id,
+    CASE WHEN p_action = 'accept' THEN 'candidate_accept' ELSE 'candidate_dismiss' END,
+    p_actor,
+    pg_catalog.jsonb_build_object('candidate_id', v_cand.id, 'term', v_cand.term, 'language', v_cand.language, 'status', v_cand.status),
+    pg_catalog.jsonb_build_object(
+      'candidate_id', v_after.id, 'term', v_after.term, 'language', v_after.language, 'status', v_after.status, 'entry_id', v_after.entry_id
+    ),
+    COALESCE(v_version, 0::bigint)
+  );
+
+  RETURN QUERY SELECT v_after.id, v_after.status, v_after.entry_id;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_term_record_miss(text, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_purge_misses(integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_read_misses(text, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_corpus_df(text, text[]) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_upsert_candidates(text, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_list_candidates(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_decide_candidate(uuid, uuid, text, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_term_record_miss(text, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_purge_misses(integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_read_misses(text, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_corpus_df(text, text[]) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_upsert_candidates(text, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_list_candidates(uuid, text, integer, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_decide_candidate(uuid, uuid, text, uuid) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
