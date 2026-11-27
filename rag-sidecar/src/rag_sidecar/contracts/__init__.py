@@ -363,7 +363,14 @@ from rag_sidecar.contracts.routing import (
     PreflightResult,
     QualityCheckResult,
 )
-from rag_sidecar.contracts.sidecar import SidecarError, SidecarHealth, SidecarInfo, SidecarReady
+from rag_sidecar.contracts.sidecar import (
+    ProviderTestRequest,
+    ProviderTestResult,
+    SidecarError,
+    SidecarHealth,
+    SidecarInfo,
+    SidecarReady,
+)
 from rag_sidecar.contracts.report import (
     EvalReport,
     InjectionReport,
@@ -621,6 +628,8 @@ __all__ = [
     "SidecarHealth",
     "SidecarInfo",
     "SidecarReady",
+    "ProviderTestRequest",
+    "ProviderTestResult",
     "Baseline",
     "BaselineMetricStat",
     "BaselineRun",

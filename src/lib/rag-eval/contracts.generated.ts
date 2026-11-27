@@ -793,6 +793,12 @@ export type PromptBudgetConfig = z.infer<typeof PromptBudgetConfigSchema>
 export const PromptBudgetTraceSchema = z.object({ "context_length_unknown": z.boolean(), "dropped_documents": z.number().int().gte(0), "dropped_history_turns": z.number().int().gte(0), "estimated_raw_total": z.number().int().gte(0), "estimator": z.object({ "encoding": z.literal("cl100k_base").default("cl100k_base"), "factor": z.number().gte(0.5), "factor_source": z.enum(["measured","default"]), "family": z.union([z.string().regex(new RegExp("^[a-z0-9][a-z0-9._-]{0,63}$")), z.null()]).default(null) }).strict(), "near_limit": z.boolean(), "overflow_mode": z.enum(["truncate","refine"]), "parts": z.object({ "documents": z.number().int().gte(0), "history": z.number().int().gte(0), "question": z.number().int().gte(0), "reserve": z.number().int().gte(0), "rules": z.number().int().gte(0), "system": z.number().int().gte(0), "tools": z.number().int().gte(0) }).strict().describe("Estimated tokens per prompt part; `reserve` is the answer reserve (the effective output cap)."), "standalone_kept": z.boolean(), "status": z.enum(["ok","exceeded"]), "window": z.number().int().gte(1), "window_source": z.enum(["model","default"]) }).strict()
 export type PromptBudgetTrace = z.infer<typeof PromptBudgetTraceSchema>
 
+export const ProviderTestRequestSchema = z.object({ "provider": z.literal("vectara") }).strict().describe("D-15: POST /v1/providers/test; only providers whose keys live in the sidecar.")
+export type ProviderTestRequest = z.infer<typeof ProviderTestRequestSchema>
+
+export const ProviderTestResultSchema = z.object({ "code": z.enum(["ok","not_configured","unauthorized","timeout","unreachable","rate_limited","provider_error","bad_response"]), "latencyMs": z.number().int().gte(0), "message": z.string(), "ok": z.boolean(), "provider": z.literal("vectara") }).strict().describe("D-15: one probe outcome; message is the fixed text for the code, never vendor text, a key or an address.")
+export type ProviderTestResult = z.infer<typeof ProviderTestResultSchema>
+
 export const QualityCheckResultSchema = z.object({ "pages": z.array(z.object({ "failed": z.array(z.enum(["empty_text","low_chars","garbled","language_mismatch","missing_table","partial_conversion","table_boundary"])), "page": z.number().int().gte(1) }).strict()), "partial": z.boolean(), "passed": z.boolean(), "score": z.number().gte(0).lte(1) }).strict()
 export type QualityCheckResult = z.infer<typeof QualityCheckResultSchema>
 

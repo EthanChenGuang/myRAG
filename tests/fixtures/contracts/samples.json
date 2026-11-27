@@ -15240,6 +15240,16 @@
       "window": 8192,
       "window_source": "default"
     },
+    "ProviderTestRequest": {
+      "provider": "vectara"
+    },
+    "ProviderTestResult": {
+      "code": "not_configured",
+      "latencyMs": 0,
+      "message": "Not tested.",
+      "ok": false,
+      "provider": "vectara"
+    },
     "QualityCheckResult": {
       "pages": [
         {
