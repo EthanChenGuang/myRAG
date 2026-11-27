@@ -22,7 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      HAS_JUDGE_KEYS: ${{ secrets.OPENROUTER_API_KEY != '' && secrets.OPENAI_API_KEY != '' && vars.RAG_JUDGE_GENERATOR_MODEL != '' }}
+      HAS_JUDGE_KEYS: ${{ secrets.OPENROUTER_API_KEY != '' && (secrets.OPENAI_API_KEY != '' || vars.RAG_EVAL_OPENAI_VIA != 'openai') && vars.RAG_JUDGE_GENERATOR_MODEL != '' }}
+      RAG_EVAL_OPENAI_VIA: ${{ vars.RAG_EVAL_OPENAI_VIA || (secrets.OPENAI_API_KEY == '' && 'openrouter' || 'openai') }}
       HAS_REVIEW_QUEUE: ${{ secrets.RAG_ADMIN_BEARER != '' && secrets.RAG_APP_URL != '' && secrets.RAG_JUDGE_CALIBRATION_TENANT != '' }}
     steps:
       - name: Skip notice when judge keys or the generator model are absent
