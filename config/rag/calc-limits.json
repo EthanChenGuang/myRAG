@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "max_operands": 50,
+  "max_list_items": 200,
+  "max_steps": 30,
+  "max_depth": 6,
+  "max_digits": 30,
+  "max_round_places": 20,
+  "max_bits": 4096
+}
