@@ -1,11 +1,17 @@
 import { RAG_MODE_CONFIGS } from '@/lib/rag-mode';
 import { answerLanguageInstruction, type AnswerLanguageOptions } from './answer-language';
+import type { DecomposedAnswerInput } from './decomposed-answer';
+
+export interface EnhancedPromptOptions extends AnswerLanguageOptions {
+  /** 06.2 D-11: set by the caller only while RAG_DECOMPOSED_ANSWER is effective and the plan has sub-questions. */
+  decomposedAnswer?: DecomposedAnswerInput;
+}
 
 export function createEnhancedRAGPrompt(
   basePrompt: string,
   context: string,
   mode: 'strict' | 'balanced' | 'flexible' | 'bypass' = 'strict',
-  options?: AnswerLanguageOptions,
+  options?: EnhancedPromptOptions,
 ): string {
   const prompt = wrapPrompt(basePrompt, context, mode);
   const line = answerLanguageInstruction(options);
