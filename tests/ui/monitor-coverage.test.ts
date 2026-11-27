@@ -513,7 +513,7 @@ describe('Test set coverage as classic scripts (the way index.html loads them)',
     const groups = root.querySelector('[data-monitor-coverage-groups]') as FakeElement;
     expect(groups, 'topic group table').toBeTruthy();
     expect(groups.querySelectorAll('[aria-hidden="true"].w-24')).toHaveLength(8);
-    expect(text(root)).toContain('Questions');
+    expect(text(root)).toContain('Not in any group');
     expect(errors).toEqual([]);
   });
 });

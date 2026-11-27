@@ -35,6 +35,7 @@ const MONITOR_GATES =
         gatesUiFetch,
         gatesUiSubTabs,
         gatesUiConfirm,
+        gatesUiShareBar,
       }
     : require('./gates-ui.js');
 
