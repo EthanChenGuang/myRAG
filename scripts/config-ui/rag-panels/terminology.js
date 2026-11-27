@@ -1335,7 +1335,7 @@ class TerminologyPanel {
     const newButton = this.btn(this.t('action.new'), { className: 'btn btn-outline md:btn-sm', attrs: { 'aria-expanded': this.editor ? 'true' : 'false', 'aria-controls': 'rag-terminology-editor' } }, () =>
       this.openEditor({ mode: 'create', draft: terminologyEmptyDraft() }),
     );
-    const toolbar = this.el('div', { className: 'flex flex-wrap items-end gap-3 min-w-0' }, [
+    const toolbar = this.el('div', { className: 'flex flex-wrap items-end gap-2 min-w-0' }, [
       this.el('div', { className: 'form-control min-w-0' }, [
         this.el('label', { className: 'label py-1', attrs: { for: searchId } }, [this.el('span', { className: 'label-text', text: this.t('list.search') })]),
         search,
@@ -1362,7 +1362,7 @@ class TerminologyPanel {
     const th = (key) => this.el('th', { className: 'font-semibold whitespace-normal align-bottom', text: this.t(key), attrs: { scope: 'col' } });
     const rows = items.map((item) => this.renderRow(item));
     const table = this.el('table', { className: 'table table-sm' }, [
-      this.el('thead', {}, [this.el('tr', {}, ['col.term', 'col.variants', 'col.kind', 'col.language', 'col.mode', 'col.status', 'col.actions'].map(th))]),
+      this.el('thead', {}, [this.el('tr', {}, ['col.term', 'col.actions', 'col.variants', 'col.kind', 'col.language', 'col.mode', 'col.status'].map(th))]),
       this.el('tbody', {}, rows),
     ]);
     const region = this.el(
@@ -1372,7 +1372,7 @@ class TerminologyPanel {
     );
     const from = this.offset + 1;
     const to = this.offset + items.length;
-    const pager = this.el('div', { className: 'flex flex-wrap items-center gap-3' }, [
+    const pager = this.el('div', { className: 'flex flex-col items-start gap-2' }, [
       this.el('span', { className: 'text-xs text-base-content/70 tabular-nums', text: this.t('list.range', { from: ui.ragUiFormatNumber(from, this.locale), to: ui.ragUiFormatNumber(to, this.locale), total: ui.ragUiFormatNumber(this.list.total, this.locale) }) }),
     ]);
     if (this.offset > 0 || to < this.list.total) {
@@ -1386,8 +1386,7 @@ class TerminologyPanel {
         this.loadEntries();
       });
       next.disabled = to >= this.list.total;
-      pager.appendChild(prev);
-      pager.appendChild(next);
+      pager.appendChild(this.el('div', { className: 'flex flex-nowrap gap-2' }, [prev, next]));
     }
     return this.el('div', { className: 'flex flex-col gap-2 min-w-0' }, [region, pager]);
   }
@@ -1400,7 +1399,7 @@ class TerminologyPanel {
       actions.push(this.btn(this.t('action.show'), { className: 'btn btn-ghost md:btn-sm', attrs: { 'aria-label': this.t('action.showAria', { term }) } }, (event) => this.setSuppression(view.suppressesEntryId, false, term, event)));
     } else {
       actions.push(this.btn(this.t('action.edit'), { className: 'btn btn-ghost md:btn-sm', attrs: { 'aria-label': this.t('action.editAria', { term }), 'data-terminology-edit': view.id } }, () => this.openEditor({ mode: 'edit', id: view.id, draft: terminologyDraftFromEntry(item) })));
-      actions.push(this.btn(this.t('action.delete'), { className: 'btn btn-ghost md:btn-sm text-error', attrs: { 'aria-label': this.t('action.deleteAria', { term }) } }, (event) => this.confirmDelete(view, event)));
+      actions.push(this.btn(this.t('action.delete'), { className: 'btn btn-ghost md:btn-sm', attrs: { 'aria-label': this.t('action.deleteAria', { term }) } }, (event) => this.confirmDelete(view, event)));
       if (this.layer === 'shared' && !this.singleTenant) {
         actions.push(this.btn(this.t('action.hide'), { className: 'btn btn-ghost md:btn-sm', attrs: { 'aria-label': this.t('action.hideAria', { term }) } }, (event) => this.setSuppression(view.id, true, term, event)));
       }
@@ -1412,6 +1411,7 @@ class TerminologyPanel {
     ]);
     return this.el('tr', {}, [
       termCell,
+      this.el('td', { className: 'min-w-28 md:min-w-48' }, [this.el('div', { className: 'flex flex-wrap gap-1' }, actions)]),
       this.el('td', { className: mono + ' min-w-32 max-w-xs', text: view.variants, attrs: { translate: 'no' } }),
       this.el('td', { text: view.kind }),
       this.el('td', { text: view.language }),
@@ -1419,7 +1419,6 @@ class TerminologyPanel {
       this.el('td', {}, [
         this.el('span', { className: 'badge badge-sm badge-outline whitespace-nowrap' + (view.suppression ? ' border-warning' : view.enabled ? '' : ' opacity-70'), text: view.status }),
       ]),
-      this.el('td', { className: 'min-w-48' }, [this.el('div', { className: 'flex flex-wrap gap-1' }, actions)]),
     ]);
   }
 
@@ -1462,7 +1461,7 @@ class TerminologyPanel {
     nodes.push(grid);
     const save = this.btn(this.t('action.save'), { className: 'btn btn-primary md:btn-sm' }, () => this.saveEntry(save));
     const cancel = this.btn(this.t('action.cancel'), { className: 'btn btn-ghost md:btn-sm' }, () => this.closeEditor());
-    nodes.push(this.el('div', { className: 'flex flex-wrap items-center gap-3' }, [save, cancel]));
+    nodes.push(this.el('div', { className: 'flex flex-wrap items-center gap-2' }, [save, cancel]));
     const block = this.el('div', { className: 'bg-base-100 rounded-lg p-4 flex flex-col gap-4 min-w-0', id: 'rag-terminology-editor', attrs: { role: 'group', 'aria-label': this.t(headingKey) } }, nodes);
     block.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') this.closeEditor();
@@ -1511,7 +1510,7 @@ class TerminologyPanel {
         this.editor.draft.enabled = Boolean(control.checked);
         this.editor.dirty = true;
       });
-      wrap.appendChild(this.el('label', { className: 'label cursor-pointer justify-start gap-3 w-fit min-h-11 md:min-h-8', attrs: { for: id } }, [control, this.el('span', { className: 'label-text', text: f.label })]));
+      wrap.appendChild(this.el('label', { className: 'label cursor-pointer justify-start gap-2 w-fit min-h-11 md:min-h-8', attrs: { for: id } }, [control, this.el('span', { className: 'label-text', text: f.label })]));
     } else {
       wrap.appendChild(this.el('label', { className: 'label py-1', attrs: { for: id } }, [this.el('span', { className: 'label-text', text: f.label })]));
       if (f.control === 'select') {
@@ -1575,7 +1574,7 @@ class TerminologyPanel {
       editor.issues = clientIssues;
       editor.focus = 'summary';
       this.renderEntries();
-      this.announce(this.t('form.notSaved'), true);
+      this.announce('');
       return;
     }
     const body = this.withOrganization({ ...terminologyEntryFields(editor.draft), layer: this.layer, expected_version: this.layerVersion ?? 0 });
@@ -1619,7 +1618,7 @@ class TerminologyPanel {
       editor.issues = Array.isArray(terminologyBody(result).issues) ? terminologyBody(result).issues : [];
       editor.focus = 'summary';
       this.renderEntries();
-      this.announce(this.t('form.notSaved'), true);
+      this.announce('');
       return;
     }
     const mapped = this.failed(result);
@@ -1760,12 +1759,12 @@ class TerminologyPanel {
           this.el('legend', { className: 'text-sm font-semibold mb-1', text: this.t('import.mode') }),
           this.el('div', { className: 'flex flex-wrap gap-x-6 gap-y-1' }, [modeOption('merge', 'import.merge'), modeOption('replace', 'import.replace')]),
         ]),
-        this.el('div', { className: 'flex flex-wrap items-center gap-3' }, [check]),
+        this.el('div', { className: 'flex flex-wrap items-center gap-2' }, [check]),
         this.hosts.importResult,
       ]),
       this.el('details', { className: 'bg-base-100 rounded-lg p-4 min-w-0' }, [
         this.el('summary', { className: 'text-sm font-semibold cursor-pointer', text: this.t('import.columns') }),
-        this.el('div', { className: 'mt-3' }, [columns]),
+        this.el('div', { className: 'mt-4' }, [columns]),
       ]),
       this.el('div', { className: 'flex flex-col gap-2 min-w-0 border-t border-base-300 pt-6' }, [
         this.el('h4', { className: 'text-base font-semibold', text: this.t('export.title') }),
@@ -1807,7 +1806,7 @@ class TerminologyPanel {
         const apply = this.btn(this.t('import.apply'), { className: 'btn btn-primary md:btn-sm', attrs: { 'aria-describedby': 'rag-terminology-apply-reason' } }, () => this.applyImport(apply, report));
         const reason = report.blocking ? this.t('import.blocked') : ready ? '' : this.t('import.needCheck');
         apply.disabled = Boolean(reason);
-        nodes.push(this.el('div', { className: 'flex flex-wrap items-center gap-3' }, [apply, this.el('p', { className: 'text-sm text-base-content/70', id: 'rag-terminology-apply-reason', text: reason })]));
+        nodes.push(this.el('div', { className: 'flex flex-wrap items-center gap-2' }, [apply, this.el('p', { className: 'text-sm text-base-content/70', id: 'rag-terminology-apply-reason', text: reason })]));
       }
     }
     host.replaceChildren(...nodes);
@@ -1989,7 +1988,7 @@ class TerminologyPanel {
       box.addEventListener('change', () => {
         p.includeDraft = Boolean(box.checked);
       });
-      nodes.push(this.el('label', { className: 'label cursor-pointer justify-start gap-3 w-fit min-h-11 md:min-h-8', attrs: { for: id } }, [box, this.el('span', { className: 'label-text', text: this.t('preview.includeDraft') })]));
+      nodes.push(this.el('label', { className: 'label cursor-pointer justify-start gap-2 w-fit min-h-11 md:min-h-8', attrs: { for: id } }, [box, this.el('span', { className: 'label-text', text: this.t('preview.includeDraft') })]));
     }
     const run = this.btn(this.t('preview.run'), { className: 'btn btn-primary md:btn-sm' }, () => this.runPreview(run));
     nodes.push(this.el('div', {}, [run]));
@@ -2144,7 +2143,7 @@ class TerminologyPanel {
     );
     const dismiss = this.btn(this.t('candidates.dismiss'), { className: 'btn btn-ghost md:btn-sm', attrs: { 'aria-label': this.t('candidates.dismissAria', { term: view.term }) } }, (event) => this.dismissCandidate(view, event));
     return this.el('li', { className: 'bg-base-100 rounded-lg p-4 flex flex-col gap-2 min-w-0' }, [
-      this.el('div', { className: 'flex flex-wrap items-center gap-3 min-w-0' }, [
+      this.el('div', { className: 'flex flex-wrap items-center gap-2 min-w-0' }, [
         this.el('span', { className: 'font-mono text-sm font-semibold break-words min-w-0', text: view.term, attrs: { translate: 'no' } }),
         this.el('div', { className: 'flex flex-wrap gap-1 ml-auto' }, [accept, dismiss]),
       ]),
