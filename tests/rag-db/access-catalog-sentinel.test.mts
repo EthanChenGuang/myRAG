@@ -245,6 +245,21 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
     functions: ['rag_document_versions'],
   },
   {
+    reason:
+      'Source recheck (0723, 06.3-07): returns the subset of the chunk ids a filtered leg already returned that are still current and ready; it takes only those ids, returns ids only and cannot widen the result.',
+    functions: ['rag_source_recheck'],
+  },
+  {
+    reason:
+      'Purge (0726, 0727, 06.3-15): tenant-checked, service_role only, for the admin purge path and source sync (no retrieval leg calls them); returns ids, counts and storage keys, never row content.',
+    functions: ['rag_purge_admin_target', 'rag_purge_lineage', 'rag_purge_verify'],
+  },
+  {
+    reason:
+      'Purge citation scrub (0724, 06.3-10): rewrites the messages jsonb it is passed (withdrawn citation markers); it reads no table and returns only its input.',
+    functions: ['rag_withdrawn_chat_messages'],
+  },
+  {
     reason: 'Account setup (multi-tenant): creates an organization and returns its row; the word documents appears only in a comment of its body.',
     functions: ['create_organization_safe'],
   },
