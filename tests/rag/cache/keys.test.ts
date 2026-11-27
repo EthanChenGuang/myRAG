@@ -1,8 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { computeCacheKeyHash, hashSystemPromptTemplate } from '@/lib/rag/cache/keys';
+import { afterEach, describe, expect, it } from 'vitest';
+import { cacheAccessKeyPart } from '@/lib/rag/cache/access-key';
+import { accessKeyPartOf, computeCacheKeyHash, hashSystemPromptTemplate } from '@/lib/rag/cache/keys';
 import type { CacheKeyParts } from '@/lib/rag/cache/types';
+import { resetRagConfigForTests } from '@/lib/rag/config';
+import { resetRagDepsForTests, setRagDepsForTests } from '@/lib/rag/deps';
+import { AccessScopeMissingError, mintAccessScope } from '@/lib/rag/tenant/access';
+import { mintScope, withAccess } from '@/lib/rag/tenant/scope';
 
 const BASE: CacheKeyParts = {
+  accessGroupSetHash: 'off',
   answerLanguage: 'en',
   ragMode: 'strict',
   generatorModel: 'provider/model-a',
@@ -26,6 +32,7 @@ describe('computeCacheKeyHash', () => {
   });
 
   const changes: Array<[keyof CacheKeyParts, CacheKeyParts[keyof CacheKeyParts]]> = [
+    ['accessGroupSetHash', 'e'.repeat(64)],
     ['answerLanguage', 'zh'],
     ['ragMode', 'balanced'],
     ['generatorModel', 'provider/model-b'],
@@ -65,6 +72,83 @@ describe('computeCacheKeyHash', () => {
     const partial: Partial<CacheKeyParts> = { ...BASE };
     delete partial.entryProfile;
     expect(() => computeCacheKeyHash(partial as CacheKeyParts)).toThrow();
+  });
+});
+
+describe('accessGroupSetHash key part (04.3-12, D-23, A-05)', () => {
+  const USER_A = '00000000-0000-4000-8000-0000000000a1';
+  const USER_B = '00000000-0000-4000-8000-0000000000b1';
+  const GROUP_A = 'g:00000000-0000-4000-8000-0000000000f1';
+  const GROUP_B = 'g:00000000-0000-4000-8000-0000000000f2';
+
+  function accessSwitch(value: 'on' | 'off'): void {
+    setRagDepsForTests({ ragEnv: () => ({ RAG_DOC_ACCESS_GROUPS: value }) });
+    resetRagConfigForTests();
+  }
+
+  afterEach(() => {
+    resetRagDepsForTests();
+    resetRagConfigForTests();
+  });
+
+  it('rejects key parts without the access part, or with an empty one', () => {
+    const partial: Partial<CacheKeyParts> = { ...BASE };
+    delete partial.accessGroupSetHash;
+    expect(() => computeCacheKeyHash(partial as CacheKeyParts)).toThrow(/accessGroupSetHash/);
+    expect(() => computeCacheKeyHash({ ...BASE, accessGroupSetHash: '' })).toThrow(/accessGroupSetHash/);
+  });
+
+  it('requires the access part at the type level', () => {
+    const partial: Omit<CacheKeyParts, 'accessGroupSetHash'> = { ...BASE };
+    // @ts-expect-error accessGroupSetHash is required
+    const missing: CacheKeyParts = partial;
+    expect(missing).toBeDefined();
+  });
+
+  it('is the constant off with the switch off and an unattached scope', () => {
+    accessSwitch('off');
+    expect(cacheAccessKeyPart(mintScope('personal', USER_A, null))).toBe('off');
+  });
+
+  it('is the constant off for an off access scope and admin_all for an admin', () => {
+    accessSwitch('on');
+    const base = mintScope('personal', USER_A, null);
+    expect(cacheAccessKeyPart(withAccess(base, mintAccessScope('off', [])))).toBe('off');
+    expect(cacheAccessKeyPart(withAccess(base, mintAccessScope('admin_all', [])))).toBe('admin_all');
+  });
+
+  it('throws for an unattached scope while the switch is on, so no key is built', () => {
+    accessSwitch('on');
+    expect(() => cacheAccessKeyPart(mintScope('personal', USER_A, null))).toThrow(AccessScopeMissingError);
+  });
+
+  it('is the set hash of the effective keys: the same set gives the same key hash in any order, another set a different one', () => {
+    accessSwitch('on');
+    const a = withAccess(mintScope('personal', USER_A, null), mintAccessScope('keys', ['all', GROUP_A]));
+    const sameSet = withAccess(mintScope('personal', USER_B, null), mintAccessScope('keys', [GROUP_A, 'all']));
+    const other = withAccess(mintScope('personal', USER_A, null), mintAccessScope('keys', ['all', GROUP_B]));
+    const part = cacheAccessKeyPart(a);
+    expect(part).toMatch(HEX64);
+    expect(cacheAccessKeyPart(sameSet)).toBe(part);
+    expect(cacheAccessKeyPart(other)).not.toBe(part);
+    const hashOf = (scope: typeof a) => computeCacheKeyHash({ ...BASE, accessGroupSetHash: cacheAccessKeyPart(scope) });
+    expect(hashOf(sameSet)).toBe(hashOf(a));
+    expect(hashOf(other)).not.toBe(hashOf(a));
+    expect(hashOf(a)).not.toBe(computeCacheKeyHash(BASE));
+    expect(computeCacheKeyHash({ ...BASE, accessGroupSetHash: 'admin_all' })).not.toBe(computeCacheKeyHash(BASE));
+  });
+
+  it('accessKeyPartOf maps the three filter shapes', () => {
+    expect(accessKeyPartOf({ mode: 'off' })).toBe('off');
+    expect(accessKeyPartOf({ mode: 'admin_all' })).toBe('admin_all');
+    expect(accessKeyPartOf({ mode: 'keys', keys: ['all'], setHash: 'f'.repeat(64) })).toBe('f'.repeat(64));
+  });
+
+  it('keeps src/lib/rag/cache/keys.ts free of runtime imports from the tenant, config and deps modules', async () => {
+    const fs = await import('node:fs');
+    const source = fs.readFileSync(new URL('../../../src/lib/rag/cache/keys.ts', import.meta.url), 'utf8');
+    const runtimeImports = source.split('\n').filter((line) => /^import (?!type )/.test(line));
+    expect(runtimeImports).toEqual(["import { createHash } from 'node:crypto';"]);
   });
 });
 
