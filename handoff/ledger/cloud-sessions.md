@@ -845,3 +845,18 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - The latest main run 00afa6d9 was also red/cancelled. If it recurs, rebalance the ts-db shards (quick task).
 - 23:06Z The owner topped up DeepInfra. API key saved as a network secret for api.deepinfra.com (myRAG env).
   - Dispatched 03.2.1-02 T4 rerun (exec/03.2.1-02-t4): hosted vectors, D-26 compare, the identity test, and the nightly job.
+- 23:15Z Batch DONE and archived:
+  - plan-07-lex05 (07-53; three decisions made for the owner) -> 07-53 exec dispatched.
+  - 06.2-23 (exec/06.2-23 3d30092e).
+  - quick-access-derived-stores (6f5491b3; G5/G6/G7).
+  - quick-62-hash-bench (105bff9e; G5/G7; G2 NOT done -> quick-62-sysprompt-hash dispatched).
+  - 06.2-25 (be335fdf).
+  - quick-41-gate-hardening.
+  - VERIFY 5.3 FAIL (verify/05.3 a77708315):
+    - gaps 1/2/3/4/15/W-1 -> quick-53-gate-monitor;
+    - gap 6 plus the PR #135/#136 timeouts -> fix/ci-timeouts;
+    - gap 16 -> train-40 builder.
+  - 06.2-42 checkpoint: Task 2 needs an embedding key.
+  - All of the above route to train 41.
+- 23:15Z The owner cannot top up OpenAI, so the api.openai.com credential form was denied. 06.2-42 Task 2 is blocked until there is an alternative route.
+- 23:15Z The owner re-ran the failed jobs of PR #136 (run 46077840057).
