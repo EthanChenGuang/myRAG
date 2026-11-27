@@ -410,6 +410,14 @@
       "mechanism": "rechunk"
     },
     {
+      "name": "RAG_LEXICAL_BM25_B",
+      "side": "query"
+    },
+    {
+      "name": "RAG_LEXICAL_BM25_K1",
+      "side": "query"
+    },
+    {
       "name": "RAG_LEXICAL_DICTIONARY",
       "side": "ingestion",
       "mechanism": "relex"
@@ -418,6 +426,10 @@
       "name": "RAG_LEXICAL_QUANTITY",
       "side": "both",
       "mechanism": "relex"
+    },
+    {
+      "name": "RAG_LEXICAL_SCORING",
+      "side": "query"
     },
     {
       "name": "RAG_LEXICAL_SEARCH",

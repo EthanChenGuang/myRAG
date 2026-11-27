@@ -29,7 +29,11 @@ import {
   finishTrace,
   isSmallTalkResult,
   isV2Pipeline,
+  answerFinishFields,
+  answerTraceFields,
+  CLAUDE_MAX_OUTPUT_TOKENS,
   createAnswerTurn,
+  parseBodyChannel,
   kbUnavailableLanguage,
   kbUnavailableText,
   noInformationLanguage,
@@ -1295,7 +1299,8 @@ export async function POST(req: Request) {
             exclude?: boolean
           },
           language?: Language, // Add language selection for system prompts
-          systemPromptTemplate?: SystemPromptTemplate // Add system prompt template selection
+          systemPromptTemplate?: SystemPromptTemplate, // Add system prompt template selection
+          maxOutputTokens?: unknown // The request's own output limit (WhatsApp sends WHATSAPP_MAX_TOKENS)
         },
         sessionId?: string, // Add optional sessionId for MCP tool persistence
         metadata?: any, // Add metadata field for debugging
@@ -1303,6 +1308,7 @@ export async function POST(req: Request) {
         disableRAG?: boolean, // WhatsApp and other overrides
         ragMode?: 'strict' | 'balanced' | 'flexible' | 'bypass' // RAG behavior mode
         capabilities?: unknown
+        channel?: unknown // Phase 5.2: 'web' | 'whatsapp', selects the notice rendering only
       },
       imageStorage?: Record<string, string> // Add imageStorage for attached images
     } = requestBody;
@@ -1396,11 +1402,12 @@ export async function POST(req: Request) {
       history: rawMessages,
       uiLanguage: userLanguage,
       channel:
-        Boolean(data?.systemPromptOverride) ||
+        parseBodyChannel(data?.channel ?? requestBody?.channel) ??
+        (Boolean(data?.systemPromptOverride) ||
         (typeof data?.chatId === 'string' && data.chatId.includes('whatsapp')) ||
         rawMessages.some((message) => message.name?.includes('@s.whatsapp.net'))
           ? 'whatsapp'
-          : 'web',
+          : 'web'),
       ragMode,
     });
     const registryAnswerLanguage = answerTurn.textsSource === 'registry' ? answerTurn.answerLanguage : null;
@@ -2593,6 +2600,26 @@ Context:
     console.log('[RAG SYSTEM DEBUG] context.length:', context.length);
     console.log('[RAG SYSTEM DEBUG] Context preview (first 200 chars):', context.substring(0, 200));
 
+    // Phase 5.2 D-30: decided once, before the composer, so the concise part and the model limit follow the same rule
+    if (answerTurn.config.maxOutputTokens.kind !== 'off') {
+      const ownLimit = data?.settings?.maxOutputTokens;
+      answerTurn.decideOutputCap({
+        knowledgeContext:
+          !smallTalkTurn &&
+          !effectiveDisableRAG &&
+          !retrievalFailed &&
+          context.length > 0 &&
+          (retrievalResult?.status === 'ok' || retrievalResult?.status === 'degraded') &&
+          (retrievalResult?.blocks ?? []).some((block) => !block.isImage),
+        userMaxTokens: typeof ownLimit === 'number' && Number.isFinite(ownLimit) && ownLimit > 0,
+        reasoning:
+          reasoningRequested ||
+          prepareReasoningConfig(model, reasoningSettings) !== undefined ||
+          model.includes('gpt-5'),
+        approvalContinuation: lastAssistantHasToolCall(rawMessages),
+      });
+    }
+
     if (smallTalkTurn) {
       systemPrompt = createEnhancedRAGPrompt(ragSystemPrompt, '', 'bypass');
     } else if (context.length > 0) {
@@ -2600,14 +2627,28 @@ Context:
       console.log('[RAG SYSTEM] Creating enhanced prompt with context length:', context.length);
       console.log('[RAG SYSTEM] Using RAG mode:', ragMode);
       const answerLanguage = answerLanguageOptions(retrievalResult);
+      // Phase 5.2 D-04, D-07: the answer-rule block goes after the citation instruction; it is the prompt itself with every switch off
+      const answerRuleOptions = {
+        mode: ragMode,
+        webSearchOffered: SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY),
+      };
       const historyNotEvidence = ragMode !== 'bypass' && historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE);
       systemPrompt = appendHistoryNotEvidence(
-        citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage)),
+        answerTurn.composeSystemPrompt(
+          citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage)),
+          answerRuleOptions,
+        ),
         historyNotEvidence,
       );
       if (citationSession.strategy === 'claude-citations') {
         claudeSystemText = [
-          appendHistoryNotEvidence(appendAnswerLanguage(citationSession.claudeSystemPrompt(ragSystemPrompt), answerLanguage), historyNotEvidence),
+          appendHistoryNotEvidence(
+            answerTurn.composeSystemPrompt(
+              appendAnswerLanguage(citationSession.claudeSystemPrompt(ragSystemPrompt), answerLanguage),
+              answerRuleOptions,
+            ),
+            historyNotEvidence,
+          ),
           String(formattingSystemMessage.content),
           String(ctaSystemMessage.content),
         ].join('\n\n');
@@ -3800,7 +3841,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           safeModelId.includes('llama-3.1-70b')
         ),
         temperature: 0.1,
-        maxOutputTokens: getMaxTokensForModel(safeModelId),
+        maxOutputTokens: answerTurn.maxOutputTokens(getMaxTokensForModel(safeModelId)),
       };
 
       // For Claude Sonnet 4, DISABLE TOOLS to prevent truncation
@@ -3812,14 +3853,15 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         streamParams.toolChoice = 'none'; // Explicitly disable tool usage
 
         // Ensure maximum token output
-        streamParams.maxOutputTokens = 16384;
-        streamParams.max_tokens = 16384; // Alternative parameter name
-        streamParams.maxCompletionTokens = 16384; // Another alternative
+        const sonnet4Limit = answerTurn.maxOutputTokens(16384);
+        streamParams.maxOutputTokens = sonnet4Limit;
+        streamParams.max_tokens = sonnet4Limit; // Alternative parameter name
+        streamParams.maxCompletionTokens = sonnet4Limit; // Another alternative
 
         // Add provider-specific metadata
         streamParams.experimental_providerMetadata = {
           openrouter: {
-            max_tokens: 16384,
+            max_tokens: sonnet4Limit,
             temperature: 0.1,
             stop: [] // No stop sequences
           }
@@ -3889,7 +3931,11 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       // First streamText call with merged tools and reasoning
       let answerToolOutputUsed = false;
       const citationTransformParams = () => {
-        const citationTransforms = citationSession.transforms();
+        // Phase 5.2 D-35: the citation transforms unchanged with every 5.2 switch off
+        const citationTransforms = answerTurn.transforms(citationSession.transforms(), {
+          webSearchOffered: SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY),
+          aliases: () => citationSession.aliases(),
+        });
         return citationTransforms.length > 0 ? { experimental_transform: citationTransforms } : {};
       };
 
@@ -4263,6 +4309,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             history,
             question: getLastUserText(rawMessages),
             reasoning: reasoningRequested,
+            ...(answerTurn.outputCapDecision()?.applied ? { outputCap: answerTurn.maxOutputTokens(CLAUDE_MAX_OUTPUT_TOKENS) } : {}),
             abortSignal: AbortSignal.any([req.signal, claudeAbort.signal]),
             onError: (error) => {
               claudeError = error;
@@ -4305,7 +4352,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           invalidCitations: records?.invalidCitations ?? 0,
           answerText: responseText,
           aborted,
-          groundednessEligible: !failed && (ragMode === 'strict' || ragMode === 'balanced') && knowledgeBaseContext,
+          groundednessEligible:
+            !failed && (ragMode === 'strict' || ragMode === 'balanced') && knowledgeBaseContext && !answerTurn.refusedByModel(),
           toolOutputUsed: answerToolOutputUsed,
           premise: {
             blocks: premiseBlocks,
@@ -4314,6 +4362,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               .filter((text) => text.length > 0),
           },
           requestLanguage: userLanguage,
+          ...(answerTurn.config.anyNonDefault ? answerFinishFields(answerTurn, retrievalResult) : {}),
         });
       };
 
@@ -4389,7 +4438,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               return undefined;
             }
             if (part.type !== 'finish') return undefined;
-            const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata() };
+            const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata(), ...answerTurn.finishMetadata() };
             if (!ragTraceId && !answerId && injectionFlagged === undefined && Object.keys(finishMetadata).length === 0) return undefined;
             return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...injectionFlaggedField, ...finishMetadata };
           };
@@ -4429,15 +4478,20 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             if (ragLogContext) setRagLogOutcome(null, detectLanguage(directText));
           }
           if (ragLogContext && (isAborted || generationFailed || finishReason === 'error')) setRagLogOutcome(null, null);
+          // D-16: a sentinel refusal is logged like the server-side refusal
+          if (answerTurn.refusedByModel()) setRagLogOutcome('refused_no_context', answerTurn.answerLanguage);
           if (ragTrace) {
             const status = isAborted ? 'aborted' : generationFailed || finishReason === 'error' ? 'error' : 'ok';
             const fallbackReason = citationSession.fallbackReason;
+            const answerTrace = answerTraceFields(answerTurn, citationSession.truncatedMarkers());
+            const rules = [...(fallbackReason ? [`citation_strategy_fallback:${fallbackReason}`] : []), ...answerTrace.rules];
             ragTrace.collector.record({
               name: 'generation',
               status,
               startedAt: aiStartTime,
               endedAt: ragTrace.collector.now(),
-              ...(fallbackReason ? { rules: [`citation_strategy_fallback:${fallbackReason}`] } : {}),
+              ...(rules.length > 0 ? { rules } : {}),
+              ...(answerTrace.counts ? { counts: answerTrace.counts } : {}),
             });
           }
           finishRagTrace();

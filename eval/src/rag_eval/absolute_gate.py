@@ -4,6 +4,7 @@ decided from one report, with no baseline. A check that did not run or had too f
 import argparse
 import importlib
 import json
+import re
 import sys
 from collections.abc import Iterable, Mapping
 from datetime import date, datetime, timezone
@@ -505,29 +506,77 @@ def _tier_entry(name: str, raw_path: str, report: EvalReport, gates: QualityGate
     }
 
 
+def _failing_checks(entry: Mapping[str, object]) -> str:
+    """'check (slice, slice); check (slice)' for the failed rows of one tier entry, in row order."""
+    slices: dict[str, list[str]] = {}
+    for row in entry.get("checks") or []:  # type: ignore[union-attr]
+        if row.get("result") == "failed":
+            slices.setdefault(str(row.get("check")), []).append(str(row.get("slice")))
+    return "; ".join(f"{check} ({', '.join(names)})" for check, names in slices.items())
+
+
 def render_measurement_markdown(record: Mapping[str, object]) -> str:
     lines = [
         "# Absolute gate measurement",
         "",
         "Would-be exit code: the absolute gate in enforce mode (0 pass, 11 ceiling or floor, 12 composition or stale share).",
         "Gate exit: the exit code of the gate run itself (noise band; absolute gate in report mode). The wall time of each run is in seconds.",
+        "Mode (stage after): enforce when the would-be exit code is 0, report otherwise (O-1).",
         "",
-        "| Tier | Stage | Out | False-answer rate | False-refusal rate | Composition | Would-be exit code | Gate exit | Wall time (s) |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Tier | Stage | Mode | Out | False-answer rate | False-refusal rate | Composition | Would-be exit code | Gate exit | Wall time (s) |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for entry in record.get("tiers", []):  # type: ignore[union-attr]
         wall = entry.get("wall_time_s")
         gate_exit = entry.get("gate_exit")
+        exit_code = entry.get("exit_code")
         lines.append(
-            f"| {entry['name']} | {entry['stage']} | {entry['out']} | {_fmt(entry.get('false_answer_rate'))} | "
-            f"{_fmt(entry.get('false_refusal_rate'))} | {entry.get('composition_result')} | {entry['exit_code']} | "
+            f"| {entry['name']} | {entry['stage']} | {entry.get('mode') or '-'} | {entry.get('out') or '-'} | "
+            f"{_fmt(entry.get('false_answer_rate'))} | {_fmt(entry.get('false_refusal_rate'))} | "
+            f"{entry.get('composition_result') or '-'} | {'-' if exit_code is None else exit_code} | "
             f"{'-' if gate_exit is None else gate_exit} | {'-' if wall is None else f'{wall:.1f}'} |"
         )
     lines += ["", "## Failed checks per tier", ""]
     for entry in record.get("tiers", []):  # type: ignore[union-attr]
         failed = ", ".join(entry.get("failed") or []) or "none"
         lines.append(f"- {entry['name']} ({entry['stage']}): {failed}")
+    report_only = [e for e in record.get("tiers", []) if e.get("stage") == "after" and e.get("mode") == "report"]  # type: ignore[union-attr]
+    if report_only:
+        lines += ["", "## Report-only tiers (stage after)", ""]
+        for entry in report_only:
+            if entry.get("reason"):
+                lines.append(f"- {entry['name']}: report-only; not measured ({entry['reason']}).")
+            else:
+                lines.append(f"- {entry['name']}: report-only; failing: {_failing_checks(entry) or ', '.join(entry.get('failed') or [])}.")
     return "\n".join(lines) + "\n"
+
+
+_REASON_CODE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def _not_measured_entry(name: str, reason: str, stage: str) -> dict[str, object]:
+    """A tier recorded without a run (for example the live nightly tier without keys): report mode with its reason."""
+    return {
+        "name": name,
+        "stage": stage,
+        "mode": "report",
+        "reason": reason,
+        "report": None,
+        "out": None,
+        "floor_tier": _floor_tier(name),
+        "rag_mode": None,
+        "exit_code": None,
+        "passed": None,
+        "failed": [],
+        "false_answer_rate": None,
+        "false_refusal_rate": None,
+        "composition_result": None,
+        "stale_result": None,
+        "checks": [],
+        "composition": None,
+        "wall_time_s": None,
+        "gate_exit": None,
+    }
 
 
 def _measure(args: argparse.Namespace) -> int:
@@ -545,6 +594,14 @@ def _measure(args: argparse.Namespace) -> int:
             paths[name] = raw_path
         wall = _pairs(args.wall_time, "--wall-time", set(tiers), float)
         gate_exit = _pairs(args.gate_exit, "--gate-exit", set(tiers), int)
+        not_measured: dict[str, str] = {}
+        for entry in args.not_measured or []:
+            name, sep, reason = entry.partition("=")
+            if not sep or not name or not _REASON_CODE.match(reason):
+                raise ValueError(f"--not-measured expects <name>=<reason_code>, got {entry!r}")
+            if name in tiers or name in not_measured:
+                raise ValueError(f"--not-measured {name} is also a measured tier or given twice")
+            not_measured[name] = reason
         out = resolve_cli_path(args.out)
         previous: list[dict[str, object]] = []
         if out.exists():
@@ -555,14 +612,20 @@ def _measure(args: argparse.Namespace) -> int:
     except (OSError, ValidationError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_MISMATCH
+    recorded = set(tiers) | set(not_measured)
     entries = [
-        entry for entry in previous if not (entry.get("name") in tiers and entry.get("stage") == args.stage)
+        entry for entry in previous if not (entry.get("name") in recorded and entry.get("stage") == args.stage)
     ]
     for name in sorted(tiers):
         entry = _tier_entry(name, paths[name], tiers[name], gates, args.stage)
         entry["wall_time_s"] = wall.get(name)
         entry["gate_exit"] = gate_exit.get(name)
+        if args.stage == "after":
+            # O-1: a tier is enforced in CI only when the measurement shows it passing every ceiling and composition check.
+            entry["mode"] = "enforce" if entry["exit_code"] == EXIT_PASS else "report"
         entries.append(entry)
+    for name in sorted(not_measured):
+        entries.append(_not_measured_entry(name, not_measured[name], args.stage))
     entries.sort(key=lambda entry: (str(entry.get("name")), str(entry.get("stage"))))
     record: dict[str, object] = {"schema_version": 1, "gates_config_hash": gates.config_hash, "tiers": entries}
     _write_text(out, json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
@@ -592,6 +655,7 @@ def _parser() -> argparse.ArgumentParser:
     measure.add_argument("--wall-time", action="append", metavar="NAME=SECONDS", help="wall time of a tier's run")
     measure.add_argument("--gate-exit", action="append", metavar="NAME=CODE", help="exit code of a tier's gate run")
     measure.add_argument("--markdown", type=Path, help="also write the Markdown twin of the whole record")
+    measure.add_argument("--not-measured", action="append", metavar="NAME=REASON", help="a tier recorded without a run")
     return parser
 
 

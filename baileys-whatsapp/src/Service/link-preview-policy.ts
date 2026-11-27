@@ -55,5 +55,25 @@ export const socketLinkPreviewConfig = (env: LinkPreviewEnv = process.env) => ({
 	generateHighQualityLinkPreview: getLinkPreviewHosts(env).size > 0
 })
 
-export const buildTextMessage = (text: string, env: LinkPreviewEnv = process.env): TextMessageContent =>
-	allowsLinkPreview(text, env) ? { text } : { text, linkPreview: null }
+export type TextMessageOptions = {
+	linkPreview?: false
+}
+
+export type LinkPreviewField = { ok: true; options: TextMessageOptions } | { ok: false }
+
+/** The optional `linkPreview` field of a send request: absent or a boolean; `false` forces previews off for that message. */
+export const parseLinkPreviewField = (value: unknown): LinkPreviewField => {
+	if (value === undefined) return { ok: true, options: {} }
+	if (typeof value !== 'boolean') return { ok: false }
+	return { ok: true, options: value ? {} : { linkPreview: false } }
+}
+
+/** The configured preview host names, sorted; the health endpoint reports these and nothing else. */
+export const linkPreviewHostList = (env: LinkPreviewEnv = process.env): string[] => [...getLinkPreviewHosts(env)].sort()
+
+export const buildTextMessage = (
+	text: string,
+	env: LinkPreviewEnv = process.env,
+	options: TextMessageOptions = {}
+): TextMessageContent =>
+	options.linkPreview !== false && allowsLinkPreview(text, env) ? { text } : { text, linkPreview: null }

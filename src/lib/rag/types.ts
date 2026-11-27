@@ -54,6 +54,8 @@ export interface StageRecord {
   detail?: string;
   counts?: Record<string, number>;
   versions?: string[];
+  /** Scalar span metadata exported to Langfuse (ids and counts only); set only by the stages that need it. */
+  attributes?: Record<string, string | number | boolean>;
 }
 
 export interface UsedDocument {
@@ -138,6 +140,12 @@ export interface ContextBlock {
   text: string;
   isImage: boolean;
   alias: string | null;
+  /** The document's documents.user_id; present only while RAG_SECURITY_EVENTS is on (D-44), null for a document without owner. */
+  uploaderId?: string | null;
+  /** RAG_VERSION_LABELS (D-50): documents.version_label, else the integer version in the label language; absent without either. */
+  versionLabel?: string;
+  /** RAG_VERSION_LABELS (D-50): ISO YYYY-MM-DD from effective_from, else the document date; absent without either. */
+  effectiveFrom?: string;
 }
 
 export interface CitationLabel {

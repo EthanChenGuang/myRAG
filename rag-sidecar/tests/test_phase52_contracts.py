@@ -440,6 +440,14 @@ def test_security_event_has_no_text_field():
     SecurityEvent.model_validate(_event(chunk_id=None, uploader_id=None, trace_id=None, source="ingest_injection", action="quarantined"))
 
 
+def test_security_event_without_a_source_document():
+    # An output-guard finding no context block contains has no document or chunk (05.2-16).
+    event = SecurityEvent.model_validate(_event(document_id=None, chunk_id=None, uploader_id=None))
+    assert event.document_id is None
+    with pytest.raises(ValidationError):
+        SecurityEvent.model_validate(_event(document_id=""))
+
+
 def test_security_alert_rules():
     alert = {
         "tenant_key": "s:default",

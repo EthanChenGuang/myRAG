@@ -82,6 +82,7 @@ export function projectPending(item: PendingUpload) {
     version: item.version,
     uploaded_at: item.uploadedAt,
     new_version: item.newVersion,
+    ...(item.heldByUploaderHold !== undefined ? { held_by_uploader_hold: item.heldByUploaderHold } : {}),
   };
 }
 

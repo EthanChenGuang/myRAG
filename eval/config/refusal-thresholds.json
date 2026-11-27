@@ -1,7 +1,7 @@
 {
   "cells": [
     {
-      "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+      "config_hash": "33e0c5485bf5c5244e5f75d6c7ce9278d6fb11b51fc8fea6857d0139024de064",
       "dev": {
         "answerable_count": 2,
         "correct_refusal_rate": 0.0,
@@ -22,7 +22,7 @@
       "pairing": "cross",
       "provider": "cohere",
       "query_language": "en",
-      "recorded_at": "2026-11-25",
+      "recorded_at": "2026-11-26",
       "rerank_text_version": 1,
       "source": "fixture",
       "status": "insufficient_data",
@@ -30,42 +30,42 @@
       "tokenizer_version": 2
     },
     {
-      "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+      "config_hash": "33e0c5485bf5c5244e5f75d6c7ce9278d6fb11b51fc8fea6857d0139024de064",
       "dev": {
-        "answerable_count": 27,
-        "correct_refusal_rate": 0.42857142857142855,
+        "answerable_count": 48,
+        "correct_refusal_rate": 0.25,
         "false_refusal_rate": 0.0,
-        "false_refusal_rate_upper_bound": 0.10501923017634435,
-        "no_answer_count": 7
+        "false_refusal_rate_upper_bound": 0.06050340934889437,
+        "no_answer_count": 12
       },
       "holdout": {
-        "answerable_count": 7,
-        "correct_refusal_rate": 0.0,
-        "false_refusal_rate": 0.14285714285714285,
-        "false_refusal_rate_upper_bound": 0.5207029735913071,
-        "no_answer_count": 1
+        "answerable_count": 20,
+        "correct_refusal_rate": 0.3333333333333333,
+        "false_refusal_rate": 0.05,
+        "false_refusal_rate_upper_bound": 0.2161061642068473,
+        "no_answer_count": 3
       },
-      "holdout_evaluations": 1,
+      "holdout_evaluations": 2,
       "key": "cohere|fake-quality-v1|en|same",
       "model": "fake-quality-v1",
       "pairing": "same",
       "provider": "cohere",
       "query_language": "en",
-      "recorded_at": "2026-11-25",
+      "recorded_at": "2026-11-26",
       "rerank_text_version": 1,
       "source": "fixture",
       "status": "calibrated",
-      "threshold": 0.14972065823582034,
+      "threshold": 0.14192281229252665,
       "tokenizer_version": 2
     },
     {
-      "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+      "config_hash": "33e0c5485bf5c5244e5f75d6c7ce9278d6fb11b51fc8fea6857d0139024de064",
       "dev": {
         "answerable_count": 4,
         "correct_refusal_rate": 0.0,
         "false_refusal_rate": 0.0,
         "false_refusal_rate_upper_bound": 0.5271291954984121,
-        "no_answer_count": 1
+        "no_answer_count": 2
       },
       "holdout": {
         "answerable_count": 0,
@@ -80,7 +80,7 @@
       "pairing": "cross",
       "provider": "cohere",
       "query_language": "it",
-      "recorded_at": "2026-11-25",
+      "recorded_at": "2026-11-26",
       "rerank_text_version": 1,
       "source": "fixture",
       "status": "insufficient_data",
@@ -88,42 +88,42 @@
       "tokenizer_version": 2
     },
     {
-      "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+      "config_hash": "33e0c5485bf5c5244e5f75d6c7ce9278d6fb11b51fc8fea6857d0139024de064",
       "dev": {
-        "answerable_count": 18,
-        "correct_refusal_rate": 0.2,
+        "answerable_count": 36,
+        "correct_refusal_rate": 0.3333333333333333,
         "false_refusal_rate": 0.0,
-        "false_refusal_rate_upper_bound": 0.15331755395727828,
-        "no_answer_count": 5
+        "false_refusal_rate_upper_bound": 0.07984650951989443,
+        "no_answer_count": 9
       },
       "holdout": {
-        "answerable_count": 10,
-        "correct_refusal_rate": 0.0,
-        "false_refusal_rate": 0.1,
-        "false_refusal_rate_upper_bound": 0.3941633024365049,
+        "answerable_count": 22,
+        "correct_refusal_rate": 0.5,
+        "false_refusal_rate": 0.09090909090909091,
+        "false_refusal_rate_upper_bound": 0.25946653222843724,
         "no_answer_count": 4
       },
-      "holdout_evaluations": 1,
+      "holdout_evaluations": 2,
       "key": "cohere|fake-quality-v1|it|same",
       "model": "fake-quality-v1",
       "pairing": "same",
       "provider": "cohere",
       "query_language": "it",
-      "recorded_at": "2026-11-25",
+      "recorded_at": "2026-11-26",
       "rerank_text_version": 1,
       "source": "fixture",
       "status": "calibrated",
-      "threshold": 0.0785353225402049,
+      "threshold": 0.15644946843472957,
       "tokenizer_version": 2
     },
     {
-      "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+      "config_hash": "33e0c5485bf5c5244e5f75d6c7ce9278d6fb11b51fc8fea6857d0139024de064",
       "dev": {
         "answerable_count": 3,
         "correct_refusal_rate": 0.0,
         "false_refusal_rate": 0.0,
         "false_refusal_rate_upper_bound": 0.6315968501359613,
-        "no_answer_count": 3
+        "no_answer_count": 4
       },
       "holdout": {
         "answerable_count": 0,
@@ -138,7 +138,7 @@
       "pairing": "cross",
       "provider": "cohere",
       "query_language": "zh",
-      "recorded_at": "2026-11-25",
+      "recorded_at": "2026-11-26",
       "rerank_text_version": 1,
       "source": "fixture",
       "status": "insufficient_data",
@@ -146,36 +146,36 @@
       "tokenizer_version": 2
     },
     {
-      "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+      "config_hash": "33e0c5485bf5c5244e5f75d6c7ce9278d6fb11b51fc8fea6857d0139024de064",
       "dev": {
-        "answerable_count": 28,
-        "correct_refusal_rate": 0.25,
+        "answerable_count": 47,
+        "correct_refusal_rate": 0.125,
         "false_refusal_rate": 0.0,
-        "false_refusal_rate_upper_bound": 0.10146573557272472,
-        "no_answer_count": 4
+        "false_refusal_rate_upper_bound": 0.06175013471082453,
+        "no_answer_count": 8
       },
       "holdout": {
-        "answerable_count": 9,
-        "correct_refusal_rate": 0.3333333333333333,
-        "false_refusal_rate": 0.0,
-        "false_refusal_rate_upper_bound": 0.2831288355631136,
-        "no_answer_count": 3
+        "answerable_count": 24,
+        "correct_refusal_rate": 0.25,
+        "false_refusal_rate": 0.041666666666666664,
+        "false_refusal_rate_upper_bound": 0.18289246975564638,
+        "no_answer_count": 4
       },
-      "holdout_evaluations": 1,
+      "holdout_evaluations": 2,
       "key": "cohere|fake-quality-v1|zh|same",
       "model": "fake-quality-v1",
       "pairing": "same",
       "provider": "cohere",
       "query_language": "zh",
-      "recorded_at": "2026-11-25",
+      "recorded_at": "2026-11-26",
       "rerank_text_version": 1,
       "source": "fixture",
       "status": "calibrated",
-      "threshold": 0.04455691316323019,
+      "threshold": 0.07449150120901893,
       "tokenizer_version": 2
     }
   ],
-  "config_hash": "fcbd572432fde02d20943f12f5de40371671f422f92918fea86f085d3a319e1d",
+  "config_hash": "6428813b6766449770aef7653dd2d3f91adeb05bb456a19d97a717d583319bcf",
   "provenance": {
     "source": "calibration"
   },

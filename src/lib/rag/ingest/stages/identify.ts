@@ -1,4 +1,5 @@
 import { assertTenantScope, scopeKey } from '../../tenant/scope';
+import { currentUploaderHoldMode } from '../approval/decide';
 import { resolveUploadApproval } from '../approval/resolve';
 import { fileSha256 } from '../hash';
 import { normalizeFilename } from '../identity';
@@ -52,9 +53,13 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
 
   // D-56: the approval decision is made here, once, for ingest() and enqueueIngest() alike, and enforced at publish. An admin's
   // type change re-processes a stored file and is not an upload.
-  if (ctx.config.uploadApproval !== 'off' && !ctx.state.typeChange) {
-    ctx.state.approval = await resolveUploadApproval(ctx);
-    if (ctx.state.approval.required) return { kind: 'next', outcome: 'approval_required' };
+  // D-46 (Phase 5.2): with RAG_UPLOADER_HOLD on, an uploader's active hold takes the same path whatever RAG_UPLOAD_APPROVAL is; with
+  // approval off, an upload that is not held records no decision, as before.
+  const holdMode = ctx.state.typeChange ? 'off' : currentUploaderHoldMode();
+  if ((ctx.config.uploadApproval !== 'off' || holdMode !== 'off') && !ctx.state.typeChange) {
+    const approval = await resolveUploadApproval(ctx, holdMode);
+    if (ctx.config.uploadApproval !== 'off' || approval.required) ctx.state.approval = approval;
+    if (approval.required) return { kind: 'next', outcome: 'approval_required' };
   }
   return { kind: 'next' };
 }

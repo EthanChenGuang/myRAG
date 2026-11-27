@@ -616,6 +616,12 @@ CONCURRENT_P52_FILES = {
     for language in ("en", "it", "zh")
     for name in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links")
 }
+# The 05.3-15 access-rules and instrument-catalog documents were written later on a parallel branch and meet these files
+# only on this word (train 31; both baselines re-recorded with every 05.3-15 item unchanged); the same rule as above.
+CONCURRENT_P53_WORDS = {"gauge"}
+CONCURRENT_P53_FILES = {
+    f"{language}/{name}.{language}.md" for language in ("en", "it", "zh") for name in ("access-rules", "instrument-catalog")
+}
 
 
 def test_new_documents_share_no_content_word_with_the_pre_existing_corpus(
@@ -643,6 +649,8 @@ def test_new_documents_share_no_content_word_with_the_pre_existing_corpus(
         body = _body(relpath)
         for word in sorted(_content_words(body)):
             if word in CONCURRENT_P52_WORDS and old_words.get(word) in CONCURRENT_P52_FILES:
+                continue
+            if word in CONCURRENT_P53_WORDS and old_words.get(word) in CONCURRENT_P53_FILES:
                 continue
             assert word not in old_words, (word, relpath, old_words.get(word))
         for gram in sorted(_han_bigrams(body)):

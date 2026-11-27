@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
-import { corpusWithoutDuplicateCopies } from '../helpers/corpus-without-duplicate-copies.mts';
+import { compactFixtureCorpus, removeCompactCorpus } from '../helpers/compact-corpus.mts';
 
 const LEGACY = 'openai-3-small-1536';
 const VOYAGE = 'voyage-4-large-2048';
@@ -33,9 +33,12 @@ describe('rag:embedding CLI over the gated pointer flip', () => {
   let registry: typeof import('@/lib/rag/embeddings/registry');
   let queryDims: number[];
 
+  let corpusDir: string | undefined;
+
   before(async () => {
-    // The duplicate-passage copies are left out: see corpusWithoutDuplicateCopies (every full re-embed here builds a halfvec HNSW).
-    fixture = await createTwoTenantDatabase({ corpusDir: corpusWithoutDuplicateCopies() });
+    // The CLI backfills and scans every current chunk; the duplicate-passage copies only make that slower.
+    corpusDir = compactFixtureCorpus();
+    fixture = await createTwoTenantDatabase({ corpusDir });
     edge = await startFakeEdge({ db: fixture.db });
     Object.assign(process.env, fixtureProcessEnv(edge.url));
     process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
@@ -57,6 +60,7 @@ describe('rag:embedding CLI over the gated pointer flip', () => {
     activeProfile?.resetActiveProfileForTests();
     await edge?.close();
     await fixture?.db.close();
+    removeCompactCorpus(corpusDir);
   });
 
   const rows = async (sql: string, params: unknown[] = []): Promise<Row[]> => (await fixture.db.query<Row>(sql, params)).rows;

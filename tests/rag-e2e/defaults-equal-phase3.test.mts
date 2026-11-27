@@ -29,6 +29,41 @@ const PHASE_31_SWITCHES = [
   'NEXT_PUBLIC_RAG_INGEST_REALTIME',
 ] as const;
 
+// D-37 (plan 03.3-24): the six Phase 3.3 switches; unset, neither the preparation step nor the attribute resolver may run.
+const PHASE_33_SWITCHES = [
+  'RAG_SECTION_RULES',
+  'RAG_PAGE_BOILERPLATE',
+  'RAG_DOC_ATTRIBUTES',
+  'RAG_ATTRIBUTE_HEADER',
+  'RAG_ATTRIBUTE_FILTER',
+  'RAG_LEXICAL_QUANTITY',
+] as const;
+
+const PHASE_33_TABLES = [
+  'rag_section_rule_sets',
+  'rag_boilerplate_rules',
+  'rag_attribute_definitions',
+  'rag_attribute_header_templates',
+  'rag_staged_attributes',
+] as const;
+
+// Pipeline-owned keys Phase 3.3 adds: the boilerplate report and review codes on documents (plan 03.3-10), the header stamp on chunks.
+const PHASE_33_DOCUMENT_METADATA_KEYS = ['boilerplate', 'review_reasons'];
+const PHASE_33_CHUNK_METADATA_KEYS = ['attribute_header_stamp'];
+const PAGE_TEXTS_ARTIFACT_NAME = 'page-texts.json';
+
+/** Every function a Phase 3.3 migration (1002 to 1009) creates, read from the files. */
+function phase33RpcNames(): Set<string> {
+  const dir = path.join(process.cwd(), 'supabase/migrations');
+  const names = new Set<string>();
+  for (const file of fs.readdirSync(dir)) {
+    const stem = Number(file.slice(0, 4));
+    if (!(stem >= 1002 && stem <= 1009)) continue;
+    for (const match of fs.readFileSync(path.join(dir, file), 'utf8').matchAll(/CREATE (?:OR REPLACE )?FUNCTION public\.([a-z0-9_]+)\s*\(/g)) names.add(match[1]!);
+  }
+  return names;
+}
+
 const QUEUE_TABLES = [
   'ingestion_jobs',
   'ingestion_batches',
@@ -67,13 +102,14 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
   let db: PGlite;
   let edge: FakeEdge;
   let uninstall: (() => Promise<void>) | undefined;
+  let objectStore: { keys(): string[] } | undefined;
   let rag: typeof import('@/lib/rag');
   let queueConfig: typeof import('@/lib/rag/ingest/queue-config');
   let scope: import('@/lib/rag/tenant/scope').TenantScope;
   const saved = new Map<string, string | undefined>();
 
   before(async () => {
-    for (const name of [...PHASE_31_SWITCHES, ...PHASE_32_VARIABLES, 'RAG_INGEST_PIPELINE', 'RAG_INGEST_WORKER']) {
+    for (const name of [...PHASE_31_SWITCHES, ...PHASE_32_VARIABLES, ...PHASE_33_SWITCHES, 'RAG_INGEST_PIPELINE', 'RAG_INGEST_WORKER']) {
       saved.set(name, process.env[name]);
       delete process.env[name];
     }
@@ -89,6 +125,7 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
     const { INGEST_MODE_ENV, fixtureAdminClient, installIngestFakes } = await import('../../eval/harness/ingest-fakes.mts');
     const fakes = await installIngestFakes({ db: fixtureAdminClient(edge.url), env: { ...INGEST_MODE_ENV, RAG_TABLE_HEADER_REPEAT: 'profile' } });
     uninstall = fakes.uninstall;
+    objectStore = fakes.objectStore;
     rag = await import('@/lib/rag');
     queueConfig = await import('@/lib/rag/ingest/queue-config');
     queueConfig.resetQueueConfigForTests();
@@ -106,9 +143,9 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
     }
   });
 
-  const queueRowCounts = async (): Promise<Record<string, number>> => {
+  const queueRowCounts = async (tables: readonly string[] = QUEUE_TABLES): Promise<Record<string, number>> => {
     const counts: Record<string, number> = {};
-    for (const table of QUEUE_TABLES) {
+    for (const table of tables) {
       counts[table] = (await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${table}`)).rows[0]?.n ?? -1;
     }
     return counts;
@@ -231,6 +268,35 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
     const documents = (await db.query<{ n: number }>('SELECT count(*)::int AS n FROM documents')).rows[0]?.n;
     assert.equal(documents, reference.runs.length);
   });
+  test('after every write path ran, no Phase 3.3 row, column value, metadata key, fingerprint part or page-text artifact exists (D-37)', async () => {
+    assert.deepEqual(await queueRowCounts(PHASE_33_TABLES), Object.fromEntries(PHASE_33_TABLES.map((table) => [table, 0])));
+    const documents = (
+      await db.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM documents WHERE attributes IS NOT NULL OR attribute_header IS NOT NULL OR attribute_header_stamp IS NOT NULL',
+      )
+    ).rows[0]?.n;
+    assert.equal(documents, 0);
+    const chunks = (
+      await db.query<{ n: number }>('SELECT count(*)::int AS n FROM document_chunks WHERE attributes IS NOT NULL OR attribute_header_stamp IS NOT NULL')
+    ).rows[0]?.n;
+    assert.equal(chunks, 0);
+    const docKeys = (
+      await db.query<{ n: number }>('SELECT count(*)::int AS n FROM documents WHERE COALESCE(metadata, \'{}\'::jsonb) ?| $1::text[]', [PHASE_33_DOCUMENT_METADATA_KEYS])
+    ).rows[0]?.n;
+    assert.equal(docKeys, 0);
+    const chunkKeys = (
+      await db.query<{ n: number }>('SELECT count(*)::int AS n FROM document_chunks WHERE COALESCE(metadata, \'{}\'::jsonb) ?| $1::text[]', [PHASE_33_CHUNK_METADATA_KEYS])
+    ).rows[0]?.n;
+    assert.equal(chunkKeys, 0);
+    const chunkPrep = (
+      await db.query<{ n: number }>("SELECT count(*)::int AS n FROM documents WHERE metadata -> 'ingest_fingerprint_parts' ? 'chunk_prep'")
+    ).rows[0]?.n;
+    assert.equal(chunkPrep, 0);
+    const keys = objectStore?.keys() ?? [];
+    assert.ok(keys.length > 0, 'the write paths stored no object');
+    assert.deepEqual(keys.filter((key) => key.endsWith(PAGE_TEXTS_ARTIFACT_NAME)), []);
+  });
+
   test('with every pipeline and language variable unset, the default upload and retrieval never call the language settings (D-02)', async () => {
     const settings = await import('@/lib/rag/lang/settings');
     const ingestDeps = await import('@/lib/rag/ingest/deps');
@@ -288,5 +354,40 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
       ragConfig.resetRagConfigForTests();
       ingestConfig.resetIngestConfigForTests();
     }
+  });
+
+  test('with every Phase 3.3 switch unset, no Phase 3.3 function was called by the write paths, legacy retrieval or a v2 retrieval (D-37)', async () => {
+    const ragConfig = await import('@/lib/rag/config');
+    const names = ['RAG_PIPELINE', 'RAG_SUPPORTED_LANGUAGES', 'RAG_PRIMARY_LANGUAGE'];
+    const before = new Map(names.map((name) => [name, process.env[name]]));
+    process.env.RAG_PIPELINE = 'v2';
+    process.env.RAG_SUPPORTED_LANGUAGES = 'en';
+    process.env.RAG_PRIMARY_LANGUAGE = 'en';
+    ragConfig.resetRagConfigForTests();
+    try {
+      for (const name of PHASE_33_SWITCHES) assert.equal(process.env[name], undefined, name);
+      const retrieved = await rag.runRetrieval({
+        scope,
+        query: 'placeholder question for the Phase 3.3 defaults check',
+        profile: 'eval',
+        options: { maxResults: 5, fallbackToLowerThreshold: true },
+        signal: new AbortController().signal,
+      });
+      assert.notEqual(retrieved.reason, 'languages_not_configured');
+      assert.ok(!(retrieved.stages ?? []).some((stage) => stage.name === 'attribute_resolve' && stage.status !== 'disabled'), 'attribute_resolve ran');
+    } finally {
+      for (const [name, value] of before) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+      ragConfig.resetRagConfigForTests();
+    }
+    const phase33 = phase33RpcNames();
+    assert.ok(phase33.size >= 30, `parsed ${phase33.size} Phase 3.3 functions`);
+    assert.ok(edge.calls.length > 0, 'the fake edge recorded no call');
+    const called = edge.calls
+      .map((call) => /^\/rest\/v1\/rpc\/([a-z0-9_]+)/.exec(call.path)?.[1])
+      .filter((name): name is string => name !== undefined && phase33.has(name));
+    assert.deepEqual([...new Set(called)], []);
   });
 });

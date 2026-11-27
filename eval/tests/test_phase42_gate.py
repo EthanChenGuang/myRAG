@@ -217,7 +217,9 @@ from rag_eval.profile_compare import baseline_from_report  # noqa: E402
 from rag_eval.report import build_report  # noqa: E402
 
 NOISE = NoiseConfig.model_validate_json((REPO_ROOT / "eval" / "config" / "noise.json").read_text(encoding="utf-8"))
-CALIBRATION = REPO_ROOT / "eval" / "reports" / "refusal-calibration-fixture" / "refusal-calibration-result.json"
+# The calibration result the refusal-cell rule tests were written against, frozen when plan 05.3-15 re-calibrated the
+# fixture (golden set version 2); the committed result now lives in eval/reports/refusal-calibration-fixture/.
+CALIBRATION = REPO_ROOT / "eval" / "tests" / "data" / "refusal-calibration-result.pre-05.3-15.json"
 SECOND = "the second passage names one more neutral fact"
 EARLIER = "the earlier version described another neutral rule"
 ASKED = "ab12"
@@ -556,6 +558,7 @@ def _spec_with(tmp_path):
     path = tmp_path / "spec.json"
     payload = json.loads(spec.model_dump_json())
     payload["baselines"] = {"prechunked": str(baseline_path), "ingest": str(baseline_path)}
+    payload["calibration_result"] = str(CALIBRATION)
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
 

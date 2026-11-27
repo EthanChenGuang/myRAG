@@ -2,7 +2,8 @@ import { after, afterEach, before, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
-import { corpusWithoutDuplicateCopies } from '../helpers/corpus-without-duplicate-copies.mts';
+
+import { compactFixtureCorpus, removeCompactCorpus } from '../helpers/compact-corpus.mts';
 
 const LEGACY = 'openai-3-small-1536';
 const VOYAGE = 'voyage-4-large-2048';
@@ -634,10 +635,13 @@ describe('re-embed job (src/lib/rag/ingest/reembed)', () => {
   let supabaseModule: typeof import('@/lib/supabase');
   let targetsModule: typeof import('@/lib/rag/ingest/embedding-targets');
   let legacyTexts: string[] = [];
+  let corpusDir = '';
 
   before(async () => {
     const { fixtureProcessEnv, startFakeEdge } = await import('../../eval/harness/fake-edge.mts');
-    fixture = await createTwoTenantDatabase({ corpusDir: corpusWithoutDuplicateCopies() });
+    // Without the duplicate-passage copies: the suite walks every chunk several times and they test nothing here.
+    corpusDir = compactFixtureCorpus();
+    fixture = await createTwoTenantDatabase({ corpusDir });
     edge = await startFakeEdge({ db: fixture.db });
     Object.assign(process.env, fixtureProcessEnv(edge.url));
     process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
@@ -674,6 +678,7 @@ describe('re-embed job (src/lib/rag/ingest/reembed)', () => {
   after(async () => {
     await edge?.close();
     await fixture?.db.close();
+    removeCompactCorpus(corpusDir);
   });
 
   const rows = async (sql: string, params: unknown[] = []): Promise<Row[]> => (await fixture.db.query<Row>(sql, params)).rows;
@@ -1283,8 +1288,10 @@ describe('scripts/rag/reprocess-documents.js', () => {
 
   before(async () => {
     const { fixtureProcessEnv, startFakeEdge } = await import('../../eval/harness/fake-edge.mts');
-    // The legacy mode refuses any document above version 1, so this database has no lineage versions (see corpusWithoutDuplicateCopies).
-    fixture = await createTwoTenantDatabase({ corpusDir: corpusWithoutDuplicateCopies({ withoutLineages: true }) });
+    fixture = await createTwoTenantDatabase();
+    // The fixture corpus holds three Phase 4.2 version notes with a superseded version 1 (04.2-37). This suite needs a database
+    // without versions, so it keeps one row per lineage: the superseded rows go, and the reset below can set version 1 everywhere.
+    await fixture.db.query('DELETE FROM documents WHERE is_current = false');
     edge = await startFakeEdge({ db: fixture.db });
     childEnv = fixtureProcessEnv(edge.url);
   });

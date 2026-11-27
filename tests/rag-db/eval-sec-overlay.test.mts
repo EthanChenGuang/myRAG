@@ -177,11 +177,12 @@ describe('smoke-tier stub answers for injection items (D-14)', () => {
 
   test('with every SEC switch at its default (npm run test-rag, no run config) only the injection item is answered', () => {
     // A separate process: the app modules keep the fake edge URL they saw at first import, so one in-process run per process.
+    // --no-answers: since 05.3-15 run-smoke answers every item by default; the stub injection path is the retrieval-only run.
     const dir = makeTmpDir();
     const goldenPath = path.join(dir, 'two.jsonl');
     fs.writeFileSync(goldenPath, goldenItems(['en-general-001', 'en-injection-001']).map((item) => JSON.stringify(item)).join('\n') + '\n');
     const out = path.join(dir, 'out');
-    const result = spawnSync(process.execPath, ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--golden', goldenPath, '--no-gate', '--out', out], {
+    const result = spawnSync(process.execPath, ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--golden', goldenPath, '--no-gate', '--no-answers', '--out', out], {
       cwd: REPO_ROOT,
       encoding: 'utf8',
     });

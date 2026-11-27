@@ -21,3 +21,15 @@ export interface LexicalOptions {
 export const DICT_TOKEN_PREFIX = '_t_';
 export const STEM_TOKEN_PREFIX = '_s_';
 export const QUANTITY_TOKEN_PREFIX = '_q_';
+
+/** The four RAG_LEXICAL_* / RAG_IDENTIFIER_INDEX switches the options follow (config.v2); lexicalQuantity may be absent in older callers. */
+export interface LexicalOptionSwitches {
+  v2: { lexicalDictionary: boolean; lexicalStemIt: boolean; identifierIndex: boolean; lexicalQuantity?: boolean };
+}
+
+/** The one off rule of every lexical option (D-33): false means no resolve, no load and today's text and version. */
+export function lexicalOptionsOn(config: LexicalOptionSwitches | undefined): boolean {
+  if (!config) return false;
+  const { lexicalDictionary, lexicalStemIt, identifierIndex, lexicalQuantity } = config.v2;
+  return lexicalDictionary || lexicalStemIt || identifierIndex || lexicalQuantity === true;
+}

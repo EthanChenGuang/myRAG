@@ -1,0 +1,61 @@
+{
+  "description": "Shared vectors for normalize_text (eval/src/rag_eval/matching.py) and normalizeQuote (src/lib/rag/monitor/golden-evidence.ts).",
+  "vectors": [
+    {
+      "input": "The Sample Component, restarts   every night.",
+      "expected": "thesamplecomponentrestartseverynight"
+    },
+    {
+      "input": "Straße STRASSE ẞ",
+      "expected": "strassestrassess"
+    },
+    {
+      "input": "ΟΔΟΣ οδος ὀδός",
+      "expected": "οδοσοδοσὀδόσ"
+    },
+    {
+      "input": "ＡＢＣ　１２３！",
+      "expected": "abc123"
+    },
+    {
+      "input": "示例组件每天晚上重新启动，并写入日志。",
+      "expected": "示例组件每天晚上重新启动并写入日志"
+    },
+    {
+      "input": "Il componente è riavviato ogni notte, però non sempre…",
+      "expected": "ilcomponenteèriavviatoogninotteperònonsempre"
+    },
+    {
+      "input": "ﬁle ﬀ ℌ ①",
+      "expected": "fileffh1"
+    },
+    {
+      "input": "tab\tnew\nline nbsp em　ideo\u001cfs\u001fus ls",
+      "expected": "tabnewlinenbspemideofsusls"
+    },
+    {
+      "input": "«quotes» “curly” ‘single’ — dash – en ‐ hyphen _under_ @#%&*",
+      "expected": "quotescurlysingledashenhyphenunder"
+    },
+    {
+      "input": "İstanbul ISTANBUL",
+      "expected": "i̇stanbulistanbul"
+    },
+    {
+      "input": "café café",
+      "expected": "cafécafé"
+    },
+    {
+      "input": "a·b ¿que? ¡si! «x» [y] {z} (w)",
+      "expected": "abquesixyzw"
+    },
+    {
+      "input": "emoji 🙂 + plus = equals < less > more $ ^ ` | ~",
+      "expected": "emoji🙂+plus=equals<less>more$^`|~"
+    },
+    {
+      "input": "",
+      "expected": ""
+    }
+  ]
+}

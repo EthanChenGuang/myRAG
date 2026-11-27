@@ -1,4 +1,7 @@
 import type { UploadApproval } from '@/lib/rag-eval/contracts.generated';
+import type { RpcClient } from '../../backend/supabase-rpc';
+import { readAnswerConfig, type UploaderHoldMode } from '../../generation/answer-config';
+import { uploaderHoldActive } from '../../security/uploader-hold';
 import type { UploadApprovalMode } from '../config';
 
 export type { UploadApproval };
@@ -25,6 +28,8 @@ export interface UploadApprovalInput {
   /** The connector references of this upload (connection ids); matched against `connector` exemptions. */
   connectorRefs: readonly string[];
   decidedAt: string;
+  /** D-46 (Phase 5.2): the uploader has an active uploader hold in this tenant. */
+  uploaderHeld?: boolean;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -44,6 +49,8 @@ function decision(input: UploadApprovalInput, required: boolean, reason: UploadA
  * by a user who is not an admin of the tenant, except a personal workspace's own upload.
  */
 export function decideUploadApproval(input: UploadApprovalInput): UploadApproval {
+  // D-46: an active uploader hold holds the upload before the approval setting is consulted, whatever the mode; no exemption lifts it.
+  if (input.uploaderHeld === true && input.uploaderId !== null) return decision(input, true, 'uploader_hold');
   if (input.mode === 'off') return decision(input, false, null);
   const uploader = input.uploaderId;
   if (uploader !== null && input.exemptions.some((row) => row.kind === 'uploader' && row.ref.trim().toLowerCase() === uploader)) {
@@ -60,4 +67,31 @@ export function decideUploadApproval(input: UploadApprovalInput): UploadApproval
   }
   if (input.isTenantAdmin === true) return decision(input, false, 'admin_upload');
   return decision(input, true, 'member_upload');
+}
+
+/** RAG_UPLOADER_HOLD as the process reads it now; a configuration that cannot be read is off. */
+export function currentUploaderHoldMode(): UploaderHoldMode {
+  try {
+    return readAnswerConfig().uploaderHold;
+  } catch {
+    return 'off';
+  }
+}
+
+export interface UploaderHoldCheckInput {
+  holdMode: UploaderHoldMode;
+  tenantKey: string;
+  uploaderId: string | null;
+  client: RpcClient | null;
+  signal: AbortSignal;
+  onFailure?: (code: string) => void;
+}
+
+/**
+ * D-46: whether this upload's uploader is held. Off, or no uploader (an upload without one is never held), asks nothing; a lookup that
+ * fails is not held (logged, onFailure), so a broken check never stops every upload.
+ */
+export async function uploaderHeldFor(input: UploaderHoldCheckInput): Promise<boolean> {
+  if (input.holdMode === 'off' || input.uploaderId === null) return false;
+  return uploaderHoldActive(input.tenantKey, input.uploaderId, { client: input.client, signal: input.signal, onFailure: input.onFailure });
 }

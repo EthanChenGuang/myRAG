@@ -392,6 +392,14 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_parse_budget_month(text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_parse_budget_month(text) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_pilot_user_resolve(text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_pilot_user_resolve(text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_pilot_user_resolve(text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_pilot_users_list(text, integer, timestamptz, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_pilot_users_list(text, integer, timestamptz, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_pilot_users_list(text, integer, timestamptz, uuid) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_parse_cache_for_document(text, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_parse_cache_for_document(text, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_parse_cache_for_document(text, uuid) TO service_role;
@@ -868,6 +876,10 @@ BEGIN
   IF to_regprocedure('public.rag_finetune_scope_slot(text, text[], text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_finetune_scope_slot(text, text[], text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_finetune_scope_slot(text, text[], text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_enqueue_review_item(text, text, jsonb, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb) TO service_role;
   END IF;
 END
 $service_role_only$;

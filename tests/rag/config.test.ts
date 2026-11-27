@@ -48,6 +48,7 @@ const PHASE42_V2_FIELDS = [
   'lexicalVersion',
   'attributeFilter',
   'lexicalQuantity',
+  'lexicalScoring',
 ];
 
 function withoutPhase42(v2: object): Record<string, unknown> {
@@ -1368,5 +1369,80 @@ describe('Phase 3.3 switches (D-03, D-29, D-33)', () => {
     expect(config.disabledStages.has('attribute_resolve')).toBe(true);
     expect(config.timeouts.chat.attribute_resolve).toBe(250);
     expect(configWarnings()).toEqual([]);
+  });
+});
+
+describe('Phase 4.4 lexical scoring (D-05)', () => {
+  const ON = { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' };
+  const DEFAULT = { mode: 'ts_rank_cd', k1: 1.2, b: 0.75 };
+
+  test('unset, empty or ts_rank_cd: the default block and no warning', () => {
+    expect(loadRagConfig({}).v2.lexicalScoring).toEqual(DEFAULT);
+    expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: '' }).v2.lexicalScoring).toEqual(DEFAULT);
+    expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'ts_rank_cd', RAG_LEXICAL_BM25_K1: '', RAG_LEXICAL_BM25_B: '' }).v2.lexicalScoring).toEqual(DEFAULT);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('bm25 with the v2 pipeline and lexical search is effective and carries k1 and b', () => {
+    expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'bm25' }).v2.lexicalScoring).toEqual({ mode: 'bm25', k1: 1.2, b: 0.75 });
+    expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'BM25', RAG_LEXICAL_BM25_K1: '2', RAG_LEXICAL_BM25_B: '0' }).v2.lexicalScoring).toEqual({
+      mode: 'bm25',
+      k1: 2,
+      b: 0,
+    });
+    expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'bm25', RAG_LEXICAL_BM25_K1: '0.5', RAG_LEXICAL_BM25_B: '1' }).v2.lexicalScoring).toEqual({
+      mode: 'bm25',
+      k1: 0.5,
+      b: 1,
+    });
+    expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'bm25', RAG_LEXICAL_BM25_K1: '3', RAG_LEXICAL_BM25_B: '0.40' }).v2.lexicalScoring.k1).toBe(3);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('bm25 without lexical search warns once with lexical-scoring-needs-lexical and uses ts_rank_cd', () => {
+    for (let i = 0; i < 3; i += 1) {
+      expect(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SCORING: 'bm25' }).v2.lexicalScoring.mode).toBe('ts_rank_cd');
+    }
+    expect(loadRagConfig({ RAG_PIPELINE: 'legacy', RAG_LEXICAL_SEARCH: 'true', RAG_LEXICAL_SCORING: 'bm25' }).v2.lexicalScoring.mode).toBe('ts_rank_cd');
+    expect(loadRagConfig({ RAG_LEXICAL_SEARCH: 'true', RAG_LEXICAL_SCORING: 'bm25' }).v2.lexicalScoring.mode).toBe('ts_rank_cd');
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_LEXICAL_SCORING');
+  });
+
+  test('an unknown mode warns once and uses ts_rank_cd', () => {
+    expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'bm25f' }).v2.lexicalScoring).toEqual(DEFAULT);
+    expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'bm25f' }).v2.lexicalScoring).toEqual(DEFAULT);
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_LEXICAL_SCORING');
+  });
+
+  test.each([
+    ['RAG_LEXICAL_BM25_K1', '0.49', 'k1', 1.2],
+    ['RAG_LEXICAL_BM25_K1', '3.01', 'k1', 1.2],
+    ['RAG_LEXICAL_BM25_K1', '1,5', 'k1', 1.2],
+    ['RAG_LEXICAL_BM25_K1', 'abc', 'k1', 1.2],
+    ['RAG_LEXICAL_BM25_K1', '-1', 'k1', 1.2],
+    ['RAG_LEXICAL_BM25_K1', 'NaN', 'k1', 1.2],
+    ['RAG_LEXICAL_BM25_B', '1.01', 'b', 0.75],
+    ['RAG_LEXICAL_BM25_B', '-0.1', 'b', 0.75],
+    ['RAG_LEXICAL_BM25_B', '0,5', 'b', 0.75],
+    ['RAG_LEXICAL_BM25_B', 'Infinity', 'b', 0.75],
+  ] as const)('%s=%s warns once and uses the default', (name, value, field, fallback) => {
+    const config = loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'bm25', [name]: value });
+    loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'bm25', [name]: value, RAG_CONTEXT_TOKEN_BUDGET: '5000' });
+    expect(config.v2.lexicalScoring.mode).toBe('bm25');
+    expect(config.v2.lexicalScoring[field]).toBe(fallback);
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(name);
+  });
+
+  test('each of the three variables returns a different configuration object', () => {
+    const base = loadRagConfig(ON);
+    expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'bm25' })).not.toBe(base);
+    expect(loadRagConfig({ ...ON, RAG_LEXICAL_BM25_K1: '2' })).not.toBe(base);
+    expect(loadRagConfig({ ...ON, RAG_LEXICAL_BM25_B: '0.5' })).not.toBe(base);
   });
 });

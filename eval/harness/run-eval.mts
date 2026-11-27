@@ -17,7 +17,14 @@ import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTabl
 import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
-import { FAKE_CITATION_GENERATOR_MODEL, installFakeCitationGenerator } from './fake-citation-generator.mts';
+import {
+  DEFAULT_FAKE_CITATION_SEED,
+  FAKE_CITATION_GENERATOR_MODEL,
+  FAKE_INSTRUCTION_GENERATOR_MODEL,
+  installFakeCitationGenerator,
+  type FakeLanguageModelFactory,
+} from './fake-citation-generator.mts';
+import { installFakeAnswerModels, isFakeGeneratorModel } from './fake-answer-models.mts';
 import { startFakeGroundedness, type FakeGroundedness } from './fake-groundedness.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, RunConfigError, type RunConfig } from './run-config.mts';
 import { CACHE_PAIRS_APP_ENV, CACHE_PAIRS_FILE, cachePairOptions, cachePairSpecs, cachePairsRun, runCachePairs } from './cache-pairs.mts';
@@ -52,6 +59,51 @@ export interface EvalRequestOptions {
 export type EvalGenerator = 'stub' | 'live' | 'fake';
 
 export const STUB_GENERATOR_MODEL = 'stub/extractive-v1';
+
+export interface AnswerGeneratorInput {
+  generator?: EvalGenerator;
+  citations?: boolean;
+  groundedness?: boolean;
+  includeAnswer?: boolean;
+  baseUrl?: string;
+  /** The run config's generator_model. */
+  generatorModel?: string;
+  /** The run config sets RAG_CITATIONS=true. */
+  citationsSwitch?: boolean;
+}
+
+/**
+ * Which generator answers the run. Citations and groundedness need an answer: a fixture run answers with the fake generator
+ * unless a live one is asked for. A run config that names a fake generator model (D-54) answers every item with it.
+ */
+export function resolveAnswerGenerator(input: AnswerGeneratorInput): {
+  generator: EvalGenerator | undefined;
+  includeAnswer: boolean;
+  citations: boolean;
+} {
+  const configFake = input.generatorModel !== undefined && isFakeGeneratorModel(input.generatorModel);
+  if (configFake && input.baseUrl) {
+    throw new RunConfigError('[Eval Harness] a run-config fake generator_model answers in-process only; omit --base-url');
+  }
+  if (configFake && input.generator === 'live') {
+    throw new RunConfigError('[Eval Harness] a run-config fake generator_model cannot be used with the live generator');
+  }
+  const citations = input.citations === true || input.citationsSwitch === true;
+  const answerFeatures = citations || input.groundedness === true;
+  const includeAnswer = input.includeAnswer === true || answerFeatures || configFake;
+  let generator = input.generator;
+  if (configFake && (generator === undefined || generator === 'stub')) generator = 'fake';
+  if (answerFeatures) {
+    if (input.baseUrl) generator ??= 'live';
+    else if (generator === undefined || generator === 'stub') generator = 'fake';
+  }
+  return { generator, includeAnswer, citations };
+}
+
+/** The one fake factory: the Phase 5.2 fakes by model id, every other id the fake citation generator (D-24, D-54). */
+export function evalFakeLanguageModelFactory(items: readonly GoldenItem[]): FakeLanguageModelFactory {
+  return installFakeAnswerModels({ items });
+}
 export const LIVE_KEY_MISSING_NOTICE = '[RAG Eval] OPENROUTER_API_KEY not set; live generation skipped';
 
 export class LiveGenerationKeyMissingError extends Error {
@@ -119,6 +171,16 @@ export interface RunEvalOptions {
   appEnv?: Record<string, string>;
   /** D-37: run the golden cache pairs (anchor stored, candidate checked) and write cache-pairs.json instead of item traces. */
   cachePairs?: boolean;
+  /**
+   * Phase 5.3 D-13: answer every item with the fake generator in instruction-sensitive mode (the no-answer set is the golden items
+   * with answerable false); in-process only.
+   */
+  answers?: boolean;
+  /**
+   * Phase 5.3 D-13: proposed settings from --env-overlay (already validated by loadEnvOverlay), applied after the pinned eval env and
+   * any run-config env, with the fixture pins set again after them; in-process only. Enters run_config_hash, not the manifest.
+   */
+  envOverlay?: Record<string, string>;
   /** With cachePairs and baseUrl: the live run seeds and probes a live cache (plan 06-46); refused without it. */
   allowLiveCache?: boolean;
 }
@@ -296,6 +358,8 @@ export async function prepareInProcessEval(options: {
   envOverrides?: Record<string, string>;
   /** Trusted harness variables applied with the overlay; not part of the run's recorded configuration. */
   appEnv?: Record<string, string>;
+  /** Set the fixture pins again after the overlay (--env-overlay runs). */
+  reapplyFixturePins?: boolean;
   /** Ingest mode: seeded before the first document; the env overlay is then applied to the build too, so dual-write runs under v2. */
   chunkingProfiles?: import('../../src/lib/rag-eval/contracts.generated.ts').ChunkingProfile[];
   /** Ingest mode: also load the isolated table_split tenants (table-split.mts). */
@@ -382,6 +446,7 @@ export async function prepareInProcessEval(options: {
     deploymentMode,
     extra: { ...evalEnv, ...retrievalEnv, ...options.ingestBuildEnv, ...appEnv },
     vendorEmbeddingRoutes: !!(embeddingProfileId || ingestFixture),
+    ...(options.reapplyFixturePins ? { reapplyFixturePins: true } : {}),
   });
 
   if (embeddingProfileId && !ingestFixture) {
@@ -559,18 +624,31 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     throw new Error('[Eval Harness] a --cache-pairs run against --base-url seeds and probes a live cache; pass --allow-live-cache (plan 06-46)');
   }
   const requestOptions: EvalRequestOptions = { ...(options.requestOptions ?? {}) };
-  const citations = options.citations === true;
   const groundedness = options.groundedness === true;
-  const answerFeatures = citations || groundedness;
+  const resolved = resolveAnswerGenerator({
+    ...(options.generator !== undefined ? { generator: options.generator } : {}),
+    citations: options.citations === true,
+    groundedness,
+    includeAnswer: options.includeAnswer === true,
+    ...(baseUrl ? { baseUrl } : {}),
+    ...(runConfig?.generatorModel !== undefined ? { generatorModel: runConfig.generatorModel } : {}),
+    citationsSwitch: runConfig?.env.RAG_CITATIONS === 'true',
+  });
+  const citations = resolved.citations;
   if (citations) requestOptions.citations = true;
   if (groundedness) requestOptions.groundedness = true;
-  // Citations and groundedness need an answer: a fixture run answers with the fake citation generator unless a live one is asked for.
-  const includeAnswer = options.includeAnswer === true || answerFeatures;
-  let generator = options.generator;
-  if (answerFeatures) {
-    if (baseUrl) generator ??= 'live';
-    else if (generator === undefined || generator === 'stub') generator = 'fake';
+  if (runConfig?.generatorModel !== undefined && !requestOptions.generator_model) requestOptions.generator_model = runConfig.generatorModel;
+  // Phase 5.3 D-13: --answers answers every item with the fake generator in instruction-sensitive mode.
+  const answers = options.answers === true;
+  const envOverlay = options.envOverlay && Object.keys(options.envOverlay).length > 0 ? options.envOverlay : undefined;
+  if (answers && baseUrl) throw new Error('[Eval Harness] --answers answers with the fake generator; it cannot be combined with --base-url');
+  if (answers && options.generator !== undefined && options.generator !== 'fake') {
+    throw new Error('[Eval Harness] --answers answers with the fake generator only');
   }
+  if (envOverlay && baseUrl) throw new Error('[Eval Harness] --env-overlay applies to in-process runs only; omit --base-url');
+  if (envOverlay && retainInProcess) throw new Error('[Eval Harness] an env overlay must be applied when the in-process session is prepared');
+  const includeAnswer = resolved.includeAnswer || answers;
+  const generator: EvalGenerator | undefined = answers ? 'fake' : resolved.generator;
   if (runConfig) {
     if (baseUrl && Object.keys(runConfig.env).length > 0) {
       throw new RunConfigError('[Eval Harness] a run-config env overlay applies to in-process runs only; omit --base-url or drop its env');
@@ -610,7 +688,9 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       if (!baseUrl && liveApiKey === '') throw new LiveGenerationKeyMissingError();
     }
     if (generator === 'stub' && !requestOptions.generator_model) requestOptions.generator_model = STUB_GENERATOR_MODEL;
-    if (generator === 'fake' && !requestOptions.generator_model) requestOptions.generator_model = FAKE_CITATION_GENERATOR_MODEL;
+    if (generator === 'fake' && !requestOptions.generator_model) {
+      requestOptions.generator_model = answers ? FAKE_INSTRUCTION_GENERATOR_MODEL : FAKE_CITATION_GENERATOR_MODEL;
+    }
   }
 
   const goldenFilter = goldenFilterFor(includeDrafts);
@@ -678,7 +758,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           ...(routed.tableSplit.length > 0 ? { tableSplit: true } : {}),
           ...(routed.tableSplit.length > 0 && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
           ...(options.ingestBuildEnv ? { ingestBuildEnv: options.ingestBuildEnv } : {}),
-          ...(runConfig && Object.keys(runConfig.env).length > 0 ? { envOverrides: runConfig.env } : {}),
+          ...((runConfig && Object.keys(runConfig.env).length > 0) || envOverlay
+            ? { envOverrides: { ...(runConfig?.env ?? {}), ...(envOverlay ?? {}) } }
+            : {}),
+          ...(envOverlay ? { reapplyFixturePins: true } : {}),
           ...(runConfig?.chunkingProfiles?.length ? { chunkingProfiles: runConfig.chunkingProfiles } : {}),
           ...(cachePairs
             ? { appEnv: { ...options.appEnv, ...CACHE_PAIRS_APP_ENV } }
@@ -696,8 +779,17 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         answerModule = await import('../../src/lib/rag-eval/answer.ts');
         if (generator === 'stub') {
           answerModule.setEvalLanguageModelFactory(() => createStubLanguageModel());
+        } else if (generator === 'fake' && answers) {
+          // D-13: the directive is read from the template the route assembles under this run's env (research F-5).
+          const noAnswerQuestions = new Map(items.filter((item) => !item.answerable).map((item) => [item.question, item.language]));
+          answerModule.setEvalLanguageModelFactory(
+            installFakeCitationGenerator(DEFAULT_FAKE_CITATION_SEED, {
+              noAnswerQuestions,
+              promptTemplate: answerModule.resolveEvalPromptTemplate(),
+            }),
+          );
         } else if (generator === 'fake') {
-          answerModule.setEvalLanguageModelFactory(installFakeCitationGenerator());
+          answerModule.setEvalLanguageModelFactory(evalFakeLanguageModelFactory(items));
         } else {
           const provider = createOpenRouter({ apiKey: liveApiKey, baseURL: 'https://openrouter.ai/api/v1' });
           answerModule.setEvalLanguageModelFactory((modelId) => provider(modelId) as unknown as LanguageModel);
@@ -880,6 +972,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         request_options: normalizedOptions,
         deployment_mode: effectiveDeploymentMode,
         ...(runConfigRecord ? { run_config: runConfigRecord } : {}),
+        ...(envOverlay ? { env_overlay: envOverlay } : {}),
       }),
       'utf8',
     )
@@ -923,3 +1016,4 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     ...(cachePairsPath ? { cachePairsPath } : {}),
   };
 }
+

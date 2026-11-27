@@ -215,3 +215,8 @@ export function resetRagDepsForTests(): void {
 export function currentLexicalVersion(): number {
   return effectiveLexicalVersion(loadRagConfig(getRagDeps().ragEnv()));
 }
+
+/** D-29: the effective attribute filter mode ('off' unless RAG_ATTRIBUTE_FILTER, RAG_DOC_ATTRIBUTES and the v2 pipeline allow it). */
+export function currentAttributeFilterMode(): 'off' | 'hard' | 'soft' {
+  return loadRagConfig(getRagDeps().ragEnv()).v2.attributeFilter;
+}
