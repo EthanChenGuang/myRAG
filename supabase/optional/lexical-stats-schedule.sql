@@ -1,0 +1,1 @@
+-- Optional: lexical statistics compaction schedule (plan 04.4-10). Placeholder.
