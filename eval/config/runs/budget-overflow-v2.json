@@ -1,0 +1,9 @@
+{
+  "name": "budget-overflow-v2",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_PROMPT_BUDGET": "true"
+  },
+  "overrides": null,
+  "generator_model": "fixture/small-window-4k"
+}

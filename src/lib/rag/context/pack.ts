@@ -1,6 +1,6 @@
 import type { PackingSummary } from '../types';
 import type { AssemblyCandidate, AssemblyDocumentRow, FilteredCandidates } from './assemble';
-import { selectWithinBudget, type BudgetCandidate, type BudgetOptions, type BudgetResult, type RenderEstimate } from './budget';
+import { countContextTokens, selectWithinBudget, type BudgetCandidate, type BudgetOptions, type BudgetResult, type RenderEstimate } from './budget';
 
 export interface PackCandidate extends Omit<BudgetCandidate, 'rank'> {
   parent_id?: string | null;
@@ -129,4 +129,50 @@ export function packFiltered<C extends LegacyPackCandidate>(
     candidates: candidates.filter((chunk) => !relevantIds.has(chunk.chunk_id) || keptIds.has(chunk.chunk_id)).map(withOverride),
     summary: { documentBudget: packed.documentBudget, droppedDocuments: packed.droppedDocuments, keptParents: packed.keptParents },
   };
+}
+
+/** How many times fitRendered packs at most; the framing per kept block is small, so two passes are the usual case. */
+export const FIT_MAX_ATTEMPTS = 4;
+
+/**
+ * D-83: the per-block estimate does not see the assembly's framing (section markers, separators, the grouped document header,
+ * citation labels, a truncated first block's rendering). This packs at `start` (default: the budget), measures the rendered context with the same
+ * counter, and repacks at a budget lowered by the overshoot until the rendered context fits or the attempts run out.
+ */
+export function fitRendered<T>(
+  budget: number,
+  attempt: (packBudget: number) => T,
+  renderedOf: (value: T) => string,
+  options: { start?: number; maxAttempts?: number } = {},
+): T {
+  const maxAttempts = options.maxAttempts ?? FIT_MAX_ATTEMPTS;
+  let packBudget = options.start ?? budget;
+  let value = attempt(packBudget);
+  for (let tries = 1; tries < maxAttempts; tries += 1) {
+    const over = countContextTokens(renderedOf(value)) - budget;
+    if (over <= 0 || packBudget <= 0) return value;
+    packBudget = Math.max(0, packBudget - over);
+    value = attempt(packBudget);
+  }
+  return value;
+}
+
+/** D-83: packs the legacy assembly so the built context, framing included, stays within the budget, and builds it. */
+export function packAndBuild<C extends LegacyPackCandidate, O extends { context: string }>(
+  state: FilteredCandidates<C>,
+  candidates: C[],
+  documents: ReadonlyMap<string, AssemblyDocumentRow>,
+  budget: number,
+  options: { isGPTModel: boolean; imageExtensions: string[] },
+  build: (packed: PackedFiltered<C>) => O,
+): { output: O; summary: PackingSummary } {
+  const fitted = fitRendered(
+    budget,
+    (packBudget) => {
+      const packed = packFiltered(state, candidates, documents, packBudget, options);
+      return { packed, output: build(packed) };
+    },
+    (value) => value.output.context,
+  );
+  return { output: fitted.output, summary: { ...fitted.packed.summary, documentBudget: budget } };
 }

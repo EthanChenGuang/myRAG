@@ -107,7 +107,9 @@ describe('eval answer prompt assembly stays tied to the chat route', () => {
 
     test('both paths take the output limit through the same cap helper', () => {
       expect(compact(chatRoute)).toContain(compact('answerTurn.maxOutputTokens(getMaxTokensForModel(safeModelId))'));
-      expect(compact(answerSource)).toContain(compact('effectiveMaxOutputTokens(maxOutputTokensForModel(generatorModel)'));
+      expect(compact(answerSource)).toContain(compact('effectiveMaxOutputTokens(evalModelOutputLimit(generatorModel)'));
+      // Phase 5.2.1 D-88: only a fake registry declares another limit; every other id keeps the eval's id rule
+      expect(compact(answerSource)).toContain(compact(': maxOutputTokensForModel(modelId);'));
       expect(evalRoute).toContain('answerTurn.decideOutputCap(');
     });
 

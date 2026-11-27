@@ -379,7 +379,7 @@ export {
   CALC_REQUEST_JSON_SCHEMA,
   type VoiceCalcSource,
 } from './calc/voice-sources';
-export { promptBudgetConfig } from './context/prompt-budget-config';
+export { factorFor, promptBudgetConfig } from './context/prompt-budget-config';
 export { fixedText } from './lang/texts';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';

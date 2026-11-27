@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { countContextTokens, type RenderEstimate } from '@/lib/rag/context/budget';
 import { buildContext, filterCandidates, IMAGE_EXTENSIONS, type AssembleInput } from '@/lib/rag/context/assemble';
-import { documentBudgetOf, packByRank, packFiltered, type PackCandidate } from '@/lib/rag/context/pack';
+import { documentBudgetOf, packAndBuild, packByRank, packFiltered, type PackCandidate } from '@/lib/rag/context/pack';
 import { assembleVoiceResults, untaggedVoiceContext } from '@/lib/rag/context/voice';
 import { createCitationLabeler } from '@/lib/rag/generation/citations/blocks';
 
@@ -122,6 +122,61 @@ describe('packFiltered (legacy assembly, D-83 / D-95)', () => {
     const packed = packFiltered(state, candidates, documents, 1_000_000, { isGPTModel: false, imageExtensions: IMAGE_EXTENSIONS });
     expect(buildContext(packed.state, { ...input, candidates: packed.candidates })).toEqual(plain);
     expect(packed.summary.droppedDocuments).toBe(0);
+  });
+});
+
+describe('packAndBuild (legacy assembly, framing counted)', () => {
+  const SAMPLE = 'neutral framing sentence for packing. '.repeat(10);
+  const ids = ['p', 'q', 'r', 's'];
+  const documents = new Map(ids.map((id) => [`doc-${id}`, { id: `doc-${id}`, filename: `${id}.txt`, content: SAMPLE, created_at: null }]));
+  const candidates = ids.map((id, index) => ({ chunk_id: `${id}1`, document_id: `doc-${id}`, content: `${id}1 ${SAMPLE}`, similarity: 0.95 - index * 0.05 }));
+  const input = (labelled: boolean): AssembleInput<(typeof candidates)[number]> => ({
+    queryText: 'neutral framing',
+    candidates,
+    documents,
+    chunkMetadata: new Map(),
+    referenced: null,
+    isGPTModel: false,
+    ragMode: 'strict',
+    webSearchEnabled: false,
+    applyRelevanceFilter: true,
+    ...(labelled ? { citationLabeler: createCitationLabeler() } : {}),
+  });
+  const one = countContextTokens(`\n--- Document: p.txt (1 relevant chunks) ---\n\np1 ${SAMPLE}`);
+  const build = (labelled: boolean, budget: number) => {
+    const state = filterCandidates(input(labelled));
+    return packAndBuild(state, candidates, documents, budget, { isGPTModel: false, imageExtensions: IMAGE_EXTENSIONS }, (packed) =>
+      buildContext(packed.state, { ...input(labelled), candidates: packed.candidates }),
+    );
+  };
+
+  for (const labelled of [false, true]) {
+    for (const budget of [one * 2 + 2, one * 3 + 1, 60, one + 3]) {
+      it(`keeps the built context within the budget (${labelled ? 'labelled' : 'plain'}, budget ${budget})`, () => {
+        const { output, summary } = build(labelled, budget);
+        expect(countContextTokens(output.context)).toBeLessThanOrEqual(budget);
+        expect(summary.documentBudget).toBe(budget);
+        expect(output.kept.length).toBeGreaterThan(0);
+      });
+    }
+  }
+
+  it('keeps the first block at its smallest truncation when the framing alone exceeds the budget', () => {
+    const { output } = build(true, 10);
+    expect(output.kept.map((row) => row.chunk_id)).toEqual(['p1']);
+    expect(output.context).not.toContain('framing sentence');
+  });
+
+  it('drops the lowest-ranked block when the framing would overflow the per-block estimate', () => {
+    const { output, summary } = build(false, one * 2 + 2);
+    expect(output.kept.map((row) => row.chunk_id)).toEqual(['p1']);
+    expect(summary).toEqual({ documentBudget: one * 2 + 2, droppedDocuments: 3, keptParents: 1 });
+  });
+
+  it('leaves the assembly byte-identical with a budget that fits everything', () => {
+    const state = filterCandidates(input(true));
+    const plain = buildContext(state, input(true));
+    expect(build(true, 1_000_000).output).toEqual(plain);
   });
 });
 

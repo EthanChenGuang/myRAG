@@ -93,8 +93,16 @@ describe('prompt-budget data files', () => {
       voice_document_budget: 2000,
       refine_max_calls: 4,
     });
-    expect(tokenizerCalibration()).toMatchObject({ version: 1, encoding: 'cl100k_base', default_factor: 1.25, written_by: 'default' });
-    expect(tokenizerCalibration().families ?? []).toEqual([]);
+    // 05.2.1-20: the calibration tool wrote the one measured cell, for the fixture family only; real families keep the default
+    expect(tokenizerCalibration()).toMatchObject({
+      version: 1,
+      encoding: 'cl100k_base',
+      default_factor: 1.25,
+      written_by: 'rag_eval.calibrate tokenizer',
+    });
+    const families = tokenizerCalibration().families ?? [];
+    expect(families.map((cell) => [cell.family, cell.source])).toEqual([['fixture', 'measured']]);
+    expect(families[0].samples).toBeGreaterThanOrEqual(20);
   });
 
   it('an invalid prompt-budget file throws', () => {

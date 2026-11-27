@@ -550,7 +550,7 @@ export async function POST(request: NextRequest) {
           isGPTModel,
           ragMode: 'balanced',
           webSearchEnabled: false,
-          ...(budgetPlan ? { documentTokenBudget: budgetPlan.documentBudget } : {}),
+          ...(budgetPlan ? { documentTokenBudget: budgetPlan.packingBudget } : {}),
         },
         signal: request.signal,
         trace: collector,
