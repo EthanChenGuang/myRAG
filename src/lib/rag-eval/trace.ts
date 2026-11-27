@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
-import { traceLanguagesOf, type TraceCollector } from '@/lib/rag/trace/collector';
-import type { RetrievalResult } from '@/lib/rag/types';
+import type { TraceCollector } from '../rag/trace/collector';
+import { traceLanguagesOf } from '../rag/trace/languages';
+import type { RetrievalResult } from '../rag/types';
 import type { AnswerNotice, AnswerSentence, OutputGuardSummary, RagTrace } from './contracts.generated';
 
 export const ENDPOINT_VERSION = 'rag-eval/1';
