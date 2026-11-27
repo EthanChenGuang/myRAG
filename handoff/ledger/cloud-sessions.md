@@ -682,3 +682,11 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - owner desk session_01X342smENMnyrGEa4FK53eB
   The self-check trigger was deleted. RESUME: when the user says so, send each of these sessions "resume from .continue-here".
   Then: PR #135 must go green, merge, the owner switches the connector back to prod, train38-live.sql is applied, the user is asked about deploying.
+- 22:02Z PAUSE confirmed by 16 of 17 (WIP sha in brackets):
+  - review-writers [eac83eef], doc-types [dc91f2e9], 06.2-24 [c9459de9]
+  - t39 [eb411c01], t38 [b5caad8d], 06.2-25 [2bd1e1bb]
+  - owner desk [e2d81bfe], t40 [4c65d151]
+  - 06.2-39 [938345a7], 06.2-36 [32f4bb7b], 05.2.1-20 [03fa34dc], 06.2-22 [6b7983b3]
+  - 03.3-25 [d06c02ec], it-locale [295ea121], comet [c7aa47ec]
+  - sidebar-hide DONE [fa81af29] -> archived
+  Only the walkthrough desk has not confirmed; it pauses with the owner anyway.
