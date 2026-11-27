@@ -312,10 +312,56 @@ export type CalcBlockTransform = StreamTextTransform<ToolSet> & {
   visibleText(): string;
 };
 
-/** RED stub. */
-export function calcBlockTransform(_options: CalcBlockOptions = {}): CalcBlockTransform {
-  const transform = (() => new TransformStream<TextStreamPart<ToolSet>, TextStreamPart<ToolSet>>()) as unknown as CalcBlockTransform;
-  transform.rawText = () => '';
-  transform.visibleText = () => '';
+type Part = TextStreamPart<ToolSet>;
+
+/**
+ * Stream adapter for `experimental_transform`, factory-returning-factory like the sentinel. Only text-delta and text-end are
+ * held; at text-end (and at finish-step or finish for a text part left open) the core is flushed. start-step, finish-step,
+ * tool parts and finish are forwarded at once (RESEARCH Pitfall 1). rawText() and visibleText() read the latest stream's core.
+ */
+export function calcBlockTransform(options: CalcBlockOptions = {}): CalcBlockTransform {
+  let current: ReturnType<typeof createCore> | null = null;
+  const transform = (() => {
+    const core = createCore(options, []);
+    current = core;
+    let openId: string | null = null;
+    const emit = (controller: TransformStreamDefaultController<Part>, id: string, text: string) => {
+      if (text) controller.enqueue({ type: 'text-delta', id, text });
+    };
+    const close = (controller: TransformStreamDefaultController<Part>) => {
+      if (openId === null) return;
+      const id = openId;
+      openId = null;
+      emit(controller, id, core.flush());
+    };
+    return new TransformStream<Part, Part>({
+      transform(part, controller) {
+        switch (part.type) {
+          case 'text-delta': {
+            if (openId !== null && openId !== part.id) close(controller);
+            openId = part.id;
+            const text = core.push(part.text);
+            if (text) controller.enqueue({ ...part, text });
+            return;
+          }
+          case 'text-end':
+            if (openId === part.id) close(controller);
+            break;
+          case 'finish-step':
+          case 'finish':
+            close(controller);
+            break;
+          default:
+            break;
+        }
+        controller.enqueue(part);
+      },
+      flush(controller) {
+        close(controller);
+      },
+    });
+  }) as CalcBlockTransform;
+  transform.rawText = () => current?.rawText() ?? '';
+  transform.visibleText = () => current?.visibleText() ?? '';
   return transform;
 }
