@@ -15,10 +15,12 @@ import { resetV2StartupForTests, verifyV2Startup } from '@/lib/rag/v2/startup';
 import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
 import { LEXICAL_BM25_FAILED, LEXICAL_SCORING_BM25, LEXICAL_STATS_UNAVAILABLE, lexicalScoringArg, runSearchStages } from '@/lib/rag/v2/stages/search';
 import { hit } from '../fusion/helpers';
+import { getRagDeps, resetRagDepsForTests } from '@/lib/rag/deps';
 import { adminWithRpc, fakeAssemblyAdmin, fakeEmbedder, installDeps, uninstallDeps } from '../helpers/pipeline-fakes';
 
 const scope = mintScope('single', null, null);
 const BASE = { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', RAG_SUPPORTED_LANGUAGES: 'en', RAG_PRIMARY_LANGUAGE: 'en' };
+const BM25_PREREQS = { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' };
 const BM25 = { ...BASE, RAG_LEXICAL_SCORING: 'bm25', RAG_LEXICAL_BM25_K1: '1.4', RAG_LEXICAL_BM25_B: '0.6' };
 
 function config(env: Record<string, string>): RagConfig {
@@ -234,5 +236,36 @@ describe('v2 startup lexical scoring line', () => {
     await startup(BASE, admin);
     expect(warn.mock.calls.some((call) => String(call[0]).includes('RAG_LEXICAL_SCORING'))).toBe(false);
     expect(tables).toEqual([]);
+  });
+});
+
+describe('the app environment reaches the lexical scoring config', () => {
+  const names = ['RAG_LEXICAL_SCORING', 'RAG_LEXICAL_BM25_K1', 'RAG_LEXICAL_BM25_B'] as const;
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    for (const name of names) saved[name] = process.env[name];
+  });
+
+  afterEach(() => {
+    for (const name of names) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+    resetRagDepsForTests();
+    resetRagConfigForTests();
+  });
+
+  it('getRagDeps().ragEnv() carries RAG_LEXICAL_SCORING, RAG_LEXICAL_BM25_K1 and RAG_LEXICAL_BM25_B', () => {
+    process.env.RAG_LEXICAL_SCORING = 'bm25';
+    process.env.RAG_LEXICAL_BM25_K1 = '1.4';
+    process.env.RAG_LEXICAL_BM25_B = '0.6';
+    resetRagDepsForTests();
+    const env = getRagDeps().ragEnv();
+    expect(env.RAG_LEXICAL_SCORING).toBe('bm25');
+    expect(env.RAG_LEXICAL_BM25_K1).toBe('1.4');
+    expect(env.RAG_LEXICAL_BM25_B).toBe('0.6');
+    resetRagConfigForTests();
+    expect(loadRagConfig({ ...env, ...BM25_PREREQS }).v2.lexicalScoring).toEqual({ mode: 'bm25', k1: 1.4, b: 0.6 });
   });
 });
