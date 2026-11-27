@@ -992,7 +992,7 @@ class IdentifierPatternsPanel {
       const open = this.el('button', { className: 'btn btn-link btn-sm px-0', text: this.t('action.openSwitches'), attrs: { type: 'button' } });
       open.addEventListener('click', () => this.openSwitches());
       notes.push(
-        this.el('div', { className: 'alert alert-info text-sm items-start' }, [
+        this.el('div', { className: 'alert alert-info text-sm items-start text-left justify-items-start' }, [
           this.icon('info-circle', 'shrink-0'),
           this.el('div', { className: 'min-w-0 max-w-prose' }, [this.el('p', { text: this.t('note.indexOff') }), open]),
         ]),
@@ -1000,7 +1000,7 @@ class IdentifierPatternsPanel {
     }
     if (this.rebuildShown) {
       notes.push(
-        this.el('div', { className: 'alert alert-info text-sm items-start', attrs: { 'data-identifier-patterns-rebuild': true } }, [
+        this.el('div', { className: 'alert alert-info text-sm items-start text-left justify-items-start', attrs: { 'data-identifier-patterns-rebuild': true } }, [
           this.icon('arrow-repeat', 'shrink-0'),
           this.el('p', { className: 'min-w-0 max-w-prose' }, this.nodes('note.rebuild', IDENTIFIER_PATTERNS_COMMANDS, ['identifiers', 'relex'])),
         ]),
@@ -1872,7 +1872,7 @@ class IdentifierPatternsPanel {
       return;
     }
     const regionChildren = [];
-    if (this.resultStale) regionChildren.push(this.el('p', { className: 'text-xs', text: this.t('test.stale') }));
+    if (this.resultStale) regionChildren.push(this.el('p', { className: 'text-xs mb-2', text: this.t('test.stale') }));
     const body = this.el('div', { className: 'flex flex-col gap-2' + (this.resultStale ? ' opacity-60' : '') });
     regionChildren.push(body);
     if (r.kind === 'refused' || r.kind === 'error') {
