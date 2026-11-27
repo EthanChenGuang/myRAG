@@ -20,7 +20,7 @@ affects: [07-28, 07-32, 07-34, 07-44]
 
 actuals:
   tasks: 2
-  commits: 7 (including this correction)
+  commits: 8  # six plan commits plus two SUMMARY count fixes
 
 tech-stack:
   added: []
