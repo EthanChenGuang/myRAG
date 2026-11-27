@@ -1,0 +1,49 @@
+# Local Qdrant and Weaviate for the external-backend adapters and the backend-canary CI job.
+# Images are pinned by digest; ports listen on 127.0.0.1 only. Keys are placeholders: override them
+# through the environment, never commit real ones.
+#   docker compose -f docker-compose.backends.yml up -d
+# Qdrant has no curl or wget in its image, so callers poll http://127.0.0.1:6333/readyz.
+name: myrag-backends
+
+services:
+  qdrant:
+    # qdrant/qdrant:v1.20.2 (OCI index digest, resolved 2026-11-27)
+    image: qdrant/qdrant:v1.20.2@sha256:d277592721d2e3b73f9b797b53cf05e6a5bb2134f6d13fdbda4ca51782afbcac
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-local-qdrant-write-key-placeholder-000000}
+      QDRANT__SERVICE__READ_ONLY_API_KEY: ${QDRANT_READ_API_KEY:-local-qdrant-read-key-placeholder-0000000}
+      QDRANT__TELEMETRY_DISABLED: 'true'
+    ports:
+      - '127.0.0.1:6333:6333'
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  weaviate:
+    # semitechnologies/weaviate:1.40.7 (OCI index digest, resolved 2026-11-27)
+    image: semitechnologies/weaviate:1.40.7@sha256:1373d227ef808c95601b79be75d5e613c04c5ad33a1a2e91ed91a5e6c2748144
+    environment:
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'false'
+      AUTHENTICATION_APIKEY_ENABLED: 'true'
+      AUTHENTICATION_APIKEY_ALLOWED_KEYS: ${WEAVIATE_API_KEY:-local-weaviate-write-key-placeholder-00},${WEAVIATE_READ_API_KEY:-local-weaviate-read-key-placeholder-000}
+      AUTHENTICATION_APIKEY_USERS: writer,reader
+      AUTHORIZATION_ADMINLIST_ENABLED: 'true'
+      AUTHORIZATION_ADMINLIST_USERS: writer
+      AUTHORIZATION_ADMINLIST_READONLY_USERS: reader
+      PERSISTENCE_DATA_PATH: /var/lib/weaviate
+      CLUSTER_HOSTNAME: node1
+      DEFAULT_VECTORIZER_MODULE: none
+      DISABLE_TELEMETRY: 'true'
+    ports:
+      - '127.0.0.1:8080:8080'
+      - '127.0.0.1:50051:50051'
+    volumes:
+      - weaviate-data:/var/lib/weaviate
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://localhost:8080/v1/.well-known/ready || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  qdrant-data:
+  weaviate-data:
