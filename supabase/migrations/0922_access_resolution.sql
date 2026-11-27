@@ -16,6 +16,10 @@
 -- rag_documents_visible check ids in one batch: the tenant always, both labels unless p_access_all; chunks must also be current and
 -- ready or variant (the hybrid_search_chunks rule), documents may be of any version. Missing or empty keys without p_access_all raise
 -- access_keys_empty (fail closed).
+-- rag_access_set_enforced(boolean) upserts the single settings row and returns the stored value; only a change writes an enforcement_set
+-- audit row (tenant key 'deployment', actor NULL, actor_kind system, reason enforced_on or enforced_off). The audit tenant_key CHECK is
+-- widened for that one row kind: 'deployment' is accepted only with action enforcement_set. rag_security_event_record stores tenant, user,
+-- event, chunk ids, document ids and request id in rag_access_security_events (0920) and returns the new id; it takes no text.
 
 BEGIN;
 
@@ -335,5 +339,70 @@ $fn$;
 
 REVOKE ALL ON FUNCTION public.rag_documents_visible(text, uuid[], text[], boolean) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_documents_visible(text, uuid[], text[], boolean) TO service_role;
+
+ALTER TABLE public.rag_access_audit DROP CONSTRAINT IF EXISTS rag_access_audit_tenant_key_check;
+ALTER TABLE public.rag_access_audit ADD CONSTRAINT rag_access_audit_tenant_key_check CHECK (
+  tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'
+  OR (tenant_key = 'deployment' AND action = 'enforcement_set')
+);
+
+CREATE OR REPLACE FUNCTION public.rag_access_set_enforced(p_enforced boolean)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_old boolean;
+  v_new boolean;
+BEGIN
+  IF p_enforced IS NULL THEN
+    RAISE EXCEPTION 'enforced_required' USING ERRCODE = '22023';
+  END IF;
+  INSERT INTO public.rag_access_group_settings (id, enforced) VALUES (true, false) ON CONFLICT (id) DO NOTHING;
+  SELECT s.enforced INTO v_old FROM public.rag_access_group_settings s WHERE s.id FOR UPDATE;
+  IF v_old IS DISTINCT FROM p_enforced THEN
+    UPDATE public.rag_access_group_settings s
+    SET enforced = p_enforced, updated_at = pg_catalog.now(), updated_by = NULL
+    WHERE s.id;
+    INSERT INTO public.rag_access_audit (tenant_key, action, actor, actor_kind, reason)
+    VALUES ('deployment', 'enforcement_set', NULL, 'system', CASE WHEN p_enforced THEN 'enforced_on' ELSE 'enforced_off' END);
+  END IF;
+  SELECT s.enforced INTO v_new FROM public.rag_access_group_settings s WHERE s.id;
+  RETURN v_new;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_access_set_enforced(boolean) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_access_set_enforced(boolean) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_security_event_record(
+  p_tenant_key text,
+  p_user_id uuid,
+  p_event text,
+  p_chunk_ids uuid[],
+  p_document_ids uuid[],
+  p_request_id text
+)
+RETURNS uuid
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_id uuid;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  INSERT INTO public.rag_access_security_events (tenant_key, user_id, event, chunk_ids, document_ids, request_id)
+  VALUES (p_tenant_key, p_user_id, p_event, COALESCE(p_chunk_ids, '{}'::uuid[]), COALESCE(p_document_ids, '{}'::uuid[]), p_request_id)
+  RETURNING id INTO v_id;
+  RETURN v_id;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_security_event_record(text, uuid, text, uuid[], uuid[], text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_security_event_record(text, uuid, text, uuid[], uuid[], text) TO service_role;
 
 COMMIT;
