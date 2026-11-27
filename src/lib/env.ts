@@ -418,6 +418,7 @@ class EnvironmentConfig {
       ]),
       NEXT_PUBLIC_OPENROUTER_MODELS: process.env.NEXT_PUBLIC_OPENROUTER_MODELS || JSON.stringify([
         { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true },
+        { id: 'auto', displayName: 'Auto' },
         { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
         { id: 'openai/gpt-4.1', displayName: 'GPT-4.1' },
         { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },

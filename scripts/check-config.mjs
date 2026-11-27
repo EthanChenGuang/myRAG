@@ -151,6 +151,7 @@ export function checkConfig(root) {
   }
 
   violations.push(...checkModelMappings(root, texts));
+  violations.push(...checkRoutingModels(root, texts));
   if (manifest) violations.push(...checkRagAffectingFile(root, manifest));
 
   const effectiveEnv = loadEffectiveEnv(root);
@@ -264,8 +265,8 @@ function envLocalModelList(text) {
   return null;
 }
 
-/** D-08: an anthropicId must be well formed and identical in every model location; unmapped ids stay free. */
-export function checkModelMappings(root, texts) {
+/** Every OpenRouter model list: the tracked locations (three fallback arrays in the Config UI) and .env.local when it sets one. */
+function openRouterModelLists(root, texts) {
   const lists = [];
   for (const [location, anchors] of Object.entries(MODEL_LIST_ANCHORS)) {
     const text = texts[location] ?? '';
@@ -282,7 +283,12 @@ export function checkModelMappings(root, texts) {
     const models = value ? modelsInArray(value, 0) : null;
     if (models !== null) lists.push({ location: 'env-local', label: 'NEXT_PUBLIC_OPENROUTER_MODELS', models });
   }
+  return lists;
+}
 
+/** D-08: an anthropicId must be well formed and identical in every model location; unmapped ids stay free. */
+export function checkModelMappings(root, texts) {
+  const lists = openRouterModelLists(root, texts);
   const violations = [];
   const mapped = new Map();
   for (const list of lists) {
@@ -333,6 +339,68 @@ export function checkModelMappings(root, texts) {
       } else if (agreed === null || values.size > 1 || !values.has(agreed)) {
         violations.push({ name: id, location: list.location, message: `anthropicId differs across locations in ${list.label}: ${summary}` });
       }
+    }
+  }
+  return violations;
+}
+
+export const ROUTING_MODEL_NAMES = ['RAG_ROUTING_FAST_MODEL', 'RAG_ROUTING_QUALITY_MODEL'];
+
+function escapeRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** The routing model ids one location writes as defaults: every occurrence, so each config-server template counts. */
+function routingDefaults(location, text, name) {
+  const n = escapeRegex(name);
+  const patterns = {
+    'init-env': [new RegExp(`^${n}=(.*)$`, 'gm')],
+    'env-ts': [new RegExp(`${n}:\\s*process\\.env\\.${n}\\s*\\|\\|\\s*'([^']*)'`, 'g')],
+    'config-server': [new RegExp(`'${n}=([^']*)'`, 'g'), new RegExp(`getEnvValue\\('${n}'\\)\\s*\\|\\|\\s*'([^']*)'`, 'g')],
+  }[location];
+  if (!patterns) return [];
+  return patterns.flatMap((re) => [...text.matchAll(re)].map((match) => match[1].trim()));
+}
+
+/**
+ * 06.2 D-19, D-35: both routing model ids name a model of every OpenRouter model list and never the auto entry; the
+ * tracked locations write them as defaults, never empty. An empty value in .env.local is left to the Config UI warning.
+ */
+export function checkRoutingModels(root, texts) {
+  const lists = openRouterModelLists(root, texts).filter((list) => list.models !== null);
+  const configured = [];
+  for (const location of ['init-env', 'env-ts', 'config-server']) {
+    for (const name of ROUTING_MODEL_NAMES) {
+      for (const value of routingDefaults(location, texts[location] ?? '', name)) configured.push({ name, location, value, allowEmpty: false });
+    }
+  }
+  const envLocalFile = path.join(root, ENV_LOCAL);
+  if (fs.existsSync(envLocalFile)) {
+    const env = parseEnvAssignments(fs.readFileSync(envLocalFile, 'utf8'));
+    for (const name of ROUTING_MODEL_NAMES) {
+      if (name in env) configured.push({ name, location: 'env-local', value: env[name], allowEmpty: true });
+    }
+  }
+
+  const violations = [];
+  const reported = new Set();
+  for (const { name, location, value, allowEmpty } of configured) {
+    const key = `${name}|${location}|${value}`;
+    if (reported.has(key)) continue;
+    reported.add(key);
+    if (value === '') {
+      if (!allowEmpty) violations.push({ name, location, message: 'must name a listed model as its default, not an empty value (06.2 D-35)' });
+      continue;
+    }
+    if (value === 'auto') {
+      violations.push({ name, location, message: 'must not be auto; it names the model the Auto entry resolves to (06.2 D-19)' });
+      continue;
+    }
+    const missing = lists
+      .filter((list) => !list.models.some((model) => model.id === value))
+      .map((list) => (list.label === 'model list' || list.location === 'env-local' ? list.location : `${list.location}#${list.label.split(' ')[2]}`));
+    if (missing.length > 0) {
+      violations.push({ name, location, message: `${value} is not in the OpenRouter model list (${missing.join(', ')}) (06.2 D-19)` });
     }
   }
   return violations;
