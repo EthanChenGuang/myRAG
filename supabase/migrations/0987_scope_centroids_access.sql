@@ -1,13 +1,14 @@
--- 0987: scope centroids honour access groups (Phase 6.2 verification R-4, QRY-14, SEC-12).
--- While access groups are enforced (rag_access_enforced()), rag_scope_centroids_rebuild counts a chunk only when both it and its document
--- carry access_groups = {all}. A restricted document therefore never moves a centroid, never creates a doc-type or scope-tag group key and
--- never changes a member count, so the in/out score of a member outside its group cannot reveal that it exists or what it is about. With
--- enforcement off every member counts as before (0983). Negative examples are admin-entered texts, not derived from documents, and are
--- unchanged. Invalidation (P-27) is extended: the documents and document_chunks update triggers also fire on access_groups changes, and a
--- statement trigger on rag_access_group_settings clears every tenant's centroids when the enforced flag changes (or the row is inserted
--- or deleted), taking each tenant's shared advisory lock as 0983 does; the rebuild reads the flag after its exclusive lock, so a rebuild
--- that overlaps a flip either sees it or is cleared by it. Bodies rebased on 0983; SET search_path = '', schema-qualified names, revoked
--- from PUBLIC, anon and authenticated, service_role only. Common to both deployment modes. Idempotent; not folded into the setup files.
+-- 0987: scope centroids honour access groups (Phase 6.2 verification R-4, QRY-14, SEC-12). While access groups are enforced
+-- (rag_access_enforced()), rag_scope_centroids_rebuild counts a chunk only when both it and its document carry access_groups = {all}. A
+-- restricted document therefore never moves a centroid, never creates a doc-type or scope-tag group key and never changes a member count,
+-- so the in/out score of a member outside its group cannot reveal that it exists or what it is about. With enforcement off every member
+-- counts as before (0983). Negative examples are admin-entered texts, not derived from documents, and are unchanged. Invalidation (P-27) is
+-- extended: the documents and document_chunks update triggers also fire on access_groups changes, and a statement trigger on
+-- rag_access_group_settings clears every tenant's centroids when the enforced flag changes (an update that flips it, or an inserted or
+-- deleted row with enforced true; a re-run of 0920's ON CONFLICT DO NOTHING insert clears nothing), taking each tenant's shared advisory
+-- lock as 0983 does; the rebuild reads the flag after its exclusive lock, so a rebuild that overlaps a flip either sees it or is cleared by
+-- it. Bodies rebased on 0983; SET search_path = '', schema-qualified names, revoked from PUBLIC, anon and authenticated, service_role only.
+-- Common to both deployment modes. Idempotent; not folded into the setup files.
 
 BEGIN;
 
@@ -172,8 +173,10 @@ BEGIN
     SELECT EXISTS (
       SELECT 1 FROM old_rows o JOIN new_rows n ON n.id = o.id WHERE o.enforced IS DISTINCT FROM n.enforced
     ) INTO v_changed;
+  ELSIF TG_OP = 'INSERT' THEN
+    SELECT EXISTS (SELECT 1 FROM new_rows n WHERE n.enforced) INTO v_changed;
   ELSE
-    v_changed := true;
+    SELECT EXISTS (SELECT 1 FROM old_rows o WHERE o.enforced) INTO v_changed;
   END IF;
   IF v_changed THEN
     PERFORM public.rag_scope_centroids_invalidate(ARRAY(
@@ -192,9 +195,16 @@ CREATE TRIGGER rag_scope_centroids_access_settings_update
   REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.rag_scope_centroids_on_access_settings_change();
 
-DROP TRIGGER IF EXISTS rag_scope_centroids_access_settings_insert_delete ON public.rag_access_group_settings;
-CREATE TRIGGER rag_scope_centroids_access_settings_insert_delete
-  AFTER INSERT OR DELETE ON public.rag_access_group_settings
+DROP TRIGGER IF EXISTS rag_scope_centroids_access_settings_insert ON public.rag_access_group_settings;
+CREATE TRIGGER rag_scope_centroids_access_settings_insert
+  AFTER INSERT ON public.rag_access_group_settings
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_scope_centroids_on_access_settings_change();
+
+DROP TRIGGER IF EXISTS rag_scope_centroids_access_settings_delete ON public.rag_access_group_settings;
+CREATE TRIGGER rag_scope_centroids_access_settings_delete
+  AFTER DELETE ON public.rag_access_group_settings
+  REFERENCING OLD TABLE AS old_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.rag_scope_centroids_on_access_settings_change();
 
 REVOKE ALL ON FUNCTION public.rag_scope_centroids_rebuild(text, text) FROM PUBLIC, anon, authenticated;

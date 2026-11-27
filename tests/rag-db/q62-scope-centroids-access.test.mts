@@ -2,6 +2,7 @@ import { after, before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import type { PGlite } from '@electric-sql/pglite';
+import { applyMigrations } from '../../eval/harness/migrations.mts';
 import { FIXTURE_USER_ID, createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 
 /**
@@ -169,6 +170,16 @@ for (const mode of ['single-tenant', 'multi-tenant'] as DeploymentMode[]) {
       assert.ok((await centroidCount(db, tenant)) > 0, 'a write that does not change enforced keeps the centroids');
       await setEnforced(db, true);
       assert.equal(await centroidCount(db, tenant), 0);
+    });
+
+    test('applying every migration again keeps enforced centroids and the restricted exclusion', async () => {
+      await setEnforced(db, true);
+      await seedOpen();
+      await seedRestricted();
+      const built = await rebuildAndList(db, tenant);
+      await applyMigrations(db, mode);
+      assert.equal(await centroidCount(db, tenant), built.length);
+      assert.deepEqual(await rebuildAndList(db, tenant), built);
     });
 
     test('changing a document access label clears the tenant centroids', async () => {
