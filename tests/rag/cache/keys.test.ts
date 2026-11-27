@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import * as cacheKeys from '@/lib/rag/cache/keys';
-import { computeCacheKeyHash, hashSystemPromptTemplate } from '@/lib/rag/cache/keys';
+import { cacheAccessKeyPart, computeCacheKeyHash, hashSystemPromptTemplate } from '@/lib/rag/cache/keys';
 import type { CacheKeyParts } from '@/lib/rag/cache/types';
 import { resetRagConfigForTests } from '@/lib/rag/config';
 import { resetRagDepsForTests, setRagDepsForTests } from '@/lib/rag/deps';
@@ -80,8 +79,6 @@ describe('accessGroupSetHash key part (04.3-12, D-23, A-05)', () => {
   const USER_B = '00000000-0000-4000-8000-0000000000b1';
   const GROUP_A = 'g:00000000-0000-4000-8000-0000000000f1';
   const GROUP_B = 'g:00000000-0000-4000-8000-0000000000f2';
-  const cacheAccessKeyPart = (scope: Parameters<typeof cacheKeys.cacheAccessKeyPart>[0]): string =>
-    (cacheKeys as { cacheAccessKeyPart: typeof cacheKeys.cacheAccessKeyPart }).cacheAccessKeyPart(scope);
 
   function accessSwitch(value: 'on' | 'off'): void {
     setRagDepsForTests({ ragEnv: () => ({ RAG_DOC_ACCESS_GROUPS: value }) });

@@ -91,6 +91,7 @@ async function configHashFor(scope: typeof scopeA): Promise<string> {
 }
 
 const KEY_BASE: Omit<CacheKeyParts, 'retrievalConfigHash'> = {
+  accessGroupSetHash: 'off',
   answerLanguage: 'en',
   ragMode: 'strict',
   generatorModel: 'provider/model-a',

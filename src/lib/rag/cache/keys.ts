@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { RetrievalFilters } from '../backend/types';
+import { scopeAccessFilter } from '../tenant/access';
+import type { TenantScope } from '../tenant/scope';
 import type { CacheKeyParts } from './types';
 
 const KEY_PARTS: readonly (keyof CacheKeyParts)[] = [
+  'accessGroupSetHash',
   'answerLanguage',
   'entryProfile',
   'generatorModel',
@@ -18,6 +21,16 @@ function sortKeys(record: Record<string, unknown>): Record<string, unknown> {
 
 function sha256Hex(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+/**
+ * D-23, A-05: the access key part. The set hash of the caller's effective keys, the constant admin_all for an admin and off while the
+ * switch is off; a scope never resolved for access while the switch is on throws, so no key is built for it.
+ */
+export function cacheAccessKeyPart(scope: TenantScope): string {
+  const filter = scopeAccessFilter(scope);
+  if (filter.mode === 'keys') return filter.setHash;
+  return filter.mode;
 }
 
 /** The request filters that change which chunks can be retrieved, as optional key parts (D-39, D-44). */

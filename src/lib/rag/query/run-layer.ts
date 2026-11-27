@@ -37,6 +37,7 @@ import type { QueryEmbedding } from '../embeddings/query-embedding';
 import { env } from '@/lib/env';
 import { checkBypassReason, type CacheRetrievalOptions, type TurnFacts } from '../cache/bypass';
 import { resolveHitSources } from '../cache/sources';
+import { cacheAccessKeyPart } from '../cache/keys';
 import { effectiveCacheThreshold } from '../cache/threshold';
 import type { CacheHit, CacheKeyParts, CacheTicket, EntryProfile } from '../cache/types';
 import { resolveFinalResultCount } from '../config';
@@ -373,7 +374,9 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
 
   let embedding: QueryEmbedding;
   let retrievalConfigHash: string;
+  let accessGroupSetHash: string;
   try {
+    accessGroupSetHash = cacheAccessKeyPart(scope);
     embedding = await ctx.cache.embed(args.standalone, transformSignal(signal, null, args.embedSpec.timeoutMs));
     retrievalConfigHash = await ctx.cache.retrievalConfigHash(embedding);
   } catch (error) {
@@ -385,6 +388,7 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
   const precomputed = { text: args.standalone, embedding };
 
   const key: CacheKeyParts = {
+    accessGroupSetHash,
     answerLanguage: gate.lang,
     ragMode: facts.ragMode as CacheKeyParts['ragMode'],
     generatorModel: context.generatorModel,
