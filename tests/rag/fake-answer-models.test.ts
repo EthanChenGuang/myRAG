@@ -493,6 +493,13 @@ describe('run configs', () => {
 
   test('the output-guard run is the recommended security configuration plus enforce, with security events off', () => {
     const recommended = load('sec-recommended').env;
-    expect(load('p52-sec-output-guard').env).toEqual({ ...recommended, RAG_OUTPUT_GUARD: 'enforce', RAG_SECURITY_EVENTS: 'false' });
+    // 05.2-32: labelled blocks for the repeating fake, and the fixture corpus's own link host on the allowlist (D-42).
+    expect(load('p52-sec-output-guard').env).toEqual({
+      ...recommended,
+      RAG_OUTPUT_GUARD: 'enforce',
+      RAG_SECURITY_EVENTS: 'false',
+      RAG_CITATIONS: 'true',
+      RAG_OUTPUT_LINK_ALLOWLIST: 'help.fixture-site.example',
+    });
   });
 });
