@@ -1006,6 +1006,11 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_chunk_embeddings_change() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_chunk_embeddings_change() TO service_role;
   END IF;
+  -- Migration 0987: scope centroids are cleared when the access enforcement flag changes (SECURITY DEFINER trigger, service_role only).
+  IF to_regprocedure('public.rag_scope_centroids_on_access_settings_change()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_access_settings_change() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_access_settings_change() TO service_role;
+  END IF;
   -- Migration 1010: the attribute resolver with the access filter (SECURITY INVOKER, service_role only).
   IF to_regprocedure('public.rag_attribute_filter_values(text, integer, text[], boolean)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_attribute_filter_values(text, integer, text[], boolean) FROM PUBLIC, anon, authenticated;
