@@ -1,8 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { NextRequest } from 'next/server';
 import { CALC_BLOCK_CLOSE, CALC_BLOCK_OPEN } from '@/lib/rag/calc/block-tag';
 import { emitNotice, renderNoticeAsText } from '@/lib/rag/generation/notices';
 import { installChatPipeline, retrievalWith } from '../../helpers/chat-route-fakes';
+import {
+  expectCharacterization,
+  readGoldenQuestions,
+  SNAPSHOT_DIR,
+  startRouteFixture,
+  systemTextOf,
+  type RouteFixture,
+} from '../../helpers/route-fixture';
 
 const QUESTION = 'What is 3 times the value of item one?';
 const PLAIN_QUESTION = 'Which panel shows the export option?';
@@ -32,6 +41,7 @@ const h = await vi.hoisted(async () => {
     ...fakes.createChatRouteHarness(),
     state,
     model,
+    fakeAdmin: true,
     calls: [] as Array<Record<string, any>>,
     parts: [] as Array<Record<string, unknown>>,
     rules: [] as Array<Record<string, unknown>>,
@@ -94,10 +104,10 @@ vi.mock('@/lib/rag/trace/schedule', () => ({
     void task();
   },
 }));
-vi.mock('@/lib/supabase', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/supabase')>()),
-  getSupabaseAdmin: () => h.supabase.client,
-}));
+vi.mock('@/lib/supabase', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/supabase')>();
+  return { ...actual, getSupabaseAdmin: () => (h.fakeAdmin ? h.supabase.client : actual.getSupabaseAdmin()) };
+});
 vi.mock('@openrouter/ai-sdk-provider', () => ({
   createOpenRouter: () => (modelId: string) => ({ specificationVersion: 'v3', provider: 'fake', modelId }),
 }));
@@ -184,6 +194,83 @@ async function post(question = QUESTION) {
   const text = chunks.filter((c) => c.type === 'text-delta').map((c) => c.delta ?? '').join('');
   return { body, text };
 }
+
+const ALL_521_SWITCHES = ['RAG_CALC_TOOL', 'RAG_CALC_CHECK', 'RAG_PROMPT_BUDGET', 'RAG_CONTEXT_OVERFLOW'] as const;
+
+// Task 3 (D-03): every 5.2.1 and 5.2 switch at its default equals the committed embed characterization, never regenerated here
+describe('embed route all-off proof (05.2.1-22, D-03)', () => {
+  let fixture: RouteFixture;
+
+  beforeAll(async () => {
+    h.fakeAdmin = false;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    fixture = await startRouteFixture({ deploymentMode: 'single-tenant', env: { RAG_PIPELINE: 'legacy' } });
+  });
+
+  afterAll(async () => {
+    await fixture.close();
+    vi.useRealTimers();
+    h.fakeAdmin = true;
+  });
+
+  beforeEach(() => {
+    h.calls.length = 0;
+    h.parts.length = 0;
+    h.rules.length = 0;
+    h.state.deltas = ['ok'];
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('the captured request and stream equal the committed snapshot with every switch at its default', async () => {
+    expect(process.env.UPDATE_CHARACTERIZATION).not.toBe('1');
+    for (const name of ALL_521_SWITCHES) expect(['', 'false', 'off', 'truncate', undefined], name).toContain(process.env[name]);
+    const { POST } = await fixture.loadRoute<typeof import('@/app/api/embed/chat/route')>('embed/chat');
+    const rag = await import('@/lib/rag');
+    const answerConfig = rag.readAnswerConfig();
+    expect(answerConfig.anyNonDefault).toBe(false);
+    expect([answerConfig.calcTool, answerConfig.calcCheck, answerConfig.promptBudget, answerConfig.contextOverflow]).toEqual([
+      false,
+      false,
+      false,
+      'truncate',
+    ]);
+
+    const actual: Array<{ id: string; system: string }> = [];
+    for (const { id, question } of readGoldenQuestions()) {
+      h.calls.length = 0;
+      const response = await POST(
+        new NextRequest('http://localhost/api/embed/chat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.43' },
+          body: JSON.stringify({ messages: [{ role: 'user', content: question }] }),
+        }),
+      );
+      const body = await response.text();
+      expect(h.calls, id).toHaveLength(1);
+      const params = h.calls[0];
+      expect(params.tools, id).toBeUndefined();
+      expect(params.providerOptions, id).toBeUndefined();
+      expect(params.experimental_transform, id).toBeUndefined();
+      expect(params.maxOutputTokens, id).toBe(2000);
+      expect((params.messages as Array<{ role: string; content: string }>).map((m) => m.role), id).toEqual(['system', 'user']);
+      expect((params.messages as Array<{ role: string; content: string }>)[1].content, id).toBe(question);
+      const deltas = parse(body).filter((c) => c.type === 'text-delta').map((c) => c.delta ?? '');
+      expect(deltas.join(''), id).toBe('ok');
+      actual.push({ id, system: systemTextOf(params) });
+    }
+    expect(actual.every((entry) => !entry.system.includes(CALC_BLOCK_OPEN))).toBe(true);
+    expect(h.parts.some((p) => 'calcBlock' in p || 'calcCheck' in p)).toBe(false);
+    expect(h.rules.some((r) => 'calculation' in r)).toBe(false);
+    expectCharacterization('embed', actual);
+    const diff = execFileSync('git', ['status', '--porcelain', '--', SNAPSHOT_DIR], { encoding: 'utf8' });
+    expect(diff).toBe('');
+  });
+});
 
 describe('embed route calculation (05.2.1-22)', () => {
   const saved: Record<string, string | undefined> = {};
