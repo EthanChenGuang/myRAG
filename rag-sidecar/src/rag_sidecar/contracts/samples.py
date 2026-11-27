@@ -244,8 +244,25 @@ from rag_sidecar.contracts.query import (
     QueryVariants,
     RewriteGateResult,
     SkippedTransform,
+    CompletenessResult,
+    LanguageDetection,
+    SubQuestionFilter,
+    SubQuestionFilterTrace,
+    SubQuestionSpec,
     SubQuestions,
+    SubQuestionsWithFilters,
 )
+from rag_sidecar.contracts.query_additions import (
+    AnswerStructure,
+    D31CheckEntry,
+    ModelRoute,
+    QueryAdditionsDecisionRecord,
+    RagTurnMetadata,
+    SpeculativeTrace,
+    SwitchDecision,
+)
+from rag_sidecar.contracts.scope_gate import ScopeGateCalibration, ScopeGateCalibrationCell, ScopeGateResult
+from rag_sidecar.contracts.langid import LangidRequest, LangidResponse
 from rag_sidecar.contracts.report import GroundednessLabelCounts, InjectionReport, StrategySlice
 from rag_sidecar.contracts.routing import (
     DetectCounts,
@@ -377,7 +394,7 @@ def _query_contract_samples() -> dict[str, Any]:
     return {
         "RewriteGateResult": _rewrite_gate(),
         "QueryPlan": _query_plan(),
-        "CondensedQuery": CondensedQuery(standalone=_QUERY_STANDALONE, unchanged=False),
+        "CondensedQuery": CondensedQuery(standalone=_QUERY_STANDALONE, unchanged=False, language=None),
         "QueryVariants": QueryVariants(
             queries=[
                 "ERR_TIMEOUT warranty coverage",
@@ -389,7 +406,7 @@ def _query_contract_samples() -> dict[str, Any]:
         ),
         "SubQuestions": SubQuestions(questions=list(_QUERY_SUB_QUESTIONS)),
         "QueryTranslation": QueryTranslation(
-            target_language="zh", text="产品保修是否涵盖 ERR_TIMEOUT？保修期多长？"
+            target_language="zh", text="产品保修是否涵盖 ERR_TIMEOUT？保修期多长？", source_language=None
         ),
         "QueryParams": QueryParams(),
     }
@@ -3857,6 +3874,179 @@ def _phase52_eval_variants() -> dict[str, Any]:
     }
 
 
+# Phase 6.2 (06.2-01): neutral synthetic values only.
+_P62_SUB_QUESTIONS = ["What does part alpha state?", "What does part beta state?"]
+_P62_TIME = datetime(2026, 11, 27, tzinfo=timezone.utc)
+
+
+def _p62_filter() -> SubQuestionFilter:
+    return SubQuestionFilter.model_validate(
+        {"date_range": {"from": "2025-01-01", "to": "2025-12-31"}, "scopes": None, "doc_types": None, "languages": None}
+    )
+
+
+def _p62_query_plan() -> QueryPlan:
+    return QueryPlan(
+        original="How do part alpha and part beta compare?",
+        standalone="How do part alpha and part beta compare?",
+        language="en",
+        gate=RewriteGateResult(rewrite=True, transforms=["decompose"], reasons=[], lang="en", protected_tokens=[]),
+        variants=[
+            QueryVariantOut(text="How do part alpha and part beta compare?", language="en", kind="original", protected_ok=True),
+            QueryVariantOut(
+                text=_P62_SUB_QUESTIONS[0],
+                language="en",
+                kind="sub_question",
+                sub_question_index=0,
+                protected_ok=True,
+                filter_applied=True,
+            ),
+            QueryVariantOut(text="part alpha part beta", language="en", kind="history_fallback", protected_ok=True),
+        ],
+        sub_questions=list(_P62_SUB_QUESTIONS),
+        skipped=[SkippedTransform(transform="translate", reason="glossary_term_lost")],
+        framework="llamaindex",
+        sub_question_specs=[
+            SubQuestionSpec(text=_P62_SUB_QUESTIONS[0], filter=_p62_filter()),
+            SubQuestionSpec(text=_P62_SUB_QUESTIONS[1], filter=None),
+        ],
+        completeness=CompletenessResult(required_count=2, missing_count=0, action="ok"),
+        language_detection=LanguageDetection(language="en", confidence=0.92, source="detector"),
+        filter_trace=[SubQuestionFilterTrace(index=0, status="applied", retried=False, retry_skipped_cap=False)],
+    )
+
+
+def _p62_calibration() -> ScopeGateCalibration:
+    return ScopeGateCalibration(
+        recorded_at=_P62_TIME,
+        source="fixture",
+        cells=[
+            ScopeGateCalibrationCell(
+                embedding_profile_id="openai-3-small-1536",
+                rag_mode="strict",
+                threshold=0.42,
+                margin=0.05,
+                false_refusal_rate=0.0,
+                false_refusal_n=12,
+                correct_refusal_rate=0.5,
+                correct_refusal_n=6,
+                false_refusal_upper_95=0.22,
+                status="calibrated",
+            ),
+            ScopeGateCalibrationCell(
+                embedding_profile_id="openai-3-small-1536",
+                rag_mode="balanced",
+                threshold=None,
+                margin=None,
+                false_refusal_rate=None,
+                false_refusal_n=0,
+                correct_refusal_rate=None,
+                correct_refusal_n=0,
+                status="uncalibrated",
+            ),
+        ],
+    )
+
+
+def _phase62_models() -> dict[str, Any]:
+    return {
+        "SubQuestionsWithFilters": SubQuestionsWithFilters(
+            questions=[
+                SubQuestionSpec(text=_P62_SUB_QUESTIONS[0], filter=_p62_filter()),
+                SubQuestionSpec(text=_P62_SUB_QUESTIONS[1], filter=None),
+            ]
+        ),
+        "ScopeGateResult": ScopeGateResult(
+            label="in_scope", score=0.61, negative_score=0.2, reason="above_threshold", centroid_count=4, latency_ms=1.2
+        ),
+        "ScopeGateCalibration": _p62_calibration(),
+        "LangidRequest": LangidRequest(text="What does part alpha state?", candidates=list(LANGUAGE_CODES)),
+        "LangidResponse": LangidResponse(language="en", confidence=0.97, model="fixture-langid"),
+        "RagTurnMetadata": RagTurnMetadata(standaloneQuery="What does part alpha state?", queryLanguage="en"),
+        "QueryAdditionsDecisionRecord": QueryAdditionsDecisionRecord(
+            recorded_at=_P62_TIME,
+            report_hash="0" * 64,
+            source="fixture",
+            switches=[
+                SwitchDecision(
+                    name="RAG_QUERY_DECOMPOSE_COMPLETENESS",
+                    eligible=False,
+                    improved_slices=["compound"],
+                    regressions=[],
+                    notes="fixture wiring proof",
+                )
+            ],
+            d31_checklist=[D31CheckEntry(letter="a", passed=True, evidence="layer-off parity run")],
+        ),
+    }
+
+
+def _phase62_variants() -> dict[str, Any]:
+    trace = _trace("Part alpha states one thing.").model_copy(
+        update={
+            "query_plan": _p62_query_plan(),
+            "scope_gate": ScopeGateResult(
+                label="unsure", score=None, negative_score=None, reason="no_centroids", centroid_count=0, latency_ms=0.4
+            ),
+            "model_route": ModelRoute(tier="fast", rule="short_lookup", selection="auto"),
+            "speculative": SpeculativeTrace(started_ms=3.0, overlap_ms=40.0, cancelled_by_cache=False, wasted_searches=1),
+            "answer_structure": AnswerStructure(parts=2, cited_parts=None, uncovered_parts=0),
+            "searches_counted": 4,
+        }
+    )
+    return {
+        "QueryPlan:phase62": {"model": "QueryPlan", "value": _p62_query_plan().model_dump(mode="json")},
+        "RagTrace:phase62": {"model": "RagTrace", "value": trace.model_dump(mode="json")},
+        "RagRunRequest:voice_entry": {
+            "model": "RagRunRequest",
+            "value": {
+                "query": "What does part alpha state?",
+                "options": {"entry_profile": "voice", "selected_model": "openrouter/auto-fixture"},
+            },
+        },
+        "GoldenItem:scoped_compound": {
+            "model": "GoldenItem",
+            "value": {
+                "id": "en-scoped-compound-901",
+                "question": "How do part alpha and part beta compare?",
+                "language": "en",
+                "category": "scoped_compound",
+                "answerable": True,
+                "expected_answer": "Part alpha states one thing and part beta states another.",
+                "gold_evidence": [
+                    {"document": "q62-alpha.md", "section": "Alpha", "quote": "part alpha states one thing"},
+                    {"document": "q62-beta.md", "section": "Beta", "quote": "part beta states another"},
+                ],
+                "review_status": "draft",
+                "provenance": "synthetic_fixture",
+                "split": "dev",
+                "sub_questions": [
+                    {
+                        "index": 0,
+                        "gold_spans": [
+                            {"document": "q62-alpha.md", "section": "Alpha", "quote": "part alpha states one thing"}
+                        ],
+                    },
+                    {
+                        "index": 1,
+                        "gold_spans": [
+                            {"document": "q62-beta.md", "section": "Beta", "quote": "part beta states another"}
+                        ],
+                    },
+                ],
+            },
+        },
+        "CondensedQuery:language": {
+            "model": "CondensedQuery",
+            "value": {"standalone": "What does part alpha state?", "unchanged": True, "language": "en"},
+        },
+        "QueryTranslation:source_language": {
+            "model": "QueryTranslation",
+            "value": {"target_language": "it", "text": "Cosa dice la parte alfa?", "source_language": "en"},
+        },
+    }
+
+
 def build_samples() -> dict[str, dict[str, Any]]:
     models = {
         **_models(),
@@ -3867,6 +4057,7 @@ def build_samples() -> dict[str, dict[str, Any]]:
         **_finetune_models(),
         **_phase52_models(),
         **_phase53_models(),
+        **_phase62_models(),
     }
     samples = {name: model.model_dump(mode="json") for name, model in models.items()}
     variants: dict[str, dict[str, Any]] = {
@@ -3999,4 +4190,5 @@ def build_samples() -> dict[str, dict[str, Any]]:
     variants.update(_phase33_variants())
     variants.update(_phase52_variants())
     variants.update(_phase52_eval_variants())
+    variants.update(_phase62_variants())
     return {"samples": samples, "variants": variants}

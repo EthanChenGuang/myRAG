@@ -1,0 +1,34 @@
+{
+  "additionalProperties": false,
+  "description": "D-22 wire shape (camelCase): the standalone query of a turn, sent back by the client as history only.",
+  "properties": {
+    "queryLanguage": {
+      "anyOf": [
+        {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Querylanguage"
+    },
+    "standaloneQuery": {
+      "maxLength": 1000,
+      "minLength": 1,
+      "title": "Standalonequery",
+      "type": "string"
+    }
+  },
+  "required": [
+    "standaloneQuery",
+    "queryLanguage"
+  ],
+  "title": "RagTurnMetadata",
+  "type": "object"
+}

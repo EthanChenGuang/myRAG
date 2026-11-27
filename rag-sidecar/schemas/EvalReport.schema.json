@@ -401,7 +401,10 @@
             "implicit_condition",
             "partial_answer",
             "stale_version",
-            "off_topic_context"
+            "off_topic_context",
+            "version_compare",
+            "scoped_compound",
+            "glossary"
           ],
           "title": "Category",
           "type": "string"
@@ -591,6 +594,21 @@
           ],
           "title": "Split",
           "type": "string"
+        },
+        "subq_hit_at_10": {
+          "minimum": 0,
+          "title": "Subq Hit At 10",
+          "type": "integer"
+        },
+        "subq_hit_at_5": {
+          "minimum": 0,
+          "title": "Subq Hit At 5",
+          "type": "integer"
+        },
+        "subq_total": {
+          "minimum": 0,
+          "title": "Subq Total",
+          "type": "integer"
         },
         "topk_redundancy": {
           "maximum": 1,
@@ -1104,11 +1122,12 @@
                   "hyde",
                   "decompose",
                   "terminology",
-                  "semantic_cache"
+                  "semantic_cache",
+                  "scope_gate"
                 ],
                 "type": "string"
               },
-              "maxItems": 18,
+              "maxItems": 19,
               "type": "array"
             },
             {
@@ -1176,6 +1195,14 @@
           ],
           "default": null,
           "title": "Embedding Profile"
+        },
+        "entry_profile": {
+          "enum": [
+            "eval",
+            "voice"
+          ],
+          "title": "Entry Profile",
+          "type": "string"
         },
         "generator_model": {
           "anyOf": [
@@ -1291,6 +1318,12 @@
             }
           ],
           "default": null
+        },
+        "selected_model": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Selected Model",
+          "type": "string"
         },
         "semantic_cache": {
           "anyOf": [
@@ -1780,6 +1813,12 @@
     "SliceMetrics": {
       "additionalProperties": false,
       "properties": {
+        "all_evidence_recall_at_10": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "all_evidence_recall_at_5": {
+          "$ref": "#/$defs/MetricValue"
+        },
         "attribute_filter_fallback_rate": {
           "$ref": "#/$defs/MetricValue"
         },
@@ -1840,6 +1879,12 @@
           "$ref": "#/$defs/MetricValue"
         },
         "recall_at_5": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "subq_coverage_at_10": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "subq_coverage_at_5": {
           "$ref": "#/$defs/MetricValue"
         },
         "topk_redundancy": {
@@ -2087,6 +2132,20 @@
           ],
           "default": null,
           "title": "Refs"
+        },
+        "scope_gate": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Gate"
         },
         "search": {
           "anyOf": [

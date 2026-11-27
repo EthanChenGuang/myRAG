@@ -193,7 +193,11 @@ from rag_sidecar.contracts.retrieval import (
     TableRow,
     VersionRange,
 )
+from rag_sidecar.contracts.langid import LangidRequest, LangidResponse
+from rag_sidecar.contracts.query import SubQuestionsWithFilters
+from rag_sidecar.contracts.query_additions import QueryAdditionsDecisionRecord, RagTurnMetadata
 from rag_sidecar.contracts.samples import build_samples
+from rag_sidecar.contracts.scope_gate import ScopeGateCalibration, ScopeGateResult
 from rag_sidecar.contracts.golden_lifecycle import GoldenSetManifest
 from rag_sidecar.contracts.quality_gates import AbsoluteGateResult, CompositionResult, QualityGates
 from rag_sidecar.contracts.monitor import (
@@ -473,6 +477,13 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (QueryVectorRow, "serialization"),
     (ChunkVectorRow, "serialization"),
     (VectorFileHeader, "serialization"),
+    (SubQuestionsWithFilters, "validation"),
+    (ScopeGateResult, "serialization"),
+    (ScopeGateCalibration, "validation"),
+    (LangidRequest, "validation"),
+    (LangidResponse, "serialization"),
+    (RagTurnMetadata, "validation"),
+    (QueryAdditionsDecisionRecord, "validation"),
 ]
 
 

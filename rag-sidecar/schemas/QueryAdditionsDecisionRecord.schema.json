@@ -1,0 +1,141 @@
+{
+  "$defs": {
+    "D31CheckEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Evidence",
+          "type": "string"
+        },
+        "letter": {
+          "enum": [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i"
+          ],
+          "title": "Letter",
+          "type": "string"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "letter",
+        "passed",
+        "evidence"
+      ],
+      "title": "D31CheckEntry",
+      "type": "object"
+    },
+    "SwitchDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "eligible": {
+          "title": "Eligible",
+          "type": "boolean"
+        },
+        "improved_slices": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Improved Slices",
+          "type": "array"
+        },
+        "name": {
+          "pattern": "^RAG_[A-Z0-9_]{1,64}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "maxLength": 2000,
+          "title": "Notes",
+          "type": "string"
+        },
+        "regressions": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Regressions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "eligible"
+      ],
+      "title": "SwitchDecision",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "D-10, D-31: written only by the decision-record tool (06.2-39).",
+  "properties": {
+    "d31_checklist": {
+      "items": {
+        "$ref": "#/$defs/D31CheckEntry"
+      },
+      "maxItems": 9,
+      "title": "D31 Checklist",
+      "type": "array"
+    },
+    "decided_by": {
+      "const": "rag_eval.compare query-additions",
+      "default": "rag_eval.compare query-additions",
+      "title": "Decided By",
+      "type": "string"
+    },
+    "recorded_at": {
+      "format": "date-time",
+      "title": "Recorded At",
+      "type": "string"
+    },
+    "report_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Report Hash",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "source": {
+      "enum": [
+        "fixture",
+        "live"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "switches": {
+      "items": {
+        "$ref": "#/$defs/SwitchDecision"
+      },
+      "title": "Switches",
+      "type": "array"
+    }
+  },
+  "required": [
+    "recorded_at",
+    "report_hash",
+    "source"
+  ],
+  "title": "QueryAdditionsDecisionRecord",
+  "type": "object"
+}
