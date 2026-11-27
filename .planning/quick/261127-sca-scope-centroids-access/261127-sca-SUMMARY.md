@@ -53,18 +53,20 @@ branch redefines these functions after 0987.
 
 ## Apply order
 After 0920-0926 and 0983: apply `0987_scope_centroids_access.sql`, then re-run `0410` (idempotent). After re-running 0983, re-run 0987.
-Existing centroid rows built before 0987 may include restricted documents: on a database where access is already enforced, run the scope
-centroid rebuild once after applying (operator action; with enforcement off nothing is needed, a later flip clears them).
+Existing centroid rows built before 0987 may include restricted documents: when access is enforced at apply time, 0987 clears every
+tenant's centroids (the gate answers unsure until the next rebuild; re-applying under enforcement clears them again, which fails open).
+With enforcement off it keeps them; a later flip clears them.
 
 ## Tests (TDD)
-- `tests/rag-db/q62-scope-centroids-access.test.mts` (PGlite, single- and multi-tenant, 6 tests per mode). RED commit 5bf57ec7f: 8 of 10
+- `tests/rag-db/q62-scope-centroids-access.test.mts` (PGlite, single- and multi-tenant, 7 tests per mode). RED commit 5bf57ec7f: 8 of 10
   failed on assertions (restricted doc type/tag leaked as group keys, tenant member count 3 instead of 2, rebuild source lacked
   `access_groups`, no invalidation on flip or relabel); the off-state test passed, as intended.
   - enforced: centroids with a restricted document present equal the centroids without it (rows deep-equal), no restricted group key.
   - access off: unchanged; labelled documents still count.
   - flipping `enforced` on clears centroids; an `updated_at`-only write does not.
   - relabelling a document clears the tenant's centroids.
-  - re-applying every migration under enforcement keeps the centroids and the exclusion.
+  - applying the migrations while enforced clears centroids built earlier (stale rows from access-off); the rebuild then excludes the
+    restricted document. Applying them while not enforced keeps the centroids.
 - A first GREEN version used a plain `AFTER INSERT OR DELETE` trigger; `q62-scope-gate-schema` "applying every migration a second time"
   caught that the 0920 re-run cleared the centroids. Fixed with transition tables (b8769bb83).
 
@@ -74,7 +76,7 @@ centroid rebuild once after applying (operator action; with enforcement off noth
 - `node scripts/ci/check-rag-boundary.mjs`, `node scripts/check-config.mjs`, `node scripts/ci/check-language-literals.mjs`,
   `node scripts/ci/check-settings-classification.mjs`: pass
 - `node --import tsx --test tests/rag-db/access-*.test.mts tests/rag-db/q62-scope-*.test.mts tests/rag-db/*grants*.test.mts
-  tests/rag-db/*search-path*.test.mts`: 626/626 pass
+  tests/rag-db/*search-path*.test.mts`: 628/628 pass
 - `npx vitest run tests/rag/scope`: 6 files, 110 tests pass
 - No TS changed, so no other vitest files import a changed module.
 
@@ -83,8 +85,9 @@ centroid rebuild once after applying (operator action; with enforcement off noth
 - 5bf57ec7f test: RED restricted documents must not enter scope centroids
 - 68573913b fix: build scope centroids from unrestricted documents only while access is enforced (0987, 0410, sentinel)
 - b8769bb83 fix: clear centroids only on a real enforcement change; idempotency test
-- (this SUMMARY)
+- f79b3fad9 fix: clear pre-0987 centroids when access is enforced at apply time
+- (last) this SUMMARY
 
 ## Deviations / deferred
 - None from the requested approach. No env switch added (the filter follows `rag_access_enforced()`, no off switch, per AGENTS.md).
-- Operator: one centroid rebuild per tenant after applying 0987 where access is already enforced.
+- Operator: after applying 0987 where access is already enforced, rebuild the scope centroids (until then the gate answers unsure).
