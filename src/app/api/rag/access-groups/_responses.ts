@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { z } from 'zod/v3';
+import { getDeploymentMode } from '@/lib/deployment-mode';
 import { env } from '@/lib/env';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import {
@@ -9,6 +10,7 @@ import {
   type AccessGroupsReason,
   type AccessServiceDeps,
   type AccessStatus,
+  type ConnectorMapRow,
   type DocumentAudience,
 } from '@/lib/rag';
 
@@ -162,4 +164,14 @@ export function enforcementStatusOf(status: AccessStatus) {
     embedGroup: status.embedGroup,
     checkedAt: status.checkedAt === null ? null : new Date(status.checkedAt).toISOString(),
   };
+}
+
+/** A-10: connector mappings and sharing rules change who sees a document only in single-tenant mode. */
+export function connectorVisibilityApplies(): boolean {
+  return getDeploymentMode() === 'single-tenant';
+}
+
+/** The wire shape of one connector mapping row; the source id is returned exactly as the source gave it. */
+export function mappingRowOf(row: ConnectorMapRow) {
+  return { id: row.id, provider: row.provider, kind: row.kind, externalPrincipalId: row.externalPrincipalId, groupId: row.groupId, documents: row.documents };
 }
