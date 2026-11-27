@@ -38,8 +38,10 @@ const ANSWER_RULES_WATCHED = [
   'RAG_UPLOADER_ALERT_THRESHOLD',
   'RAG_UPLOADER_HOLD',
   'RAG_INGEST_PIPELINE',
+  'RAG_PROMPT_BUDGET',
+  'RAG_CONTEXT_OVERFLOW',
 ];
-/** The nine warnings in display order (UI-SPEC 6.12); the server remains the authority. */
+/** The warnings in display order (UI-SPEC 6.12, 14.3); the server remains the authority. */
 const ANSWER_RULES_WARNING_KEYS = [
   'warn.perSentenceNeedsCitations',
   'warn.claimNeedsGroundedness',
@@ -50,8 +52,16 @@ const ANSWER_RULES_WARNING_KEYS = [
   'warn.guardEmptyAllowlist',
   'warn.alertNeedsEvents',
   'warn.holdNeedsApprovalPath',
+  'warn.overflowNeedsBudget',
+  'warn.budgetUnknownModels',
 ];
-const ANSWER_RULES_INFO_WARNINGS = new Set(['warn.guardEmptyAllowlist']);
+const ANSWER_RULES_INFO_WARNINGS = new Set(['warn.guardEmptyAllowlist', 'warn.budgetUnknownModels']);
+/** The three read-only lines of the Calculations and Prompt size groups (UI-SPEC 14.3), placed by plan 05.2.1-02. */
+const ANSWER_RULES_LINE_IDS = {
+  limits: 'rag-answer-rules-calc-limits',
+  unknown: 'rag-answer-rules-budget-unknown',
+  estimate: 'rag-answer-rules-budget-estimate',
+};
 
 const ANSWER_RULES_LABELS = {
   en: {
@@ -76,6 +86,11 @@ const ANSWER_RULES_LABELS = {
     'overflow.truncate': 'Keep the highest-ranked documents',
     'overflow.refine': 'Answer over several calls',
     'RAG_CONTEXT_OVERFLOW.help': 'Read only while the prompt budget is on. Several calls apply to the web chat only.',
+    'calc.limits': 'Limits: {operands} values, {steps} steps, {items} list items',
+    'budget.unknownModels': 'Models without a known context window: {n}. They use the default window of {tokens} tokens.',
+    'budget.estimate': 'Token estimate measured for: {measured}. Default factor for: {defaulted}.',
+    'warn.overflowNeedsBudget': '“If the documents do not fit” is read only while the prompt budget is on.',
+    'warn.budgetUnknownModels': '{n} models have no known context window, so their requests are sized for the default window.',
     RAG_REGISTRY_TEXTS: 'Use the language registry for the refusal, notices and badge texts',
     'RAG_REGISTRY_TEXTS.help': 'Off keeps today’s texts. English answers read the same either way. Needs supported languages.',
     RAG_PARTIAL_ANSWER_RULE: 'Answer the covered part and name what the documents do not cover',
@@ -183,6 +198,11 @@ const ANSWER_RULES_LABELS = {
     'overflow.truncate': '保留排名最高的文档',
     'overflow.refine': '分多次调用作答',
     'RAG_CONTEXT_OVERFLOW.help': '仅在提示词预算开启时生效。多次调用仅适用于网页聊天。',
+    'calc.limits': '限制：{operands} 个数值，{steps} 个步骤，{items} 个列表项',
+    'budget.unknownModels': '上下文窗口未知的模型：{n} 个。它们使用 {tokens} token 的默认窗口。',
+    'budget.estimate': '已实测 token 估算的系列：{measured}。使用默认系数的系列：{defaulted}。',
+    'warn.overflowNeedsBudget': '“文档放不下时”仅在提示词预算开启时生效。',
+    'warn.budgetUnknownModels': '{n} 个模型的上下文窗口未知，因此其请求按默认窗口计算。',
     RAG_REGISTRY_TEXTS: '拒答、提示和徽标文本使用语言注册表',
     'RAG_REGISTRY_TEXTS.help': '关闭时保留现有文本。英文回答在两种情况下都相同。需要先选择支持的语言。',
     RAG_PARTIAL_ANSWER_RULE: '回答文档覆盖的部分，并说明文档未涉及的部分',
@@ -282,6 +302,11 @@ const ANSWER_RULES_LABELS = {
     'overflow.truncate': 'Mantieni i documenti con il punteggio più alto',
     'overflow.refine': 'Rispondi con più chiamate',
     'RAG_CONTEXT_OVERFLOW.help': 'Letto solo con il budget del prompt attivo. Le chiamate multiple valgono solo per la chat web.',
+    'calc.limits': 'Limiti: {operands} valori, {steps} passaggi, {items} elementi di elenco',
+    'budget.unknownModels': 'Modelli senza finestra di contesto nota: {n}. Usano la finestra predefinita di {tokens} token.',
+    'budget.estimate': 'Stima dei token misurata per: {measured}. Fattore predefinito per: {defaulted}.',
+    'warn.overflowNeedsBudget': '“Se i documenti non rientrano” è letto solo con il budget del prompt attivo.',
+    'warn.budgetUnknownModels': '{n} modelli non hanno una finestra di contesto nota, quindi le loro richieste sono dimensionate sulla finestra predefinita.',
     RAG_REGISTRY_TEXTS: 'Usa il registro delle lingue per rifiuto, avvisi e testi del badge',
     'RAG_REGISTRY_TEXTS.help': 'Spento mantiene i testi attuali. Le risposte in inglese restano identiche. Richiede le lingue supportate.',
     RAG_PARTIAL_ANSWER_RULE: 'Rispondi alla parte coperta e indica ciò che i documenti non coprono',
@@ -410,7 +435,22 @@ function isAnswerRulesSummary(summary) {
     Array.isArray(summary.judgeLanguages) &&
     summary.judgeLanguages.every((row) => row && typeof row.language === 'string' && row.language !== '' && typeof row.calibrated === 'boolean');
   const counts = summary.ruleCounts;
+  const isPositive = (value) => Number.isInteger(value) && value > 0;
+  const limits = summary.calc && summary.calc.limits;
+  const calcOk = Boolean(limits && isPositive(limits.operands) && isPositive(limits.steps) && isPositive(limits.items));
+  const budget = summary.budget;
+  const names = (list) => Array.isArray(list) && list.every((name) => typeof name === 'string' && name !== '');
+  const budgetOk = Boolean(
+    budget &&
+      answerRulesIsCount(budget.unknownModels) &&
+      isPositive(budget.defaultWindow) &&
+      budget.families &&
+      names(budget.families.measured) &&
+      names(budget.families.defaulted),
+  );
   return Boolean(
+    calcOk &&
+      budgetOk &&
     capsOk &&
       Number.isInteger(summary.floor) &&
       summary.floor > 0 &&
@@ -449,6 +489,14 @@ function answerRulesRows(summary, locale) {
     })),
     sameFamily: summary.sameFamily,
     allowlist: summary.allowlist.slice(),
+    limits: {
+      operands: ui.ragUiFormatNumber(summary.calc.limits.operands, locale),
+      steps: ui.ragUiFormatNumber(summary.calc.limits.steps, locale),
+      items: ui.ragUiFormatNumber(summary.calc.limits.items, locale),
+    },
+    unknownModels: ui.ragUiFormatNumber(summary.budget.unknownModels, locale),
+    defaultWindow: ui.ragUiFormatNumber(summary.budget.defaultWindow, locale),
+    families: { measured: summary.budget.families.measured.slice(), defaulted: summary.budget.families.defaulted.slice() },
     rules: Object.assign(
       { version: summary.rulesVersion },
       Object.fromEntries(Object.keys(summary.ruleCounts).map((lang) => [lang, ui.ragUiFormatNumber(summary.ruleCounts[lang], locale)])),
@@ -483,6 +531,8 @@ function answerRulesWarnings(state, summary, allowlist) {
   const holding = state.hold !== '' && state.hold !== 'off';
   if (((Number.isFinite(threshold) && threshold > 0) || holding) && !state.securityEvents) shown.add('warn.alertNeedsEvents');
   if (holding && state.ingestPipeline !== 'unified') shown.add('warn.holdNeedsApprovalPath');
+  if (state.overflow === 'refine' && !state.promptBudget) shown.add('warn.overflowNeedsBudget');
+  if (summary && state.promptBudget && summary.budget.unknownModels > 0) shown.add('warn.budgetUnknownModels');
   return ANSWER_RULES_WARNING_KEYS.filter((key) => shown.has(key));
 }
 
@@ -637,6 +687,8 @@ class AnswerRulesPanel {
       alertThreshold: this.value('RAG_UPLOADER_ALERT_THRESHOLD'),
       hold: this.value('RAG_UPLOADER_HOLD') || 'off',
       ingestPipeline: this.value('RAG_INGEST_PIPELINE'),
+      promptBudget: this.checked('RAG_PROMPT_BUDGET'),
+      overflow: this.value('RAG_CONTEXT_OVERFLOW') || 'truncate',
     };
   }
 
@@ -670,13 +722,20 @@ class AnswerRulesPanel {
       const alert = ui.ragUiAlert(this.doc, {
         tone: info ? 'info' : 'warning',
         icon: info ? 'info-circle' : 'exclamation-triangle',
-        body: [this.t(key)],
+        body: [this.t(key, this.warningVars(key))],
         className: 'mb-2',
       });
       alert.setAttribute('data-answer-rules-warning', key);
       nodes.push(alert);
     }
     alerts.replaceChildren(...nodes);
+  }
+
+  warningVars(key) {
+    if (key === 'warn.budgetUnknownModels' && this.summary) {
+      return { n: answerRulesUiLib().ragUiFormatNumber(this.summary.budget.unknownModels, this.locale) };
+    }
+    return undefined;
   }
 
   renderGuardNow() {
@@ -691,12 +750,14 @@ class AnswerRulesPanel {
   renderBlocks() {
     if (this.state === 'loading') {
       for (const name of ['judge', 'caps', 'guardRules']) this.renderLoading(this.host(name));
+      this.renderLines(null, '');
       if (!this.control('RAG_OUTPUT_LINK_ALLOWLIST')) this.renderLoading(this.host('allowlist'));
       else this.renderAllowlist();
       return;
     }
     if (this.state === 'failed') {
       for (const name of ['judge', 'caps', 'guardRules']) this.renderDash(this.host(name));
+      this.renderLines(null, '—');
       if (this.control('RAG_OUTPUT_LINK_ALLOWLIST')) this.renderAllowlist();
       else this.renderDash(this.host('allowlist'));
       return;
@@ -706,6 +767,51 @@ class AnswerRulesPanel {
     this.renderCaps(rows);
     this.renderAllowlist();
     this.renderRules(rows);
+    this.renderLines(rows);
+  }
+
+  /**
+   * UI-SPEC 14.3, 14.5: the limits line and the two window lines; empty while loading, an em dash after a failure. Family names are
+   * code elements built with textContent, an empty list is an em dash, and no factor value exists in the summary to show.
+   */
+  renderLines(rows, placeholder) {
+    const ui = answerRulesUiLib();
+    const line = (name) => this.doc.getElementById(ANSWER_RULES_LINE_IDS[name]);
+    const limits = line('limits');
+    const unknown = line('unknown');
+    const estimate = line('estimate');
+    if (!rows) {
+      for (const el of [limits, unknown, estimate]) if (el) el.replaceChildren(...(placeholder ? [this.doc.createTextNode(placeholder)] : []));
+      return;
+    }
+    if (limits) limits.replaceChildren(...ui.ragUiTemplateNodes(this.doc, this.t('calc.limits'), rows.limits));
+    if (unknown) {
+      unknown.replaceChildren(...ui.ragUiTemplateNodes(this.doc, this.t('budget.unknownModels'), { n: rows.unknownModels, tokens: rows.defaultWindow }));
+    }
+    if (estimate) {
+      const nodes = [];
+      const template = this.t('budget.estimate');
+      const re = /\{(measured|defaulted)\}/g;
+      let last = 0;
+      let match;
+      while ((match = re.exec(template))) {
+        if (match.index > last) nodes.push(this.doc.createTextNode(template.slice(last, match.index)));
+        nodes.push(...this.familyNodes(rows.families[match[1]]));
+        last = match.index + match[0].length;
+      }
+      if (last < template.length) nodes.push(this.doc.createTextNode(template.slice(last)));
+      estimate.replaceChildren(...nodes);
+    }
+  }
+
+  familyNodes(names) {
+    if (names.length === 0) return [this.doc.createTextNode('—')];
+    const nodes = [];
+    names.forEach((name, index) => {
+      if (index > 0) nodes.push(this.doc.createTextNode(', '));
+      nodes.push(this.code(name));
+    });
+    return nodes;
   }
 
   renderLoading(host) {
