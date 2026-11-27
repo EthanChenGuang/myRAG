@@ -712,3 +712,11 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 22:15Z User approved the phase verifications. Launched verify 4.3 (session_01X342shY1eHychh2rk5AqA5, branch verify/04.3) and verify 6.2 (mid-phase, branch verify/06.2); both read-only, gsd-verifier plus the security and integration checks.
 - 22:17Z 06.2-24 DONE (9458f747; speculative retrieval behind a switch; deps.ts now reads RAG_SPECULATIVE_RETRIEVAL) and archived -> train 41. Observation: buildQueryVariantSet drops the D-11 date suffix from the dense text of the original variant (pre-existing).
 - 22:18Z User upgraded the plan (Max -> Ultra) and asked to keep parallelism high. Launched 07-37 (from exec/07-28; re-checks its own deps and may merge main) and 06.3-14 (from exec/06.3-27, merges 06.3-07 itself).
+- 22:19Z OWNER RULE: follow the GSD process as closely as possible from now on. Orchestrator commitments:
+  (1) Every plan runs through /gsd-execute-phase and is gated on its SUMMARY. Ad-hoc work goes through /gsd-quick or /gsd-debug.
+  (2) When a phase's plans are all done, run phase verification (gsd-verifier, secure-phase, integration-checker) before the phase counts as closed. 4.3 and 6.2 have been launched.
+  (3) Keep STATE.md and ROADMAP in sync. Launched quick-state-sync (Sonnet, ops role).
+  (4) Train builders must run the full CI-equivalent gates, including all of rag-db in both modes.
+  (5) Audit trains against SUMMARYs so no branch is left out.
+  (6) Model roles: dev and review = Opus, ops = Sonnet, design and research = Fable.
+  Parallelism stays high (plan upgraded to Ultra).
