@@ -7,8 +7,8 @@ Verdict: **PASS** over off_identity, diversity, identifier, table, versions, dic
 | off_identity | D-37 | PASS | 0 |
 | diversity | D-22 | PASS | 0 |
 | identifier | D-32 | PASS | 0 |
-| table | ROADMAP-4.2-SC3 | PASS | 0 |
-| versions | ROADMAP-4.2-SC5 | PASS | 0 |
+| table | ROADMAP-4.2-SC5 | PASS | 0 |
+| versions | ROADMAP-4.2-SC3 | PASS | 0 |
 | dictionary | D-09 | PASS | 0 |
 
 ## off_identity (D-37)
@@ -53,7 +53,7 @@ Runs: v2-identifier-on, v2-default.
 | near_miss_leakage | 0.0000 |
 | near_miss_leakage_n | 12 |
 
-## table (ROADMAP-4.2-SC3)
+## table (ROADMAP-4.2-SC5)
 
 Runs: v2-table-lookup-on, v2-default.
 
@@ -62,7 +62,7 @@ Runs: v2-table-lookup-on, v2-default.
 | items | 3 |
 | items_with_leg | 3 |
 
-## versions (ROADMAP-4.2-SC5)
+## versions (ROADMAP-4.2-SC3)
 
 Runs: v2-version-scope-on, v2-default.
 
