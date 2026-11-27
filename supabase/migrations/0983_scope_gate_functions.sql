@@ -1,0 +1,1 @@
+-- 06.2-15: scope-gate functions (reserved)
