@@ -488,6 +488,8 @@ function evalAnswerRulesInput(input: {
   const language = answerTurn.answerLanguage;
   const refusedByModel = answerChain?.refused === true;
   const generated = answer !== null && answerChain !== null;
+  // The Pydantic AnswerSentence needs a reason on a not_checked sentence; the eval runs no claim check on its answer
+  const notCheckedReason = config.claimCheck ? 'claim_check_not_run' : 'claim_check_off';
   const sentences =
     generated && !refusedByModel && language && (config.citationPerSentence || config.claimCheck)
       ? buildSentenceRecords({
@@ -496,7 +498,7 @@ function evalAnswerRulesInput(input: {
           language,
           aliases: input.citationSession?.aliases() ?? new Set<string>(),
           truncated: answerChain.truncated,
-        })
+        }).map((sentence) => (sentence.support === 'not_checked' && !sentence.reason ? { ...sentence, reason: notCheckedReason } : sentence))
       : null;
   let outputGuard = null;
   if (answerChain?.outputGuard) {

@@ -293,6 +293,8 @@ describe('eval route answer rules, output cap and whole-text chain (05.2-31)', (
     expect(trace).toHaveProperty('sentences');
     const sentences = trace.sentences as Array<{ index: number; cited: boolean; factual: boolean }>;
     expect(sentences.map((sentence) => sentence.cited)).toEqual([true, false]);
+    // The sidecar's AnswerSentence requires a reason on every not_checked sentence
+    expect((trace.sentences as Array<{ support: string; reason: string | null }>).every((s) => s.support !== 'not_checked' || !!s.reason)).toBe(true);
     expect(trace.refusal_origin ?? null).toBeNull();
   });
 });
