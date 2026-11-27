@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import type { RagConfig } from '../config';
-import { accessRpcArgs, sameAccessFilter, scopeAccessFilter } from '../tenant/access';
+import { accessRpcArgs, sameAccessFilter } from '../tenant/access-filter';
 import { assertTenantScope, scopeKey } from '../tenant/scope';
 import {
   EmbeddingProfileMismatchError,
@@ -280,6 +280,8 @@ export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBacke
     async search(req: BackendSearchRequest): Promise<BackendLegs> {
       assertTenantScope(req.scope);
       // D-05: the request's filter must be the one its scope resolves to; a mismatch never reaches SQL.
+      // Loaded lazily: tenant/access reads the RAG config through deps, which modules importing this file (table-lookup) must not load.
+      const { scopeAccessFilter } = await import('../tenant/access');
       if (!req.access || !sameAccessFilter(req.access, scopeAccessFilter(req.scope))) {
         throw new RetrievalBackendError('hybrid_search_chunks', 'access_filter_mismatch');
       }
