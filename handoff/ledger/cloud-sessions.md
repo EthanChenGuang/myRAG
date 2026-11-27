@@ -905,3 +905,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - FINDING: a fresh phase42 gate on t39 FAILs on category:scanned (diversity + identifier); this is pre-existing. -> debug-42-scanned. The W-1 session was told to report it separately.
   - Reserved quicks dispatched: 261127-idn (neutral id names) and 261127-rbm (new rebuild mechanism for the 3 switches).
 - 23:52Z NF-1: full rag-db suite about halfway, 0 failures; fix f13f6428 pushed.
+- 23:53Z quick-44-gate-diag DONE exec/quick-44-gate-diag 3f47d40f -> train 41. G2 rerun: (b) FAIL with 4 offenders, incl. scanned ingest R@10. G1 diag: the cause is BM25 IDF (the flood passage is copied into 30 docs); not ties, not dedupe. Possible fix: cluster-aware DF. OWNER choice pending: A override, or keep not_flipped and plan cluster-aware DF (recommended). Archived.
