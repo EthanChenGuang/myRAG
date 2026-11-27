@@ -394,6 +394,7 @@ export const sr = {
   waitingForApproval: "Чекање на вашу дозволу...",
   executingTool: "Извршавање алата, молимо сачекајте...",
   toolError: "Дошло је до грешке приликом покретања алата.",
+  voiceUnavailable: "Глас је привремено недоступан. Покушајте поново касније.",
 
   // Chat message action tooltips
   copyTooltip: "Копирај",

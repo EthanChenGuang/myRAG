@@ -401,6 +401,7 @@ export const ja = {
   waitingForApproval: "承認をお待ちしています...",
   executingTool: "ツールを実行中です。お待ちください...",
   toolError: "ツールの実行中にエラーが発生しました。",
+  voiceUnavailable: "音声は一時的に利用できません。しばらくしてから再度お試しください。",
   
   // Chat message action tooltips
   copyTooltip: "コピー",

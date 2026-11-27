@@ -35,7 +35,7 @@ import { Check, ChevronUp, ChevronDown, Copy, ChevronsUpDown, FileX, Play, Downl
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { useTheme } from '@/components/theme-provider';
-import { onAudioStateChange, stopAudioPlayback, textToSpeech, getCachedAudioBlob, isAudioCached, generateAudioFilename } from '@/lib/audio-utils';
+import { onAudioStateChange, stopAudioPlayback, textToSpeech, getCachedAudioBlob, isAudioCached, generateAudioFilename, isVoiceUnavailableError } from '@/lib/audio-utils';
 import { useUserSettingsStore } from '@/lib/user-settings-store';
 import { useOrganizationStore } from '@/lib/stores/organization-store';
 import { isMultiTenant } from '@/lib/deployment-mode';
@@ -47,7 +47,7 @@ import type { Components } from 'react-markdown';
 import { cn } from '@/lib/utils';
 import { generatePDFBlob, generatePDFFilename, downloadMessageAsPDF } from '@/lib/pdf-utils';
 import { useArtifact } from '@/components/providers/artifact-provider';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast, toast } from '@/components/ui/use-toast';
 import { useLanguage } from '@/components/providers/language-provider';
 import { useSources } from '@/components/providers/sources-provider';
 import { cleanMarkdown } from '@/lib/title-generator';
@@ -3790,6 +3790,9 @@ ChatMessage = function ({
     } catch (error) {
       console.error('Failed to play text-to-speech:', error);
       setAudioState({ isPlaying: false, isLoading: false, audioUrl: null });
+      if (isVoiceUnavailableError(error)) {
+        toast({ title: t('voiceUnavailable'), variant: 'destructive' });
+      }
     }
   };
 
