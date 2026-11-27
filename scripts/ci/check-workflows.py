@@ -1,4 +1,4 @@
-"""Structural check of the GitHub Actions workflows (pr-smoke, nightly, ray-optional).
+"""Structural check of the GitHub Actions workflows (pr-smoke, nightly, ray-optional, rag-release-gate).
 
 Run locally with: python3 -I scripts/ci/check-workflows.py
 Requires PyYAML. Exits 1 and lists every failed assertion.
@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PR = ROOT / ".github" / "workflows" / "pr-smoke.yml"
 NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
 RAY_OPTIONAL = ROOT / ".github" / "workflows" / "ray-optional.yml"
+RELEASE_GATE = ROOT / ".github" / "workflows" / "rag-release-gate.yml"
 MEASUREMENT = ROOT / "eval" / "reports" / "phase-05.3" / "absolute-gate-measurement.json"
 DOCKERFILE = ROOT / "rag-sidecar" / "Dockerfile"
 SIDECAR_CONFIG_DIR = ROOT / "rag-sidecar" / "config" / "rag"
@@ -756,6 +757,135 @@ def check_no_ray_extra(name: str, text: str, errors: list[str]) -> None:
         errors.append(f"{name}: must not install the ray extra (it runs only in ray-optional.yml)")
 
 
+RELEASE_GATE_CONTEXT = "rag-release-gate"
+RELEASE_GATE_JOB = "gate"
+RELEASE_GATE_JOB_PERMISSIONS = {"contents": "read", "statuses": "write", "checks": "read"}
+RELEASE_GATE_RUN = "python -m rag_eval.release_gate run"
+RELEASE_GATE_OVERRIDE = "python -m rag_eval.release_gate override"
+RELEASE_GATE_POSTER = "node scripts/ci/post-release-status.mjs"
+RELEASE_GATE_SHA_PATTERN = "^[0-9a-f]{40}$"
+
+
+def _step_index(steps: list[dict], needle: str) -> int | None:
+    return next((i for i, step in enumerate(steps) if needle in str(step.get("run", ""))), None)
+
+
+def check_release_gate(data: dict, text: str, errors: list[str], known_refs: set[str] | None = None) -> None:
+    """D-33, D-36, research F-3: the rag-release-gate commit status is posted by job `gate` on the exact commit."""
+    name = "rag-release-gate"
+    check_common(name, data, text, errors)
+    trig = triggers(data)
+    for forbidden in ("pull_request", "pull_request_target", "schedule", "workflow_run"):
+        if forbidden in trig:
+            errors.append(f"{name}: trigger '{forbidden}' must not be used")
+    dispatch = trig.get("workflow_dispatch") if "workflow_dispatch" in trig else None
+    inputs = (dispatch or {}).get("inputs") or {}
+    if "workflow_dispatch" not in trig:
+        errors.append(f"{name}: trigger 'workflow_dispatch' missing")
+    if not (inputs.get("sha") or {}).get("required"):
+        errors.append(f"{name}: workflow_dispatch needs a required 'sha' input")
+    if "override_reason" not in inputs or (inputs.get("override_reason") or {}).get("required"):
+        errors.append(f"{name}: workflow_dispatch needs an optional 'override_reason' input")
+    extra = sorted(set(inputs) - {"sha", "override_reason"})
+    if extra:
+        errors.append(f"{name}: unexpected workflow_dispatch inputs {extra}")
+    push = trig.get("push") if "push" in trig else None
+    if "push" not in trig or not isinstance(push, dict) or push.get("branches") != ["main"] or set(push) != {"branches"}:
+        errors.append(f"{name}: push must trigger on branches [main] only, got {push!r}")
+    concurrency = data.get("concurrency") or {}
+    if not isinstance(concurrency, dict) or concurrency.get("cancel-in-progress") is not False or "sha" not in str(concurrency.get("group", "")):
+        errors.append(f"{name}: concurrency must be grouped per sha with cancel-in-progress false")
+
+    jobs = data.get("jobs") or {}
+    for jname, job in jobs.items():
+        if jname == RELEASE_GATE_CONTEXT or str((job or {}).get("name", "")) == RELEASE_GATE_CONTEXT:
+            errors.append(f"{name}: no job may be named {RELEASE_GATE_CONTEXT} (a check run would shadow the commit status)")
+        perms = (job or {}).get("permissions")
+        if jname != RELEASE_GATE_JOB and isinstance(perms, dict) and any(v == "write" for v in perms.values()):
+            errors.append(f"{name}: only job '{RELEASE_GATE_JOB}' may hold a write permission")
+    job = jobs.get(RELEASE_GATE_JOB)
+    if job is None:
+        errors.append(f"{name}: job '{RELEASE_GATE_JOB}' missing")
+        return
+    if job.get("permissions") != RELEASE_GATE_JOB_PERMISSIONS:
+        errors.append(f"{name}: job '{RELEASE_GATE_JOB}' permissions must be exactly {RELEASE_GATE_JOB_PERMISSIONS}, got {job.get('permissions')!r}")
+    env = job.get("env") or {}
+    if "inputs.sha" not in str(env.get("GATE_SHA", "")) or "github.sha" not in str(env.get("GATE_SHA", "")):
+        errors.append(f"{name}: job env GATE_SHA must come from inputs.sha or github.sha")
+    flag = str(env.get("HAS_JUDGE_KEYS", ""))
+    for secret in ("OPENROUTER_API_KEY", "OPENAI_API_KEY"):
+        if f"secrets.{secret} != ''" not in flag:
+            errors.append(f"{name}: job env HAS_JUDGE_KEYS must require secrets.{secret}")
+
+    steps = all_steps(job)
+    for step in steps:
+        run = str(step.get("run", ""))
+        if "${{" in run:
+            errors.append(f"{name}: inputs, secrets and contexts reach run scripts only through env, found '${{{{' in a run step")
+        if "secrets." in run or "inputs." in run:
+            errors.append(f"{name}: inputs and secrets must be passed through step env, not interpolated into run")
+        if re.search(r"\becho\b.*\b(KEY|TOKEN|BEARER)\b", run):
+            errors.append(f"{name}: a step appears to echo a secret")
+    if known_refs is not None:
+        for ref in uses_refs(data):
+            if ref not in known_refs:
+                errors.append(f"{name}: uses '{ref}' is not a pinned action already used by pr-smoke or nightly")
+
+    validate = next((i for i, s in enumerate(steps) if RELEASE_GATE_SHA_PATTERN in str(s.get("run", "")) and "GATE_SHA" in str(s.get("run", ""))), None)
+    if validate != 0:
+        errors.append(f"{name}: the first step must check GATE_SHA against {RELEASE_GATE_SHA_PATTERN}")
+    pending = next(
+        (
+            i
+            for i, s in enumerate(steps)
+            if "state=pending" in str(s.get("run", "")) and RELEASE_GATE_CONTEXT in str(s.get("run", "")) and "/statuses/" in str(s.get("run", ""))
+        ),
+        None,
+    )
+    gate = _step_index(steps, RELEASE_GATE_RUN)
+    override = _step_index(steps, RELEASE_GATE_OVERRIDE)
+    poster = _step_index(steps, RELEASE_GATE_POSTER)
+    checkout = next((i for i, s in enumerate(steps) if str(s.get("uses", "")).startswith("actions/checkout@")), None)
+    if gate is None:
+        errors.append(f"{name}: no step runs '{RELEASE_GATE_RUN}'")
+    if override is None:
+        errors.append(f"{name}: no step runs '{RELEASE_GATE_OVERRIDE}'")
+    if pending is None or any(i is not None and pending > i for i in (gate, override)):
+        errors.append(f"{name}: a pending {RELEASE_GATE_CONTEXT} status must be posted before the gate and override steps")
+    if checkout is None or str((steps[checkout].get("with") or {}).get("ref", "")).replace(" ", "") != "${{env.GATE_SHA}}":
+        errors.append(f"{name}: checkout must check out ref ${{{{ env.GATE_SHA }}}}")
+    elif any(i is not None and checkout > i for i in (gate, override)):
+        errors.append(f"{name}: checkout must come before the gate and override steps")
+    if poster is None:
+        errors.append(f"{name}: no step runs '{RELEASE_GATE_POSTER}'")
+    else:
+        if not str(steps[poster].get("if", "")).replace(" ", "").startswith("always()"):
+            errors.append(f"{name}: the status posting step must run with if: always()")
+        if any(i is not None and poster < i for i in (gate, override)):
+            errors.append(f"{name}: the status posting step must come after the gate and override steps")
+        if "GH_TOKEN" not in (steps[poster].get("env") or {}):
+            errors.append(f"{name}: the status posting step must receive GH_TOKEN through step env")
+    if gate is not None:
+        gate_env = steps[gate].get("env") or {}
+        for secret in ("OPENROUTER_API_KEY", "OPENAI_API_KEY"):
+            if secret not in gate_env:
+                errors.append(f"{name}: the gate step must receive {secret} through step env")
+        if "override_reason == ''" not in str(steps[gate].get("if", "")):
+            errors.append(f"{name}: the gate step must run only without an override reason")
+    if override is not None:
+        ostep = steps[override]
+        oenv = ostep.get("env") or {}
+        orun = str(ostep.get("run", ""))
+        if str(oenv.get("TRIGGERING_ACTOR", "")).replace(" ", "") != "${{github.triggering_actor}}":
+            errors.append(f"{name}: the override step must take TRIGGERING_ACTOR from github.triggering_actor through env")
+        if "inputs.override_reason" not in str(oenv.get("OVERRIDE_REASON", "")) or "--reason-env OVERRIDE_REASON" not in orun:
+            errors.append(f"{name}: the override reason must reach the override step through env OVERRIDE_REASON and --reason-env")
+        if '--actor "$TRIGGERING_ACTOR"' not in orun:
+            errors.append(f"{name}: the override step must pass --actor \"$TRIGGERING_ACTOR\"")
+        if "override_reason != ''" not in str(ostep.get("if", "")):
+            errors.append(f"{name}: the override step must run only with an override reason")
+
+
 QUALITY_GATES = "eval/config/quality-gates.json"
 PROMPT_CONTROL_OVERLAY = "eval/fixtures/controls/no-refusal-directive.overlay.json"
 FIXTURE_MANIFESTS = ("eval/fixtures/golden.manifest.json", "eval/fixtures/ingest/golden-ingest.manifest.json")
@@ -895,6 +1025,15 @@ def main() -> int:
         check_ray_optional(*load(RAY_OPTIONAL), errors)
     else:
         errors.append(f"missing {RAY_OPTIONAL.relative_to(ROOT)}")
+    if RELEASE_GATE.exists():
+        known_refs = set()
+        for path in (PR, NIGHTLY):
+            if path.exists():
+                known_refs.update(uses_refs(load(path)[0]))
+        check_release_gate(*load(RELEASE_GATE), errors, known_refs)
+        check_no_ray_extra("rag-release-gate", RELEASE_GATE.read_text(encoding="utf-8"), errors)
+    else:
+        errors.append(f"missing {RELEASE_GATE.relative_to(ROOT)}")
     check_lakera_secret_scope(errors)
     check_absolute_gates(load(PR)[0] if PR.exists() else None, load(NIGHTLY)[0] if NIGHTLY.exists() else None, errors)
     workflows = [load(path)[0] for path in (PR, NIGHTLY) if path.exists()]

@@ -1,0 +1,128 @@
+name: rag-release-gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full 40-character commit sha to gate
+        required: true
+        type: string
+      override_reason:
+        description: Emergency override reason (repository admins only); leave empty for a normal run
+        required: false
+        type: string
+        default: ''
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rag-release-gate-${{ inputs.sha || github.sha }}
+  cancel-in-progress: false
+
+env:
+  DEEPEVAL_TELEMETRY_OPT_OUT: '1'
+  DEEPEVAL_UPDATE_WARNING_OPT_IN: '0'
+  RAGAS_DO_NOT_TRACK: 'true'
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      statuses: write
+      checks: read
+    env:
+      GATE_SHA: ${{ inputs.sha || github.sha }}
+      HAS_JUDGE_KEYS: ${{ secrets.OPENROUTER_API_KEY != '' && secrets.OPENAI_API_KEY != '' }}
+      HAS_APP_RECORD: ${{ secrets.RAG_APP_URL != '' && secrets.RAG_ADMIN_BEARER != '' }}
+      RESULT_FILE: eval/out/release/release-gate.json
+    steps:
+      - name: Validate the commit sha
+        run: |
+          if ! printf '%s' "$GATE_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::sha must be a full 40-character lowercase commit sha"
+            exit 1
+          fi
+      - name: Post pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GATE_SHA"
+          -f state=pending -f context=rag-release-gate -f description="release gate running"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ env.GATE_SHA }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - name: Install Node dependencies
+        run: npm ci --ignore-scripts
+      - name: Sync eval project
+        run: uv sync --directory eval --locked --all-extras
+      - name: Sync rag-sidecar project
+        run: uv sync --directory rag-sidecar --locked
+      - name: Fill the tiktoken encoding cache (tests never download it)
+        run: python3 scripts/ci/fill-tiktoken-cache.py
+      - name: Notice when judge keys are absent (the gate records skipped, nothing is spent)
+        if: env.HAS_JUDGE_KEYS != 'true' && inputs.override_reason == ''
+        run: echo "::notice::judge key not configured, the release gate result is skipped and the status is failure"
+      - name: Emergency override (repository admins only)
+        id: override
+        if: inputs.override_reason != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          OVERRIDE_REASON: ${{ inputs.override_reason }}
+        run: >-
+          uv run --directory eval python -m rag_eval.release_gate override
+          --sha "$GATE_SHA" --actor "$TRIGGERING_ACTOR" --reason-env OVERRIDE_REASON
+          --out eval/out/release
+      - name: Release gate run on the exact commit
+        id: gate
+        if: inputs.override_reason == ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: >-
+          uv run --directory eval python -m rag_eval.release_gate run
+          --sha "$GATE_SHA" --out eval/out/release
+      - name: Post the release gate status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f scripts/ci/post-release-status.mjs ]; then
+            node scripts/ci/post-release-status.mjs "$RESULT_FILE"
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GATE_SHA" \
+              -f state=failure -f context=rag-release-gate -f description="error: no result"
+            exit 1
+          fi
+      - name: Record the override in the app (GitHub stays the authoritative record)
+        if: always() && steps.override.outcome == 'success' && env.HAS_APP_RECORD == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RAG_APP_URL: ${{ secrets.RAG_APP_URL }}
+          RAG_ADMIN_BEARER: ${{ secrets.RAG_ADMIN_BEARER }}
+        run: >-
+          uv run --directory eval python -m rag_eval.release_gate post
+          --result "$RESULT_FILE" --source override --base-url "$RAG_APP_URL"
+      - name: Upload the release gate result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rag-release-gate
+          path: eval/out/release
+          if-no-files-found: warn
