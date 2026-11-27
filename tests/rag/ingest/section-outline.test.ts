@@ -153,6 +153,28 @@ describe('normalizeWithOutline', () => {
     expect(headings(markdown).filter((line) => line === '## 3 Notes')).toHaveLength(2);
   });
 
+  it('matches a cross-reference prefix only as a whole word', () => {
+    const outline = { ...OUTLINE, cross_ref_prefixes: ['see', 'e'] };
+    const { markdown } = normalizeWithOutline(DOCUMENT.replace('Alpha Widget, blue.', 'Alpha Widget, blue and oversee 2 Scope'), input([outline]));
+    expect(markdown).toContain('oversee 2 Scope');
+    const body = ALPHA.replace(' 2 Scope', ' the sample line 2 Scope').replace(' 3 Notes The', ' a single blue tone 3 Notes The');
+    const kept = normalizeWithOutline(`${TITLE}\n${body}\n`, input([{ ...OUTLINE, cross_ref_prefixes: ['e'] }]));
+    expect(headings(kept.markdown)).toEqual(['## 1 Name', '## 2 Scope', '### 2.1 Details', '## 3 Notes']);
+  });
+
+  it('does not take the short tail of one variant and the head of the next for a contents list', () => {
+    const five = {
+      ...OUTLINE,
+      sections: ['Name', 'Scope', 'Details', 'Notes', 'Owner'].map((title, index) => ({ key: String(index + 1), level: 1, pattern: `${index + 1}\\s+${title}` })),
+      toc: { max_span_chars: 90 },
+    };
+    const pad = 'plain sample words that fill this part of the synthetic sheet';
+    const variant = (name: string) => `1 Name ${name}. 2 Scope ${pad} and ${pad}. 3 Details ${pad} and ${pad}. 4 Notes Plain. 5 Owner Lab.`;
+    const { report } = normalizeWithOutline(`${TITLE}\n${variant('Alpha')} ${variant('Beta')}\n`, input([five]));
+    expect(report?.variants).toHaveLength(2);
+    expect(report?.markers_kept).toBe(10);
+  });
+
   it('splits two variants under level-1 headings labelled from the body', () => {
     for (const outline of [OUTLINE, { ...OUTLINE, variant_label: 'body' }]) {
       const { markdown, report } = normalizeWithOutline(DOCUMENT, input([outline]));

@@ -89,14 +89,25 @@ function findOccurrences(text: string, outline: CompiledOutline, starts: number[
   return result;
 }
 
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+
+/** A prefix counts only as whole words, followed by nothing but spaces and punctuation up to the marker. */
 function isCrossReference(text: string, occurrence: Occurrence, prefixes: readonly string[]): boolean {
   return prefixes.some((prefix) => {
-    const window = text.slice(Math.max(0, occurrence.start - (prefix.length + 3)), occurrence.start).toLowerCase();
-    return window.includes(prefix);
+    const from = Math.max(0, occurrence.start - (prefix.length + 4));
+    const at = text.slice(from, occurrence.start).toLowerCase().lastIndexOf(prefix);
+    if (at < 0) return false;
+    const start = from + at;
+    const before = start > 0 ? (text[start - 1] ?? '') : '';
+    return !WORD_CHAR.test(before) && !WORD_CHAR.test(text.slice(start + prefix.length, occurrence.start));
   });
 }
 
-/** A run of markers within the span limit that names more than half of the level-1 keys is a contents list (PD-3). */
+/**
+ * A run of markers in outline order within the span limit that names more than half of the level-1 keys is a contents list (PD-3).
+ * The run ends at the first marker that does not move forward in the outline, so the tail of one variant and the head of the next
+ * never form a run.
+ */
 function dropTocRuns(occurrences: Occurrence[], outline: CompiledOutline, maxSpan: number): Occurrence[] {
   const levelOne = new Set(outline.sections.filter((section) => section.level === 1).map((section) => section.key));
   const kept: Occurrence[] = [];
@@ -107,7 +118,7 @@ function dropTocRuns(occurrences: Occurrence[], outline: CompiledOutline, maxSpa
     let j = i;
     while (j + 1 < occurrences.length) {
       const next = occurrences[j + 1] as Occurrence;
-      if (next.end - first.start > maxSpan || seen.has(next.section)) break;
+      if (next.end - first.start > maxSpan || next.section <= (occurrences[j] as Occurrence).section) break;
       seen.add(next.section);
       j += 1;
     }
