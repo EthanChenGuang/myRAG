@@ -184,11 +184,10 @@ describe('document translation glossary (plan 06.2-17, D-14)', () => {
     (await fixture.db.query<Row>('SELECT chunk_id::text, reason FROM chunk_translation_gaps WHERE document_id = $1 ORDER BY chunk_id', [documentId])).rows;
 
   const termVersion = async (tenant: string): Promise<string> => {
-    const { getTerminologyLexicon } = lexicon;
-    const { backfillScope } = await import('@/lib/rag/tenant/backfill-scope');
-    const scoped = await backfillScope(tenant, { deploymentMode: 'multi-tenant', admin: supabaseModule.getSupabaseAdmin() as never });
-    assert.ok(scoped.ok);
-    return (await getTerminologyLexicon(scoped.scope, { kinds: ['translation'], includeTranslations: true })).version;
+    const { scopeForStoredTenantKey } = await import('@/lib/rag/tenant/ingestion-job');
+    const scope = scopeForStoredTenantKey(tenant);
+    assert.ok(scope);
+    return (await lexicon.getTerminologyLexicon(scope, { kinds: ['translation'], includeTranslations: true })).version;
   };
 
   test('switch on: the target term is kept, the source surface is corrected once, a lost term is a gap and counted', async () => {

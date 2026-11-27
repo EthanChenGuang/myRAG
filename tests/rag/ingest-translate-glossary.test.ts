@@ -103,6 +103,27 @@ describe('glossaryFor (Phase 3.2 D-29 seam, 6.2 D-14)', () => {
     expect(a.version).not.toBe(b.version);
   });
 
+  it('the default ragEnv reads RAG_TRANSLATION_GLOSSARY from the process environment', async () => {
+    const rpcCalls: string[] = [];
+    const rpc: RpcClient = {
+      rpc(fn, args) {
+        rpcCalls.push(`${fn}:${String(args.p_tenant_key)}`);
+        const response: RpcResponse = { data: TERMS[String(args.p_tenant_key)] ?? [], error: null };
+        const request = {
+          abortSignal: () => request,
+          then: (resolve: (value: RpcResponse) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve(response).then(resolve, reject),
+        };
+        return request as ReturnType<RpcClient['rpc']>;
+      },
+    };
+    setRagDepsForTests({ adminClient: () => rpc as never });
+    for (const [name, value] of Object.entries(ON)) vi.stubEnv(name, value);
+    resetRagConfigForTests();
+    const glossary = await glossaryFor({ tenantKey: TENANT_A }, 'zh', 'en');
+    expect(glossary.terms.map((term) => term.target)).toEqual(['lattice relay module']);
+    expect(rpcCalls).toEqual([`rag_term_effective:${TENANT_A}`]);
+  });
+
   it('switch on and the dictionary cannot be read: GlossaryUnavailable, never an unenforced glossary', async () => {
     install(ON, { fail: true });
     await expect(glossaryFor({ tenantKey: TENANT_A }, 'zh', 'en')).rejects.toBeInstanceOf(GlossaryUnavailable);

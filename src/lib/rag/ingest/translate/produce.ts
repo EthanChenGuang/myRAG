@@ -15,7 +15,8 @@ import { queueConfigFromProcessEnv } from '../queue-config';
 import { countTokens } from '../text/tokens';
 import { finishTranslationTrace } from '../trace';
 import { isTenantKey } from '../writer';
-import { glossaryFor, type Glossary } from './glossary';
+import { enforceGlossary, requiredTranslations } from '../../query/glossary';
+import { glossaryFor, glossaryTerms, GlossaryUnavailable, type Glossary } from './glossary';
 import {
   TRANSLATION_INPUT_TOKEN_LIMIT,
   TranslationModelUnavailable,
@@ -43,7 +44,10 @@ export type TranslationRefusal =
   | 'invalid_argument'
   | 'unavailable';
 
-export type TranslationStop = 'time_budget' | 'usd_budget' | 'model_unavailable' | 'aborted' | 'write_failed';
+export type TranslationStop = 'time_budget' | 'usd_budget' | 'model_unavailable' | 'glossary_unavailable' | 'aborted' | 'write_failed';
+
+/** A stored gap: the translator's reasons plus D-14's glossary_term_lost (0985). */
+export type StoredGapReason = TranslationGapReason | 'glossary_term_lost';
 
 export interface TranslationLanguageCounts {
   translated: number;
@@ -62,6 +66,8 @@ export interface TranslationRunSummary {
   byLanguage: Record<string, TranslationLanguageCounts>;
   /** Estimated spend of this run (model and embedding), USD rounded to 4 decimals. */
   estimatedUsd: number;
+  /** D-14: chunks whose translation lost a required glossary term after the one correction (also counted in gaps); only with the glossary switch effective. */
+  glossaryRejected?: number;
 }
 
 export type TranslationRunResult = TranslationRunSummary | { ok: false; reason: TranslationRefusal };
@@ -270,7 +276,24 @@ interface Translated {
 interface Gap {
   chunk: PendingChunk;
   language: string;
-  reason: TranslationGapReason;
+  reason: StoredGapReason;
+}
+
+type GlossaryCheck = { ok: true; content: string } | { ok: false };
+
+/** D-14: the per-chunk prompt glossary (only the pairs the chunk needs) and its check; switch off (no pairs) keeps the glossary as given. */
+function chunkGlossary(glossary: Glossary, chunk: PendingChunk, target: string): { prompt: Glossary; check: (content: string) => GlossaryCheck } {
+  if (!glossary.pairs) return { prompt: glossary, check: (content) => ({ ok: true, content }) };
+  const required = requiredTranslations(chunk.content, chunk.sourceLanguage, target, glossary.pairs);
+  const prompt: Glossary = { version: glossary.version, terms: glossaryTerms(required) };
+  return {
+    prompt,
+    check: (content) => {
+      if (required.length === 0) return { ok: true, content };
+      const enforced = enforceGlossary(content, required);
+      return enforced.status === 'lost' ? { ok: false } : { ok: true, content: enforced.text };
+    },
+  };
 }
 
 function pageSizeOf(options: TranslationRunOptions): number {
@@ -354,6 +377,8 @@ async function runTranslations(tenantKey: string, documentId: string | null, opt
   let stopped: TranslationStop | null = null;
   let translatedTotal = 0;
   let gapTotal = 0;
+  let glossaryRejected = 0;
+  let glossaryUsed = false;
 
   for (const language of targets) {
     const counts: TranslationLanguageCounts = { translated: 0, gaps: 0, remaining: 0 };
@@ -384,16 +409,24 @@ async function runTranslations(tenantKey: string, documentId: string | null, opt
         after = chunk.chunkId;
         let glossary = glossaries.get(chunk.sourceLanguage);
         if (!glossary) {
-          glossary = await glossaryFor({ tenantKey }, chunk.sourceLanguage, language);
+          try {
+            glossary = await glossaryFor({ tenantKey }, chunk.sourceLanguage, language, { signal });
+          } catch (error) {
+            stopped = signal.aborted ? 'aborted' : 'glossary_unavailable';
+            if (!signal.aborted) console.warn('[Translation] glossary unavailable, run stopped', { documentId: chunk.documentId, kind: error instanceof GlossaryUnavailable ? 'unavailable' : 'error' });
+            break;
+          }
           glossaries.set(chunk.sourceLanguage, glossary);
         }
+        if (glossary.pairs) glossaryUsed = true;
+        const perChunk = chunkGlossary(glossary, chunk, language);
         try {
           const outcome = await translateChunk(chunk.content, {
             sourceLanguage: chunk.sourceLanguage,
             targetLanguage: language,
             model,
             signal,
-            glossary,
+            glossary: perChunk.prompt,
             maxInputTokens: options.maxInputTokens ?? TRANSLATION_INPUT_TOKEN_LIMIT,
           });
           if (outcome.attempts > 0) {
@@ -401,8 +434,15 @@ async function runTranslations(tenantKey: string, documentId: string | null, opt
             spent.input += cost.input * outcome.attempts;
             spent.output += cost.output * outcome.attempts;
           }
-          if (outcome.ok) translated.push({ chunk, language, content: outcome.content, glossaryVersion: glossary.version });
-          else gaps.push({ chunk, language, reason: outcome.reason });
+          if (!outcome.ok) gaps.push({ chunk, language, reason: outcome.reason });
+          else {
+            const checked = perChunk.check(outcome.content);
+            if (checked.ok) translated.push({ chunk, language, content: checked.content, glossaryVersion: glossary.version });
+            else {
+              gaps.push({ chunk, language, reason: 'glossary_term_lost' });
+              glossaryRejected += 1;
+            }
+          }
         } catch (error) {
           stopped = signal.aborted ? 'aborted' : 'model_unavailable';
           console.warn('[Translation] model unavailable, run stopped', {
@@ -445,8 +485,16 @@ async function runTranslations(tenantKey: string, documentId: string | null, opt
     stopped,
     byLanguage,
     estimatedUsd: roundUsd(usdOf(spent, embeddingUsd)),
+    ...(glossaryUsed ? { glossaryRejected } : {}),
   };
-  console.log('[Translation] run finished', { documentId, translated: translatedTotal, gaps: gapTotal, remaining, stopped });
+  console.log('[Translation] run finished', {
+    documentId,
+    translated: translatedTotal,
+    gaps: gapTotal,
+    remaining,
+    stopped,
+    ...(glossaryUsed ? { glossaryRejected } : {}),
+  });
   return summary;
 }
 
