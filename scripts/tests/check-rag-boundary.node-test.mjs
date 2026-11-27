@@ -44,6 +44,9 @@ test('exports a rule list with unique ids and an allow-list naming every exempti
     'vector-or-rerank-client',
     'mint-scope',
     'voice-agent-rpc',
+    'mint-access-scope',
+    'access-rpc',
+    'access-admin-rpc',
   ]) {
     assert.ok(ids.includes(id), `missing rule ${id}`);
   }
@@ -763,4 +766,77 @@ test('the current tree passes the table lookup rules', () => {
   const ids = new Set(checkBoundary().map((v) => v.rule));
   assert.ok(!ids.has('table-lookup-rpc'));
   assert.ok(!ids.has('table-lookup-sql'));
+});
+
+test('mint-access-scope: mintAccessScope and withAccess are restricted outside src/lib/rag/tenant', () => {
+  assert.deepEqual(
+    onlyRule({ 'src/lib/rag/context/x.ts': "import { mintAccessScope } from '../tenant/access';\n" }, 'mint-access-scope'),
+    ['src/lib/rag/context/x.ts:mint-access-scope'],
+  );
+  assert.deepEqual(
+    onlyRule({ 'src/lib/rag/context/w.ts': "import { withAccess } from '../tenant/scope';\n" }, 'mint-access-scope'),
+    ['src/lib/rag/context/w.ts:mint-access-scope'],
+  );
+  assert.deepEqual(
+    onlyRule({ 'src/lib/rag/tenant/voice.ts': "import { mintAccessScope } from './access';\nimport { withAccess } from './scope';\n" }, 'mint-access-scope'),
+    [],
+  );
+  assert.deepEqual(
+    onlyRule({ 'src/lib/rag/context/y.ts': "import { scopeAccessFilter, accessRpcArgs } from '../tenant/access';\n" }, 'mint-access-scope'),
+    [],
+  );
+  assert.deepEqual(
+    onlyRule(
+      { 'src/app/api/z/route.ts': "import {\n  scopeAccessFilter,\n  mintAccessScope as mint,\n} from '@/lib/rag/tenant/access';\n" },
+      'mint-access-scope',
+    ),
+    ['src/app/api/z/route.ts:mint-access-scope'],
+  );
+  assert.deepEqual(
+    onlyRule({ 'src/lib/rag/context/n.ts': "import * as access from '../tenant/access';\n" }, 'mint-access-scope'),
+    ['src/lib/rag/context/n.ts:mint-access-scope'],
+  );
+  assert.deepEqual(
+    onlyRule({ 'scripts/r.js': "const { withAccess } = require('../src/lib/rag/tenant/scope');\n" }, 'mint-access-scope'),
+    ['scripts/r.js:mint-access-scope'],
+  );
+});
+
+test('access-rpc: resolver and enforcement RPCs only in src/lib/rag/tenant/ and src/lib/rag/access/', () => {
+  assert.deepEqual(
+    onlyRule({ 'src/lib/rag/pipeline.ts': "await db.rpc('rag_resolve_access_scope', args);\n" }, 'access-rpc'),
+    ['src/lib/rag/pipeline.ts:access-rpc'],
+  );
+  assert.deepEqual(onlyRule({ 'src/lib/rag/access/status.ts': "await db.rpc('rag_resolve_access_scope', args);\n" }, 'access-rpc'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/tenant/access-startup.ts': "await db.rpc('rag_access_set_enforced', args);\n" }, 'access-rpc'), []);
+  assert.deepEqual(
+    onlyRule({ 'src/app/api/x/route.ts': 'await db.rpc(\n  "rag_access_readiness",\n  {},\n);\n' }, 'access-rpc'),
+    ['src/app/api/x/route.ts:access-rpc'],
+  );
+  assert.deepEqual(
+    onlyRule({ 'scripts/y.mjs': 'await db.rpc(`rag_access_groups_drift`, {});\n' }, 'access-rpc'),
+    ['scripts/y.mjs:access-rpc'],
+  );
+  assert.deepEqual(onlyRule({ 'src/lib/rag/v2/q.ts': "await db.rpc('rag_access_enforced_other', args);\n" }, 'access-rpc'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/v2/u.ts': "import { rag_resolve_access_scope } from './names';\n" }, 'access-rpc'), []);
+});
+
+test('access-admin-rpc: setter, visibility, event and admin RPCs only inside src/lib/rag/', () => {
+  assert.deepEqual(
+    onlyRule({ 'src/app/api/x/route.ts': "await db.rpc('rag_set_document_access_groups', args);\n" }, 'access-admin-rpc'),
+    ['src/app/api/x/route.ts:access-admin-rpc'],
+  );
+  assert.deepEqual(
+    onlyRule({ 'src/lib/rag/access/labels.ts': "await db.rpc('rag_set_document_access_groups', args);\n" }, 'access-admin-rpc'),
+    [],
+  );
+  for (const name of ['rag_chunks_visible', 'rag_documents_visible', 'rag_security_event_record', 'rag_access_group_create', 'rag_access_member_add', 'rag_access_documents_list', 'rag_connector_map_set']) {
+    assert.deepEqual(
+      onlyRule({ 'src/app/api/y/route.ts': `await db.rpc(\n  '${name}',\n  args,\n);\n` }, 'access-admin-rpc'),
+      ['src/app/api/y/route.ts:access-admin-rpc'],
+      name,
+    );
+  }
+  assert.deepEqual(onlyRule({ 'src/app/api/z/route.ts': "await db.rpc('rag_admin_audit_list', args);\n" }, 'access-admin-rpc'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/a.ts': "import { rag_chunks_visible } from './names';\n" }, 'access-admin-rpc'), []);
 });
