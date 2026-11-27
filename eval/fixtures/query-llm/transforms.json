@@ -866,6 +866,36 @@
           }
         ]
       }
+    },
+    {
+      "transform": "translate",
+      "item_id": "q62-glossary-generic-en-zh",
+      "query": "How often does the quartz relay unit report its status?",
+      "output": {
+        "target_language": "zh",
+        "text": "石英继电器多久报告一次状态？",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "q62-glossary-kept-zh-en",
+      "query": "星桥模块的状态多久报告一次？",
+      "output": {
+        "target_language": "en",
+        "text": "How often does the 星桥模块 report its status?",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "q62-glossary-generic-it-en",
+      "query": "Ogni quanto l'unità di raccordo riporta lo stato?",
+      "output": {
+        "target_language": "en",
+        "text": "How often does the connection unit report its status?",
+        "source_language": null
+      }
     }
   ]
 }

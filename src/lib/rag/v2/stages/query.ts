@@ -23,7 +23,7 @@ import { terminologyMatcherFor } from '../../terminology/load';
 import { normalizeLexical } from '../../lexical/tokenize';
 import { getV2StartupVerdict } from '../startup';
 import type { TraceCollector as Collector } from '../../trace/collector';
-import { ATTRIBUTE_STATE_NONE, ATTRIBUTE_STATE_SKIPPED, type AttributeFilterHashStage, type TerminologyHashStage } from '../config-hash';
+import { ATTRIBUTE_STATE_NONE, ATTRIBUTE_STATE_SKIPPED, type AttributeFilterHashStage, type GlossaryHashStage, type TerminologyHashStage } from '../config-hash';
 import { effectiveQueryParams } from '../../query/query-params';
 import { AttributeFilterError, resolveAttributeFilter, type AttributeResolution } from '../../retrieval/attributes';
 import { attributeFilterConfig } from '../../retrieval/attribute-filter-config';
@@ -44,6 +44,8 @@ export interface QueryStagesInput {
   onTerminology?: (stage: TerminologyHashStage) => void;
   /** D-30: told how the attribute_resolve stage ended, before semantic_cache builds its key. */
   onAttributeFilter?: (stage: AttributeFilterHashStage) => void;
+  /** D-14: told the glossary state while RAG_TRANSLATION_GLOSSARY is effective, before semantic_cache builds its key. */
+  onGlossary?: (stage: GlossaryHashStage) => void;
 }
 
 export interface QueryStagesOutput {
@@ -359,6 +361,7 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
       scope,
       ...(ctx.cache ? { cache: ctx.cache } : {}),
       afterTransforms: terminologyStage,
+      ...(ctx.onGlossary ? { onGlossary: ctx.onGlossary } : {}),
     });
   }
 

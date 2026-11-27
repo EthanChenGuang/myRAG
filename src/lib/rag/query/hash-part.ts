@@ -15,7 +15,13 @@ import llamaindexSubq from './prompts/llamaindex.subq.v1.json';
 import sharedSuffix from './prompts/shared.suffix.v1.json';
 import sharedTranslate from './prompts/shared.translate.v1.json';
 
-/** Every query-layer prompt file; a test fails when a file in prompts/ is missing here. */
+/**
+ * Prompt files whose version enters the hash in their own switch-gated block instead of this list, so the hash with their switch
+ * off keeps its value: shared.glossary (D-14) is in the glossary block (glossaryHashBlock).
+ */
+export const SWITCH_GATED_PROMPT_IDS: ReadonlySet<string> = new Set(['shared.glossary']);
+
+/** Every query-layer prompt file except SWITCH_GATED_PROMPT_IDS; a test fails when a file in prompts/ is missing here. */
 const PROMPT_FILES: ReadonlyArray<{ id: string; version: number }> = [
   langchainContextualize,
   langchainDecompose,

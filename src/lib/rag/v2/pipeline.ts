@@ -37,7 +37,7 @@ import { queryLanguage as detectQueryLanguage } from '../query/language';
 import { effectiveQueryLayerConfig, queryLayerOverrides } from '../query/layer-config';
 import { effectiveQueryParams } from '../query/query-params';
 import { queryLayerHashComponent } from '../query/hash-part';
-import { ATTRIBUTE_STATE_SKIPPED, type AttributeFilterHashStage, type RetrievalConfigHashQueryLayer, type TerminologyHashStage } from './config-hash';
+import { ATTRIBUTE_STATE_SKIPPED, type AttributeFilterHashStage, type GlossaryHashStage, type RetrievalConfigHashQueryLayer, type TerminologyHashStage } from './config-hash';
 import { hasTranslationWork, planTranslationLegs, translationHashFields, type TranslationLegsPlan } from './translation-legs';
 import type { SemanticCacheSeam } from '../query/run-layer';
 import { variantDenseTexts } from '../query/variants';
@@ -121,6 +121,8 @@ export async function runV2Pipeline(
   // D-30: set by the attribute stage before semantic_cache builds its key; enabled but not reached reads as skipped.
   let attributeStage: AttributeFilterHashStage =
     config.v2.attributeFilter !== 'off' && spec('attribute_resolve', 'skip').enabled ? { enabled: true, state: ATTRIBUTE_STATE_SKIPPED } : { enabled: false };
+  // D-14: set by the query layer before semantic_cache builds its key, only while RAG_TRANSLATION_GLOSSARY is effective.
+  let glossaryStage: GlossaryHashStage = { enabled: false };
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
@@ -194,6 +196,7 @@ export async function runV2Pipeline(
         terminology: terminologyStage,
         ...(await lexicalStampFor()),
         attributeFilter: attributeStage,
+        glossary: glossaryStage,
       }),
   };
 
@@ -213,6 +216,9 @@ export async function runV2Pipeline(
       },
       onAttributeFilter: (stage) => {
         attributeStage = stage;
+      },
+      onGlossary: (stage) => {
+        glossaryStage = stage;
       },
     });
     queryContext = query.queryContext;
@@ -521,6 +527,7 @@ export async function runV2Pipeline(
     ...(identifierRefusal ? { identifierRefusal } : {}),
     ...(queryLexical ? { lexicalStamp: queryLexical.stamp } : {}),
     attributeFilter: attributeStage,
+    glossary: glossaryStage,
   });
 }
 
