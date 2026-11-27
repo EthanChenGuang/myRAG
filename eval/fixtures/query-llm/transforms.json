@@ -759,6 +759,141 @@
           "What were the sample totals in the fourth quarter of 2023?"
         ]
       }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "q62-subq-filter-valid",
+      "query": "What changed for unit one in 2023 and what changed for unit two in 2024?",
+      "output": {
+        "questions": [
+          {
+            "text": "What changed for unit one in 2023?",
+            "filter": {
+              "date_range": {
+                "from": "2023-01-01",
+                "to": "2023-12-31"
+              },
+              "scopes": {
+                "department": [
+                  "unit-one"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "What changed for unit two in 2024?",
+            "filter": {
+              "date_range": {
+                "from": "2024-01-01",
+                "to": "2024-12-31"
+              },
+              "scopes": null,
+              "doc_types": [
+                "general"
+              ],
+              "languages": [
+                "en"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "q62-subq-filter-invalid",
+      "query": "How is the sample setting alpha described and how is the sample setting beta described?",
+      "output": {
+        "questions": [
+          {
+            "text": "How is the sample setting alpha described?",
+            "filter": {
+              "date_range": null,
+              "scopes": null,
+              "doc_types": "general",
+              "languages": null
+            }
+          },
+          {
+            "text": "How is the sample setting beta described?",
+            "filter": {
+              "date_range": null,
+              "scopes": null,
+              "doc_types": null,
+              "languages": null,
+              "tenant_key": "s:default"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "q62-subq-filter-unknown",
+      "query": "What does the sample guide say for zone delta and for zone epsilon?",
+      "output": {
+        "questions": [
+          {
+            "text": "What does the sample guide say for zone delta?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-delta"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "What does the sample guide say for zone epsilon?",
+            "filter": {
+              "date_range": null,
+              "scopes": null,
+              "doc_types": [
+                "invoice_receipt"
+              ],
+              "languages": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "q62-subq-filter-disjoint",
+      "query": "What did the sample summary report in 2019 and in 2020?",
+      "output": {
+        "questions": [
+          {
+            "text": "What did the sample summary report in 2019?",
+            "filter": {
+              "date_range": {
+                "from": "2019-01-01",
+                "to": "2019-12-31"
+              },
+              "scopes": null,
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "What did the sample summary report in 2020?",
+            "filter": {
+              "date_range": {
+                "from": "2020-01-01",
+                "to": "2020-12-31"
+              },
+              "scopes": null,
+              "doc_types": null,
+              "languages": null
+            }
+          }
+        ]
+      }
     }
   ]
 }
