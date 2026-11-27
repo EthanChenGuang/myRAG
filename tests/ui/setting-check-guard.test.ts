@@ -500,7 +500,7 @@ function pageContext(globals: Json, answers: Array<{ status: number; body?: unkn
     ...globals,
   };
   context.window = context;
-  page.dispatchEvent = () => true;
+  (page as unknown as { dispatchEvent: () => boolean }).dispatchEvent = () => true;
   vm.createContext(context);
   for (const name of ['ragSettingCheckText', 'ragGateRequiredAnswer', 'ragGuardedSave', 'showRagSaveHeld', 'showRagGateRequiredToast']) {
     if (new RegExp(`function ${name}\\(`).test(indexHtml)) new vm.Script(functionSource(indexHtml, name)).runInContext(context);
