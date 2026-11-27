@@ -938,6 +938,8 @@ def materialise_run_config(run: RunSpec, profiles: list[dict[str, Any]]) -> dict
         overrides["chunking_profile_by_doc_type"] = {profile["doc_type"]: profile["id"] for profile in profiles}
         config["chunking_profiles"] = [dict(profile) for profile in profiles]
     config["overrides"] = overrides or None
+    if base.get("generator_model") is not None:
+        config["generator_model"] = base["generator_model"]
     return config
 
 
