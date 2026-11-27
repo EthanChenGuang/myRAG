@@ -806,3 +806,38 @@ export async function isPurgeTombstoned(
   const value = scalarOf(answer.rows, 'rag_purge_tombstone_exists');
   return typeof value === 'boolean' ? { ok: true, tombstoned: value } : { ok: false, reason: 'unavailable' };
 }
+
+// ---- Records (D-12, D-16) ----
+
+export interface PurgeRecord {
+  id: string;
+  startedAt: string;
+  actorKind: 'admin' | 'source_sync';
+  actorId: string;
+  /** The provider of a source-sync record's connection while it exists; null for admins. */
+  provider: string | null;
+  workspaceKey: string;
+  reasonCode: string;
+  reasonNote: string | null;
+  lineageId: string;
+  versionCount: number;
+  result: PurgeCheckResult | 'unchecked';
+  removed: Record<string, number>;
+  left: Record<string, number>;
+  pendingFiles: number;
+  checkedAt: string | null;
+}
+
+export type ListPurgeRecordsResult =
+  | { ok: true; records: PurgeRecord[]; limit: number; offset: number; hasMore: boolean }
+  | { ok: false; reason: PurgeFailure };
+
+export async function listPurgeRecords(_input: { actorUserId: string; limit?: number; offset?: number; signal: AbortSignal }): Promise<ListPurgeRecordsResult> {
+  return { ok: false, reason: 'unavailable' };
+}
+
+export type ReverifyPurgeResult = { ok: true; auditId: string; check: PurgeCheck } | { ok: false; reason: PurgeFailure };
+
+export async function reverifyPurgeAsAdmin(_input: { auditId: string; actorUserId: string; signal: AbortSignal }): Promise<ReverifyPurgeResult> {
+  return { ok: false, reason: 'unavailable' };
+}

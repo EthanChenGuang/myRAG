@@ -94,6 +94,19 @@ test('source-recheck-rpc: rag_source_recheck called outside src/lib/rag is flagg
   assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('rag_source_recheck_report', {});\n// db.rpc('rag_source_recheck')\n" }), []);
 });
 
+test('purge-rpc: rag_purge_* called outside src/lib/rag/ingest/purge.ts is flagged; inside it is allowed (D-11)', () => {
+  const code = "const r = await db.rpc('rag_purge_lineage', { p_tenant_key: key, p_lineage_id: id });\n";
+  const multiLine = 'const r = await admin.rpc(\n  `rag_purge_verify`,\n  args,\n);\n';
+  assert.deepEqual(rulesFor({ 'src/app/api/rag/admin/purges/route.ts': code, 'src/lib/rag/ingest/soft-delete.ts': multiLine }).sort(), [
+    'src/app/api/rag/admin/purges/route.ts:purge-rpc',
+    'src/lib/rag/ingest/soft-delete.ts:purge-rpc',
+  ]);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/ingest/purge.ts': code + multiLine }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('rag_purge_old_rows_report', {});\n// db.rpc('rag_purge_lineage')\n" }).filter((v) => v.endsWith(':purge-rpc')), [
+    'src/lib/a.ts:purge-rpc',
+  ]);
+});
+
 test('retired-module: alias and relative imports fail', () => {
   const files = {
     'src/app/a.ts': "import { x } from '@/lib/enhanced-rag-retrieval';\n",

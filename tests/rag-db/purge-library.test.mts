@@ -167,6 +167,62 @@ for (const mode of MODES) {
       assert.equal((audit?.object_counts as Record<string, number>).original_files, 4);
     });
 
+    test('the records list holds only the tenants the admin administers, newest first, with ids and counts, and a check can run again', async () => {
+      objectStore.setObjectStoreForTests(fakeStore.createFakeObjectStore());
+      fakePublic.installFakePublicImageStore();
+      const own = await seedLineage(world, world.tenantA);
+      const purged = await purge.purgeDocumentAsAdmin({
+        documentId: await currentVersion(world, own),
+        actorUserId: world.adminA,
+        reasonCode: 'other',
+        reasonNote: 'A synthetic note.',
+        signal: signal(),
+      });
+      assert.ok(purged.ok);
+      let foreignAudit: string | null = null;
+      if (world.tenantB) {
+        const foreign = await seedLineage(world, world.tenantB);
+        const other = await purge.purgeDocumentAsAdmin({
+          documentId: await currentVersion(world, foreign),
+          actorUserId: world.outsider,
+          reasonCode: 'owner_request',
+          reasonNote: null,
+          signal: signal(),
+        });
+        assert.ok(other.ok);
+        foreignAudit = other.auditId;
+      }
+
+      const listed = await purge.listPurgeRecords({ actorUserId: world.adminA, limit: 100, offset: 0, signal: signal() });
+      assert.ok(listed.ok);
+      const ids = listed.records.map((record) => record.id);
+      assert.ok(ids.includes(purged.auditId));
+      if (foreignAudit) assert.ok(!ids.includes(foreignAudit), 'another tenant record is never listed');
+      for (const record of listed.records) assert.equal(record.workspaceKey, world.tenantA.key);
+      const starts = listed.records.map((record) => Date.parse(record.startedAt));
+      assert.deepEqual(starts, [...starts].sort((a, b) => b - a));
+      const mine = listed.records.find((record) => record.id === purged.auditId);
+      assert.ok(mine);
+      assert.equal(mine.actorKind, 'admin');
+      assert.equal(mine.actorId, world.adminA);
+      assert.equal(mine.reasonCode, 'other');
+      assert.equal(mine.versionCount, 2);
+      assert.equal(mine.result, 'verified');
+      assert.equal(mine.removed.documents, 2);
+      assert.doesNotMatch(JSON.stringify(listed.records), TEXT_LEAKS);
+      assert.doesNotMatch(JSON.stringify(listed.records), /[0-9a-f]{64}|_parse-cache/);
+
+      const again = await purge.reverifyPurgeAsAdmin({ auditId: purged.auditId, actorUserId: world.adminA, signal: signal() });
+      assert.ok(again.ok);
+      assert.equal(again.check.result, 'verified');
+      if (foreignAudit) {
+        const refused = await purge.reverifyPurgeAsAdmin({ auditId: foreignAudit, actorUserId: world.adminA, signal: signal() });
+        const unknown = await purge.reverifyPurgeAsAdmin({ auditId: crypto.randomUUID(), actorUserId: world.adminA, signal: signal() });
+        assert.deepEqual(refused, { ok: false, reason: 'not_found' });
+        assert.deepEqual(unknown, refused);
+      }
+    });
+
     test('ids that are not uuids are refused before any call', async () => {
       const result = await purge.purgeDocumentAsAdmin({
         documentId: 'not-a-uuid',

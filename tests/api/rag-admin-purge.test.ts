@@ -39,7 +39,9 @@ async function load() {
   }));
   vi.doMock('@/lib/rag', () => ({ PURGE_ADMIN_REASON_CODES: ADMIN_CODES, purgeDocumentAsAdmin, listPurgeRecords, reverifyPurgeAsAdmin }));
   const purge = await import('@/app/api/rag/admin/documents/[id]/purge/route');
-  return { purge };
+  const records = await import('@/app/api/rag/admin/purges/route');
+  const verify = await import('@/app/api/rag/admin/purges/[id]/verify/route');
+  return { purge, records, verify };
 }
 
 function post(url: string, body?: unknown, raw?: string): Request {
@@ -161,5 +163,130 @@ describe('POST /api/rag/admin/documents/[id]/purge', () => {
   it('leaves DELETE /api/documents/[id] on its soft path: it never reaches the purge', () => {
     const source = fs.readFileSync(path.join(REPO_ROOT, 'src/app/api/documents/[id]/route.ts'), 'utf8');
     expect(source).not.toMatch(/purge/i);
+  });
+});
+
+const RECORD = {
+  id: AUDIT_ID,
+  startedAt: '2026-11-27T09:00:00.000Z',
+  actorKind: 'admin',
+  actorId: ADMIN_ID,
+  provider: null,
+  workspaceKey: 's:default',
+  reasonCode: 'added_in_error',
+  reasonNote: 'A synthetic note.',
+  lineageId: LINEAGE_ID,
+  versionCount: 2,
+  result: 'pending',
+  removed: { documents: 2, original_files: 3 },
+  left: { documents: 0, original_files: 1 },
+  pendingFiles: 1,
+  checkedAt: '2026-11-27T09:00:01.000Z',
+};
+
+describe('GET /api/rag/admin/purges and POST /api/rag/admin/purges/[id]/verify', () => {
+  beforeEach(() => {
+    state.admin = { ok: true, userId: ADMIN_ID };
+    listPurgeRecords.mockReset();
+    listPurgeRecords.mockResolvedValue({ ok: true, records: [RECORD], limit: 50, offset: 0, hasMore: false });
+    reverifyPurgeAsAdmin.mockReset();
+    reverifyPurgeAsAdmin.mockResolvedValue({ ok: true, auditId: AUDIT_ID, check: CHECK });
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  const get = (query = '') => new Request(`http://localhost/api/rag/admin/purges${query}`);
+
+  it('lists the records of the verified admin with ids and counts only, without caching', async () => {
+    const { records } = await load();
+    const response = await records.GET(get('?limit=20&offset=40'));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(listPurgeRecords).toHaveBeenCalledWith(expect.objectContaining({ actorUserId: ADMIN_ID, limit: 20, offset: 40 }));
+    const body = await response.json();
+    expect(body).toEqual({
+      success: true,
+      limit: 50,
+      offset: 0,
+      has_more: false,
+      items: [
+        {
+          id: AUDIT_ID,
+          started_at: RECORD.startedAt,
+          actor_kind: 'admin',
+          actor_id: ADMIN_ID,
+          provider: null,
+          workspace_key: 's:default',
+          reason_code: 'added_in_error',
+          reason_note: 'A synthetic note.',
+          lineage_id: LINEAGE_ID,
+          version_count: 2,
+          result: 'pending',
+          removed: { documents: 2, original_files: 3 },
+          left: { documents: 0, original_files: 1 },
+          pending_files: 1,
+          checked_at: RECORD.checkedAt,
+        },
+      ],
+    });
+  });
+
+  it('never sends a file name, path or hash in the list body', async () => {
+    const { records } = await load();
+    listPurgeRecords.mockResolvedValue({
+      ok: true,
+      records: [{ ...RECORD, pendingPaths: ['original_files:s:default/x/'], fileSha256: 'a'.repeat(64), filename: 'synthetic-name.md' }],
+      limit: 50,
+      offset: 0,
+      hasMore: false,
+    });
+    const text = await (await records.GET(get())).text();
+    expect(text).not.toMatch(/synthetic-name|original_files:|[0-9a-f]{64}|\/_parse-cache\//);
+  });
+
+  it.each([['?limit=101'], ['?limit=0'], ['?offset=-1'], ['?limit=abc'], ['?cursor=x']])('refuses %s with 400', async (query) => {
+    const { records } = await load();
+    const response = await records.GET(get(query));
+    expect(response.status).toBe(400);
+    expect(listPurgeRecords).not.toHaveBeenCalled();
+  });
+
+  it('answers the admin-denied status on both routes', async () => {
+    const { records, verify } = await load();
+    state.admin = { ok: false, status: 401, reason: 'denied' };
+    expect((await records.GET(get())).status).toBe(401);
+    expect((await verify.POST(post(`/api/rag/admin/purges/${AUDIT_ID}/verify`), params(AUDIT_ID))).status).toBe(401);
+    expect(listPurgeRecords).not.toHaveBeenCalled();
+    expect(reverifyPurgeAsAdmin).not.toHaveBeenCalled();
+  });
+
+  it('re-runs the check of a record and answers the purge check shape', async () => {
+    const { verify } = await load();
+    const response = await verify.POST(post(`/api/rag/admin/purges/${AUDIT_ID}/verify`), params(AUDIT_ID));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(reverifyPurgeAsAdmin).toHaveBeenCalledWith(expect.objectContaining({ auditId: AUDIT_ID, actorUserId: ADMIN_ID }));
+    expect(await response.json()).toEqual({
+      success: true,
+      record_id: AUDIT_ID,
+      check: { left: CHECK.left, pending_files: 0, queued_external: 0, result: 'verified' },
+      checked_at: CHECK.checkedAt,
+    });
+  });
+
+  it('answers the same 404 for an unknown and a foreign record, and 400 for an id that is not a uuid', async () => {
+    const { verify } = await load();
+    reverifyPurgeAsAdmin.mockResolvedValue({ ok: false, reason: 'not_found' });
+    const unknown = await verify.POST(post(`/api/rag/admin/purges/${AUDIT_ID}/verify`), params(AUDIT_ID));
+    const foreign = await verify.POST(post(`/api/rag/admin/purges/${DOC_ID}/verify`), params(DOC_ID));
+    expect(unknown.status).toBe(404);
+    expect(await foreign.json()).toEqual(await unknown.json());
+    const bad = await verify.POST(post('/api/rag/admin/purges/x/verify'), params('x'));
+    expect(bad.status).toBe(400);
   });
 });
