@@ -16,6 +16,20 @@ if (typeof require !== 'undefined') {
 
 const REVIEW_LABELLING_LABELS = {
   en: {
+    'reason.claim_unsupported': "Sentence not confirmed by the documents",
+    'reason.output_guard': "Link or sign-in request in an answer",
+    'reason.version_conflict': "Two versions disagree",
+    'reason.calc_mismatch': "Calculation corrected",
+    'reason.calc_unverified': "Calculation not verified",
+    'review.noQuestion': "Raised by a check, not by a question.",
+    'review.openVersions': "Open possible older versions",
+    'check.heading': "What the check found",
+    'check.kind': "Check",
+    'check.documents': "Documents",
+    'check.uploadedBy': "Uploaded by",
+    'check.unknownUploader': "Unknown uploader",
+    'check.documentRemoved': "Document removed",
+    'check.noDocuments': "No document is named by this check.",
     'panel.title': "Review queue",
     'panel.description': "Questions the knowledge base answered badly or refused, found by weekly mining. Open a case, quote the passage that answers it, write the expected answer and choose what the case is used for. You see only the workspaces you were granted.",
     'list.loading': "Loading cases…",
@@ -227,6 +241,20 @@ const REVIEW_LABELLING_LABELS = {
     'item.noQuestion': "No question text is kept for this case.",
   },
   zh: {
+    'reason.claim_unsupported': "句子未被文档证实",
+    'reason.output_guard': "回答中出现链接或登录信息请求",
+    'reason.version_conflict': "两个版本内容不一致",
+    'reason.calc_mismatch': "计算已更正",
+    'reason.calc_unverified': "计算未核实",
+    'review.noQuestion': "由检查触发，并非来自提问。",
+    'review.openVersions': "打开可能的旧版本",
+    'check.heading': "检查发现的内容",
+    'check.kind': "检查",
+    'check.documents': "文档",
+    'check.uploadedBy': "上传者",
+    'check.unknownUploader': "未知上传者",
+    'check.documentRemoved': "文档已删除",
+    'check.noDocuments': "此检查未指明任何文档。",
     'panel.title': "复核队列",
     'panel.description': "每周挖掘找出的、知识库答得不好或拒答的问题。打开一个案例，摘录能回答它的原文，写出期望答案，并选择这个案例的用途。你只能看到已授权给你的工作区。",
     'list.loading': "正在加载案例…",
@@ -438,6 +466,20 @@ const REVIEW_LABELLING_LABELS = {
     'item.noQuestion': "此案例未保留问题文本。",
   },
   it: {
+    'reason.claim_unsupported': "Frase non confermata dai documenti",
+    'reason.output_guard': "Link o richiesta di accesso in una risposta",
+    'reason.version_conflict': "Due versioni in disaccordo",
+    'reason.calc_mismatch': "Calcolo corretto",
+    'reason.calc_unverified': "Calcolo non verificato",
+    'review.noQuestion': "Segnalato da un controllo, non da una domanda.",
+    'review.openVersions': "Apri possibili versioni precedenti",
+    'check.heading': "Che cosa ha trovato il controllo",
+    'check.kind': "Controllo",
+    'check.documents': "Documenti",
+    'check.uploadedBy': "Caricato da",
+    'check.unknownUploader': "Autore sconosciuto",
+    'check.documentRemoved': "Documento rimosso",
+    'check.noDocuments': "Questo controllo non indica alcun documento.",
     'panel.title': "Coda di revisione",
     'panel.description': "Domande a cui la knowledge base ha risposto male o che ha rifiutato, trovate dall’estrazione settimanale. Apri un caso, cita il passaggio che risponde, scrivi la risposta attesa e scegli a cosa serve il caso. Vedi solo gli spazi di lavoro per cui hai l’accesso.",
     'list.loading': "Caricamento dei casi…",
@@ -665,7 +707,14 @@ const REVIEW_LABELLING_REASONS = [
   'zero_results',
   'low_score',
   'no_source_opened',
+  'claim_unsupported',
+  'output_guard',
+  'version_conflict',
+  'calc_mismatch',
+  'calc_unverified',
 ];
+/** Phase 5.2 D-55: items these checks raise have no question; they show the check, its documents and their uploaders. */
+const REVIEW_LABELLING_CHECKS = ['output_guard', 'version_conflict'];
 const REVIEW_LABELLING_LANGUAGES = ['zh', 'en', 'it'];
 const REVIEW_LABELLING_OUTCOMES = ['answered', 'refused_no_context', 'kb_unavailable', 'degraded_answer', 'unknown'];
 const REVIEW_LABELLING_CHANNELS = ['chat', 'embed', 'voice'];
@@ -966,7 +1015,46 @@ function reviewLabellingCaseView(raw) {
     candidates,
     label: reviewLabellingIsObject(raw.label) ? raw.label : null,
     triage: reviewLabellingStrings(raw.triage),
+    check: reviewLabellingCheckView(raw.check_details, row.reasons),
   };
+}
+
+/** check_details of a check-raised item (05.2-18): the check and each document by name with its uploader; named fields only. */
+function reviewLabellingCheckView(details, reasons) {
+  const fromDetails = reviewLabellingIsObject(details) && REVIEW_LABELLING_CHECKS.includes(details.check) ? details.check : '';
+  const fromReasons = REVIEW_LABELLING_CHECKS.find((code) => reasons.includes(code)) || '';
+  const check = fromDetails || fromReasons;
+  if (!check) return null;
+  const documents = (reviewLabellingIsObject(details) && Array.isArray(details.documents) ? details.documents : [])
+    .filter((d) => reviewLabellingIsObject(d) && typeof d.document_id === 'string')
+    .map((d) => ({
+      documentId: d.document_id,
+      fileName: reviewLabellingString(d.file_name) || '',
+      uploaderId: reviewLabellingString(d.uploader_id) || '',
+      uploaderName: (reviewLabellingString(d.uploader_name) || '').trim(),
+      uploaderEmail: (reviewLabellingString(d.uploader_email) || '').trim(),
+    }));
+  return { check, documents };
+}
+
+/** Open possible older versions: RAG administration, Versions and dates, its candidates view, heading focused. */
+function reviewLabellingOpenVersions() {
+  if (typeof document === 'undefined') return;
+  const view = typeof window !== 'undefined' ? window : globalThis;
+  const link = document.querySelector('.menu-item[data-tab="rag-administration"]') || document.querySelector('[data-tab="rag-administration"]');
+  if (link && typeof link.click === 'function') link.click();
+  const finish = () => {
+    const panel = view.versionsDatesPanel;
+    if (panel && panel.tabs && typeof panel.tabs.select === 'function') panel.tabs.select('candidates');
+    const section = document.getElementById('rag-administration-versions');
+    if (section && typeof section.scrollIntoView === 'function') section.scrollIntoView({ block: 'start' });
+    const heading = document.getElementById('rag-versions-dates-title');
+    if (heading && typeof heading.focus === 'function') heading.focus();
+  };
+  const started = typeof view.initVersionsDatesPanel === 'function' ? view.initVersionsDatesPanel() : null;
+  if (started && typeof started.then === 'function') return started.then(finish, finish);
+  finish();
+  return null;
 }
 
 function reviewLabellingChunkMap(body) {
@@ -1435,7 +1523,7 @@ class ReviewLabellingPanel {
     if (!opts.keepStatus) this.announce('');
     const back = this.contentHost.querySelector('[data-review-back]');
     if (back) back.focus();
-    await this.loadChunks();
+    if (!view.check) await this.loadChunks();
     return view;
   }
 
@@ -1497,7 +1585,7 @@ class ReviewLabellingPanel {
       this.el('p', { className: 'text-xs text-base-content/70', text: this.t('item.question'), attrs: { id: questionId } }),
       this.el('p', {
         className: 'text-base break-words mt-1',
-        text: view.question || this.t('item.noQuestion'),
+        text: view.check ? this.t('review.noQuestion') : view.question || this.t('item.noQuestion'),
         attrs: { dir: 'auto', translate: 'no', 'aria-labelledby': questionId, 'data-review-question': true },
       }),
       this.caseMeta(),
@@ -1506,7 +1594,9 @@ class ReviewLabellingPanel {
         this.el('span', { text: reviewLabellingOutcomeText(view.outcome, this.locale) }),
       ]),
     ]);
-    if (view.answer) {
+    if (view.check) {
+      // no answer text and no outcome line: the check raised the item
+    } else if (view.answer) {
       header.appendChild(this.el('p', { className: 'text-xs text-base-content/70 mt-4', text: this.t('item.answer') }));
       header.appendChild(
         this.el('div', {
@@ -1597,6 +1687,10 @@ class ReviewLabellingPanel {
 
   renderEvidence() {
     if (!this.evidenceHost || !this.caseState) return;
+    if (this.caseState.view.check) {
+      this.renderCheckDetails();
+      return;
+    }
     const doc = this.doc;
     const state = this.caseState;
     const nodes = [this.el('h4', { className: 'text-balance text-base font-semibold mb-2', text: this.t('passages.heading') })];
@@ -1627,6 +1721,71 @@ class ReviewLabellingPanel {
     }
     nodes.push(this.searchBlock());
     this.evidenceHost.replaceChildren(...nodes);
+  }
+
+  /** UI-SPEC 05.2 6.14: the check, the documents by name and their uploaders; never a document text, never a link. */
+  renderCheckDetails() {
+    const view = this.caseState.view;
+    const check = view.check;
+    const nodes = [
+      this.el('h4', { className: 'text-balance text-base font-semibold mb-2', text: this.t('check.heading') }),
+      this.el('p', { className: 'text-sm mb-2' }, [
+        this.el('span', { className: 'text-base-content/70', text: `${this.t('check.kind')}: ` }),
+        this.el('span', { text: reviewLabellingReasonText(check.check, this.locale), attrs: { 'data-review-check': check.check } }),
+      ]),
+      this.el('p', { className: 'text-xs text-base-content/70 mt-4 mb-1', text: this.t('check.documents') }),
+    ];
+    if (check.documents.length === 0) nodes.push(this.el('p', { className: 'text-sm', text: this.t('check.noDocuments') }));
+    else {
+      nodes.push(
+        this.el(
+          'ul',
+          { className: 'flex flex-col gap-2 min-w-0', attrs: { 'data-review-check-documents': true } },
+          check.documents.map((d) =>
+            this.el('li', { className: 'border border-base-300 rounded-lg p-3 min-w-0' }, [
+              this.el('span', { className: 'block text-sm font-medium [overflow-wrap:anywhere]', text: d.fileName || this.t('check.documentRemoved') }),
+              this.el('span', { className: 'block text-xs text-base-content/70 mt-1 min-w-0' }, [
+                this.el('span', { text: `${this.t('check.uploadedBy')}: ` }),
+                this.checkUploader(d),
+              ]),
+            ]),
+          ),
+        ),
+      );
+    }
+    if (check.check === 'version_conflict') {
+      const open = this.el('button', { className: 'btn btn-link btn-sm px-0 mt-2', text: this.t('review.openVersions'), attrs: { type: 'button', 'data-review-open-versions': true } });
+      open.addEventListener('click', () => reviewLabellingOpenVersions());
+      nodes.push(open);
+    }
+    this.evidenceHost.replaceChildren(...nodes);
+  }
+
+  /** The uploader under the D-47 rules: name as text, the e-mail line only when returned, a bare id in monospace. */
+  checkUploader(d) {
+    if (!d.uploaderName && !d.uploaderId) return this.el('span', { text: this.t('check.unknownUploader') });
+    const name = d.uploaderName
+      ? this.el('span', { className: '[overflow-wrap:anywhere]', text: d.uploaderName })
+      : this.el('code', { className: 'font-mono break-all', text: d.uploaderId, attrs: { translate: 'no' } });
+    if (!d.uploaderEmail) return name;
+    return this.el('span', {}, [name, this.el('span', { className: 'block [overflow-wrap:anywhere]', text: d.uploaderEmail, attrs: { translate: 'no' } })]);
+  }
+
+  /** A check-raised item has no labelling form: only the panel's existing action that closes an item (Skip case). */
+  renderCheckActions() {
+    const state = this.caseState;
+    if (state.readOnly) {
+      this.labelHost.replaceChildren();
+      return;
+    }
+    const skip = this.el('button', { className: 'btn btn-outline btn-sm', attrs: { type: 'button', 'data-review-skip': true } }, [
+      state.busy === 'skip' ? reviewLabellingSpinner(this.doc, this.t('action.skipping')) : this.el('span', { text: this.t('action.skip') }),
+    ]);
+    skip.disabled = Boolean(state.busy);
+    skip.addEventListener('click', () => {
+      void this.submit({ status: 'skipped' }, 'skip');
+    });
+    this.labelHost.replaceChildren(this.el('div', { className: 'flex flex-wrap gap-2' }, [skip]));
   }
 
   quotedChunkIds() {
@@ -2064,6 +2223,10 @@ Object.assign(ReviewLabellingPanel.prototype, {
 
   renderLabel(focusSelector) {
     if (!this.labelHost || !this.caseState) return;
+    if (this.caseState.view.check) {
+      this.renderCheckActions();
+      return;
+    }
     const state = this.caseState;
     const form = state.form;
     const nodes = [this.answerBlock(), this.quotesBlock(), this.typeBlock(), this.outputsBlock()];

@@ -7,6 +7,10 @@
 
 const VERSIONS_DATES_LABELS = {
   en: {
+    'row.version': 'Version',
+    'version.label': 'Version label',
+    'version.help': 'Shown to readers next to citations. Leave empty to show the version number.',
+    'version.none': 'No label',
     'panel.title': 'Versions and dates',
     'panel.description': 'Decide when an older document stops being used, and from when a document applies. Nothing is replaced and no date hides a document without your decision. Follows the workspace chosen under Document Processing.',
     'tab.candidates': 'Possible older versions: {count}',
@@ -141,6 +145,10 @@ const VERSIONS_DATES_LABELS = {
     'dates.clearHint': 'Either date may stay empty. Leave both empty to remove the dates.',
   },
   zh: {
+    'row.version': '版本',
+    'version.label': '版本标签',
+    'version.help': '在引用旁显示给读者。留空则显示版本号。',
+    'version.none': '无标签',
     'panel.title': '版本与日期',
     'panel.description': '决定旧文档何时停止使用，以及文档从何时起生效。未经你确认，不会替换任何文档，也不会有日期让文档退出回答。跟随“文档处理”中选择的工作区。',
     'tab.candidates': '可能的旧版本：{count}',
@@ -275,6 +283,10 @@ const VERSIONS_DATES_LABELS = {
     'dates.clearHint': '任一日期都可以留空。两项都留空即删除日期。',
   },
   it: {
+    'row.version': 'Versione',
+    'version.label': 'Etichetta di versione',
+    'version.help': 'Mostrata ai lettori accanto alle citazioni. Lascia vuoto per mostrare il numero di versione.',
+    'version.none': 'Nessuna etichetta',
     'panel.title': 'Versioni e date',
     'panel.description': 'Decidi quando un documento più vecchio smette di essere usato e da quando un documento si applica. Nulla viene sostituito e nessuna data nasconde un documento senza la tua decisione. Segue lo spazio di lavoro scelto in Document Processing.',
     'tab.candidates': 'Possibili versioni precedenti: {count}',
@@ -493,6 +505,8 @@ function versionsDatesDocumentView(value, locale) {
     to: versionsDatesDay(value.effective_to),
     uploadedAt: versionsDatesText(value.uploaded_at),
     uploader,
+    versionLabel: versionsDatesText(value.version_label),
+    version: Number.isInteger(value.version) && value.version > 0 ? value.version : null,
   };
 }
 
@@ -597,6 +611,7 @@ function versionsDatesDateRowView(item, today) {
   return {
     id: versionsDatesText(data.id),
     file: versionsDatesText(data.file_name),
+    versionLabel: versionsDatesText(data.version_label),
     origin,
     stored,
     proposal,
@@ -1076,6 +1091,7 @@ class VersionsDatesPanel {
     };
     row(this.t('row.file'), this.el('span', { className: 'font-medium break-words [overflow-wrap:anywhere]', text: view.file }));
     row(this.t('row.docType'), view.docTypeLabel ? this.el('span', { text: view.docTypeLabel }) : this.missing('date.none'));
+    row(this.t('row.version'), this.versionNode(view));
     row(this.t('row.docDate'), this.dayNode(view.docDate));
     row(this.t('row.effective'), this.effectiveNodes(view.from, view.to));
     const uploaded = [this.timeNode(view.uploadedAt)];
@@ -1083,6 +1099,13 @@ class VersionsDatesPanel {
     row(this.t('row.uploaded'), uploaded);
     section.appendChild(dl);
     return section;
+  }
+
+  /** UI-SPEC 05.2 6.14: the version label, else the version number when the route gives one, else "No label". */
+  versionNode(view) {
+    if (view.versionLabel) return this.el('span', { className: 'break-words [overflow-wrap:anywhere]', text: view.versionLabel, attrs: { 'data-versions-dates-version': '' } });
+    if (view.version !== null) return this.el('span', { className: 'tabular-nums', text: String(view.version), attrs: { 'data-versions-dates-version': '' } });
+    return this.missing('version.none');
   }
 
   /** "from <time> until <time>", one side only, or "No dates". */
@@ -1525,10 +1548,13 @@ class VersionsDatesPanel {
     });
   }
 
-  putDates(row, range) {
+  /** versionLabel is sent only when the editor changed it (an absent label leaves it unchanged, 05.2-21); empty clears it. */
+  putDates(row, range, versionLabel) {
+    const body = { from: range.from || null, to: range.to || null };
+    if (typeof versionLabel === 'string') body.versionLabel = versionLabel.trim() || null;
     return this.ui().ragUiRagRequest(VERSIONS_DATES_DATES_PATH + '/' + encodeURIComponent(row.id) + this.query(), {
       method: 'PUT',
-      body: JSON.stringify({ from: range.from || null, to: range.to || null }),
+      body: JSON.stringify(body),
     });
   }
 
@@ -1551,7 +1577,7 @@ class VersionsDatesPanel {
 
   openEditor(row) {
     const start = row.proposal ? row.proposal : row.stored;
-    this.editor = { id: row.id, from: start.from || '', to: start.to || '', error: null };
+    this.editor = { id: row.id, from: start.from || '', to: start.to || '', versionLabel: row.versionLabel || '', error: null };
     this.renderDates();
     this.focus(this.doc.getElementById('rag-versions-dates-edit-from'));
   }
@@ -1612,6 +1638,7 @@ class VersionsDatesPanel {
       this.el('legend', { className: 'text-sm font-semibold mb-2 break-words [overflow-wrap:anywhere]', text: this.t('dates.editLegend', { file: row.file }) }),
       this.el('div', { className: 'grid gap-3 md:grid-cols-2 max-w-xl' }, [field('from', this.t('dates.col.from')), field('to', this.t('dates.col.to'))]),
       this.el('p', { className: 'text-xs text-base-content/70 mt-2', id: ids.hint, text: this.t('dates.clearHint') }),
+      this.versionLabelField(),
       this.el('p', { className: 'text-sm text-error mt-2', id: ids.order, text: orderError ? this.t('dates.order') : '', attrs: { 'data-versions-dates-order': '' } }),
       e.error ? this.el('p', { className: 'text-sm text-error mt-2', id: ids.error, text: e.error, attrs: { role: 'alert' } }) : null,
       this.el('div', { className: 'flex flex-col md:flex-row gap-2 mt-3' }, [save, cancel]),
@@ -1623,6 +1650,29 @@ class VersionsDatesPanel {
       }
     });
     return this.el('tr', { className: 'block md:table-row', attrs: { 'data-versions-dates-editor': row.id } }, [this.el('td', { className: 'block md:table-cell', attrs: { colspan: '6' } }, [fieldset])]);
+  }
+
+  /** The third editor field (UI-SPEC 05.2 6.14): at most 40 characters, saved by Save dates with the dates. */
+  versionLabelField() {
+    const e = this.editor;
+    const id = 'rag-versions-dates-edit-version';
+    const helpId = 'rag-versions-dates-edit-version-help';
+    const input = this.el('input', {
+      className: 'input input-bordered input-sm w-full',
+      id,
+      attrs: { type: 'text', name: 'versions-dates-version-label', maxlength: '40', autocomplete: 'off', 'aria-describedby': helpId, 'data-versions-dates-version-label': '' },
+    });
+    input.value = e.versionLabel || '';
+    input.addEventListener('input', (event) => {
+      versionsDatesStop(event);
+      this.editor.versionLabel = String(input.value || '').slice(0, 40);
+    });
+    input.addEventListener('change', versionsDatesStop);
+    return this.el('div', { className: 'form-control min-w-0 max-w-xl mt-3' }, [
+      this.el('label', { className: 'label py-1', attrs: { for: id } }, [this.el('span', { className: 'label-text', text: this.t('version.label') })]),
+      input,
+      this.el('p', { className: 'text-xs text-base-content/70 mt-1', id: helpId, text: this.t('version.help') }),
+    ]);
   }
 
   /** Updates the order finding and Save dates in place, so typing keeps the focus in the date field. */
@@ -1664,7 +1714,8 @@ class VersionsDatesPanel {
     const restore = ui.ragUiButtonBusy(this.doc, button, this.t('action.savingDates'), [sibling]);
     let result;
     try {
-      result = await this.putDates(row, range);
+      const label = String(this.editor.versionLabel || '').trim();
+      result = await this.putDates(row, range, label !== String(row.versionLabel || '').trim() ? label : undefined);
     } finally {
       restore();
     }
