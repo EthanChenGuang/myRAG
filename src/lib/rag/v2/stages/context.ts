@@ -11,7 +11,7 @@ import {
 } from '../../context/assemble';
 import { selectWithinBudget, type BudgetOptions, type RenderEstimate } from '../../context/budget';
 import { compressChunks, type CompressibleChunk } from '../../context/compress';
-import { documentBudgetOf, packUnitKey } from '../../context/pack';
+import { documentBudgetOf, fitRendered, packUnitKey } from '../../context/pack';
 import { edgeOrder } from '../../context/edge-order';
 import { fetchVersionColumns, type AssemblyRows } from '../../context/fetch-rows';
 import { fetchVersionPairs, versionConflictAttributes } from '../../context/version-conflicts';
@@ -456,6 +456,8 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     },
   );
   let parentSelection = expansion.skipped || !expansion.value.selection?.parentIds.size ? null : expansion.value.selection;
+  // The list the parent selection was made from, so a document budget can select again at a lower packing budget.
+  let parentPool: Parameters<typeof selectWithParents>[0] | null = parentSelection && !expansion.skipped ? expansion.value.expanded : null;
 
   // injection_check sits after expand_parents and before budget selection and aliasing (D-06, R3): it sees the
   // candidates with their expanded parent text, captions and referenced sections, so nothing dropped is budgeted or cited.
@@ -501,10 +503,13 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
         };
         budgetInput = keep(budgetInput);
         if (expandedList && !expansion.skipped && expansion.value.fetched > 0) {
-          const selection = selectWithParents(keep(expandedList), tokenBudget, estimateRender, budgetOptions);
+          const pool = keep(expandedList);
+          const selection = selectWithParents(pool, tokenBudget, estimateRender, budgetOptions);
           parentSelection = selection.parentIds.size ? selection : null;
+          parentPool = parentSelection ? pool : null;
         } else {
           parentSelection = null;
+          parentPool = null;
         }
       }
     }
@@ -538,96 +543,112 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     }
   }
 
+  /** Selects and renders at a packing budget; `rendered` is the context as the request finally gets it. */
+  const assembleWithin = (packBudget: number): { value: AssembleStageValue; rendered: string } => {
+    const lowered = packBudget !== tokenBudget;
+    const pooled = lowered && parentPool ? selectWithParents(parentPool, packBudget, estimateRender, budgetOptions) : null;
+    const parentAt = lowered ? (pooled?.parentIds.size ? pooled : null) : parentSelection;
+    const selection = parentAt ?? selectWithinBudget(budgetInput, packBudget, estimateRender, budgetOptions);
+
+    const chosenById = new Map(selection.selected.map((chosen) => [chosen.chunk_id, chosen]));
+    const selected = candidates
+      .filter((candidate) => chosenById.has(candidate.chunk_id))
+      .map((candidate) => {
+        const content =
+          selection.contentOverrides.get(candidate.chunk_id) ?? (parentAt ? chosenById.get(candidate.chunk_id)?.content : undefined);
+        return content === undefined || content === candidate.content ? candidate : { ...candidate, content };
+      });
+
+    const adjacent: AdjacentChunk[] = selected
+      .filter((candidate) => !isImageFilename(filenameOf(candidate.document_id)))
+      .map((candidate) => {
+        const rank = rankById.get(candidate.chunk_id) ?? 0;
+        const source = hitById.get(candidate.chunk_id);
+        return {
+          chunk_id: candidate.chunk_id,
+          document_id: candidate.document_id,
+          chunk_index: source ? chunkIndexOf(source, rank) : -1_000_000 - rank * 2,
+          parent_id: candidate.parent_id ?? null,
+          rank,
+        };
+      });
+    const groups = mergeAdjacent(adjacent);
+    const groupIds = groups.map((group) => group.documentId);
+    const marks = injectionMarks as InjectionMarks | null;
+    const flaggedGroups = new Set(
+      marks ? groups.filter((group) => group.runs.flat().some((chunk) => marks.chunkIds.has(chunk.chunk_id))).map((group) => group.documentId) : [],
+    );
+    const groupOrder =
+      flaggedGroups.size > 0
+        ? placeFlaggedGroups(groupIds, flaggedGroups, config.v2.edgeOrder)
+        : config.v2.edgeOrder
+          ? edgeOrder(groupIds)
+          : groupIds;
+
+    const blockRuns = new Map<string, string>();
+    for (const group of groups) {
+      group.runs.forEach((runChunks, index) => {
+        for (const chunk of runChunks) blockRuns.set(chunk.chunk_id, `${group.documentId}#${index}`);
+      });
+    }
+    const blockChunkIds = new Map<string, string[]>();
+    for (const candidate of selected) {
+      const parentId = candidate.parent_id;
+      if (!parentId || !parentAt?.parentChunkIds.has(candidate.chunk_id)) continue;
+      const children = candidates
+        .filter((child) => child.parent_id === parentId && child.document_id === candidate.document_id)
+        .sort(
+          (x, y) =>
+            chunkIndexOf(hitById.get(x.chunk_id)!, rankById.get(x.chunk_id) ?? 0) -
+            chunkIndexOf(hitById.get(y.chunk_id)!, rankById.get(y.chunk_id) ?? 0),
+        )
+        .map((child) => child.chunk_id);
+      blockChunkIds.set(candidate.chunk_id, children);
+    }
+
+    const output = render(selected, groupOrder, { runs: blockRuns, chunkIds: blockChunkIds });
+    const kept = output.kept.map((row) => {
+      const dupClusterId = hitById.get(row.chunk_id)?.dupClusterId;
+      const dropped = ctx.alsoIn?.get(row.chunk_id);
+      const alsoIn =
+        clusterSourcesPending && (dropped?.length || dupClusterId)
+          ? mergeAlsoIn(row.document_id, [dropped, dupClusterId ? clusterSources?.get(dupClusterId) : undefined])
+          : dropped;
+      return {
+        ...row,
+        rank: rankById.get(row.chunk_id) ?? row.rank,
+        ...(dupClusterId ? { dupClusterId } : {}),
+        ...(alsoIn && alsoIn.length > 0 ? { alsoIn } : {}),
+        ...(historyScope ? keptVersionFields(hitById.get(row.chunk_id), versionInfo?.get(row.document_id)) : {}),
+      };
+    });
+    const value: AssembleStageValue = {
+      output: { ...output, kept },
+      selected,
+      parentChunkIds: parentAt?.parentChunkIds ?? new Set<string>(),
+      groupOrder,
+      blockRuns,
+      blockChunkIds,
+      budgetTokens: tokenBudget,
+      usedTokens: selection.usedTokens,
+      groups: groupIds.length,
+      ...(documentBudget === null ? {} : { packing: packingSummary(budgetInput, selection.selected, tokenBudget) }),
+    };
+    if (documentBudget === null) return { value, rendered: '' };
+    // Measured as the request gets it: labelled when a labeler is set, with the suggestion line after the passages.
+    const labeler = input.citationLabeler;
+    const context = labeler ? render(selected, groupOrder, { runs: blockRuns, chunkIds: blockChunkIds, labeler }).context : output.context;
+    const line = ctx.identifierSuggestionLine ?? '';
+    return { value, rendered: line.length === 0 ? context : context.length > 0 ? `${context}\n\n${line}` : line };
+  };
+
   const assembled = await runStage(
     spec('assemble', 'skip'),
     signal,
     (): AssembleStageValue => {
-      const selection = parentSelection ?? selectWithinBudget(budgetInput, tokenBudget, estimateRender, budgetOptions);
-
-      const chosenById = new Map(selection.selected.map((chosen) => [chosen.chunk_id, chosen]));
-      const selected = candidates
-        .filter((candidate) => chosenById.has(candidate.chunk_id))
-        .map((candidate) => {
-          const content =
-            selection.contentOverrides.get(candidate.chunk_id) ?? (parentSelection ? chosenById.get(candidate.chunk_id)?.content : undefined);
-          return content === undefined || content === candidate.content ? candidate : { ...candidate, content };
-        });
-
-      const adjacent: AdjacentChunk[] = selected
-        .filter((candidate) => !isImageFilename(filenameOf(candidate.document_id)))
-        .map((candidate) => {
-          const rank = rankById.get(candidate.chunk_id) ?? 0;
-          const source = hitById.get(candidate.chunk_id);
-          return {
-            chunk_id: candidate.chunk_id,
-            document_id: candidate.document_id,
-            chunk_index: source ? chunkIndexOf(source, rank) : -1_000_000 - rank * 2,
-            parent_id: candidate.parent_id ?? null,
-            rank,
-          };
-        });
-      const groups = mergeAdjacent(adjacent);
-      const groupIds = groups.map((group) => group.documentId);
-      const marks = injectionMarks as InjectionMarks | null;
-      const flaggedGroups = new Set(
-        marks ? groups.filter((group) => group.runs.flat().some((chunk) => marks.chunkIds.has(chunk.chunk_id))).map((group) => group.documentId) : [],
-      );
-      const groupOrder =
-        flaggedGroups.size > 0
-          ? placeFlaggedGroups(groupIds, flaggedGroups, config.v2.edgeOrder)
-          : config.v2.edgeOrder
-            ? edgeOrder(groupIds)
-            : groupIds;
-
-      const blockRuns = new Map<string, string>();
-      for (const group of groups) {
-        group.runs.forEach((runChunks, index) => {
-          for (const chunk of runChunks) blockRuns.set(chunk.chunk_id, `${group.documentId}#${index}`);
-        });
-      }
-      const blockChunkIds = new Map<string, string[]>();
-      for (const candidate of selected) {
-        const parentId = candidate.parent_id;
-        if (!parentId || !parentSelection?.parentChunkIds.has(candidate.chunk_id)) continue;
-        const children = candidates
-          .filter((child) => child.parent_id === parentId && child.document_id === candidate.document_id)
-          .sort(
-            (x, y) =>
-              chunkIndexOf(hitById.get(x.chunk_id)!, rankById.get(x.chunk_id) ?? 0) -
-              chunkIndexOf(hitById.get(y.chunk_id)!, rankById.get(y.chunk_id) ?? 0),
-          )
-          .map((child) => child.chunk_id);
-        blockChunkIds.set(candidate.chunk_id, children);
-      }
-
-      const output = render(selected, groupOrder, { runs: blockRuns, chunkIds: blockChunkIds });
-      const kept = output.kept.map((row) => {
-        const dupClusterId = hitById.get(row.chunk_id)?.dupClusterId;
-        const dropped = ctx.alsoIn?.get(row.chunk_id);
-        const alsoIn =
-          clusterSourcesPending && (dropped?.length || dupClusterId)
-            ? mergeAlsoIn(row.document_id, [dropped, dupClusterId ? clusterSources?.get(dupClusterId) : undefined])
-            : dropped;
-        return {
-          ...row,
-          rank: rankById.get(row.chunk_id) ?? row.rank,
-          ...(dupClusterId ? { dupClusterId } : {}),
-          ...(alsoIn && alsoIn.length > 0 ? { alsoIn } : {}),
-          ...(historyScope ? keptVersionFields(hitById.get(row.chunk_id), versionInfo?.get(row.document_id)) : {}),
-        };
-      });
-      return {
-        output: { ...output, kept },
-        selected,
-        parentChunkIds: parentSelection?.parentChunkIds ?? new Set<string>(),
-        groupOrder,
-        blockRuns,
-        blockChunkIds,
-        budgetTokens: tokenBudget,
-        usedTokens: selection.usedTokens,
-        groups: groupIds.length,
-        ...(documentBudget === null ? {} : { packing: packingSummary(budgetInput, selection.selected, tokenBudget) }),
-      };
+      if (documentBudget === null) return assembleWithin(tokenBudget).value;
+      // D-83: the rendered context the request gets (labels and suggestion line included) is what must fit the document budget.
+      return fitRendered(documentBudget, assembleWithin, (attempt) => attempt.rendered, { start: tokenBudget }).value;
     },
     collector,
     {

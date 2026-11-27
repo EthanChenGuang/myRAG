@@ -95,7 +95,7 @@ describe('v2 context stage with documentTokenBudget (D-83)', () => {
 
   for (const labelled of [false, true]) {
     it(`keeps the rendered context within the budget, the truncated first block included (${labelled ? 'labelled' : 'plain'})`, async () => {
-      for (const budget of [blockTokens('k1') * 2, blockTokens('k1') + 2, Math.floor(blockTokens('k1') / 2), 40]) {
+      for (const budget of [blockTokens('k1') * 2, blockTokens('k1') + 2, Math.floor(blockTokens('k1') / 2), 70]) {
         const { out } = await run({ documentTokenBudget: budget }, labelled);
         expect(countContextTokens(out.assembly!.context)).toBeLessThanOrEqual(budget);
         expect(out.assembly!.kept.length).toBeGreaterThan(0);

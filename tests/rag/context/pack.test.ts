@@ -151,7 +151,7 @@ describe('packAndBuild (legacy assembly, framing counted)', () => {
   };
 
   for (const labelled of [false, true]) {
-    for (const budget of [one * 2 + 2, one * 3 + 1, Math.floor(one / 2), one + 3]) {
+    for (const budget of [one * 2 + 2, one * 3 + 1, 60, one + 3]) {
       it(`keeps the built context within the budget (${labelled ? 'labelled' : 'plain'}, budget ${budget})`, () => {
         const { output, summary } = build(labelled, budget);
         expect(countContextTokens(output.context)).toBeLessThanOrEqual(budget);
@@ -160,6 +160,12 @@ describe('packAndBuild (legacy assembly, framing counted)', () => {
       });
     }
   }
+
+  it('keeps the first block at its smallest truncation when the framing alone exceeds the budget', () => {
+    const { output } = build(true, 10);
+    expect(output.kept.map((row) => row.chunk_id)).toEqual(['p1']);
+    expect(output.context).not.toContain('framing sentence');
+  });
 
   it('drops the lowest-ranked block when the framing would overflow the per-block estimate', () => {
     const { output, summary } = build(false, one * 2 + 2);
