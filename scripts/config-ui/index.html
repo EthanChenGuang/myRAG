@@ -77,6 +77,7 @@
     <script src="rag-panels/question-sources.js"></script>
     <script src="rag-panels/monitor.js"></script>
     <script src="rag-panels/rag-ui.js"></script>
+    <script src="rag-panels/rag-pipeline.js"></script>
     <script src="rag-panels/languages.js"></script>
     <script src="rag-panels/ingest-impact.js"></script>
     <script src="rag-panels/upload-approvals.js"></script>
@@ -6461,6 +6462,17 @@
                                         ignore all uploaded documents and knowledge base content.</span>
                                 </div>
 
+                                <!-- RAG pipeline settings (generated section, plan 07-20) -->
+                                <section id="rag-pipeline-settings" class="mt-6 min-w-0 scroll-mt-4" aria-labelledby="rag-pipeline-title">
+                                    <h3 id="rag-pipeline-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-rag-pipeline-title>RAG pipeline settings</h3>
+                                    <p class="text-sm text-base-content/70 mb-2 max-w-prose" data-rag-pipeline-description></p>
+                                    <p class="text-xs text-base-content/70 mb-4 max-w-prose" data-rag-pipeline-secrets-note></p>
+                                    <div data-rag-pipeline-alert class="mb-4 empty:mb-0"></div>
+                                    <nav data-rag-pipeline-nav class="flex flex-wrap gap-2 mb-4"></nav>
+                                    <div data-rag-pipeline-content class="grid gap-6">Loading settings…</div>
+                                    <div data-rag-pipeline-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                </section>
+
                                 <!-- Evaluation & Sidecar -->
                                 <div class="card bg-base-200 shadow-md mt-6">
                                     <div class="card-body">
@@ -11561,6 +11573,7 @@
             populateFields() {
                 (this.secretsSet || new Set()).forEach((name) => {
                     const secretField = document.getElementById(name);
+                    if (secretField && secretField.closest('#rag-pipeline-settings')) return;
                     if (secretField) {
                         secretField.value = '';
                         secretField.placeholder = 'Configured (hidden). Type a new value to replace it.';
@@ -11578,6 +11591,7 @@
                     // No special handling needed for unified RAG system
 
                     const field = document.getElementById(key);
+                    if (field && field.closest('#rag-pipeline-settings')) return;
                     if (field) {
                         if (field.type === 'checkbox') {
                             field.checked = value === 'true' || value === true;
@@ -11955,6 +11969,7 @@
 
                     this.showSaveIndicator();
                     console.log('Config saved successfully');
+                    document.dispatchEvent(new CustomEvent('rag-config-saved'));
 
                     const shortSecrets = ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY', 'RAG_VECTOR_SYNC_SECRET', 'RAG_MONITOR_WEBHOOK_SECRET'].filter((name) => {
                         const value = this.config[name];

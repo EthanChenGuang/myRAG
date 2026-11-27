@@ -436,7 +436,10 @@ test('fails when COHERE_BASE_URL is missing from the config UI', () => {
   const root = copyRealTree();
   try {
     const file = path.join(root, 'scripts/config-ui/index.html');
-    const text = fs.readFileSync(file, 'utf8').replace(/COHERE_BASE_URL/g, 'REMOVED_COHERE_BASE_URL');
+    const text = fs
+      .readFileSync(file, 'utf8')
+      .replace(/COHERE_BASE_URL/g, 'REMOVED_COHERE_BASE_URL')
+      .replace(/<script src="rag-panels\/rag-pipeline\.js"><\/script>\n?/g, '');
     fs.writeFileSync(file, text);
     const { code, out } = run(root);
     assert.equal(code, 1);
@@ -716,9 +719,11 @@ const PHASE6_NAMES = [
   'REDIS_URL',
 ];
 
+/** In index.html, also drops the generated-section loader (plan 07-20), so the name is absent from the whole Config UI. */
 function removeName(root, relative, name) {
   const file = path.join(root, relative);
-  const text = fs.readFileSync(file, 'utf8').replace(new RegExp(`(?<![A-Z0-9_])${name}(?![A-Z0-9_])`, 'g'), 'REMOVED_NAME');
+  let text = fs.readFileSync(file, 'utf8').replace(new RegExp(`(?<![A-Z0-9_])${name}(?![A-Z0-9_])`, 'g'), 'REMOVED_NAME');
+  if (relative === 'scripts/config-ui/index.html') text = text.replace(/<script src="rag-panels\/rag-pipeline\.js"><\/script>\n?/g, '');
   fs.writeFileSync(file, text);
 }
 

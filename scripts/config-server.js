@@ -189,6 +189,51 @@ app.get('/api/config', (req, res) => {
   }
 });
 
+const PIPELINE_MANIFEST_PATH = path.join(__dirname, 'rag', 'env-manifest.json');
+const PIPELINE_ENTRY_FIELDS = ['name', 'group', 'label', 'type', 'options', 'requires', 'default', 'provider', 'help'];
+
+/**
+ * The managed manifest entries for the generated RAG pipeline section (D-14): metadata, the saved non-secret value and,
+ * for a secret, only { state, last4? } from maskConfig. A secret's value and default never leave the server.
+ */
+function buildRagPipelineManifest(manifest, saved) {
+  const { config, secretHints } = security.maskConfig(saved || {});
+  const entries = [];
+  for (const raw of Array.isArray(manifest && manifest.vars) ? manifest.vars : []) {
+    if (!raw || raw.status !== 'managed' || typeof raw.name !== 'string') continue;
+    const entry = {};
+    for (const field of PIPELINE_ENTRY_FIELDS) {
+      if (raw[field] !== undefined) entry[field] = raw[field];
+    }
+    const secret = raw.type === 'secret' || security.isSecretConfigEntry(raw.name, '') || Object.prototype.hasOwnProperty.call(secretHints, raw.name);
+    if (secret) {
+      entry.default = '';
+      entry.secret = secretHints[raw.name] || { state: 'unset' };
+    } else {
+      entry.value = Object.prototype.hasOwnProperty.call(config, raw.name) ? String(config[raw.name]) : null;
+    }
+    entries.push(entry);
+  }
+  return entries;
+}
+
+app.get('/api/rag-pipeline/manifest', (req, res) => {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(PIPELINE_MANIFEST_PATH, 'utf8'));
+    const envPath = path.join(REPO_ROOT, '.env.local');
+    const exists = fs.existsSync(envPath);
+    const saved = exists ? dotenv.parse(fs.readFileSync(envPath, 'utf8')) : {};
+    res.json({
+      success: true,
+      entries: buildRagPipelineManifest(manifest, saved),
+      envModifiedAt: exists ? fs.statSync(envPath).mtime.toISOString() : null,
+    });
+  } catch (error) {
+    console.error('[Config] RAG pipeline manifest could not be read');
+    res.status(500).json({ success: false, error: 'manifest_unavailable' });
+  }
+});
+
 // The variables the app's hidden-text client reads (src/lib/rag/security/hidden-text.ts: env.RAG_SIDECAR_URL, env.RAG_SIDECAR_SECRET).
 const HIDDEN_TEXT_CHECK_VAR = 'RAG_HIDDEN_TEXT_CHECK';
 const HIDDEN_TEXT_SIDECAR_VARS = ['RAG_SIDECAR_URL', 'RAG_SIDECAR_SECRET'];
@@ -5008,4 +5053,4 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings, answerRulesModelFamily };
+module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings, answerRulesModelFamily, buildRagPipelineManifest };

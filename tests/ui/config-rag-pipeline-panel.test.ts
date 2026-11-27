@@ -208,6 +208,10 @@ describe('index.html wiring (07-20 Task 2)', () => {
       const doc = new FakeDocument();
       const events: string[] = [];
       doc.addEventListener('rag-config-saved', () => events.push('saved'));
+      (doc as unknown as { dispatchEvent: (e: { type: string }) => boolean }).dispatchEvent = (e) => {
+        doc.dispatch(e.type);
+        return true;
+      };
       const context: Record<string, unknown> = {
         document: doc,
         console: { log() {}, error() {}, warn() {} },
@@ -368,9 +372,10 @@ describe('Test connection, warnings and sync (07-20 Task 3)', () => {
     expect(text(older.section().querySelector('[data-rag-pipeline-alert]'))).not.toContain('.env.local changed');
   });
 
-  it('index.html has the section skeleton in the RAG Modes tab and loads rag-pipeline.js once, directly after rag-fetch.js', () => {
+  it('index.html has the section skeleton in the RAG Modes tab and loads rag-pipeline.js once, after rag-fetch.js and directly after rag-ui.js', () => {
     expect(indexHtml.match(/rag-panels\/rag-pipeline\.js/g)).toHaveLength(1);
-    expect(indexHtml).toMatch(/<script src="rag-panels\/rag-fetch\.js"><\/script>\s*<script src="rag-panels\/rag-pipeline\.js"><\/script>/);
+    expect(indexHtml).toMatch(/<script src="rag-panels\/rag-ui\.js"><\/script>\s*<script src="rag-panels\/rag-pipeline\.js"><\/script>/);
+    expect(indexHtml.indexOf('rag-panels/rag-pipeline.js')).toBeGreaterThan(indexHtml.indexOf('rag-panels/rag-fetch.js'));
     const tabStart = indexHtml.indexOf('id="rag-modes"');
     const tabEnd = indexHtml.indexOf('<!-- RAG Settings Tab -->', tabStart);
     const section = indexHtml.indexOf('id="rag-pipeline-settings"');
