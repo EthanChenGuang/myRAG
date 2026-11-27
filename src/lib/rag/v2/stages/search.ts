@@ -17,6 +17,7 @@ import {
 } from '../../embeddings/query-embedding';
 import { requireValue, runStage, StageError, stageSpec, type StageSpec } from '../../pipeline';
 import { exactIdStage, type ExactIdRow } from '../../retrieval/exact-id';
+import { runSourceRecheckStage, type SourceRecheckMarker } from '../../retrieval/source-recheck';
 import type { TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
@@ -116,6 +117,8 @@ const BINDING_STAGE_MARGIN_MS = 10;
 export interface SearchStagesOutput {
   fusedHits: FusedHit[];
   dedupeCounts: DedupeCounts;
+  /** Set only when the source_recheck stage completed (D-46). */
+  sourceRecheck?: SourceRecheckMarker;
 }
 
 function buildFilters(input: RunRetrievalInput): RetrievalFilters {
@@ -556,6 +559,24 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   );
 
   const capped = deduped.skipped ? sliceCap(fused, params.rerank_input_cap) : deduped.value;
+
+  if (config.sourceRecheck) {
+    // D-19, D-38: an index row that missed a delete never reaches rerank; a failed recheck keeps the candidates and degrades the result.
+    const recheck = await runSourceRecheckStage({
+      spec: spec('source_recheck', 'skip'),
+      signal,
+      collector,
+      scope,
+      client: () => requireAdminSearchClient(getRagDeps()),
+      items: capped.hits,
+      chunkIdOf: (row) => row.hit.chunkId,
+    });
+    return {
+      fusedHits: recheck.items,
+      dedupeCounts: capped.counts,
+      ...(recheck.marker ? { sourceRecheck: recheck.marker } : {}),
+    };
+  }
 
   return { fusedHits: capped.hits, dedupeCounts: capped.counts };
 }

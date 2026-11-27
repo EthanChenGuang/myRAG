@@ -104,6 +104,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let effectiveOn: string | undefined;
   let queryLayerHash: RetrievalConfigHashQueryLayer | undefined;
   let cacheTicket: RetrievalResult['cacheTicket'];
+  let sourceRecheck: RetrievalResult['sourceRecheck'];
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
@@ -246,6 +247,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       bindings: { plan: bindingPlan, embeds: bindingEmbeds },
       ...(hasTranslationWork(translationPlan) ? { translations: translationPlan } : {}),
     });
+    sourceRecheck = search.sourceRecheck;
 
     const rank = await runRankStages({
       input,
@@ -406,6 +408,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     ...(effectiveOn ? { effectiveOn } : {}),
     ...(queryLayerHash ? { queryLayerHash } : {}),
     ...(cacheTicket ? { cacheTicket } : {}),
+    ...(sourceRecheck ? { sourceRecheck } : {}),
   });
 }
 

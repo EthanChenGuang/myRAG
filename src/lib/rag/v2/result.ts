@@ -60,6 +60,8 @@ export interface BuildV2ResultInput {
   queryLayerHash?: RetrievalConfigHashQueryLayer;
   /** The semantic_cache stage's store ticket (D-32). */
   cacheTicket?: CacheTicket;
+  /** D-46: the source_recheck marker from the search stages; absent when the stage did not run or did not complete. */
+  sourceRecheck?: { checked: number; dropped: number };
 }
 
 export interface RequestConfigHashInput {
@@ -104,6 +106,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
       rerankTierChat: config.v2.rerankTier.chat,
       rerankTierVoice: config.v2.rerankTier.voice,
       ...(config.monolingual ? { monolingual: true as const } : {}),
+      ...(config.sourceRecheck ? { sourceRecheck: true as const } : {}),
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
     ...(ctx.bindingHash ?? {}),
@@ -277,6 +280,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(injection ? { injection } : {}),
     ...(queryPlan ? { queryPlan } : {}),
     ...(ctx.cacheTicket && profile !== 'voice' ? { cacheTicket: ctx.cacheTicket } : {}),
+    ...(ctx.sourceRecheck ? { sourceRecheck: ctx.sourceRecheck } : {}),
   };
 
   if (profile === 'voice') {

@@ -345,4 +345,6 @@ export interface RetrievalResult {
   cacheHit?: CacheHit;
   /** Set when the semantic_cache stage checked with no check-time bypass; the entry point stores the answer with it. */
   cacheTicket?: CacheTicket;
+  /** D-46: set only when a source recheck completed; the trace's stale_index_drop is its dropped count. */
+  sourceRecheck?: { checked: number; dropped: number };
 }

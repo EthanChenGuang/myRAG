@@ -33,6 +33,7 @@ export const OPTIONAL_STAGES = [
   'identifier_resolve',
   'identifier_guard',
   'terminology',
+  'source_recheck',
 ] as const;
 
 /** Phase 6 query-layer stages (D-05); translate is the shared Phase 4 slot and is not listed here. */
@@ -78,6 +79,7 @@ const V2_STANDARD: StageTimeouts = {
   diversify: 1000,
   identifier_resolve: 1000,
   identifier_guard: 1000,
+  source_recheck: 1000,
 };
 
 const V2_VOICE: StageTimeouts = {
@@ -93,6 +95,7 @@ const V2_VOICE: StageTimeouts = {
   diversify: 300,
   identifier_resolve: 500,
   identifier_guard: 300,
+  source_recheck: 300,
 };
 
 const V2_EVAL: StageTimeouts = {
@@ -299,6 +302,7 @@ export interface RagEnvInput {
   RAG_DISABLED_STAGES?: string;
   RAG_STAGE_TIMEOUTS?: string;
   RAG_EXACT_ID_LOOKUP?: string;
+  RAG_SOURCE_RECHECK?: string;
   RAG_LEXICAL_SEARCH?: string;
   RAG_RERANKER?: string;
   RAG_RERANK_TIER_CHAT?: string;
@@ -383,6 +387,8 @@ export interface RagConfig {
   operatorDisabledStages?: ReadonlySet<StageName>;
   timeouts: Record<Profile, StageTimeouts>;
   exactIdLookup: boolean;
+  /** D-19: recheck candidates against Supabase after fusion and before rerank (RAG_SOURCE_RECHECK); off enters no stage. */
+  sourceRecheck: boolean;
   v2: V2Config;
   effectiveDates: boolean;
   scopeTags: boolean;
@@ -980,6 +986,7 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_DISABLED_STAGES ?? '',
     env.RAG_STAGE_TIMEOUTS ?? '',
     env.RAG_EXACT_ID_LOOKUP ?? '',
+    env.RAG_SOURCE_RECHECK ?? '',
     env.RAG_LEXICAL_SEARCH ?? '',
     env.RAG_RERANKER ?? '',
     env.RAG_RERANK_TIER_CHAT ?? '',
@@ -1133,6 +1140,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     operatorDisabledStages,
     timeouts,
     exactIdLookup,
+    sourceRecheck: parseNamedFlag('RAG_SOURCE_RECHECK', env.RAG_SOURCE_RECHECK, warnings),
     v2,
     effectiveDates: parseNamedFlag('RAG_EFFECTIVE_DATES', env.RAG_EFFECTIVE_DATES, warnings),
     scopeTags: parseNamedFlag('RAG_SCOPE_TAGS', env.RAG_SCOPE_TAGS, warnings),

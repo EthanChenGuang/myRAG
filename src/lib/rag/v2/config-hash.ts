@@ -21,6 +21,8 @@ export interface RetrievalConfigHashSwitches {
   rerankTierVoice: RerankTier;
   /** D-03: present only for a single-language deployment, so a multilingual hash is unchanged. */
   monolingual?: true;
+  /** D-19: present only while RAG_SOURCE_RECHECK is on, so the hash with the switch off is unchanged. */
+  sourceRecheck?: true;
 }
 
 /** The prompt-injection defense configuration a result was built under (D-18). */
