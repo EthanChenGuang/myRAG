@@ -545,3 +545,4 @@ Train-36/37 must include verify/05, verify/05.1, verify/06 branches.
 HOLD: 04.3-32, 04.3-46 until 04.3-23 SUMMARY is final; 06.3-14/07-37 still wait on Phase 6.3 close; auto=false: 04.4-15, 06-46, 06.3-04, 06.3-15.
 Pending owner: train36 SQL (owner desk), then ask owner before deploying main 274d0456.
 - 13:40Z 04.3-41 DONE (exec/04.3-41 eb698ced SUMMARY pushed) → session archived; train 38 candidate. 04.3-42 launched: session_01X342si9FhvqgKWK25YyzBC (base exec/04.3-41).
+- 13:39Z owner desk: train36-live.sql APPLIED + verified on prod (owner approved DROPs). r19 stored text has one-line typo in a no-op guard branch (DB state correct). Awaiting user consent to deploy main 274d0456.
