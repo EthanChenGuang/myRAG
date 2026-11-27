@@ -626,3 +626,85 @@ def test_the_committed_criteria_validate_and_name_existing_run_configs():
         assert (REPO / "eval" / "config" / "runs" / f"{name}.json").is_file(), name
     noise = NoiseConfig.model_validate_json((REPO / criteria.noise_path).read_text(encoding="utf-8")).metrics
     assert criteria.gated_metrics == {metric: direction for metric, direction in noise.items() if metric not in SUBQ_METRICS}
+
+
+# ---------- quick-41: G1 numbers, run provenance, no re-derive after a gate result
+
+
+def test_every_failing_g1_check_carries_n_and_band(tmp_path):
+    criteria = _criteria(tmp_path)
+    low = _report({"overall": {"recall_at_10": (0.7 - 0.03, 40)}}, run_id="low")
+    result = evaluate_config_mode(_run("v2-default", "prechunked", low), _baseline(), _noise(), _budgets(), criteria)
+    failing = [check for check in _criterion(result, "G1").checks if check.status == "fail"]
+    assert failing
+    assert all(check.n is not None and check.band is not None for check in failing)
+    overall = next(check for check in failing if check.slice == "overall" and check.metric == "recall_at_10")
+    assert overall.n == 40 and overall.band == pytest.approx(0.02)
+    assert "(n )" not in dg.render_markdown(_evaluate(criteria, _all_runs({("v2-default", "prechunked"): low})))
+
+
+def _evaluate_cli_world(tmp_path: Path) -> tuple[Path, Path, Path]:
+    ingest = _write(tmp_path / "ingest.json", _baseline())
+    _write(tmp_path / "prechunked.json", _baseline())
+    noise_path = _write(tmp_path / "noise.json", _noise())
+    _write(tmp_path / "budgets.json", _budgets())
+    rules = _rules(
+        baselines={"prechunked": str(tmp_path / "prechunked.json"), "ingest": str(ingest)},
+        noise_path=str(noise_path),
+        budgets_path=str(tmp_path / "budgets.json"),
+    )
+    criteria_path = tmp_path / "criteria.json"
+    criteria_path.write_text(dg.dump_criteria(derive_absolute_floor(rules, ingest, noise_path)), encoding="utf-8")
+    reports = tmp_path / "reports"
+    _write_runs(reports, _all_runs())
+    return criteria_path, ingest, noise_path
+
+
+def test_evaluate_records_the_git_sha_and_the_evaluation_time(tmp_path, monkeypatch):
+    criteria_path, _, _ = _evaluate_cli_world(tmp_path)
+    monkeypatch.setattr(dg, "git_changed_at", lambda _path: CHANGED_AT)
+    monkeypatch.setattr(dg, "git_head_sha", lambda: "a" * 40)
+    out = tmp_path / "out"
+    assert main(["evaluate", "--criteria", str(criteria_path), "--reports", str(tmp_path / "reports"), "--out", str(out)]) == 1
+    result = DefaultsGateResult.model_validate_json((out / "defaults-gate.json").read_text(encoding="utf-8"))
+    assert result.git_sha == "a" * 40
+    assert result.evaluated_at is not None
+    assert "a" * 40 in (out / "defaults-gate.md").read_text(encoding="utf-8")
+
+
+def _consumed_gate(tmp_path: Path, criteria_path: Path) -> Path:
+    criteria = DefaultsGateCriteria.model_validate_json(criteria_path.read_text(encoding="utf-8"))
+    result = _evaluate(criteria, _all_runs()).model_copy(update={"criteria_path": str(criteria_path)})
+    gate = tmp_path / "gate" / "defaults-gate.json"
+    gate.parent.mkdir()
+    gate.write_text(result.model_dump_json(indent=2), encoding="utf-8")
+    return gate
+
+
+def test_derive_refuses_once_a_gate_result_was_taken_on_the_criteria(tmp_path, capsys):
+    criteria_path, ingest, noise_path = _evaluate_cli_world(tmp_path)
+    gate = _consumed_gate(tmp_path, criteria_path)
+    before = criteria_path.read_bytes()
+    new_ingest = _write(tmp_path / "ingest2.json", _baseline(spread=0.01))
+    args = ["derive", "--criteria", str(criteria_path), "--ingest-baseline", str(new_ingest), "--noise", str(noise_path), "--gate-result", str(gate)]
+    capsys.readouterr()
+    assert main(args) == 2
+    assert dg.CRITERIA_AFTER_GATE in capsys.readouterr().err
+    assert criteria_path.read_bytes() == before
+    assert main([*args, "--before-run"]) == 0
+    assert criteria_path.read_bytes() != before
+
+
+def test_derive_ignores_a_gate_result_of_another_criteria_file(tmp_path):
+    criteria_path, ingest, noise_path = _evaluate_cli_world(tmp_path)
+    other = tmp_path / "other-criteria.json"
+    other.write_bytes(criteria_path.read_bytes())
+    gate = _consumed_gate(tmp_path, other)
+    args = ["derive", "--criteria", str(criteria_path), "--ingest-baseline", str(ingest), "--noise", str(noise_path), "--gate-result", str(gate)]
+    assert main(args) == 0
+
+
+def test_the_committed_gate_result_blocks_a_re_derive_of_the_committed_criteria():
+    committed = Path(__file__).resolve().parents[1] / "config" / "defaults-gate.json"
+    reason = dg.gate_result_blocks_derive(dg.DEFAULT_GATE_RESULT, committed)
+    assert reason is not None and dg.CRITERIA_AFTER_GATE in reason
