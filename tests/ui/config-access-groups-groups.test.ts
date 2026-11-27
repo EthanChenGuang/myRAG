@@ -510,3 +510,239 @@ describe('injection (T-04.3-421)', () => {
     expect(page.doc.innerHtmlWrites).toBe(0);
   });
 });
+
+describe('Rename group (D-01)', () => {
+  it('turns the name into an input with Save name and Cancel editing; the key stays', async () => {
+    const page = loadPage();
+    await page.init();
+    button(page.row(ID_A), 'Rename group').click();
+    expect(page.doc.getElementById('rag-access-groups-rename-input'), 'the rename editor is open').not.toBeNull();
+    const input = page.doc.getElementById('rag-access-groups-rename-input')!;
+    expect(page.doc.activeElement).toBe(input);
+    expect(input.value).toBe('group-a');
+    expect(page.row(ID_A).querySelector('code')!.textContent).toBe('group-a');
+    type(input, '');
+    expect(button(page.row(ID_A), 'Save name').disabled).toBe(true);
+    type(input, 'group-renamed');
+    button(page.row(ID_A), 'Save name').click();
+    await flush();
+    expect(page.count('rename')).toBe(1);
+    expect(page.last('rename').path.split('?')[0]).toBe('/api/rag/access-groups/' + ID_A);
+    expect(page.body('rename')).toEqual({ name: 'group-renamed' });
+    expect(page.statusRegion().textContent).toBe('Group renamed to group-renamed. Its documents and members are unchanged.');
+    expect(page.row(ID_A).querySelector('[data-access-groups-name]')!.textContent).toBe('group-renamed');
+    expect(page.row(ID_A).querySelector('code')!.textContent).toBe('group-a');
+    expect(page.doc.activeElement!.getAttribute('data-access-groups-rename')).toBe(ID_A);
+  });
+
+  it('one row edits at a time, and Escape cancels with focus back on Rename group', async () => {
+    const page = loadPage();
+    await page.init();
+    button(page.row(ID_A), 'Rename group').click();
+    button(page.row(ID_B), 'Rename group').click();
+    expect(page.root.querySelectorAll('[data-access-groups-rename-editor]')).toHaveLength(1);
+    expect(page.row(ID_B).querySelector('[data-access-groups-rename-editor]')).toBeTruthy();
+    page.doc.getElementById('rag-access-groups-rename-input')!.dispatch('keydown', { key: 'Escape' });
+    expect(page.root.querySelectorAll('[data-access-groups-rename-editor]')).toHaveLength(0);
+    expect(page.doc.activeElement!.getAttribute('data-access-groups-rename')).toBe(ID_B);
+    expect(page.count('rename')).toBe(0);
+  });
+
+  it('a 404 says error.changed and reloads the list', async () => {
+    const page = loadPage({ replies: { rename: { status: 404, body: { success: false, error: 'not_found' } } } });
+    await page.init();
+    const before = page.count('list');
+    button(page.row(ID_A), 'Rename group').click();
+    expect(page.doc.getElementById('rag-access-groups-rename-input'), 'the rename editor is open').not.toBeNull();
+    type(page.doc.getElementById('rag-access-groups-rename-input')!, 'group-z');
+    button(page.row(ID_A), 'Save name').click();
+    await flush();
+    expect(page.statusRegion().textContent).toContain('This item was changed by someone else.');
+    expect(page.count('list')).toBe(before + 1);
+  });
+});
+
+describe('Members region and member search (D-01, D-04, UI-SPEC decision 21)', () => {
+  async function openMembers(options: PageOptions = {}, id = ID_A) {
+    const page = loadPage(options);
+    await page.init();
+    button(page.row(id), 'Manage members').click();
+    await flush();
+    expect(page.root.querySelector('[data-access-groups-member-search]'), 'the members region is open').not.toBeNull();
+    return page;
+  }
+
+  function search(page: ReturnType<typeof loadPage>): FakeElement {
+    return page.root.querySelector('[data-access-groups-member-search]')!;
+  }
+
+  it('toggles the region with aria-expanded and aria-controls and moves focus to the search field', async () => {
+    const page = await openMembers();
+    const manage = page.row(ID_A).querySelector('[data-access-groups-manage]')!;
+    expect(manage.getAttribute('aria-expanded')).toBe('true');
+    expect(manage.textContent).toBe('Close members');
+    const region = page.doc.getElementById(manage.getAttribute('aria-controls')!)!;
+    expect(region).toBeTruthy();
+    expect(region.querySelector('h4')!.textContent).toBe('Members of group-a');
+    expect(page.doc.activeElement).toBe(search(page));
+    expect(region.textContent).toContain('Owners and admins see every document and do not need to be in a group.');
+    expect(region.textContent).toContain('Type at least 2 characters.');
+    expect(page.last('members').path.split('?')[0]).toBe('/api/rag/access-groups/' + ID_A + '/members');
+    expect(region.querySelector('table')!.textContent).toContain('member-a');
+  });
+
+  it('one region is open at a time; Close members and Escape return focus to the opening button', async () => {
+    const page = await openMembers();
+    button(page.row(ID_B), 'Manage members').click();
+    await flush();
+    expect(page.root.querySelectorAll('[data-access-groups-members-row]')).toHaveLength(1);
+    expect(page.row(ID_A).querySelector('[data-access-groups-manage]')!.getAttribute('aria-expanded')).toBe('false');
+    search(page).dispatch('keydown', { key: 'Escape' });
+    expect(page.root.querySelectorAll('[data-access-groups-members-row]')).toHaveLength(0);
+    expect(page.doc.activeElement!.getAttribute('data-access-groups-manage')).toBe(ID_B);
+    button(page.row(ID_A), 'Manage members').click();
+    await flush();
+    button(page.groupsPanel(), 'Close members').click();
+    expect(page.doc.activeElement!.getAttribute('data-access-groups-manage')).toBe(ID_A);
+  });
+
+  it('searches only after 2 characters and 400 ms, with the group id in the query', async () => {
+    const page = await openMembers();
+    type(search(page), 'm');
+    await page.advance(1000);
+    expect(page.count('candidates')).toBe(0);
+    expect(page.groupsPanel().textContent).toContain('Type at least 2 characters.');
+    type(search(page), 'me');
+    await page.advance(399);
+    expect(page.count('candidates')).toBe(0);
+    await page.advance(1);
+    expect(page.count('candidates')).toBe(1);
+    expect(page.last('candidates').query.get('q')).toBe('me');
+    expect(page.last('candidates').query.get('groupId')).toBe(ID_A);
+    const results = page.root.querySelector('[data-access-groups-results]')!;
+    const items = results.querySelectorAll('li');
+    expect(items).toHaveLength(2);
+    expect(items[0]!.textContent).toContain('In this group');
+    expect(items[0]!.querySelector('button')).toBeNull();
+    expect(button(items[1]!, 'Add member').getAttribute('aria-label')).toBe('Add member: member-b');
+  });
+
+  it('Enter runs the search at once; a spinner with text shows while earlier results stay', async () => {
+    const page = await openMembers({ hold: ['candidates'] });
+    type(search(page), 'me');
+    search(page).dispatch('keydown', { key: 'Enter' });
+    await flush();
+    expect(page.count('candidates')).toBe(1);
+    page.release('candidates', { status: 200, body: { success: true, candidates: [{ userId: USER_2, displayName: 'member-b', email: '', already: false }] } });
+    await flush();
+    type(search(page), 'mem');
+    await page.advance(400);
+    const region = page.root.querySelector('[data-access-groups-members-row]')!;
+    expect(region.textContent).toContain('Searching members…');
+    expect(region.querySelector('.loading')).toBeTruthy();
+    expect(page.root.querySelector('[data-access-groups-results]')!.textContent).toContain('member-b');
+    page.release('candidates', { status: 200, body: { success: true, candidates: [] } });
+    await flush();
+    expect(region.textContent).toContain('No member of this workspace matches "mem".');
+  });
+
+  it('lists at most 20 results', async () => {
+    const candidates = Array.from({ length: 25 }, (_, i) => ({ userId: '00000000-0000-4000-8000-1000000000' + String(i).padStart(2, '0'), displayName: 'member-' + i, email: '', already: false }));
+    const page = await openMembers({ replies: { candidates: { status: 200, body: { success: true, candidates } } } });
+    type(search(page), 'member');
+    await page.advance(400);
+    expect(page.root.querySelector('[data-access-groups-results]')!.querySelectorAll('li')).toHaveLength(20);
+  });
+
+  it('Add member acts at once, announces member.added and reloads the members', async () => {
+    const page = await openMembers({
+      replies: {
+        members: [
+          { status: 200, body: { success: true, members: [] } },
+          { status: 200, body: { success: true, members: [{ userId: USER_2, displayName: 'member-b', email: '', addedAt: '2026-11-26T10:00:00.000Z' }] } },
+        ],
+      },
+    });
+    expect(page.root.querySelector('[data-access-groups-members-empty]')!.textContent).toBe(
+      'No members yet. Until someone is added, only admins see documents restricted to this group.',
+    );
+    type(search(page), 'me');
+    await page.advance(400);
+    button(page.root.querySelector('[data-access-groups-results]')!, 'Add member').click();
+    await flush();
+    expect(page.count('addMember')).toBe(1);
+    expect(page.body('addMember')).toEqual({ userId: USER_2 });
+    expect(page.statusRegion().textContent).toBe('member-b added to group-a. They can see its documents from their next question.');
+    expect(page.root.querySelector('[data-access-groups-members]')!.textContent).toContain('member-b');
+    expect(page.root.querySelector('[data-access-groups-results]')!.querySelectorAll('button')).toHaveLength(0);
+    expect(page.row(ID_A).querySelector('td')!.textContent).toBe('5');
+  });
+
+  it('Remove member acts at once and announces member.removed', async () => {
+    const page = await openMembers();
+    const remove = button(page.root.querySelector('[data-access-groups-members]')!, 'Remove member');
+    expect(remove.getAttribute('aria-label')).toBe('Remove member: member-a');
+    remove.click();
+    await flush();
+    expect(page.last('removeMember').path.split('?')[0]).toBe('/api/rag/access-groups/' + ID_A + '/members/' + USER_1);
+    expect(page.last('removeMember').init.method).toBe('DELETE');
+    expect(page.statusRegion().textContent).toBe('member-a removed from group-a. They lose access through this group from their next question.');
+    expect(page.root.querySelector('[data-access-groups-members-empty]')).toBeTruthy();
+    expect(page.doc.activeElement).toBe(search(page));
+    expect(page.row(ID_A).querySelector('td')!.textContent).toBe('3');
+  });
+
+  it.each([
+    ['member_exists', 409, 'This person is already in the group. The list has been reloaded.'],
+    ['not_a_workspace_member', 400, 'This person is no longer a member of the workspace. The list has been reloaded.'],
+  ])('%s shows its message and reloads', async (code, statusCode, message) => {
+    const page = await openMembers({ replies: { addMember: { status: statusCode, body: { success: false, error: code } } } });
+    type(search(page), 'me');
+    await page.advance(400);
+    const membersBefore = page.count('members');
+    const candidatesBefore = page.count('candidates');
+    button(page.root.querySelector('[data-access-groups-results]')!, 'Add member').click();
+    await flush();
+    expect(page.statusRegion().textContent).toContain(message);
+    expect(page.count('members')).toBe(membersBefore + 1);
+    expect(page.count('candidates')).toBe(candidatesBefore + 1);
+  });
+
+  it('a member without a display name shows the e-mail, or the id in font-mono', async () => {
+    const page = await openMembers({
+      replies: {
+        members: {
+          status: 200,
+          body: {
+            success: true,
+            members: [
+              { userId: USER_1, displayName: '', email: 'a@example.org', addedAt: '2026-11-26T09:30:00.000Z' },
+              { userId: USER_3, displayName: null, email: null, addedAt: '2026-11-26T09:30:00.000Z' },
+            ],
+          },
+        },
+      },
+    });
+    const rows = page.root.querySelector('[data-access-groups-members]')!.querySelectorAll('tbody tr');
+    expect(rows[0]!.querySelector('th')!.textContent).toBe('a@example.org');
+    const code = rows[1]!.querySelector('th code')!;
+    expect(code.textContent).toBe(USER_3);
+    expect(code.className).toContain('font-mono');
+    expect(rows[0]!.querySelector('time')!.getAttribute('datetime')).toBe('2026-11-26T09:30:00.000Z');
+  });
+
+  it('markup in member names creates no element and no link', async () => {
+    const page = await openMembers({
+      replies: {
+        members: { status: 200, body: { success: true, members: [{ userId: USER_1, displayName: XSS_PAYLOAD, email: '', addedAt: null }] } },
+        candidates: { status: 200, body: { success: true, candidates: [{ userId: USER_2, displayName: '', email: 'javascript:' + XSS_PAYLOAD, already: false }] } },
+      },
+    });
+    type(search(page), 'me');
+    await page.advance(400);
+    expect(injectedElements(page.doc)).toEqual([]);
+    expect(page.root.querySelectorAll('a')).toHaveLength(0);
+    expect(page.root.querySelector('[data-access-groups-members]')!.textContent).toContain(XSS_PAYLOAD);
+    expect(page.doc.innerHtmlWrites).toBe(0);
+  });
+});
