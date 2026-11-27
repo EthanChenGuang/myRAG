@@ -95,6 +95,7 @@ import {
   type PromptBudgetPlan,
   type PromptBudgetTrace,
 } from '@/lib/rag';
+import type { AnswerChecks } from '@/lib/rag-eval/contracts.generated';
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
 import type { JSONValue } from '@ai-sdk/provider';
@@ -196,6 +197,18 @@ function uiMessageText(message: { parts?: ReadonlyArray<{ type?: string; text?: 
     .map((part) => (part.type === 'text' && typeof part.text === 'string' ? part.text : textOnly ? '' : JSON.stringify(part)))
     .filter((text) => text.length > 0)
     .join('\n');
+}
+
+// D-86: the part of the trace stored in rag_answer_records.checks.prompt_budget
+function promptBudgetSummary(trace: PromptBudgetTrace): NonNullable<AnswerChecks['prompt_budget']> {
+  return {
+    parts: trace.parts,
+    window: trace.window,
+    dropped_documents: trace.dropped_documents,
+    dropped_history_turns: trace.dropped_history_turns,
+    near_limit: trace.near_limit,
+    status: trace.status,
+  };
 }
 
 // D-86: the prompt_budget span; part sizes, window and decisions as counts and fixed words, never text
@@ -4055,6 +4068,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           finishRagTrace();
           return promptBudgetExceededResponse(budgetLanguage);
         }
+        recordPromptBudgetSpan(ragTrace?.collector, promptBudgetFinal.trace);
         if (promptBudgetFinal.action === 'dropped_history') {
           const regionStart = messagesForModel.length - budgetNoteMessages(promptBudgetPlan).length - budgetModelHistory(convertedMessages, promptBudgetPlan).length;
           const rebuilt = { keptHistory: promptBudgetFinal.keptHistory, standaloneNote: promptBudgetFinal.standaloneNote };
@@ -4677,6 +4691,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           requestLanguage: userLanguage,
           ...(answerTurn.config.anyNonDefault ? answerFinishFields(answerTurn, retrievalResult) : {}),
           ...(calcRun ? { calc: { primary: calcRun.primary, items: calcRun.checks, reviewReasons: calcRun.reviewReasons } } : {}),
+          ...(promptBudgetFinal ? { promptBudget: promptBudgetSummary(promptBudgetFinal.trace) } : {}),
         });
       };
 
