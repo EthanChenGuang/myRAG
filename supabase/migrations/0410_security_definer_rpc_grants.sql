@@ -1024,6 +1024,11 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_review_items_enqueue_re_review(text, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_review_items_enqueue_re_review(text, jsonb) TO service_role;
   END IF;
+  -- 0990 (quick task): review items owner trigger function (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_review_items_fill_owner()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_review_items_fill_owner() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_review_items_fill_owner() TO service_role;
+  END IF;
 END
 $service_role_only$;
 
