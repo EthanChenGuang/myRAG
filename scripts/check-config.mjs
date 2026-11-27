@@ -16,6 +16,9 @@ export const TRACKED = {
 };
 export const TRACKED_LOCATIONS = Object.keys(TRACKED);
 const MANIFEST_PATH = 'scripts/rag/env-manifest.json';
+export const VENDOR_INVENTORY_PATH = 'config/rag/vendor-data-flow.json';
+/** D-20: providers inside the deployment boundary (app signing secrets, the deployment's own sidecar, the metrics-only monitor webhook). */
+export const IN_DEPLOYMENT_PROVIDERS = new Set(['app', 'sidecar', 'webhook']);
 const ENV_LOCAL = '.env.local';
 export const RAG_AFFECTING_PATH = 'src/lib/rag/config-gate/rag-affecting.generated.json';
 const WRITE_RAG_AFFECTING = 'node scripts/check-config.mjs --write-rag-affecting';
@@ -168,6 +171,7 @@ export function checkConfig(root) {
 
   violations.push(...checkModelMappings(root, texts));
   if (manifest) violations.push(...checkRagAffectingFile(root, manifest));
+  violations.push(...checkVendorInventory(root, vars));
 
   const effectiveEnv = loadEffectiveEnv(root);
   const ingestion = checkIngestionSwitches(effectiveEnv);
@@ -175,6 +179,37 @@ export function checkConfig(root) {
 
   violations.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.location < b.location ? -1 : a.location > b.location ? 1 : 0));
   return { violations, warnings: ingestion.warnings, varCount: vars.length };
+}
+
+/** D-20: the provider ids config/rag/vendor-data-flow.json covers (vendor ids and their providers lists). */
+function inventoryProviders(root) {
+  const file = path.join(root, VENDOR_INVENTORY_PATH);
+  if (!fs.existsSync(file)) return { ids: new Set(), problems: [] };
+  let inventory;
+  try {
+    inventory = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    return { ids: new Set(), problems: [{ name: '-', location: 'manifest', message: `${VENDOR_INVENTORY_PATH} is not valid JSON: ${error.message}` }] };
+  }
+  const ids = new Set();
+  for (const entry of Array.isArray(inventory?.vendors) ? inventory.vendors : []) {
+    if (typeof entry?.vendor === 'string') ids.add(entry.vendor);
+    for (const provider of Array.isArray(entry?.providers) ? entry.providers : []) if (typeof provider === 'string') ids.add(provider);
+  }
+  return { ids, problems: [] };
+}
+
+/** D-20: every managed url or secret variable names a provider with a vendor data-flow entry, unless it stays inside the deployment. */
+export function checkVendorInventory(root, vars) {
+  const { ids, problems } = inventoryProviders(root);
+  const out = [...problems];
+  for (const entry of vars) {
+    if (!entry || entry.status !== 'managed' || (entry.type !== 'url' && entry.type !== 'secret')) continue;
+    const provider = entry.provider;
+    if (!isNonEmptyString(provider) || IN_DEPLOYMENT_PROVIDERS.has(provider) || ids.has(provider)) continue;
+    out.push(metadataViolation(entry.name, `provider ${provider} has no vendor data-flow entry in ${VENDOR_INVENTORY_PATH}`));
+  }
+  return out;
 }
 
 function metadataViolation(name, message) {
