@@ -443,6 +443,8 @@ export interface RetrievalResult {
   searchesCounted?: number;
   /** Phase 6.2 D-21: absent while RAG_SPECULATIVE_RETRIEVAL is off. */
   speculative?: SpeculativeTrace;
+  /** D-46: set only when a source recheck completed; the trace's stale_index_drop is its dropped count. */
+  sourceRecheck?: { checked: number; dropped: number };
   /**
    * D-25, A-06: server-side only. The access_groups of each document the result used, read in one batched query while
    * RAG_DOC_ACCESS_GROUPS is on (the scope's mode is not off); absent while off or when the read failed. Set as a non-enumerable
@@ -457,6 +459,4 @@ export interface IdentifierFilterSummary {
   resolved: number;
   fallback: boolean;
   nearMissDropped: number;
-  /** D-46: set only when a source recheck completed; the trace's stale_index_drop is its dropped count. */
-  sourceRecheck?: { checked: number; dropped: number };
 }
