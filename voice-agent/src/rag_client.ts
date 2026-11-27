@@ -25,6 +25,39 @@ export interface RAGResponse {
     source_images: SourceImage[];
     /** Retrieval trace id of the app answer; absent from older apps. */
     traceId?: string;
+    /** Phase 5.2.1 D-76: the calculation offer for this turn; absent when the app does not offer it. */
+    calc?: VoiceCalcOffer;
+}
+
+export interface VoiceCalcSource {
+    alias: string;
+    chunk_id: string;
+}
+
+export interface VoiceCalcOffer {
+    offered: true;
+    check: boolean;
+    sources: VoiceCalcSource[];
+    tool_schema: Record<string, unknown>;
+}
+
+export interface VoiceCalcResult {
+    status: string;
+    value?: string | null;
+    [key: string]: unknown;
+}
+
+export interface VoiceCalcTrace {
+    origin: 'tool';
+    request: Record<string, unknown>;
+    result: VoiceCalcResult | null;
+    anchor_offset: number | null;
+}
+
+export interface VoiceCalcCheck {
+    checks: Array<Record<string, unknown>>;
+    notices: unknown[];
+    replacement: { start: number; end: number; text: string } | null;
 }
 
 export interface VoiceTiming {
@@ -37,8 +70,38 @@ export interface RAGClientOptions {
     contextLength?: number | null;
 }
 
-export function parseContextLength(_value: string | undefined): number | null {
-    return null;
+/** The voice-rag body accepts modelContextLength from 1,024 to 10,000,000 tokens; anything else counts as unset. */
+export const CONTEXT_LENGTH_MIN = 1024;
+export const CONTEXT_LENGTH_MAX = 10_000_000;
+
+export function parseContextLength(value: string | undefined): number | null {
+    if (typeof value !== 'string') return null;
+    const text = value.trim();
+    if (!/^[0-9]+$/.test(text)) return null;
+    const n = Number(text);
+    return Number.isSafeInteger(n) && n >= CONTEXT_LENGTH_MIN && n <= CONTEXT_LENGTH_MAX ? n : null;
+}
+
+const ALIAS_RE = /^S[1-9][0-9]{0,2}$/;
+const CALC_TIMEOUT_MS = 10000;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseCalcOffer(value: unknown): VoiceCalcOffer | null {
+    if (!isPlainObject(value) || value.offered !== true || typeof value.check !== 'boolean' || !isPlainObject(value.tool_schema)) return null;
+    if (!Array.isArray(value.sources)) return null;
+    const sources: VoiceCalcSource[] = [];
+    for (const source of value.sources) {
+        if (!isPlainObject(source) || typeof source.alias !== 'string' || !ALIAS_RE.test(source.alias) || typeof source.chunk_id !== 'string') return null;
+        sources.push({ alias: source.alias, chunk_id: source.chunk_id });
+    }
+    return { offered: true, check: value.check, sources, tool_schema: value.tool_schema };
+}
+
+function calcUrl(apiUrl: string): string {
+    return apiUrl.replace(/\/voice-rag(?=$|[?#])/, '/voice-calc');
 }
 
 export interface HistoryTurn {
@@ -97,11 +160,50 @@ export class RAGClient {
     private apiKey: string;
     private timingTimeoutMs: number;
     private timingFailures = 0;
+    private calcFailures = 0;
+    private contextLength: number | null;
 
     constructor(apiUrl: string, apiKey: string, options: RAGClientOptions = {}) {
         this.apiUrl = apiUrl;
         this.apiKey = apiKey;
         this.timingTimeoutMs = options.timingTimeoutMs && options.timingTimeoutMs > 0 ? options.timingTimeoutMs : DEFAULT_TIMING_TIMEOUT_MS;
+        if (options.contextLength !== undefined) {
+            this.contextLength = options.contextLength;
+        } else {
+            const raw = process.env.VOICE_AGENT_CONTEXT_LENGTH;
+            this.contextLength = parseContextLength(raw);
+            if (this.contextLength === null && raw !== undefined && raw.trim() !== '') {
+                console.warn('[RAG] VOICE_AGENT_CONTEXT_LENGTH ignored: expected an integer from 1024 to 10000000');
+            }
+        }
+    }
+
+    /** D-87: the agent model's window when VOICE_AGENT_CONTEXT_LENGTH is set, else null. */
+    getContextLength(): number | null {
+        return this.contextLength;
+    }
+
+    private headers(scopeToken?: string): Record<string, string> {
+        const headers: Record<string, string> = {
+            'x-api-key': this.apiKey,
+            'Content-Type': 'application/json'
+        };
+        if (scopeToken) {
+            headers['x-rag-scope-token'] = scopeToken;
+        }
+        return headers;
+    }
+
+    private async postCalc(action: 'execute' | 'check', body: Record<string, unknown>, scopeToken?: string): Promise<Record<string, unknown> | null> {
+        try {
+            const response = await axios.post(calcUrl(this.apiUrl), { action, ...body }, { headers: this.headers(scopeToken), timeout: CALC_TIMEOUT_MS });
+            return isPlainObject(response.data) ? response.data : null;
+        } catch (error) {
+            this.calcFailures++;
+            const status = axios.isAxiosError(error) ? error.response?.status ?? null : null;
+            console.debug('[RAG] Voice calc call failed', { action, status, failures: this.calcFailures });
+            return null;
+        }
     }
 
     /** Fire-and-forget: posts the voice text timing for a retrieval trace (D-39). Never throws. */
@@ -127,18 +229,35 @@ export class RAGClient {
     }
 
     calcFailureCount(): number {
-        return 0;
+        return this.calcFailures;
     }
 
-    async executeCalc(_request: unknown, _question: string, _sources: unknown[], _scopeToken?: string): Promise<unknown> {
+    /** D-76: evaluates one calculate call on the server; null on any failure (counted, logged without text). */
+    async executeCalc(request: Record<string, unknown>, question: string, sources: VoiceCalcSource[], scopeToken?: string): Promise<VoiceCalcResult | null> {
+        const data = await this.postCalc('execute', { question, request, sources }, scopeToken);
+        if (data === null) return null;
+        const result = data.result;
+        if (isPlainObject(result) && typeof result.status === 'string') return result as VoiceCalcResult;
+        this.calcFailures++;
+        console.debug('[RAG] Voice calc answer malformed', { action: 'execute', failures: this.calcFailures });
         return null;
     }
 
-    async checkCalc(_answerText: string, _traces: unknown[], _question: string, _sources: unknown[], _scopeToken?: string): Promise<unknown> {
+    /** D-76: recomputes the turn's traces against its text; null when the check is off or the call failed. */
+    async checkCalc(answerText: string, traces: VoiceCalcTrace[], question: string, sources: VoiceCalcSource[], scopeToken?: string): Promise<VoiceCalcCheck | null> {
+        const data = await this.postCalc('check', { question, answer_text: answerText, traces, sources }, scopeToken);
+        if (data === null || data.check === null) return null;
+        const check = data.check;
+        if (isPlainObject(check) && Array.isArray(check.checks)) {
+            const replacement = isPlainObject(check.replacement) ? (check.replacement as VoiceCalcCheck['replacement']) : null;
+            return { checks: check.checks as VoiceCalcCheck['checks'], notices: Array.isArray(check.notices) ? check.notices : [], replacement };
+        }
+        this.calcFailures++;
+        console.debug('[RAG] Voice calc answer malformed', { action: 'check', failures: this.calcFailures });
         return null;
     }
 
-    async query(userQuery: string, scopeToken?: string, userId?: string, history?: HistoryTurn[], _historyTokens?: number): Promise<RAGQueryResult> {
+    async query(userQuery: string, scopeToken?: string, userId?: string, history?: HistoryTurn[], historyTokens?: number): Promise<RAGQueryResult> {
         try {
             console.log(`[RAG] Querying internal API: "${userQuery}"`);
 
@@ -157,6 +276,12 @@ export class RAGClient {
             };
             if (history !== undefined) {
                 body.history = boundHistory(history);
+            }
+            if (this.contextLength !== null) {
+                body.modelContextLength = this.contextLength;
+                body.historyTokens = typeof historyTokens === 'number' && Number.isSafeInteger(historyTokens) && historyTokens > 0
+                    ? Math.min(historyTokens, CONTEXT_LENGTH_MAX)
+                    : 0;
             }
 
             const response = await axios.post(this.apiUrl, body, { headers });
@@ -188,10 +313,11 @@ export class RAGClient {
 
             // Format context for LLM
             console.log(`[RAG] Found ${results.length} context chunks.`);
+            const calc = parseCalcOffer(response.data.calc);
             const serverContext: unknown = response.data.context;
             const contextText = typeof serverContext === 'string' && serverContext.trim() !== ''
                 ? serverContext
-                : results.map(r => `[Context from document ${r.document_id}]: ${r.content}`).join('\n\n');
+                : results.map((r, i) => `${calc ? `[S${i + 1}] ` : ''}[Context from document ${r.document_id}]: ${r.content}`).join('\n\n');
 
             // Format sources for UI
             const sources = results.map(r => {
@@ -215,7 +341,8 @@ export class RAGClient {
                 sources: uniqueSources,
                 source_images: sourceImages,
                 serverQueryRewrite,
-                ...traceIdOf(response.data)
+                ...traceIdOf(response.data),
+                ...(calc ? { calc } : {})
             };
 
         } catch (error) {
