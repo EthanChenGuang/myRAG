@@ -289,3 +289,64 @@ describe('chat route strict mode with the prompt-injection defense on (05.1-06)'
     expect(systemTextOf(h.capture.calls[0])).toContain(INJECTED);
   });
 });
+
+describe('chat route strict mode with a scope-gate out_of_scope result (Phase 6.2 D-26)', () => {
+  beforeEach(() => {
+    h.capture.reset();
+    h.retrieval.mockReset();
+    h.retrieval.mockResolvedValue(emptyRetrieval());
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.doUnmock('@/lib/rag');
+  });
+
+  async function askOutOfScope(webSearch: boolean): Promise<string> {
+    vi.resetModules();
+    vi.doMock('@/lib/rag', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@/lib/rag')>();
+      return {
+        ...actual,
+        runRetrieval: async (input: Parameters<typeof actual.runRetrieval>[0]) => {
+          const result = await actual.runRetrieval(input);
+          return {
+            ...result,
+            status: 'empty' as const,
+            reason: 'out_of_scope',
+            context: '',
+            usedDocuments: [],
+            refusalCandidate: true,
+            skipReason: 'out_of_scope' as const,
+            scopeGate: { label: 'out_of_scope' as const, score: 0.1, negative_score: 0.5, reason: 'negative_closer' as const, centroid_count: 2, latency_ms: 1 },
+          };
+        },
+      };
+    });
+    await installChatPipeline(h);
+    const { POST } = await import('@/app/api/chat/route');
+    const response = await POST(
+      chatRequest({
+        messages: [{ role: 'user', content: 'Which colour do the sample widgets have?' }],
+        data: { ragMode: 'strict', settings: { webSearch } },
+      }),
+    );
+    return readSse(response);
+  }
+
+  it('webSearch off: answers Information Not Available without a model call and without a scope label', async () => {
+    const body = await askOutOfScope(false);
+    expect(body).toContain('Information Not Available');
+    expect(body).not.toContain('scopeGate');
+    expect(h.capture.streamText).not.toHaveBeenCalled();
+  });
+
+  it('webSearch on: the model is called with the webSearch tool, as today', async () => {
+    const body = await askOutOfScope(true);
+    expect(body).not.toContain('Information Not Available');
+    expect(h.capture.streamText).toHaveBeenCalledTimes(1);
+    expect(body).not.toContain('scopeGate');
+  });
+});
