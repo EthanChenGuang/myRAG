@@ -6,7 +6,9 @@ import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
 import { RETRIEVAL_BACKEND_IDS, type BackendId, type BackendLegs, type RankedHit } from '@/lib/rag/backend/types';
 import type { StoreLegs, VectorStore, VectorSyncTarget } from '@/lib/rag/sync/stores/types';
 import type { TenantScope } from '@/lib/rag/tenant/scope';
-import type { RetrievalBackendSelection } from '@/lib/rag/types';
+import type { CitationRecord } from '@/lib/rag-eval/contracts.generated';
+import type { SemanticCache } from '@/lib/rag/cache/types';
+import type { RetrievalBackendSelection, RetrievalCacheContext, RetrievalResult } from '@/lib/rag/types';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../../eval/harness/fake-edge.mts';
 import { embedText } from '../../../eval/harness/fixture-embedder.mts';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../../eval/harness/pglite-supabase.mts';
@@ -155,12 +157,118 @@ export interface CanaryEnv {
   /** Drains, then reconciles until every (target, profile, tenant) row is ready; a no-op on pgvector. */
   settle(): Promise<void>;
   sql<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]>;
+  /**
+   * One request through runRetrieval (RAG_PIPELINE=v2, RAG_RETRIEVAL_BACKEND set to the backend under test). With the cache option the
+   * query layer and the Phase 6 semantic cache run (deterministic fake query LLM, the semantic_cache stage, store-after awaited);
+   * without it RAG_SEMANTIC_CACHE is off and the query layer stays off.
+   */
+  ask(scope: TenantScope, question: string, options?: CanaryAskOptions): Promise<CanaryAnswer>;
   close(): Promise<void>;
 }
 
 export interface CreateCanaryEnvOptions {
   /** Default true: seeds the tenants' canary documents through ingest. */
   seed?: boolean;
+  /** Plan 07-28: ask() runs with RAG_SEMANTIC_CACHE set to this backend. Absent: the cache is off and the factory is unchanged. */
+  cache?: 'pgvector';
+}
+
+export type CanaryAskProfile = 'chat' | 'embed' | 'voice';
+
+export interface CanaryAskOptions {
+  profile?: CanaryAskProfile;
+  /** RAG_RETRIEVAL_BACKEND for this request; defaults to the backend under test. */
+  backend?: BackendId;
+  /** RAG_RETRIEVAL_BACKEND_VOICE for this request; undefined leaves it unset (its default). */
+  voiceBackend?: BackendId;
+  /** Default true: a miss with a cache ticket is stored through the Phase 6 store-after path before ask() returns. */
+  store?: boolean;
+  /** Test-only: the cache the stage and the store use instead of the one RAG_SEMANTIC_CACHE selects (negative controls). */
+  semanticCache?: SemanticCache | null;
+}
+
+export interface CanaryAnswer {
+  scope: TenantScope;
+  result: RetrievalResult;
+  /** The semantic_cache stage outcome: hit, miss (checked, nothing served), bypass (stage recorded but not checked) or off (no stage). */
+  cache: 'hit' | 'miss' | 'bypass' | 'off';
+  /** The served answer text: the cached text on a hit, the stub generator's text otherwise. */
+  answerText: string;
+  /** Chunk ids the answer rests on: the cached citations' chunk ids on a hit, the candidates otherwise. */
+  chunkIds: string[];
+  /** Document ids of the answer's sources (cached sources on a hit, the context's documents otherwise). */
+  documentIds: string[];
+  /** Text a leak would show in: the answer text plus every candidate's content. */
+  texts: string[];
+  /** The search stage's backend, or null when no search ran (a hit). */
+  backend: string | null;
+  /** Whether store-after ran for this request (a miss with a ticket and store on). */
+  storeAttempted: boolean;
+  /** Every admin RPC name the request (and its store) called, in order. */
+  rpcCalls: string[];
+}
+
+/** The request context the chat and embed routes hand the cache stage; the template hash is a fixed placeholder. */
+export const CANARY_CACHE_CONTEXT: RetrievalCacheContext = {
+  generatorModel: 'provider/canary-model',
+  systemPromptHash: crypto.createHash('sha256').update('You answer from the knowledge base only.\n\n{{context}}', 'utf8').digest('hex'),
+  webSearch: false,
+  mcpTools: false,
+  chatId: null,
+};
+
+function recordingRpc(inner: SupabaseClient, calls: string[]): SupabaseClient {
+  return new Proxy(inner, {
+    get(target, prop, receiver) {
+      if (prop === 'rpc') {
+        return (fn: string, args?: unknown, options?: unknown) => {
+          calls.push(fn);
+          return (target.rpc as (...a: unknown[]) => unknown).call(target, fn, args, options);
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+function quoteHash(text: string): string {
+  return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+/** The stub generator: an answer naming every candidate's content, and one chunk-alias citation per document (chat only, as the route). */
+function stubAnswer(result: RetrievalResult, profile: CanaryAskProfile): { text: string; citations: CitationRecord[] } {
+  const candidates = result.candidates;
+  const text = candidates.length > 0 ? `Canary answer: ${candidates.map((row) => row.content.trim()).join(' | ')}` : 'Canary answer: nothing found.';
+  if (profile !== 'chat') return { text, citations: [] };
+  const names = new Map((result.blocks ?? []).map((block) => [block.documentId, block.documentName] as const));
+  const byDocument = new Map<string, { name: string; chunkIds: string[]; quote: string }>();
+  for (const row of candidates) {
+    const known = byDocument.get(row.document_id);
+    if (known) known.chunkIds.push(String(row.chunk_id));
+    else byDocument.set(row.document_id, { name: names.get(row.document_id) ?? 'canary-document', chunkIds: [String(row.chunk_id)], quote: row.content.trim().slice(0, 200) || 'canary' });
+  }
+  const citations = [...byDocument].map(([documentId, doc], index) => ({
+    alias: `S${index + 1}`,
+    chunkIds: doc.chunkIds,
+    documentId,
+    documentName: doc.name,
+    documentVersion: null,
+    n: index + 1,
+    page: null,
+    quote: doc.quote,
+    quoteHash: quoteHash(doc.quote),
+    sectionPath: null,
+    strategy: 'chunk-alias' as const,
+  }));
+  return { text, citations };
+}
+
+function cacheOutcome(result: RetrievalResult): CanaryAnswer['cache'] {
+  if (result.cacheHit) return 'hit';
+  const stage = result.stages.find((row) => row.name === 'semantic_cache');
+  if (!stage) return 'off';
+  return stage.status === 'ok' ? 'miss' : 'bypass';
 }
 
 function lowerUuid(): string {
@@ -260,6 +368,9 @@ export async function createCanaryEnv(backend: BackendId, mode: DeploymentMode, 
   const tenantKeys = new Set<string>();
   let store: VectorStore | null = null;
   const backendConfig: BackendConfig = { default: backend, voice: 'pgvector', maxLagSeconds: 300 };
+  const cacheBackend = options.cache ?? null;
+  const { createFakeQueryLlm } = await import('../../../eval/harness/fake-query-llm.mts');
+  const queryLlm = createFakeQueryLlm({ table: { version: 1, entries: [] } });
 
   const drain = async () => {
     if (!store) return;
@@ -340,6 +451,88 @@ export async function createCanaryEnv(backend: BackendId, mode: DeploymentMode, 
         filters: { currentOnly: true },
         signal: new AbortController().signal,
       });
+    },
+    async ask(scope, question, askOptions = {}) {
+      const profile = askOptions.profile ?? 'chat';
+      const [{ runRetrieval }, { scheduleCacheStore, cacheSourcesFromResult }] = await Promise.all([
+        import('@/lib/rag/pipeline'),
+        import('@/lib/rag/cache/store-after'),
+      ]);
+      const current = deps.getRagDeps();
+      const previous = {
+        ragEnv: current.ragEnv,
+        rawPipelineEnv: current.rawPipelineEnv,
+        adminClient: current.adminClient,
+        queryLlm: current.queryLlm,
+        semanticCache: current.semanticCache,
+      };
+      const baseEnv = current.ragEnv();
+      const calls: string[] = [];
+      deps.setRagDepsForTests({
+        ragEnv: () => ({
+          ...baseEnv,
+          RAG_PIPELINE: 'v2',
+          pipelineSourceHint: 'explicit',
+          RAG_LEXICAL_SEARCH: 'true',
+          RAG_RETRIEVAL_BACKEND: askOptions.backend ?? backend,
+          RAG_RETRIEVAL_BACKEND_VOICE: askOptions.voiceBackend,
+          RAG_QUERY_LAYER: cacheBackend ? 'true' : 'false',
+          RAG_SEMANTIC_CACHE: cacheBackend ?? 'off',
+          RAG_SEMANTIC_CACHE_EMBED_STORE: 'true',
+        }),
+        rawPipelineEnv: () => ({ RAG_PIPELINE: 'v2' }),
+        adminClient: () => recordingRpc(supabase, calls),
+        queryLlm: () => queryLlm,
+        ...(askOptions.semanticCache !== undefined ? { semanticCache: () => askOptions.semanticCache ?? null } : {}),
+      });
+      try {
+        const result = await runRetrieval({
+          scope,
+          query: question,
+          profile,
+          options: { ragMode: 'strict', webSearchEnabled: false },
+          signal: new AbortController().signal,
+          cacheContext: CANARY_CACHE_CONTEXT,
+          ...(profile === 'embed' ? { channel: 'embed' as const } : {}),
+        });
+        const hit = result.cacheHit;
+        const stub = stubAnswer(result, profile);
+        let storeAttempted = false;
+        if (!hit && result.cacheTicket && askOptions.store !== false) {
+          const pending: Promise<void>[] = [];
+          scheduleCacheStore(
+            {
+              scope,
+              ticket: result.cacheTicket,
+              traceId: `canary-${crypto.randomUUID()}`,
+              facts: { chatId: null, sourceImages: result.sourceImages.length > 0, retrievalStatus: result.status, answerText: stub.text, isRefusal: false },
+              citations: stub.citations,
+              sources: cacheSourcesFromResult(result),
+            },
+            { schedule: (task) => void pending.push(task()) },
+          );
+          storeAttempted = pending.length > 0;
+          await Promise.all(pending);
+        }
+        const search = result.stages.find((row) => row.name === 'search');
+        const candidateIds = result.candidates.map((row) => String(row.chunk_id));
+        return {
+          scope,
+          result,
+          cache: cacheOutcome(result),
+          answerText: hit ? hit.answer.answer_text : stub.text,
+          chunkIds: hit ? (hit.answer.citations ?? []).flatMap((citation) => citation.chunkIds) : candidateIds,
+          documentIds: hit
+            ? [...new Set([...(hit.answer.sources ?? []).map((row) => row.document_id), ...(hit.answer.source_versions ?? []).map((row) => row.document_id)])]
+            : [...new Set(result.candidates.map((row) => row.document_id))],
+          texts: [hit ? hit.answer.answer_text : stub.text, ...result.candidates.map((row) => row.content)],
+          backend: typeof search?.attributes?.backend === 'string' ? search.attributes.backend : null,
+          storeAttempted,
+          rpcCalls: [...calls],
+        };
+      } finally {
+        deps.setRagDepsForTests(previous);
+      }
     },
     queryVector: canaryVector,
     drain,
