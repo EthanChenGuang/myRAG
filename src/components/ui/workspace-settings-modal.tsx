@@ -16,7 +16,8 @@ import {
   Trash2,
   Edit2,
   X,
-  Check
+  Check,
+  Users
 } from 'lucide-react';
 import {
   Dialog,
@@ -35,6 +36,9 @@ import { cn } from '@/lib/utils';
 import { SystemPromptSettings, useOrganizationStore } from '@/lib/stores/organization-store';
 import styles from '@/components/ui/settings/styles/settings.module.css';
 import { useLanguage } from '@/components/providers/language-provider';
+import { AccessGroupsAdmin, showAccessGroupsTab } from '@/components/ui/access-groups-admin';
+import { accessGroupText } from '@/components/ui/access-group-labels';
+import { accessGroupsMineUrl, readAccessGroupsMine, ACCESS_GROUPS_TIMEOUT_MS } from '@/lib/stores/access-groups-store';
 
 interface WorkspaceSettingsModalProps {
   isOpen: boolean;
@@ -42,6 +46,7 @@ interface WorkspaceSettingsModalProps {
   organizationId: string;
   organizationName: string;
   userRole: 'owner' | 'admin' | 'member' | 'viewer';
+  isPersonal?: boolean;
 }
 
 const PRE_CONTEXT_PLACEHOLDER = `You are a helpful AI assistant for [YOUR TEAM/COMPANY].
@@ -62,8 +67,9 @@ export function WorkspaceSettingsModal({
   organizationId,
   organizationName,
   userRole,
+  isPersonal = false,
 }: WorkspaceSettingsModalProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { switchToPersonalWorkspace, fetchOrganizations } = useOrganizationStore();
   const [activeTab, setActiveTab] = useState('general');
   const [isLoading, setIsLoading] = useState(false);
@@ -86,6 +92,33 @@ export function WorkspaceSettingsModal({
 
   const canEdit = userRole === 'owner' || userRole === 'admin';
   const isOwner = userRole === 'owner';
+
+  // Access groups switch, as the server reports it for this workspace
+  const [accessGroupsEnabled, setAccessGroupsEnabled] = useState(false);
+  const roleMayManageAccess = showAccessGroupsTab({ enabled: true, userRole, isPersonal });
+  const showAccessTab = roleMayManageAccess && accessGroupsEnabled;
+
+  useEffect(() => {
+    setAccessGroupsEnabled(false);
+    if (!isOpen || !organizationId || !roleMayManageAccess) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ACCESS_GROUPS_TIMEOUT_MS);
+    fetch(accessGroupsMineUrl(organizationId), { signal: controller.signal, cache: 'no-store', credentials: 'same-origin' })
+      .then(async (response) => (response.ok ? readAccessGroupsMine(await response.json()) : null))
+      .then((mine) => {
+        if (mine && !controller.signal.aborted) setAccessGroupsEnabled(mine.enabled && !mine.personal);
+      })
+      .catch(() => undefined)
+      .finally(() => clearTimeout(timer));
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [isOpen, organizationId, roleMayManageAccess]);
+
+  useEffect(() => {
+    if (!showAccessTab && activeTab === 'access-groups') setActiveTab('general');
+  }, [showAccessTab, activeTab]);
 
   // Load current settings when modal opens
   useEffect(() => {
@@ -324,7 +357,7 @@ export function WorkspaceSettingsModal({
           <div className="flex-1 overflow-hidden">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full">
               <div className="px-6 pt-6 pb-0">
-                <TabsList className="grid w-full grid-cols-2 bg-transparent gap-2 p-0 mb-6">
+                <TabsList className={cn("grid w-full bg-transparent gap-2 p-0 mb-6", showAccessTab ? "grid-cols-3" : "grid-cols-2")}>
                   <TabsTrigger
                     value="general"
                     className={cn(
@@ -351,6 +384,21 @@ export function WorkspaceSettingsModal({
                     <Brain className="h-4 w-4" />
                     {t('aiBehavior')}
                   </TabsTrigger>
+                  {showAccessTab && (
+                    <TabsTrigger
+                      value="access-groups"
+                      className={cn(
+                        "flex items-center gap-2 px-4 py-3 rounded-xl",
+                        "data-[state=active]:bg-[#FFE0D0] data-[state=active]:dark:bg-[#2A2A2A]",
+                        "data-[state=active]:text-gray-900 data-[state=active]:dark:text-white",
+                        "data-[state=inactive]:text-gray-700 data-[state=inactive]:dark:text-gray-300",
+                        "data-[state=inactive]:hover:bg-[#FFE0D0] data-[state=inactive]:dark:hover:bg-[#2A2A2A]"
+                      )}
+                    >
+                      <Users className="h-4 w-4" aria-hidden="true" />
+                      {accessGroupText('tab.access', language)}
+                    </TabsTrigger>
+                  )}
                 </TabsList>
               </div>
 
@@ -667,6 +715,17 @@ export function WorkspaceSettingsModal({
                   </>
                 )}
               </TabsContent>
+
+              {showAccessTab && (
+                <TabsContent value="access-groups" className={cn(
+                  "space-y-6 mt-0 px-6 pb-6 overflow-y-scroll",
+                  "max-h-[calc(95vh-280px)] lg:max-h-[calc(650px-280px)]",
+                  "workspace-modal-scroll",
+                  styles.tabContent
+                )}>
+                  <AccessGroupsAdmin organizationId={organizationId} language={language} />
+                </TabsContent>
+              )}
             </Tabs>
           </div>
 
@@ -677,7 +736,7 @@ export function WorkspaceSettingsModal({
               onClick={onClose}
               disabled={isSaving || isUpdatingName || isDeleting}
             >
-              {canEdit ? t('cancel') : t('close')}
+              {canEdit && activeTab !== 'access-groups' ? t('cancel') : t('close')}
             </Button>
             {canEdit && activeTab === 'ai-behavior' && (
               <Button
