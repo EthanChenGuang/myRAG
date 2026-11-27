@@ -1,6 +1,10 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const { isSecretConfigEntry } = require('./config-server-security.js');
 
 const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -12,11 +16,17 @@ export const TRACKED = {
 };
 export const TRACKED_LOCATIONS = Object.keys(TRACKED);
 const MANIFEST_PATH = 'scripts/rag/env-manifest.json';
+export const VENDOR_INVENTORY_PATH = 'config/rag/vendor-data-flow.json';
+/** D-20: providers inside the deployment boundary (app signing secrets, the deployment's own sidecar, the metrics-only monitor webhook). */
+export const IN_DEPLOYMENT_PROVIDERS = new Set(['app', 'sidecar', 'webhook']);
 const ENV_LOCAL = '.env.local';
 export const RAG_AFFECTING_PATH = 'src/lib/rag/config-gate/rag-affecting.generated.json';
 const WRITE_RAG_AFFECTING = 'node scripts/check-config.mjs --write-rag-affecting';
 const NAME_PATTERN = '(?:NEXT_PUBLIC_)?RAG_[A-Z0-9_]+|LLAMACLOUD_[A-Z0-9_]+|LANGFUSE_[A-Z0-9_]+|VOYAGE_[A-Z0-9_]+|DEEPINFRA_[A-Z0-9_]+|COHERE_[A-Z0-9_]+|ANTHROPIC_[A-Z0-9_]+|WEAVIATE_[A-Z0-9_]+|QDRANT_[A-Z0-9_]+|OPENAI_EMBEDDING_MODEL';
 const SRC_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs']);
+const DEFAULTS_DECISION_PATH = 'eval/decisions/04.1-retrieval-defaults.json';
+export const METADATA_TYPES = ['bool', 'enum', 'number', 'string', 'secret', 'url'];
+const GENERATED_SECTION_LOADER = /<script\b[^>]*\bsrc=["'][^"']*rag-panels\/rag-pipeline\.js["']/;
 
 function presenceRegex(name) {
   return new RegExp(`(?<![A-Z0-9_])${name}(?![A-Z0-9_])`);
@@ -88,6 +98,11 @@ export function checkConfig(root) {
     violations.push({ name: '-', location: 'manifest', message: 'manifest lists zero variables' });
   }
 
+  const metadataContext = {
+    byName: new Map(vars.filter((entry) => entry && typeof entry.name === 'string').map((entry) => [entry.name, entry])),
+    initEnvText: texts['init-env'] ?? '',
+    implicitEmpty: implicitInTemplates(root),
+  };
   const seen = new Set();
   const manifestNames = new Set();
   for (const entry of vars) {
@@ -118,10 +133,14 @@ export function checkConfig(root) {
         violations.push({ name, location: 'manifest', message: `unknown knownGaps location ${JSON.stringify(gap)}` });
       }
     }
+    const metadataViolations = status === 'managed' ? checkEntryMetadata(entry, metadataContext) : [];
+    violations.push(...metadataViolations);
     const regex = presenceRegex(name);
     for (const location of TRACKED_LOCATIONS) {
       if (!(location in texts)) continue;
-      const present = regex.test(texts[location]);
+      const present =
+        regex.test(texts[location]) ||
+        (location === 'config-ui' && metadataViolations.length === 0 && rendersGeneratedSection(entry, texts[location]));
       const isGap = gaps.includes(location);
       if (!present && !isGap) {
         violations.push({ name, location, message: 'missing from this location' });
@@ -151,7 +170,9 @@ export function checkConfig(root) {
   }
 
   violations.push(...checkModelMappings(root, texts));
+  violations.push(...checkRoutingModels(root, texts));
   if (manifest) violations.push(...checkRagAffectingFile(root, manifest));
+  violations.push(...checkVendorInventory(root, vars));
 
   const effectiveEnv = loadEffectiveEnv(root);
   const ingestion = checkIngestionSwitches(effectiveEnv);
@@ -159,6 +180,143 @@ export function checkConfig(root) {
 
   violations.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.location < b.location ? -1 : a.location > b.location ? 1 : 0));
   return { violations, warnings: ingestion.warnings, varCount: vars.length };
+}
+
+/** D-20: the provider ids config/rag/vendor-data-flow.json covers (vendor ids and their providers lists). */
+function inventoryProviders(root) {
+  const file = path.join(root, VENDOR_INVENTORY_PATH);
+  if (!fs.existsSync(file)) return { ids: new Set(), problems: [] };
+  let inventory;
+  try {
+    inventory = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    return { ids: new Set(), problems: [{ name: '-', location: 'manifest', message: `${VENDOR_INVENTORY_PATH} is not valid JSON: ${error.message}` }] };
+  }
+  const ids = new Set();
+  for (const entry of Array.isArray(inventory?.vendors) ? inventory.vendors : []) {
+    if (typeof entry?.vendor === 'string') ids.add(entry.vendor);
+    for (const provider of Array.isArray(entry?.providers) ? entry.providers : []) if (typeof provider === 'string') ids.add(provider);
+  }
+  return { ids, problems: [] };
+}
+
+/** D-20: every managed url or secret variable names a provider with a vendor data-flow entry, unless it stays inside the deployment. */
+export function checkVendorInventory(root, vars) {
+  const { ids, problems } = inventoryProviders(root);
+  const out = [...problems];
+  for (const entry of vars) {
+    if (!entry || entry.status !== 'managed' || (entry.type !== 'url' && entry.type !== 'secret')) continue;
+    const provider = entry.provider;
+    if (!isNonEmptyString(provider) || IN_DEPLOYMENT_PROVIDERS.has(provider) || ids.has(provider)) continue;
+    out.push(metadataViolation(entry.name, `provider ${provider} has no vendor data-flow entry in ${VENDOR_INVENTORY_PATH}`));
+  }
+  return out;
+}
+
+function metadataViolation(name, message) {
+  return { name, location: 'manifest', message };
+}
+
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+function templateLine(initEnvText, name) {
+  const match = initEnvText.match(new RegExp(`^${name}=(.*)$`, 'm'));
+  return match ? match[1] : null;
+}
+
+/** 04.1 D-25: once the retrieval defaults flipped, every name in implicit_in_templates ships an empty template value. */
+function implicitInTemplates(root) {
+  const file = path.join(root, DEFAULTS_DECISION_PATH);
+  if (!fs.existsSync(file)) return new Set();
+  try {
+    const decision = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (decision?.status !== 'flip' || !Array.isArray(decision.implicit_in_templates)) return new Set();
+    return new Set(decision.implicit_in_templates.filter((name) => typeof name === 'string'));
+  } catch {
+    return new Set();
+  }
+}
+
+/** D-14: the metadata the generated Config UI section needs for one managed entry. */
+export function checkEntryMetadata(entry, { byName, initEnvText, implicitEmpty }) {
+  const name = entry.name;
+  const out = [];
+  for (const field of ['group', 'label']) {
+    if (!isNonEmptyString(entry[field])) out.push(metadataViolation(name, `missing metadata: ${field}`));
+  }
+  const type = entry.type;
+  const typeKnown = METADATA_TYPES.includes(type);
+  if (type === undefined) out.push(metadataViolation(name, 'missing metadata: type'));
+  else if (!typeKnown) out.push(metadataViolation(name, `invalid metadata type ${JSON.stringify(type)} (expected ${METADATA_TYPES.join(', ')})`));
+
+  const options = entry.options;
+  const optionsValid =
+    Array.isArray(options) && options.length > 0 && options.every((o) => typeof o === 'string' && o !== '') && new Set(options).size === options.length;
+  if (type === 'enum' && !optionsValid) out.push(metadataViolation(name, 'enum metadata needs options (distinct non-empty strings)'));
+  if (typeKnown && type !== 'enum' && options !== undefined) out.push(metadataViolation(name, 'options are allowed only on enum metadata'));
+
+  if (!Array.isArray(entry.requires)) {
+    out.push(metadataViolation(name, 'missing metadata: requires (a list, empty when nothing is required)'));
+  } else {
+    for (const requirement of entry.requires) {
+      const match = typeof requirement === 'string' ? requirement.match(/^([A-Z][A-Z0-9_]*)(?:=(.*))?$/) : null;
+      if (!match) {
+        out.push(metadataViolation(name, `requires entry ${JSON.stringify(requirement)} must be NAME or NAME=value`));
+        continue;
+      }
+      const target = byName.get(match[1]);
+      if (!target) {
+        out.push(metadataViolation(name, `requires names an unknown variable ${match[1]}`));
+      } else if (match[2] !== undefined && target.type === 'enum' && Array.isArray(target.options) && !target.options.includes(match[2])) {
+        out.push(metadataViolation(name, `requires ${match[1]}=${match[2]}, which is not one of its options`));
+      }
+    }
+  }
+
+  if ((type === 'url' || type === 'secret') && !isNonEmptyString(entry.provider)) out.push(metadataViolation(name, 'missing metadata: provider'));
+
+  if ('help' in entry && !(isNonEmptyString(entry.help) && !/[\r\n\u2028\u2029]/.test(entry.help))) {
+    out.push(metadataViolation(name, 'help must be a non-empty single-line string'));
+  }
+
+  const detectedSecret = isSecretConfigEntry(name, '');
+  if (detectedSecret && typeKnown && type !== 'secret') {
+    out.push(metadataViolation(name, 'name is detected as a secret, so metadata type must be secret'));
+  } else if (!detectedSecret && type === 'secret') {
+    out.push(metadataViolation(name, 'metadata type secret but the name is not detected as a secret'));
+  }
+
+  if (!('default' in entry)) {
+    out.push(metadataViolation(name, 'missing metadata: default'));
+    return out;
+  }
+  const value = entry.default;
+  if (typeof value !== 'string') {
+    out.push(metadataViolation(name, 'metadata default must be a string'));
+    return out;
+  }
+  const template = templateLine(initEnvText, name);
+  if (type === 'secret' && value !== '') out.push(metadataViolation(name, 'secret default must be empty'));
+  else if (type === 'bool' && value !== 'true' && value !== 'false' && !(value === '' && (template ?? '') === '')) {
+    out.push(metadataViolation(name, 'bool default must be true or false (use enum for on/off switches)'));
+  } else if (type === 'enum' && optionsValid && value !== '' && !options.includes(value)) {
+    out.push(metadataViolation(name, 'enum default must be one of its options'));
+  }
+  if (implicitEmpty.has(name) && value !== '') {
+    out.push(metadataViolation(name, 'default must be empty: implicit in templates (04.1 D-25)'));
+  } else if (type !== 'secret' && template !== null && template !== value) {
+    out.push(metadataViolation(name, `default differs from init-env.js (${JSON.stringify(value)} vs ${JSON.stringify(template)})`));
+  } else if (type !== 'secret' && template === null && presenceRegex(name).test(initEnvText)) {
+    out.push(metadataViolation(name, `init-env.js has no ${name}= template line to compare the default with`));
+  }
+  return out;
+}
+
+/** D-14: index.html renders every managed entry with complete metadata once it loads the generated section. */
+function rendersGeneratedSection(entry, configUiText) {
+  return entry.status === 'managed' && GENERATED_SECTION_LOADER.test(configUiText);
 }
 
 /** D-11: the sorted union of the manifest entries marked ragAffecting and ragAffectingExtra. */
@@ -264,8 +422,8 @@ function envLocalModelList(text) {
   return null;
 }
 
-/** D-08: an anthropicId must be well formed and identical in every model location; unmapped ids stay free. */
-export function checkModelMappings(root, texts) {
+/** Every OpenRouter model list: the tracked locations (three fallback arrays in the Config UI) and .env.local when it sets one. */
+function openRouterModelLists(root, texts) {
   const lists = [];
   for (const [location, anchors] of Object.entries(MODEL_LIST_ANCHORS)) {
     const text = texts[location] ?? '';
@@ -282,7 +440,12 @@ export function checkModelMappings(root, texts) {
     const models = value ? modelsInArray(value, 0) : null;
     if (models !== null) lists.push({ location: 'env-local', label: 'NEXT_PUBLIC_OPENROUTER_MODELS', models });
   }
+  return lists;
+}
 
+/** D-08: an anthropicId must be well formed and identical in every model location; unmapped ids stay free. */
+export function checkModelMappings(root, texts) {
+  const lists = openRouterModelLists(root, texts);
   const violations = [];
   const mapped = new Map();
   for (const list of lists) {
@@ -333,6 +496,68 @@ export function checkModelMappings(root, texts) {
       } else if (agreed === null || values.size > 1 || !values.has(agreed)) {
         violations.push({ name: id, location: list.location, message: `anthropicId differs across locations in ${list.label}: ${summary}` });
       }
+    }
+  }
+  return violations;
+}
+
+export const ROUTING_MODEL_NAMES = ['RAG_ROUTING_FAST_MODEL', 'RAG_ROUTING_QUALITY_MODEL'];
+
+function escapeRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** The routing model ids one location writes as defaults: every occurrence, so each config-server template counts. */
+function routingDefaults(location, text, name) {
+  const n = escapeRegex(name);
+  const patterns = {
+    'init-env': [new RegExp(`^${n}=(.*)$`, 'gm')],
+    'env-ts': [new RegExp(`${n}:\\s*process\\.env\\.${n}\\s*\\|\\|\\s*'([^']*)'`, 'g')],
+    'config-server': [new RegExp(`'${n}=([^']*)'`, 'g'), new RegExp(`getEnvValue\\('${n}'\\)\\s*\\|\\|\\s*'([^']*)'`, 'g')],
+  }[location];
+  if (!patterns) return [];
+  return patterns.flatMap((re) => [...text.matchAll(re)].map((match) => match[1].trim()));
+}
+
+/**
+ * 06.2 D-19, D-35: both routing model ids name a model of every OpenRouter model list and never the auto entry; the
+ * tracked locations write them as defaults, never empty. An empty value in .env.local is left to the Config UI warning.
+ */
+export function checkRoutingModels(root, texts) {
+  const lists = openRouterModelLists(root, texts).filter((list) => list.models !== null);
+  const configured = [];
+  for (const location of ['init-env', 'env-ts', 'config-server']) {
+    for (const name of ROUTING_MODEL_NAMES) {
+      for (const value of routingDefaults(location, texts[location] ?? '', name)) configured.push({ name, location, value, allowEmpty: false });
+    }
+  }
+  const envLocalFile = path.join(root, ENV_LOCAL);
+  if (fs.existsSync(envLocalFile)) {
+    const env = parseEnvAssignments(fs.readFileSync(envLocalFile, 'utf8'));
+    for (const name of ROUTING_MODEL_NAMES) {
+      if (name in env) configured.push({ name, location: 'env-local', value: env[name], allowEmpty: true });
+    }
+  }
+
+  const violations = [];
+  const reported = new Set();
+  for (const { name, location, value, allowEmpty } of configured) {
+    const key = `${name}|${location}|${value}`;
+    if (reported.has(key)) continue;
+    reported.add(key);
+    if (value === '') {
+      if (!allowEmpty) violations.push({ name, location, message: 'must name a listed model as its default, not an empty value (06.2 D-35)' });
+      continue;
+    }
+    if (value === 'auto') {
+      violations.push({ name, location, message: 'must not be auto; it names the model the Auto entry resolves to (06.2 D-19)' });
+      continue;
+    }
+    const missing = lists
+      .filter((list) => !list.models.some((model) => model.id === value))
+      .map((list) => (list.label === 'model list' || list.location === 'env-local' ? list.location : `${list.location}#${list.label.split(' ')[2]}`));
+    if (missing.length > 0) {
+      violations.push({ name, location, message: `${value} is not in the OpenRouter model list (${missing.join(', ')}) (06.2 D-19)` });
     }
   }
   return violations;

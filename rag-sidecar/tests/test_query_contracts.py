@@ -181,14 +181,16 @@ def test_sub_questions_cap_at_four():
 
 def test_query_translation_carries_target_language_and_text():
     translation = _model("QueryTranslation")
-    assert accepts(translation, {"target_language": "it", "text": "placeholder"})
-    assert rejects(translation, {"target_language": "fr", "text": "placeholder"})
-    assert rejects(translation, {"text": "placeholder"})
+    assert accepts(translation, {"target_language": "it", "text": "placeholder", "source_language": None})
+    assert rejects(translation, {"target_language": "fr", "text": "placeholder", "source_language": None})
+    assert rejects(translation, {"text": "placeholder", "source_language": None})
+    assert rejects(translation, {"target_language": "it", "text": "placeholder"})
 
 
 def test_condensed_and_hypothetical_shapes():
-    assert accepts(_model("CondensedQuery"), {"standalone": "placeholder", "unchanged": False})
-    assert rejects(_model("CondensedQuery"), {"standalone": "placeholder"})
+    assert accepts(_model("CondensedQuery"), {"standalone": "placeholder", "unchanged": False, "language": None})
+    assert rejects(_model("CondensedQuery"), {"standalone": "placeholder", "language": None})
+    assert rejects(_model("CondensedQuery"), {"standalone": "placeholder", "unchanged": False})
     assert accepts(_model("HypotheticalDocument"), {"passage": "placeholder passage"})
     assert rejects(_model("HypotheticalDocument"), {"passage": "placeholder", "extra": 1})
 

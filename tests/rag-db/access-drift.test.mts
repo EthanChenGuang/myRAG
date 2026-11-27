@@ -12,7 +12,7 @@ import { applyMigrationFiles } from '../../eval/harness/migrations.mts';
 // ingest, rechunk, relabel, version replace and quarantine release, current and superseded rows alike, and rag_access_groups_drift() proves it.
 // Fixtures are neutral synthetic sentences.
 
-const MIGRATION = 'supabase/migrations/0921_access_groups_columns.sql';
+const MIGRATION = 'supabase/migrations/0923_access_labels_and_resolution.sql';
 const id = (kind: string, n: number): string => `00000000-0000-4000-8000-${kind}${String(n).padStart(8, '0')}`;
 
 const OWNER = id('9411', 1);
@@ -235,7 +235,7 @@ for (const mode of ['single-tenant', 'multi-tenant'] as DeploymentMode[]) {
       await assertNoDrift(db, 'quarantine release');
     });
 
-    test('an absent optional store is skipped, and re-applying 0921 after it appears completes it', async () => {
+    test('an absent optional store is skipped, and re-applying 0923 after it appears completes it', async () => {
       // Simulate a database without Phase 4.2's table-row store: the table and 0852's follow trigger on documents.
       await db.query('DROP TRIGGER IF EXISTS rag_table_rows_follow_document ON public.documents');
       await db.query('DROP TABLE public.rag_table_rows CASCADE');

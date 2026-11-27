@@ -394,6 +394,7 @@ export const hr = {
   waitingForApproval: "Čekanje na vašu dozvolu...",
   executingTool: "Izvršavanje alata, molimo pričekajte...",
   toolError: "Došlo je do greške pri pokretanju alata.",
+  voiceUnavailable: "Glas trenutačno nije dostupan. Pokušajte ponovno kasnije.",
 
   // Chat message action tooltips
   copyTooltip: "Kopiraj",

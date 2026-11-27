@@ -1,3 +1,4 @@
+import '../helpers/next-async-storage.mts';
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AsyncLocalStorage } from 'node:async_hooks';

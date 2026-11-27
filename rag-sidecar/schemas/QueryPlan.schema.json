@@ -1,5 +1,37 @@
 {
   "$defs": {
+    "CompletenessResult": {
+      "additionalProperties": false,
+      "description": "D-04, T-06.2-03: counts and the action only, never the term text.",
+      "properties": {
+        "action": {
+          "enum": [
+            "ok",
+            "added",
+            "discarded"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "missing_count": {
+          "minimum": 0,
+          "title": "Missing Count",
+          "type": "integer"
+        },
+        "required_count": {
+          "minimum": 0,
+          "title": "Required Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "required_count",
+        "missing_count",
+        "action"
+      ],
+      "title": "CompletenessResult",
+      "type": "object"
+    },
     "DateRange": {
       "additionalProperties": false,
       "properties": {
@@ -33,9 +65,61 @@
       "title": "DateRange",
       "type": "object"
     },
+    "LanguageDetection": {
+      "additionalProperties": false,
+      "description": "D-17: the resolved query language and the step of the chain that decided it.",
+      "properties": {
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "enum": [
+                "zh",
+                "en",
+                "it"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Language"
+        },
+        "source": {
+          "enum": [
+            "single_language",
+            "detector",
+            "sidecar",
+            "llm",
+            "previous_turn",
+            "ui_language",
+            "primary"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "language",
+        "confidence",
+        "source"
+      ],
+      "title": "LanguageDetection",
+      "type": "object"
+    },
     "QueryVariantOut": {
       "additionalProperties": false,
       "properties": {
+        "filter_applied": {
+          "title": "Filter Applied",
+          "type": "boolean"
+        },
         "kind": {
           "enum": [
             "original",
@@ -43,7 +127,8 @@
             "expanded",
             "hyde",
             "sub_question",
-            "translated"
+            "translated",
+            "history_fallback"
           ],
           "title": "Kind",
           "type": "string"
@@ -165,7 +250,8 @@
             "protected_token_lost",
             "length",
             "cap",
-            "disabled_for_profile"
+            "disabled_for_profile",
+            "glossary_term_lost"
           ],
           "title": "Reason",
           "type": "string"
@@ -189,10 +275,196 @@
       ],
       "title": "SkippedTransform",
       "type": "object"
+    },
+    "SubQuestionDateRange": {
+      "additionalProperties": false,
+      "description": "D-05: a sub-question's period; no include flags (the undated rule stays the request's own).",
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "title": "SubQuestionDateRange",
+      "type": "object"
+    },
+    "SubQuestionFilter": {
+      "additionalProperties": false,
+      "description": "D-05, T-06.2-01: the only narrowing a decomposer may propose. No tenant, document, source, version or include\nfield; every field is required and nullable for strict structured output (A-5). Plan 06.2-25 adds versions.",
+      "properties": {
+        "date_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubQuestionDateRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "doc_types": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "general",
+                  "financial_report",
+                  "contract_legal",
+                  "invoice_receipt",
+                  "product_technical",
+                  "scanned_image"
+                ],
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Doc Types"
+        },
+        "languages": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "zh",
+                  "en",
+                  "it"
+                ],
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Languages"
+        },
+        "scopes": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "items": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              },
+              "propertyNames": {
+                "enum": [
+                  "region",
+                  "legal_entity",
+                  "department"
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scopes"
+        }
+      },
+      "required": [
+        "date_range",
+        "scopes",
+        "doc_types",
+        "languages"
+      ],
+      "title": "SubQuestionFilter",
+      "type": "object"
+    },
+    "SubQuestionFilterTrace": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "exclusiveMaximum": 4,
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "retried": {
+          "title": "Retried",
+          "type": "boolean"
+        },
+        "retry_skipped_cap": {
+          "title": "Retry Skipped Cap",
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "applied",
+            "dropped_invalid",
+            "dropped_empty_intersection",
+            "dropped_unknown_values",
+            "stripped_switch_off"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "status",
+        "retried",
+        "retry_skipped_cap"
+      ],
+      "title": "SubQuestionFilterTrace",
+      "type": "object"
+    },
+    "SubQuestionSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubQuestionFilter"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "filter"
+      ],
+      "title": "SubQuestionSpec",
+      "type": "object"
     }
   },
   "additionalProperties": false,
   "properties": {
+    "completeness": {
+      "$ref": "#/$defs/CompletenessResult"
+    },
     "date_range": {
       "anyOf": [
         {
@@ -203,6 +475,14 @@
         }
       ],
       "default": null
+    },
+    "filter_trace": {
+      "items": {
+        "$ref": "#/$defs/SubQuestionFilterTrace"
+      },
+      "maxItems": 4,
+      "title": "Filter Trace",
+      "type": "array"
     },
     "framework": {
       "enum": [
@@ -224,6 +504,9 @@
       "title": "Language",
       "type": "string"
     },
+    "language_detection": {
+      "$ref": "#/$defs/LanguageDetection"
+    },
     "original": {
       "maxLength": 4000,
       "minLength": 1,
@@ -242,6 +525,14 @@
       "minLength": 1,
       "title": "Standalone",
       "type": "string"
+    },
+    "sub_question_specs": {
+      "items": {
+        "$ref": "#/$defs/SubQuestionSpec"
+      },
+      "maxItems": 4,
+      "title": "Sub Question Specs",
+      "type": "array"
     },
     "sub_questions": {
       "items": {

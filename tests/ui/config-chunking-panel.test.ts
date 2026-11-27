@@ -1458,11 +1458,13 @@ describe('index.html mounts both panels and the pointer', () => {
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
   });
 
-  it('has both sections and the pointer next to the refusal switch, without changing the switch', () => {
+  it('has both sections; the refusal switch keeps one control and its static pointer is gone (plan 07-20 links it from the generated row)', () => {
     expect(html).toContain('id="rag-administration-chunking"');
     expect(html).toContain('id="rag-administration-refusal"');
     expect(html.split('id="RAG_REFUSAL_THRESHOLD"').length - 1).toBe(1);
-    const afterSwitch = html.slice(html.indexOf('id="RAG_REFUSAL_THRESHOLD"'), html.indexOf('id="RAG_CONTEXT_EDGE_ORDER"'));
-    expect(afterSwitch).toContain('data-refusal-pointer');
+    expect(html).not.toContain('data-refusal-pointer');
+    const script = fs.readFileSync('scripts/config-ui/rag-panels/rag-pipeline.js', 'utf8');
+    expect(script).toContain("RAG_REFUSAL_THRESHOLD: 'rag-administration-refusal'");
   });
+
 });

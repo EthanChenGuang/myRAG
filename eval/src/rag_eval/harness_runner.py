@@ -137,7 +137,11 @@ def run_harness(
     splits: tuple[str, ...] = ("dev",),
     env_overlay: dict[str, str] | None = None,
     chunking_profiles: list[dict[str, Any]] | None = None,
+    answers: bool = False,
+    rag_mode: str | None = None,
 ) -> HarnessRun:
+    if rag_mode is not None and rag_mode not in ("strict", "balanced"):
+        raise HarnessError(f"rag_mode must be strict or balanced, got {rag_mode!r}")
     out_dir = Path(out)
     inputs = out_dir / INPUTS_DIR
     inputs.mkdir(parents=True, exist_ok=True)
@@ -174,9 +178,12 @@ def run_harness(
     ]
     if base_url:
         argv.extend(["--base-url", base_url])
-    else:
-        # 05.3-15: run-smoke answers in-process runs by default; sweeps and calibrations score retrieval only.
+    elif not answers:
+        # 05.3-15: run-smoke answers in-process runs by default; sweeps and calibrations score retrieval only,
+        # except the output-cap sweep (D-34), which scores the answers.
         argv.append("--no-answers")
+    if rag_mode is not None:
+        argv.extend(["--rag-mode", rag_mode])
     if fixture_mode:
         argv.extend(["--fixture-mode", fixture_mode])
 

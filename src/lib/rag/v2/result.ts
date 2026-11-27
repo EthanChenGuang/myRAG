@@ -1,3 +1,5 @@
+import { selectedBackendId } from '../backend/factory';
+import { backendIndexParams } from '../backend/index-params';
 import { getRetrievalBackend } from '../backend/registry';
 import { CORE_STAGES, QUERY_LAYER_STAGES, effectiveLexicalVersion, terminologyDenseFor, type RagConfig } from '../config';
 import { getActiveChunkingProfiles } from '../chunking/active';
@@ -13,18 +15,23 @@ import type { RefusalRecord } from '../refusal/types';
 import { describeReranker } from '../rerank/select';
 import { RERANK_TEXT_VERSION } from '../rerank/types';
 import type { TraceCollector } from '../trace/collector';
-import type { Candidate, InjectionSummary, Profile, RetrievalResult, RunRetrievalInput, StageRecord } from '../types';
+import type { Candidate, InjectionSummary, PackingSummary, Profile, RetrievalResult, RunRetrievalInput, StageRecord } from '../types';
 import type { CacheHit, CacheTicket } from '../cache/types';
 import type { TemporalQueryContext } from '../query/temporal-query-detector';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import { getRagDeps } from '../deps';
 import type { SecurityConfig } from '../security/config';
+import { readAnswerConfig } from '../generation/answer-config';
 import {
   attributeFilterHashBlock,
   computeRetrievalConfigHash,
   lexicalScoringHashBlock,
   securityHashComponent,
+  answerRulesHashComponent,
+  calcBudgetHashComponent,
   terminologyHashBlock,
+  type AnswerRulesHashConfig,
+  type CalcBudgetHashConfig,
   type AttributeFilterHashStage,
   type RetrievalConfigHashQueryLayer,
   type TerminologyHashStage,
@@ -36,6 +43,8 @@ import { effectiveRetrievalParams } from './retrieval-params';
 import { effectiveTuningParams, tuningHashComponent } from './tuning-params';
 import type { TranslationHashField } from './translation-legs';
 import type { AssembleOutput } from '../context/assemble';
+import { recordAnswerConflict } from '../context/version-conflicts';
+import { scopeKey } from '../tenant/scope';
 import type { QueryPlan, RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 import type { LexicalStamp } from '../lexical/resolve-options';
 import type { SearchIdentifiers } from './stages/search';
@@ -61,6 +70,8 @@ export interface BuildV2ResultInput {
   /** The injection_check summary; absent when RAG_INJECTION_CHECK is off. */
   injection?: InjectionSummary;
   injectionStalled?: boolean;
+  /** D-86: the packing summary; set only when the request gave documentTokenBudget. */
+  packing?: PackingSummary;
   /** The request's security config; defaults to RagDeps.securityConfig(). */
   security?: SecurityConfig;
   /** The planned binding legs (bindingHashFields); empty when none is planned. */
@@ -90,6 +101,8 @@ export interface BuildV2ResultInput {
 }
 
 export interface RequestConfigHashInput {
+  /** Phase 5.2 D-58 and 5.2.1 D-88: the answer switches; read from the environment when absent. */
+  answerConfig?: AnswerRulesHashConfig & CalcBudgetHashConfig;
   input: RunRetrievalInput;
   config: RagConfig;
   profile: Profile;
@@ -113,14 +126,19 @@ export interface RequestConfigHashInput {
 export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): Promise<string> {
   const { input, config, profile, queryLanguage, security } = ctx;
   const { configHash: thresholdsConfigHash } = loadThresholds();
+  const answerConfig = ctx.answerConfig ?? readAnswerConfig();
   const chunking = await getActiveChunkingProfiles();
   const terminology = terminologyHashBlock(ctx.terminology ?? { enabled: false }, terminologyParams(), terminologyDenseFor(config, profile));
   const attributeStage = ctx.attributeFilter ?? { enabled: false };
   const attributeFilter = attributeStage.enabled
     ? attributeFilterHashBlock(attributeStage, config.v2.attributeFilter, attributeFilterConfig())
     : undefined;
+  // D-24: the configured backend of this entry point; pgvector keeps the registry id and no index block, so its hash is unchanged.
+  const backendChoice = selectedBackendId(profile, config, input.stageOverrides?.retrievalOverrides);
+  const backendIndex = backendIndexParams(backendChoice, ctx.embeddingProfileId);
   return computeRetrievalConfigHash({
-    backendId: getRetrievalBackend().id,
+    backendId: backendIndex ? backendChoice : getRetrievalBackend().id,
+    ...(backendIndex ? { backendIndex } : {}),
     embeddingProfileId: ctx.embeddingProfileId,
     lexicalVersion: effectiveLexicalVersion(config),
     rerankTextVersion: RERANK_TEXT_VERSION,
@@ -144,6 +162,8 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
       ...(config.monolingual ? { monolingual: true as const } : {}),
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
+    answerRules: answerRulesHashComponent(answerConfig),
+    calcBudget: calcBudgetHashComponent(answerConfig),
     tuning: tuningHashComponent(
       config,
       effectiveTuningParams(profile, config, evalTuningOverrides(profile, input.stageOverrides?.retrievalOverrides), { embeddingProfileId: ctx.embeddingProfileId }),
@@ -343,6 +363,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(injection ? { injection } : {}),
     ...(queryPlan ? { queryPlan } : {}),
     ...(ctx.cacheTicket && profile !== 'voice' ? { cacheTicket: ctx.cacheTicket } : {}),
+    ...(ctx.packing ? { packing: ctx.packing } : {}),
   };
 
   let result: RetrievalResult;
@@ -381,7 +402,11 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
       retrievalConfigHash,
       refusal,
       queryLanguage,
+      ...(assembly.versionConflict ? { versionConflict: assembly.versionConflict } : {}),
     };
+    if (assembly.versionConflict && profile !== 'eval' && input.scope) {
+      recordAnswerConflict({ tenantKey: scopeKey(input.scope), conflict: assembly.versionConflict, traceId: collector.traceId });
+    }
   }
 
   // D-25: fire-and-forget; the response never waits on the miss log.

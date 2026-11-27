@@ -400,6 +400,7 @@ export const ar = {
   waitingForApproval: "في انتظار موافقتك...",
   executingTool: "جاري تشغيل الأداة، يرجى الانتظار...",
   toolError: "حدث خطأ أثناء تشغيل الأداة.",
+  voiceUnavailable: "الصوت غير متاح مؤقتًا. يرجى المحاولة لاحقًا.",
   
   // Chat message action tooltips
   copyTooltip: "نسخ",

@@ -1,0 +1,142 @@
+{
+  "bins": [
+    {
+      "confident": true,
+      "correct": 85,
+      "length_bucket": "short",
+      "n": 85,
+      "script_class": "single",
+      "source": "calibrated",
+      "value": 0.9885
+    },
+    {
+      "confident": true,
+      "correct": 18,
+      "length_bucket": "short",
+      "n": 18,
+      "script_class": "mixed",
+      "source": "calibrated",
+      "value": 0.95
+    },
+    {
+      "confident": true,
+      "correct": 196,
+      "length_bucket": "medium",
+      "n": 198,
+      "script_class": "single",
+      "source": "calibrated",
+      "value": 0.985
+    },
+    {
+      "confident": true,
+      "correct": 35,
+      "length_bucket": "medium",
+      "n": 35,
+      "script_class": "mixed",
+      "source": "calibrated",
+      "value": 0.973
+    },
+    {
+      "confident": true,
+      "correct": 171,
+      "length_bucket": "long",
+      "n": 171,
+      "script_class": "single",
+      "source": "calibrated",
+      "value": 0.9942
+    },
+    {
+      "confident": true,
+      "correct": 1,
+      "length_bucket": "long",
+      "n": 6,
+      "script_class": "mixed",
+      "source": "calibrated",
+      "value": 0.25
+    },
+    {
+      "confident": false,
+      "correct": 0,
+      "length_bucket": "short",
+      "n": 0,
+      "script_class": "single",
+      "source": "mapped_fallback",
+      "value": 0.5
+    },
+    {
+      "confident": false,
+      "correct": 0,
+      "length_bucket": "short",
+      "n": 0,
+      "script_class": "mixed",
+      "source": "mapped_fallback",
+      "value": 0.5
+    },
+    {
+      "confident": false,
+      "correct": 0,
+      "length_bucket": "medium",
+      "n": 0,
+      "script_class": "single",
+      "source": "mapped_fallback",
+      "value": 0.5
+    },
+    {
+      "confident": false,
+      "correct": 0,
+      "length_bucket": "medium",
+      "n": 0,
+      "script_class": "mixed",
+      "source": "mapped_fallback",
+      "value": 0.5
+    },
+    {
+      "confident": false,
+      "correct": 0,
+      "length_bucket": "long",
+      "n": 1,
+      "script_class": "single",
+      "source": "calibrated",
+      "value": 0.3333
+    },
+    {
+      "confident": false,
+      "correct": 0,
+      "length_bucket": "long",
+      "n": 0,
+      "script_class": "mixed",
+      "source": "mapped_fallback",
+      "value": 0.5
+    }
+  ],
+  "detector": "heuristic",
+  "generated_at": "2026-11-27T13:53:43Z",
+  "inputs": [
+    {
+      "path": "eval/fixtures/golden.jsonl",
+      "sha256": "e57df6d12d834e95d1c2614840a93efabf308145542b030677aed0eb854a5647"
+    },
+    {
+      "path": "eval/fixtures/domain/golden.jsonl",
+      "sha256": "de5beef5c0eb2c0e1609b948a9e6a0888d9b23b627acb26f7fc70f09d725f561"
+    },
+    {
+      "path": "eval/fixtures/ingest/golden-ingest.jsonl",
+      "sha256": "edaa818df2ae3250d7c7252abcd21bbf7876eb8879f3f14a1e38ffc643decc6e"
+    },
+    {
+      "path": "src/lib/rag/lang/detect.ts",
+      "sha256": "b4502b5b6aa3b3b9f9038786f3ee560cd31d88f773640297f6196cfc07f5c9b0"
+    },
+    {
+      "path": "config/rag/language-packs.json",
+      "sha256": "63dcc385901612163225bb09264cfa57848acee914cb929815d49f31d1f80852"
+    }
+  ],
+  "length_buckets": {
+    "medium_max_chars": 60,
+    "short_max_chars": 20
+  },
+  "schema_version": 1,
+  "smoothing": "laplace"
+}

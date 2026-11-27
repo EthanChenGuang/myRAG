@@ -33,6 +33,7 @@ import { diversify, type AlsoIn, type DiversifyCounts } from '../diversify';
 import { effectiveRetrievalParams } from '../retrieval-params';
 import { effectiveTuningParams } from '../tuning-params';
 import { guardNearMisses } from '../../retrieval/identifiers';
+import { extractChunkIdentifiers } from '../../identifiers/extract';
 import type { ContextRerankInput } from './context';
 
 export interface RankStagesInput {
@@ -58,8 +59,15 @@ export interface RankStagesInput {
   finalTopK?: number;
   /** D-49: selects a per-profile tuning entry. */
   embeddingProfileId?: string;
-  /** D-31, D-51: the question's normalized identifiers and the tenant's patterns; present only while the identifier filter is on. */
-  identifiers?: { askedNorms: readonly string[]; patterns: readonly RegExp[] };
+  /**
+   * D-31, D-51: the question's normalized identifiers (with the stored forms they resolved to) and the tenant's patterns; present only
+   * while the identifier filter is on. filteredBy is set when every search leg was filtered to chunks carrying one of norms.
+   */
+  identifiers?: {
+    askedNorms: readonly string[];
+    patterns: readonly RegExp[];
+    filteredBy?: { norms: readonly string[]; spellings: readonly string[] };
+  };
 }
 
 export interface RankRerankOutput extends ContextRerankInput {
@@ -171,6 +179,37 @@ function bestDenseSimilarity(hits: FusedHit[]): number | null {
   return best;
 }
 
+/** D-31: the floors' reason when a candidate of an identifier-filtered search carries an asked identifier the tenant holds. */
+export const IDENTIFIER_MATCH_REASON = 'identifier_match';
+
+/**
+ * D-31: the similarity floors stand in for relevance evidence. Under an applied identifier filter, a candidate that carries an asked
+ * identifier (read with the ingestion extractor, as the guard reads it) is that evidence, as a query-term match is for legacy_rule.
+ */
+function identifierMatchRecord(ctx: RankStagesInput, fusedHits: FusedHit[], standalone: boolean): RefusalRecord | null {
+  const filteredBy = ctx.identifiers?.filteredBy;
+  if (!filteredBy || filteredBy.norms.length === 0 || fusedHits.length === 0) return null;
+  const wanted = new Set(filteredBy.norms);
+  const patterns = ctx.identifiers?.patterns ?? [];
+  if (!fusedHits.some((row) => extractChunkIdentifiers(row.hit.content, patterns).norm.some((norm) => wanted.has(norm)))) return null;
+  let best: number | null = null;
+  for (const row of fusedHits) {
+    const sim = floorSimilarity(row, standalone);
+    if (sim !== null && Number.isFinite(sim) && (best === null || sim > best)) best = sim;
+  }
+  return { decision: 'answer', basis: 'none', reason: IDENTIFIER_MATCH_REASON, topScore: best, threshold: null, cellKey: null };
+}
+
+/** The text with every occurrence of the spellings removed (both sides NFKC, as the spellings were read from the question). */
+function withoutSpellings(text: string, spellings: readonly string[]): string {
+  if (spellings.length === 0) return text;
+  let out = text.normalize('NFKC');
+  for (const spelling of [...spellings].sort((a, b) => b.length - a.length)) {
+    if (spelling.length > 0) out = out.split(spelling).join(' ');
+  }
+  return out.replace(/\s+/gu, ' ').trim();
+}
+
 /** D-06: under the query layer the floor reads the standalone variant's similarity, never a HyDE, expanded or translated list. */
 function floorSimilarity(row: FusedHit, standalone: boolean): number | null {
   return standalone ? (row.standaloneSimilarity ?? 0) : row.hit.similarity;
@@ -197,6 +236,9 @@ function applyRefusal(
     ragMode: ctx.input.options?.ragMode,
   });
   if (gate.decision !== 'not_applied') return { record: gate, gate };
+
+  const identifierMatch = identifierMatchRecord(ctx, fusedHits, standalone);
+  if (identifierMatch) return { record: identifierMatch, gate };
 
   if (config.v2.refusalFloor === 'legacy_rule') {
     const members = legacyPoolMembers(ctx, fusedHits);
@@ -313,11 +355,14 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
 
   const wantSpans = settings.compression;
   const texts = hits.map((row) => rerankText({ sectionPath: row.hit.sectionPath, content: row.hit.content }));
-  const rerankQuery = ctx.queryPlan ? ctx.queryPlan.standalone : input.query;
+  // D-31: under an applied identifier filter every candidate carries a found identifier, so a pool-statistics scorer drops its spelling.
+  const constantSpellings = reranker.scoreSemantics === 'relative' ? (ctx.identifiers?.filteredBy?.spellings ?? []) : [];
+  const forPool = (text: string) => withoutSpellings(text, constantSpellings);
+  const rerankQuery = forPool(ctx.queryPlan ? ctx.queryPlan.standalone : input.query);
   // D-06: under the layer every document is scored against the standalone query, never a generated or translated text.
   const queryByDoc = ctx.queryPlan
     ? hits.map(() => rerankQuery)
-    : queryByDocument(hits, ctx.variants ?? [{ text: input.query, language: queryLanguage, kind: 'original' as const }], input.query);
+    : queryByDocument(hits, ctx.variants ?? [{ text: input.query, language: queryLanguage, kind: 'original' as const }], input.query).map(forPool);
   const capturedFrom = ctx.dedupeCounts?.capped_from ?? hits.length;
 
   const outcome = await runStage(

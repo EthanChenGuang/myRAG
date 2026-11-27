@@ -1,0 +1,143 @@
+{
+  "schema_version": 2,
+  "phase": "05.2",
+  "noise": "eval/config/noise.json",
+  "baselines": {
+    "prechunked": "eval/baselines/fixture-baseline.json",
+    "ingest": "eval/baselines/fixture-ingest-baseline.json"
+  },
+  "runs": [
+    {
+      "name": "all-off",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/p52-all-off.json",
+      "checks": [
+        "gate",
+        "paired_all_zero",
+        "characterization",
+        {
+          "kind": "latency_budget",
+          "profile": "chat"
+        }
+      ]
+    },
+    {
+      "name": "all-off-ingest",
+      "fixture_mode": "ingest",
+      "base": "eval/config/runs/p52-all-off.json",
+      "checks": [
+        "paired_all_zero"
+      ]
+    },
+    {
+      "name": "rules-on",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/p52-rules-on.json",
+      "checks": [
+        "gate",
+        {
+          "kind": "absolute_zero",
+          "path": "answer_rules.unsupported_addition_rate.overall"
+        },
+        {
+          "kind": "absolute_zero",
+          "path": "answer_rules.mixed_versions_rate.overall"
+        },
+        {
+          "kind": "absolute_zero",
+          "path": "answer_rules.adjacent_repurpose_rate.overall"
+        },
+        {
+          "kind": "category_noise",
+          "exclude": [
+            "partial_answer",
+            "stale_version",
+            "off_topic_context"
+          ]
+        },
+        {
+          "kind": "retrieval_unchanged",
+          "exclude_categories": [
+            "partial_answer",
+            "stale_version",
+            "off_topic_context"
+          ]
+        },
+        {
+          "kind": "latency_budget",
+          "profile": "chat",
+          "against": "all-off",
+          "tolerance_ms": 5,
+          "tolerance_ratio": 0.5
+        }
+      ]
+    },
+    {
+      "name": "violating-partial",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/p52-violating-partial.json",
+      "checks": [
+        "gate"
+      ]
+    },
+    {
+      "name": "violating-versions",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/p52-violating-versions.json",
+      "checks": [
+        "gate"
+      ]
+    },
+    {
+      "name": "violating-offtopic",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/p52-violating-offtopic.json",
+      "checks": [
+        "gate"
+      ]
+    },
+    {
+      "name": "sec-output-guard",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/p52-sec-output-guard.json",
+      "checks": [
+        "gate",
+        {
+          "kind": "absolute_zero",
+          "path": "injection.attack_success_rate[\"tag:link_injection\"]"
+        },
+        {
+          "kind": "absolute_zero",
+          "path": "injection.attack_success_rate[\"category:injection\"]"
+        }
+      ]
+    },
+    {
+      "name": "output-cap-512",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/p52-output-cap-512.json",
+      "checks": [
+        {
+          "kind": "below_limit",
+          "path": "answer_rules.truncation_rate.overall",
+          "limit": 0.02
+        }
+      ]
+    }
+  ],
+  "commands": {
+    "characterization": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/rag/characterize-chat.test.ts",
+      "tests/rag/characterize-chat-overview.test.ts",
+      "tests/rag/characterize-embed.test.ts",
+      "tests/rag/characterize-voice.test.ts",
+      "tests/rag/characterize-defaults.test.ts",
+      "tests/chat-strict.test.ts",
+      "tests/chat-websearch.test.ts",
+      "tests/chat-source-images.test.ts"
+    ]
+  }
+}

@@ -36,6 +36,9 @@ TEXT_IDS = {"contract-zh", "injection-zh", "injection-en", "injection-it"}
 LONG_TABLE_PLAIN = ["long-table-zh", "long-table-en", "long-table-it"]
 LONG_TABLE_CONTINUED = ["long-table-zh-continued", "long-table-en-continued", "long-table-it-continued"]
 LONG_TABLE_IDS = LONG_TABLE_PLAIN + LONG_TABLE_CONTINUED
+TEMPLATED_IDS = {f"tpl-family-{language}-{number:02d}" for language in ("zh", "en", "it") for number in range(1, 13)} | {
+    f"tpl-variants-{language}" for language in ("zh", "en", "it")
+}
 
 
 def _load(name: str):
@@ -134,7 +137,7 @@ def test_the_generator_runs_reportlab_in_invariant_mode():
 @requires_reportlab
 def test_digital_pdfs_are_written_for_every_digital_fixture(tmp_path):
     written = generate.generate(tmp_path / "pdf", tmp_path / "text", cjk_font=None)
-    assert set(written) == DIGITAL_IDS | set(LONG_TABLE_IDS)
+    assert set(written) == DIGITAL_IDS | set(LONG_TABLE_IDS) | TEMPLATED_IDS
     for spec_id in DIGITAL_IDS:
         data = (tmp_path / "pdf" / f"{spec_id}.pdf").read_bytes()
         assert data.startswith(b"%PDF-")
@@ -145,7 +148,7 @@ def test_digital_pdfs_are_written_for_every_digital_fixture(tmp_path):
 def test_regenerating_the_digital_pdfs_gives_identical_bytes(tmp_path):
     first = generate.generate(tmp_path / "a" / "pdf", tmp_path / "a" / "text", cjk_font=None)
     second = generate.generate(tmp_path / "b" / "pdf", tmp_path / "b" / "text", cjk_font=None)
-    assert first == second and len(first) == len(DIGITAL_IDS) + len(LONG_TABLE_IDS)
+    assert first == second and len(first) == len(DIGITAL_IDS) + len(LONG_TABLE_IDS) + len(TEMPLATED_IDS)
     for spec_id in DIGITAL_IDS:
         left = (tmp_path / "a" / "pdf" / f"{spec_id}.pdf").read_bytes()
         right = (tmp_path / "b" / "pdf" / f"{spec_id}.pdf").read_bytes()
@@ -155,14 +158,14 @@ def test_regenerating_the_digital_pdfs_gives_identical_bytes(tmp_path):
 @requires_reportlab
 def test_committed_digital_pdfs_equal_a_fresh_build(tmp_path):
     fresh = generate.generate(tmp_path / "pdf", tmp_path / "text", cjk_font=None)
-    assert set(fresh) == DIGITAL_IDS | set(LONG_TABLE_IDS)
+    assert set(fresh) == DIGITAL_IDS | set(LONG_TABLE_IDS) | TEMPLATED_IDS
     for spec_id, digest in fresh.items():
         assert _sha256(_read(PDF_DIR / f"{spec_id}.pdf")) == digest, f"{spec_id}.pdf differs from the generator output"
 
 
 def test_every_fixture_has_a_committed_pdf_and_digital_ones_have_a_text_layer():
     committed = {path.stem for path in PDF_DIR.glob("*.pdf")}
-    assert committed == DIGITAL_IDS | SCANNED_IDS | set(LONG_TABLE_IDS)
+    assert committed == DIGITAL_IDS | SCANNED_IDS | set(LONG_TABLE_IDS) | TEMPLATED_IDS
     assert len(committed) >= 9
     for spec_id in DIGITAL_IDS:
         assert _text_operator_count(_read(PDF_DIR / f"{spec_id}.pdf")) > 0, spec_id
@@ -454,7 +457,7 @@ def test_recorded_docling_json_is_valid_and_tagged_with_the_parser():
 
 def test_the_recorded_directory_holds_only_files_the_manifest_names():
     named = set()
-    for entry in [*_manifest()["fixtures"], *_manifest()["long_table_fixtures"]]:
+    for entry in [*_manifest()["fixtures"], *_manifest()["long_table_fixtures"], *_manifest().get("templated_fixtures", [])]:
         named |= {Path(entry["recorded"]["parse_result"]).name, Path(entry["recorded"]["docling"]).name}
         if "parse_result_header_repeat" in entry["recorded"]:
             named.add(Path(entry["recorded"]["parse_result_header_repeat"]).name)

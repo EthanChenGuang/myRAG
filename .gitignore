@@ -81,6 +81,7 @@ wt/
 eval/reports/*/harness/
 eval/reports/*/inputs/
 eval/reports/*/cells/
+eval/reports/*/private/
 eval/reports/chunking-cells/
 
 # tiktoken encoding cache for tests (scripts/ci/fill-tiktoken-cache.py)

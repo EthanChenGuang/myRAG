@@ -1,0 +1,514 @@
+{
+  "rows": [
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-zh-01.pdf",
+      "attributes": {
+        "alpha_code": "ZQX-4101",
+        "beta_label": "杵愦耔蜇",
+        "gamma_group": "鲕锾",
+        "delta_tags": [
+          "珥碥",
+          "瘐堠"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-zh-02.pdf",
+      "attributes": {
+        "alpha_code": "ZQX-4102",
+        "beta_label": "咭劭埏黟",
+        "gamma_group": "菁鄯",
+        "delta_tags": [
+          "瘐堠",
+          "谘嘟"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-zh-03.pdf",
+      "attributes": {
+        "alpha_code": "ZQX-4103",
+        "beta_label": "珂僭忖埯",
+        "gamma_group": "鲕锾",
+        "delta_tags": [
+          "谘嘟",
+          "珥碥"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-zh-04.pdf",
+      "attributes": {
+        "alpha_code": "ZQX-4104",
+        "beta_label": "腚澶滂躞",
+        "gamma_group": "菁鄯",
+        "delta_tags": [
+          "珥碥",
+          "瘐堠"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-zh-05.pdf",
+      "attributes": {
+        "alpha_code": "ZQX-4105",
+        "beta_label": "镤旖蓦碇",
+        "gamma_group": "鲕锾",
+        "delta_tags": [
+          "瘐堠",
+          "谘嘟"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-zh-06.pdf",
+      "attributes": {
+        "alpha_code": "ZQX-4106",
+        "beta_label": "壑萋籴铩",
+        "gamma_group": "菁鄯",
+        "delta_tags": [
+          "谘嘟",
+          "珥碥"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-zh-07.pdf",
+      "attributes": {
+        "alpha_code": "ZQX-4107",
+        "beta_label": "燧芰腩喵",
+        "gamma_group": "鲕锾",
+        "delta_tags": [
+          "珥碥",
+          "瘐堠"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-zh-08.pdf",
+      "attributes": {
+        "alpha_code": "ZQX-4108",
+        "beta_label": "螭缪棂蔺",
+        "gamma_group": "菁鄯",
+        "delta_tags": [
+          "瘐堠",
+          "谘嘟"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-zh-09.pdf",
+      "attributes": {
+        "alpha_code": "ZQX-4109",
+        "beta_label": "蜈跚嵫缫",
+        "gamma_group": "鲕锾",
+        "delta_tags": [
+          "谘嘟",
+          "珥碥"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-zh-10.pdf",
+      "attributes": {
+        "alpha_code": "ZQX-4110",
+        "beta_label": "刭僖绲辍",
+        "gamma_group": "菁鄯",
+        "delta_tags": [
+          "珥碥",
+          "瘐堠"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-zh-11.pdf",
+      "attributes": {
+        "alpha_code": "ZQX-4111",
+        "beta_label": "稂洚嗟鲇",
+        "gamma_group": "鲕锾",
+        "delta_tags": [
+          "瘐堠",
+          "谘嘟"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-zh-12.pdf",
+      "attributes": {
+        "alpha_code": "ZQX-4112",
+        "beta_label": "蛞缤鳄殡",
+        "gamma_group": "菁鄯",
+        "delta_tags": [
+          "谘嘟",
+          "珥碥"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-variants-zh.pdf",
+      "attributes": {
+        "alpha_code": "ZQX-4120",
+        "beta_label": "绡诠麾偎",
+        "gamma_group": "鲕锾",
+        "delta_tags": [
+          "珥碥",
+          "瘐堠",
+          "谘嘟"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-en-01.pdf",
+      "attributes": {
+        "alpha_code": "ZQV-4101",
+        "beta_label": "Jizdri Jurksnelt",
+        "gamma_group": "Kivrurk",
+        "delta_tags": [
+          "gembge",
+          "venddomb"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-en-02.pdf",
+      "attributes": {
+        "alpha_code": "ZQV-4102",
+        "beta_label": "Plykskerv Grirkdrov",
+        "gamma_group": "Vrufizzok",
+        "delta_tags": [
+          "venddomb",
+          "gexvand"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-en-03.pdf",
+      "attributes": {
+        "alpha_code": "ZQV-4103",
+        "beta_label": "Vambzle Favtryrv",
+        "gamma_group": "Kivrurk",
+        "delta_tags": [
+          "gexvand",
+          "gembge"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-en-04.pdf",
+      "attributes": {
+        "alpha_code": "ZQV-4104",
+        "beta_label": "Vuvplend Griskgro",
+        "gamma_group": "Vrufizzok",
+        "delta_tags": [
+          "gembge",
+          "venddomb"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-en-05.pdf",
+      "attributes": {
+        "alpha_code": "ZQV-4105",
+        "beta_label": "Quxsnox Snosnamb",
+        "gamma_group": "Kivrurk",
+        "delta_tags": [
+          "venddomb",
+          "gexvand"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-en-06.pdf",
+      "attributes": {
+        "alpha_code": "ZQV-4106",
+        "beta_label": "Derkkryrv Vrixsnov",
+        "gamma_group": "Vrufizzok",
+        "delta_tags": [
+          "gexvand",
+          "gembge"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-en-07.pdf",
+      "attributes": {
+        "alpha_code": "ZQV-4107",
+        "beta_label": "Divsnolt Vyvgarv",
+        "gamma_group": "Kivrurk",
+        "delta_tags": [
+          "gembge",
+          "venddomb"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-en-08.pdf",
+      "attributes": {
+        "alpha_code": "ZQV-4108",
+        "beta_label": "Boltkurk Kokkresk",
+        "gamma_group": "Vrufizzok",
+        "delta_tags": [
+          "venddomb",
+          "gexvand"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-en-09.pdf",
+      "attributes": {
+        "alpha_code": "ZQV-4109",
+        "beta_label": "Kykskurk Zlumbgox",
+        "gamma_group": "Kivrurk",
+        "delta_tags": [
+          "gexvand",
+          "gembge"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-en-10.pdf",
+      "attributes": {
+        "alpha_code": "ZQV-4110",
+        "beta_label": "Drevbryrk Plandfuv",
+        "gamma_group": "Vrufizzok",
+        "delta_tags": [
+          "gembge",
+          "venddomb"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-en-11.pdf",
+      "attributes": {
+        "alpha_code": "ZQV-4111",
+        "beta_label": "Snymbjix Braktraz",
+        "gamma_group": "Kivrurk",
+        "delta_tags": [
+          "venddomb",
+          "gexvand"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-en-12.pdf",
+      "attributes": {
+        "alpha_code": "ZQV-4112",
+        "beta_label": "Dervfa Grexzluv",
+        "gamma_group": "Vrufizzok",
+        "delta_tags": [
+          "gexvand",
+          "gembge"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-variants-en.pdf",
+      "attributes": {
+        "alpha_code": "ZQV-4120",
+        "beta_label": "Skavzluv Derkgov",
+        "gamma_group": "Kivrurk",
+        "delta_tags": [
+          "gembge",
+          "venddomb",
+          "gexvand"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-it-01.pdf",
+      "attributes": {
+        "alpha_code": "ZQW-4101",
+        "beta_label": "Voglergru Tistelu",
+        "gamma_group": "Scofeme",
+        "delta_tags": [
+          "tasscosni",
+          "forevo"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-it-02.pdf",
+      "attributes": {
+        "alpha_code": "ZQW-4102",
+        "beta_label": "Nonlesto Nantforfe",
+        "gamma_group": "Zirmosce",
+        "delta_tags": [
+          "forevo",
+          "firbosdru"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-it-03.pdf",
+      "attributes": {
+        "alpha_code": "ZQW-4103",
+        "beta_label": "Tesloldri Voltribu",
+        "gamma_group": "Scofeme",
+        "delta_tags": [
+          "firbosdru",
+          "tasscosni"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-it-04.pdf",
+      "attributes": {
+        "alpha_code": "ZQW-4104",
+        "beta_label": "Grorzogo Banbratru",
+        "gamma_group": "Zirmosce",
+        "delta_tags": [
+          "tasscosni",
+          "forevo"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-it-05.pdf",
+      "attributes": {
+        "alpha_code": "ZQW-4105",
+        "beta_label": "Zerlisgli Dirtorza",
+        "gamma_group": "Scofeme",
+        "delta_tags": [
+          "forevo",
+          "firbosdru"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-it-06.pdf",
+      "attributes": {
+        "alpha_code": "ZQW-4106",
+        "beta_label": "Tisvosca Zusguta",
+        "gamma_group": "Zirmosce",
+        "delta_tags": [
+          "firbosdru",
+          "tasscosni"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-it-07.pdf",
+      "attributes": {
+        "alpha_code": "ZQW-4107",
+        "beta_label": "Vurlaru Grirnivu",
+        "gamma_group": "Scofeme",
+        "delta_tags": [
+          "tasscosni",
+          "forevo"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-it-08.pdf",
+      "attributes": {
+        "alpha_code": "ZQW-4108",
+        "beta_label": "Gladirvfu Zuvigo",
+        "gamma_group": "Zirmosce",
+        "delta_tags": [
+          "forevo",
+          "firbosdru"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-it-09.pdf",
+      "attributes": {
+        "alpha_code": "ZQW-4109",
+        "beta_label": "Drongono Nastrunti",
+        "gamma_group": "Scofeme",
+        "delta_tags": [
+          "firbosdru",
+          "tasscosni"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-it-10.pdf",
+      "attributes": {
+        "alpha_code": "ZQW-4110",
+        "beta_label": "Sceluntbe Grofuscu",
+        "gamma_group": "Zirmosce",
+        "delta_tags": [
+          "tasscosni",
+          "forevo"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-it-11.pdf",
+      "attributes": {
+        "alpha_code": "ZQW-4111",
+        "beta_label": "Funtasto Gislurvna",
+        "gamma_group": "Scofeme",
+        "delta_tags": [
+          "forevo",
+          "firbosdru"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-family-it-12.pdf",
+      "attributes": {
+        "alpha_code": "ZQW-4112",
+        "beta_label": "Derdintvo Fimestgra",
+        "gamma_group": "Zirmosce",
+        "delta_tags": [
+          "firbosdru",
+          "tasscosni"
+        ]
+      }
+    },
+    {
+      "source": "config_upload",
+      "source_key": "root/tpl-variants-it.pdf",
+      "attributes": {
+        "alpha_code": "ZQW-4120",
+        "beta_label": "Lestrelvi Vulrarze",
+        "gamma_group": "Scofeme",
+        "delta_tags": [
+          "tasscosni",
+          "forevo",
+          "firbosdru"
+        ]
+      }
+    }
+  ]
+}

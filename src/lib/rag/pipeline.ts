@@ -2,6 +2,7 @@ import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { describeStageCause } from './stage-error-cause';
 import { RetrievalBackendError, searchByEmbedding, type RawChunk, type RpcClient } from './backend/supabase-rpc';
+import { warnBackendIgnoredOnLegacy } from './backend/factory';
 import {
   CORE_STAGES,
   FALLBACK_STAGE_TIMEOUT_MS,
@@ -17,9 +18,13 @@ import {
   filterCandidates,
   type AssembleInput,
   type AssembleOutput,
+  IMAGE_EXTENSIONS,
   type FilteredCandidates,
 } from './context/assemble';
+import { documentBudgetOf, packFiltered } from './context/pack';
 import { fetchAssemblyRows, type AssemblyRows } from './context/fetch-rows';
+import { recordAnswerConflict, versionConflictAttributes } from './context/version-conflicts';
+import { readAnswerConfig } from './generation/answer-config';
 import { formatImageContext, formatVideoContext } from './context/media';
 import {
   OVERVIEW_MATCH_COUNT,
@@ -80,9 +85,11 @@ import { finishTrace, type FinishTraceOptions } from './trace/finish';
 import { resolveEffectivePipeline, V2_UNAVAILABLE, type PipelineFallback } from './v2/readiness';
 import { voiceKeywordFallback, type VoiceChunk } from './voice/keyword-fallback';
 import type {
+  BackendDegradedReason,
   Candidate,
   InjectionSummary,
   LogOutcome,
+  PackingSummary,
   Profile,
   ReferencedState,
   RetrievalOptions,
@@ -421,11 +428,12 @@ export function downweightOrder<C extends { chunk_id: string }>(candidates: read
 const ASSEMBLY_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval'];
 const EMPTY_ROWS: AssemblyRows = { documents: new Map(), chunkMetadata: new Map() };
 
-async function loadRows(candidates: Candidate[], signal: AbortSignal): Promise<AssemblyRows> {
+async function loadRows(candidates: Candidate[], signal: AbortSignal, tenantKey?: string): Promise<AssemblyRows> {
   if (candidates.length === 0) return EMPTY_ROWS;
   const adminClient = getRagDeps().adminClient();
   if (!adminClient) throw new Error('[RAG Assemble] admin client unavailable');
-  return fetchAssemblyRows(candidates, { adminClient, signal });
+  const withPairs = tenantKey !== undefined && readAnswerConfig().versionLabels;
+  return fetchAssemblyRows(candidates, { adminClient, signal, ...(withPairs ? { tenantKey } : {}) });
 }
 
 function requireAdminSearchClient(deps: RagDeps): RpcClient {
@@ -482,9 +490,23 @@ export function assembleDisabledStatus(
   return records.some((record) => record.name === 'assemble' && record.status === 'disabled') ? 'degraded' : status;
 }
 
+const BACKEND_DEGRADED_REASONS: ReadonlySet<string> = new Set<BackendDegradedReason>(['backend_not_ready', 'backend_error', 'backend_slow']);
+
+/** D-11: the reason of a search stage that pgvector served in place of an unavailable or slow external backend. */
+function backendFallbackOf(records: StageRecord[]): BackendDegradedReason | null {
+  for (const record of records) {
+    if (record.name !== 'search' || record.status !== 'degraded') continue;
+    const reason = record.attributes?.fallback_reason;
+    if (typeof reason === 'string' && BACKEND_DEGRADED_REASONS.has(reason)) return reason as BackendDegradedReason;
+  }
+  return null;
+}
+
 export function degradedReason(records: StageRecord[]): string {
   const skipped = records.find((record) => record.status === 'skipped');
   if (skipped) return `${skipped.name}_${skipped.reason ?? 'skipped'}`;
+  const backendFallback = backendFallbackOf(records);
+  if (backendFallback) return backendFallback;
   if (records.some(detectorUnavailable)) return `injection_check_${INJECTION_DETECTOR_UNAVAILABLE}`;
   return records.some((record) => record.name === 'assemble' && record.status === 'disabled') ? 'assemble_disabled' : 'degraded';
 }
@@ -876,6 +898,8 @@ function bufferedCollector(parent: TraceCollector): TraceCollector & { commit():
     markGenerationStart: () => parent.markGenerationStart(),
     markFirstTextDelta: () => parent.markFirstTextDelta(),
     setCacheState: (state) => parent.setCacheState(state),
+    setLanguages: (block) => parent.setLanguages(block),
+    languages: () => parent.languages(),
     timing: () => parent.timing(),
     commit() {
       for (const record of buffer.stages()) {
@@ -891,6 +915,7 @@ function bufferedCollector(parent: TraceCollector): TraceCollector & { commit():
           rules: record.rules,
           ...(record.versions !== undefined ? { versions: record.versions } : {}),
           ...(record.detail !== undefined ? { detail: record.detail } : {}),
+          ...(record.attributes !== undefined ? { attributes: record.attributes } : {}),
         });
       }
     },
@@ -921,6 +946,7 @@ async function dispatchRetrieval(
   if (evalBindingOverride && effective.pipeline === 'legacy') return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
   if (effective.pipeline === 'legacy') {
     if (effective.fallback !== 'none') recordPipelineFallback(collector, effective.fallback);
+    warnBackendIgnoredOnLegacy(loadRagConfig(getRagDeps().ragEnv()).backend);
     return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
   }
 
@@ -968,6 +994,8 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   let injectionStalled = false;
   let injectionMarks: InjectionMarks | null = null;
   const security = deps.securityConfig();
+  const documentBudget = documentBudgetOf(input.options?.documentTokenBudget);
+  let packing: PackingSummary | undefined;
 
   try {
     referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
@@ -1050,6 +1078,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         citationLabeler: input.citationLabeler,
         ...(security.contextTagging ? { contextTagging: true } : {}),
         ...(injectionMarks ? { injectionMarks } : {}),
+        ...(rows.versionPairs ? { versionPairs: rows.versionPairs } : {}),
       });
 
       let rows: AssemblyRows | null = null;
@@ -1059,7 +1088,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         spec('post_filter', 'skip'),
         signal,
         async (stageSignal) => {
-          const loaded = await loadRows(candidates, stageSignal);
+          const loaded = await loadRows(candidates, stageSignal, scopeKey(scope));
           const result = filterCandidates(assemblyInput(loaded, true));
           rows = loaded;
           filtered = result;
@@ -1105,15 +1134,23 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         spec('assemble', 'skip'),
         signal,
         async (stageSignal) => {
-          const loaded: AssemblyRows = rows ?? (await loadRows(candidates, stageSignal));
+          const loaded: AssemblyRows = rows ?? (await loadRows(candidates, stageSignal, scopeKey(scope)));
           const applyRelevanceFilter = !postFilter.skipped;
           const state = filtered ?? filterCandidates(assemblyInput(loaded, applyRelevanceFilter));
-          return buildContext(state, assemblyInput(loaded, applyRelevanceFilter));
+          if (documentBudget === null) return buildContext(state, assemblyInput(loaded, applyRelevanceFilter));
+          // D-83, D-95: packed before buildContext, whose labeller then aliases only the kept blocks.
+          const packed = packFiltered(state, candidates, loaded.documents, documentBudget, {
+            isGPTModel: input.options?.isGPTModel ?? false,
+            imageExtensions: IMAGE_EXTENSIONS,
+          });
+          packing = packed.summary;
+          return buildContext(packed.state, { ...assemblyInput(loaded, applyRelevanceFilter), candidates: packed.candidates });
         },
         collector,
         {
           candidatesIn: (filtered as FilteredCandidates<Candidate> | null)?.relevantChunks.length ?? candidates.length,
           candidatesOut: (value) => value.usedDocuments.length,
+          attributes: (value) => versionConflictAttributes(value.versionConflict),
         },
       );
       assembly = assembled.skipped ? null : assembled.value;
@@ -1154,6 +1191,9 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
 
   const base = { ...failure(collector, status, reason, queryContext), ...(injection ? { injection } : {}) };
   if (!assembly) return { ...base, candidates };
+  if (assembly.versionConflict && profile !== 'eval') {
+    recordAnswerConflict({ tenantKey: scopeKey(scope), conflict: assembly.versionConflict, traceId: collector.traceId });
+  }
 
   return {
     ...base,
@@ -1167,6 +1207,8 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
     queryTerms: assembly.queryTerms,
     refusalCandidate: assembly.refusalCandidate,
     blocks: assembly.blocks,
+    ...(assembly.versionConflict ? { versionConflict: assembly.versionConflict } : {}),
+    ...(packing ? { packing } : {}),
   };
 }
 
@@ -1196,6 +1238,7 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
   let voiceInput = 0;
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
+  let packing: PackingSummary | undefined;
 
   try {
     const embedding = requireValue(
@@ -1274,12 +1317,18 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
     const assembled = await runStage(
       spec('assemble', 'skip'),
       signal,
-      () => assembleVoiceResults({ query, chunks: ranked, matchCount }),
+      () => assembleVoiceResults({ query, chunks: ranked, matchCount, documentTokenBudget: documentBudgetOf(input.options?.documentTokenBudget) }),
       collector,
       { candidatesIn: ranked.length, candidatesOut: (value) => value.results.length },
     );
     voiceInput = ranked.length;
-    voice = assembled.skipped ? { results: [], source_images: [] } : assembled.value;
+    if (assembled.skipped) {
+      voice = { results: [], source_images: [] };
+    } else {
+      const { packing: voicePacking, ...payload } = assembled.value;
+      voice = payload;
+      packing = voicePacking;
+    }
     if (security.contextTagging && !assembled.skipped) {
       const context = voiceContext(voice.results, flaggedForRender);
       if (context !== null) voice = { ...voice, context };
@@ -1312,5 +1361,5 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
       : status === 'empty'
         ? 'no_candidates'
         : injectionReason(records, injectionStalled);
-  return { ...failure(collector, status, reason, null), voice, ...(injection ? { injection } : {}) };
+  return { ...failure(collector, status, reason, null), voice, ...(injection ? { injection } : {}), ...(packing ? { packing } : {}) };
 }

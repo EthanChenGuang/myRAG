@@ -15,14 +15,8 @@ export {
   type AccessScopeMode,
 } from './access-brand';
 
-/**
- * A-14: the stable seam Phase 7 (07-38, 07-39) reads. The accessor name and the three shapes are a contract; renaming either breaks that
- * phase.
- */
-export type ScopeAccessFilter =
-  | { mode: 'off' }
-  | { mode: 'admin_all' }
-  | { mode: 'keys'; keys: readonly string[]; setHash: string };
+export { accessRpcArgs, sameAccessFilter, type ScopeAccessFilter } from './access-filter';
+import type { ScopeAccessFilter } from './access-filter';
 
 /** A scope that was never resolved for access while RAG_DOC_ACCESS_GROUPS is on: retrieval fails closed (D-09, D-10). */
 export class AccessScopeMissingError extends Error {
@@ -34,6 +28,11 @@ export class AccessScopeMissingError extends Error {
 
 function accessGroupsOn(): boolean {
   return loadRagConfig(getRagDeps().ragEnv()).accessGroups === 'on';
+}
+
+/** True while RAG_DOC_ACCESS_GROUPS is on; read paths outside retrieval use it to skip access work while the switch is off. */
+export function accessGroupsEnabled(): boolean {
+  return accessGroupsOn();
 }
 
 /** A-14 seam 1: the scope's access filter; an unattached scope is off while the switch is off and throws while it is on. */
@@ -48,26 +47,6 @@ export function scopeAccessFilter(scope: TenantScope): ScopeAccessFilter {
   if (access.mode === 'off') return { mode: 'off' };
   if (access.mode === 'admin_all') return { mode: 'admin_all' };
   return { mode: 'keys', keys: access.keys, setHash: access.setHash };
-}
-
-/** Two filters describe the same access: same mode and, for keys, the same key set and set hash. */
-export function sameAccessFilter(a: ScopeAccessFilter, b: ScopeAccessFilter): boolean {
-  if (a.mode !== b.mode) return false;
-  if (a.mode === 'keys' && b.mode === 'keys') {
-    if (a.setHash !== b.setHash) return false;
-    const left = [...new Set(a.keys)].sort();
-    const right = [...new Set(b.keys)].sort();
-    return left.length === right.length && left.every((key, index) => key === right[index]);
-  }
-  return true;
-}
-
-/** The only place a filter becomes SQL arguments: off sends nothing, so the request body is today's. */
-export function accessRpcArgs(filter: ScopeAccessFilter): { p_access_keys?: string[]; p_access_all?: boolean } {
-  if (filter.mode === 'off') return {};
-  if (filter.mode === 'admin_all') return { p_access_keys: ['all'], p_access_all: true };
-  if (filter.keys.length === 0) throw new Error('[RAG Access] keys filter without keys');
-  return { p_access_keys: [...filter.keys], p_access_all: false };
 }
 
 /** D-06, D-07: who is asking, always established by the server (session, signed token, embed configuration, eval admission). */

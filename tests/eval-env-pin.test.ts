@@ -38,6 +38,24 @@ describe('pinned eval env', () => {
     expect(pinned).not.toHaveProperty('REDIS_URL');
   });
 
+  test('pins the twelve Phase 6.2 variables at their D-28 defaults with the D-35 routing model ids', () => {
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    expect(pinned).toMatchObject({
+      RAG_QUERY_DECOMPOSE_COMPLETENESS: 'true',
+      RAG_QUERY_SUBQ_FILTERS: 'false',
+      RAG_DECOMPOSED_ANSWER: 'true',
+      RAG_TRANSLATION_GLOSSARY: 'false',
+      RAG_LANGID_SIDECAR: 'false',
+      RAG_MODEL_ROUTING: 'off',
+      RAG_ROUTING_FAST_MODEL: 'anthropic/claude-haiku-5.5',
+      RAG_ROUTING_QUALITY_MODEL: 'anthropic/claude-sonnet-5.5',
+      RAG_SPECULATIVE_RETRIEVAL: 'false',
+      RAG_QUERY_HISTORY_FALLBACK: 'true',
+      RAG_WHATSAPP_HISTORY: 'false',
+      RAG_SCOPE_GATE: 'false',
+    });
+  });
+
   test('pins the eighteen Phase 3.2 variables: languages zh,en,it with primary en, every switch at its D-47 default, RAG_TABLE_HEADER_REPEAT at the 03.2-67 decision (D-02, D-19)', () => {
     const expected = {
       RAG_SUPPORTED_LANGUAGES: 'zh,en,it',
@@ -161,6 +179,22 @@ describe('pinned eval env', () => {
     expect(() => parseRunConfig({ name: 'bad-guard', env: { RAG_OUTPUT_GUARD: 'block' } }, 'inline')).toThrow(RunConfigError);
     expect(() => parseRunConfig({ name: 'bad-hold', env: { RAG_UPLOADER_HOLD: 'always' } }, 'inline')).toThrow(RunConfigError);
     expect(() => parseRunConfig({ name: 'bad-cap', env: { RAG_MAX_OUTPUT_TOKENS: 'lots' } }, 'inline')).toThrow(RunConfigError);
+  });
+
+  test('pins the four Phase 5.2.1 switches at their defaults and lets a run config set them (05.2.1 D-88)', () => {
+    const expected = { RAG_CALC_TOOL: 'false', RAG_CALC_CHECK: 'false', RAG_PROMPT_BUDGET: 'false', RAG_CONTEXT_OVERFLOW: 'truncate' };
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    for (const [name, value] of Object.entries(expected)) {
+      expect(pinned[name], name).toBe(value);
+      expect(RUN_CONFIG_ENV_ALLOWLIST, `${name} is settable by a run config`).toContain(name);
+    }
+    const config = parseRunConfig(
+      { name: 'calc-budget', env: { RAG_CALC_TOOL: 'true', RAG_CALC_CHECK: 'true', RAG_PROMPT_BUDGET: 'true', RAG_CONTEXT_OVERFLOW: 'refine' } },
+      'inline',
+    );
+    expect(config.env).toEqual({ RAG_CALC_CHECK: 'true', RAG_CALC_TOOL: 'true', RAG_CONTEXT_OVERFLOW: 'refine', RAG_PROMPT_BUDGET: 'true' });
+    expect(() => parseRunConfig({ name: 'bad-overflow', env: { RAG_CONTEXT_OVERFLOW: 'drop' } }, 'inline')).toThrow(RunConfigError);
+    expect(() => parseRunConfig({ name: 'bad-calc', env: { RAG_CALC_TOOL: 'yes' } }, 'inline')).toThrow(RunConfigError);
   });
 
   test('a run config cannot set the embed version-scope switch (D-58)', () => {

@@ -1,0 +1,202 @@
+{
+  "schema_version": 1,
+  "phase": "03.3",
+  "description": "Phase 3.3 eval gates (D-36, TPL-09), registered in plan 03.3-22 before any tpl-recommended run existed. This file is committed once and never edited: a later failing gate is a result, never a reason to change a number here. Evaluated by python -m rag_eval.phase33_gate evaluate over the run directories of eval/config/phase33-comparison.json.",
+  "comparison_spec": "eval/config/phase33-comparison.json",
+  "noise": "eval/config/noise.json",
+  "gate_split": "dev",
+  "min_dev_items": 10,
+  "gates": [
+    {
+      "id": "off_identity",
+      "kind": "off_identity",
+      "runs": [
+        "tpl-all-off-prechunked",
+        "tpl-all-off-ingest"
+      ],
+      "decisions": [
+        "D-36"
+      ],
+      "requirements": [
+        "TPL-09"
+      ]
+    },
+    {
+      "id": "boilerplate_share",
+      "kind": "boilerplate_share",
+      "run": "tpl-recommended-ingest",
+      "control": "tpl-all-off-ingest",
+      "slice": "category:templated_collection",
+      "max": 0.01,
+      "control_min": 0.04,
+      "decisions": [
+        "D-13",
+        "D-15"
+      ],
+      "requirements": [
+        "TPL-02"
+      ]
+    },
+    {
+      "id": "named_document",
+      "kind": "named_document",
+      "run": "tpl-recommended-ingest",
+      "tag": "feature:attribute_named",
+      "k": 5,
+      "recall_min": 0.95,
+      "wrong_document_at_1_max": 0.05,
+      "cited_asked_document_min": 0.9,
+      "decisions": [
+        "D-28",
+        "D-29",
+        "D-30"
+      ],
+      "requirements": [
+        "TPL-03",
+        "TPL-06",
+        "TPL-09"
+      ]
+    },
+    {
+      "id": "variant",
+      "kind": "variant",
+      "run": "tpl-recommended-ingest",
+      "tag": "feature:variant",
+      "min": 0.85,
+      "decisions": [
+        "D-19"
+      ],
+      "requirements": [
+        "TPL-01"
+      ]
+    },
+    {
+      "id": "quantity",
+      "kind": "quantity",
+      "run": "tpl-recommended-ingest",
+      "tag": "feature:quantity",
+      "min": 0.9,
+      "require_lexical_leg": true,
+      "decisions": [
+        "D-31"
+      ],
+      "requirements": [
+        "TPL-07"
+      ]
+    },
+    {
+      "id": "no_other_slice_drop",
+      "kind": "no_other_slice_drop",
+      "pairs": [
+        {
+          "run": "tpl-recommended-prechunked",
+          "reference": "tpl-v2-off-prechunked"
+        },
+        {
+          "run": "tpl-recommended-ingest",
+          "reference": "tpl-v2-off-ingest"
+        }
+      ],
+      "exclude_categories": [
+        "templated_collection"
+      ],
+      "decisions": [
+        "D-36"
+      ],
+      "requirements": [
+        "TPL-09"
+      ]
+    }
+  ],
+  "report_only": {
+    "fallback_rate_runs": [
+      "tpl-recommended-ingest",
+      "tpl-only-filter-hard-ingest",
+      "tpl-only-filter-soft-ingest"
+    ],
+    "retrieval_moves": {
+      "pairs": [
+        {
+          "run": "tpl-recommended-prechunked",
+          "reference": "tpl-v2-off-prechunked"
+        },
+        {
+          "run": "tpl-recommended-ingest",
+          "reference": "tpl-v2-off-ingest"
+        }
+      ],
+      "exclude_categories": [
+        "templated_collection"
+      ]
+    },
+    "single_switch": [
+      {
+        "run": "tpl-only-boilerplate-prechunked",
+        "reference": "tpl-v2-off-prechunked"
+      },
+      {
+        "run": "tpl-only-boilerplate-ingest",
+        "reference": "tpl-v2-off-ingest"
+      },
+      {
+        "run": "tpl-only-section-rules-prechunked",
+        "reference": "tpl-v2-off-prechunked"
+      },
+      {
+        "run": "tpl-only-section-rules-ingest",
+        "reference": "tpl-v2-off-ingest"
+      },
+      {
+        "run": "tpl-only-attributes-prechunked",
+        "reference": "tpl-v2-off-prechunked"
+      },
+      {
+        "run": "tpl-only-attributes-ingest",
+        "reference": "tpl-v2-off-ingest"
+      },
+      {
+        "run": "tpl-only-header-prechunked",
+        "reference": "tpl-v2-off-prechunked"
+      },
+      {
+        "run": "tpl-only-header-ingest",
+        "reference": "tpl-v2-off-ingest"
+      },
+      {
+        "run": "tpl-only-filter-hard-prechunked",
+        "reference": "tpl-v2-off-prechunked"
+      },
+      {
+        "run": "tpl-only-filter-hard-ingest",
+        "reference": "tpl-v2-off-ingest"
+      },
+      {
+        "run": "tpl-only-filter-soft-prechunked",
+        "reference": "tpl-v2-off-prechunked"
+      },
+      {
+        "run": "tpl-only-filter-soft-ingest",
+        "reference": "tpl-v2-off-ingest"
+      },
+      {
+        "run": "tpl-only-quantity-prechunked",
+        "reference": "tpl-v2-off-prechunked"
+      },
+      {
+        "run": "tpl-only-quantity-ingest",
+        "reference": "tpl-v2-off-ingest"
+      },
+      {
+        "run": "tpl-only-identifier-feed-prechunked",
+        "reference": "tpl-v2-off-prechunked"
+      },
+      {
+        "run": "tpl-only-identifier-feed-ingest",
+        "reference": "tpl-v2-off-ingest"
+      }
+    ],
+    "notes": [
+      "Report-only (D-36): the attribute filter fallback rate per run; retrieval moves of tpl-recommended against tpl-v2-off over non-templated items (cleaning and quantity tokens may legitimately move them); the five templated rates and the slice deltas of each single-switch run against tpl-v2-off of the same mode."
+    ]
+  }
+}

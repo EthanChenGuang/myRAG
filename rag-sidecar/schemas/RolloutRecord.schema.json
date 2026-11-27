@@ -1,0 +1,198 @@
+{
+  "$defs": {
+    "RolloutRef": {
+      "additionalProperties": false,
+      "description": "What one arm serves: exactly one of an embedding profile, chunking profiles or a rebuild run.",
+      "properties": {
+        "chunking_profile_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chunking Profile Ids",
+          "uniqueItems": true
+        },
+        "embedding_profile_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embedding Profile Id"
+        },
+        "rebuild_run_id": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rebuild Run Id"
+        }
+      },
+      "title": "RolloutRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One rag_rollouts row with its tenant memberships (plans 07-47, 07-49).",
+  "properties": {
+    "candidate_ref": {
+      "$ref": "#/$defs/RolloutRef"
+    },
+    "created_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})?)?$",
+      "title": "Created At",
+      "type": "string"
+    },
+    "created_by": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created By"
+    },
+    "ended_at": {
+      "anyOf": [
+        {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})?)?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ended At"
+    },
+    "ended_by": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ended By"
+    },
+    "excluded_tenants": {
+      "items": {
+        "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+        "type": "string"
+      },
+      "title": "Excluded Tenants",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "included_tenants": {
+      "items": {
+        "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+        "type": "string"
+      },
+      "title": "Included Tenants",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "incumbent_ref": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RolloutRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "kind": {
+      "enum": [
+        "embedding_profile",
+        "chunking_profile",
+        "rebuild_run"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "tenants",
+        "share"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "salt": {
+      "pattern": "^[A-Za-z0-9_-]{8,128}$",
+      "title": "Salt",
+      "type": "string"
+    },
+    "share_percent": {
+      "anyOf": [
+        {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Share Percent"
+    },
+    "state": {
+      "enum": [
+        "active",
+        "promoted",
+        "rolled_back",
+        "cancelled"
+      ],
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "kind",
+    "candidate_ref",
+    "mode",
+    "salt",
+    "state",
+    "created_at"
+  ],
+  "title": "RolloutRecord",
+  "type": "object"
+}

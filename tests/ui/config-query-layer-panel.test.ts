@@ -356,6 +356,8 @@ describe('Query layer panel module (D-44)', () => {
     }
     const tenantInput = /<input[^>]*id="query-layer-clear-tenant"[^>]*>/.exec(card)![0];
     expect(tenantInput).not.toMatch(/\bname=/);
-    expect(card.replace(/<[^>]+>/g, '')).toContain('voice always uses the native condense');
+    // Plan 07-20: the voice transforms input moved to the generated RAG pipeline section, which renders its manifest help.
+    const manifest = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '../../scripts/rag/env-manifest.json'), 'utf8')) as { vars: Array<{ name: string; help?: string }> };
+    expect(manifest.vars.find((v) => v.name === 'RAG_QUERY_VOICE_TRANSFORMS')?.help).toContain('voice always uses the native condense');
   });
 });

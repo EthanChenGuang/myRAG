@@ -394,6 +394,7 @@ export const pt = {
   waitingForApproval: "Aguardando sua aprovação...",
   executingTool: "Executando ferramenta, por favor aguarde...",
   toolError: "Ocorreu um erro ao executar a ferramenta.",
+  voiceUnavailable: "A voz está temporariamente indisponível. Tente novamente mais tarde.",
   
   // Chat message action tooltips
   copyTooltip: "Copiar",

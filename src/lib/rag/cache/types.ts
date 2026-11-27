@@ -12,6 +12,8 @@ export type GroundednessLabel = NonNullable<CachedAnswer['groundedness']['label'
 
 /** Every part of key_hash. Document references and retrieval options are bypass rules, not key parts. */
 export interface CacheKeyParts {
+  /** D-23, A-05: cacheAccessKeyPart(scope); required, so no key is built without the caller's group-set hash. */
+  accessGroupSetHash: string;
   answerLanguage: CacheAnswerLanguage;
   ragMode: CacheRagMode;
   generatorModel: string;
@@ -37,6 +39,19 @@ export interface CacheQuery extends CacheKeyParts {
   maxDistance?: number;
   /** The request's signal; the fail-open wrapper adds the 150 ms deadline. */
   signal?: AbortSignal;
+}
+
+/**
+ * D-23 (04.3-13): the access hooks a backend calls, injected by deps.ts so the backends load no config or env. accessRpcArgs is
+ * accessRpcArgs(scopeAccessFilter(scope)) ({} while access groups are off); visibleDocumentIds is the batched visibility check.
+ */
+export interface CacheAccessIo {
+  accessRpcArgs(scope: TenantScope): Promise<{ p_access_keys?: string[]; p_access_all?: boolean }>;
+  visibleDocumentIds(
+    scope: TenantScope,
+    documentIds: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<{ ok: true; ids: ReadonlySet<string> } | { ok: false }>;
 }
 
 export interface CacheCallOptions {

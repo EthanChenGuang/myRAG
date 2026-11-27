@@ -26,6 +26,7 @@ from rag_sidecar.contracts import (
     SecurityAlertView,
     SecurityUploaderView,
     LinkPreviewStatus,
+    ReviewCheckDetails,
     AnswerFeedbackRequest,
     AnswerRecord,
     CacheCheckRequest,
@@ -96,6 +97,8 @@ from rag_sidecar.contracts import (
     SidecarHealth,
     SidecarInfo,
     SidecarReady,
+    ProviderTestRequest,
+    ProviderTestResult,
     AdvanceRequest,
     AdvanceResponse,
     TranslateCallbackRequest,
@@ -192,7 +195,13 @@ from rag_sidecar.contracts.retrieval import (
     TableRow,
     VersionRange,
 )
+from rag_sidecar.contracts.langid import LangidRequest, LangidResponse
+from rag_sidecar.contracts.query import SubQuestionsWithFilters
+from rag_sidecar.contracts.query_additions import QueryAdditionsDecisionRecord, RagTurnMetadata
 from rag_sidecar.contracts.samples import build_samples
+from rag_sidecar.contracts.calc import CalcCheck, CalcLimits, CalcRequest, CalcResult, CalcTrace
+from rag_sidecar.contracts.prompt_budget import PromptBudgetConfig, PromptBudgetTrace, TokenizerCalibration
+from rag_sidecar.contracts.scope_gate import ScopeGateCalibration, ScopeGateResult
 from rag_sidecar.contracts.golden_lifecycle import GoldenSetManifest
 from rag_sidecar.contracts.quality_gates import AbsoluteGateResult, CompositionResult, QualityGates
 from rag_sidecar.contracts.monitor import (
@@ -205,6 +214,15 @@ from rag_sidecar.contracts.monitor import (
     MonitorSamplingConfig,
 )
 from rag_sidecar.contracts.judge_calibration import JudgeCalibration, JudgeCalibrationCell, JudgeSeedCase
+from rag_sidecar.contracts.release import DefaultsDecision, RegressionPlan, VendorDataFlow
+from rag_sidecar.contracts.language_monitor import (
+    LanguageConfidenceCalibration,
+    LanguageDropAlert,
+    LanguageQualityCell,
+    TraceLanguages,
+)
+from rag_sidecar.contracts.rollout import RolloutPromoteResult, RolloutRecord
+from rag_sidecar.contracts.red_team import RedTeamCorpusItem, RedTeamReport
 from rag_sidecar.contracts.release_gate import ReleaseGateConfig, ReleaseGatePart, ReleaseGateResult
 from rag_sidecar.contracts.config_change import (
     ConfigChangeRecord,
@@ -293,6 +311,8 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (SidecarReady, "serialization"),
     (SidecarInfo, "serialization"),
     (SidecarError, "serialization"),
+    (ProviderTestRequest, "validation"),
+    (ProviderTestResult, "serialization"),
     (PreflightResult, "serialization"),
     (PageStructureVerdict, "serialization"),
     (ParseRoutingConfig, "validation"),
@@ -338,6 +358,7 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (SecurityAlertView, "serialization"),
     (SecurityUploaderView, "serialization"),
     (LinkPreviewStatus, "serialization"),
+    (ReviewCheckDetails, "serialization"),
     (InjectionClassifyRequest, "validation"),
     (InjectionClassifyResponse, "serialization"),
     (InjectionDetectorConfig, "validation"),
@@ -471,6 +492,31 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (QueryVectorRow, "serialization"),
     (ChunkVectorRow, "serialization"),
     (VectorFileHeader, "serialization"),
+    (CalcRequest, "validation"),
+    (CalcTrace, "validation"),
+    (CalcLimits, "validation"),
+    (CalcResult, "serialization"),
+    (CalcCheck, "serialization"),
+    (PromptBudgetConfig, "validation"),
+    (TokenizerCalibration, "validation"),
+    (PromptBudgetTrace, "serialization"),
+    (SubQuestionsWithFilters, "validation"),
+    (ScopeGateResult, "serialization"),
+    (ScopeGateCalibration, "validation"),
+    (LangidRequest, "validation"),
+    (LangidResponse, "serialization"),
+    (RagTurnMetadata, "validation"),
+    (QueryAdditionsDecisionRecord, "validation"),
+    (DefaultsDecision, "serialization"),
+    (RegressionPlan, "serialization"),
+    (VendorDataFlow, "validation"),
+    (LanguageConfidenceCalibration, "validation"),
+    (LanguageQualityCell, "serialization"),
+    (LanguageDropAlert, "serialization"),
+    (RolloutRecord, "serialization"),
+    (RolloutPromoteResult, "serialization"),
+    (RedTeamCorpusItem, "validation"),
+    (RedTeamReport, "serialization"),
 ]
 
 

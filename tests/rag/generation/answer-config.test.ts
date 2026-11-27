@@ -37,6 +37,10 @@ describe('readAnswerConfig', () => {
       uploaderAlertThreshold: 0,
       uploaderAlertWindowHours: 24,
       uploaderHold: 'off',
+      calcTool: false,
+      calcCheck: false,
+      promptBudget: false,
+      contextOverflow: 'truncate',
       anyNonDefault: false,
       warnings: [],
     });
@@ -230,5 +234,96 @@ describe('warnAnswerConfigOnce', () => {
     warnAnswerConfigOnce(readAnswerConfig({ RAG_UPLOADER_HOLD: 'x' }));
     expect(warn).toHaveBeenCalledTimes(2);
     expect(warn.mock.calls[1][1]).toEqual({ codes: ['invalid_uploader_hold'] });
+  });
+
+  describe('Phase 5.2.1 switches (D-58, D-85, D-88)', () => {
+    const PHASE52_TEMPLATE = {
+      RAG_REGISTRY_TEXTS: 'true',
+      RAG_PARTIAL_ANSWER_RULE: 'true',
+      RAG_MAX_OUTPUT_TOKENS: '600',
+      RAG_OUTPUT_GUARD: 'flag',
+      RAG_UPLOADER_HOLD: 'manual',
+      RAG_UPLOADER_ALERT_WINDOW_HOURS: '48',
+    };
+    const PHASE521_FIELDS = ['calcTool', 'calcCheck', 'promptBudget', 'contextOverflow'] as const;
+
+    function withoutPhase521(config: ReturnType<typeof readAnswerConfig>): Record<string, unknown> {
+      const rest: Record<string, unknown> = { ...config };
+      for (const key of PHASE521_FIELDS) delete rest[key];
+      return rest;
+    }
+
+    it('defaults to off and truncate and leaves every Phase 5.2 field unchanged', () => {
+      for (const base of [{}, PHASE52_TEMPLATE]) {
+        const defaults = readAnswerConfig({
+          ...base,
+          RAG_CALC_TOOL: 'false',
+          RAG_CALC_CHECK: 'false',
+          RAG_PROMPT_BUDGET: 'false',
+          RAG_CONTEXT_OVERFLOW: 'truncate',
+        });
+        const unset = readAnswerConfig(base);
+        expect(unset.calcTool).toBe(false);
+        expect(unset.calcCheck).toBe(false);
+        expect(unset.promptBudget).toBe(false);
+        expect(unset.contextOverflow).toBe('truncate');
+        expect(defaults).toEqual(unset);
+        expect(Object.keys(withoutPhase521(unset)).sort()).toEqual(
+          Object.keys(withoutPhase521(readAnswerConfig(base))).sort(),
+        );
+      }
+      expect(readAnswerConfig({ RAG_CONTEXT_OVERFLOW: 'truncate' }).anyNonDefault).toBe(false);
+      expect(readAnswerConfig({}).warnings).toEqual([]);
+    });
+
+    it.each([
+      ['RAG_CALC_TOOL', 'calcTool'],
+      ['RAG_CALC_CHECK', 'calcCheck'],
+      ['RAG_PROMPT_BUDGET', 'promptBudget'],
+    ] as const)('turns %s on only for the literal true and counts it as non-default', (name, key) => {
+      expect(readAnswerConfig({ [name]: 'true' })[key]).toBe(true);
+      expect(readAnswerConfig({ [name]: 'yes' })[key]).toBe(false);
+      expect(readAnswerConfig({ [name]: 'true' }).anyNonDefault).toBe(true);
+      expect(readAnswerConfig({ [name]: 'true' }).warnings).toEqual([]);
+    });
+
+    it('accepts the calculation check without the tool (it also serves the trailing block)', () => {
+      const config = readAnswerConfig({ RAG_CALC_CHECK: 'true', RAG_CALC_TOOL: 'false' });
+      expect(config.calcCheck).toBe(true);
+      expect(config.calcTool).toBe(false);
+      expect(config.warnings).toEqual([]);
+    });
+
+    it('resolves refine without the prompt budget to truncate with one overflow_needs_budget warning', () => {
+      const config = readAnswerConfig({ RAG_CONTEXT_OVERFLOW: 'refine', RAG_PROMPT_BUDGET: 'false' });
+      expect(config.contextOverflow).toBe('truncate');
+      expect(config.warnings.map((warning) => warning.code)).toEqual(['overflow_needs_budget']);
+      expect(config.warnings[0].message).toContain('RAG_CONTEXT_OVERFLOW');
+      expect(config.warnings[0].message).toContain('RAG_PROMPT_BUDGET');
+      expect(config.anyNonDefault).toBe(false);
+    });
+
+    it('keeps refine while the prompt budget is on', () => {
+      const config = readAnswerConfig({ RAG_CONTEXT_OVERFLOW: 'refine', RAG_PROMPT_BUDGET: 'true' });
+      expect(config.contextOverflow).toBe('refine');
+      expect(config.promptBudget).toBe(true);
+      expect(config.warnings).toEqual([]);
+      expect(config.anyNonDefault).toBe(true);
+    });
+
+    it('resolves an unknown overflow value to truncate with an invalid_context_overflow warning that never repeats the value', () => {
+      const config = readAnswerConfig({ RAG_CONTEXT_OVERFLOW: 'zq-overflow-sentinel', RAG_PROMPT_BUDGET: 'true' });
+      expect(config.contextOverflow).toBe('truncate');
+      expect(config.warnings.map((warning) => warning.code)).toEqual(['invalid_context_overflow']);
+      expect(config.warnings[0].message).toContain('RAG_CONTEXT_OVERFLOW');
+      expect(JSON.stringify(config.warnings)).not.toContain('zq-overflow-sentinel');
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      warnAnswerConfigOnce(config);
+      warnAnswerConfigOnce(readAnswerConfig({ RAG_CONTEXT_OVERFLOW: 'refine' }));
+      expect(warn).toHaveBeenCalledTimes(2);
+      expect(warn.mock.calls[0][1]).toEqual({ codes: ['invalid_context_overflow'] });
+      expect(warn.mock.calls[1][1]).toEqual({ codes: ['overflow_needs_budget'] });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('zq-overflow-sentinel');
+    });
   });
 });

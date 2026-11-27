@@ -149,22 +149,26 @@ export interface ExactRankingOptions {
   docTypes?: string[] | null;
   limit: number;
   queryVector?: string;
+  /** Only rows whose chunk and document labels overlap these keys (D-12); null or absent: no access filter. */
+  accessKeys?: string[] | null;
 }
 
-/** Brute-force cosine ranking over matching rows (no index hint). */
+/** Brute-force cosine ranking over matching rows; `+ 0` keeps the planner off the HNSW index even with enable_seqscan off. */
 export async function exactFilteredRanking(db: PGlite, options: ExactRankingOptions): Promise<string[]> {
   const query = options.queryVector ?? selectiveQueryVectorLiteral();
   const result = await db.query<{ id: string }>(
     `SELECT c.id::text
      FROM document_chunks c
+     JOIN documents d ON d.id = c.document_id
      WHERE c.tenant_key = $1
        AND c.is_current
        AND c.status IN ('ready', 'variant')
        AND c.embedding IS NOT NULL
        AND ($2::text[] IS NULL OR c.doc_type = ANY($2))
-     ORDER BY c.embedding <=> $3::vector
+       AND ($5::text[] IS NULL OR (c.access_groups && $5::text[] AND d.access_groups && $5::text[]))
+     ORDER BY (c.embedding <=> $3::vector) + 0
      LIMIT $4`,
-    [options.tenantKey, options.docTypes ?? null, query, options.limit],
+    [options.tenantKey, options.docTypes ?? null, query, options.limit, options.accessKeys ?? null],
   );
   return result.rows.map((row) => row.id);
 }
@@ -392,6 +396,118 @@ export async function createSelectiveFilterDatabase(): Promise<SelectiveFixtureD
     throw new Error(`[Selective Filter] database build exceeded 15s (${Date.now() - started}ms)`);
   }
 
+  return fixture;
+}
+
+/**
+ * 04.3-16 (D-13, A-09): one tenant whose rows are split across three labels, so a member of one group sees a small share and a
+ * member of another sees more than the 1000-row exact cutoff. Neutral synthetic rows; one shared HNSW index as in production.
+ */
+export const ACCESS_SELECTIVE_IDS = {
+  owner: '00000000-0000-4000-8000-0000000004a1',
+  memberSmall: '00000000-0000-4000-8000-0000000004b1',
+  memberLarge: '00000000-0000-4000-8000-0000000004c1',
+  groupSmall: '00000000-0000-4000-8000-0000000004f1',
+  groupLarge: '00000000-0000-4000-8000-0000000004f2',
+  groupOther: '00000000-0000-4000-8000-0000000004f3',
+  docSmall: '00000000-0000-4000-8000-0000000004d1',
+  docLarge: '00000000-0000-4000-8000-0000000004d2',
+  docOther: '00000000-0000-4000-8000-0000000004d3',
+} as const;
+
+export const ACCESS_SELECTIVE_ROWS = { small: 60, large: 1100, other: 1340 } as const;
+
+export function accessSelectiveTenantKey(): string {
+  return `u:${ACCESS_SELECTIVE_IDS.owner}`;
+}
+
+/** The caller's keys as the resolver would mint them: all, the user key, the group key. */
+export function accessSelectiveKeys(which: 'small' | 'large'): string[] {
+  const ids = ACCESS_SELECTIVE_IDS;
+  return which === 'small'
+    ? ['all', `g:${ids.groupSmall}`, `u:${ids.memberSmall}`]
+    : ['all', `g:${ids.groupLarge}`, `u:${ids.memberLarge}`];
+}
+
+export async function createAccessSelectiveDatabase(): Promise<SelectiveFixtureDatabase> {
+  const fixture = await createEmptyFixtureDatabase({ deploymentMode: 'multi-tenant', supabaseGrants: true });
+  const { db } = fixture;
+  const ids = ACCESS_SELECTIVE_IDS;
+  const tenantKey = accessSelectiveTenantKey();
+  try {
+    await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2), ($3, $4), ($5, $6)', [
+      ids.owner,
+      'access-owner@example.invalid',
+      ids.memberSmall,
+      'access-small@example.invalid',
+      ids.memberLarge,
+      'access-large@example.invalid',
+    ]);
+    // As in createSelectiveFilterDatabase: no btree path the planner could sort instead of scanning the HNSW index.
+    await db.exec(`
+      DROP INDEX IF EXISTS idx_document_chunks_embedding;
+      DROP INDEX IF EXISTS idx_document_chunks_organization_id;
+      DROP INDEX IF EXISTS idx_document_chunks_document_id;
+      DROP INDEX IF EXISTS idx_chunks_org_embedding;
+      DROP INDEX IF EXISTS idx_document_chunks_document_chunk_index;
+      DROP INDEX IF EXISTS idx_document_chunks_lexical_tsv;
+      DROP INDEX IF EXISTS idx_document_chunks_lexical_version;
+      DROP INDEX IF EXISTS idx_document_chunks_parent_id;
+      DROP INDEX IF EXISTS idx_document_chunks_tenant_key;
+      DROP INDEX IF EXISTS idx_document_chunks_document_profile;
+    `);
+    const docs = [
+      { id: ids.docSmall, label: `g:${ids.groupSmall}`, rows: ACCESS_SELECTIVE_ROWS.small, seedBase: 200_000 },
+      { id: ids.docLarge, label: `g:${ids.groupLarge}`, rows: ACCESS_SELECTIVE_ROWS.large, seedBase: 300_000 },
+      { id: ids.docOther, label: `g:${ids.groupOther}`, rows: ACCESS_SELECTIVE_ROWS.other, seedBase: 400_000 },
+    ];
+    for (const doc of docs) {
+      await db.query(
+        `INSERT INTO documents (id, filename, content, user_id, is_current, status, doc_type, created_at, access_groups)
+         VALUES ($1, $2, $3, $4, true, 'ready', 'general', $5, $6::text[])`,
+        [doc.id, `access-${doc.rows}.md`, 'synthetic access corpus', ids.owner, CREATED_AT, [doc.label]],
+      );
+    }
+    // Each row leans towards the query by a seeded amount, so the true ranking is well separated (as with real embeddings) and a
+    // recall gap measures the filter, not HNSW noise between near-orthogonal random vectors.
+    const query = embedText(SELECTIVE_QUERY_TEXT);
+    const leaning = (seed: number): number[] => {
+      const lean = mulberry32(seed ^ 0x5bd1e995)() * 0.8;
+      const noise = unitVector(seed);
+      const mixed = noise.map((value, index) => value + lean * query[index]!);
+      const norm = Math.sqrt(mixed.reduce((sum, value) => sum + value * value, 0));
+      return mixed.map((value) => value / norm);
+    };
+    const planned: ChunkInsertRow[] = [];
+    for (const doc of docs) {
+      for (let i = 0; i < doc.rows; i += 1) {
+        const seed = doc.seedBase + i;
+        planned.push({
+          id: chunkIdForSeed(seed),
+          documentId: doc.id,
+          content: `access selective chunk seed ${seed}`,
+          embedding: vectorLiteral(leaning(seed)),
+          chunkIndex: i,
+          tenantKey,
+          docType: 'general',
+          isCurrent: true,
+        });
+      }
+    }
+    // The copy trigger (0921) gives every chunk its document's label.
+    await db.transaction(async (tx) => {
+      await insertChunkRows(tx as unknown as PGlite, planned);
+    });
+    await db.exec(
+      `CREATE INDEX idx_document_chunks_embedding ON document_chunks
+         USING hnsw (embedding vector_cosine_ops)
+         WITH (m = 16, ef_construction = 64)`,
+    );
+    await db.exec('ANALYZE document_chunks');
+  } catch (error) {
+    await db.close().catch(() => undefined);
+    throw error;
+  }
   return fixture;
 }
 

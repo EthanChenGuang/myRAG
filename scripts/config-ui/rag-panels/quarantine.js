@@ -6,6 +6,8 @@
 
 const QUARANTINE_LABELS = {
   en: {
+    'state.held': 'Uploads held',
+    'uploader.showEvents': 'Show uploader\'s events',
     'panel.title': 'Quarantine',
     'panel.description':
       'Documents held out of answers by an injection rule, hidden text or a link outside the allowlist, the documents no hidden-text check covers, and the checks themselves. Lists every workspace you administer.',
@@ -132,6 +134,8 @@ const QUARANTINE_LABELS = {
     'rescan.started': 'Rescan started. Follow it under Ingestion changes, Rebuilds.',
   },
   zh: {
+    'state.held': '上传已暂缓',
+    'uploader.showEvents': '查看该上传者的事件',
     'panel.title': '隔离区',
     'panel.description':
       '因注入规则、隐藏文字或白名单之外的链接而未进入回答的文档、未做隐藏文字检查的文档，以及检查项本身。列出你管理的所有工作区。',
@@ -254,6 +258,8 @@ const QUARANTINE_LABELS = {
     'rescan.started': '重新扫描已开始。可在“入库设置变更 → 重建”中查看进度。',
   },
   it: {
+    'state.held': 'Caricamenti sospesi',
+    'uploader.showEvents': 'Mostra gli eventi dell\'autore',
     'panel.title': 'Quarantena',
     'panel.description':
       'I documenti esclusi dalle risposte da una regola di injection, da testo nascosto o da un link fuori dalla lista consentita, i documenti senza controllo del testo nascosto e i controlli stessi. Elenca tutti gli spazi di lavoro che amministri.',
@@ -513,6 +519,7 @@ function quarantineItemView(item, locale) {
     version: Number.isFinite(Number(data.version)) && data.version !== null ? Number(data.version) : null,
     quarantinedAt: quarantineText(data.quarantined_at),
     uploader: uploaderId || uploaderDisplay ? { id: uploaderId, display: uploaderDisplay || uploaderId, isId: !uploaderDisplay || uploaderDisplay === uploaderId } : null,
+    uploaderHeld: data.uploader_held === true,
     pendingApproval: data.pending_approval === true,
     unlocated: Math.max(quarantineCount(data.unlocated), hiddenGroup ? hiddenGroup.unlocated : 0),
     groups,
@@ -908,12 +915,43 @@ class QuarantinePanel {
     ]);
   }
 
+  /** Phase 5.2 (UI-SPEC 6.14): security events are recorded when the RAG Modes switch is on and the panel is on the page. */
+  securityEventsShown() {
+    const view = typeof window !== 'undefined' ? window : globalThis;
+    const control = this.doc.getElementById('RAG_SECURITY_EVENTS');
+    return Boolean(control && control.checked && this.doc.getElementById('rag-administration-security-events') && typeof view.openSecurityEvents === 'function');
+  }
+
+  uploaderNodes(item) {
+    const ui = quarantineUiLib();
+    if (!item.uploader) return this.el('span', { text: this.t('meta.none') });
+    const name = item.uploader.isId ? this.codeEl(item.uploader.id) : this.el('span', { className: '[overflow-wrap:anywhere]', text: item.uploader.display });
+    const nodes = [name];
+    if (item.uploaderHeld) {
+      nodes.push(
+        this.el('span', { className: 'badge badge-warning badge-sm gap-1 ml-1 h-auto', attrs: { 'data-quarantine-uploader-held': '' } }, [
+          ui.ragUiIcon(this.doc, 'pause-circle'),
+          this.el('span', { text: this.t('state.held') }),
+        ]),
+      );
+    }
+    if (item.uploader.id && this.securityEventsShown()) {
+      const show = this.el('button', {
+        className: 'btn btn-link btn-sm px-1 h-auto min-h-0 align-baseline',
+        text: this.t('uploader.showEvents'),
+        attrs: { type: 'button', 'data-quarantine-uploader-events': item.uploader.id },
+      });
+      show.addEventListener('click', () => {
+        const view = typeof window !== 'undefined' ? window : globalThis;
+        if (typeof view.openSecurityEvents === 'function') void view.openSecurityEvents({ tab: 'events', uploader: { id: item.uploader.id, label: item.uploader.display } });
+      });
+      nodes.push(show);
+    }
+    return this.el('span', { className: 'inline-flex flex-wrap items-center gap-1 min-w-0' }, nodes);
+  }
+
   renderMeta(item) {
-    const uploader = !item.uploader
-      ? this.el('span', { text: this.t('meta.none') })
-      : item.uploader.isId
-        ? this.codeEl(item.uploader.id)
-        : this.el('span', { className: '[overflow-wrap:anywhere]', text: item.uploader.display });
+    const uploader = this.uploaderNodes(item);
     return this.el('dl', { className: 'flex flex-wrap gap-x-4 gap-y-1 text-xs text-base-content/70 mt-2' }, [
       item.workspace ? this.metaItem(this.t('meta.workspace'), this.codeEl(item.workspace)) : null,
       item.source ? this.metaItem(this.t('meta.source'), this.codeEl(item.source)) : null,

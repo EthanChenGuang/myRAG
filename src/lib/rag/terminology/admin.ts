@@ -7,7 +7,7 @@ import { normalizeLexical } from '../lexical/tokenize';
 import { terminologyParams } from './expand';
 import { invalidateTerminologyCache } from './load';
 import { termKey } from './matcher';
-import { validateEntries } from './validate';
+import { validateEntries, withTranslationDefaults } from './validate';
 
 /** D-03: the fixed reasons a dictionary admin call can fail with; no database message ever leaves this module. */
 export type TerminologyAdminFailure =
@@ -271,6 +271,8 @@ const listArgs = (actor: string, layerKey: string, limit: number, offset: number
   p_search: search,
 });
 
+const filterOf = (value: string | null | undefined): string | null => (typeof value === 'string' && value.trim() !== '' ? value.trim() : null);
+
 /** The version row of a layer (version 0 and no hash before the first write). Call only after the SQL checked the actor for the layer. */
 async function layerState(layerKey: string, signal: AbortSignal): Promise<{ ok: true; state: TerminologyLayerVersion } | TerminologyAdminFailed> {
   const db = client();
@@ -431,7 +433,7 @@ async function writeEntry(
     enabledLanguages: terminologyEnabledLanguages(),
     minHanChars: terminologyParams().min_han_chars,
   };
-  const candidate = candidateOf(build(existing), layer, existing?.id ?? null);
+  const candidate = candidateOf(withTranslationDefaults(build(existing)), layer, existing?.id ?? null);
   const issues = validateEntries([candidate], context);
   if (errorsOf(issues).length > 0) return { ok: false, reason: 'invalid', issues };
 
@@ -480,12 +482,29 @@ async function writeEntry(
 
 /** One page of a layer (suppression rows included), with the layer version and the enabled languages for the Config UI (D-35). */
 export async function listEntries(
-  input: LayerInput & { limit?: number; offset?: number; search?: string | null },
+  input: LayerInput & {
+    limit?: number;
+    offset?: number;
+    search?: string | null;
+    kind?: TerminologyKind | null;
+    sourceLanguage?: string | null;
+    targetLanguage?: string | null;
+  },
 ): Promise<ListTerminologyEntriesResult> {
   const limit = clampLimit(input.limit);
   const offset = clampOffset(input.offset);
-  const search = typeof input.search === 'string' && input.search.trim() !== '' ? input.search.trim() : null;
-  const page = await callTerminologyRpc('rag_term_list_entries', listArgs(input.actorUserId, input.layerKey, limit, offset, search), input.signal);
+  const search = filterOf(input.search);
+  // 06.2 D-15: the Glossary view filters by kind, source language (the entry language) and target language in SQL, before the page is cut.
+  const page = await callTerminologyRpc(
+    'rag_term_list_entries',
+    {
+      ...listArgs(input.actorUserId, input.layerKey, limit, offset, search),
+      p_kind: filterOf(input.kind),
+      p_source_language: filterOf(input.sourceLanguage),
+      p_target_language: filterOf(input.targetLanguage),
+    },
+    input.signal,
+  );
   if (!page.ok) return page;
   const state = await layerState(input.layerKey, input.signal);
   if (!state.ok) return state;

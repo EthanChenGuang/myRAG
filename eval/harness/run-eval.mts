@@ -14,14 +14,16 @@ import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
 import { ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.mts';
 import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTableSplitTenant, type TableSplitTenant } from './table-split.mts';
-import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
+import { isTemplatedItem } from './templated-fixtures.mts';
+import { phase33BuildEnv, PHASE33_PROCESS_SWITCHES } from './templated-seed.mts';
+import { closeQ62Tenant, isQ62Item, Q62_USER_ID, withQ62Tenant, type Q62Tenant } from './q62-fixtures.mts';
+import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedRunLexicalStats, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 import {
-  DEFAULT_FAKE_CITATION_SEED,
   FAKE_CITATION_GENERATOR_MODEL,
   FAKE_INSTRUCTION_GENERATOR_MODEL,
-  installFakeCitationGenerator,
+  type FakeCitationGeneratorOptions,
   type FakeLanguageModelFactory,
 } from './fake-citation-generator.mts';
 import { installFakeAnswerModels, isFakeGeneratorModel } from './fake-answer-models.mts';
@@ -101,8 +103,11 @@ export function resolveAnswerGenerator(input: AnswerGeneratorInput): {
 }
 
 /** The one fake factory: the Phase 5.2 fakes by model id, every other id the fake citation generator (D-24, D-54). */
-export function evalFakeLanguageModelFactory(items: readonly GoldenItem[]): FakeLanguageModelFactory {
-  return installFakeAnswerModels({ items });
+export function evalFakeLanguageModelFactory(
+  items: readonly GoldenItem[],
+  citation?: FakeCitationGeneratorOptions,
+): FakeLanguageModelFactory {
+  return installFakeAnswerModels({ items, ...(citation ? { citation } : {}) });
 }
 export const LIVE_KEY_MISSING_NOTICE = '[RAG Eval] OPENROUTER_API_KEY not set; live generation skipped';
 
@@ -121,12 +126,16 @@ export interface InProcessEval {
   fixtureDb: import('@electric-sql/pglite').PGlite;
   /** Set when the session was prepared for table_split items (ingest mode only). */
   tableSplitTenants?: TableSplitTenant[];
+  /** Set when the session was prepared for q62 items (either fixture mode). */
+  q62Tenant?: Q62Tenant;
   /** Ingest mode only: golden corpus document id to the id of the document the build wrote from the same file. */
   ingestDocumentIds?: ReadonlyMap<string, string>;
   fixtureUserId: string;
   corpusSha256: string;
   sqlSha256: Record<string, string>;
   fakeQueryLlm?: import('./fake-query-llm.mts').FakeQueryLlm;
+  /** D-36: set when the run's effective lexical scoring is bm25 and the fixture tenants' statistics were rebuilt. */
+  lexicalStats?: import('./pglite-supabase.mts').RunLexicalStatsReport;
   close: () => Promise<void>;
 }
 
@@ -183,6 +192,8 @@ export interface RunEvalOptions {
   envOverlay?: Record<string, string>;
   /** With cachePairs and baseUrl: the live run seeds and probes a live cache (plan 06-46); refused without it. */
   allowLiveCache?: boolean;
+  /** D-34: the rag_mode of every request (the output-cap sweep runs each mode); default strict. */
+  ragMode?: EvalRagMode;
 }
 
 export interface RunEvalResult {
@@ -239,6 +250,7 @@ export function itemRequestOptions(
 
 // D-07: every harness request runs in strict mode; run.json and the report carry it, run_config_hash does not.
 const EVAL_RAG_MODE = 'strict' as const;
+export type EvalRagMode = 'strict' | 'balanced';
 const NO_INGEST_DOCUMENT_IDS: ReadonlyMap<string, string> = new Map();
 
 const INJECTION_CATEGORIES: ReadonlySet<string> = new Set(['injection', 'injection_evasive']);
@@ -364,8 +376,12 @@ export async function prepareInProcessEval(options: {
   chunkingProfiles?: import('../../src/lib/rag-eval/contracts.generated.ts').ChunkingProfile[];
   /** Ingest mode: also load the isolated table_split tenants (table-split.mts). */
   tableSplit?: boolean;
+  /** Ingest mode: also ingest the templated collection into the fixture tenant (templated-fixtures.mts). */
+  templated?: boolean;
   /** Ingest mode: the doc type the table_split documents are loaded with (RunEvalOptions.tableSplitDocType). */
   tableSplitDocType?: string;
+  /** Also load the isolated q62 tenant of the Phase 6.2 documents (q62-fixtures.mts), in either fixture mode. */
+  q62?: boolean;
   /** Ingest mode: ingestion switches for the fixture build, also recorded in the retrieval env (RunEvalOptions.ingestBuildEnv). */
   ingestBuildEnv?: Record<string, string>;
   /** The run's requests set options.query_layer=true (D-38); with the env overlay it decides the fake query LLM install (D-39). */
@@ -393,6 +409,12 @@ export async function prepareInProcessEval(options: {
   if (tableSplit && (fixtureMode !== 'ingest' || ingestRouting)) {
     throw new Error('[Eval Harness] table_split items run only in the inline ingest fixture mode');
   }
+  const templated = options.templated === true;
+  if (templated && (fixtureMode !== 'ingest' || ingestRouting)) {
+    throw new Error('[Eval Harness] templated_collection items run only in the inline ingest fixture mode');
+  }
+  const q62 = options.q62 === true;
+  if (q62 && ingestRouting) throw new Error('[Eval Harness] q62 items do not run under --routing');
   const existingSecret = process.env.RAG_EVAL_SECRET ?? '';
   const secret = existingSecret.length >= 32 ? existingSecret : crypto.randomBytes(24).toString('hex');
   const evalEnv = {
@@ -400,6 +422,7 @@ export async function prepareInProcessEval(options: {
     RAG_EVAL_ALLOWED_SCOPES: [
       `user:${FIXTURE_USER_ID}`,
       ...(tableSplit && deploymentMode === 'multi-tenant' ? [`user:${TABLE_SPLIT_USER_ID}`] : []),
+      ...(q62 && deploymentMode === 'multi-tenant' ? [`user:${Q62_USER_ID}`] : []),
       ...allowedScopes,
     ].join(','),
     ...(embeddingProfileId ? { RAG_EMBEDDING_PROFILES: 'on' } : {}),
@@ -418,12 +441,21 @@ export async function prepareInProcessEval(options: {
       ...(ingestRouting ? { ingestRouting } : {}),
       ...(tableSplit ? { tableSplit: true } : {}),
       ...(tableSplit && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
+      ...(templated ? { templated: true } : {}),
       ...(options.ingestBuildEnv ? { ingestEnv: options.ingestBuildEnv } : {}),
       ...(terminologySeed.length ? { terminologySeed } : {}),
+      ...(q62 ? { q62: true } : {}),
     }));
   if (tableSplit && !fixture.tableSplitTenants) {
     if (!ingestFixture) await fixture.db.close().catch(() => undefined);
     throw new Error('[Eval Harness] the ingest fixture was built without the table_split tenants');
+  }
+  if (q62 && !fixture.q62Tenant) {
+    if (!ingestFixture) {
+      await closeTableSplitTenants(fixture.tableSplitTenants);
+      await fixture.db.close().catch(() => undefined);
+    }
+    throw new Error('[Eval Harness] the fixture was built without the q62 tenant');
   }
   let edge: FakeEdge | undefined;
   try {
@@ -464,11 +496,32 @@ export async function prepareInProcessEval(options: {
     try {
       const { fixtureAdminClient } = await import('./ingest-fakes.mts');
       await seedFixtureFeatures(fixture, { deploymentMode, admin: fixtureAdminClient(startedEdge.url) });
+      // The q62 tenant gets the same rebuilds while the edge serves it (D-31 a: the switches act on both tenants alike).
+      const q62Tenant = fixture.q62Tenant;
+      if (q62Tenant) {
+        await withQ62Tenant(startedEdge, fixture.db, q62Tenant, () =>
+          seedFixtureFeatures(
+            { db: q62Tenant.db, fixtureUserId: Q62_USER_ID, sqlSha256: {} },
+            { deploymentMode, admin: fixtureAdminClient(startedEdge.url) },
+          ),
+        );
+      }
     } catch (error) {
       if (ownsEdge) await startedEdge.close().catch(() => undefined);
+      await closeQ62Tenant(fixture.q62Tenant);
       await fixture.db.close().catch(() => undefined);
       throw error;
     }
+  }
+
+  // Plan 04.4-13 (D-36): statistics for a bm25 run, in both fixture modes, after relex and the feature rebuilds.
+  let lexicalStats: import('./pglite-supabase.mts').RunLexicalStatsReport | null = null;
+  try {
+    lexicalStats = await seedRunLexicalStats(fixture);
+  } catch (error) {
+    if (ownsEdge) await startedEdge.close().catch(() => undefined);
+    if (ownsDb) await fixture.db.close().catch(() => undefined);
+    throw error;
   }
 
   const route = await import('../../src/app/api/internal/rag/run/route.ts');
@@ -512,11 +565,13 @@ export async function prepareInProcessEval(options: {
     edge: startedEdge,
     fixtureDb: fixture.db,
     ...(fixture.tableSplitTenants ? { tableSplitTenants: fixture.tableSplitTenants } : {}),
+    ...(fixture.q62Tenant ? { q62Tenant: fixture.q62Tenant } : {}),
     ...(fixtureMode === 'ingest' ? { ingestDocumentIds: new Map(Object.entries(fixture.ingestDocumentIds ?? {})) } : {}),
     fixtureUserId: fixture.fixtureUserId,
     corpusSha256: fixture.corpusSha256,
     sqlSha256: fixture.sqlSha256,
     ...(fakeQueryLlm ? { fakeQueryLlm } : {}),
+    ...(lexicalStats ? { lexicalStats } : {}),
     close: async () => {
       restoreQueryLlm?.();
       translatorModule?.resetTranslatorForTests();
@@ -524,6 +579,7 @@ export async function prepareInProcessEval(options: {
       if (ownsEdge) await startedEdge.close();
       if (ownsDb) {
         await closeTableSplitTenants(fixture.tableSplitTenants);
+        await closeQ62Tenant(fixture.q62Tenant);
         await fixture.db.close().catch(() => undefined);
       }
     },
@@ -603,6 +659,42 @@ function redirectConsole(logPath: string): () => void {
   };
 }
 
+/**
+ * D-36 cap agreement: the run manifest is a schema-validated contract, so the overlap figures of a bm25 run go to a sibling file
+ * (lexical-bm25-overlap.json) in the run's output directory. Measured on the main fixture tenant over the run's non-table_split
+ * questions with the query-side lexical options the search stage would use; ids and numbers only.
+ */
+async function writeLexicalOverlap(session: InProcessEval, deploymentMode: DeploymentMode, items: readonly GoldenItem[], outDir: string): Promise<void> {
+  const stats = session.lexicalStats;
+  if (!stats) return;
+  const { fixtureOverlapAtK, OVERLAP_FILE, OVERLAP_K } = await import('./lexical-stats.mts');
+  const { tenantHash } = await import('./lexical-leg-run.mts');
+  const { loadRagConfig } = await import('../../src/lib/rag/config.ts');
+  const { getRagDeps } = await import('../../src/lib/rag/deps.ts');
+  const { lexicalOptionsOn } = await import('../../src/lib/rag/lexical/options.ts');
+  const { resolveLexicalOptions } = await import('../../src/lib/rag/lexical/resolve-options.ts');
+  const { storeScopeForTenantKey } = await import('../../src/lib/rag/tenant/store-scope.ts');
+  const { queryLanguage } = await import('../../src/lib/rag/query/language.ts');
+  const config = loadRagConfig(getRagDeps().ragEnv());
+  const tenantKey = deploymentMode === 'multi-tenant' ? `u:${session.fixtureUserId}` : 's:default';
+  const scope = storeScopeForTenantKey(tenantKey);
+  const report = await fixtureOverlapAtK(
+    session.fixtureDb,
+    tenantKey,
+    items.map((item) => ({ id: item.id, question: item.question })),
+    OVERLAP_K,
+    {
+      tenantHash: tenantHash(tenantKey),
+      k1: stats.k1,
+      b: stats.b,
+      ...(lexicalOptionsOn(config)
+        ? { lexicalOptionsFor: async (question: string) => (await resolveLexicalOptions(scope, config, { language: queryLanguage(question) })).options }
+        : {}),
+    },
+  );
+  fs.writeFileSync(path.join(outDir, OVERLAP_FILE), `${JSON.stringify(report, null, 2)}\n`);
+}
+
 export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const {
     goldenPath,
@@ -619,6 +711,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     retainInProcess,
     runConfig,
   } = options;
+  const ragMode: EvalRagMode = options.ragMode ?? EVAL_RAG_MODE;
+  if (ragMode !== 'strict' && ragMode !== 'balanced') throw new Error('[Eval Harness] ragMode must be strict or balanced');
   const cachePairs = options.cachePairs === true;
   if (cachePairs && baseUrl && options.allowLiveCache !== true) {
     throw new Error('[Eval Harness] a --cache-pairs run against --base-url seeds and probes a live cache; pass --allow-live-cache (plan 06-46)');
@@ -697,7 +791,14 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const allItems = readGolden(goldenPath);
   // table_split items need the isolated tenants of the inline ingest fixture mode; every other run leaves them out.
   const tableSplitRunnable = !baseUrl && fixtureMode === 'ingest' && !ingestRouting;
-  const items = selectGolden(allItems, goldenFilter).filter((item) => tableSplitRunnable || !isTableSplitItem(item));
+  // templated_collection items need the collection, which only the inline ingest fixture mode loads.
+  // q62 items need the isolated q62 tenant, which in-process runs load in either fixture mode (not --base-url, not --routing).
+  const q62Runnable = !baseUrl && !ingestRouting;
+  const items = selectGolden(allItems, goldenFilter).filter(
+    (item) =>
+      (tableSplitRunnable || (!isTableSplitItem(item) && !isTemplatedItem(item))) &&
+      (q62Runnable || isTableSplitItem(item) || !isQ62Item(item)),
+  );
   const routed = partitionIngestModeItems(items);
   if (items.length === 0) {
     throw new Error(`[Eval Harness] no golden items with review_status in [${goldenFilter.review_statuses.join(', ')}] in ${goldenPath}`);
@@ -747,6 +848,16 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       if (retainInProcess) {
         inProcess = retainInProcess;
       } else {
+        // Plan 03.3-23 (D-36): the Phase 3.3 switches the run sets to a non-default value are layered into the ingest build, which
+        // then seeds the fixture tenant's rule data; a run that only restates the defaults layers nothing.
+        const phase33Env = phase33BuildEnv({ ...(runConfig?.env ?? {}), ...(envOverlay ?? {}) });
+        const buildEnv =
+          fixtureMode === 'ingest' && (Object.keys(phase33Env).length > 0 || options.ingestBuildEnv)
+            ? { ...phase33Env, ...options.ingestBuildEnv }
+            : options.ingestBuildEnv;
+        if (fixtureMode !== 'ingest' && Object.keys(phase33Env).some((name) => !(PHASE33_PROCESS_SWITCHES as readonly string[]).includes(name))) {
+          console.log('[Eval Harness] phase33_seed_skipped_prechunked: the prechunked build seeds no Phase 3.3 rule data');
+        }
         const prepared = await prepareInProcessEval({
           corpusDir,
           deploymentMode,
@@ -757,7 +868,9 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           ...(ingestRouting ? { ingestRouting } : {}),
           ...(routed.tableSplit.length > 0 ? { tableSplit: true } : {}),
           ...(routed.tableSplit.length > 0 && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
-          ...(options.ingestBuildEnv ? { ingestBuildEnv: options.ingestBuildEnv } : {}),
+          ...(routed.templated.length > 0 ? { templated: true } : {}),
+          ...(routed.q62.length > 0 ? { q62: true } : {}),
+          ...(buildEnv ? { ingestBuildEnv: buildEnv } : {}),
           ...((runConfig && Object.keys(runConfig.env).length > 0) || envOverlay
             ? { envOverrides: { ...(runConfig?.env ?? {}), ...(envOverlay ?? {}) } }
             : {}),
@@ -782,8 +895,9 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         } else if (generator === 'fake' && answers) {
           // D-13: the directive is read from the template the route assembles under this run's env (research F-5).
           const noAnswerQuestions = new Map(items.filter((item) => !item.answerable).map((item) => [item.question, item.language]));
+          // A run config's Phase 5.2 fake still answers by its id; every other id gets the instruction-sensitive generator.
           answerModule.setEvalLanguageModelFactory(
-            installFakeCitationGenerator(DEFAULT_FAKE_CITATION_SEED, {
+            evalFakeLanguageModelFactory(items, {
               noAnswerQuestions,
               promptTemplate: answerModule.resolveEvalPromptTemplate(),
             }),
@@ -849,14 +963,20 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     if (routed.tableSplit.length > 0 && !tableTenants) {
       throw new Error('[Eval Harness] table_split items need an ingest session prepared with the table_split tenants');
     }
-    // Ingest mode routes by category: the other items first, exactly as before, then each table_split item against its tenant.
-    for (const item of cachePairs ? [] : [...routed.main, ...routed.tableSplit]) {
+    const q62Tenant = routed.q62.length > 0 ? inProcess?.q62Tenant : undefined;
+    if (routed.q62.length > 0 && !q62Tenant) throw new Error('[Eval Harness] q62 items need a session prepared with the q62 tenant');
+    // Routing by category: the other items first, exactly as before, then each table_split item against its tenant, then the q62 items
+    // (scoped_compound, glossary, version_compare, tagged off_domain) against the q62 tenant.
+    for (const item of cachePairs ? [] : [...routed.main, ...routed.tableSplit, ...routed.q62]) {
+      const routedQ62 = !isTableSplitItem(item) && isQ62Item(item);
       // Ingest mode: filter ids name the documents the build wrote; the table_split tenants have no map, so their filters fail closed.
       const documentIds =
         fixtureMode === 'ingest'
           ? isTableSplitItem(item)
             ? NO_INGEST_DOCUMENT_IDS
-            : (inProcess?.ingestDocumentIds ?? NO_INGEST_DOCUMENT_IDS)
+            : routedQ62
+              ? (q62Tenant?.documentIds ?? NO_INGEST_DOCUMENT_IDS)
+              : (inProcess?.ingestDocumentIds ?? NO_INGEST_DOCUMENT_IDS)
           : undefined;
       const options = itemRequestOptions(requestOptions, item, documentIds);
       if (inProcess && deploymentMode === 'multi-tenant' && !options.user_id) {
@@ -867,13 +987,18 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         options.user_id = TABLE_SPLIT_USER_ID;
         options.organization_id = null;
       }
+      // The q62 documents also belong to their own fixture user in multi-tenant mode.
+      if (inProcess && deploymentMode === 'multi-tenant' && routedQ62) {
+        options.user_id = Q62_USER_ID;
+        options.organization_id = null;
+      }
       const stubAnswer = stubInjectionAnswers && answersItemForInjectionMetrics(tier, item);
       if (stubAnswer) options.generator_model = STUB_GENERATOR_MODEL;
       const payload = {
         schema_version: 1 as const,
         query: item.question,
         conversation: item.conversation,
-        rag_mode: EVAL_RAG_MODE,
+        rag_mode: ragMode,
         web_search: false as const,
         options,
         item_id: item.id,
@@ -883,7 +1008,9 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       const { status, body } =
         tableTenants && inProcess && isTableSplitItem(item)
           ? await withTableSplitTenant(inProcess.edge, inProcess.fixtureDb, tableTenants, item, () => send(payload))
-          : await send(payload);
+          : q62Tenant && inProcess && routedQ62
+            ? await withQ62Tenant(inProcess.edge, inProcess.fixtureDb, q62Tenant, () => send(payload))
+            : await send(payload);
       if (status !== 200) {
         const detail = body && typeof body === 'object' && 'error' in body ? String((body as { error: unknown }).error) : 'no error body';
         throw new Error(`[Eval Harness] item ${item.id}: route returned ${status} (${detail})`);
@@ -914,6 +1041,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           .join('; ');
         throw new Error(`[Eval Harness] fake edge recorded ${edgeErrors} unsupported or failed request(s): ${sample}`);
       }
+      if (inProcess.lexicalStats && !cachePairs) await writeLexicalOverlap(inProcess, deploymentMode, routed.main, outDir);
     }
   } finally {
     restoreConsole();
@@ -995,7 +1123,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     embedding_profile: embeddingProfile,
     effective_config_hash: effectiveConfigHash,
     run_config_hash: runConfigHash,
-    rag_mode: EVAL_RAG_MODE,
+    rag_mode: ragMode,
     item_count: items.length,
     edge_errors: edgeErrors,
     ...(runConfigRecord ? { run_config: runConfigRecord } : {}),

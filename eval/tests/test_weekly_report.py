@@ -170,8 +170,8 @@ def test_stats_section_renders_per_tenant_hash_from_the_route(private_runs_root,
     golden, traces = six_layer_run()
     write_run(private_runs_root, "run-a", "2026-11-02T00:00:00Z", golden, traces, report=eval_report("run-a", 0.5))
     assert main(["--since", SINCE, "--until", "2026-11-08", "--base-url", "http://app.test/", "--token-env", "RAG_ADMIN_BEARER"]) == 0
+    seen = [request for request in seen if request.url.path == "/api/rag/admin/feedback-loop/stats"]
     assert len(seen) == 1
-    assert seen[0].url.path == "/api/rag/admin/feedback-loop/stats"
     assert seen[0].url.params["since"] == "2026-11-01T00:00:00Z" and seen[0].url.params["until"] == "2026-11-08T00:00:00Z"
     assert seen[0].headers["authorization"] == "Bearer placeholder-token"
     report, raw, markdown = _latest(private_runs_root)
@@ -242,3 +242,25 @@ def test_the_failure_report_is_written_too_so_next_week_lists_only_new_failures(
     assert main(["--since", SINCE]) == 0
     report, _, _ = _latest(private_runs_root)
     assert report.failures is not None and report.failures.entries == []
+
+
+def test_the_gates_section_is_attached_and_rendered(private_runs_root, monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/rag/admin/monitor/alerts":
+            return httpx.Response(200, json={"alerts": [{"rule": "refusal_rate", "status": "open"}], "next_cursor": None})
+        if request.url.path == "/api/rag/admin/feedback-loop/stats":
+            return httpx.Response(200, json=_stats_payload())
+        return httpx.Response(503, json={"success": False})
+
+    monkeypatch.setattr(weekly_report, "_http_client", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
+    monkeypatch.setenv("RAG_ADMIN_BEARER", "placeholder-token")
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    write_run(private_runs_root, "run-a", "2026-11-02T00:00:00Z", [item("en-general-007")], [trace("en-general-007")], report=eval_report("run-a", 0.5))
+    assert main(["--since", SINCE, "--base-url", "http://app.test", "--token-env", "RAG_ADMIN_BEARER"]) == 0
+    report, raw, markdown = _latest(private_runs_root)
+    assert report.gates is not None
+    assert report.gates.open_alerts == {"refusal_rate": 1}
+    assert "## Gates" in markdown and "| refusal_rate | 1 |" in markdown
+    assert "config_changes: not read (http_503)" in markdown
+    assert "GitHub was not read (no_token)" in markdown
+    assert "placeholder-token" not in raw and "placeholder-token" not in markdown

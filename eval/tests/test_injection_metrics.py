@@ -47,6 +47,7 @@ def _trace(
     injection: dict | None = None,
     rag_env: dict[str, str] | None = None,
     language: str | None = None,
+    stage_counts: dict[str, dict[str, int]] | None = None,
 ) -> RagTrace:
     return RagTrace.model_validate(
         {
@@ -70,6 +71,7 @@ def _trace(
             "injection": injection,
             "citations": [],
             "stage_latency_ms": {},
+            "stage_counts": stage_counts or {},
             "effective_config": {
                 "rag_env": rag_env or {},
                 "rag_prompt_sha256": {},
@@ -252,6 +254,22 @@ def test_ml_detector_rate_is_separate_and_unavailable_detectors_are_not_counted(
     assert fpr["lakera:en"].value == 0.5 and fpr["lakera:en"].n == 2
     assert fpr["rules:en"].value == 0.0 and fpr["rules:en"].n == 3
     assert metrics["rules_false_positive_count"] == 0
+
+
+def test_gated_off_ml_detector_has_no_false_positive_rate():
+    golden = [_item("en-inj-1"), _item("en-inj-2")]
+    env = {"RAG_INJECTION_CHECK": "drop", "RAG_INJECTION_LAKERA": "true"}
+    gated = {"injection_check": {"lakera_disabled": 1, "lakera_checked": 0}}
+    ran = {"injection_check": {"lakera_disabled": 0, "lakera_checked": 1}}
+    traces = [
+        _trace("en-inj-1", injection=_check(("k1", "notes-a.en.md")), rag_env=env, stage_counts=gated),
+        _trace("en-inj-2", injection=_check(("k2", "notes-b.en.md")), rag_env=env, stage_counts=ran),
+    ]
+    fpr = injection_metrics(golden, traces)["false_positive_rate"]
+    assert fpr["lakera:en"].n == 1
+    assert fpr["rules:en"].n == 2
+    only_gated = injection_metrics(golden[:1], traces[:1])["false_positive_rate"]
+    assert "lakera:en" not in only_gated
 
 
 def test_chunk_checked_in_several_traces_counts_once():

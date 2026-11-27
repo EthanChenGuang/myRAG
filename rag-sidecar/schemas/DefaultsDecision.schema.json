@@ -1,0 +1,1085 @@
+{
+  "$defs": {
+    "BackendComparison": {
+      "additionalProperties": false,
+      "properties": {
+        "incumbent": {
+          "const": "pgvector",
+          "default": "pgvector",
+          "title": "Incumbent",
+          "type": "string"
+        },
+        "reason": {
+          "pattern": "^[a-z0-9_]+$",
+          "title": "Reason",
+          "type": "string"
+        },
+        "results": {
+          "items": {
+            "$ref": "#/$defs/BackendResult"
+          },
+          "minItems": 1,
+          "title": "Results",
+          "type": "array"
+        },
+        "winner": {
+          "enum": [
+            "pgvector",
+            "weaviate",
+            "qdrant"
+          ],
+          "title": "Winner",
+          "type": "string"
+        }
+      },
+      "required": [
+        "results",
+        "winner",
+        "reason"
+      ],
+      "title": "BackendComparison",
+      "type": "object"
+    },
+    "BackendResult": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "enum": [
+            "pgvector",
+            "weaviate",
+            "qdrant"
+          ],
+          "title": "Backend",
+          "type": "string"
+        },
+        "band": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Band"
+        },
+        "ci_high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci High"
+        },
+        "ci_low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci Low"
+        },
+        "config_name": {
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,127}$",
+          "title": "Config Name",
+          "type": "string"
+        },
+        "cost_note": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Cost Note",
+          "type": "string"
+        },
+        "delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delta"
+        },
+        "invalid_reason": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Invalid Reason"
+        },
+        "operational_note": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Operational Note",
+          "type": "string"
+        },
+        "valid": {
+          "title": "Valid",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "backend",
+        "config_name",
+        "valid",
+        "cost_note",
+        "operational_note"
+      ],
+      "title": "BackendResult",
+      "type": "object"
+    },
+    "CostAmount": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "not_measured",
+                "not_provided"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "usd": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Usd"
+        }
+      },
+      "required": [
+        "usd"
+      ],
+      "title": "CostAmount",
+      "type": "object"
+    },
+    "CostBasis": {
+      "additionalProperties": false,
+      "properties": {
+        "document_sample": {
+          "minimum": 0,
+          "title": "Document Sample",
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "measured",
+            "estimated"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "price_table_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Price Table Sha256",
+          "type": "string"
+        },
+        "query_sample": {
+          "minimum": 0,
+          "title": "Query Sample",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "price_table_sha256",
+        "document_sample",
+        "query_sample",
+        "kind"
+      ],
+      "title": "CostBasis",
+      "type": "object"
+    },
+    "CostPer1000": {
+      "additionalProperties": false,
+      "description": "Cost per 1,000 documents ingested (per embedding profile and backend) or per 1,000 queries (per configuration).",
+      "properties": {
+        "backend": {
+          "anyOf": [
+            {
+              "enum": [
+                "pgvector",
+                "weaviate",
+                "qdrant"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backend"
+        },
+        "config_name": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Name"
+        },
+        "documents": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IngestCostParts"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "embedding_profile": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embedding Profile"
+        },
+        "queries": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QueryCostParts"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "CostPer1000",
+      "type": "object"
+    },
+    "CostSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "$ref": "#/$defs/CostBasis"
+        },
+        "per_1000_documents": {
+          "items": {
+            "$ref": "#/$defs/CostPer1000"
+          },
+          "minItems": 1,
+          "title": "Per 1000 Documents",
+          "type": "array"
+        },
+        "per_1000_queries": {
+          "items": {
+            "$ref": "#/$defs/CostPer1000"
+          },
+          "minItems": 1,
+          "title": "Per 1000 Queries",
+          "type": "array"
+        }
+      },
+      "required": [
+        "per_1000_documents",
+        "per_1000_queries",
+        "basis"
+      ],
+      "title": "CostSummary",
+      "type": "object"
+    },
+    "IncumbentSource": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "const": "eval/decisions/04.1-retrieval-defaults.json",
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "title": "IncumbentSource",
+      "type": "object"
+    },
+    "IngestCostParts": {
+      "additionalProperties": false,
+      "properties": {
+        "embedding": {
+          "$ref": "#/$defs/CostAmount"
+        },
+        "enrichment": {
+          "$ref": "#/$defs/CostAmount"
+        },
+        "external_store": {
+          "$ref": "#/$defs/CostAmount"
+        },
+        "parse": {
+          "$ref": "#/$defs/CostAmount"
+        }
+      },
+      "required": [
+        "parse",
+        "embedding",
+        "enrichment",
+        "external_store"
+      ],
+      "title": "IngestCostParts",
+      "type": "object"
+    },
+    "LanguageQuality": {
+      "additionalProperties": false,
+      "description": "One enabled language: the adopted configuration's primary metric against the incumbent's (ADM-02).",
+      "properties": {
+        "band": {
+          "minimum": 0,
+          "title": "Band",
+          "type": "number"
+        },
+        "baseline": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Baseline"
+        },
+        "below_baseline": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Below Baseline"
+        },
+        "difference": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Difference"
+        },
+        "language": {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+          "title": "Language",
+          "type": "string"
+        },
+        "metric": {
+          "pattern": "^[a-z][a-z0-9_@.+]{0,127}$",
+          "title": "Metric",
+          "type": "string"
+        },
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "language",
+        "metric",
+        "n",
+        "value",
+        "baseline",
+        "difference",
+        "band",
+        "below_baseline"
+      ],
+      "title": "LanguageQuality",
+      "type": "object"
+    },
+    "LatencyEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "enum": [
+            "chat",
+            "voice"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
+        "config_name": {
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,127}$",
+          "title": "Config Name",
+          "type": "string"
+        },
+        "values": {
+          "items": {
+            "$ref": "#/$defs/LatencyValue"
+          },
+          "minItems": 1,
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "config_name",
+        "channel",
+        "values"
+      ],
+      "title": "LatencyEntry",
+      "type": "object"
+    },
+    "LatencySummary": {
+      "additionalProperties": false,
+      "properties": {
+        "budgets_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Budgets Sha256",
+          "type": "string"
+        },
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/LatencyEntry"
+          },
+          "minItems": 1,
+          "title": "Entries",
+          "type": "array"
+        }
+      },
+      "required": [
+        "budgets_sha256",
+        "entries"
+      ],
+      "title": "LatencySummary",
+      "type": "object"
+    },
+    "LatencyValue": {
+      "additionalProperties": false,
+      "properties": {
+        "budget_p50_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Budget P50 Ms"
+        },
+        "budget_p95_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Budget P95 Ms"
+        },
+        "p50_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "P50 Ms"
+        },
+        "p95_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "P95 Ms"
+        },
+        "report_only": {
+          "default": false,
+          "title": "Report Only",
+          "type": "boolean"
+        },
+        "stage": {
+          "pattern": "^[a-z0-9_]+$",
+          "title": "Stage",
+          "type": "string"
+        },
+        "within_budget": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Within Budget"
+        }
+      },
+      "required": [
+        "stage",
+        "p50_ms",
+        "p95_ms",
+        "within_budget"
+      ],
+      "title": "LatencyValue",
+      "type": "object"
+    },
+    "QueryCostParts": {
+      "additionalProperties": false,
+      "properties": {
+        "external_store": {
+          "$ref": "#/$defs/CostAmount"
+        },
+        "generation": {
+          "$ref": "#/$defs/CostAmount"
+        },
+        "query_embedding": {
+          "$ref": "#/$defs/CostAmount"
+        },
+        "rerank": {
+          "$ref": "#/$defs/CostAmount"
+        }
+      },
+      "required": [
+        "query_embedding",
+        "rerank",
+        "generation",
+        "external_store"
+      ],
+      "title": "QueryCostParts",
+      "type": "object"
+    },
+    "ShipCheckResult": {
+      "additionalProperties": false,
+      "description": "D-24 ship rule result; passed exactly when no reason code is listed.",
+      "properties": {
+        "baseline_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Baseline Hash",
+          "type": "string"
+        },
+        "candidate_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Candidate Hash",
+          "type": "string"
+        },
+        "ci_high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci High"
+        },
+        "ci_low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci Low"
+        },
+        "gate_population": {
+          "enum": [
+            "all",
+            "production",
+            "real"
+          ],
+          "title": "Gate Population",
+          "type": "string"
+        },
+        "manifest_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Manifest Hash"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "reasons": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "resamples": {
+          "default": 10000,
+          "minimum": 1,
+          "title": "Resamples",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seed": {
+          "default": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "target_delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Delta"
+        },
+        "target_metric": {
+          "pattern": "^[a-z][a-z0-9_@.]{0,63}$",
+          "title": "Target Metric",
+          "type": "string"
+        }
+      },
+      "required": [
+        "passed",
+        "target_metric",
+        "baseline_hash",
+        "candidate_hash",
+        "gate_population"
+      ],
+      "title": "ShipCheckResult",
+      "type": "object"
+    },
+    "SwitchVerdict": {
+      "additionalProperties": false,
+      "properties": {
+        "band": {
+          "minimum": 0,
+          "title": "Band",
+          "type": "number"
+        },
+        "ci_high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ci High"
+        },
+        "ci_low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ci Low"
+        },
+        "decision": {
+          "enum": [
+            "adopt",
+            "keep_incumbent"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Delta"
+        },
+        "gated_slices_ok": {
+          "title": "Gated Slices Ok",
+          "type": "boolean"
+        },
+        "injection_asr": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Injection Asr"
+        },
+        "latency_ok": {
+          "title": "Latency Ok",
+          "type": "boolean"
+        },
+        "p_holm": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "P Holm"
+        },
+        "p_value": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "P Value"
+        },
+        "reason": {
+          "pattern": "^[a-z0-9_]+$",
+          "title": "Reason",
+          "type": "string"
+        },
+        "switch": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Switch",
+          "type": "string"
+        },
+        "too_small_slices": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Too Small Slices",
+          "type": "array"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "switch",
+        "value",
+        "delta",
+        "ci_low",
+        "ci_high",
+        "band",
+        "p_value",
+        "p_holm",
+        "gated_slices_ok",
+        "latency_ok",
+        "injection_asr",
+        "decision",
+        "reason"
+      ],
+      "title": "SwitchVerdict",
+      "type": "object"
+    },
+    "TestSplitUse": {
+      "additionalProperties": false,
+      "description": "One line of the test-split ledger; an unregistered run names its reason (Pitfall 12).",
+      "properties": {
+        "config_name": {
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,127}$",
+          "title": "Config Name",
+          "type": "string"
+        },
+        "plan_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Plan Sha256",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 10,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "registered": {
+          "title": "Registered",
+          "type": "boolean"
+        },
+        "run_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "used_at": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})?)?$",
+          "title": "Used At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "config_name",
+        "plan_sha256",
+        "used_at",
+        "registered"
+      ],
+      "title": "TestSplitUse",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "D-18 record in eval/config/release-defaults.json; code defaults follow only a non-provisional one.",
+  "properties": {
+    "backend": {
+      "enum": [
+        "pgvector",
+        "weaviate",
+        "qdrant"
+      ],
+      "title": "Backend",
+      "type": "string"
+    },
+    "backend_comparison": {
+      "$ref": "#/$defs/BackendComparison"
+    },
+    "config_hashes": {
+      "minProperties": 1,
+      "patternProperties": {
+        "^[a-z0-9][a-z0-9_.:-]{0,127}$": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        }
+      },
+      "title": "Config Hashes",
+      "type": "object"
+    },
+    "cost": {
+      "$ref": "#/$defs/CostSummary"
+    },
+    "decided_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})?)?$",
+      "title": "Decided At",
+      "type": "string"
+    },
+    "defaults": {
+      "minProperties": 1,
+      "patternProperties": {
+        "^[A-Z][A-Z0-9_]{0,127}$": {
+          "type": "string"
+        }
+      },
+      "title": "Defaults",
+      "type": "object"
+    },
+    "embedding_profile": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Embedding Profile",
+      "type": "string"
+    },
+    "incumbent": {
+      "minProperties": 1,
+      "patternProperties": {
+        "^[A-Z][A-Z0-9_]{0,127}$": {
+          "type": "string"
+        }
+      },
+      "title": "Incumbent",
+      "type": "object"
+    },
+    "incumbent_source": {
+      "$ref": "#/$defs/IncumbentSource"
+    },
+    "latency": {
+      "$ref": "#/$defs/LatencySummary"
+    },
+    "per_language": {
+      "items": {
+        "$ref": "#/$defs/LanguageQuality"
+      },
+      "title": "Per Language",
+      "type": "array"
+    },
+    "plan_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Plan Sha256",
+      "type": "string"
+    },
+    "primary_metric": {
+      "pattern": "^[a-z][a-z0-9_@.+]{0,127}$",
+      "title": "Primary Metric",
+      "type": "string"
+    },
+    "provisional": {
+      "anyOf": [
+        {
+          "const": "fixtures",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Provisional"
+    },
+    "reranker": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Reranker",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "ship_check_ref": {
+      "$ref": "#/$defs/ShipCheckResult"
+    },
+    "test_split_uses": {
+      "items": {
+        "$ref": "#/$defs/TestSplitUse"
+      },
+      "title": "Test Split Uses",
+      "type": "array"
+    },
+    "verdicts": {
+      "items": {
+        "$ref": "#/$defs/SwitchVerdict"
+      },
+      "title": "Verdicts",
+      "type": "array"
+    }
+  },
+  "required": [
+    "provisional",
+    "decided_at",
+    "plan_sha256",
+    "primary_metric",
+    "incumbent_source",
+    "incumbent",
+    "defaults",
+    "embedding_profile",
+    "reranker",
+    "backend",
+    "backend_comparison",
+    "config_hashes"
+  ],
+  "title": "DefaultsDecision",
+  "type": "object"
+}

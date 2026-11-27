@@ -29,7 +29,12 @@
             "implicit_condition",
             "partial_answer",
             "stale_version",
-            "off_topic_context"
+            "off_topic_context",
+            "multi_step_calc",
+            "context_overflow",
+            "version_compare",
+            "scoped_compound",
+            "glossary"
           ],
           "title": "Category",
           "type": "string"

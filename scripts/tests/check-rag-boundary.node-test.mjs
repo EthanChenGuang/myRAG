@@ -160,8 +160,6 @@ test('deep-import: the shared config-gate CommonJS files may be required, nothin
 
 test('vector-or-rerank-client: client packages and AI SDK embed/embedMany/rerank fail', () => {
   const files = {
-    'src/lib/a.ts': "import weaviate from 'weaviate-client';\n",
-    'src/lib/b.ts': "import { QdrantClient } from '@qdrant/js-client-rest';\n",
     'src/lib/c.ts': "import { CohereClient } from 'cohere-ai';\n",
     'src/lib/d.ts': "import { VoyageAIClient } from 'voyageai';\n",
     'src/lib/e.ts': "import { embed } from 'ai';\n",
@@ -169,13 +167,68 @@ test('vector-or-rerank-client: client packages and AI SDK embed/embedMany/rerank
     'src/lib/g.ts': "import {\n  rerank,\n} from 'ai';\n",
   };
   const out = rulesFor(files).sort();
-  assert.equal(out.length, 7);
+  assert.equal(out.length, 5);
   assert.ok(out.every((entry) => entry.endsWith(':vector-or-rerank-client')));
 });
 
 test('vector-or-rerank-client: streamText from ai is fine, and the rule is inactive inside src/lib/rag', () => {
   assert.deepEqual(rulesFor({ 'src/lib/a.ts': "import { streamText } from 'ai';\n" }), []);
   assert.deepEqual(rulesFor({ 'src/lib/rag/embeddings/a.ts': "import { embedMany } from 'ai';\n" }), []);
+});
+
+test('vector-store-client: the vector-store packages are their own list, apart from the reranker clients', () => {
+  assert.deepEqual((boundary.VECTOR_STORE_PACKAGES ?? []).slice().sort(), [
+    '@qdrant/js-client-rest',
+    '@qdrant/qdrant-js',
+    '@weaviate/core',
+    '@weaviate/node',
+    '@weaviate/web',
+    'weaviate-client',
+    'weaviate-ts-client',
+  ]);
+  assert.deepEqual(boundary.VECTOR_OR_RERANK_PACKAGES.slice().sort(), ['cohere-ai', 'voyageai']);
+  assert.ok(RULES.some((r) => r.id === 'vector-store-client'));
+});
+
+test('vector-store-client: the Qdrant client is allowed only in the qdrant adapter and sync folders', () => {
+  const code = "import { QdrantClient } from '@qdrant/js-client-rest';\nexport const c = QdrantClient;\n";
+  assert.deepEqual(rulesFor({ 'src/lib/rag/backend/qdrant/client.ts': code }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/sync/qdrant.ts': code }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/v2/x.ts': code }), ['src/lib/rag/v2/x.ts:vector-store-client']);
+  assert.deepEqual(rulesFor({ 'src/app/api/x/route.ts': code }), ['src/app/api/x/route.ts:vector-store-client']);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/backend/weaviate/q.ts': code }), []);
+});
+
+test('vector-store-client: the Weaviate client is refused in src/lib/rag/backend outside weaviate/', () => {
+  const code = "import weaviate from '@weaviate/node';\nexport const w = weaviate;\n";
+  assert.deepEqual(rulesFor({ 'src/lib/rag/backend/weaviate/client.ts': code }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/sync/weaviate.ts': code }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/backend/registry.ts': code }), ['src/lib/rag/backend/registry.ts:vector-store-client']);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/backend/weaviate-x.ts': code }), ['src/lib/rag/backend/weaviate-x.ts:vector-store-client']);
+});
+
+test('vector-store-client: every listed name, deep paths and require are refused outside the three folders', () => {
+  const files = {
+    'src/lib/rag/v2/a.ts': "import { x } from '@weaviate/core';\n",
+    'src/lib/rag/v2/b.ts': "import { x } from '@weaviate/web';\n",
+    'src/lib/rag/v2/c.ts': "import weaviate from 'weaviate-client';\n",
+    'src/lib/rag/v2/d.ts': "import weaviate from 'weaviate-ts-client';\n",
+    'src/lib/rag/v2/e.ts': "import { QdrantClient } from '@qdrant/qdrant-js';\n",
+    'src/lib/rag/v2/f.ts': "import x from '@weaviate/node/dist/x';\n",
+    'src/lib/rag/v2/g.ts': "const q = require('@qdrant/js-client-rest');\n",
+    'src/lib/rag/v2/h.ts': "const w = await import('@weaviate/node');\n",
+    'scripts/rag/i.mjs': "import { QdrantClient } from '@qdrant/js-client-rest';\n",
+  };
+  const out = rulesFor(files).sort();
+  assert.equal(out.length, 9);
+  assert.ok(out.every((entry) => entry.endsWith(':vector-store-client')));
+});
+
+test('vector-store-client: look-alike names and the reranker clients keep their old behaviour', () => {
+  assert.deepEqual(rulesFor({ 'src/lib/rag/v2/a.ts': "import x from '@weaviate/nodex';\n" }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/rerank/a.ts': "import { CohereClient } from 'cohere-ai';\n" }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/rerank/b.ts': "import { VoyageAIClient } from 'voyageai';\n" }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/c.ts': "import { CohereClient } from 'cohere-ai';\n" }), ['src/lib/c.ts:vector-or-rerank-client']);
 });
 
 test('mint-scope: only the mintScope binding is restricted outside src/lib/rag/tenant', () => {

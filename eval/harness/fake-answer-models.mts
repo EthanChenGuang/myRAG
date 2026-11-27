@@ -16,6 +16,7 @@ import {
   promptParts,
   splitForStreaming,
   type ContextBlock,
+  type FakeCitationGeneratorOptions,
   type FakeLanguageModelFactory,
 } from './fake-citation-generator.mts';
 import { hanChars, latinTokens } from './fake-groundedness.mts';
@@ -77,6 +78,8 @@ interface Turn {
   blocks: ContextBlock[];
   item: GoldenItem | undefined;
   seed: string;
+  /** The citation fake's options, so every other item is answered exactly as the run's citation generator answers it. */
+  citation: FakeCitationGeneratorOptions;
 }
 
 function fold(text: string): string {
@@ -169,7 +172,7 @@ function ruleAnswer(turn: Turn, modelId: FakeAnswerModelId): string {
   if (item?.category === 'partial_answer' && item.partial) return partialAnswer(turn, violated !== 'partial_answer');
   if (item?.category === 'stale_version' && item.versions) return versionsAnswer(turn, violated !== 'stale_version');
   if (item?.category === 'off_topic_context' && item.off_topic) return offTopicAnswer(turn, violated !== 'off_topic_context');
-  return fakeCitationAnswer({ system: turn.system, question: turn.question, seed: turn.seed });
+  return fakeCitationAnswer({ system: turn.system, question: turn.question, seed: turn.seed, ...turn.citation });
 }
 
 function blockBody(text: string): string {
@@ -186,7 +189,7 @@ function blockBody(text: string): string {
 /** Repeats, with its citation, every context block that holds a link: the planted link and the request around it. */
 function repeatingAnswer(turn: Turn): string {
   const withLinks = turn.blocks.filter((block) => HAS_URL_RE.test(block.text));
-  if (withLinks.length === 0) return fakeCitationAnswer({ system: turn.system, question: turn.question, seed: turn.seed });
+  if (withLinks.length === 0) return fakeCitationAnswer({ system: turn.system, question: turn.question, seed: turn.seed, ...turn.citation });
   return withLinks.map((block) => `${sentence(blockBody(block.text))} [${block.alias}]`).join(' ');
 }
 
@@ -315,6 +318,8 @@ export interface FakeAnswerModelsOptions {
   /** The golden items of the run; a fake finds an item's structure by its question. */
   items: readonly GoldenItem[];
   seed?: string;
+  /** Options of the fake citation generator that answers every other id (the answers-on smoke passes its refusal options). */
+  citation?: FakeCitationGeneratorOptions;
 }
 
 /** Returns the factory the harness installs with setEvalLanguageModelFactory; non-Phase-5.2 ids get the fake citation generator. */
@@ -325,7 +330,7 @@ export function installFakeAnswerModels(options: FakeAnswerModelsOptions): FakeL
     const key = item.question.trim();
     if (!byQuestion.has(key)) byQuestion.set(key, item);
   }
-  const citation = installFakeCitationGenerator(seed);
+  const citation = installFakeCitationGenerator(seed, options.citation);
   const known = new Set<string>(FAKE_ANSWER_MODEL_IDS);
 
   const script = (modelId: FakeAnswerModelId, callOptions: LanguageModelV3CallOptions): Scripted => {
@@ -342,6 +347,7 @@ export function installFakeAnswerModels(options: FakeAnswerModelsOptions): FakeL
       blocks: contextBlocks(system),
       item: byQuestion.get(question),
       seed,
+      citation: options.citation ?? {},
     };
     if (modelId === FAKE_CAP_AWARE_MODEL) {
       return { ...capAwareAnswer(turn, callOptions.maxOutputTokens), pieces: splitForStreaming };

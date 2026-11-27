@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const { exec, spawn } = require('child_process');
 const multer = require('multer');
 const security = require('./config-server-security');
+const ragGate = require('./config-server-rag-gate');
 const app = express();
 const PORT = 3333;
 // Loopback only. CONFIG_UI_HOST can override it, but any other value exposes an unauthenticated .env editor to the network.
@@ -163,9 +164,9 @@ Context:
 Based on the context provided, offer comprehensive and helpful answers. If specific information is missing, suggest how the user might rephrase their question or what additional information would be helpful.`;
 
 // Default model configurations
-const DEFAULT_OPENAI_MODELS = '[{"id":"gpt-4.1-mini","displayName":"GPT-4.1 Mini"},{"id":"gpt-4.1","displayName":"GPT-4.1"},{"id":"o3","displayName":"o3"},{"id":"o4-mini","displayName":"o4 Mini"}]';
+const DEFAULT_OPENAI_MODELS = '[{"id":"gpt-4.1-mini","displayName":"GPT-4.1 Mini","contextLength":1047576},{"id":"gpt-4.1","displayName":"GPT-4.1","contextLength":1047576},{"id":"o3","displayName":"o3","contextLength":200000},{"id":"o4-mini","displayName":"o4 Mini","contextLength":200000}]';
 
-const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-5-mini","displayName":"GPT-5 Mini"},{"id":"openai/gpt-5","displayName":"GPT-5"},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"},{"id":"anthropic/claude-opus-5.5","displayName":"Claude Opus 5.5","anthropicId":"claude-opus-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-sonnet-5.5","displayName":"Claude Sonnet 5.5","anthropicId":"claude-sonnet-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-haiku-5.5","displayName":"Claude Haiku 5.5","anthropicId":"claude-haiku-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite"},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash"},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
+const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true,"contextLength":1000000},{"id":"auto","displayName":"Auto"},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-5-mini","displayName":"GPT-5 Mini","contextLength":400000},{"id":"openai/gpt-5","displayName":"GPT-5","contextLength":400000},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1","contextLength":200000},{"id":"anthropic/claude-opus-5.5","displayName":"Claude Opus 5.5","anthropicId":"claude-opus-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-sonnet-5.5","displayName":"Claude Sonnet 5.5","anthropicId":"claude-sonnet-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-haiku-5.5","displayName":"Claude Haiku 5.5","anthropicId":"claude-haiku-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite","contextLength":1048576},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash","contextLength":1048576},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true,"contextLength":524288},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
 
 // API endpoint to get current .env values. Secret values are never returned; secretsSet lists which ones are set.
 app.get('/api/config', (req, res) => {
@@ -185,6 +186,51 @@ app.get('/api/config', (req, res) => {
   } catch (error) {
     console.error('Error loading configuration:', error);
     res.status(500).json({ error: 'Failed to load configuration' });
+  }
+});
+
+const PIPELINE_MANIFEST_PATH = path.join(__dirname, 'rag', 'env-manifest.json');
+const PIPELINE_ENTRY_FIELDS = ['name', 'group', 'label', 'type', 'options', 'requires', 'default', 'provider', 'help'];
+
+/**
+ * The managed manifest entries for the generated RAG pipeline section (D-14): metadata, the saved non-secret value and,
+ * for a secret, only { state, last4? } from maskConfig. A secret's value and default never leave the server.
+ */
+function buildRagPipelineManifest(manifest, saved) {
+  const { config, secretHints } = security.maskConfig(saved || {});
+  const entries = [];
+  for (const raw of Array.isArray(manifest && manifest.vars) ? manifest.vars : []) {
+    if (!raw || raw.status !== 'managed' || typeof raw.name !== 'string') continue;
+    const entry = {};
+    for (const field of PIPELINE_ENTRY_FIELDS) {
+      if (raw[field] !== undefined) entry[field] = raw[field];
+    }
+    const secret = raw.type === 'secret' || security.isSecretConfigEntry(raw.name, '') || Object.prototype.hasOwnProperty.call(secretHints, raw.name);
+    if (secret) {
+      entry.default = '';
+      entry.secret = secretHints[raw.name] || { state: 'unset' };
+    } else {
+      entry.value = Object.prototype.hasOwnProperty.call(config, raw.name) ? String(config[raw.name]) : null;
+    }
+    entries.push(entry);
+  }
+  return entries;
+}
+
+app.get('/api/rag-pipeline/manifest', (req, res) => {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(PIPELINE_MANIFEST_PATH, 'utf8'));
+    const envPath = path.join(REPO_ROOT, '.env.local');
+    const exists = fs.existsSync(envPath);
+    const saved = exists ? dotenv.parse(fs.readFileSync(envPath, 'utf8')) : {};
+    res.json({
+      success: true,
+      entries: buildRagPipelineManifest(manifest, saved),
+      envModifiedAt: exists ? fs.statSync(envPath).mtime.toISOString() : null,
+    });
+  } catch (error) {
+    console.error('[Config] RAG pipeline manifest could not be read');
+    res.status(500).json({ success: false, error: 'manifest_unavailable' });
   }
 });
 
@@ -208,22 +254,38 @@ function hiddenTextNeedsSidecar(posted) {
 }
 
 // API endpoint to update .env.local file
-app.post('/api/config', (req, res) => {
+app.post('/api/config', async (req, res) => {
   try {
     // Allow either { config, fullValues } or just { config } in the request body
     // If only config is provided, use it as fullValues too
     const { config } = req.body;
-    const rawFullValues = req.body.fullValues || req.body.config || req.body;
+    let rawFullValues = req.body.fullValues || req.body.config || req.body;
+    if (rawFullValues === req.body) {
+      // The control fields of the request are never env names (Phase 5.3 D-15, UI-SPEC 6.12).
+      const { ragGate: _ragGate, clear: _clear, ...rest } = req.body;
+      rawFullValues = rest;
+    }
+
+    const clear = req.body.clear;
+    if (clear !== undefined && (!Array.isArray(clear) || !clear.every((name) => typeof name === 'string' && ragGate.clearableNames.includes(name)))) {
+      return res.status(400).json({ success: false, error: 'invalid_clear' });
+    }
+    const cleared = Array.isArray(clear) ? [...new Set(clear)] : [];
 
     // Filter out invalid environment variable names and template placeholders
     const fullValues = filterValidEnvVars(rawFullValues);
 
-    // The UI never receives secret values, so an empty secret means "unchanged"
-    for (const [name, value] of Object.entries(fullValues)) {
-      if (security.isSecretConfigEntry(name, '') && (value === '' || value === null || value === undefined)) {
-        delete fullValues[name];
+    // The UI never receives secret values: an empty or masked secret field means "unchanged" (D-14)
+    {
+      const savedEnvPath = path.join(REPO_ROOT, '.env.local');
+      const savedValues = fs.existsSync(savedEnvPath) ? dotenv.parse(fs.readFileSync(savedEnvPath, 'utf8')) : {};
+      const merged = security.mergeSecretUpdate(savedValues, fullValues);
+      for (const name of Object.keys(fullValues)) {
+        if (Object.prototype.hasOwnProperty.call(merged, name)) fullValues[name] = merged[name];
+        else delete fullValues[name];
       }
     }
+    for (const name of cleared) fullValues[name] = '';
 
     // A value must stay on one .env.local line: line breaks other than \n are refused, \n is stored as the literal \n
     const refused = [];
@@ -264,7 +326,7 @@ app.post('/api/config', (req, res) => {
       key.endsWith('_KEY')
     );
 
-    if (!hasConfigValues) {
+    if (!hasConfigValues && cleared.length === 0) {
       console.error('API: No valid configuration values found in request');
       return res.status(400).json({ error: "No valid configuration values found. Please ensure you're sending the configuration data correctly." });
     }
@@ -276,8 +338,12 @@ app.post('/api/config', (req, res) => {
     console.log('DEFAULT_OPENAI_MODELS:', DEFAULT_OPENAI_MODELS);
     console.log('DEFAULT_OPENROUTER_MODELS:', DEFAULT_OPENROUTER_MODELS);
 
+    const envExists = fs.existsSync(envPath);
+    const beforeValues = envExists ? dotenv.parse(fs.readFileSync(envPath, 'utf8')) : {};
+    let contentToWrite;
+
     // First check if the file exists
-    if (!fs.existsSync(envPath)) {
+    if (!envExists) {
       // If it doesn't exist, create a new one with default structure
       const newContent = `# myRAG Configuration
 
@@ -699,6 +765,10 @@ ${fullValues.RAG_SECURITY_EVENTS !== undefined ? `RAG_SECURITY_EVENTS=${fullValu
 ${fullValues.RAG_UPLOADER_ALERT_THRESHOLD !== undefined ? `RAG_UPLOADER_ALERT_THRESHOLD=${fullValues.RAG_UPLOADER_ALERT_THRESHOLD}` : 'RAG_UPLOADER_ALERT_THRESHOLD=0'}
 ${fullValues.RAG_UPLOADER_ALERT_WINDOW_HOURS !== undefined ? `RAG_UPLOADER_ALERT_WINDOW_HOURS=${fullValues.RAG_UPLOADER_ALERT_WINDOW_HOURS}` : 'RAG_UPLOADER_ALERT_WINDOW_HOURS=24'}
 ${fullValues.RAG_UPLOADER_HOLD !== undefined ? `RAG_UPLOADER_HOLD=${fullValues.RAG_UPLOADER_HOLD}` : 'RAG_UPLOADER_HOLD=off'}
+${fullValues.RAG_CALC_TOOL !== undefined ? `RAG_CALC_TOOL=${fullValues.RAG_CALC_TOOL}` : 'RAG_CALC_TOOL=false'}
+${fullValues.RAG_CALC_CHECK !== undefined ? `RAG_CALC_CHECK=${fullValues.RAG_CALC_CHECK}` : 'RAG_CALC_CHECK=false'}
+${fullValues.RAG_PROMPT_BUDGET !== undefined ? `RAG_PROMPT_BUDGET=${fullValues.RAG_PROMPT_BUDGET}` : 'RAG_PROMPT_BUDGET=false'}
+${fullValues.RAG_CONTEXT_OVERFLOW !== undefined ? `RAG_CONTEXT_OVERFLOW=${fullValues.RAG_CONTEXT_OVERFLOW}` : 'RAG_CONTEXT_OVERFLOW=truncate'}
 
 # Query layer
 ${fullValues.RAG_QUERY_LAYER !== undefined ? `RAG_QUERY_LAYER=${fullValues.RAG_QUERY_LAYER}` : 'RAG_QUERY_LAYER=false'}
@@ -712,6 +782,18 @@ ${fullValues.RAG_QUERY_DATE_NORMALIZE !== undefined ? `RAG_QUERY_DATE_NORMALIZE=
 ${fullValues.RAG_QUERY_HYDE !== undefined ? `RAG_QUERY_HYDE=${fullValues.RAG_QUERY_HYDE}` : 'RAG_QUERY_HYDE=false'}
 ${fullValues.RAG_QUERY_TRANSLATE_DISABLED_PROFILES !== undefined ? `RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${fullValues.RAG_QUERY_TRANSLATE_DISABLED_PROFILES}` : 'RAG_QUERY_TRANSLATE_DISABLED_PROFILES='}
 ${fullValues.RAG_QUERY_VOICE_TRANSFORMS !== undefined ? `RAG_QUERY_VOICE_TRANSFORMS=${fullValues.RAG_QUERY_VOICE_TRANSFORMS}` : 'RAG_QUERY_VOICE_TRANSFORMS=condense_history,normalize_dates'}
+${fullValues.RAG_QUERY_HISTORY_FALLBACK !== undefined ? `RAG_QUERY_HISTORY_FALLBACK=${fullValues.RAG_QUERY_HISTORY_FALLBACK}` : 'RAG_QUERY_HISTORY_FALLBACK=true'}
+${fullValues.RAG_QUERY_DECOMPOSE_COMPLETENESS !== undefined ? `RAG_QUERY_DECOMPOSE_COMPLETENESS=${fullValues.RAG_QUERY_DECOMPOSE_COMPLETENESS}` : 'RAG_QUERY_DECOMPOSE_COMPLETENESS=true'}
+${fullValues.RAG_QUERY_SUBQ_FILTERS !== undefined ? `RAG_QUERY_SUBQ_FILTERS=${fullValues.RAG_QUERY_SUBQ_FILTERS}` : 'RAG_QUERY_SUBQ_FILTERS=false'}
+${fullValues.RAG_DECOMPOSED_ANSWER !== undefined ? `RAG_DECOMPOSED_ANSWER=${fullValues.RAG_DECOMPOSED_ANSWER}` : 'RAG_DECOMPOSED_ANSWER=true'}
+${fullValues.RAG_WHATSAPP_HISTORY !== undefined ? `RAG_WHATSAPP_HISTORY=${fullValues.RAG_WHATSAPP_HISTORY}` : 'RAG_WHATSAPP_HISTORY=false'}
+${fullValues.RAG_TRANSLATION_GLOSSARY !== undefined ? `RAG_TRANSLATION_GLOSSARY=${fullValues.RAG_TRANSLATION_GLOSSARY}` : 'RAG_TRANSLATION_GLOSSARY=false'}
+${fullValues.RAG_LANGID_SIDECAR !== undefined ? `RAG_LANGID_SIDECAR=${fullValues.RAG_LANGID_SIDECAR}` : 'RAG_LANGID_SIDECAR=false'}
+${fullValues.RAG_SPECULATIVE_RETRIEVAL !== undefined ? `RAG_SPECULATIVE_RETRIEVAL=${fullValues.RAG_SPECULATIVE_RETRIEVAL}` : 'RAG_SPECULATIVE_RETRIEVAL=false'}
+${fullValues.RAG_MODEL_ROUTING !== undefined ? `RAG_MODEL_ROUTING=${fullValues.RAG_MODEL_ROUTING}` : 'RAG_MODEL_ROUTING=off'}
+${fullValues.RAG_ROUTING_FAST_MODEL !== undefined ? `RAG_ROUTING_FAST_MODEL=${fullValues.RAG_ROUTING_FAST_MODEL}` : 'RAG_ROUTING_FAST_MODEL=anthropic/claude-haiku-5.5'}
+${fullValues.RAG_ROUTING_QUALITY_MODEL !== undefined ? `RAG_ROUTING_QUALITY_MODEL=${fullValues.RAG_ROUTING_QUALITY_MODEL}` : 'RAG_ROUTING_QUALITY_MODEL=anthropic/claude-sonnet-5.5'}
+${fullValues.RAG_SCOPE_GATE !== undefined ? `RAG_SCOPE_GATE=${fullValues.RAG_SCOPE_GATE}` : 'RAG_SCOPE_GATE=false'}
 
 # Semantic cache
 ${fullValues.RAG_SEMANTIC_CACHE !== undefined ? `RAG_SEMANTIC_CACHE=${fullValues.RAG_SEMANTIC_CACHE}` : 'RAG_SEMANTIC_CACHE=off'}
@@ -841,7 +923,7 @@ ${fullValues.MCP_CUSTOM_SERVERS !== undefined ? `MCP_CUSTOM_SERVERS=${fullValues
 ${fullValues.ADMIN_EMAIL ? `ADMIN_EMAIL=${fullValues.ADMIN_EMAIL}` : 'ADMIN_EMAIL='}
 ${fullValues.ADMIN_PASSWORD ? `ADMIN_PASSWORD=${fullValues.ADMIN_PASSWORD}` : 'ADMIN_PASSWORD='}`
 
-      fs.writeFileSync(envPath, newContent);
+      contentToWrite = newContent;
     } else {
       // If it exists, try to update values while preserving structure
       const rawContent = fs.readFileSync(envPath, 'utf8');
@@ -918,19 +1000,37 @@ ${fullValues.ADMIN_PASSWORD ? `ADMIN_PASSWORD=${fullValues.ADMIN_PASSWORD}` : 'A
         }
       });
 
-      // Write the updated content
-      fs.writeFileSync(envPath, updatedLines.join('\n'));
+      contentToWrite = updatedLines.join('\n');
     }
+
+    // Phase 5.3 D-15, D-16: decide before anything is written; the proposed values are the posted ones over the current file.
+    const afterValues = { ...(envExists ? beforeValues : dotenv.parse(contentToWrite)), ...envValueStrings(fullValues) };
+    const gate = await ragGate.guardEnvWrite({ before: beforeValues, after: afterValues, ragGate: req.body.ragGate, repoRoot: REPO_ROOT, makeClient: app.locals.ragGateMakeClient, route: 'config' });
+    if (!gate.ok) return res.status(gate.status).json(gate.body);
+
+    fs.writeFileSync(envPath, contentToWrite);
 
     res.json({
       success: true,
-      message: '.env.local updated successfully!'
+      message: '.env.local updated successfully!',
+      ...(gate.ragGate ? { ragGate: gate.ragGate } : {})
     });
   } catch (error) {
     console.error('Error updating configuration:', error);
     res.status(500).json({ error: error.message });
   }
 });
+
+// The string each posted value is written as, so the gate hashes what lands in the file.
+function envValueStrings(values) {
+  const out = {};
+  for (const [name, value] of Object.entries(values)) {
+    if (typeof value === 'boolean') out[name] = value ? 'true' : 'false';
+    else if (value === null || value === undefined) out[name] = '';
+    else out[name] = String(value);
+  }
+  return out;
+}
 
 // Helper function to validate environment variable names
 function isValidEnvVarName(key) {
@@ -1044,7 +1144,7 @@ app.get('/api/config/rag-prompt', async (req, res) => {
 // API endpoint to update RAG system prompt - PROXY TO MAIN APP
 app.post('/api/config/rag-prompt', async (req, res) => {
   try {
-    const { preContext, postContext } = req.body;
+    const { preContext, postContext, ragGate: ragGateField } = req.body;
 
     console.log('[RAG API] Proxying POST request to main app:', {
       preContextLength: preContext?.length || 0,
@@ -1058,7 +1158,8 @@ app.post('/api/config/rag-prompt', async (req, res) => {
       }),
       body: JSON.stringify({
         preContext,
-        postContext
+        postContext,
+        ...(ragGateField !== undefined ? { ragGate: ragGateField } : {})
       })
     });
 
@@ -1070,7 +1171,8 @@ app.post('/api/config/rag-prompt', async (req, res) => {
       success: data.success,
       fullPrompt: data.assembledPrompt,
       message: data.message,
-      error: data.error
+      error: data.error,
+      ...(data.ragGate ? { ragGate: data.ragGate } : {})
     };
 
     res.json(transformedData);
@@ -1288,8 +1390,38 @@ app.all(/^\/api\/scrapers\//, async (req, res) => {
   }
 });
 
+// Phase 5.3 D-13, D-14: the pre-save setting check (POST /api/config/rag-gate/check, GET .../latest, GET .../:id).
+// A posted config goes through the same filtering as POST /api/config before it is compared and hashed.
+function prepareRagGateConfig(raw) {
+  const values = filterValidEnvVars(raw);
+  for (const [name, value] of Object.entries(values)) {
+    if (security.isSecretConfigEntry(name, '') && (value === '' || value === null || value === undefined)) delete values[name];
+  }
+  for (const [name, value] of Object.entries(values)) {
+    if (value === null || value === undefined) {
+      delete values[name];
+      continue;
+    }
+    const text = typeof value === 'object' ? (Array.isArray(value) ? value.join(',') : JSON.stringify(value)) : String(value);
+    const safe = security.toEnvLineValue(text);
+    if (safe === null) return null;
+    values[name] = safe;
+  }
+  return values;
+}
+
+ragGate.registerRagGateRoutes(
+  app,
+  ragGate.createRagGateRunner({
+    repoRoot: REPO_ROOT,
+    spawn,
+    prepareConfig: prepareRagGateConfig,
+    appBaseUrl: () => getMainAppBaseUrl(),
+  }),
+);
+
 // API endpoint to create a new .env.local with template
-app.post('/api/config/create', (req, res) => {
+app.post('/api/config/create', async (req, res) => {
   try {
     const { template = 'standard' } = req.body;
     const envPath = path.join(REPO_ROOT, '.env.local');
@@ -1317,6 +1449,14 @@ app.post('/api/config/create', (req, res) => {
         break;
     }
 
+    // Phase 5.3 D-15, D-16: overwriting an existing file with force goes through the gate first.
+    let gate = { ok: true, ragGate: null };
+    if (fs.existsSync(envPath)) {
+      const beforeValues = dotenv.parse(fs.readFileSync(envPath, 'utf8'));
+      gate = await ragGate.guardEnvWrite({ before: beforeValues, after: dotenv.parse(templateContent), ragGate: req.body.ragGate, repoRoot: REPO_ROOT, makeClient: app.locals.ragGateMakeClient, route: 'create' });
+      if (!gate.ok) return res.status(gate.status).json(gate.body);
+    }
+
     // Write the file
     fs.writeFileSync(envPath, templateContent);
 
@@ -1326,7 +1466,8 @@ app.post('/api/config/create', (req, res) => {
     res.json({
       success: true,
       message: '.env.local created successfully!',
-      config: config
+      config: config,
+      ...(gate.ragGate ? { ragGate: gate.ragGate } : {})
     });
   } catch (error) {
     console.error('Error creating config file:', error);
@@ -1662,6 +1803,10 @@ RAG_SECURITY_EVENTS=${getEnvValue('RAG_SECURITY_EVENTS') || 'false'}
 RAG_UPLOADER_ALERT_THRESHOLD=${getEnvValue('RAG_UPLOADER_ALERT_THRESHOLD') || '0'}
 RAG_UPLOADER_ALERT_WINDOW_HOURS=${getEnvValue('RAG_UPLOADER_ALERT_WINDOW_HOURS') || '24'}
 RAG_UPLOADER_HOLD=${getEnvValue('RAG_UPLOADER_HOLD') || 'off'}
+RAG_CALC_TOOL=${getEnvValue('RAG_CALC_TOOL') || 'false'}
+RAG_CALC_CHECK=${getEnvValue('RAG_CALC_CHECK') || 'false'}
+RAG_PROMPT_BUDGET=${getEnvValue('RAG_PROMPT_BUDGET') || 'false'}
+RAG_CONTEXT_OVERFLOW=${getEnvValue('RAG_CONTEXT_OVERFLOW') || 'truncate'}
 # Query layer
 RAG_QUERY_LAYER=${getEnvValue('RAG_QUERY_LAYER') || 'false'}
 RAG_QUERY_FRAMEWORK=${getEnvValue('RAG_QUERY_FRAMEWORK') || 'llamaindex'}
@@ -1674,6 +1819,18 @@ RAG_QUERY_DATE_NORMALIZE=${getEnvValue('RAG_QUERY_DATE_NORMALIZE') || 'true'}
 RAG_QUERY_HYDE=${getEnvValue('RAG_QUERY_HYDE') || 'false'}
 RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${getEnvValue('RAG_QUERY_TRANSLATE_DISABLED_PROFILES') || ''}
 RAG_QUERY_VOICE_TRANSFORMS=${getEnvValue('RAG_QUERY_VOICE_TRANSFORMS') || 'condense_history,normalize_dates'}
+RAG_QUERY_HISTORY_FALLBACK=${getEnvValue('RAG_QUERY_HISTORY_FALLBACK') || 'true'}
+RAG_QUERY_DECOMPOSE_COMPLETENESS=${getEnvValue('RAG_QUERY_DECOMPOSE_COMPLETENESS') || 'true'}
+RAG_QUERY_SUBQ_FILTERS=${getEnvValue('RAG_QUERY_SUBQ_FILTERS') || 'false'}
+RAG_DECOMPOSED_ANSWER=${getEnvValue('RAG_DECOMPOSED_ANSWER') || 'true'}
+RAG_WHATSAPP_HISTORY=${getEnvValue('RAG_WHATSAPP_HISTORY') || 'false'}
+RAG_TRANSLATION_GLOSSARY=${getEnvValue('RAG_TRANSLATION_GLOSSARY') || 'false'}
+RAG_LANGID_SIDECAR=${getEnvValue('RAG_LANGID_SIDECAR') || 'false'}
+RAG_SPECULATIVE_RETRIEVAL=${getEnvValue('RAG_SPECULATIVE_RETRIEVAL') || 'false'}
+RAG_MODEL_ROUTING=${getEnvValue('RAG_MODEL_ROUTING') || 'off'}
+RAG_ROUTING_FAST_MODEL=${getEnvValue('RAG_ROUTING_FAST_MODEL') || 'anthropic/claude-haiku-5.5'}
+RAG_ROUTING_QUALITY_MODEL=${getEnvValue('RAG_ROUTING_QUALITY_MODEL') || 'anthropic/claude-sonnet-5.5'}
+RAG_SCOPE_GATE=${getEnvValue('RAG_SCOPE_GATE') || 'false'}
 # Semantic cache
 RAG_SEMANTIC_CACHE=${getEnvValue('RAG_SEMANTIC_CACHE') || 'off'}
 RAG_SEMANTIC_CACHE_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_TTL') || '3600'}
@@ -2189,6 +2346,10 @@ RAG_SECURITY_EVENTS=${getEnvValue('RAG_SECURITY_EVENTS') || 'false'}
 RAG_UPLOADER_ALERT_THRESHOLD=${getEnvValue('RAG_UPLOADER_ALERT_THRESHOLD') || '0'}
 RAG_UPLOADER_ALERT_WINDOW_HOURS=${getEnvValue('RAG_UPLOADER_ALERT_WINDOW_HOURS') || '24'}
 RAG_UPLOADER_HOLD=${getEnvValue('RAG_UPLOADER_HOLD') || 'off'}
+RAG_CALC_TOOL=${getEnvValue('RAG_CALC_TOOL') || 'false'}
+RAG_CALC_CHECK=${getEnvValue('RAG_CALC_CHECK') || 'false'}
+RAG_PROMPT_BUDGET=${getEnvValue('RAG_PROMPT_BUDGET') || 'false'}
+RAG_CONTEXT_OVERFLOW=${getEnvValue('RAG_CONTEXT_OVERFLOW') || 'truncate'}
 # Query layer
 RAG_QUERY_LAYER=${getEnvValue('RAG_QUERY_LAYER') || 'false'}
 RAG_QUERY_FRAMEWORK=${getEnvValue('RAG_QUERY_FRAMEWORK') || 'llamaindex'}
@@ -2201,6 +2362,18 @@ RAG_QUERY_DATE_NORMALIZE=${getEnvValue('RAG_QUERY_DATE_NORMALIZE') || 'true'}
 RAG_QUERY_HYDE=${getEnvValue('RAG_QUERY_HYDE') || 'false'}
 RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${getEnvValue('RAG_QUERY_TRANSLATE_DISABLED_PROFILES') || ''}
 RAG_QUERY_VOICE_TRANSFORMS=${getEnvValue('RAG_QUERY_VOICE_TRANSFORMS') || 'condense_history,normalize_dates'}
+RAG_QUERY_HISTORY_FALLBACK=${getEnvValue('RAG_QUERY_HISTORY_FALLBACK') || 'true'}
+RAG_QUERY_DECOMPOSE_COMPLETENESS=${getEnvValue('RAG_QUERY_DECOMPOSE_COMPLETENESS') || 'true'}
+RAG_QUERY_SUBQ_FILTERS=${getEnvValue('RAG_QUERY_SUBQ_FILTERS') || 'false'}
+RAG_DECOMPOSED_ANSWER=${getEnvValue('RAG_DECOMPOSED_ANSWER') || 'true'}
+RAG_WHATSAPP_HISTORY=${getEnvValue('RAG_WHATSAPP_HISTORY') || 'false'}
+RAG_TRANSLATION_GLOSSARY=${getEnvValue('RAG_TRANSLATION_GLOSSARY') || 'false'}
+RAG_LANGID_SIDECAR=${getEnvValue('RAG_LANGID_SIDECAR') || 'false'}
+RAG_SPECULATIVE_RETRIEVAL=${getEnvValue('RAG_SPECULATIVE_RETRIEVAL') || 'false'}
+RAG_MODEL_ROUTING=${getEnvValue('RAG_MODEL_ROUTING') || 'off'}
+RAG_ROUTING_FAST_MODEL=${getEnvValue('RAG_ROUTING_FAST_MODEL') || 'anthropic/claude-haiku-5.5'}
+RAG_ROUTING_QUALITY_MODEL=${getEnvValue('RAG_ROUTING_QUALITY_MODEL') || 'anthropic/claude-sonnet-5.5'}
+RAG_SCOPE_GATE=${getEnvValue('RAG_SCOPE_GATE') || 'false'}
 # Semantic cache
 RAG_SEMANTIC_CACHE=${getEnvValue('RAG_SEMANTIC_CACHE') || 'off'}
 RAG_SEMANTIC_CACHE_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_TTL') || '3600'}
@@ -3517,7 +3690,7 @@ app.get('/api/config/languages', (req, res) => {
   }
 });
 
-app.post('/api/config/languages', (req, res) => {
+app.post('/api/config/languages', async (req, res) => {
   const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : null;
   if (
     !body ||
@@ -3537,7 +3710,12 @@ app.post('/api/config/languages', (req, res) => {
     if (!result.ok) {
       return res.status(400).json({ success: false, error: 'Invalid language settings', details: result.errors });
     }
-    languageSettings.writeLanguageVariables(path.join(REPO_ROOT, '.env.local'), result.normalized);
+    const languagesEnvPath = path.join(REPO_ROOT, '.env.local');
+    const beforeValues = fs.existsSync(languagesEnvPath) ? dotenv.parse(fs.readFileSync(languagesEnvPath, 'utf8')) : {};
+    const afterValues = { ...beforeValues, RAG_SUPPORTED_LANGUAGES: result.normalized.languages.join(','), RAG_PRIMARY_LANGUAGE: result.normalized.primary };
+    const gate = await ragGate.guardEnvWrite({ before: beforeValues, after: afterValues, ragGate: body.ragGate, repoRoot: REPO_ROOT, makeClient: app.locals.ragGateMakeClient, route: 'languages' });
+    if (!gate.ok) return res.status(gate.status).json(gate.body);
+    languageSettings.writeLanguageVariables(languagesEnvPath, result.normalized);
     console.log('[RAG Languages] saved', { languages: result.normalized.languages, primary: result.normalized.primary });
     return res.json({
       success: true,
@@ -3545,6 +3723,7 @@ app.post('/api/config/languages', (req, res) => {
       primary: result.normalized.primary,
       warnings: result.warnings,
       verifiedAgainstActiveProfile: result.verifiedAgainstActiveProfile,
+      ...(gate.ragGate ? { ragGate: gate.ragGate } : {}),
     });
   } catch (error) {
     console.error('[RAG Languages] save failed:', { message: error instanceof Error ? error.message : String(error) });
@@ -4011,8 +4190,8 @@ app.post('/api/config/models', async (req, res) => {
       // Set response headers
       res.statusCode = proxyRes.statusCode;
 
-      // Forward response headers
-      Object.keys(proxyRes.headers).forEach(key => {
+      // Forward response headers; the body is re-serialised by res.json, so framing headers stay with this response
+      Object.keys(proxyRes.headers).filter((key) => !['content-length', 'transfer-encoding', 'connection'].includes(key.toLowerCase())).forEach(key => {
         res.setHeader(key, proxyRes.headers[key]);
       });
 
@@ -4922,4 +5101,4 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings, answerRulesModelFamily };
+module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings, answerRulesModelFamily, buildRagPipelineManifest };

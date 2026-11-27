@@ -37,7 +37,7 @@ function recordingQueryLlm(calls: LlmCall[]): QueryLlm {
       calls.push({ transform: request.transform, prompt: `${request.system}\n${request.prompt}`, input: request.input });
       if (request.transform !== 'condense') throw new Error('unexpected transform');
       const codes = [CODE_A, CODE_B].filter((code) => request.prompt.includes(code));
-      const output = codes.length === 0 ? { standalone: request.input, unchanged: true } : { standalone: `${request.input} ${codes.join(' ')}`, unchanged: false };
+      const output = codes.length === 0 ? { standalone: request.input, unchanged: true, language: null } : { standalone: `${request.input} ${codes.join(' ')}`, unchanged: false, language: null };
       return request.schema.parse(output);
     },
   };

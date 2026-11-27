@@ -89,6 +89,18 @@ const REFUSAL_LABELS = {
     'legend.summary': 'What the statuses mean',
     'legend.fixture': 'Fixture, eval only: calibrated on the built-in test data. Used when evaluating, never for live answers.',
     'legend.stale': 'Stale: calibrated with another tokenizer or rerank text version than the app runs now. Not used until calibrated again.',
+    'warning.uncalibrated_after_change': "Thresholds not applied since a setting change: {count}. They are marked “Uncalibrated after a change” below. Run {command} with the new value, commit the result and redeploy.",
+    'warning.changedSettings': "Changed settings: {names}",
+    'warning.possibly_stale_scores': "Thresholds that may no longer fit, because the score distribution moved: {count}. They still apply. Check them with a new calibration.",
+    'badge.pending': "Uncalibrated after a change",
+    'badge.shift': "Possibly stale",
+    'hint.pending.reranker_model': "The reranker model changed on {date}. Not applied until calibrated again.",
+    'hint.pending.embedding_model': "The embedding model changed on {date}. Not applied until calibrated again.",
+    'hint.pending.tokenizer': "The tokenizer changed on {date}. Not applied until calibrated again.",
+    'hint.shift': "The score distribution moved on {date}. Still applied.",
+    'legend.pending': "Uncalibrated after a change: the reranker model, the embedding model or the tokenizer changed after this calibration. Not used until calibrated again.",
+    'legend.shift': "Possibly stale: the monitor saw the score distribution move. Still used.",
+    'action.reviewAlerts': "Review alerts",
     'error.unavailable': 'Refusal calibration is unavailable right now. Select Reload panel in a moment.',
     'error.statusUnreadable': 'The refusal calibration status could not be read. Select Reload panel. If it repeats, check the app log for [RAG Admin].',
     'pointer.text': 'Calibration status and warnings are under RAG administration, Refusal calibration.',
@@ -178,6 +190,18 @@ const REFUSAL_LABELS = {
     'legend.summary': '状态说明',
     'legend.fixture': '测试数据，仅用于评估：用内置测试数据校准，只在评估时使用，不会用于实际回答。',
     'legend.stale': '已过期：校准时使用的分词器或重排文本版本与应用当前版本不同。重新校准之前不会使用。',
+    'warning.uncalibrated_after_change': "设置更改后未生效的阈值：{count} 个。它们在下方标为“更改后未校准”。请用新取值运行 {command}，提交结果并重新部署。",
+    'warning.changedSettings': "已更改的设置：{names}",
+    'warning.possibly_stale_scores': "因分数分布偏移而可能不再合适的阈值：{count} 个。它们仍在生效。请通过新的校准进行核对。",
+    'badge.pending': "更改后未校准",
+    'badge.shift': "可能已过期",
+    'hint.pending.reranker_model': "重排模型于 {date} 更改。重新校准之前不会生效。",
+    'hint.pending.embedding_model': "向量模型于 {date} 更改。重新校准之前不会生效。",
+    'hint.pending.tokenizer': "分词器于 {date} 更改。重新校准之前不会生效。",
+    'hint.shift': "分数分布于 {date} 发生偏移。仍在生效。",
+    'legend.pending': "更改后未校准：这次校准之后，重排模型、向量模型或分词器发生了变更。重新校准之前不会使用。",
+    'legend.shift': "可能已过期：监控发现分数分布发生了偏移。仍在使用。",
+    'action.reviewAlerts': "查看告警",
     'error.unavailable': '暂时无法读取拒答校准。请稍后点击“重新加载面板”。',
     'error.statusUnreadable': '无法读取拒答校准状态。请点击“重新加载面板”。如果再次出现，请在应用日志中查找 [RAG Admin]。',
     'pointer.text': '校准状态和警告位于 RAG administration 的“拒答校准”中。',
@@ -273,6 +297,18 @@ const REFUSAL_LABELS = {
     'legend.fixture': 'Dati di prova, solo valutazione: calibrata sui dati di prova integrati. Usata nella valutazione, mai per le risposte reali.',
     'legend.stale':
       'Obsoleta: calibrata con una versione del tokenizer o del testo di reranking diversa da quella in uso. Non viene usata finché non è ricalibrata.',
+    'warning.uncalibrated_after_change': "Soglie non applicate dopo una modifica: {count}. Sotto sono indicate come “Non calibrata dopo una modifica”. Esegui {command} con il nuovo valore, fai commit del risultato e ridistribuisci.",
+    'warning.changedSettings': "Impostazioni modificate: {names}",
+    'warning.possibly_stale_scores': "Soglie che potrebbero non essere più adatte perché la distribuzione dei punteggi si è spostata: {count}. Restano applicate. Verificale con una nuova calibrazione.",
+    'badge.pending': "Non calibrata dopo una modifica",
+    'badge.shift': "Forse non più valida",
+    'hint.pending.reranker_model': "Il modello di reranking è cambiato il {date}. Non applicata finché non viene ricalibrata.",
+    'hint.pending.embedding_model': "Il modello di embedding è cambiato il {date}. Non applicata finché non viene ricalibrata.",
+    'hint.pending.tokenizer': "Il tokenizer è cambiato il {date}. Non applicata finché non viene ricalibrata.",
+    'hint.shift': "La distribuzione dei punteggi si è spostata il {date}. Ancora applicata.",
+    'legend.pending': "Non calibrata dopo una modifica: il modello di reranking, il modello di embedding o il tokenizer sono cambiati dopo questa calibrazione. Non usata finché non viene ricalibrata.",
+    'legend.shift': "Forse non più valida: il monitoraggio ha rilevato uno spostamento della distribuzione dei punteggi. Ancora usata.",
+    'action.reviewAlerts': "Esamina avvisi",
     'error.unavailable': 'La calibrazione del rifiuto non è disponibile al momento. Seleziona «Ricarica pannello» tra poco.',
     'error.statusUnreadable':
       "Non è stato possibile leggere lo stato della calibrazione. Seleziona «Ricarica pannello». Se si ripete, cerca [RAG Admin] nel log dell’app.",
@@ -295,7 +331,12 @@ const REFUSAL_WARNING_STYLE = Object.freeze({
   stale_cells: { tone: 'warning', icon: 'bi-exclamation-triangle' },
   relative_reranker: { tone: 'warning', icon: 'bi-exclamation-triangle' },
   fixture_cells_only: { tone: 'info', icon: 'bi-info-circle' },
+  uncalibrated_after_change: { tone: 'warning', icon: 'bi-exclamation-triangle' },
+  possibly_stale_scores: { tone: 'warning', icon: 'bi-exclamation-triangle' },
 });
+/** D-18 / D-24 derived marks per cell: a change reason (not applied until calibrated again) or a score shift (still applied). */
+const REFUSAL_PENDING_REASONS = Object.freeze(['reranker_model', 'embedding_model', 'tokenizer']);
+const REFUSAL_ENV_NAME = /^[A-Z][A-Z0-9_]*$/;
 
 function refusalLocale(locale) {
   return locale === 'zh' || locale === 'it' ? locale : 'en';
@@ -451,13 +492,43 @@ function refusalCorrectRate(split, locale) {
 }
 
 /** One view row per threshold cell, in the route's order, with only the fields UI-SPEC section 6.8 names. */
+/**
+ * The derived mark of a cell (UI-SPEC 6.5), or null: a badge and its 12px hint with the date. It never replaces the stored status. A date
+ * the formatter cannot read stays as given, in a mono segment.
+ */
+function refusalPendingView(pending, locale) {
+  if (!pending || typeof pending !== 'object') return null;
+  const reason = pending.reason;
+  const shift = reason === 'score_shift';
+  if (!shift && !REFUSAL_PENDING_REASONS.includes(reason)) return null;
+  const since = typeof pending.since === 'string' ? pending.since : '';
+  const date = refusalDate(since, locale, 'date');
+  const dateVar = date ? { time: date } : since ? { mono: since } : '—';
+  return {
+    kind: shift ? 'shift' : 'pending',
+    label: refusalLabel(shift ? 'badge.shift' : 'badge.pending', locale),
+    hint: refusalMessage(shift ? 'hint.shift' : 'hint.pending.' + reason, locale, { date: dateVar }),
+  };
+}
+
+/** True when the route sends the D-18 / D-24 fields (a pending field on a cell or one of the two warnings); else the panel is as before. */
+function refusalHasPendingFields(status) {
+  const cells = status && Array.isArray(status.cells) ? status.cells : [];
+  const warnings = status && Array.isArray(status.warnings) ? status.warnings : [];
+  return (
+    cells.some((cell) => cell && typeof cell === 'object' && Object.prototype.hasOwnProperty.call(cell, 'pending')) ||
+    warnings.some((w) => w && (w.code === 'uncalibrated_after_change' || w.code === 'possibly_stale_scores'))
+  );
+}
+
 function cellRows(status, locale) {
   const cells = status && Array.isArray(status.cells) ? status.cells : [];
   return cells.map((cell) => {
     const statusKey = REFUSAL_STATUSES.includes(cell.status) ? cell.status : 'uncalibrated';
     const fixture = cell.source === 'fixture';
     const stale = cell.stale === true;
-    return {
+    const pending = refusalPendingView(cell.pending, locale);
+    const row = {
       provider: refusalProviderName(cell.provider, locale),
       model: String(cell.model),
       language: refusalLanguageName(cell.query_language, locale),
@@ -477,7 +548,29 @@ function cellRows(status, locale) {
       holdout: { falseRefusal: refusalFalseRate(cell.holdout, locale), correctRefusal: refusalCorrectRate(cell.holdout, locale) },
       recorded: refusalDate(cell.recorded_at, locale, 'date'),
     };
+    if (pending) row.pending = pending;
+    return row;
   });
+}
+
+/** warning.changedSettings with each env name as its own code segment, separated by commas. */
+function refusalNamesMessage(names, locale) {
+  const message = refusalMessage('warning.changedSettings', locale, { names: '\u0000' });
+  const segments = [];
+  for (const segment of message.segments) {
+    if (segment.text === undefined || !segment.text.includes('\u0000')) {
+      segments.push(segment);
+      continue;
+    }
+    const [before, after] = segment.text.split('\u0000');
+    if (before) segments.push({ text: before });
+    names.forEach((name, i) => {
+      if (i > 0) segments.push({ text: ', ' });
+      segments.push(REFUSAL_ENV_NAME.test(name) ? { code: name } : { text: name });
+    });
+    if (after) segments.push({ text: after });
+  }
+  return { key: message.key, segments, text: refusalSegmentsText(segments) };
 }
 
 /** A route warning as a localized sentence (UI-SPEC section 12.5); an unknown code shows the route's own message in English. */
@@ -511,7 +604,14 @@ function refusalWarningView(warning, locale, status) {
   }
   if (code === 'stale_cells') vars.count = refusalNumber(Array.isArray(w.keys) ? w.keys.length : 0, locale);
   if (code === 'relative_reranker') vars.provider = refusalProviderName(w.provider, locale);
-  return { ...refusalMessage('warning.' + code, locale, vars), code, tone: style.tone, icon: style.icon, missing };
+  const extra = {};
+  if (code === 'uncalibrated_after_change' || code === 'possibly_stale_scores') vars.count = refusalNumber(Array.isArray(w.keys) ? w.keys.length : 0, locale);
+  if (code === 'uncalibrated_after_change') {
+    const names = (Array.isArray(w.changed_keys) ? w.changed_keys : []).filter((n) => typeof n === 'string' && n !== '');
+    extra.changedSettings = names.length > 0 ? refusalNamesMessage(names, locale) : null;
+  }
+  if (code === 'possibly_stale_scores') extra.reviewAlerts = true;
+  return { ...refusalMessage('warning.' + code, locale, vars), code, tone: style.tone, icon: style.icon, missing, ...extra };
 }
 
 /**
@@ -680,6 +780,8 @@ class RefusalCalibrationPanel {
     this.fetcher = d.fetcher || ((apiPath, init) => window.ragFetch(apiPath, init));
     this.appUrl = d.appUrl || null;
     this.page = d.page || null;
+    this.openMonitorFn = typeof d.openMonitor === 'function' ? d.openMonitor : null;
+    this.refreshBannerFn = typeof d.refreshBanner === 'function' ? d.refreshBanner : null;
     this.mounted = false;
     this.status = null;
     this.updatedAt = null;
@@ -695,6 +797,20 @@ class RefusalCalibrationPanel {
 
   t(key, vars) {
     return refusalLabel(key, this.locale, vars);
+  }
+
+  /** Review alerts: the Monitoring panel's Alerts view, as the page banner opens it (UI-SPEC 6.6). */
+  openMonitor() {
+    if (this.openMonitorFn) return this.openMonitorFn();
+    if (typeof gatesUiOpenMonitorAlerts === 'function') return gatesUiOpenMonitorAlerts();
+    return null;
+  }
+
+  /** The page banner counts the cells marked pending, so it is refreshed after this panel is (UI-SPEC 6.6). */
+  refreshBanner() {
+    if (this.refreshBannerFn) return this.refreshBannerFn();
+    if (typeof window !== 'undefined' && typeof window.gatesUiRefreshBanner === 'function') return window.gatesUiRefreshBanner();
+    return null;
   }
 
   async mount() {
@@ -713,7 +829,7 @@ class RefusalCalibrationPanel {
     const content = this.hosts.content;
     if (!content) return;
     this.updatedEl = refusalEl('span', { cls: 'text-xs text-base-content/70' });
-    this.refreshButton = refusalEl('button', { cls: 'btn btn-outline btn-sm', attrs: { type: 'button' }, on: { click: () => this.load() } }, [
+    this.refreshButton = refusalEl('button', { cls: 'btn btn-outline btn-sm', attrs: { type: 'button' }, on: { click: () => this.load({ refresh: true }) } }, [
       refusalIcon('bi-arrow-clockwise'),
       this.t('action.refresh'),
     ]);
@@ -738,7 +854,7 @@ class RefusalCalibrationPanel {
   reload() {
     if (this.hosts.content) this.hosts.content.hidden = false;
     if (this.hosts.alert) this.hosts.alert.replaceChildren();
-    return this.load();
+    return this.load({ refresh: true });
   }
 
   setBusy(busy) {
@@ -756,7 +872,7 @@ class RefusalCalibrationPanel {
     }
   }
 
-  async load() {
+  async load(opts) {
     if (this.loading || !this.body) return;
     this.setBusy(true);
     let result;
@@ -786,6 +902,7 @@ class RefusalCalibrationPanel {
     const cells = Array.isArray(this.status.cells) ? this.status.cells.length : 0;
     const warnings = Array.isArray(this.status.warnings) ? this.status.warnings.length : 0;
     this.setStatus(this.t('status.loaded', { cells: refusalNumber(cells, this.locale), warnings: refusalNumber(warnings, this.locale) }));
+    if (opts && opts.refresh) this.refreshBanner();
   }
 
   render() {
@@ -843,6 +960,17 @@ class RefusalCalibrationPanel {
         for (const item of view.missing) ul.appendChild(refusalMessageEl('li', '', item));
         extra.push(ul);
       }
+      if (view.changedSettings) {
+        const line = refusalMessageEl('p', 'text-xs break-words min-w-0', view.changedSettings);
+        // Env names have no break points, so they break anywhere instead of widening the alert at 360px (UI-SPEC 10).
+        for (const code of line.querySelectorAll('code')) code.className = 'font-mono text-xs break-all';
+        extra.push(line);
+      }
+      if (view.reviewAlerts) {
+        extra.push(
+          refusalEl('button', { cls: 'btn btn-link btn-xs px-0 h-auto min-h-0 text-current underline underline-offset-2', text: this.t('action.reviewAlerts'), attrs: { type: 'button' }, on: { click: () => this.openMonitor() } }),
+        );
+      }
       list.appendChild(refusalAlert(view.tone, view.icon, view, extra, view.lang));
     }
     return refusalEl('div', null, [refusalEl('h4', { cls: 'text-base font-semibold mb-2', text: this.t('warnings.heading') }), list]);
@@ -898,9 +1026,19 @@ class RefusalCalibrationPanel {
           : row.statusKey === 'failed_holdout'
             ? 'badge badge-warning badge-sm'
             : 'badge badge-ghost badge-sm';
-      const badges = refusalEl('div', { cls: 'flex flex-wrap gap-1' }, [refusalEl('span', { cls: statusCls + ' h-auto whitespace-nowrap', text: row.statusLabel })]);
+      // With a derived mark every badge keeps its own line (UI-SPEC 6.5, finding 8); without one the row is as before this phase.
+      const badges = row.pending
+        ? refusalEl('div', { cls: 'flex flex-col items-start gap-1', attrs: { 'data-refusal-badges': '' } }, [refusalEl('span', { cls: statusCls + ' h-auto whitespace-nowrap', text: row.statusLabel })])
+        : refusalEl('div', { cls: 'flex flex-wrap gap-1' }, [refusalEl('span', { cls: statusCls + ' h-auto whitespace-nowrap', text: row.statusLabel })]);
       if (row.fixture) badges.appendChild(refusalEl('span', { cls: 'badge badge-info badge-outline badge-sm h-auto whitespace-nowrap', text: row.fixtureLabel }));
       if (row.stale) badges.appendChild(refusalEl('span', { cls: 'badge badge-warning badge-outline badge-sm h-auto whitespace-nowrap', text: row.staleLabel }));
+      if (row.pending) {
+        badges.appendChild(
+          refusalEl('span', { cls: 'badge badge-warning badge-outline badge-sm h-auto whitespace-nowrap', text: row.pending.label, attrs: { 'data-refusal-mark': row.pending.kind } }),
+        );
+      }
+      const statusCell = [badges, refusalEl('div', { cls: 'text-xs text-base-content/70 mt-1', text: row.statusHint })];
+      if (row.pending) statusCell.push(refusalMessageEl('div', 'text-xs text-base-content/70 mt-1 break-words', row.pending.hint));
       tbody.appendChild(
         refusalEl('tr', null, [
           refusalEl('th', { cls: 'font-normal align-top min-w-40', attrs: { scope: 'row' } }, [
@@ -912,7 +1050,7 @@ class RefusalCalibrationPanel {
             refusalEl('div', { cls: 'text-xs text-base-content/70 md:hidden', text: row.pairing }),
           ]),
           refusalEl('td', { cls: 'align-top text-sm hidden md:table-cell', text: row.pairing }),
-          refusalEl('td', { cls: 'align-top min-w-40' }, [badges, refusalEl('div', { cls: 'text-xs text-base-content/70 mt-1', text: row.statusHint })]),
+          refusalEl('td', { cls: row.pending ? 'align-top min-w-48' : 'align-top min-w-40' }, statusCell),
           refusalEl('td', { cls: 'align-top text-right tabular-nums text-sm', text: row.threshold }),
           refusalEl('td', { cls: 'align-top' }, [refusalRateCell(row.dev.falseRefusal, this.locale)]),
           refusalEl('td', { cls: 'align-top hidden lg:table-cell' }, [refusalCorrectCell(row.dev.correctRefusal, this.locale)]),
@@ -940,6 +1078,10 @@ class RefusalCalibrationPanel {
     }
     legend.appendChild(refusalEl('li', { text: this.t('legend.fixture') }));
     legend.appendChild(refusalEl('li', { text: this.t('legend.stale') }));
+    if (refusalHasPendingFields(this.status)) {
+      legend.appendChild(refusalEl('li', { text: this.t('legend.pending') }));
+      legend.appendChild(refusalEl('li', { text: this.t('legend.shift') }));
+    }
     nodes.push(
       refusalEl('details', { cls: 'mt-4' }, [
         refusalEl('summary', {
@@ -1015,6 +1157,7 @@ if (typeof module !== 'undefined' && module.exports) {
     refusalLabel,
     refusalMessage,
     cellRows,
+    refusalPendingView,
     refusalWarningView,
     refusalSummary,
     mapRefusalError,

@@ -1,6 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { getRagDeps } from '../deps';
 import type { Profile, StageFailureReason, StageRecord, StageRunStatus } from '../types';
+import { sanitizeTraceLanguages, type TraceLanguages } from './languages';
+
+export { sanitizeTraceLanguages, traceLanguagesOf, type TraceLanguages } from './languages';
 
 const TRACE_ID = /^[0-9a-f]{32}$/;
 
@@ -78,6 +81,10 @@ export interface TraceCollector {
   setCacheState(state: TraceCacheState): void;
   /** Null until a request start was marked, so a request that records no timing exports what it exported before. */
   timing(): TraceTiming | null;
+  /** LANG-10: recorded when the trace is finished; a later call replaces it (the answer language may arrive after the stream). */
+  setLanguages(block: TraceLanguages): void;
+  /** Null until languages were recorded. */
+  languages(): TraceLanguages | null;
 }
 
 export interface TraceCollectorOptions {
@@ -100,6 +107,7 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
   let preGenerationMs: number | null = null;
   let ttftMs: number | null = null;
   let cacheState: TraceCacheState = 'bypass';
+  let languageBlock: TraceLanguages | null = null;
   const elapsedSince = (start: number): number => {
     const elapsed = deps.now() - start;
     return Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0;
@@ -164,6 +172,10 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
         cache: cacheState,
       };
     },
+    setLanguages(block) {
+      languageBlock = sanitizeTraceLanguages(block);
+    },
+    languages: () => (languageBlock ? { ...languageBlock, chunk_languages: [...languageBlock.chunk_languages] } : null),
     toStageStatus() {
       const status: Record<string, StageRunStatus> = {};
       for (const record of records) status[record.name] = record.status;

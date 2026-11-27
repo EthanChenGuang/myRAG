@@ -336,7 +336,7 @@ describe('chat, embed and voice routes keep tenants apart under legacy and v2 wi
       {
         transform: 'condense' as const,
         query: LAYER_FOLLOW_UP,
-        output: { standalone: 'Which clause does the two tenant isolation canary handbook list first?', unchanged: false },
+        output: { standalone: 'Which clause does the two tenant isolation canary handbook list first?', unchanged: false, language: null },
       },
       { transform: 'expand' as const, query: LAYER_KEYWORDS, output: { queries: ['two tenant isolation canary phrase clause'] } },
       { transform: 'hyde' as const, query: LAYER_KEYWORDS, output: { passage: 'Two tenant isolation canary phrase: clause one of the handbook.' } },

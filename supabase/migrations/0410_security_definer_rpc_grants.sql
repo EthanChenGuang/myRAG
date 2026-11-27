@@ -5,7 +5,9 @@
 --
 --   Section 1: service-role-only RPCs. EXECUTE is revoked from PUBLIC, anon and authenticated and granted to service_role.
 --   Section 2: authenticated-callable RPCs and RLS helpers. EXECUTE is revoked from PUBLIC and anon and granted to authenticated and service_role.
---              Only the helpers that policies without a TO clause evaluate for anon (is_org_member, is_org_owner, is_org_admin, check_admin_status) keep anon.
+--              Only the helpers that policies without a TO clause evaluate for anon (is_org_member, is_org_owner, is_org_admin, check_admin_status) keep anon,
+--              and the three helpers of the 0926 restrictive access-group policies (TO anon, authenticated): rag_access_enforced, rag_caller_access_keys,
+--              rag_caller_is_access_admin.
 --
 -- The authoritative allow-list is tests/helpers/security-definer-allow-list.ts; tests/rag/search-rpc-grants.test.ts replays the setup files and the
 -- migrations and fails when a SECURITY DEFINER function is neither covered here nor in the setup files' own REVOKE/GRANT.
@@ -63,10 +65,6 @@ BEGIN
   IF to_regprocedure('public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid) TO service_role;
-  END IF;
-  IF to_regprocedure('public.rag_access_enforced()') IS NOT NULL THEN
-    REVOKE ALL ON FUNCTION public.rag_access_enforced() FROM PUBLIC, anon, authenticated;
-    GRANT EXECUTE ON FUNCTION public.rag_access_enforced() TO service_role;
   END IF;
   IF to_regprocedure('public.rag_access_groups_from_document()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_access_groups_from_document() FROM PUBLIC, anon, authenticated;
@@ -191,6 +189,18 @@ BEGIN
   IF to_regprocedure('public.rag_dismiss_effective_date_proposal(uuid, text, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_dismiss_effective_date_proposal(uuid, text, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_dismiss_effective_date_proposal(uuid, text, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_lexstats_chunks_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_lexstats_chunks_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_lexstats_chunks_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_lexstats_chunks_insert()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_lexstats_chunks_insert() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_lexstats_chunks_insert() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_lexstats_chunks_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_lexstats_chunks_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_lexstats_chunks_update() TO service_role;
   END IF;
   IF to_regprocedure('public.rag_set_document_effective_dates(uuid, text, date, date, text, real, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_set_document_effective_dates(uuid, text, date, date, text, real, uuid) FROM PUBLIC, anon, authenticated;
@@ -608,6 +618,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_save_ingest_state(uuid, text, text, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_save_ingest_state(uuid, text, text, jsonb) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_semantic_cache_on_access_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_semantic_cache_on_access_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_semantic_cache_on_access_update() TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_semantic_cache_on_documents_delete()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_semantic_cache_on_documents_delete() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_semantic_cache_on_documents_delete() TO service_role;
@@ -747,6 +761,10 @@ BEGIN
   IF to_regprocedure('public.rag_term_list_entries(uuid, text, integer, integer, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_list_entries(uuid, text, integer, integer, text, text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text, text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text, text, text, text) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint) FROM PUBLIC, anon, authenticated;
@@ -925,11 +943,32 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb) TO service_role;
   END IF;
+  -- Phase 5.2, migration 0945: security-events admin tenant resolution (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_security_admin_keys(uuid, boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_security_admin_keys(uuid, boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_security_admin_keys(uuid, boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_security_uploader_in_tenant(text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_security_uploader_in_tenant(text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_security_uploader_in_tenant(text, uuid) TO service_role;
+  END IF;
 END
 $service_role_only$;
 
 DO $authenticated_callable$
 BEGIN
+  IF to_regprocedure('public.rag_access_enforced()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_access_enforced() FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION public.rag_access_enforced() TO authenticated, anon, service_role;
+  END IF;
+  IF to_regprocedure('public.rag_caller_access_keys()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_caller_access_keys() FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION public.rag_caller_access_keys() TO authenticated, anon, service_role;
+  END IF;
+  IF to_regprocedure('public.rag_caller_is_access_admin()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_caller_is_access_admin() FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION public.rag_caller_is_access_admin() TO authenticated, anon, service_role;
+  END IF;
   IF to_regprocedure('public.check_admin_status()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.check_admin_status() FROM PUBLIC;
     GRANT EXECUTE ON FUNCTION public.check_admin_status() TO authenticated, anon, service_role;
@@ -977,6 +1016,10 @@ BEGIN
   IF to_regprocedure('public.rag_is_domain_expert(text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_is_domain_expert(text) FROM PUBLIC, anon;
     GRANT EXECUTE ON FUNCTION public.rag_is_domain_expert(text) TO authenticated, service_role;
+  END IF;
+  IF to_regprocedure('public.rag_caller_reads_access_sets(text, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_caller_reads_access_sets(text, jsonb) FROM PUBLIC, anon;
+    GRANT EXECUTE ON FUNCTION public.rag_caller_reads_access_sets(text, jsonb) TO authenticated, service_role;
   END IF;
   IF to_regprocedure('public.rag_ingest_realtime_topic_allowed(text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_ingest_realtime_topic_allowed(text) FROM PUBLIC, anon;

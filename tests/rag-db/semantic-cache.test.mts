@@ -165,7 +165,7 @@ interface FunctionCase {
 const FUNCTIONS: FunctionCase[] = [
   {
     name: 'rag_cache_check',
-    signature: 'public.rag_cache_check(text, text, text, public.halfvec, double precision)',
+    signature: 'public.rag_cache_check(text, text, text, public.halfvec, double precision, text[], boolean)',
     call: (key) => ['SELECT * FROM public.rag_cache_check($1, $2, $3, $4::halfvec, $5)', [key, KEY_HASH, 'p1', BASE, 0.05]],
   },
   {

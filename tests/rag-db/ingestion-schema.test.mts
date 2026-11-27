@@ -260,15 +260,16 @@ for (const mode of MODES) {
 
     // 0425 later replaces 0351's functions with an empty search_path, 0426 replaces rag_advance_ingestion_job again, 0427 replaces
     // rag_record_parse_attempt, 0440 replaces 0425's rag_chunk_embeddings_guard, 0442 replaces 0425's re-embed functions and the Phase 3.2
-    // files (08xx) replace the ledger functions and rag_set_document_fields again, so a re-run of 0351 is followed by 0425, 0426, 0427, 0440,
-    // 0442 and the 08xx files, as in migration order.
-    test('applying 0351 twice (then 0314, 0425, 0426, 0427, 0440, 0442 and 08xx, which supersede its functions) leaves the catalog unchanged', async () => {
+    // files (08xx) replace the ledger functions and rag_set_document_fields again, and 0706 (Phase 7) replaces 0425's
+    // rag_activate_embedding_profile, so a re-run of 0351 is followed by 0425, 0426, 0427, 0440, 0442, 0706 and the 08xx files, as in
+    // migration order. 0930 (Phase 4.3) redefines hybrid_search_chunks after 0802 and 0856, so it follows the 08xx files.
+    test('applying 0351 twice (then 0314, 0425, 0426, 0427, 0440, 0442, 0706, 08xx and 0930, which supersede its functions) leaves the catalog unchanged', async () => {
       const once = await createFixtureDatabase({ deploymentMode: mode, corpusDir: REAL_CORPUS, migrations: true, supabaseGrants: true });
       const before = await catalogDump(once.db);
       const fs = await import('node:fs');
       await once.db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION_0351), 'utf8'));
       // 0314 first: 0856 changed the rag_exact_id_documents signature that the 0425 precheck names (0856 header).
-      for (const file of migrationFiles(mode).filter((relpath) => /^supabase\/migrations\/(0314|042[5-7]|0440|0442|08\d\d)_/.test(relpath))) {
+      for (const file of migrationFiles(mode).filter((relpath) => /^supabase\/migrations\/(0314|042[5-7]|0440|0442|0706|08\d\d|0930)_/.test(relpath))) {
         await once.db.exec(fs.readFileSync(path.join(REPO_ROOT, file), 'utf8'));
       }
       const after = await catalogDump(once.db);

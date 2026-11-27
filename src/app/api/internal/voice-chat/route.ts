@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { env } from '@/lib/env';
-import { resolveVoiceScope } from '@/lib/rag';
+import { guardVoiceTranscript, recordOutputGuardEvents, resolveVoiceScope, scopeKey } from '@/lib/rag';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { generateTitle, generateSmartTitle } from '@/lib/title-generator';
 import type { DBMessage } from '@/types/chat';
@@ -69,6 +69,23 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({
                 error: 'Conversation must have at least one user and one assistant message'
             }, { status: 400 });
+        }
+
+        // Phase 5.2 D-40: post-hoc check of the spoken answers in flag behaviour; the stored text is never changed
+        try {
+            const tenantKey = scopeKey(scope.scope);
+            for (const summary of guardVoiceTranscript(messages)) {
+                recordOutputGuardEvents(summary, {
+                    tenantKey,
+                    traceId: null,
+                    blocks: [],
+                    channel: 'voice',
+                    removedTargets: summary.removedTargets,
+                    matchedPhrases: [],
+                });
+            }
+        } catch {
+            console.warn('[RAG Security] voice transcript check failed', { channel: 'voice' });
         }
 
         const adminClient = getSupabaseAdmin();

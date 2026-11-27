@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "phase": "04.2",
+  "decision": "D-10",
+  "switch": "RAG_LEXICAL_STEM_IT",
+  "verdict": "keep_off",
+  "rule": {
+    "decision": "D-10",
+    "description": "flip only when the language:it Recall@10 gain over the reference exceeds the noise band (max(k * spread, floor) of the reference) and no slice drops beyond the band; otherwise keep_off",
+    "run": "v2-lexical-stem-it-on",
+    "reference": "v2-default",
+    "slice": "language:it",
+    "metric": "recall_at_10",
+    "outcomes": [
+      "flip",
+      "keep_off"
+    ]
+  },
+  "spec": {
+    "path": "eval/config/phase42-gates.json",
+    "sha256": "3c4cd1ce4b224192f52589dfee2aa7aec212975cd88ba3e2e880d3fc3de4bbe2"
+  },
+  "gate": {
+    "path": "eval/reports/phase-04.2/gates.json",
+    "sha256": "d3ff8107ecc97b0c5eef497c52e225390154c6fb8c5414e6b0568bd30dd0d3a1"
+  },
+  "numbers": {
+    "it_recall_at_10_gain": 0.0,
+    "noise_band": 0.02,
+    "it_recall_at_10_on": 0.7721,
+    "it_recall_at_10_reference": 0.7721,
+    "dropped_slices": 0
+  },
+  "slice_recall_at_10": {
+    "category:ambiguous": {
+      "delta": 0.0,
+      "on": 0.6667,
+      "reference": 0.6667
+    },
+    "category:cache_near_miss": {
+      "delta": 0.0,
+      "on": 0.6364,
+      "reference": 0.6364
+    },
+    "category:cache_paraphrase": {
+      "delta": 0.0,
+      "on": 0.7778,
+      "reference": 0.7778
+    },
+    "category:colloquial": {
+      "delta": 0.0,
+      "on": 0.75,
+      "reference": 0.75
+    },
+    "category:compound": {
+      "delta": 0.0,
+      "on": 0.4444,
+      "reference": 0.4444
+    },
+    "category:cross_lingual": {
+      "delta": 0.0,
+      "on": 0.4286,
+      "reference": 0.4286
+    },
+    "category:duplicate_flood": {
+      "delta": 0.0,
+      "on": 1.0,
+      "reference": 1.0
+    },
+    "category:exact_term": {
+      "delta": 0.0,
+      "on": 0.875,
+      "reference": 0.875
+    },
+    "category:general": {
+      "delta": 0.0,
+      "on": 0.8158,
+      "reference": 0.8158
+    },
+    "category:identifier_near_miss": {
+      "delta": 0.0,
+      "on": 0.8889,
+      "reference": 0.8889
+    },
+    "category:implicit_condition": {
+      "delta": 0.0,
+      "on": 1.0,
+      "reference": 1.0
+    },
+    "category:injection": {
+      "delta": 0.0,
+      "on": 1.0,
+      "reference": 1.0
+    },
+    "category:injection_evasive": {
+      "delta": 0.0,
+      "on": 1.0,
+      "reference": 1.0
+    },
+    "category:multi_turn": {
+      "delta": 0.0,
+      "on": 0.5,
+      "reference": 0.5
+    },
+    "category:partial_answer": {
+      "delta": 0.0,
+      "on": 1.0,
+      "reference": 1.0
+    },
+    "category:scanned": {
+      "delta": 0.0,
+      "on": 0.75,
+      "reference": 0.75
+    },
+    "category:selective_filter": {
+      "delta": 0.0,
+      "on": 0.5,
+      "reference": 0.5
+    },
+    "category:stale_version": {
+      "delta": 0.0,
+      "on": 1.0,
+      "reference": 1.0
+    },
+    "category:table": {
+      "delta": 0.0,
+      "on": 0.4545,
+      "reference": 0.4545
+    },
+    "category:typo": {
+      "delta": 0.0,
+      "on": 0.3333,
+      "reference": 0.3333
+    },
+    "language:en": {
+      "delta": 0.0,
+      "on": 0.65,
+      "reference": 0.65
+    },
+    "language:it": {
+      "delta": 0.0,
+      "on": 0.7721,
+      "reference": 0.7721
+    },
+    "language:zh": {
+      "delta": 0.0,
+      "on": 0.7459,
+      "reference": 0.7459
+    },
+    "overall": {
+      "delta": 0.0,
+      "on": 0.7211,
+      "reference": 0.7211
+    }
+  },
+  "reasons": [
+    "language:it recall_at_10 gain 0.0000 does not exceed the noise band 0.0200",
+    "no config location changes: RAG_LEXICAL_STEM_IT stays false everywhere; the shipped effective lexical version stays 2, so no refusal cell goes stale because of stemming (the per-mode fixture cells are committed separately by the refusal_mode_cells rule)"
+  ],
+  "dictionary_run": {
+    "report_only": true,
+    "note": "D-08/D-09: the dictionary is tenant data with no default flip; the gate checks that the run passes",
+    "gate_passed": true,
+    "overall_recall_at_10": 0.7211,
+    "overall_recall_at_10_reference": 0.7211,
+    "overall_mrr": 0.6398,
+    "overall_mrr_reference": 0.637
+  },
+  "provisional": true,
+  "provisional_note": "fixture evidence only (synthetic golden set); re-decide on the real population once gate-population mode is real"
+}

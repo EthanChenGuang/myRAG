@@ -3,8 +3,24 @@ import axios from 'axios';
 import { AssemblyAISTT } from './providers/assemblyai.js';
 import { ResembleTTS } from './providers/resemble.js';
 
-import { HISTORY_MAX_TURNS, RAGClient, scopeTokenBinding, type HistoryTurn, type RAGQueryResult } from './rag_client.js';
+import { HISTORY_MAX_TURNS, parseContextLength, RAGClient, scopeTokenBinding, type HistoryTurn, type RAGQueryResult, type VoiceCalcTrace } from './rag_client.js';
+import {
+    applyReplacement,
+    buildCalculateToolSpec,
+    CALCULATE_TOOL_NAME,
+    createToolCallAccumulator,
+    MAX_TOOL_ROUNDS,
+    splitSentences,
+    stripAliasMarkers,
+    summarizeCheck,
+    trimHistory,
+    type CalcCheckSummary,
+    type ToolCallDelta,
+} from './calc_tool.js';
 import { STTEvent, TTSProvider } from './providers/types.js';
+
+/** The voice-calc check route accepts at most five traces. */
+const MAX_CHECK_TRACES = 5;
 
 export class VoicePipeline {
     private stt: AssemblyAISTT;
@@ -42,6 +58,9 @@ export class VoicePipeline {
 
     // Server-side follow-up condensation (VOICE_SERVER_QUERY_REWRITE)
     private readonly serverQueryRewriteEnabled: boolean;
+
+    // D-87: the agent model's window (VOICE_AGENT_CONTEXT_LENGTH); null keeps the history as it is
+    private readonly contextLength: number | null;
     private serverRewrite = false;
     private turnBindings = new WeakMap<OpenAI.Chat.Completions.ChatCompletionMessageParam, string>();
 
@@ -84,6 +103,7 @@ export class VoicePipeline {
     }, onAudioOutput: (audio: Buffer) => void, onTextOutput?: (payload: any) => void) {
 
         this.serverQueryRewriteEnabled = process.env.VOICE_SERVER_QUERY_REWRITE === 'true';
+        this.contextLength = parseContextLength(process.env.VOICE_AGENT_CONTEXT_LENGTH);
 
         // Set provider (default to openai)
         this.llmProvider = config.llmProvider || 'openai';
@@ -159,7 +179,7 @@ export class VoicePipeline {
         this.recordTurn({ role: 'assistant', content: assistantContent });
     }
 
-    private async retrieve(text: string, requestId: number): Promise<{ rewrittenQuery: string; ragResult?: RAGQueryResult }> {
+    private async retrieve(text: string, requestId: number, historyTokens?: number): Promise<{ rewrittenQuery: string; ragResult?: RAGQueryResult }> {
         // The server condenses only while its latest response said so (x-rag-server-query-rewrite: 1)
         const useServerRewrite = this.serverQueryRewriteEnabled && this.serverRewrite && !!this.scopeToken;
 
@@ -177,9 +197,14 @@ export class VoicePipeline {
         // The user should see exactly what they said, not an LLM-expanded version.
 
         // 2. RAG Retrieval with rewritten query
-        const ragResult = useServerRewrite
-            ? await this.rag.query(rewrittenQuery, this.scopeToken, this.userId, this.boundHistory())
-            : await this.rag.query(rewrittenQuery, this.scopeToken, this.userId);
+        let ragResult: RAGQueryResult;
+        if (historyTokens === undefined) {
+            ragResult = useServerRewrite
+                ? await this.rag.query(rewrittenQuery, this.scopeToken, this.userId, this.boundHistory())
+                : await this.rag.query(rewrittenQuery, this.scopeToken, this.userId);
+        } else {
+            ragResult = await this.rag.query(rewrittenQuery, this.scopeToken, this.userId, useServerRewrite ? this.boundHistory() : undefined, historyTokens);
+        }
         if (this.serverQueryRewriteEnabled) {
             this.serverRewrite = ragResult.ok && ragResult.serverQueryRewrite;
         }
@@ -523,7 +548,15 @@ Examples:
         this.isProcessing = true;
         this.cancelCurrentPlayback = false;
 
-        const { rewrittenQuery, ragResult } = await this.retrieve(text, requestId);
+        // D-87: with a known window the agent trims its own history oldest-first and reports the size it keeps
+        const trimmed = this.contextLength !== null
+            ? trimHistory(this.history.filter(m => m.role !== 'system'), { contextLength: this.contextLength })
+            : null;
+        if (trimmed && trimmed.dropped > 0) {
+            console.log('[VoicePipeline] History trimmed', { dropped: trimmed.dropped, historyTokens: trimmed.historyTokens });
+        }
+
+        const { rewrittenQuery, ragResult } = await this.retrieve(text, requestId, trimmed ? trimmed.historyTokens : undefined);
         if (!ragResult) {
             return;
         }
@@ -560,10 +593,10 @@ Examples:
         // We do NOT inject image names/URLs into the LLM context to prevent it from narrating filenames.
         // The system prompt already tells the LLM that images are displayed automatically.
 
-        // Prepare messages for LLM
+        // Prepare messages for LLM (D-87: the trimmed history when the agent knows its window)
         const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
             { role: 'system', content: systemMessageWithContext },
-            ...this.history.filter(m => m.role !== 'system'),
+            ...(trimmed ? trimmed.messages : this.history.filter(m => m.role !== 'system')),
             { role: 'user', content: rewrittenQuery } // Use rewritten query for LLM context
         ];
 
@@ -577,30 +610,43 @@ Examples:
             return;
         }
 
+        // Phase 5.2.1 D-76: the calculate tool, only on turns the app marks
+        const offer = ragResult.calc;
+        const tools = offer ? [buildCalculateToolSpec(offer.tool_schema)] : undefined;
+        const calcQuestion = rewrittenQuery.slice(0, 4000);
+        const traces: VoiceCalcTrace[] = [];
+        let calcMeta: CalcCheckSummary | null = null;
+        const superseded = () => this.cancelCurrentPlayback || this.currentRequestId !== requestId;
+
         try {
             const generationStartedAt = this.clock();
             const traceId = ragResult.traceId;
             let timingReported = false;
-            const stream = await this.llm.chat.completions.create({
-                model: this.llmModel,
-                messages: messages,
-                stream: true,
-            });
 
             // Start agent message - include source_images immediately for early display
             const agentMsgId = `agent-${Date.now()}`;
-            this.onTextOutput?.({
-                type: 'transcription',
-                role: 'assistant',
-                text: '',
-                isPartial: true,
-                id: agentMsgId,
-                source_images: source_images  // Include source images in initial message
-            });
+            let agentMessageStarted = false;
+            const startAgentMessage = () => {
+                if (agentMessageStarted) return;
+                agentMessageStarted = true;
+                this.onTextOutput?.({
+                    type: 'transcription',
+                    role: 'assistant',
+                    text: '',
+                    isPartial: true,
+                    id: agentMsgId,
+                    source_images: source_images  // Include source images in initial message
+                });
+            };
 
             let fullResponse = '';
             let sentenceBuffer = '';
             let sentenceCount = 0;
+            // D-76: index in fullResponse from which speech and display are held (a tool call is pending, or a checked turn)
+            let holdFrom: number | null = null;
+            // Text as shown and spoken: unchanged on turns without the offer, alias markers removed with it
+            const shown = (text: string) => (offer ? stripAliasMarkers(text) : text);
+            const displayText = () => shown(holdFrom === null ? fullResponse : fullResponse.slice(0, holdFrom));
 
             // Ordered audio queue: Map<sentenceNum, audioBuffer>
             const audioQueue = new Map<number, Buffer>();
@@ -608,7 +654,6 @@ Examples:
             const sentenceDurations = new Map<number, number>();
             // Track word timings per sentence for word-level sync
             const wordTimingsMap = new Map<number, Array<{ word: string; start: number; end: number }>>();
-            let cumulativeAudioDurationMs = 0;
             let nextSentenceToPlay = 1;
             let totalSentences = 0;
             let allSentencesQueued = false;
@@ -643,135 +688,27 @@ Examples:
                 }
             };
 
-            // Start playback loop in background
-            const playbackPromise = playbackLoop();
-
             // TTS completion handlers - now returns durations
             const ttsPromises: Promise<number>[] = [];
 
-            // 4. Stream LLM -> Detect Sentences -> TTS each sentence immediately
-            for await (const chunk of stream) {
-                // Check for cancellation during LLM streaming
-                if (this.cancelCurrentPlayback) {
-                    console.log('[LLM] ⚠️ Cancelled by new message');
-                    break;
-                }
-
-                const content = chunk.choices[0]?.delta?.content || '';
-                if (!content) continue;
-
-                if (!timingReported) {
-                    timingReported = true;
-                    if (traceId) this.reportTurnTiming(traceId, turnStartedAt, generationStartedAt, this.clock());
-                }
-
-                fullResponse += content;
-                sentenceBuffer += content;
-
-                // Stream agent text updates (throttled slightly if needed, but per-token is usually fine)
-                this.onTextOutput?.({
-                    type: 'transcription',
-                    role: 'assistant',
-                    text: fullResponse,
-                    isPartial: true,
-                    id: agentMsgId
-                });
-
-                // IMPROVED: Check for sentence boundaries
-                // Require punctuation followed by whitespace (space, newline) to avoid splitting "Dr." etc
-                const sentenceEndMatch = sentenceBuffer.match(/^(.*?[.!?])(\s+)(.*)$/s);
-                if (sentenceEndMatch) {
-                    const completeSentence = sentenceEndMatch[1].trim();
-                    sentenceBuffer = sentenceEndMatch[3];
-
-                    if (completeSentence.length > 0) {
-                        sentenceCount++;
-                        const currentSentenceNum = sentenceCount;
-                        console.log(`[TTS] Queueing sentence #${currentSentenceNum}: "${completeSentence.slice(0, 50)}..."`);
-
-                        // Fire off TTS for this sentence (don't await - parallel synthesis)
-                        const ttsPromise = this.synthesizeToQueue(
-                            completeSentence,
-                            currentSentenceNum,
-                            audioQueue,
-                            sentenceDurations,
-                            wordTimingsMap
-                        ).then(async (duration) => {
-                            // BROADCAST INCREMENTAL TIMINGS
-                            if (!this.cancelCurrentPlayback) {
-                                const currentAllTimings: Array<{ word: string; start: number; end: number }> = [];
-                                let cumulativeOffsetSec = 0;
-
-                                for (let i = 1; i <= sentenceCount; i++) {
-                                    if (wordTimingsMap.has(i) && sentenceDurations.has(i)) {
-                                        const sentenceTimings = wordTimingsMap.get(i) || [];
-                                        const sentenceDurationMs = sentenceDurations.get(i) || 0;
-
-                                        for (const timing of sentenceTimings) {
-                                            currentAllTimings.push({
-                                                word: timing.word,
-                                                start: timing.start + cumulativeOffsetSec,
-                                                end: timing.end + cumulativeOffsetSec
-                                            });
-                                        }
-                                        cumulativeOffsetSec += sentenceDurationMs / 1000;
-                                    } else {
-                                        break;
-                                    }
-                                }
-
-                                if (currentAllTimings.length > 0) {
-                                    console.log(`[VoicePipeline] Broadcasting incremental timings (stream): ${currentAllTimings.length} words`);
-                                    this.onTextOutput?.({
-                                        type: 'transcription',
-                                        role: 'assistant',
-                                        text: fullResponse,
-                                        isPartial: true,
-                                        id: agentMsgId,
-                                        wordTimings: currentAllTimings,
-                                        source_images: source_images
-                                    });
-                                }
-                            }
-                            return duration;
-                        });
-                        ttsPromises.push(ttsPromise);
-                    }
-                }
-            }
-
-            // Handle any remaining text that didn't end with punctuation
-            if (!this.cancelCurrentPlayback && sentenceBuffer.trim().length > 0) {
+            // Fire off TTS for one sentence (don't await - parallel synthesis) and broadcast the timings known so far
+            const queueSentence = (sentence: string, label: 'sentence' | 'final fragment') => {
                 sentenceCount++;
-                console.log(`[TTS] Queueing final fragment #${sentenceCount}: "${sentenceBuffer.trim().slice(0, 50)}..."`);
+                const currentSentenceNum = sentenceCount;
+                console.log(`[TTS] Queueing ${label} #${currentSentenceNum}: "${sentence.slice(0, 50)}..."`);
                 const ttsPromise = this.synthesizeToQueue(
-                    sentenceBuffer.trim(),
-                    sentenceCount,
+                    sentence,
+                    currentSentenceNum,
                     audioQueue,
                     sentenceDurations,
                     wordTimingsMap
                 ).then(async (duration) => {
                     // BROADCAST INCREMENTAL TIMINGS
-                    // Only broadcast if we have a contiguous block of sentences starting from 1
-                    // This ensures we don't send timings for sentence 3 before sentence 2 is ready
-
-                    const canBroadcast = () => {
-                        // Check if we have durations for all sentences up to the current one
-                        // Actually, we just need to broadcast what we have so far in order
-                        // We track nextSequentialSentenceToBroadcast
-                        return true;
-                    };
-
+                    // Only contiguous completed sentences from #1 have known offsets
                     if (!this.cancelCurrentPlayback) {
-                        // Reconstruct all available timings in order
                         const currentAllTimings: Array<{ word: string; start: number; end: number }> = [];
                         let cumulativeOffsetSec = 0;
 
-                        // We can only reliably calculate offsets for contiguous completed sentences
-                        // But we want to show text ASAP. 
-                        // Since audio playback is sequential, latency is mainly synthesis time.
-
-                        // Iterate through all known sentences so far
                         for (let i = 1; i <= sentenceCount; i++) {
                             if (wordTimingsMap.has(i) && sentenceDurations.has(i)) {
                                 const sentenceTimings = wordTimingsMap.get(i) || [];
@@ -786,8 +723,6 @@ Examples:
                                 }
                                 cumulativeOffsetSec += sentenceDurationMs / 1000;
                             } else {
-                                // Stop at the first missing sentence to ensure timing consistency
-                                // (If sentence 2 is missing, we can't know start time of sentence 3)
                                 break;
                             }
                         }
@@ -797,8 +732,8 @@ Examples:
                             this.onTextOutput?.({
                                 type: 'transcription',
                                 role: 'assistant',
-                                text: fullResponse, // Send current full text
-                                isPartial: true, // Still partial
+                                text: displayText(),
+                                isPartial: true,
                                 id: agentMsgId,
                                 wordTimings: currentAllTimings,
                                 source_images: source_images
@@ -808,10 +743,169 @@ Examples:
                     return duration;
                 });
                 ttsPromises.push(ttsPromise);
+            };
+
+            // Held text released for speech: every complete sentence is queued, the last fragment stays in the buffer
+            const releaseHeld = () => {
+                if (holdFrom === null) return;
+                const parts = splitSentences(fullResponse.slice(holdFrom));
+                holdFrom = null;
+                const endsComplete = /[.!?]\s+$/.test(fullResponse);
+                sentenceBuffer = !endsComplete && parts.length > 0 ? parts.pop()! : '';
+                for (const part of parts) queueSentence(shown(part), 'sentence');
+            };
+
+            let messagesForRound = messages;
+            let toolRounds = 0;
+            let playbackPromise: Promise<void> | null = null;
+
+            // 4. Stream LLM -> Detect Sentences -> TTS each sentence immediately (with the tool: at most MAX_TOOL_ROUNDS rounds)
+            while (true) {
+                const stream = await this.llm.chat.completions.create({
+                    model: this.llmModel,
+                    messages: messagesForRound,
+                    stream: true,
+                    ...(tools && toolRounds < MAX_TOOL_ROUNDS ? { tools } : {}),
+                });
+                startAgentMessage();
+                // Start playback loop in background
+                if (!playbackPromise) playbackPromise = playbackLoop();
+
+                const toolCalls = createToolCallAccumulator();
+                let roundText = '';
+
+                for await (const chunk of stream) {
+                    // Check for cancellation during LLM streaming
+                    if (this.cancelCurrentPlayback) {
+                        console.log('[LLM] ⚠️ Cancelled by new message');
+                        break;
+                    }
+
+                    const delta = chunk.choices[0]?.delta;
+                    if (tools && delta?.tool_calls && delta.tool_calls.length > 0) {
+                        toolCalls.add(delta.tool_calls as ToolCallDelta[]);
+                        // While a tool call is pending no text goes to speech
+                        if (holdFrom === null) {
+                            holdFrom = fullResponse.length - sentenceBuffer.length;
+                            sentenceBuffer = '';
+                        }
+                    }
+
+                    const content = delta?.content || '';
+                    if (!content) continue;
+
+                    if (!timingReported) {
+                        timingReported = true;
+                        if (traceId) this.reportTurnTiming(traceId, turnStartedAt, generationStartedAt, this.clock());
+                    }
+
+                    fullResponse += content;
+                    roundText += content;
+
+                    // Stream agent text updates (throttled slightly if needed, but per-token is usually fine)
+                    this.onTextOutput?.({
+                        type: 'transcription',
+                        role: 'assistant',
+                        text: displayText(),
+                        isPartial: true,
+                        id: agentMsgId
+                    });
+
+                    if (holdFrom !== null) continue;
+                    sentenceBuffer += content;
+
+                    // IMPROVED: Check for sentence boundaries
+                    // Require punctuation followed by whitespace (space, newline) to avoid splitting "Dr." etc
+                    const sentenceEndMatch = sentenceBuffer.match(/^(.*?[.!?])(\s+)(.*)$/s);
+                    if (sentenceEndMatch) {
+                        const completeSentence = sentenceEndMatch[1].trim();
+                        sentenceBuffer = sentenceEndMatch[3];
+
+                        if (completeSentence.length > 0) {
+                            queueSentence(shown(completeSentence), 'sentence');
+                        }
+                    }
+                }
+
+                const calls = toolCalls.calls();
+                if (!tools || !offer || calls.length === 0 || toolRounds >= MAX_TOOL_ROUNDS || superseded()) break;
+
+                // D-76: execute each call through the app, then request the next completion with the results
+                toolRounds++;
+                const anchor = fullResponse.length;
+                const toolMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+                const statuses: string[] = [];
+                for (const call of calls) {
+                    let output: unknown;
+                    if (!call.valid || call.name !== CALCULATE_TOOL_NAME || !call.arguments) {
+                        output = { status: 'rejected', reject_reason: 'invalid_request' };
+                        statuses.push('invalid');
+                    } else {
+                        const result = await this.rag.executeCalc(call.arguments, calcQuestion, offer.sources, this.scopeToken);
+                        if (superseded()) break;
+                        if (result) {
+                            if (traces.length < MAX_CHECK_TRACES) traces.push({ origin: 'tool', request: call.arguments, result, anchor_offset: anchor });
+                            output = result;
+                            statuses.push(result.status);
+                        } else {
+                            output = { error: 'calculation_unavailable' };
+                            statuses.push('unavailable');
+                        }
+                    }
+                    toolMessages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(output) });
+                }
+                if (superseded()) break;
+                console.log('[Voice Calc]', { round: toolRounds, calls: calls.length, statuses });
+                messagesForRound = [
+                    ...messagesForRound,
+                    {
+                        role: 'assistant',
+                        content: roundText.length > 0 ? roundText : null,
+                        tool_calls: calls.map((call) => ({ id: call.id, type: 'function' as const, function: { name: call.name, arguments: call.argumentsText } })),
+                    },
+                    ...toolMessages,
+                ];
+                // A checked turn stays held until the check answers; otherwise the text after the tool streams again
+                if (!offer.check) releaseHeld();
+            }
+
+            let finalText = shown(fullResponse);
+            if (toolRounds > 0) calcMeta = { stated: null, recomputed: null, status: 'not_verified' };
+
+            // D-76: a held turn is checked, corrected and only then spoken
+            if (holdFrom !== null && !superseded()) {
+                const heldAt: number = holdFrom;
+                const outcome = offer && offer.check && traces.length > 0 && fullResponse.length > 0
+                    ? await this.rag.checkCalc(fullResponse, traces, calcQuestion, offer.sources, this.scopeToken)
+                    : null;
+                if (!superseded()) {
+                    const replacement = outcome?.replacement;
+                    const corrected = replacement && replacement.start >= heldAt ? applyReplacement(fullResponse, replacement) : fullResponse;
+                    calcMeta = toolRounds > 0 ? summarizeCheck(outcome) : calcMeta;
+                    console.log('[Voice Calc]', { check: outcome ? 'done' : 'not_verified', status: calcMeta?.status ?? null, traces: traces.length });
+                    const tail = stripAliasMarkers(corrected.slice(heldAt));
+                    finalText = stripAliasMarkers(corrected.slice(0, heldAt)) + tail;
+                    holdFrom = null;
+                    sentenceBuffer = '';
+                    for (const part of splitSentences(tail)) queueSentence(part, 'sentence');
+                }
+            }
+
+            // A tool turn superseded while it waited on the app publishes and stores nothing (the cancel flag may already be reset)
+            if (toolRounds > 0 && this.currentRequestId !== requestId) {
+                totalSentences = sentenceCount;
+                allSentencesQueued = true;
+                console.log(`[VoicePipeline] 🛑 Request ${requestId} cancelled during the calculation (superseded by ${this.currentRequestId})`);
+                return;
+            }
+
+            // Handle any remaining text that didn't end with punctuation
+            if (!this.cancelCurrentPlayback && holdFrom === null && sentenceBuffer.trim().length > 0) {
+                queueSentence(shown(sentenceBuffer.trim()), 'final fragment');
             }
 
             if (!this.cancelCurrentPlayback) {
-                console.log(`[Agent] ${fullResponse}`);
+                console.log(`[Agent] ${finalText}`);
             }
 
             // Mark total sentences and that all are queued
@@ -823,7 +917,7 @@ Examples:
 
             // Calculate total audio duration
             const totalAudioDurationMs = durations.reduce((sum, d) => sum + d, 0);
-            console.log(`[VoicePipeline] Total audio duration: ${totalAudioDurationMs}ms for ${fullResponse.length} chars`);
+            console.log(`[VoicePipeline] Total audio duration: ${totalAudioDurationMs}ms for ${finalText.length} chars`);
 
             // Aggregate word timings across all sentences with cumulative time offsets
             const allWordTimings: Array<{ word: string; start: number; end: number }> = [];
@@ -856,7 +950,7 @@ Examples:
                 const payload = {
                     type: 'transcription',
                     role: 'assistant',
-                    text: fullResponse,
+                    text: finalText,
                     isPartial: false,
                     id: agentMsgId,
                     audioDurationMs: totalAudioDurationMs,
@@ -871,21 +965,23 @@ Examples:
             await playbackPromise;
 
             // Update History only if not cancelled
-            if (!this.cancelCurrentPlayback && fullResponse.length > 0) {
+            if (!this.cancelCurrentPlayback && finalText.length > 0) {
                 // Save the REWRITTEN query to history so the user bubble shows the clarified intent
                 // This fixes the issue where "How much is it?" is shown instead of "How much is myRAG?"
                 // Strip quotes if present
                 const cleanRewrittenQuery = rewrittenQuery.replace(/^["']|["']$/g, '');
-                this.recordExchange(cleanRewrittenQuery, fullResponse);
+                this.recordExchange(cleanRewrittenQuery, finalText);
 
-                // Store source metadata if available (sources OR images)
+                // Store source metadata if available (sources OR images), and the calculation's two values (D-76)
                 const hasSources = sources && sources.length > 0;
                 const hasImages = source_images && source_images.length > 0;
-                if (hasSources || hasImages) {
+                if (hasSources || hasImages || calcMeta) {
                     // unexpected behavior: history length just increased by 2 (user + assistant)
                     // The assistant message is at index: length - 1
                     const assistantMsgIndex = this.history.length - 1;
-                    this.messageMetadata.set(assistantMsgIndex, { sources, source_images });
+                    const metadata: Record<string, unknown> = hasSources || hasImages ? { sources, source_images } : {};
+                    if (calcMeta) metadata.calc = calcMeta;
+                    this.messageMetadata.set(assistantMsgIndex, metadata);
                     console.log(`[VoicePipeline] 📎 Attached ${sources?.length || 0} sources and ${source_images?.length || 0} images to message #${assistantMsgIndex}`);
                 }
             }
@@ -982,7 +1078,7 @@ Examples:
      * Get the conversation history in a format suitable for saving to the database.
      * Excludes system prompts, returns only user and assistant messages.
      */
-    public getConversationHistory(): Array<{ id: string; role: 'user' | 'assistant'; content: string | any[]; createdAt: Date }> {
+    public getConversationHistory(): Array<{ id: string; role: 'user' | 'assistant'; content: string | any[]; createdAt: Date; calc?: CalcCheckSummary }> {
         return this.history
             .map((m, originalIdx) => ({ m, originalIdx })) // Keep track of original index
             .filter(({ m }) => m.role !== 'system')
@@ -1037,7 +1133,9 @@ Examples:
                     id: `voice-msg-${Date.now()}-${idx}`,
                     role: m.role as 'user' | 'assistant',
                     content: content,
-                    createdAt: new Date()
+                    createdAt: new Date(),
+                    // D-76: the spoken text is the content; the calculation keeps both values
+                    ...(m.role === 'assistant' && metadata?.calc ? { calc: metadata.calc } : {})
                 };
             });
     }

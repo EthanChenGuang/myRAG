@@ -1,4 +1,23 @@
 {
+  "answer_checks": {
+    "calc_check": {
+      "p50_ms": 5,
+      "p95_ms": 20
+    },
+    "claim_check": {
+      "p50_ms": 2000,
+      "p95_ms": 6000
+    },
+    "groundedness_judge": {
+      "p50_ms": 5000,
+      "p95_ms": 10000
+    },
+    "output_guard": {
+      "p50_ms": 1,
+      "p95_ms": 2
+    },
+    "report_only": true
+  },
   "groundedness": {
     "hhem_2_1_open": {
       "p50_ms": 2500,
@@ -27,6 +46,10 @@
         "query": {
           "p50_ms": 600,
           "p95_ms": 1200
+        },
+        "scope_gate": {
+          "p50_ms": 2,
+          "p95_ms": 5
         }
       },
       "stages": {
@@ -47,6 +70,7 @@
         "injection_check": 400,
         "refusal": 1,
         "rerank": 600,
+        "scope_gate": 5,
         "search": 400,
         "semantic_cache": 150,
         "table_lookup": 60,
@@ -61,6 +85,10 @@
         "query": {
           "p50_ms": 600,
           "p95_ms": 1200
+        },
+        "scope_gate": {
+          "p50_ms": 2,
+          "p95_ms": 5
         }
       },
       "stages": {
@@ -81,6 +109,7 @@
         "injection_check": 400,
         "refusal": 1,
         "rerank": 600,
+        "scope_gate": 5,
         "search": 400,
         "semantic_cache": 150,
         "table_lookup": 60,

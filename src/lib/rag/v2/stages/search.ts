@@ -1,6 +1,15 @@
 import type { RpcClient } from '../../backend/supabase-rpc';
-import { backendForRequest, getRetrievalBackend } from '../../backend/registry';
-import type { BackendLegs, RankedHit, RetrievalFilters, VersionScope } from '../../backend/types';
+import { resolveRetrievalBackend } from '../../backend/factory';
+import { backendForRequest } from '../../backend/registry';
+import type {
+  BackendLegs,
+  LexicalScoringOutcome,
+  LexicalScoringRequest,
+  RankedHit,
+  RetrievalBackend,
+  RetrievalFilters,
+  VersionScope,
+} from '../../backend/types';
 import type { AssemblyDocumentRow, TableRowAttachment } from '../../context/assemble';
 import { fetchAssemblyRows } from '../../context/fetch-rows';
 import type { RagConfig, StageName } from '../../config';
@@ -18,7 +27,7 @@ import {
 } from '../../embeddings/query-embedding';
 import { requireValue, runStage, StageError, stageSpec, type StageSpec } from '../../pipeline';
 import { exactIdStage } from '../../retrieval/exact-id';
-import { identifierSuggestions, resolveQueryIdentifiers, type QueryIdentifiers } from '../../retrieval/identifiers';
+import { digitLookalikeMatches, identifierSuggestions, resolveQueryIdentifiers, type QueryIdentifiers } from '../../retrieval/identifiers';
 import { loadTenantIdentifierPatterns } from '../../identifiers/patterns';
 import { tableLookupStage, type TableLookupRow } from '../../retrieval/table-lookup';
 import type { LexicalOptions } from '../../lexical/options';
@@ -26,7 +35,7 @@ import type { LexicalStamp } from '../../lexical/resolve-options';
 import { scopeAccessFilter, type ScopeAccessFilter } from '../../tenant/access';
 import { scopeKey, type TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
-import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
+import type { Profile, QueryVariant, RetrievalBackendSelection, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
 import { terminologyParams } from '../../terminology/expand';
 import { reserveTerminologyHits } from '../../terminology/reserve';
@@ -238,6 +247,8 @@ export interface SearchIdentifiers {
   suggestions: string[];
   /** The tenant's compiled patterns, so the guard reads candidates as ingestion indexed them. */
   patterns: readonly RegExp[];
+  /** The question's spellings (after NFKC) of the asked identifiers that resolved; in memory only, never traced (D-34). */
+  foundSpellings: string[];
 }
 
 /** D-12, D-40: fixed trace codes of the search stage detail. */
@@ -254,6 +265,49 @@ export const IDENTIFIER_RESOLVE_FAILED = 'identifier_resolve_failed';
 function buildFilters(input: RunRetrievalInput): RetrievalFilters {
   const { versionScope: _versionScope, ...extra } = input.retrievalFilters ?? {};
   return { currentOnly: true, ...extra };
+}
+
+/** D-25: the search span's backend fields; ids and counts only. */
+export function backendAttributes(selection: RetrievalBackendSelection): Record<string, string | number> {
+  return {
+    backend: selection.backend,
+    tenant_validation_dropped: selection.tenantValidationDropped,
+    ...(selection.fallbackReason ? { fallback_reason: selection.fallbackReason } : {}),
+  };
+}
+
+export const LEXICAL_SCORING_BM25 = 'lexical_scoring_bm25';
+export const LEXICAL_STATS_UNAVAILABLE = 'lexical_stats_unavailable';
+export const LEXICAL_BM25_FAILED = 'lexical_bm25_failed';
+
+/** D-28: the request field every backend.search call of a request carries while bm25 is the effective mode; empty for ts_rank_cd. */
+export function lexicalScoringArg(config: RagConfig): { lexicalScoring?: LexicalScoringRequest } {
+  const scoring = config.v2.lexicalScoring;
+  return scoring.mode === 'bm25' ? { lexicalScoring: { mode: 'bm25', k1: scoring.k1, b: scoring.b } } : {};
+}
+
+/**
+ * The backend as seen by every leg of one request under bm25: each search request gains lexicalScoring (k1 and b from server config
+ * only) and the outcome each call reports is collected. searchTranslations and every other member are the backend's own (D-21).
+ */
+function withLexicalScoring(backend: RetrievalBackend, scoring: LexicalScoringRequest, outcomes: LexicalScoringOutcome[]): RetrievalBackend {
+  const wrapped = Object.create(backend) as RetrievalBackend;
+  Object.defineProperty(wrapped, 'search', {
+    value: async (req: Parameters<RetrievalBackend['search']>[0]) => {
+      const legs = await backend.search({ ...req, lexicalScoring: scoring });
+      if (legs.meta?.lexicalScoring) outcomes.push(legs.meta.lexicalScoring);
+      return legs;
+    },
+  });
+  return wrapped;
+}
+
+/** D-40: one code per request, the worst outcome of its calls; none when no call had a lexical leg to serve. */
+function lexicalScoringCode(outcomes: readonly LexicalScoringOutcome[]): string | undefined {
+  if (outcomes.includes('bm25_failed')) return LEXICAL_BM25_FAILED;
+  if (outcomes.includes('stats_unavailable')) return LEXICAL_STATS_UNAVAILABLE;
+  if (outcomes.includes('bm25')) return LEXICAL_SCORING_BM25;
+  return undefined;
 }
 
 function joinDetail(parts: readonly (string | undefined)[]): string | undefined {
@@ -497,16 +551,26 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const softVariantIndex = standaloneVariantIndex(variants);
   const fallbackFilters = attributes?.fallbackFilters ?? null;
   const attributeActive = attributes !== null && (attributes.softIds.length > 0 || fallbackFilters !== null);
+  const scoring = lexicalScoringArg(config).lexicalScoring;
+  const scoringOutcomes: LexicalScoringOutcome[] = [];
+  const scoringCode = (): string | undefined => (scoring ? lexicalScoringCode(scoringOutcomes) : undefined);
   type SoftOutcome = { legs: BackendLegs | null; failed: boolean };
+  // D-11, D-24: one backend per request; every variant, binding, translation, term and soft call goes through it.
+  const resolved = resolveRetrievalBackend(profile, config, stageOverrides?.retrievalOverrides);
 
   // D-31: with found identifiers every leg is first filtered to chunks carrying one; an empty filtered search reruns once without it.
   const runLegs = async (identifiersNorm: string[] | undefined, legCodes: readonly string[]) => {
     const identifierArg = identifiersNorm ? { identifiersNorm } : {};
     const route =
       historyScope || identifiersNorm
-        ? backendForRequest({ ...(historyScope ? { versionScope: historyScope } : {}), ...identifierArg })
-        : { backend: getRetrievalBackend() };
-    const backend = route.backend;
+        ? backendForRequest({ ...(historyScope ? { versionScope: historyScope } : {}), ...identifierArg }, resolved.backend)
+        : { backend: resolved.backend };
+    const backend = scoring ? withLexicalScoring(route.backend, scoring, scoringOutcomes) : route.backend;
+    const selection = (): RetrievalBackendSelection =>
+      route.backend === resolved.backend
+        ? resolved.selection()
+        : { backend: route.backend.id, fallbackReason: null, tenantValidationDropped: 0, degraded: false };
+    const externalChoice = resolved.choice !== 'pgvector';
     const versionCodes = [
       versions.ignored ? VERSIONS_IGNORED : undefined,
       historyScope ? SUPERSEDED_DENSE_UNAVAILABLE : undefined,
@@ -779,6 +843,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         ...attributeCodes(value),
       ]);
     const hasVersionCodes = versionCodes.some((code) => code !== undefined);
+    // D-11: the fallback reason is a detail code only when a fallback happened, so the default detail is unchanged.
+    const backendCodes = (): (string | undefined)[] => [selection().fallbackReason ?? undefined];
 
     let searchValue: Awaited<ReturnType<typeof runBackendSearch>>['legsByVariant'];
     let domainLists: RankedList[] = [];
@@ -822,9 +888,12 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           searched.lexicalDetail,
           ...attributeCodes(searched),
           ...versionCodes,
+          ...backendCodes(),
+          scoringCode(),
         ])!,
         counts: searchCounts(searched),
         candidatesOut: searched.denseTotal + searched.lexicalTotal,
+        attributes: backendAttributes(selection()),
       });
     } else {
       const searched = requireValue(
@@ -836,13 +905,15 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           {
             candidatesOut: (value) => value.denseTotal + value.lexicalTotal,
             counts: searchCounts,
+            attributes: () => backendAttributes(selection()),
             ...(ctx.searchDelegate ? { failureDetail: delegateFailureDetail } : {}),
-            ...(bindings || translations || hasVersionCodes || dictionaryDetailOn || attributeActive
+            ...(bindings || translations || hasVersionCodes || dictionaryDetailOn || attributeActive || externalChoice || scoring
               ? {
                   // D-19, D-30: a dropped binding or translation leg degrades the stage; the original legs and the answer continue.
                   // D-12: a backend that cannot serve the version scope is replaced by pgvector and degrades the stage too.
-                  status: (value) => (extraFailed(value) || versionDegraded ? 'degraded' : 'ok'),
-                  detail: (value) => joinDetail([extraDetail(value), ...versionCodes]),
+                  // D-11: an external backend served by pgvector (not ready, error, slow) degrades the stage.
+                  status: (value) => (extraFailed(value) || versionDegraded || selection().degraded ? 'degraded' : 'ok'),
+                  detail: (value) => joinDetail([extraDetail(value), ...versionCodes, ...backendCodes(), scoringCode()]),
                 }
               : {}),
           },
@@ -1057,7 +1128,13 @@ async function runIdentifierResolve(ctx: SearchStagesInput): Promise<ResolvedIde
       const { expressions } = await loadTenantIdentifierPatterns(scope, { signal: stageSignal });
       try {
         const client = requireAdminSearchClient(getRagDeps());
-        const resolved = await resolveQueryIdentifiers(scope, input.query, expressions, { client, signal: stageSignal });
+        const exact = await resolveQueryIdentifiers(scope, input.query, expressions, { client, signal: stageSignal });
+        const lookalikes = exact.missing.length > 0 ? await digitLookalikeMatches(scope, exact.missing, { client, signal: stageSignal }) : new Map<string, string>();
+        const resolved: QueryIdentifiers = {
+          asked: exact.asked,
+          found: [...new Set([...exact.found, ...lookalikes.values()])],
+          missing: exact.missing.filter((norm) => !lookalikes.has(norm)),
+        };
         const notFound = resolved.asked.length > 0 && resolved.found.length === 0;
         const suggestions = notFound ? await identifierSuggestions(scope, resolved.missing, { client, signal: stageSignal }) : [];
         return { ok: true, resolved, patterns: expressions, suggestions };
@@ -1083,6 +1160,7 @@ async function runIdentifierResolve(ctx: SearchStagesInput): Promise<ResolvedIde
   );
   if (outcome.skipped || !outcome.value.ok) return null;
   const { resolved, patterns, suggestions } = outcome.value;
+  const missing = new Set(resolved.missing);
   return {
     asked: resolved.asked.map((entry) => entry.norm),
     found: resolved.found,
@@ -1090,6 +1168,7 @@ async function runIdentifierResolve(ctx: SearchStagesInput): Promise<ResolvedIde
     notFound: resolved.asked.length > 0 && resolved.found.length === 0,
     suggestions,
     patterns,
+    foundSpellings: resolved.asked.filter((entry) => !missing.has(entry.norm)).map((entry) => entry.raw),
   };
 }
 

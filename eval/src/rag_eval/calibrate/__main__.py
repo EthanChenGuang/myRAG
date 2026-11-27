@@ -1,9 +1,10 @@
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
 
-from rag_eval.calibrate import cache, dup_clusters, groundedness, refusal
+from rag_eval.calibrate import cache, dup_clusters, groundedness, groundedness_judge, refusal, tokenizer
 from rag_eval.calibrate.refusal import CalibrationError, run_refusal_calibration
 from rag_eval.harness_runner import HarnessError
 from rag_eval.paths import resolve_cli_path
@@ -102,6 +103,28 @@ def _groundedness(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _groundedness_judge(args: argparse.Namespace) -> int:
+    labelled = resolve_cli_path(args.labelled)
+    out = None if args.dry_run else resolve_cli_path(args.out)
+    report_dir = resolve_cli_path(args.report_dir)
+    try:
+        result = groundedness_judge.run_judge_calibration(
+            labelled, out, report_dir, judge=args.judge, generator_model=args.generator_model
+        )
+    except (groundedness_judge.JudgeCalibrationError, OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    counts: dict[str, int] = {}
+    for record in result.languages:
+        counts[record.status] = counts.get(record.status, 0) + 1
+    summary = " ".join(f"{status}={count}" for status, count in sorted(counts.items())) or "no languages"
+    print(f"groundedness-judge calibration ({result.judge_model} {result.judge_version}, {result.source}): {summary}")
+    print(f"wrote {report_dir / groundedness_judge.RESULT_NAME} and {report_dir / groundedness_judge.REPORT_NAME}")
+    if result.thresholds_written:
+        print(f"wrote judge cells to {result.thresholds_path}")
+    return EXIT_OK
+
+
 EXIT_GATE = 1
 
 
@@ -136,9 +159,42 @@ def _cache(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _run_dir(path: Path) -> Path:
+    return path if path.is_absolute() or path.exists() else resolve_cli_path(path)
+
+
+def _tokenizer(args: argparse.Namespace) -> int:
+    out = resolve_cli_path(args.out)
+    try:
+        result = tokenizer.run_tokenizer_calibration(
+            [_run_dir(path) for path in args.runs],
+            out,
+            quantile=args.quantile,
+            min_samples=args.min_samples,
+            write=not args.dry_run,
+        )
+    except (tokenizer.CalibrationError, OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    fitted = " ".join(f"{cell.family}={cell.factor:.4f}(n={cell.samples})" for cell in result.fitted) or "no family measured"
+    under = " ".join(f"{family}(n={count})" for family, count in sorted(result.under_sampled.items()))
+    skipped = " ".join(f"{reason}={count}" for reason, count in sorted(result.skipped.items()))
+    print(f"tokenizer calibration (q={args.quantile}, min {args.min_samples}): {fitted}")
+    if under:
+        print(f"below the sample minimum, not measured: {under}")
+    if skipped:
+        print(f"skipped traces: {skipped}")
+    if args.dry_run:
+        print("dry run, nothing written; fitted cells:")
+        print(json.dumps([cell.model_dump(mode="json") for cell in result.fitted], indent=2))
+    else:
+        print(f"wrote {out}")
+    return EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="rag_eval.calibrate", description="myRAG refusal, groundedness, duplicate-cluster and semantic-cache calibration"
+        prog="rag_eval.calibrate", description="myRAG refusal, groundedness, duplicate-cluster, semantic-cache and tokenizer calibration"
     )
     commands = parser.add_subparsers(dest="command", required=True)
     cmd = commands.add_parser("refusal", help="fit per-cell refusal thresholds on dev, check once on the frozen holdout")
@@ -178,6 +234,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     cmd.set_defaults(handler=_groundedness)
     cmd = commands.add_parser(
+        "groundedness-judge",
+        help="fit the judge's max unsupported share per (judge model, judge version, language) on dev, check once on test",
+    )
+    cmd.add_argument("--judge", required=True, help="fake (the deterministic fake judge) or a judge model id")
+    cmd.add_argument("--generator-model", default=None, help="the generator the real judge must differ from (D-25)")
+    cmd.add_argument("--labelled", type=Path, default=groundedness_judge.DEFAULT_LABELLED)
+    cmd.add_argument(
+        "--out",
+        type=Path,
+        default=groundedness_judge.THRESHOLDS_PATH,
+        help="the judge thresholds file to merge the cells into (default eval/config/groundedness-judge-thresholds.json)",
+    )
+    cmd.add_argument("--report-dir", type=Path, default=groundedness_judge.DEFAULT_REPORT_DIR)
+    cmd.add_argument("--dry-run", action="store_true", help="write the report only, no thresholds file")
+    cmd.set_defaults(handler=_groundedness_judge)
+    cmd = commands.add_parser(
         "cache", help="fit the semantic-cache distance per embedding profile on dev cache pairs, check once on test"
     )
     cmd.add_argument("--pairs", required=True, type=Path, help="cache-pairs.json from npm run test-rag -- --cache-pairs")
@@ -200,6 +272,17 @@ def main(argv: list[str] | None = None) -> int:
         help="RAG_SEMANTIC_CACHE_MAX_DISTANCE, used when the profile has no calibrated entry",
     )
     cmd.set_defaults(handler=_cache)
+    cmd = commands.add_parser("tokenizer", help="fit per-family token estimate factors from recorded eval runs")
+    cmd.add_argument("--runs", required=True, nargs="+", type=Path, help="one or more eval run output directories (traces.jsonl)")
+    cmd.add_argument(
+        "--out", type=Path, default=tokenizer.CALIBRATION_PATH, help="calibration file (default eval/config/tokenizer-calibration.json)"
+    )
+    cmd.add_argument("--quantile", type=float, default=tokenizer.DEFAULT_QUANTILE, help="quantile of reported/estimated ratios")
+    cmd.add_argument(
+        "--min-samples", type=int, default=tokenizer.DEFAULT_MIN_SAMPLES, help="families with fewer samples are not measured"
+    )
+    cmd.add_argument("--dry-run", action="store_true", help="print the fitted cells without writing")
+    cmd.set_defaults(handler=_tokenizer)
     args = parser.parse_args(argv)
     return args.handler(args)
 
