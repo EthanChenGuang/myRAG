@@ -88,6 +88,8 @@ export interface SearchStagesInput {
   attributes?: AttributeSearchInput;
   /** D-05: the access filter runRetrieval computed once; absent reads it from the scope. Set on every backend request. */
   access?: ScopeAccessFilter;
+  /** Phase 6.2 D-08, P-10: the query layer's max_searches; set only while the layer runs, and then searchesCounted is reported. */
+  maxSearches?: number;
 }
 
 /** The request's query-side lexical options and what they were built from. */
@@ -229,6 +231,17 @@ export interface SearchStagesOutput {
   tableRows?: ReadonlyMap<string, TableRowAttachment>;
   /** D-31: the identifier_resolve outcome; absent while RAG_IDENTIFIER_FILTER is off or the stage did not run. */
   identifiers?: SearchIdentifiers;
+  /** Phase 6.2 P-10: variant searches plus filter retries; present only when maxSearches was given. */
+  searchesCounted?: number;
+  /** Phase 6.2 D-08: one entry per filtered sub-question variant; absent when no variant carried a filter. */
+  filterRetries?: VariantFilterRetry[];
+}
+
+/** Phase 6.2 D-08: how one filtered sub-question's search ended. */
+export interface VariantFilterRetry {
+  subQuestionIndex: number;
+  retried: boolean;
+  retrySkippedCap: boolean;
 }
 
 /** D-31, D-51: what the identifier_resolve stage found, for the rank (guard) and context (suggestion line) stages and the result. */
@@ -265,6 +278,11 @@ export const IDENTIFIER_RESOLVE_FAILED = 'identifier_resolve_failed';
 function buildFilters(input: RunRetrievalInput): RetrievalFilters {
   const { versionScope: _versionScope, ...extra } = input.retrievalFilters ?? {};
   return { currentOnly: true, ...extra };
+}
+
+/** Phase 6.2 D-08: the filters a variant is searched with; stub. */
+export function applyVariantFilters(base: RetrievalFilters, _variant: QueryVariant): RetrievalFilters {
+  return base;
 }
 
 /** D-25: the search span's backend fields; ids and counts only. */
