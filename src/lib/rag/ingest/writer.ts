@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { RpcClient } from '../backend/supabase-rpc';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
+import { kickVectorSync } from '../sync/kick';
 import { HASH_NORMALIZATION_VERSION } from './hash';
 import type { ChunkKind, DocTypeOrigin, IngestSource } from './types';
 
@@ -551,12 +552,14 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
       if (outcome === null || !PUBLISH_OUTCOMES.has(outcome)) {
         throw new IngestWriterError('rag_publish_document_version', 'bad_response');
       }
-      return {
+      const published = {
         outcome: outcome as PublishOutcome,
         documentId: requireText('rag_publish_document_version', row, 'document_id'),
         version: integer(row, 'version') ?? 0,
         supersededDocumentId: text(row, 'superseded_document_id'),
       };
+      kickVectorSync();
+      return published;
     },
 
     async holdForReview(documentId) {
