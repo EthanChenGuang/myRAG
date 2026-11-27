@@ -114,6 +114,19 @@ async function fetchDocumentVersions(scope: TenantScope, documentIds: string[], 
   return out;
 }
 
+/** D-13, D-40: a kept chunk's version under a non-current scope, from the search row first, else the document lookup. */
+function keptVersionFields(
+  hit: { isCurrent?: boolean; documentVersion?: number } | undefined,
+  info: VersionLabelInfo | undefined,
+): { isCurrent?: boolean; documentVersion?: number } {
+  const isCurrent = hit?.isCurrent ?? info?.isCurrent;
+  const documentVersion = hit?.documentVersion ?? info?.version;
+  return {
+    ...(isCurrent !== undefined ? { isCurrent } : {}),
+    ...(documentVersion !== undefined ? { documentVersion } : {}),
+  };
+}
+
 /** D-21: the assemble stage detail when the cluster source lookup failed; alsoIn then lists the dropped candidates only. */
 export const ALSO_IN_SOURCES_UNAVAILABLE = 'also_in_sources_unavailable';
 /** D-21: at most this many other documents are listed under one kept chunk or used document. */
@@ -485,7 +498,8 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
   }
 
   // D-13: only a non-current scope looks versions up; a current request makes no call and renders today's context.
-  if (ctx.versionScope !== undefined && ctx.versionScope !== 'current') {
+  const historyScope = ctx.versionScope !== undefined && ctx.versionScope !== 'current';
+  if (historyScope) {
     const documentIds = [...new Set(candidates.map((candidate) => candidate.document_id))].sort();
     try {
       if (!input.scope) throw new Error('[RAG Context] version labels need a tenant scope');
@@ -574,6 +588,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
           rank: rankById.get(row.chunk_id) ?? row.rank,
           ...(dupClusterId ? { dupClusterId } : {}),
           ...(alsoIn && alsoIn.length > 0 ? { alsoIn } : {}),
+          ...(historyScope ? keptVersionFields(hitById.get(row.chunk_id), versionInfo?.get(row.document_id)) : {}),
         };
       });
       return {
