@@ -572,3 +572,203 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
     });
   });
 }
+
+interface Audience {
+  document_id: string;
+  filename: string;
+  kind: string;
+  group_ids: string[];
+  group_names: string[];
+  people_count: number;
+  fallback_reason: string | null;
+  connector_managed: boolean;
+  cursor?: string;
+}
+
+const VIEW = {
+  everyone: id('9246', 1),
+  groups: id('9246', 2),
+  fallback: id('9246', 3),
+  own: id('9246', 4),
+  source: id('9246', 5),
+  oldGroups: id('9246', 6),
+} as const;
+
+for (const mode of ['single-tenant', 'multi-tenant'] as const) {
+  const multi = mode === 'multi-tenant';
+
+  describe(`admin document view (${mode})`, () => {
+    let fx: Fixture;
+    let db: PGlite;
+    const groups: Record<string, string> = {};
+
+    const call = <T extends Row>(sql: string, params: unknown[]): Promise<T[]> => service(db, async () => (await db.query<T>(sql, params)).rows);
+    const COLUMNS = `document_id::text AS document_id, filename, kind, group_ids::text[] AS group_ids, group_names, people_count::int AS people_count,
+      fallback_reason, connector_managed`;
+
+    const audience = async (ids: string[], tenantKey = fx.tenantKey): Promise<Audience[]> => {
+      await assertFunction(db, 'rag_access_document_audience');
+      return call<Audience & Row>(`SELECT ${COLUMNS} FROM public.rag_access_document_audience($1, $2::uuid[]) ORDER BY filename`, [tenantKey, ids]);
+    };
+
+    const listDocs = async (filter: string, query: string | null, cursor: string | null = null, limit: number | null = null): Promise<Audience[]> => {
+      await assertFunction(db, 'rag_access_documents_list');
+      return call<Audience & Row>(`SELECT ${COLUMNS}, cursor FROM public.rag_access_documents_list($1, $2, $3, $4, $5)`, [
+        fx.tenantKey,
+        filter,
+        query,
+        cursor,
+        limit,
+      ]);
+    };
+
+    const listAll = async (filter: string, query: string | null): Promise<Audience[]> => {
+      const out: Audience[] = [];
+      let cursor: string | null = null;
+      for (;;) {
+        const page = await listDocs(filter, query, cursor, 50);
+        out.push(...page);
+        if (page.length < 50) return out;
+        cursor = page[page.length - 1]!.cursor!;
+      }
+    };
+
+    const counts = async (query: string | null): Promise<Record<string, number>> => {
+      await assertFunction(db, 'rag_access_documents_counts');
+      const rows = await call<Row>(
+        `SELECT restricted::int AS restricted, uploader_only::int AS uploader_only, everyone::int AS everyone, "all"::int AS "all"
+         FROM public.rag_access_documents_counts($1, $2)`,
+        [fx.tenantKey, query],
+      );
+      return rows[0] as Record<string, number>;
+    };
+
+    before(async () => {
+      fx = await build(mode);
+      db = fx.db;
+      for (const key of ['group-a', 'group-b', 'group-c']) {
+        const row = await call<{ id: string }>('SELECT id::text AS id FROM public.rag_access_group_create($1, $2, $3, $4)', [fx.tenantKey, key, `Name ${key}`, ADMIN]);
+        groups[key] = row[0]!.id;
+      }
+      const ga = `g:${groups['group-a']}`;
+      const gb = `g:${groups['group-b']}`;
+      await insertDoc(db, multi, { id: VIEW.everyone, text: 'A neutral synthetic record for everyone.', groups: ['all'], filename: 'view-alpha-everyone.md' });
+      await insertDoc(db, multi, { id: VIEW.oldGroups, text: 'An older neutral synthetic record.', groups: [ga], filename: 'view-beta-groups.md' });
+      await insertDoc(db, multi, {
+        id: VIEW.groups,
+        text: 'A neutral synthetic record for two groups and a person.',
+        groups: [ga, gb, `u:${MEMBER_B}`].sort(),
+        filename: 'view-beta-groups.md',
+        lineage: VIEW.oldGroups,
+        version: 2,
+      });
+      await db.query('UPDATE documents SET access_groups = $2::text[] WHERE id = $1', [VIEW.groups, [ga, gb, `u:${MEMBER_B}`].sort()]);
+      await supersede(db, VIEW.oldGroups, VIEW.groups);
+      await insertDoc(db, multi, { id: VIEW.fallback, text: 'A neutral synthetic record that falls back.', groups: [`g:${groups['group-c']}`], filename: 'view-gamma_fallback.md' });
+      await call('SELECT * FROM public.rag_access_group_delete($1, $2, 1, $3)', [fx.tenantKey, groups['group-c'], ADMIN]);
+      await insertDoc(db, multi, { id: VIEW.own, text: 'A neutral synthetic record for its uploader.', groups: ['all'], filename: 'view-delta-own.md' });
+      await call("SELECT * FROM public.rag_set_document_access_groups($1, $2::uuid[], $3::text[], $4, 'admin', 'manual')", [
+        fx.tenantKey,
+        [VIEW.own],
+        [`u:${MEMBER_A}`],
+        ADMIN,
+      ]);
+      await insertDoc(db, multi, { id: VIEW.source, text: 'A neutral synthetic record from a connector.', groups: ['all'], filename: 'view-epsilon-source.md' });
+      await db.query(
+        "INSERT INTO nango_sync_records (user_id, connection_id, provider, file_id, file_name, document_id) VALUES ($1, 'conn-1', 'google-drive', 'file-1', 'file-1.md', $2)",
+        [MEMBER_A, VIEW.source],
+      );
+      await call("SELECT * FROM public.rag_set_document_access_groups($1, $2::uuid[], $3::text[], NULL, 'connector', 'unmapped_source')", [
+        fx.tenantKey,
+        [VIEW.source],
+        [`u:${MEMBER_A}`],
+      ]);
+    });
+
+    after(async () => {
+      await db?.close();
+    });
+
+    test('the audience reads everyone, groups with names and people, and uploader only with its fallback reason', async () => {
+      const ids = [VIEW.everyone, VIEW.groups, VIEW.oldGroups, VIEW.fallback, VIEW.own, VIEW.source];
+      if (multi) ids.push(DOC.other);
+      const rows = await audience(ids);
+      const ga = groups['group-a']!;
+      const gb = groups['group-b']!;
+      const [firstId, secondId] = [ga, gb].sort();
+      const names = { [ga]: 'Name group-a', [gb]: 'Name group-b' };
+      assert.deepEqual(rows, [
+        { document_id: VIEW.everyone, filename: 'view-alpha-everyone.md', kind: 'everyone', group_ids: [], group_names: [], people_count: 0, fallback_reason: null, connector_managed: false },
+        {
+          document_id: VIEW.groups,
+          filename: 'view-beta-groups.md',
+          kind: 'groups',
+          group_ids: [firstId, secondId],
+          group_names: [names[firstId!], names[secondId!]],
+          people_count: 1,
+          fallback_reason: null,
+          connector_managed: false,
+        },
+        { document_id: VIEW.own, filename: 'view-delta-own.md', kind: 'uploader_only', group_ids: [], group_names: [], people_count: 0, fallback_reason: null, connector_managed: false },
+        { document_id: VIEW.source, filename: 'view-epsilon-source.md', kind: 'uploader_only', group_ids: [], group_names: [], people_count: 0, fallback_reason: 'unmapped_source', connector_managed: true },
+        { document_id: VIEW.fallback, filename: 'view-gamma_fallback.md', kind: 'uploader_only', group_ids: [], group_names: [], people_count: 0, fallback_reason: 'group_deleted', connector_managed: false },
+      ], 'current documents of this tenant only: no superseded version, no other workspace');
+      if (multi) assert.deepEqual(await audience([VIEW.everyone], `o:${OTHER_ORG}`), [], 'another tenant sees nothing of this one');
+    });
+
+    test('a later relabel clears the fallback reason', async () => {
+      await call("SELECT * FROM public.rag_set_document_access_groups($1, $2::uuid[], $3::text[], $4, 'admin', 'manual')", [
+        fx.tenantKey,
+        [VIEW.fallback],
+        [`g:${groups['group-a']}`],
+        ADMIN,
+      ]);
+      await call("SELECT * FROM public.rag_set_document_access_groups($1, $2::uuid[], $3::text[], $4, 'admin', 'manual')", [
+        fx.tenantKey,
+        [VIEW.fallback],
+        [`u:${MEMBER_A}`],
+        ADMIN,
+      ]);
+      const [row] = await audience([VIEW.fallback]);
+      assert.equal(row!.kind, 'uploader_only');
+      assert.equal(row!.fallback_reason, null, 'set by an admin, not a fallback');
+    });
+
+    test('filters, search, cursor and counts agree', async () => {
+      const restricted = await listAll('restricted', null);
+      assert.deepEqual(restricted.map((r) => r.document_id), [VIEW.groups], 'restricted is the groups kind');
+      const uploaderOnly = await listAll('uploader_only', null);
+      assert.deepEqual(uploaderOnly.map((r) => r.document_id), [VIEW.own, VIEW.source, VIEW.fallback], 'ordered by file name');
+      const everyone = await listAll('everyone', null);
+      assert.ok(everyone.every((r) => r.kind === 'everyone'), 'everyone only');
+      assert.ok(everyone.some((r) => r.document_id === VIEW.everyone));
+      const all = await listAll('all', null);
+      assert.equal(all.length, restricted.length + uploaderOnly.length + everyone.length, 'all is the union');
+      assert.equal(new Set(all.map((r) => r.document_id)).size, all.length, 'no duplicates across pages');
+      assert.ok(!all.some((r) => r.document_id === VIEW.oldGroups || r.document_id === DOC.other), 'current documents of this tenant only');
+
+      assert.deepEqual(await counts(null), {
+        restricted: restricted.length,
+        uploader_only: uploaderOnly.length,
+        everyone: everyone.length,
+        all: all.length,
+      });
+
+      const page1 = await listDocs('uploader_only', null, null, 2);
+      const page2 = await listDocs('uploader_only', null, page1[1]!.cursor!, 2);
+      assert.deepEqual([...page1, ...page2].map((r) => r.document_id), [VIEW.own, VIEW.source, VIEW.fallback], 'cursor pages continue');
+
+      assert.deepEqual((await listDocs('all', '  gamma_ ')).map((r) => r.document_id), [VIEW.fallback], 'trimmed search');
+      assert.deepEqual(await listDocs('all', 'view-%-own'), [], 'percent is literal');
+      assert.deepEqual((await listDocs('all', 'VIEW-BETA')).map((r) => r.document_id), [VIEW.groups], 'case-insensitive');
+      assert.deepEqual(await counts('view-'), { restricted: 1, uploader_only: 3, everyone: 1, all: 5 });
+
+      await rejects(() => listDocs('nobody', null), /^invalid_filter/, 'unknown filter');
+      await rejects(() => listDocs('all', null, 'not-a-cursor'), /^invalid_cursor/, 'bad cursor');
+    });
+
+    test('the task 3 functions are service_role only with an empty search_path', async () => {
+      await assertGrants(db, ['rag_access_document_audience', 'rag_access_documents_list', 'rag_access_documents_counts']);
+    });
+  });
+}
