@@ -215,3 +215,39 @@ describe('AGENTS.md reflects the Phase 5.1.1 feedback loop', () => {
     expect(AGENTS).toContain('Phase 5.1.1 (0531–0537)');
   });
 });
+
+describe('AGENTS.md reflects the Phase 6 query layer and semantic cache', () => {
+  const section6 = AGENTS.slice(AGENTS.indexOf('## 6. RAG & Data Pipeline'), AGENTS.indexOf('## 7. AI Model Management'));
+  const section14 = AGENTS.slice(AGENTS.indexOf('## 14. Behaviour to Preserve'), AGENTS.indexOf('## 15. Quality Checklist'));
+  const section15 = AGENTS.slice(AGENTS.indexOf('## 15. Quality Checklist'), AGENTS.indexOf('## 16. Handy Scripts'));
+
+  test.each([
+    '`RAG_QUERY_LAYER=false`',
+    '`RAG_QUERY_FRAMEWORK=llamaindex`',
+    '`RAG_QUERY_VOICE_TRANSFORMS=condense_history,normalize_dates`',
+    '`VOICE_SERVER_QUERY_REWRITE`',
+    '`RAG_SEMANTIC_CACHE=off`',
+    '`/api/rag/admin/semantic-cache`',
+    '`eval/config/semantic-cache.json`',
+    '`python -m rag_eval.calibrate cache`',
+    '`rag_tenant_language_shares`',
+    'eval/config/phase6-comparison.json',
+  ])('section 6 mentions %s', (fragment) => {
+    expect(section6).toContain(fragment);
+  });
+
+  test('the fold sentence names Phase 6', () => {
+    expect(AGENTS).toContain('Phase 6 (0601–0603)');
+  });
+
+  test('section 14 keeps small talk, strict refusal and cache hits', () => {
+    expect(section14).toContain('small talk skips retrieval only under the layer');
+    expect(section14).toContain('`cache: hit`');
+  });
+
+  test('section 15 names the zod isolation check and the LangChain and query-LLM boundary', () => {
+    expect(section15).toContain('node scripts/ci/check-zod-isolation.mjs');
+    expect(section15).toContain('`src/lib/rag/query/langchain/`');
+    expect(section15).toContain('`src/lib/rag/query/llm`');
+  });
+});
