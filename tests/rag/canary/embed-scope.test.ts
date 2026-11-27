@@ -188,13 +188,14 @@ describe.runIf(ENABLED.includes('pgvector'))('embed-scope canary, layer 2 parity
   beforeEach(captureLogs);
 
   it("negative control: a filter-ignoring RPC returns A's rows for O's embed scope, and rag_validate_chunks under that scope drops them", async () => {
-    const [{ createPgvectorBackend }, { loadRagConfig }, { getRagDeps }, { revalidateChunks }, { canonicalTenantKey }, { queryLexicalTokens }] = await Promise.all([
+    const [{ createPgvectorBackend }, { loadRagConfig }, { getRagDeps }, { revalidateChunks }, { canonicalTenantKey }, { queryLexicalTokens }, { scopeAccessFilter }] = await Promise.all([
       import('@/lib/rag/backend/pgvector'),
       import('@/lib/rag/config'),
       import('@/lib/rag/deps'),
       import('@/lib/rag/backend/revalidate'),
       import('@/lib/rag/backend/tenant-key'),
       import('@/lib/rag/lexical/tokenize'),
+      import('@/lib/rag/tenant/access'),
     ]);
     const a = env.tenants.a!;
     const o = env.tenants.o!;
@@ -204,6 +205,8 @@ describe.runIf(ENABLED.includes('pgvector'))('embed-scope canary, layer 2 parity
     const broken = createPgvectorBackend({ adminClient: () => fake.client, getConfig: () => loadRagConfig(getRagDeps().ragEnv()) });
     const legs = await broken.search({
       scope,
+      // Phase 4.3 D-05: the backend refuses a request whose access filter is not its scope's own.
+      access: scopeAccessFilter(scope),
       embeddingProfileId: LEGACY_PROFILE,
       denseVector: env.queryVector(CANARY_SENTENCE),
       lexicalTokens: queryLexicalTokens(CANARY_SENTENCE),
