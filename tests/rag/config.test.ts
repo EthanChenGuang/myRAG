@@ -82,6 +82,7 @@ const CHAT_DEFAULTS = {
   diversify: 1000,
   identifier_resolve: 1000,
   identifier_guard: 1000,
+  source_recheck: 1000,
 };
 
 describe('stage tables', () => {
@@ -115,6 +116,7 @@ describe('stage tables', () => {
       'identifier_resolve',
       'identifier_guard',
       'terminology',
+      'source_recheck',
     ]);
   });
 
@@ -136,6 +138,36 @@ describe('stage tables', () => {
     expect(PROFILE_STAGE_DEFAULTS.voice).toMatchObject({ table_lookup: 500, identifier_resolve: 500, diversify: 300, identifier_guard: 300 });
     expect(PROFILE_STAGE_DEFAULTS.eval).toMatchObject({ table_lookup: 1000, identifier_resolve: 1000, diversify: 1000, identifier_guard: 1000 });
     expect(PROFILE_STAGE_DEFAULTS.eval.terminology).toBe(1000);
+    expect(PROFILE_STAGE_DEFAULTS.voice.source_recheck).toBe(300);
+    expect(PROFILE_STAGE_DEFAULTS.eval.source_recheck).toBe(1000);
+  });
+});
+
+describe('RAG_SOURCE_RECHECK switch (D-19)', () => {
+  test('unset gives false with no warning', () => {
+    const config = loadRagConfig({});
+    expect(config.sourceRecheck).toBe(false);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('true and TRUE give true; false gives false', () => {
+    expect(loadRagConfig({ RAG_SOURCE_RECHECK: 'true' }).sourceRecheck).toBe(true);
+    expect(loadRagConfig({ RAG_SOURCE_RECHECK: 'TRUE' }).sourceRecheck).toBe(true);
+    expect(loadRagConfig({ RAG_SOURCE_RECHECK: 'false' }).sourceRecheck).toBe(false);
+  });
+
+  test('an unsupported value such as yes gives false and exactly one config warning', () => {
+    const config = loadRagConfig({ RAG_SOURCE_RECHECK: 'yes' });
+    expect(config.sourceRecheck).toBe(false);
+    const warnings = configWarnings().filter((line) => line.includes('RAG_SOURCE_RECHECK'));
+    expect(warnings).toHaveLength(1);
+  });
+
+  test('the switch does not disable or add any stage, and the memo key separates on and off', () => {
+    const off = loadRagConfig({ RAG_SOURCE_RECHECK: 'false' });
+    const on = loadRagConfig({ RAG_SOURCE_RECHECK: 'true' });
+    expect(on).not.toBe(off);
+    expect([...on.disabledStages]).toEqual([...off.disabledStages]);
   });
 });
 
