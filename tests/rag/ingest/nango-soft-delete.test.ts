@@ -237,7 +237,7 @@ describe('deleteOrphanedDocuments soft delete under the queue (D-27)', () => {
 
   it('with unified and async off, the hard delete recomputes the owner tenant duplicate clusters after the rows are gone (DATA-21)', async () => {
     const memory = orphanSeed();
-    let documentsAtRecompute: string[] | null = null;
+    let documentsAtRecompute: unknown[] | null = null;
     recomputeDirtyDupClusters.mockImplementationOnce(async () => {
       documentsAtRecompute = memory.documentIds();
       return { ok: true, skipped: false };
