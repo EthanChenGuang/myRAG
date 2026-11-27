@@ -649,3 +649,13 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - 14 DONE but in no train: 04.2-33, 04.3-52, 05.2.1-16, 05.3-48, 06.2-27, 06.3-01/02/03/06/07/10/27, 07-28, 07-34. Sent to the train-39 builder; it may spill to train 40.
   - 78 not done: 1 running (03.3-25), 6 READY waiting for train 39, about 50 blocked by dependencies (06.3 ~20, 07 ~18, 06.2 ~9), 21 auto=false or HOLD.
 - 04.3-52 DONE (b8f250a1; 40 route access canaries) and archived. Launched quick-it-refusal-locale: Italian strict refusals come back localized as Spanish. Operator: re-run the access-on smoke after train 39.
+- 21:40Z User asked for more in parallel. Launched 8 sessions on ci/merge-train-39 WIP 6da932ba, which already contains 05.2.1-17, 06.2-15/17/18/20/21 and quick-attribute-access:
+  - 05.2.1-20 session_01X342skyCJC61RwqFMVE6iA
+  - 06.2-22 session_01X342si1y9d6kxtPqeezSDM
+  - 06.2-24 session_01X342sksLKwFrTzHbF1HG7E
+  - 06.2-25 session_01X342smJg58e4rvyQhwwDuG
+  - 06.2-36 session_01X342sk7pgf5cUPYEzTjBwp
+  - 06.2-39 session_01X342siPkL5Q4yMnZ2ndJgr (merges 06.2-27 itself; conflicts in run/route.ts and index.ts)
+  - quick-review-writers-access (0967/0974) session_01X342smetEyjLKyC7oJtCAc
+  - quick-doc-types-access (rag_tenant_doc_types) session_01X342skHQQ4zUehWoynnq6C
+  Running now: 03.3-25, quick-sidebar-hide, quick-it-refusal-locale, the train-38 builder (fixing CI) and the train-39 builder (gates plus 13 extra branches).
