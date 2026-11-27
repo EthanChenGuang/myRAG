@@ -290,7 +290,7 @@ function driftAnswer(body: unknown) {
   return (path: string): FetchResult => (path.includes('/monitor/drift') ? { ok: true, status: 200, body } : { ok: true, status: 200, body: ALERTS });
 }
 
-async function openCoverage(doc: FakeDocument, fetcher: Fetcher, config = ON) {
+async function openCoverage(doc: FakeDocument, fetcher: Fetcher, config: () => Record<string, string> = ON) {
   const { MonitorPanel } = load();
   const root = monitorRoot(doc);
   const panel = new MonitorPanel(root, { fetcher, locale: 'en', config });
