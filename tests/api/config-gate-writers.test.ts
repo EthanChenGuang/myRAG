@@ -304,6 +304,28 @@ describe('POST /api/config guard (in-app settings)', () => {
     expect(json.ragGate).toEqual({ record_id: db.inserts[0].id, gate_result: 'pass' });
   });
 
+  it('W-1: lowering RAG_CONFIG_GATE in enforce needs an override reason and records it', async () => {
+    process.env.RAG_CONFIG_GATE = 'enforce';
+    const env = makeEnvDir(ENV_FILE);
+    const lowered = { RAG_CONFIG_GATE: 'off' };
+    storeCheck(env.dir, { ...parseEnv(ENV_FILE), ...lowered });
+    const route = await load<Route>('@/app/api/config/route');
+
+    for (const ragGate of [undefined, { check_id: CHECK_ID }]) {
+      const res = await post(route, { config: lowered, ...(ragGate ? { ragGate } : {}) });
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toBe('rag_gate_override_required');
+    }
+    expect(writeSpy).not.toHaveBeenCalled();
+    expect(db.inserts).toHaveLength(0);
+
+    const res = await post(route, { config: lowered, ragGate: { override: { reason: REASON } } });
+    expect(res.status).toBe(200);
+    expect(env.read()).toContain('RAG_CONFIG_GATE=off');
+    expect(db.inserts).toHaveLength(1);
+    expect(db.inserts[0]).toMatchObject({ changed_keys: ['RAG_CONFIG_GATE'], override_reason: REASON });
+  });
+
   it('a change of only non-RAG-affecting names is written without a check in enforce mode', async () => {
     process.env.RAG_CONFIG_GATE = 'enforce';
     const env = makeEnvDir(ENV_FILE);

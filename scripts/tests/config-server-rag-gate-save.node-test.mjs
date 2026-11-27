@@ -291,6 +291,30 @@ describe('POST /api/config', () => {
     assert.equal(readEnv(), baseEnv('enforce'));
   });
 
+  test('W-1: lowering RAG_CONFIG_GATE in enforce answers 409 rag_gate_override_required without a reason, even with a passed check', async () => {
+    fs.writeFileSync(envPath(), baseEnv('enforce'));
+    const res = await call('POST', '/api/config', { NEXT_PUBLIC_APP_NAME: 'Demo', RAG_CONFIG_GATE: 'off' });
+    assert.equal(res.status, 409);
+    assert.equal(res.json.error, 'rag_gate_override_required');
+    assert.equal(readEnv(), baseEnv('enforce'));
+    const checkId = storeCheck(proposed({ RAG_CONFIG_GATE: 'off' }), 'pass');
+    const checked = await call('POST', '/api/config', { NEXT_PUBLIC_APP_NAME: 'Demo', RAG_CONFIG_GATE: 'off', ragGate: { check_id: checkId } });
+    assert.equal(checked.status, 409);
+    assert.equal(checked.json.error, 'rag_gate_override_required');
+    assert.equal(readEnv(), baseEnv('enforce'));
+    assert.equal(insertedRows.length, 0);
+  });
+
+  test('W-1: lowering RAG_CONFIG_GATE with a typed reason writes it and records the reason', async () => {
+    fs.writeFileSync(envPath(), baseEnv('enforce'));
+    const res = await call('POST', '/api/config', { NEXT_PUBLIC_APP_NAME: 'Demo', RAG_CONFIG_GATE: 'warn', ragGate: { override: { reason: REASON } } });
+    assert.equal(res.status, 200);
+    assert.equal(dotenv.parse(readEnv()).RAG_CONFIG_GATE, 'warn');
+    assert.equal(insertedRows.length, 1);
+    assert.deepEqual(insertedRows[0].changed_keys, ['RAG_CONFIG_GATE']);
+    assert.equal(insertedRows[0].override_reason, REASON);
+  });
+
   test('enforce with a malformed ragGate answers 400 and writes nothing', async () => {
     fs.writeFileSync(envPath(), baseEnv('enforce'));
     const res = await call('POST', '/api/config', saveBody({ ragGate: { check_id: 7 } }));
