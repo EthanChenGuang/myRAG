@@ -20,7 +20,7 @@ interface Call {
   args: Record<string, unknown>;
 }
 
-type Responder = (call: Call) => RpcResponse | Promise<RpcResponse>;
+type Responder = (call: Call) => RpcResponse | PromiseLike<RpcResponse>;
 
 interface DbState {
   flag: boolean;

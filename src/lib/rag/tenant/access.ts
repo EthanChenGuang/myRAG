@@ -1,6 +1,7 @@
 import type { RpcClient, RpcResponse } from '../backend/supabase-rpc';
 import { loadRagConfig, type AccessGroupsMode } from '../config';
 import { getRagDeps } from '../deps';
+import { accessReadyForResolve } from './access-startup';
 import { ACCESS_ADMIN_HASH, assertAccessScope, hashAccessKeys, mintAccessScope, type AccessScope } from './access-brand';
 import { assertTenantScope, scopeKey, withAccess, type TenantScope } from './scope';
 
@@ -189,6 +190,8 @@ export async function resolveAccessScope(input: ResolveAccessScopeInput): Promis
   const caller = userId?.toLowerCase() ?? null;
 
   try {
+    input.signal.throwIfAborted();
+    if (!(await accessReadyForResolve())) return refuse('access_not_ready');
     input.signal.throwIfAborted();
 
     let access: AccessScope;

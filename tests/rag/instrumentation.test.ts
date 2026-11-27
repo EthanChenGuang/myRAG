@@ -11,6 +11,7 @@ import type { EmbeddingProvider } from '@/lib/rag/embeddings/types';
 import { resetIngestDepsForTests, setIngestDepsForTests } from '@/lib/rag/ingest/deps';
 import { resetLanguageStartupCheckForTests, verifyLanguageSettingsAtStartup } from '@/lib/rag/lang/startup';
 import { resetLanguageSettingsForTests } from '@/lib/rag/lang/settings';
+import { getAccessStartupVerdict, resetAccessStartupForTests } from '@/lib/rag/tenant/access-startup';
 
 const VOYAGE_KEY = 'test-voyage-key-placeholder-0123456789';
 const DEEPINFRA_KEY = 'test-deepinfra-key-placeholder-0123';
@@ -23,6 +24,7 @@ const savedRuntime = process.env.NEXT_RUNTIME;
 
 let mode: string | undefined;
 let rpcCalls: string[];
+let accessCalls: { fn: string; args: Record<string, unknown> }[];
 let errorSpy: MockInstance<typeof console.error>;
 let warnSpy: MockInstance<typeof console.warn>;
 
@@ -47,7 +49,13 @@ function row(id: string, status: string, over: Record<string, unknown> = {}): Re
 
 function installRegistry(respond: () => Promise<RpcResponse> | RpcResponse): void {
   const client: RpcClient = {
-    rpc(fn) {
+    rpc(fn, args) {
+      if (fn.startsWith('rag_access_')) {
+        accessCalls.push({ fn, args });
+        const flag = fn === 'rag_access_groups_drift' ? [] : false;
+        const answer = { abortSignal: () => answer, then: (ok: (value: RpcResponse) => unknown) => Promise.resolve({ data: flag, error: null }).then(ok) };
+        return answer as unknown as ReturnType<RpcClient['rpc']>;
+      }
       rpcCalls.push(fn);
       const request = {
         abortSignal: () => request,
@@ -89,6 +97,8 @@ function fakeProvider(over: Partial<EmbeddingProvider>): EmbeddingProvider {
 beforeEach(() => {
   mode = 'on';
   rpcCalls = [];
+  accessCalls = [];
+  resetAccessStartupForTests();
   process.env.NEXT_RUNTIME = 'nodejs';
   for (const name of KEY_NAMES) savedKeys[name] = mutableEnv[name];
   mutableEnv.VOYAGE_API_KEY = VOYAGE_KEY;
@@ -109,6 +119,7 @@ afterEach(() => {
   resetIngestDepsForTests();
   resetEmbeddingProvidersForTests();
   resetActiveProfileForTests();
+  resetAccessStartupForTests();
 });
 
 describe('register (startup embedding profile check)', () => {
@@ -236,6 +247,28 @@ describe('register (startup embedding profile check)', () => {
     expect(errorSpy).not.toHaveBeenCalled();
     expect(getStartupVerdict()).toMatchObject({ status: 'unknown', reason: 'profile_unavailable' });
     expect(loggedText()).not.toContain('registry exploded');
+  });
+});
+
+describe('register (startup access-groups check, A-03)', () => {
+  it('writes the enforcement flag to match the switch (off by default) and records the verdict', async () => {
+    mode = 'off';
+    installRegistry(() => ({ data: [], error: null }));
+    await register();
+    expect(accessCalls[0]).toEqual({ fn: 'rag_access_set_enforced', args: { p_enforced: false } });
+    expect(accessCalls.map((call) => call.fn)).not.toContain('rag_access_readiness');
+    expect(getAccessStartupVerdict()).toMatchObject({ status: 'off', flagValue: false });
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('with the switch on and the readiness function missing, records not_ready and still resolves', async () => {
+    mode = 'off';
+    setRagDepsForTests({ ragEnv: () => ({ RAG_DOC_ACCESS_GROUPS: 'on' }) });
+    installRegistry(() => ({ data: [], error: null }));
+    await expect(register()).resolves.toBeUndefined();
+    const verdict = getAccessStartupVerdict();
+    expect(verdict.status).toBe('not_ready');
+    expect(verdict.reasons).toContain('readiness_unavailable');
   });
 });
 

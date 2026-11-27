@@ -35,6 +35,8 @@ export {
   uploadAccessKeys,
 } from './tenant/access';
 export { scopeAccessFilter } from './tenant/access';
+export { getAccessStartupVerdict, syncAccessEnforcementNow, verifyAccessGroupsStartup } from './tenant/access-startup';
+export type { AccessStartupStatus, AccessStartupVerdict } from './tenant/access-startup';
 export type {
   AccessIdentity,
   AccessScopeRefusalReason,
