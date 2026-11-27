@@ -4014,6 +4014,13 @@ def _p62_filter() -> SubQuestionFilter:
     )
 
 
+def _p62_versions_filter() -> SubQuestionFilter:
+    """06.2-25 (P-17): the RET-11 version scope on a sub-question; a range with one open bound."""
+    return SubQuestionFilter.model_validate(
+        {"date_range": None, "scopes": None, "doc_types": None, "languages": None, "versions": {"to": "2024-12-31"}}
+    )
+
+
 def _p62_query_plan() -> QueryPlan:
     return QueryPlan(
         original="How do part alpha and part beta compare?",
@@ -4082,7 +4089,7 @@ def _phase62_models() -> dict[str, Any]:
         "SubQuestionsWithFilters": SubQuestionsWithFilters(
             questions=[
                 SubQuestionSpec(text=_P62_SUB_QUESTIONS[0], filter=_p62_filter()),
-                SubQuestionSpec(text=_P62_SUB_QUESTIONS[1], filter=None),
+                SubQuestionSpec(text=_P62_SUB_QUESTIONS[1], filter=_p62_versions_filter()),
             ]
         ),
         "ScopeGateResult": ScopeGateResult(

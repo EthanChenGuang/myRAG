@@ -2,7 +2,7 @@ import type { ExtractedURL } from '@/lib/url-extractor';
 import type { QueryClassification } from '@/lib/query-classifier';
 import type { QueryPlan, RagTrace, ScopeGateResult } from '@/lib/rag-eval/contracts.generated';
 import type { QueryParamsOverrides } from './query/query-params';
-import type { BackendId, RetrievalFilterInput, RetrievalFilters } from './backend/types';
+import type { BackendId, RetrievalFilterInput, RetrievalFilters, VersionScope } from './backend/types';
 import type { VoiceResults } from './context/voice';
 import type { QueryFramework, QueryTransformSwitches, SemanticCacheBackend, StageName, StageTimeouts } from './config';
 import type { TemporalQueryContext } from './query/temporal-query-detector';
@@ -233,6 +233,8 @@ export interface QueryVariant {
   filters?: RetrievalFilters;
   /** Phase 6.2 D-05: whether filters narrowed this variant's search. */
   filterApplied?: boolean;
+  /** Phase 6.2 P-35: a sub-question's narrowed version scope; the search stage applies it to this variant only, under RAG_VERSION_SCOPE. */
+  versionScope?: VersionScope;
 }
 
 export interface RetrievalOverrides {
@@ -305,6 +307,8 @@ export interface RunRetrievalInput {
   trace?: TraceCollector;
   stageOverrides?: StageOverrides;
   retrievalFilters?: RetrievalFilterInput;
+  /** Phase 6.2 P-35: the caller's retrievalFilters asked for versions current; a sub-question version proposal is then ignored. */
+  callerVersionsCurrent?: true;
   queryVariants?: QueryVariant[];
   /** When absent the context is rendered exactly as without citations. */
   citationLabeler?: CitationLabeler;

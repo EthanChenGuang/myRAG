@@ -49,6 +49,8 @@ import { effectiveCacheThreshold } from '../cache/threshold';
 import type { CacheHit, CacheKeyParts, CacheTicket, EntryProfile } from '../cache/types';
 import { resolveFinalResultCount } from '../config';
 import { effectiveVersionScope } from './filters';
+import { isVersionQuestion, subQuestionVersionScope, type VersionRules } from './subq-filters';
+import type { VersionScope } from '../backend/types';
 import { collectRequiredTerms, type RequiredTerm } from './completeness';
 import { loadTenantDocTypes, loadTenantVocabulary } from './tenant-vocabulary';
 import type { SubqFilterContext } from './llamaindex/decompose';
@@ -184,6 +186,7 @@ export async function subqFilterContextFor(args: {
   base: SubqFilterContext['base'];
   vocabCap: number;
   signal: AbortSignal;
+  versionRules?: VersionRules;
 }): Promise<SubqFilterContext> {
   const { scope } = args;
   const [vocabulary, docTypes] = await Promise.all([
@@ -198,6 +201,7 @@ export async function subqFilterContextFor(args: {
       languages: [...getLanguageSettings().languages],
     },
     vocabCap: args.vocabCap,
+    ...(args.versionRules ? { versionRules: args.versionRules } : {}),
   };
 }
 
@@ -360,6 +364,8 @@ interface CacheStageInput {
   framework: CacheKeyParts['queryFramework'];
   spec: StageSpec;
   embedSpec: StageSpec;
+  /** P-35: the first non-current version scope of the plan's applied sub-question specs. */
+  subQuestionVersionScope?: VersionScope;
 }
 
 interface CacheStageResult {
@@ -425,7 +431,12 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
     defaultMaxResults: resolveFinalResultCount(undefined, env.RAG_FINAL_RESULT_COUNT),
   };
   const versionScope = effectiveVersionScope(ctx.config, profile, input.retrievalFilters?.versionScope, input.channel).scope;
+  // RET-11, P-35: a sub-question that reads superseded versions makes the whole turn a version_scope bypass.
+  const subQuestionScope = args.subQuestionVersionScope
+    ? effectiveVersionScope(ctx.config, profile, args.subQuestionVersionScope, input.channel).scope
+    : 'current';
   if (versionScope !== 'current') facts.versionScope = versionScope;
+  else if (subQuestionScope !== 'current') facts.versionScope = subQuestionScope;
   const bypass = checkBypassReason(facts);
   if (bypass !== null) {
     // D-42 e: the eval report reads bypass_<reason> from the stage counts.
@@ -811,6 +822,12 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
                     base: input.retrievalFilters,
                     vocabCap: params.subq_filter_vocab_cap,
                     signal: stageSignal,
+                    // P-35: versions may widen past current only where the request's own scope would, on a comparison or period turn.
+                    versionRules: {
+                      versionScopeEffective: !effectiveVersionScope(config, profile, 'all', input.channel).ignored,
+                      versionQuestion: isVersionQuestion(standalone, gate.reasons) || isVersionQuestion(input.query, []),
+                      ...(input.callerVersionsCurrent === true ? { callerCurrent: true } : {}),
+                    },
                   })
                 : Promise.resolve(null),
               glossaryProtectedFor(standalone),
@@ -918,6 +935,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   };
 
   if (ctx.afterTransforms) await ctx.afterTransforms(standalone);
+  const subQuestionScope = subQuestionVersionScope(plan.sub_question_specs);
 
   const cached = await runSemanticCacheStage({
     ctx,
@@ -929,6 +947,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     framework: transformer.framework,
     spec: cacheSpec,
     embedSpec: spec('embed', 'throw'),
+    ...(subQuestionScope ? { subQuestionVersionScope: subQuestionScope } : {}),
   });
   return {
     plan,

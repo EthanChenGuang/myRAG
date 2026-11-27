@@ -35,6 +35,7 @@ import {
   isCacheHitResult,
   OPTIONAL_STAGES,
   parseRetrievalFilters,
+  requestsCurrentVersions,
   resolveScopesFilter,
   ScopeFilterError,
   readGenerationConfig,
@@ -646,12 +647,15 @@ export async function POST(req: NextRequest) {
   const scope = resolvedAccess.ok ? resolvedAccess.scope : scoped.scope;
 
   let retrievalFilters: RetrievalFilterInput | undefined;
+  let callerVersionsCurrent = false;
   if (options?.retrieval_filters) {
-    const filtersParsed = parseRetrievalFilters(toFilterBody(options.retrieval_filters));
+    const filterBody = toFilterBody(options.retrieval_filters);
+    const filtersParsed = parseRetrievalFilters(filterBody);
     if (!filtersParsed.ok) {
       return NextResponse.json({ success: false, error: 'Invalid request data', details: filtersParsed.details }, { status: 400 });
     }
     retrievalFilters = filtersParsed.filters;
+    callerVersionsCurrent = requestsCurrentVersions(filterBody);
     if (retrievalFilters?.scopes) {
       try {
         retrievalFilters = await resolveScopesFilter(retrievalFilters, { scope, signal: req.signal });
@@ -743,6 +747,7 @@ export async function POST(req: NextRequest) {
       trace: collector,
       ...(stageOverrides ? { stageOverrides } : {}),
       ...(retrievalFilters ? { retrievalFilters } : {}),
+      ...(callerVersionsCurrent ? { callerVersionsCurrent: true as const } : {}),
       ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
       ...(history.length > 0 ? { history } : {}),
       ...(classification ? { classification } : {}),

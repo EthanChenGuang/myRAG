@@ -66,6 +66,7 @@ import {
   scheduleCacheStore,
   streamCachedAnswer,
   parseRetrievalFilters,
+  requestsCurrentVersions,
   resolveScopesFilter,
   ScopeFilterError,
   readFeedbackLoopConfig,
@@ -1456,6 +1457,7 @@ export async function POST(req: Request) {
 
     // Only the v2 pipeline reads this field; under legacy the body is handled exactly as before
     let retrievalFilters: RetrievalFilterInput | undefined;
+    let callerVersionsCurrent = false;
     if (isV2Pipeline()) {
       const filtersParsed = parseRetrievalFilters(requestBody?.retrievalFilters);
       if (!filtersParsed.ok) {
@@ -1465,6 +1467,7 @@ export async function POST(req: Request) {
         );
       }
       retrievalFilters = filtersParsed.filters;
+      callerVersionsCurrent = requestsCurrentVersions(requestBody?.retrievalFilters);
     }
 
     // D-11: the client's IANA zone, read only by the query layer; an unknown zone resolves to UTC there
@@ -2589,6 +2592,7 @@ Context:
           signal: req.signal,
           trace: collector,
           ...(retrievalFilters ? { retrievalFilters } : {}),
+          ...(callerVersionsCurrent ? { callerVersionsCurrent: true as const } : {}),
           ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
           ...queryLayerInputs,
           ...(cacheContext ? { cacheContext } : {}),

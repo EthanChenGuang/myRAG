@@ -544,7 +544,12 @@ function sliceCap(fused: FusedHit[], cap: number): DedupeResult {
 
 export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchStagesOutput> {
   const { input, scope, config, profile, params, embedding, signal, collector, stageOverrides } = ctx;
-  const variants = ctx.variants ?? [{ text: input.query, language: null, kind: 'original' as const }];
+  // P-35: a sub-question's version scope counts only where the request's own would (RAG_VERSION_SCOPE, never voice; embed needs its switch).
+  const variants = (ctx.variants ?? [{ text: input.query, language: null, kind: 'original' as const }]).map((variant: QueryVariant): QueryVariant => {
+    if (variant.versionScope === undefined || !effectiveVersionScope(config, profile, variant.versionScope, input.channel).ignored) return variant;
+    const { versionScope: _ignored, ...rest } = variant;
+    return rest;
+  });
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
   const pool = params.candidate_pool_size;
   const filters = ctx.filters ?? buildFilters(input);
@@ -552,6 +557,15 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const versions = effectiveVersionScope(config, profile, input.retrievalFilters?.versionScope, input.channel);
   const historyScope = versions.scope === 'current' ? undefined : versions.scope;
   const versionScopeArg = historyScope ? { versionScope: historyScope } : {};
+  const variantHistoryScope = variants
+    .map((variant) => variant.versionScope)
+    .find((scope): scope is Exclude<VersionScope, 'current'> => scope !== undefined && scope !== 'current');
+  // Any leg reading superseded versions: the request's own scope, else the first sub-question's (route, trace code, context labels).
+  const anyHistoryScope = historyScope ?? variantHistoryScope;
+  const scopeForVariant = (variant: QueryVariant): { versionScope?: VersionScope } => {
+    const scope = variant.versionScope ?? historyScope;
+    return scope !== undefined && scope !== 'current' ? { versionScope: scope } : {};
+  };
   const access = ctx.access ?? scopeAccessFilter(scope);
   // D-18, D-34: the terminology variant's dense list weighs dense_weight × the dense leg weight in force, read at run time.
   const terminologyDenseWeight = ctx.terminologyDenseWeight ?? terminologyParams().dense_weight;
@@ -581,8 +595,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const runLegs = async (identifiersNorm: string[] | undefined, legCodes: readonly string[]) => {
     const identifierArg = identifiersNorm ? { identifiersNorm } : {};
     const route =
-      historyScope || identifiersNorm
-        ? backendForRequest({ ...(historyScope ? { versionScope: historyScope } : {}), ...identifierArg }, resolved.backend)
+      anyHistoryScope || identifiersNorm
+        ? backendForRequest({ ...(anyHistoryScope ? { versionScope: anyHistoryScope } : {}), ...identifierArg }, resolved.backend)
         : { backend: resolved.backend };
     const backend = scoring ? withLexicalScoring(route.backend, scoring, scoringOutcomes) : route.backend;
     const selection = (): RetrievalBackendSelection =>
@@ -592,7 +606,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     const externalChoice = resolved.choice !== 'pgvector';
     const versionCodes = [
       versions.ignored ? VERSIONS_IGNORED : undefined,
-      historyScope ? SUPERSEDED_DENSE_UNAVAILABLE : undefined,
+      anyHistoryScope ? SUPERSEDED_DENSE_UNAVAILABLE : undefined,
       route.reason === 'backend_field_unsupported' ? BACKEND_FIELD_UNSUPPORTED : undefined,
       ...legCodes,
     ];
@@ -771,7 +785,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       const translationPending = runTranslations(stageSignal, roundFilters);
       const softPending = runSoftLeg(stageSignal, roundFilters);
       softPending.catch(() => undefined);
-      const searchVariant = (variant: QueryVariant, index: number, variantFilters: RetrievalFilters) =>
+      const searchVariant = (variant: QueryVariant, index: number, variantFilters: RetrievalFilters, own = true) =>
         backend.search(
           variantSearchRequest({
             scope,
@@ -782,7 +796,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
             lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
             signal: stageSignal,
             chunkingProfileOverride: chunkingOverride,
-            ...versionScopeArg,
+            // P-35: the variant's own version scope; a retry searches the shared filters and the shared scope, never wider.
+            ...(own ? scopeForVariant(variant) : versionScopeArg),
             ...identifierArg,
             ...lexicalOptionsArg,
             access,
@@ -812,7 +827,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         budget -= 1;
         entry.retried = true;
         retries.push(
-          searchVariant(variant, index, roundFilters).then((legs) => {
+          searchVariant(variant, index, roundFilters, false).then((legs) => {
             legsByVariant[index] = legs;
           }),
         );
@@ -1158,7 +1173,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   return {
     fusedHits: capped.hits,
     dedupeCounts: capped.counts,
-    versionScope: versions.scope,
+    versionScope: anyHistoryScope ?? versions.scope,
     ...(tableRows ? { tableRows } : {}),
     ...(identifiers ? { identifiers: { ...identifiers, filtered: filterIdentifiers !== undefined && !fallback, fallback } } : {}),
     // P-10: plan variants (history fallback included) and filter retries; term:0 and translation legs keep their own caps.

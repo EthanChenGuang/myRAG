@@ -53,7 +53,7 @@ describe('SubQuestionFilter.versions contract (P-17)', () => {
 describe('isVersionQuestion (P-35)', () => {
   it('fires on a comparison or on a period term, not on a plain question', () => {
     const comparison = 'How does the first version compare with the second version of the sample note?';
-    expect(isVersionQuestion(comparison, needsRewrite(comparison, { hasHistory: false, language: 'en' }).reasons)).toBe(true);
+    expect(isVersionQuestion(comparison, needsRewrite(comparison, { hasHistory: false, language: 'en', now: new Date('2026-11-27T00:00:00Z') }).reasons)).toBe(true);
     expect(isVersionQuestion('What did the sample note state last year?', [])).toBe(true);
     expect(isVersionQuestion('What did the sample note state in 2023?', [])).toBe(true);
     expect(isVersionQuestion('What does the sample note state?', [])).toBe(false);
@@ -129,7 +129,7 @@ describe('narrowFilters versions (D-06, P-35)', () => {
 });
 
 describe('plan and cache (RET-11 text, P-35)', () => {
-  const gate = needsRewrite('How does the first version compare with the second version of the sample note?', { hasHistory: false, language: 'en' });
+  const gate = needsRewrite('How does the first version compare with the second version of the sample note?', { hasHistory: false, language: 'en', now: new Date('2026-11-27T00:00:00Z') });
 
   function planWith(versions: SubQuestionFilter['versions']) {
     return buildQueryPlan({

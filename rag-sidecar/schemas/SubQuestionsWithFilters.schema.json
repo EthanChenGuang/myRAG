@@ -24,7 +24,7 @@
     },
     "SubQuestionFilter": {
       "additionalProperties": false,
-      "description": "D-05, T-06.2-01: the only narrowing a decomposer may propose. No tenant, document, source, version or include\nfield; every field is required and nullable for strict structured output (A-5). Plan 06.2-25 adds versions.",
+      "description": "D-05, T-06.2-01: the only narrowing a decomposer may propose. No tenant, document, source or include field; the\nfirst four fields are required and nullable for strict structured output (A-5). versions (06.2-25, P-17) is the RET-11\nVersionScope, optional so an output written before it stays valid; the narrowing rule admits it only on comparison or\nperiod questions (P-35).",
       "properties": {
         "date_range": {
           "anyOf": [
@@ -107,6 +107,24 @@
             }
           ],
           "title": "Scopes"
+        },
+        "versions": {
+          "anyOf": [
+            {
+              "enum": [
+                "current",
+                "all"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/VersionRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Versions"
         }
       },
       "required": [
@@ -143,6 +161,24 @@
         "filter"
       ],
       "title": "SubQuestionSpec",
+      "type": "object"
+    },
+    "VersionRange": {
+      "additionalProperties": false,
+      "description": "D-12: a version period; either bound may be left open, not both.",
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "title": "VersionRange",
       "type": "object"
     }
   },
