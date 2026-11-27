@@ -472,6 +472,152 @@ class TsJobsTest(unittest.TestCase):
         self.assertTrue(any("continue-on-error" in e for e in self.errors_for(jobs)))
 
 
+QDRANT_REF = "qdrant/qdrant:v1.20.2@sha256:" + "a" * 64
+WEAVIATE_REF = "semitechnologies/weaviate:1.40.7@sha256:" + "b" * 64
+COMPOSE_FIXTURE = f"""
+services:
+  qdrant:
+    image: {QDRANT_REF}
+  weaviate:
+    image: {WEAVIATE_REF}
+"""
+PULL_RUN = """for image in "$QDRANT_IMAGE" "$WEAVIATE_IMAGE"; do
+  for attempt in 1 2 3; do
+    docker pull "$image" && break
+    if [ "$attempt" -eq 3 ]; then exit 1; fi
+    sleep $((attempt * 20))
+  done
+done
+"""
+
+
+def canary_job() -> dict:
+    return {
+        "runs-on": "ubuntu-latest",
+        "timeout-minutes": 20,
+        "env": {"QDRANT_IMAGE": QDRANT_REF, "WEAVIATE_IMAGE": WEAVIATE_REF},
+        "steps": [
+            {"uses": "actions/checkout@" + "1" * 40},
+            {"uses": "actions/setup-node@" + "2" * 40, "with": {"node-version": "22", "cache": "npm"}},
+            {"run": "npm ci --ignore-scripts"},
+            {"name": "Per-run keys", "run": 'echo "QDRANT_API_KEY=$(openssl rand -hex 24)" >> "$GITHUB_ENV"'},
+            {"name": "Pull", "run": PULL_RUN},
+            {"name": "Start", "run": 'docker run -d --name qdrant "$QDRANT_IMAGE"\ndocker run -d --name weaviate "$WEAVIATE_IMAGE"'},
+            {
+                "name": "Wait",
+                "run": "for i in $(seq 1 60); do curl -sf http://127.0.0.1:6333/readyz && curl -sf http://127.0.0.1:8080/v1/.well-known/ready && exit 0; sleep 2; done; exit 1",
+            },
+            {
+                "name": "Canary",
+                "run": "npx vitest run tests/rag/canary tests/rag/backend-conformance",
+                "env": {"CI_BACKEND_CANARY": "1", "RAG_CANARY_BACKENDS": "pgvector,weaviate,qdrant"},
+            },
+        ],
+    }
+
+
+class BackendCanaryJobTest(unittest.TestCase):
+    def errors_for(self, job: dict | None, compose: str = COMPOSE_FIXTURE) -> list[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "docker-compose.backends.yml"
+            path.write_text(compose, encoding="utf-8")
+            errors: list[str] = []
+            check_workflows.check_backend_canary(job, errors, path)
+            return errors
+
+    def assert_reported(self, job: dict | None, needle: str, compose: str = COMPOSE_FIXTURE) -> None:
+        errors = self.errors_for(job, compose)
+        self.assertTrue(any(needle in e for e in errors), errors)
+
+    def step(self, job: dict, name: str) -> dict:
+        return next(s for s in job["steps"] if s.get("name") == name)
+
+    def test_the_fixture_is_valid(self):
+        self.assertEqual(self.errors_for(canary_job()), [])
+
+    def test_repository_workflow_has_a_valid_job(self):
+        self.assertIn("backend-canary", check_workflows.PR_JOBS)
+        job = check_workflows.load(check_workflows.PR)[0]["jobs"].get("backend-canary")
+        errors: list[str] = []
+        check_workflows.check_backend_canary(job, errors)
+        self.assertEqual(errors, [])
+
+    def test_missing_job_is_reported(self):
+        self.assert_reported(None, "backend-canary missing")
+
+    def test_an_image_without_a_digest_is_reported(self):
+        job = canary_job()
+        job["env"]["QDRANT_IMAGE"] = "qdrant/qdrant:v1.20.2"
+        self.assert_reported(job, "without an @sha256 digest")
+
+    def test_a_literal_pull_without_a_digest_is_reported(self):
+        job = canary_job()
+        self.step(job, "Start")["run"] += "\ndocker pull semitechnologies/weaviate:latest"
+        self.assert_reported(job, "without an @sha256 digest")
+
+    def test_a_digest_other_than_the_compose_file_is_reported(self):
+        job = canary_job()
+        job["env"]["WEAVIATE_IMAGE"] = "semitechnologies/weaviate:1.40.7@sha256:" + "c" * 64
+        self.assert_reported(job, "differs from docker-compose.backends.yml")
+
+    def test_a_compose_digest_change_is_reported(self):
+        self.assert_reported(canary_job(), "differs from docker-compose.backends.yml", COMPOSE_FIXTURE.replace("a" * 64, "d" * 64))
+
+    def test_a_pull_without_a_retry_loop_is_reported(self):
+        job = canary_job()
+        self.step(job, "Pull")["run"] = 'docker pull "$QDRANT_IMAGE"\ndocker pull "$WEAVIATE_IMAGE"'
+        self.assert_reported(job, "retry")
+
+    def test_a_wrong_backend_list_is_reported(self):
+        job = canary_job()
+        self.step(job, "Canary")["env"]["RAG_CANARY_BACKENDS"] = "pgvector,qdrant"
+        self.assert_reported(job, "RAG_CANARY_BACKENDS")
+
+    def test_a_missing_canary_flag_is_reported(self):
+        job = canary_job()
+        self.step(job, "Canary")["env"]["CI_BACKEND_CANARY"] = "0"
+        self.assert_reported(job, "CI_BACKEND_CANARY")
+
+    def test_continue_on_error_is_reported(self):
+        job = canary_job()
+        job["continue-on-error"] = True
+        self.assert_reported(job, "continue-on-error")
+        job = canary_job()
+        self.step(job, "Canary")["continue-on-error"] = True
+        self.assert_reported(job, "continue-on-error")
+
+    def test_a_job_condition_is_reported(self):
+        job = canary_job()
+        job["if"] = "contains(github.event.head_commit.message, 'canary')"
+        self.assert_reported(job, "must run on every")
+
+    def test_a_dropped_suite_is_reported(self):
+        job = canary_job()
+        self.step(job, "Canary")["run"] = "npx vitest run tests/rag/canary"
+        self.assert_reported(job, "tests/rag/backend-conformance")
+
+    def test_a_missing_health_wait_is_reported(self):
+        job = canary_job()
+        job["steps"] = [s for s in job["steps"] if s.get("name") != "Wait"]
+        self.assert_reported(job, "/readyz")
+
+    def test_a_long_timeout_is_reported(self):
+        job = canary_job()
+        job["timeout-minutes"] = 30
+        self.assert_reported(job, "timeout-minutes")
+
+    def test_fixed_keys_are_reported(self):
+        job = canary_job()
+        job["steps"] = [s for s in job["steps"] if s.get("name") != "Per-run keys"]
+        self.assert_reported(job, "openssl rand")
+
+    def test_a_docker_hub_token_from_secrets_is_reported(self):
+        text = check_workflows.PR.read_text(encoding="utf-8")
+        text += "\n# docker login -u bot -p ${{ secrets.DOCKERHUB_TOKEN }}\n"
+        errors = DbTestsStepTest.pr_errors(self, text)
+        self.assertTrue(any("must not reference secrets." in e for e in errors), errors)
+
+
 if __name__ == "__main__":
     unittest.main()
 

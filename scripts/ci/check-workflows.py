@@ -345,6 +345,14 @@ def check_docker_build(job: dict | None, errors: list[str]) -> None:
             errors.append(f"pr-smoke: job docker-build does not compare the image copy of config/rag/{name}")
 
 
+COMPOSE_BACKENDS = ROOT / "docker-compose.backends.yml"
+
+
+def check_backend_canary(job: dict | None, errors: list[str], compose_path: Path = COMPOSE_BACKENDS) -> None:
+    """D-12, A-9: the backend-canary job (rules land with the job)."""
+    return
+
+
 def sidecar_config_copies() -> list[str]:
     return sorted(p.name for p in SIDECAR_CONFIG_DIR.glob("*.json"))
 
