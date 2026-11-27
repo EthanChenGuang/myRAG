@@ -5,7 +5,9 @@
 --
 --   Section 1: service-role-only RPCs. EXECUTE is revoked from PUBLIC, anon and authenticated and granted to service_role.
 --   Section 2: authenticated-callable RPCs and RLS helpers. EXECUTE is revoked from PUBLIC and anon and granted to authenticated and service_role.
---              Only the helpers that policies without a TO clause evaluate for anon (is_org_member, is_org_owner, is_org_admin, check_admin_status) keep anon.
+--              Only the helpers that policies without a TO clause evaluate for anon (is_org_member, is_org_owner, is_org_admin, check_admin_status) keep anon,
+--              and the three helpers of the 0923 restrictive access-group policies (TO anon, authenticated): rag_access_enforced, rag_caller_access_keys,
+--              rag_caller_is_access_admin.
 --
 -- The authoritative allow-list is tests/helpers/security-definer-allow-list.ts; tests/rag/search-rpc-grants.test.ts replays the setup files and the
 -- migrations and fails when a SECURITY DEFINER function is neither covered here nor in the setup files' own REVOKE/GRANT.
@@ -63,10 +65,6 @@ BEGIN
   IF to_regprocedure('public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid) TO service_role;
-  END IF;
-  IF to_regprocedure('public.rag_access_enforced()') IS NOT NULL THEN
-    REVOKE ALL ON FUNCTION public.rag_access_enforced() FROM PUBLIC, anon, authenticated;
-    GRANT EXECUTE ON FUNCTION public.rag_access_enforced() TO service_role;
   END IF;
   IF to_regprocedure('public.rag_access_groups_from_document()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_access_groups_from_document() FROM PUBLIC, anon, authenticated;
@@ -939,6 +937,18 @@ $service_role_only$;
 
 DO $authenticated_callable$
 BEGIN
+  IF to_regprocedure('public.rag_access_enforced()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_access_enforced() FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION public.rag_access_enforced() TO authenticated, anon, service_role;
+  END IF;
+  IF to_regprocedure('public.rag_caller_access_keys()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_caller_access_keys() FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION public.rag_caller_access_keys() TO authenticated, anon, service_role;
+  END IF;
+  IF to_regprocedure('public.rag_caller_is_access_admin()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_caller_is_access_admin() FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION public.rag_caller_is_access_admin() TO authenticated, anon, service_role;
+  END IF;
   IF to_regprocedure('public.check_admin_status()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.check_admin_status() FROM PUBLIC;
     GRANT EXECUTE ON FUNCTION public.check_admin_status() TO authenticated, anon, service_role;
