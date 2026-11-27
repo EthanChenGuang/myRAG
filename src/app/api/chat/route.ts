@@ -20,6 +20,8 @@ import {
   buildCalculateTool,
   CALCULATE_TOOL_NAME,
   createCalcTraceHolder,
+  createCalcCheckSink,
+  type CalcCheckSink,
   createCitationLabeler,
   isServerCalculateTool,
   mayOfferCalc,
@@ -68,6 +70,7 @@ import {
   resolveTenantScope,
   runRetrieval,
   scheduleAnswerFinish,
+  scheduleCalcReviewEnqueue,
   scopeKey,
   shouldPersistAnswer,
   type LogContext,
@@ -2633,6 +2636,9 @@ Context:
       // No strategy renders citations on this turn, so the block markers the calculation needs are removed from the visible text
       calcOffer = { mode: calcMode, aliases, stripMarkers: citationSession.strategy === null };
     }
+    // Phase 5.2.1 D-73: RAG_CALC_CHECK checks the answer at the end of a stream that offered the calculation
+    const calcCheckSink: CalcCheckSink | null = calcOffer && answerTurn.config.calcCheck ? createCalcCheckSink() : null;
+    const calcEvidenceBlocks = calcCheckSink ? (retrievalResult?.blocks ?? []).filter((block) => !block.isImage && block.alias) : [];
 
     const resolvedSystemPrompt = await resolveRagSystemPrompt();
     let ragSystemPrompt = resolvedSystemPrompt.ragSystemPrompt;
@@ -4027,6 +4033,17 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             : calcOffer?.stripMarkers
               ? { calcBlock: { stripMarkers: true } }
               : {}),
+          ...(calcCheckSink
+            ? {
+                calcCheck: {
+                  holder: calcHolder,
+                  blocks: calcEvidenceBlocks.map((block) => ({ alias: block.alias ?? '', text: block.text })),
+                  question: calcQuestion,
+                  offered: true,
+                  sink: calcCheckSink,
+                },
+              }
+            : {}),
         });
         return citationTransforms.length > 0 ? { experimental_transform: citationTransforms } : {};
       };
@@ -4434,6 +4451,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         if (!answerRecordPending || !answerId || !scope || !answerUserId) return null;
         answerRecordPending = false;
         const records = citationSession.fullRecords();
+        const calcRun = calcCheckSink?.result() ?? null;
         const premiseBlocks =
           !retrievalFailed && !effectiveDisableRAG && retrievalResult?.blocks
             ? retrievalResult.blocks.filter((block) => !block.isImage).map((block) => ({ alias: block.alias ?? '', text: block.text }))
@@ -4465,6 +4483,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           },
           requestLanguage: userLanguage,
           ...(answerTurn.config.anyNonDefault ? answerFinishFields(answerTurn, retrievalResult) : {}),
+          ...(calcRun ? { calc: { primary: calcRun.primary, items: calcRun.checks, reviewReasons: calcRun.reviewReasons } } : {}),
         });
       };
 
@@ -4500,6 +4519,18 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
         if (isClaudeSonnet4 && usedDocuments && usedDocuments.length > 0) {
           metadata.documentSources = buildDocumentSources(usedDocuments);
+        }
+
+        // Phase 5.2.1 D-75: both values and the status of every checked calculation, only when the check ran
+        const calcRun = calcCheckSink?.result();
+        if (calcRun) {
+          metadata.calc = calcRun.checks.map((check) => ({
+            status: check.status,
+            stated: check.stated,
+            recomputed: check.recomputed,
+            unit: check.unit,
+            ...(check.reason ? { reason: check.reason } : {}),
+          }));
         }
 
         return metadata;
@@ -4595,6 +4626,21 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               ...(rules.length > 0 ? { rules } : {}),
               ...(answerTrace.counts ? { counts: answerTrace.counts } : {}),
             });
+            // D-75, D-61: the calculation check as its own span, status counts and duration only
+            const calcRun = calcCheckSink?.result();
+            if (calcRun) {
+              const endedAt = ragTrace.collector.now();
+              const counts: Record<string, number> = { calc_checks: calcRun.checks.length };
+              for (const check of calcRun.checks) counts[`calc_${check.status}`] = (counts[`calc_${check.status}`] ?? 0) + 1;
+              ragTrace.collector.record({
+                name: 'calc_check',
+                status: calcRun.checks.some((check) => check.reason === 'check_error') ? 'error' : 'ok',
+                startedAt: endedAt - calcRun.durationMs,
+                endedAt,
+                counts,
+                attributes: { duration_ms: calcRun.durationMs },
+              });
+            }
           }
           finishRagTrace();
           const responseText = responseMessage.parts
@@ -4602,7 +4648,20 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             .join('');
           const turnAborted = isAborted || req.signal.aborted;
           const turnFailed = generationFailed || finishReason === 'error';
+          const answerRecordWrites = answerRecordPending && answerId !== null && Boolean(scope) && Boolean(answerUserId);
           const groundednessHandle = answerRecordPending ? finishAnswerRecord(responseText, turnAborted, turnFailed) : null;
+          // D-55: a turn without an answer record hands its calculation reasons to the review queue directly; ghost chats never
+          const calcRunAtFinish = calcCheckSink?.result();
+          if (calcRunAtFinish && !answerRecordWrites && scope && calcRunAtFinish.reviewReasons.length > 0) {
+            scheduleCalcReviewEnqueue({
+              tenantKey: scopeKey(scope),
+              reasons: calcRunAtFinish.reviewReasons,
+              sourceChunkIds: [...new Set(calcEvidenceBlocks.flatMap((block) => block.chunkIds))],
+              documentIds: [...new Set(calcEvidenceBlocks.map((block) => block.documentId))],
+              traceId: ragTraceId ?? null,
+              ghost: typeof data?.chatId === 'string' && data.chatId.startsWith('ghost-'),
+            });
+          }
           const cacheTicket = retrievalResult?.cacheTicket;
           if (cacheTicket && ragTraceId && !turnAborted && !turnFailed) {
             // D-32/D-33: stored after the response, chained to this request's Phase 5 groundedness label
