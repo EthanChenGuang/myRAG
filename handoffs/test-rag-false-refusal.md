@@ -1,6 +1,13 @@
 # test-rag false refusals on origin/main: root cause and options
 
-Status: **stopped for an owner decision** (H-10, Phase 5.3 plan 05.3-50). No code, threshold, gate or gold label was changed.
+Status: **option A done** (orchestrator decision on the owner's delegation, 2026-11-27). **C queued for the owner**: it needs OpenAI eval credit, which has run out. **D stays an owner product decision.** No threshold in `quality-gates.json`, gold label or the 0.65 keep rule was changed.
+
+## Option A as implemented
+
+- `eval/harness/gate-mode.mts` `resolveGatesMode`: an explicit `--gates-mode` wins. Otherwise an in-process run takes the mode that `eval/reports/phase-05.3/absolute-gate-measurement.json` records for its fixture mode's tier (latest stage; prechunked → `smoke` = `report`, ingest → `smoke-ingest` = `enforce`). That is the same record `scripts/ci/check-workflows.py` checks the pr-smoke `--gates-mode report` flags against. A live run (`--base-url`), a `--gates` or `--golden` override, a missing record or an unmeasured tier keeps the gate default, `enforce`. When the owner re-measures a tier as `enforce`, the local default follows it with no code change.
+- `run-smoke.mts` prints one line when the measured mode applies, and `--gates-mode enforce` still enforces (exit 11 on main today).
+- The pr-smoke prompt control now passes `--gates-mode enforce` explicitly, because a prechunked run no longer defaults to enforce. `check-workflows.py` requires the flag (test `test_a_prompt_control_without_explicit_enforce_is_reported`).
+- Regression test `tests/eval-gate-mode-default.test.ts`: for every gated `npm run test-rag` call in pr-smoke.yml, the local default equals the mode CI applies and the mode the record holds for that `--out` tier. Unmeasured controls must state `--gates-mode`. Plus resolution unit cases.
 
 ## Reproduction
 
@@ -59,9 +66,9 @@ C. **Measure legacy on real embeddings first.** Run `nightly-live` (eval project
 
 D. **Image-caption context (independent of A–C).** Decide whether caption text of an image document should enter the text context (it is retrieved already). If yes, it needs its own switch (off = today, per the "every component has a switch" constraint) and a citation rule for image blocks. If no, the four `selective_filter` items need their evidence in a text document, or a no-answer-aware label, with evidence recorded by the golden-set tooling.
 
-Recommendation: A now, so the local run stops failing on a known, recorded condition, then C. C is the only option that says whether the product promise holds in production. Decide D separately.
+Decision: A done (above). C is queued for the owner and waits on OpenAI eval credit. D is left to the owner as a product decision.
 
-## Verification done
+## Verification done (investigation, before A)
 
 - `npm run test-rag` on main: exit 11, en 0.3143, overall 0.2462, all slices equal to the baseline.
 - `RAG_EVAL_RETRIEVAL_MIN_SIMILARITY=-1 npm run test-rag -- --no-gate`: unchanged (the RPC floor is not the cause).
@@ -69,3 +76,20 @@ Recommendation: A now, so the local run stops failing on a known, recorded condi
 - `--run-config eval/config/runs/v2-all-off.json --no-gate`: overall 0.020, en 0.029, correct refusal 1.000.
 - `--run-config eval/config/runs/v2-default.json --no-gate`: identical to legacy (en 0.3143).
 - No Supabase or Vercel project was touched. Every run is in process (PGlite, fixture embedder, fake generator).
+
+## Verification after A (this branch)
+
+| Run | Exit |
+| --- | --- |
+| `npm run test-rag` (bare, prechunked: measured `report`) | 0, absolute gate FAIL printed, report only |
+| `npm run test-rag -- --gates-mode enforce` | 11 |
+| CI smoke `--gates-mode report` | 0 |
+| CI ingest tier (enforce) | 0, absolute gate PASS |
+| CI explicit-legacy prechunked | 0, `paired.all_zero == true` |
+| CI explicit-legacy ingest | 0, `paired.all_zero == true` |
+| CI SEC tier | 0 |
+| Degrade and thin controls | 10 |
+| Prompt control `--gates-mode enforce` | 11, false_answer_rate overall failed |
+| Prompt control without a flag (shows why the flag is needed) | 10 |
+
+`vitest run tests/eval-gate-mode-default.test.ts tests/eval-harness.test.ts tests/eval-phase52-tier.test.ts`: 35 passed. `pytest scripts/tests/test_check_workflows.py`: 199 passed. `check-workflows.py`: OK. `tsc --noEmit`: 0 errors. No baseline was re-recorded.

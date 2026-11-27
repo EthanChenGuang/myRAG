@@ -1409,6 +1409,10 @@ def check_prompt_control(job: dict | None, errors: list[str]) -> None:
         )
         return
     body = next(run for run in control if re.search(r'test\s+"?\$code"?\s+-eq\s+11\b', run))
+    if not re.search(r"--gates-mode\s+enforce\b", body):
+        errors.append(
+            "pr-smoke: the prompt control must pass --gates-mode enforce; a prechunked run defaults to the report mode its measured tier records"
+        )
     if not re.search(r"jq -e '[^']*false_answer_rate[^']*overall[^']*failed[^']*' \S+/gate\.json", body):
         errors.append("pr-smoke: the prompt control must assert a failed false_answer_rate check on overall with jq -e on its gate.json")
 
