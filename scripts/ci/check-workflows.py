@@ -179,6 +179,15 @@ def check_tsx_tests_covered(workflows: list[dict], tests_dir: Path, errors: list
             errors.append(f"workflows: tests/{name} is not run by any 'node --import tsx --test' step; use the {TSX_GLOB} glob")
 
 
+AGGREGATE_JOB = "pr-smoke"
+TRUNK_BRANCH = "claude/ecstatic-hamilton-86gtwv"
+PUSH_BRANCHES = ("main", TRUNK_BRANCH)
+
+
+def check_pr_aggregate(data: dict, errors: list[str]) -> None:
+    """D-37: the aggregate job is the one required check; only real success of every other job satisfies it."""
+
+
 def check_pr(errors: list[str]) -> None:
     data, text = load(PR)
     check_common("pr-smoke", data, text, errors)

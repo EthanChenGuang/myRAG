@@ -920,3 +920,111 @@ class ReleaseGateWorkflowTest(unittest.TestCase):
         data = self.workflow()
         data["concurrency"]["cancel-in-progress"] = True
         self.assert_error(data, "cancel-in-progress false")
+
+
+class PrSmokeAggregateTest(unittest.TestCase):
+    """D-37: one aggregate pr-smoke job that only real success satisfies, run on trunk and main pushes."""
+
+    def workflow(self) -> dict:
+        import yaml
+
+        return yaml.safe_load(check_workflows.PR.read_text(encoding="utf-8"))
+
+    def errors_for(self, data: dict) -> list[str]:
+        import yaml
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "pr-smoke.yml"
+            path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+            original = check_workflows.PR
+            check_workflows.PR = path
+            try:
+                errors: list[str] = []
+                check_workflows.check_pr_aggregate(check_workflows.load(path)[0], errors)
+                return errors
+            finally:
+                check_workflows.PR = original
+
+    def on(self, data: dict) -> dict:
+        return data["on"] if "on" in data else data[True]
+
+    def aggregate(self, data: dict) -> dict:
+        return data["jobs"][check_workflows.AGGREGATE_JOB]
+
+    def assert_error(self, data: dict, fragment: str) -> None:
+        errors = self.errors_for(data)
+        self.assertTrue(any(fragment in e for e in errors), f"no error containing {fragment!r} in {errors}")
+
+    def test_repository_workflow_passes(self):
+        self.assertEqual(self.errors_for(self.workflow()), [])
+
+    def test_the_aggregate_is_a_checked_pr_job(self):
+        self.assertIn(check_workflows.AGGREGATE_JOB, check_workflows.PR_JOBS)
+
+    def test_missing_aggregate_fails(self):
+        data = self.workflow()
+        del data["jobs"][check_workflows.AGGREGATE_JOB]
+        self.assert_error(data, "job 'pr-smoke' missing")
+
+    def test_needs_missing_a_job_fails(self):
+        data = self.workflow()
+        self.aggregate(data)["needs"] = [n for n in self.aggregate(data)["needs"] if n != "docker-build"]
+        self.assert_error(data, "needs must list every other job")
+
+    def test_needs_missing_a_newly_added_job_fails(self):
+        data = self.workflow()
+        data["jobs"]["extra-job"] = {"runs-on": "ubuntu-latest", "steps": [{"run": "true"}]}
+        self.assert_error(data, "extra-job")
+
+    def test_without_always_fails(self):
+        data = self.workflow()
+        del self.aggregate(data)["if"]
+        self.assert_error(data, "if: always()")
+        data = self.workflow()
+        self.aggregate(data)["if"] = "success()"
+        self.assert_error(data, "if: always()")
+
+    def test_a_step_accepting_skipped_fails(self):
+        data = self.workflow()
+        step = self.aggregate(data)["steps"][0]
+        step["run"] = 'for r in $RESULTS; do case "$r" in success|skipped) ;; *) exit 1;; esac; done'
+        self.assert_error(data, "skipped")
+
+    def test_results_must_come_from_needs_through_env(self):
+        data = self.workflow()
+        self.aggregate(data)["steps"][0]["env"] = {"RESULTS": "success"}
+        self.assert_error(data, "join(needs.*.result")
+
+    def test_push_without_the_trunk_branch_fails(self):
+        data = self.workflow()
+        self.on(data)["push"] = {"branches": ["main"]}
+        self.assert_error(data, "claude/ecstatic-hamilton-86gtwv")
+        data = self.workflow()
+        self.on(data)["push"] = {"branches": [check_workflows.TRUNK_BRANCH]}
+        self.assert_error(data, "'main'")
+
+    def test_a_secret_in_the_aggregate_fails(self):
+        data = self.workflow()
+        self.aggregate(data)["steps"][0]["env"]["TOKEN"] = "${{ secrets.GITHUB_TOKEN }}"
+        self.assert_error(data, "secrets.")
+
+    def run_loop(self, results: str) -> int:
+        import subprocess
+
+        step = self.aggregate(self.workflow())["steps"][0]
+        proc = subprocess.run(["bash", "-c", step["run"]], env={"RESULTS": results, "PATH": "/usr/bin:/bin"}, capture_output=True, text=True)
+        return proc.returncode
+
+    def test_the_loop_rejects_a_skipped_job(self):
+        self.assertNotEqual(self.run_loop("success success skipped"), 0)
+
+    def test_the_loop_rejects_failure_and_cancelled(self):
+        self.assertNotEqual(self.run_loop("success failure"), 0)
+        self.assertNotEqual(self.run_loop("cancelled success"), 0)
+
+    def test_the_loop_rejects_no_results(self):
+        self.assertNotEqual(self.run_loop(""), 0)
+
+    def test_the_loop_accepts_only_success(self):
+        self.assertEqual(self.run_loop("success"), 0)
+        self.assertEqual(self.run_loop("success success success"), 0)
