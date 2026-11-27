@@ -1,0 +1,41 @@
+# Phase 4.2 coordinator summary (D-38)
+
+Written by plan 04.2-32 on 2026-11-27, at the phase close. One list of every upstream item and hand-off of the phase, with its status.
+
+## D-38 items
+
+| Item | Topic | Hand-off file | Status |
+| --- | --- | --- | --- |
+| (a) | ROADMAP 4.2 success criterion 5 wording breaks domain neutrality; proposed "a question naming two cell values of one table row" | `04.2-24-coordinator.md` | open: ROADMAP edit for the coordinator (executors do not edit ROADMAP.md) |
+| (b) | EVAL-20 weekly-report row depends on FBK-10 (Phase 5.1.1) | none needed: `04.2-20-SUMMARY.md` | done: `rag_eval.weekly_report` existed, plan 04.2-20 added the per-tenant mean top-k redundancy table |
+| (c) | RET-11 "set by QRY-10" | `04.2-15-version-scope-notes.md` | open, wording only: Phase 6.2 sets `retrievalFilters.versions` through the same field; no second path |
+| (d) | LANG-07 picks up XLG-05 glossary pairs once Phase 6.2 stores them as `translation` entries | `04.2-19-xlg05.md` | open for Phase 6.2: no code needed here; a `--stale-dictionary` relex brings them in |
+| (e) | Keeping superseded vectors | `04.2-15-version-scope-notes.md` | decided by the owner 2026-11-25, D-58: not kept; history retrieval is lexical and deterministic only |
+| (f) | An embed-specific opt-in for `versions` | `04.2-15-version-scope-notes.md`, `04.2-21-embed-sources.md` | decided by the owner 2026-11-25, D-58: `RAG_EMBED_VERSION_SCOPE` (plan 04.2-39), stated in AGENTS.md |
+| (g) | Order of the `hybrid_search_chunks` redefinitions between 3.2 and 4.2 | `04.2-09-hybrid-order.md` | done in code (0856 rebuilt on 0802); the coordinator confirms that any later 3.2 redefinition rebases on 0856 |
+| (h) | Order of `diversify` relative to 06-25's `reserveSubQuestionCoverage` | none (pinned by `tests/rag/v2/rank-order.test.ts`) | done: rerank, refusal, diversify, then the sub-question reservation; Phase 6 plan 06-25 keeps the order |
+| (i) | Voice TTFT measured in the voice agent, not the app | `04.2-11-voice-ttft-point.md` | done (D-39): agent posts to `/api/internal/voice-timing`; LAT-04 "server-side" wording for the coordinator |
+| (j) | Domain-specific names in `src/lib/rag/retrieval/exact-id.ts` and `src/lib/rag/ids/shapes.ts` | `04.2-24-coordinator.md` | open: the cleanup needs an owner |
+
+## Other hand-offs of the phase
+
+| File | Status ("open": no later SUMMARY records a fix) |
+| --- | --- |
+| `04.2-01-sweep-cap-min.md` | done by 04.2-05 (cap minimum 25) |
+| `04.2-01-upstream.md` | record of the 04.2-01 upstream gate |
+| `04.2-02-config-ui-i18n.md` | done by 04.2-25 (zh and it strings) |
+| `04.2-02-settings-classification.md` | open: the three backfill-dependent switches use mechanism `reparse` until dedicated rebuild mechanisms exist |
+| `04.2-04-registry-stemmer.md` | open: registry fields the tokenizer does not drive yet |
+| `04.2-06-eval-tuning-overrides.md` | open: eval tuning overrides do not reach the request hash yet |
+| `04.2-07-fixture-drift.md` | addressed by 04.2-32 Task 3 (fixture calibration re-run) |
+| `04.2-12-golden-rule.md` | open: GoldenItem category rule for no-answer near-miss items |
+| `04.2-16-eval-run-clustering.md` | open: where a fixture duplicate threshold applies; live threshold is 04.2-33 |
+| `04.2-21-embed-sources.md` | open: the embed route has no sources payload |
+| `04.2-23-finding-copy.md`, `04.2-23-hidden-utility.md` | open UI follow-ups |
+| `04.2-23-proxy-wildcard.md` | done: RAG proxy path bug fixed |
+| `04.2-23-ui-review.md`, `04.2-25-ui-review.md` | UI review records |
+| `04.2-26-panel-preexisting.md` | open: pre-existing sources-panel findings |
+| `04.2-30-canary.md` | open for Phase 7 (RET-08 canary cases) |
+| `04.2-38-purge-inventory.md` | open for Phase 6.3 (plan 06.3-19) |
+| `04.2-32-gate-identifier.md`, `04.2-32-gate-versions.md` | resolved (PRs #125, #128) |
+| `04.2-32-gate-diversity.md` | resolved: option 1 chosen by the orchestrator under owner delegation and fixed in `src/lib/rag/v2/diversify.ts` |
