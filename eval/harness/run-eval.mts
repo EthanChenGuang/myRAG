@@ -15,6 +15,7 @@ import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-e
 import { ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.mts';
 import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTableSplitTenant, type TableSplitTenant } from './table-split.mts';
 import { isTemplatedItem } from './templated-fixtures.mts';
+import { phase33BuildEnv, PHASE33_PROCESS_SWITCHES } from './templated-seed.mts';
 import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
@@ -765,6 +766,16 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       if (retainInProcess) {
         inProcess = retainInProcess;
       } else {
+        // Plan 03.3-23 (D-36): the Phase 3.3 switches the run sets to a non-default value are layered into the ingest build, which
+        // then seeds the fixture tenant's rule data; a run that only restates the defaults layers nothing.
+        const phase33Env = phase33BuildEnv({ ...(runConfig?.env ?? {}), ...(envOverlay ?? {}) });
+        const buildEnv =
+          fixtureMode === 'ingest' && (Object.keys(phase33Env).length > 0 || options.ingestBuildEnv)
+            ? { ...phase33Env, ...options.ingestBuildEnv }
+            : options.ingestBuildEnv;
+        if (fixtureMode !== 'ingest' && Object.keys(phase33Env).some((name) => !(PHASE33_PROCESS_SWITCHES as readonly string[]).includes(name))) {
+          console.log('[Eval Harness] phase33_seed_skipped_prechunked: the prechunked build seeds no Phase 3.3 rule data');
+        }
         const prepared = await prepareInProcessEval({
           corpusDir,
           deploymentMode,
@@ -776,7 +787,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           ...(routed.tableSplit.length > 0 ? { tableSplit: true } : {}),
           ...(routed.tableSplit.length > 0 && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
           ...(routed.templated.length > 0 ? { templated: true } : {}),
-          ...(options.ingestBuildEnv ? { ingestBuildEnv: options.ingestBuildEnv } : {}),
+          ...(buildEnv ? { ingestBuildEnv: buildEnv } : {}),
           ...((runConfig && Object.keys(runConfig.env).length > 0) || envOverlay
             ? { envOverrides: { ...(runConfig?.env ?? {}), ...(envOverlay ?? {}) } }
             : {}),

@@ -29,6 +29,7 @@ from rag_sidecar.contracts.report import (
 
 from rag_eval.metrics import (
     POPULATION_EXCLUSIONS,
+    TEMPLATED_CATEGORY,
     answer_rule_metrics,
     aggregate,
     citation_metrics,
@@ -42,6 +43,7 @@ from rag_eval.metrics import (
     slices_by,
     strategy_key,
     table_split_report,
+    templated_boilerplate_share,
     uncited_sentence_rate,
 )
 from rag_eval.native_review import MIN_GATED_ITEMS, REVIEWED_LANGUAGES, counts_in_gated_slices, review_backlog
@@ -597,6 +599,17 @@ def skip_monolingual_slices(aggregated: dict[str, object], languages: tuple[str,
     )
 
 
+def _set_boilerplate_share(aggregated: dict[str, object], golden: list[GoldenItem], traces: list[RagTrace] | None) -> None:
+    """D-36: the boilerplate token share goes on the templated_collection category slice, only when the set holds such items."""
+    by_category = aggregated["by_category"]
+    if not traces or not any(item.category == TEMPLATED_CATEGORY for item in golden):
+        return
+    if not isinstance(by_category, dict) or TEMPLATED_CATEGORY not in by_category:
+        return
+    share = templated_boilerplate_share(traces)
+    by_category[TEMPLATED_CATEGORY] = by_category[TEMPLATED_CATEGORY].model_copy(update={"boilerplate_token_share": share})
+
+
 def build_report(
     manifest: RunManifest,
     results: list[ItemResult],
@@ -637,6 +650,7 @@ def build_report(
     skipped_note = skip_monolingual_slices(aggregated, languages)
     if skipped_note is not None:
         notes.append(skipped_note)
+    _set_boilerplate_share(aggregated, golden, traces)
     answer_fields: dict[str, object] = {}
     if traces:
         if citation_run(traces, requested=manifest.request_options.citations):
@@ -882,6 +896,48 @@ CONVERSATIONAL_NOTE = (
     "Small-talk turns are not knowledge-base questions (D-10): correct means retrieval was skipped, no document was "
     "kept or cited, and the turn was not refused. They are outside the refusal-rate denominators."
 )
+
+
+TEMPLATED_NOTE = (
+    "Templated collection (D-36): named-document recall at rank 5 and the wrong-document rate at rank 1 over "
+    "feature:attribute_named items, variant accuracy at rank 1, the quantity match rate at lexical rank 1, the attribute "
+    "filter fallback rate over items with a hard filter attempted, and the boilerplate token share of indexed templated chunks."
+)
+_TEMPLATED_RATES = (
+    ("Named-document recall@5", "named_document_recall"),
+    ("Wrong document @1", "wrong_document_at_1"),
+    ("Variant accuracy", "variant_accuracy"),
+    ("Quantity match rate", "quantity_match_rate"),
+    ("Filter fallback rate", "attribute_filter_fallback_rate"),
+)
+_TEMPLATED_ITEM_FIELDS = (
+    "named_document_hit",
+    "wrong_document_at_1",
+    "variant_correct",
+    "quantity_matched",
+    "attribute_filter_fallback",
+)
+
+
+def _templated_section(report: EvalReport) -> list[str]:
+    items = [item for item in report.items if any(getattr(item, field) is not None for field in _TEMPLATED_ITEM_FIELDS)]
+    share = report.by_category.get(TEMPLATED_CATEGORY)
+    share_metric = share.boilerplate_token_share if share is not None else None
+    if not items and share_metric is None:
+        return []
+    lines = [
+        "## Templated collection",
+        "",
+        TEMPLATED_NOTE,
+        "",
+        "| Slice | " + " | ".join(label for label, _ in _TEMPLATED_RATES) + " |",
+        "|" + "|".join(["---"] * (len(_TEMPLATED_RATES) + 1)) + "|",
+    ]
+    for name, metrics in (_per_language_rows(items) if items else {}).items():
+        cells = [_optional_cell(getattr(metrics, field)) for _, field in _TEMPLATED_RATES]
+        lines.append("| " + " | ".join([name, *cells]) + " |")
+    lines.extend(["", _metric_line("Boilerplate token share (category:templated_collection)", share_metric), ""])
+    return lines
 
 
 def _conversational_section(report: EvalReport) -> list[str]:
@@ -1434,6 +1490,7 @@ def _render_markdown(
     lines.extend(_duplicate_flood_section(report))
     lines.extend(_identifier_section(report))
     lines.extend(_conversational_section(report))
+    lines.extend(_templated_section(report))
     lines.extend(_query_layer_section(report))
     lines.extend(_semantic_cache_section(report))
     lines.extend(_backlog_section(report))

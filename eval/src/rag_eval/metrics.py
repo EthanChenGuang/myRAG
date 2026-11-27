@@ -32,6 +32,7 @@ from rag_eval.ndcg import gold_unit_first_hits, ndcg_at_context_k
 from rag_eval.refusal_text import is_refusal_answer
 from rag_eval.native_review import MIN_GATED_ITEMS, counts_in_gated_slices, report_only_reason
 from rag_eval.table_answer import extract_numbers, score_table_answer, value_present
+from rag_eval.templated_fixtures import load_templated_fixtures
 
 _RECALL_FIELDS = {5: "spans_hit_at_5", 10: "spans_hit_at_10"}
 CROSS_LINGUAL = "cross_lingual"
@@ -198,6 +199,47 @@ def _conversational_fields(trace: RagTrace, item: GoldenItem) -> dict[str, objec
     return {"expected_behavior": CONVERSATIONAL, "conversational_ok": conversational_ok(trace)}
 
 
+TEMPLATED_CATEGORY = "templated_collection"
+NAMED_TAG = "feature:attribute_named"
+VARIANT_TAG = "feature:variant"
+QUANTITY_TAG = "feature:quantity"
+NAMED_DOCUMENT_K = 5
+HARD_FILTER = "hard"
+
+
+def _asked_document(item: GoldenItem) -> str | None:
+    return item.gold_evidence[0].document.casefold() if item.gold_evidence else None
+
+
+def _matches_gold(chunk, item: GoldenItem) -> bool:
+    name = getattr(chunk, "document_name", None) or ""
+    return any(chunk_matches_span(name, chunk.content, span) for span in item.gold_evidence)
+
+
+def _templated_fields(trace: RagTrace, item: GoldenItem, ranked, *, leg_ran: bool) -> dict[str, object]:
+    """D-29, D-31, D-36: per-item templated-collection flags from the item's tags and gold spans; numbers and flags only."""
+    fields: dict[str, object] = {}
+    first = ranked[0] if ranked else None
+    if NAMED_TAG in item.tags:
+        asked = _asked_document(item)
+        top = [] if trace.refused else ranked[:NAMED_DOCUMENT_K]
+        fields["named_document_hit"] = asked is not None and any(
+            (chunk.document_name or "").casefold() == asked for chunk in top
+        )
+        if first is not None:
+            fields["wrong_document_at_1"] = (first.document_name or "").casefold() != asked
+    if VARIANT_TAG in item.tags:
+        fields["variant_correct"] = not trace.refused and first is not None and _matches_gold(first, item)
+    if QUANTITY_TAG in item.tags and leg_ran:
+        fields["quantity_matched"] = any(
+            _lexical_rank(candidate.legs) == 1 and _matches_gold(candidate, item) for candidate in trace.candidates
+        )
+    block = trace.attribute_filter
+    if block is not None and block.mode == HARD_FILTER and (block.explicit or block.matched_attributes > 0):
+        fields["attribute_filter_fallback"] = block.fallback
+    return fields
+
+
 def score_items(
     traces: list[RagTrace],
     golden: list[GoldenItem],
@@ -246,6 +288,7 @@ def score_items(
                 **_context_fields(trace, item),
                 **_identifier_fields(trace, item),
                 **_conversational_fields(trace, item),
+                **_templated_fields(trace, item, ranked, leg_ran=leg_ran),
             )
         )
     return results
@@ -292,6 +335,11 @@ def _slice(results: list[ItemResult]) -> SliceMetrics:
         identifier_precision=_optional_mean([r.identifier_precise for r in results]),
         near_miss_leakage=_optional_mean([r.near_miss_leak for r in results]),
         conversational_rate=_optional_mean([r.conversational_ok for r in results]),
+        named_document_recall=_optional_mean([r.named_document_hit for r in results]),
+        wrong_document_at_1=_optional_mean([r.wrong_document_at_1 for r in results]),
+        variant_accuracy=_optional_mean([r.variant_correct for r in results]),
+        quantity_match_rate=_optional_mean([r.quantity_matched for r in results]),
+        attribute_filter_fallback_rate=_optional_mean([r.attribute_filter_fallback for r in results]),
     )
 
 
@@ -523,6 +571,60 @@ def aggregate(
         "gate_population": label,
         POPULATION_EXCLUSIONS: exclusions,
     }
+
+
+_HAN = "\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff"
+_TEMPLATED_TOKEN = re.compile(rf"[{_HAN}]|[^\W_{_HAN}]+")
+_DIGIT_RUN = re.compile(r"\d+")
+_WHITESPACE = re.compile(r"\s+")
+BOILERPLATE_LINE_ROLES = ("top", "bottom", "fragment")
+
+
+def templated_text(text: str) -> str:
+    """NFKC, whitespace collapsed, each digit run one placeholder: declared lines differ across pages only in the page number."""
+    folded = unicodedata.normalize("NFKC", text)
+    return _DIGIT_RUN.sub("0", _WHITESPACE.sub(" ", folded)).strip()
+
+
+def templated_token_count(text: str) -> int:
+    """Runs of letters or digits; each Han character counts alone."""
+    return len(_TEMPLATED_TOKEN.findall(templated_text(text)))
+
+
+def _declared_lines(fixture: Mapping) -> list[str]:
+    lines = fixture["templated"]["lines"]
+    found: list[str] = []
+    for role in BOILERPLATE_LINE_ROLES:
+        value = lines.get(role)
+        for line in [value] if isinstance(value, str) else value or []:
+            normalized = templated_text(line)
+            if normalized and normalized not in found:
+                found.append(normalized)
+    return found
+
+
+def boilerplate_token_share(traces: Iterable[RagTrace], fixtures: Iterable[Mapping]) -> MetricValue:
+    """D-13, D-36: tokens of the declared top, bottom and fragment lines found in the distinct candidate chunks of the
+    templated fixtures, over all their tokens; n is the chunk count."""
+    declared = {fixture["file_name"].casefold(): _declared_lines(fixture) for fixture in fixtures}
+    chunks: dict[str, tuple[str, str]] = {}
+    for trace in traces:
+        for candidate in trace.candidates:
+            name = (candidate.document_name or "").casefold()
+            if name in declared and candidate.chunk_id not in chunks:
+                chunks[candidate.chunk_id] = (name, candidate.content)
+    total = removed = 0
+    for name, content in chunks.values():
+        text = templated_text(content)
+        total += templated_token_count(text)
+        removed += sum(text.count(line) * templated_token_count(line) for line in declared[name])
+    if not chunks or total == 0:
+        return MetricValue(value=None, n=len(chunks))
+    return MetricValue(value=min(removed, total) / total, n=len(chunks))
+
+
+def templated_boilerplate_share(traces: Iterable[RagTrace]) -> MetricValue:
+    return boilerplate_token_share(traces, load_templated_fixtures()["fixtures"])
 
 
 INJECTION_CATEGORIES = ("injection", "injection_evasive")
