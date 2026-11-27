@@ -157,17 +157,18 @@ export function chunkMarkdownSections(markdown: string, options: MarkdownChunkOp
   return drafts;
 }
 
-/** A section path that leaves fewer than MIN_CONTENT_TOKENS for content is shortened to max_tokens / PATH_SHARE. */
+/** A section path that leaves fewer than min(MIN_CONTENT_TOKENS, max_tokens / PATH_SHARE) for content is shortened to max_tokens / PATH_SHARE. */
 const MIN_CONTENT_TOKENS = 16;
 const PATH_SHARE = 4;
 const MIN_PATH_ELEMENT_TOKENS = 4;
 
 /**
- * The section path, unchanged while its embedding prefix leaves at least MIN_CONTENT_TOKENS of max_tokens for content; otherwise every
+ * The section path, unchanged while its embedding prefix leaves at least min(MIN_CONTENT_TOKENS, max_tokens / PATH_SHARE) for content; otherwise every
  * element is cut to an equal share of max_tokens / PATH_SHARE. A paragraph mistaken for a heading would else leave about one token per chunk.
  */
 export function fitSectionPath(path: string[], maxTokens: number): string[] {
-  if (maxTokens - countTokens(buildEmbeddingText({ section_path: path, content: '' })) >= MIN_CONTENT_TOKENS) return path;
+  const minContent = Math.min(MIN_CONTENT_TOKENS, Math.floor(maxTokens / PATH_SHARE));
+  if (maxTokens - countTokens(buildEmbeddingText({ section_path: path, content: '' })) >= minContent) return path;
   const cap = Math.max(MIN_PATH_ELEMENT_TOKENS, Math.floor(maxTokens / PATH_SHARE));
   const each = Math.max(MIN_PATH_ELEMENT_TOKENS, Math.floor(cap / Math.max(1, path.length)) - 1);
   return path.map((element) => (countTokens(element) <= each ? element : truncateToTokens(element, each).trimEnd()));
