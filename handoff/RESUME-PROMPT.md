@@ -28,9 +28,22 @@ git fetch origin ops/orchestrator-briefs ops/owner-actions
   - 已完成的会话先确认 SUMMARY 已推送，再归档。
   - 每 20 分钟左右用 send_later 自检一次。
 
-第四步：owner 操作台
-- 新开一个 owner 操作台会话，读 ops/owner-actions：owner-queue.md，以及交接文件（如果有）。
-- 需要我亲自做的事都放在那里，由它陪我做。你只负责派任务。
+第四步：owner 操作台（新开一个会话，标题"Owner 操作台（需要你亲自做的事）"，model opus，source_revision main）
+把下面这段作为它的初始提示词：
+"""
+你是 myRAG 的 owner 操作台，只处理必须由我（owner）亲自做或在场确认的事。用简体中文简短地和我交流，一次只问一件事。
+先运行 git fetch origin ops/owner-actions，读 handoff/owner-desk-continue-here.md 和 owner-queue.md（在分支根目录），以及 sql/ 下的文件。
+状态更新：PR #131（第 36 批）已于 2026-11-27 13:08 UTC 合并进 main（合并提交 274d0456），所以第 36 批的数据库 SQL 现在可以执行了。
+1. 先把 sql/train36-live.sql 开头列出的删除再重建部分讲给我听，等我同意后，再在生产 Supabase（ppvywaxrycaxrtrrditl）上用 apply_migration 按顺序执行：0903、0923、0926（common，然后 .multi-tenant）、0931、0950，最后 0410 r19。SQL 不改动，命名照 train35_* 的样式。执行后核对：对象都在、RLS 开着、新函数 anon/authenticated 不能执行。核对完把结果告诉编排者。
+2. 然后按 owner-queue 的顺序陪我做剩下的事：在线检查（先做 WhatsApp 回复检查 05.2-15）、第三方 key、发布门槛的 H-3（等 OpenRouter 方案合并且有余额后再做）等。
+3. 还没回答的问题：生产环境的 /api/audio 返回 401（Vercel 上没有 OPENAI_API_KEY）；/api/ai-to-rag 的标题生成用的 gpt-3.5-turbo 已下线，返回 404。编排者已经替我定了：标题模型改走 OpenRouter；语音在有 OpenAI key 之前优雅关闭，并给出提示。这两项由编排者派执行者去修，你只需要告诉我一声。
+规则：不 force-push；不在对话或 git 里放密钥；不让我粘贴密钥；删除操作必须等我在场确认；你不部署（部署由编排者负责，并且要我同意）；每个生产操作都记日志；状态更新推到 ops/owner-actions 分支。
+编排者的会话 ID 会由它自己发消息告诉你；所有结果都发给编排者。
+"""
+- 建好后，把这个会话的 ID 发给 owner 操作台，并记进台账。你只负责派任务；需要我做的事都交给 owner 操作台。
+- 另外派一个执行者，在 main 上做两个小修复（开修复 PR）：
+  - /api/ai-to-rag 的标题模型改走 OpenRouter（src/app/api/ai-to-rag/route.ts:101）；
+  - 没有 OPENAI_API_KEY 时，/api/audio 优雅关闭，返回结构化错误。
 
 必须遵守的规则（详见 continue-here.md）：
 - 不 force-push。
