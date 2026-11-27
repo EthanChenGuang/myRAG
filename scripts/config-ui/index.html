@@ -80,6 +80,7 @@
     <script src="rag-panels/scope-tags.js"></script>
     <script src="rag-panels/versions-dates.js"></script>
     <script src="rag-panels/translation-targets.js"></script>
+    <script src="rag-panels/terminology.js"></script>
     <script src="rag-panels/doc-types.js"></script>
     <script src="rag-panels/quarantine.js"></script>
     <script src="rag-panels/embedding-profiles.js"></script>
@@ -10468,6 +10469,19 @@
                                         </div>
                                     </section>
                                     <!-- rag-translation-targets:end -->
+
+                                    <!-- rag-terminology:start -->
+                                    <section id="rag-administration-terminology" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-terminology-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-terminology-title" class="text-lg font-semibold mb-2 text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-terminology-title>Terminology</h3>
+                                            <p class="text-sm text-base-content/70 max-w-prose" data-terminology-description>Maintains the dictionary that expands search queries with synonyms, abbreviations and other spellings. Translation pairs are stored for translation features and never expand a query. Follows the workspace chosen under Document Processing.</p>
+                                            <p class="text-xs text-base-content/70 mt-1 mb-4 break-words" data-terminology-workspace></p>
+                                            <div data-terminology-alert class="flex flex-col gap-2 mb-4 empty:mb-0"></div>
+                                            <div data-terminology-content></div>
+                                            <div data-terminology-status class="text-sm mt-4" role="status" aria-live="polite" tabindex="-1"></div>
+                                        </div>
+                                    </section>
+                                    <!-- rag-terminology:end -->
 
                                     <section id="rag-administration-profiles" class="card bg-base-200 shadow-md">
                                         <div class="card-body">
