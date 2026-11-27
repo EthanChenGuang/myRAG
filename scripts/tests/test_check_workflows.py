@@ -1028,3 +1028,114 @@ class PrSmokeAggregateTest(unittest.TestCase):
     def test_the_loop_accepts_only_success(self):
         self.assertEqual(self.run_loop("success"), 0)
         self.assertEqual(self.run_loop("success success success"), 0)
+
+
+class PromoteProductionWorkflowTest(unittest.TestCase):
+    """D-35, O-5: one failing example per rule of check_promote_production."""
+
+    def workflow(self) -> dict:
+        import yaml
+
+        return yaml.safe_load(check_workflows.PROMOTE.read_text(encoding="utf-8"))
+
+    def known_refs(self) -> set[str]:
+        refs: set[str] = set()
+        for path in (check_workflows.PR, check_workflows.NIGHTLY):
+            refs.update(check_workflows.uses_refs(check_workflows.load(path)[0]))
+        return refs
+
+    def errors_for(self, data: dict, text: str | None = None) -> list[str]:
+        import yaml
+
+        errors: list[str] = []
+        check_workflows.check_promote_production(data, text if text is not None else yaml.safe_dump(data), errors, self.known_refs())
+        return errors
+
+    def on(self, data: dict) -> dict:
+        return data["on"] if "on" in data else data[True]
+
+    def job(self, data: dict) -> dict:
+        return data["jobs"]["promote"]
+
+    def step(self, data: dict) -> dict:
+        return next(s for s in self.job(data)["steps"] if "promote-production.mjs" in str(s.get("run", "")))
+
+    def assert_error(self, data: dict, fragment: str) -> None:
+        errors = self.errors_for(data)
+        self.assertTrue(any(fragment in e for e in errors), f"no error containing {fragment!r} in {errors}")
+
+    def test_repository_workflow_passes(self):
+        text = check_workflows.PROMOTE.read_text(encoding="utf-8")
+        errors: list[str] = []
+        check_workflows.check_promote_production(self.workflow(), text, errors, self.known_refs())
+        self.assertEqual(errors, [])
+
+    def test_a_push_trigger_fails(self):
+        data = self.workflow()
+        self.on(data)["push"] = {"branches": ["main"]}
+        self.assert_error(data, "workflow_dispatch only")
+
+    def test_other_triggers_fail(self):
+        for trigger in ("pull_request", "schedule", "workflow_run"):
+            data = self.workflow()
+            self.on(data)[trigger] = {}
+            self.assert_error(data, "workflow_dispatch only")
+
+    def test_sha_input_is_required_and_alone(self):
+        data = self.workflow()
+        self.on(data)["workflow_dispatch"]["inputs"]["sha"]["required"] = False
+        self.assert_error(data, "required 'sha' input")
+        data = self.workflow()
+        self.on(data)["workflow_dispatch"]["inputs"]["force"] = {"type": "boolean"}
+        self.assert_error(data, "unexpected workflow_dispatch inputs")
+
+    def test_inputs_sha_inside_run_fails(self):
+        data = self.workflow()
+        self.step(data)["run"] = "node scripts/ci/promote-production.mjs --sha ${{ inputs.sha }}"
+        self.assert_error(data, "only through env")
+
+    def test_a_secret_inside_run_fails(self):
+        data = self.workflow()
+        self.step(data)["run"] += " && echo ${{ secrets.VERCEL_TOKEN }}"
+        self.assert_error(data, "not interpolated into run")
+
+    def test_a_write_permission_fails(self):
+        data = self.workflow()
+        self.job(data)["permissions"]["statuses"] = "write"
+        self.assert_error(data, "permissions must be exactly")
+        data = self.workflow()
+        self.job(data)["permissions"]["contents"] = "write"
+        self.assert_error(data, "permissions must be exactly")
+        data = self.workflow()
+        data["permissions"] = {"contents": "write"}
+        self.assert_error(data, "top-level permissions")
+
+    def test_env_must_carry_the_sha_and_the_vercel_settings(self):
+        for key in ("PROMOTE_SHA", "GH_TOKEN", "VERCEL_TOKEN", "VERCEL_PROJECT_ID", "VERCEL_TEAM_ID"):
+            data = self.workflow()
+            del self.step(data)["env"][key]
+            self.assert_error(data, key)
+        data = self.workflow()
+        self.step(data)["env"]["PROMOTE_SHA"] = "${{ github.sha }}"
+        self.assert_error(data, "PROMOTE_SHA")
+
+    def test_the_promote_command_is_required(self):
+        data = self.workflow()
+        self.step(data)["run"] = "echo nothing"
+        self.assert_error(data, "no step runs")
+
+    def test_checkout_of_the_promoted_sha_fails(self):
+        data = self.workflow()
+        checkout = next(s for s in self.job(data)["steps"] if str(s.get("uses", "")).startswith("actions/checkout@"))
+        checkout.setdefault("with", {})["ref"] = "${{ inputs.sha }}"
+        self.assert_error(data, "must not check out")
+
+    def test_an_unknown_action_fails(self):
+        data = self.workflow()
+        self.job(data)["steps"].append({"uses": "someone/new-action@" + "d" * 40})
+        self.assert_error(data, "not a pinned action already used")
+
+    def test_concurrency_must_not_cancel(self):
+        data = self.workflow()
+        data["concurrency"]["cancel-in-progress"] = True
+        self.assert_error(data, "cancel-in-progress false")

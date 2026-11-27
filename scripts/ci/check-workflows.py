@@ -18,6 +18,7 @@ PR = ROOT / ".github" / "workflows" / "pr-smoke.yml"
 NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
 RAY_OPTIONAL = ROOT / ".github" / "workflows" / "ray-optional.yml"
 RELEASE_GATE = ROOT / ".github" / "workflows" / "rag-release-gate.yml"
+PROMOTE = ROOT / ".github" / "workflows" / "promote-production.yml"
 MEASUREMENT = ROOT / "eval" / "reports" / "phase-05.3" / "absolute-gate-measurement.json"
 DOCKERFILE = ROOT / "rag-sidecar" / "Dockerfile"
 SIDECAR_CONFIG_DIR = ROOT / "rag-sidecar" / "config" / "rag"
@@ -931,6 +932,14 @@ def check_release_gate(data: dict, text: str, errors: list[str], known_refs: set
             errors.append(f"{name}: the override step must pass --actor \"$TRIGGERING_ACTOR\"")
         if "override_reason != ''" not in str(ostep.get("if", "")):
             errors.append(f"{name}: the override step must run only with an override reason")
+
+
+PROMOTE_JOB_PERMISSIONS = {"contents": "read", "statuses": "read"}
+PROMOTE_RUN = 'node scripts/ci/promote-production.mjs --sha "$PROMOTE_SHA"'
+
+
+def check_promote_production(data: dict, text: str, errors: list[str], known_refs: set[str] | None = None) -> None:
+    """D-35, O-5: manual promotion of a staged production build, only after a passed rag-release-gate."""
 
 
 QUALITY_GATES = "eval/config/quality-gates.json"
