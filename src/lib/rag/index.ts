@@ -10,6 +10,8 @@ export { isQueryLayerEnabled, isSemanticCacheActive, isV2Pipeline, voiceServerCo
 export { isSmallTalkResult } from './v2/result';
 export { buildHistoryWindow } from './query/history';
 export type { HistoryWindowLimits } from './query/history';
+export { queryTurnInputs, ragTurnMetadataFromPlan } from './query/turn-metadata';
+export type { QueryTurnInputs, RagTurnMetadata } from './query/turn-metadata';
 export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
 export { currentAttributeFilterMode, currentLexicalVersion } from './deps';

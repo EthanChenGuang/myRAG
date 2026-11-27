@@ -40,7 +40,10 @@ import {
   detectLanguage,
   finishTrace,
   isSmallTalkResult,
+  isQueryLayerEnabled,
   isV2Pipeline,
+  queryTurnInputs,
+  ragTurnMetadataFromPlan,
   answerFinishFields,
   answerTraceFields,
   CLAUDE_MAX_OUTPUT_TOKENS,
@@ -163,6 +166,12 @@ function withToolResultGuard(
 }
 
 /** D-10: tool results are data; the sentence joins the reference notice when the context is tagged. */
+/** A refusal's start metadata with the turn's rag field added; null when neither is present, so the stream is unchanged. */
+function withRagTurn(metadata: Record<string, unknown> | null, ragField: { rag?: unknown }): Record<string, unknown> | null {
+  if (!ragField.rag) return metadata;
+  return { ...(metadata ?? {}), ...ragField };
+}
+
 function withToolResultNotice(prompt: string): string {
   const tagged = `${REFERENCE_NOTICE}\n<documents>`;
   if (prompt.includes(tagged)) return prompt.replace(tagged, () => `${REFERENCE_NOTICE}\n${TOOL_RESULT_SENTENCE}\n<documents>`);
@@ -2263,6 +2272,8 @@ Context:
         history: buildHistoryWindow(originalMessages),
         classification: queryClassification,
         ...(clientTimeZone ? { timeZone: clientTimeZone } : {}),
+        // D-17, D-22: the previous turn's standalone query and the UI language, read only while the layer is on
+        ...(isQueryLayerEnabled() ? queryTurnInputs({ messages: rawMessages, uiLanguage: data?.settings?.language }) : {}),
       };
 
       // Then perform semantic search for the query text
@@ -2457,6 +2468,12 @@ Context:
 
     } // End of RAG processing (skipped when disableRAG is true)
 
+    // D-22, P-22: the turn's standalone query rides on the assistant message only when retrieval produced a query plan
+    const ragTurnField = (): { rag?: NonNullable<ReturnType<typeof ragTurnMetadataFromPlan>> } => {
+      const rag = ragTurnMetadataFromPlan(retrievalResult?.queryPlan);
+      return rag ? { rag } : {};
+    };
+
     // D-32: a semantic-cache hit streams the cached answer through the normal UI stream, with no generation call
     const cacheHit = retrievalResult && isCacheHitResult(retrievalResult) ? retrievalResult.cacheHit : undefined;
     if (cacheHit) {
@@ -2472,7 +2489,7 @@ Context:
           streamCachedAnswer(cacheHit, {
             writer,
             startMetadata: { ...answerFields, ...(cached.is_refusal ? { refusal: true } : {}) },
-            finishMetadata: answerFields,
+            finishMetadata: { ...answerFields, ...ragTurnField() },
           });
         },
         onFinish: ({ isAborted }) => {
@@ -2531,7 +2548,7 @@ Context:
 
       if (strictWithoutWebSearch) {
         setRagLogOutcome('kb_unavailable', kbUnavailableLanguage(answerTurn, fallbackLanguage));
-        const refusalMetadata = refusalStartMetadata();
+        const refusalMetadata = withRagTurn(refusalStartMetadata(), ragTurnField());
         finishRagTrace();
         const errorText = kbUnavailableText(answerTurn, fallbackLanguage);
         const stream = createUIMessageStream({
@@ -2573,7 +2590,7 @@ Context:
         : noInformationText(answerTurn, fallbackLanguage);
       ragTrace?.collector.setReviewContent({ answer: responseText, context });
       setRagLogOutcome('refused_no_context', noInformationLanguage(answerTurn, fallbackLanguage));
-      const refusalMetadata = refusalStartMetadata();
+      const refusalMetadata = withRagTurn(refusalStartMetadata(), ragTurnField());
       const refusalTraceId = ragTrace?.collector.traceId;
       finishRagTrace();
       if (retrievalResult?.cacheTicket && refusalTraceId) {
@@ -4571,7 +4588,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               return undefined;
             }
             if (part.type !== 'finish') return undefined;
-            const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata(), ...answerTurn.finishMetadata() };
+            const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata(), ...answerTurn.finishMetadata(), ...ragTurnField() };
             if (!ragTraceId && !answerId && injectionFlagged === undefined && Object.keys(finishMetadata).length === 0) return undefined;
             return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...injectionFlaggedField, ...finishMetadata };
           };
