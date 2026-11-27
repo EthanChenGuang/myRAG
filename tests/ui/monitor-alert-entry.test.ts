@@ -158,7 +158,7 @@ describe('monitorAlertView', () => {
   it('uses the locale number format', () => {
     const { monitorAlertView } = load();
     const v = monitorAlertView(alert(), 'it');
-    expect(v.measurement.text).toBe('Misurato: 38,0% (76 su 200). Abituale: 12,0% (720 su 6.000, nei 30 giorni precedenti).');
+    expect(v.measurement.text).toBe('Misurato: 38,0% (76 su 200). Abituale: 12,0% (720 su 6000, nei 30 giorni precedenti).');
   });
 
   it('a widened window, all languages and, in multi-tenant mode, the workspace', () => {
@@ -277,7 +277,7 @@ describe('monitorEvidenceView', () => {
     const json = JSON.stringify(v.changes);
     expect(json).not.toContain(before);
     expect(json).not.toContain('secret reason text');
-    expect(v.changes.rows[0]).toMatchObject({ source: 'Config UI', keys: ['RAG_EXAMPLE_SETTING'], record: uuid(9) });
+    expect(v.changes.rows[0]).toMatchObject({ source: { text: 'Config UI', code: false }, keys: ['RAG_EXAMPLE_SETTING'], record: uuid(9) });
     expect((v.changes.rows[0].config as Message).text).toBe('aaaaaaaa to bbbbbbbb');
     expect((v.changes.rows[1].unrecorded as Message).segments.map((s) => s.code).filter(Boolean)).toEqual(['npm run rag:monitor -- record-change --keys <names> --reason <text>']);
     expect(v.changes.empty).toBeNull();
