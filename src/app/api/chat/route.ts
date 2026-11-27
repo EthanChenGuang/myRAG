@@ -3600,8 +3600,10 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       }
 
       const toolResultGuard = readSecurityConfig().toolResultGuard;
+      const flaggedToolResults = new Set<string>();
       if (toolResultGuard !== 'off') {
         const recordToolResultFlag = (toolName: string, ruleIds: string[]) => {
+          flaggedToolResults.add(toolName);
           const collector = ragTrace?.collector;
           if (collector) {
             const at = collector.now();
@@ -3928,6 +3930,20 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         return [];
       };
 
+      // Phase 5.2 D-37, D-39: the output guard's allow evidence, read only while RAG_OUTPUT_GUARD is not off
+      const outputGuardSources = {
+        blocks: () => (retrievalFailed || effectiveDisableRAG || smallTalkTurn ? [] : retrievalResult?.blocks ?? []),
+        serverUrls: () => [
+          ...usedDocuments.flatMap((doc) => [doc.external_url || DOCUMENT_URL_MAP[doc.name || doc.filename], doc.image_url]),
+          ...precomputedSourceImages.map((image) => image.url),
+        ].filter((url): url is string => typeof url === 'string' && url !== ''),
+        webResults: () => webSearchResults,
+        flaggedTools: () => flaggedToolResults,
+        contextFlagged: () => injectionSummary?.flagged === true,
+        tenantKey: () => (scope ? scopeKey(scope) : null),
+        trace: () => ragTrace?.collector ?? null,
+      };
+
       // First streamText call with merged tools and reasoning
       let answerToolOutputUsed = false;
       const citationTransformParams = () => {
@@ -3935,6 +3951,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         const citationTransforms = answerTurn.transforms(citationSession.transforms(), {
           webSearchOffered: SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY),
           aliases: () => citationSession.aliases(),
+          guard: outputGuardSources,
         });
         return citationTransforms.length > 0 ? { experimental_transform: citationTransforms } : {};
       };
@@ -4302,6 +4319,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       markGenerationStart();
       if (citationSession.strategy === 'claude-citations' && claudeSystemText !== null) {
         try {
+          const claudeGuard = answerTurn.guardTransform(outputGuardSources);
           const history = modelMessages.filter((message) => message.role !== 'system');
           if (history.at(-1)?.role === 'user') history.pop();
           claudeStream = citationSession.startClaude({
@@ -4314,6 +4332,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             onError: (error) => {
               claudeError = error;
             },
+            ...(claudeGuard ? { extraTransforms: [claudeGuard] } : {}),
           });
         } catch {
           citationSession.fallback('error');
