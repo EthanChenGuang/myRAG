@@ -10431,6 +10431,36 @@
                                                 </div>
                                             </div>
                                             <!-- rag-phase053-settings:end -->
+                                            <!-- rag-phase043-settings:start -->
+                                            <div id="rag-phase043-settings" class="hidden">
+                                                <div data-rag-settings-group="access">
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_DOC_ACCESS_GROUPS">
+                                                            <span class="label-text" data-rag-i18n="RAG_DOC_ACCESS_GROUPS.label">Access groups</span>
+                                                        </label>
+                                                        <select id="RAG_DOC_ACCESS_GROUPS" name="RAG_DOC_ACCESS_GROUPS" autocomplete="off" translate="no" aria-describedby="rag-doc-access-groups-help" class="select select-bordered select-sm w-full max-w-xs">
+                                                            <option value="off" data-rag-i18n="RAG_DOC_ACCESS_GROUPS.opt.off" selected>Off, as today</option>
+                                                            <option value="on" data-rag-i18n="RAG_DOC_ACCESS_GROUPS.opt.on">On</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-doc-access-groups-help" data-rag-i18n="RAG_DOC_ACCESS_GROUPS.now.off">Every member sees every document. Groups and document access are saved but not applied.</span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_DOC_ACCESS_GROUPS</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_EMBED_ACCESS_GROUP">
+                                                            <span class="label-text" data-rag-i18n="RAG_EMBED_ACCESS_GROUP.label">Embedded chat group</span>
+                                                        </label>
+                                                        <input type="text" id="RAG_EMBED_ACCESS_GROUP" name="RAG_EMBED_ACCESS_GROUP" autocomplete="off" spellcheck="false" translate="no" aria-describedby="rag-embed-access-group-help"
+                                                            class="input input-bordered input-sm font-mono w-full max-w-xs">
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-embed-access-group-help" data-rag-i18n="RAG_EMBED_ACCESS_GROUP.help">The key of one access group in the embedded chat’s workspace. Embedded chat and WhatsApp then also answer from documents restricted to that group. Empty: they answer only from documents visible to everyone.</span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_EMBED_ACCESS_GROUP</code>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <!-- rag-phase043-settings:end -->
                                         </div>
                                     </section>
 
