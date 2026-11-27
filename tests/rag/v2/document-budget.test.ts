@@ -39,6 +39,7 @@ async function run(options: RetrievalOptions | undefined, labeled = false) {
   const cfg = loadRagConfig({ RAG_PIPELINE: 'v2' });
   const collector = createTraceCollector({ profile: 'chat', tenantKey: 's:default' });
   const out = await runContextStages({
+    access: { mode: 'off' },
     input: {
       scope,
       query: 'neutral filler',

@@ -218,7 +218,7 @@ describe('batched supersession read (D-48, T-05.2-223)', () => {
 
   it('switch off: no supersession query and no rows field', async () => {
     const admin = fakeAdmin();
-    const rows = await fetchAssemblyRows(CANDIDATES, { adminClient: admin.client, signal, tenantKey: TENANT });
+    const rows = await fetchAssemblyRows(CANDIDATES, { adminClient: admin.client, signal, tenantKey: TENANT, access: { mode: 'off' } });
     expect(admin.calls.map((call) => call.table)).toEqual(['documents', 'document_chunks']);
     expect('versionPairs' in rows).toBe(false);
   });
@@ -226,7 +226,7 @@ describe('batched supersession read (D-48, T-05.2-223)', () => {
   it('switch on: one query filtered by the tenant key and the request document ids', async () => {
     vi.stubEnv('RAG_VERSION_LABELS', 'true');
     const admin = fakeAdmin([{ document_id: DOC_NEW, candidate_document_id: DOC_OLD, status: 'confirmed' }]);
-    const rows = await fetchAssemblyRows(CANDIDATES, { adminClient: admin.client, signal, tenantKey: TENANT });
+    const rows = await fetchAssemblyRows(CANDIDATES, { adminClient: admin.client, signal, tenantKey: TENANT, access: { mode: 'off' } });
     const reads = admin.calls.filter((call) => call.table === 'rag_supersession_candidates');
     expect(reads).toHaveLength(1);
     expect(reads[0]!.filters).toContainEqual(['eq', 'tenant_key', TENANT]);
@@ -238,7 +238,7 @@ describe('batched supersession read (D-48, T-05.2-223)', () => {
   it('switch on without a tenant key: no supersession query', async () => {
     vi.stubEnv('RAG_VERSION_LABELS', 'true');
     const admin = fakeAdmin();
-    await fetchAssemblyRows(CANDIDATES, { adminClient: admin.client, signal });
+    await fetchAssemblyRows(CANDIDATES, { adminClient: admin.client, signal, access: { mode: 'off' } });
     expect(admin.calls.some((call) => call.table === 'rag_supersession_candidates')).toBe(false);
   });
 });

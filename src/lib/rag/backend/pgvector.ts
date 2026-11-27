@@ -304,7 +304,7 @@ function mapTranslationRow(row: TranslationRow): TranslationHit {
 }
 
 /** hybrid_search_translations takes the hybrid_search_chunks filter arguments unchanged, without the exact-scan and lexical-language ones. */
-function buildTranslationArgs(req: BackendTranslationSearchRequest, config: RagConfig): Record<string, unknown> {
+function buildTranslationArgs(req: BackendTranslationSearchRequest, config: RagConfig, access: ScopeAccessFilter): Record<string, unknown> {
   const filters = req.filters;
   return {
     p_tenant_key: scopeKey(req.scope),
@@ -329,7 +329,7 @@ function buildTranslationArgs(req: BackendTranslationSearchRequest, config: RagC
     ...(filters.dateRange?.includeUndated === true ? { p_include_undated: true } : {}),
     ...scopeArgs(filters),
     ...(filters.effectiveOn ? { p_effective_on: filters.effectiveOn } : {}),
-    ...accessRpcArgs(scopeAccessFilter(req.scope)),
+    ...accessRpcArgs(access),
   };
 }
 
@@ -431,8 +431,10 @@ export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBacke
       const client = deps.adminClient();
       if (!client) throw new RetrievalBackendError('hybrid_search_translations', 'admin_unavailable');
       const rpcClient = client as RpcClient;
+      // Lazy for the same reason as in search: tenant/access reads the RAG config through deps.
+      const { scopeAccessFilter } = await import('../tenant/access');
       const response = await rpcClient
-        .rpc('hybrid_search_translations', buildTranslationArgs(req, deps.getConfig()))
+        .rpc('hybrid_search_translations', buildTranslationArgs(req, deps.getConfig(), scopeAccessFilter(req.scope)))
         .abortSignal(req.signal);
       req.signal.throwIfAborted();
       if (response.error) {

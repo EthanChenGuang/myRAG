@@ -378,7 +378,6 @@ export {
   CALC_REQUEST_JSON_SCHEMA,
   type VoiceCalcSource,
 } from './calc/voice-sources';
-export { planPromptBudget } from './context/prompt-budget';
 export { promptBudgetConfig } from './context/prompt-budget-config';
 export { fixedText } from './lang/texts';
 export { identifierSuggestionMessage } from './generation/messages';
@@ -931,16 +930,5 @@ export type {
   ProfileStateCounts,
 } from './backend/index-compat';
 export type { VectorStore, VectorSyncTarget } from './sync/stores/types';
-// Phase 5.2.1 plan 21: the prompt budget on the chat route
-export {
-  assertQuestionLast,
-  finalizePromptBudget,
-  planPromptBudget,
-  PromptOrderError,
-  type BudgetMessage,
-  type FinalizeResult,
-  type PromptBudgetPlan,
-} from './context/prompt-budget';
+// Phase 5.2.1 plan 21: the prompt budget on the chat route (its runtime exports are listed with plan 22's above)
 export type { PromptBudgetTrace } from '@/lib/rag-eval/contracts.generated';
-export { modelContextLength, modelFamily } from './context/model-window';
-export { fixedText } from './lang/texts';

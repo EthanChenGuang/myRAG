@@ -2461,7 +2461,7 @@ Context:
       const budgetTools: Record<string, unknown> =
         SUPPORTS_TOOLS && !modelBlocksTools(model)
           ? {
-              useDocument: documentReferenceTool,
+              useDocument: createDocumentReferenceTool([]),
               ...(budgetWebSearch ? { webSearch: { description: WEB_SEARCH_TOOL_DESCRIPTION, inputSchema: webSearchInputSchema } } : {}),
               ...(calcMayBeOffered
                 ? { [CALCULATE_TOOL_NAME]: buildCalculateTool({ aliases: new Set<string>(), holder: createCalcTraceHolder() }) }

@@ -48,7 +48,6 @@ import { resolveFinalResultCount } from '../config';
 import { effectiveVersionScope } from './filters';
 import { collectRequiredTerms, type RequiredTerm } from './completeness';
 import { loadTenantDocTypes, loadTenantVocabulary } from './tenant-vocabulary';
-import { getLanguageSettings } from '../lang/settings';
 import type { SubqFilterContext } from './llamaindex/decompose';
 import { terminologyMatcherFor } from '../terminology/load';
 import { terminologyParams } from '../terminology/expand';
