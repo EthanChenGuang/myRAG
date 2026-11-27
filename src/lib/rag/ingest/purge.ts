@@ -1,5 +1,6 @@
 import type { RpcClient } from '../backend/supabase-rpc';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
+import type { SemanticCache } from '../cache/types';
 import { getIngestDeps } from './deps';
 
 /**
@@ -51,8 +52,17 @@ export interface PurgeDocumentAsAdminInput {
   signal: AbortSignal;
 }
 
+export interface LineageDocumentRow {
+  id: string;
+  source: string | null;
+  sourceFileId: string | null;
+}
+
 export interface PurgeDeps {
   db: () => RpcClient | null;
+  lineageDocuments: (tenantKey: string, lineageId: string, signal: AbortSignal) => Promise<LineageDocumentRow[] | null>;
+  cacheTarget: () => Pick<SemanticCache, 'invalidateTenant'> | null;
+  scopeOf: (tenantKey: string, signal: AbortSignal) => Promise<TenantScope | null>;
 }
 
 type Row = Record<string, unknown>;
@@ -64,7 +74,12 @@ const SQL_REASONS = new Set<PurgeFailure>(['not_found', 'invalid_argument', 'ten
 let depsOverride: Partial<PurgeDeps> = {};
 
 function deps(): PurgeDeps {
-  return { db: depsOverride.db ?? (() => getIngestDeps().db()) };
+  return {
+    db: depsOverride.db ?? (() => getIngestDeps().db()),
+    lineageDocuments: depsOverride.lineageDocuments ?? (async () => []),
+    cacheTarget: depsOverride.cacheTarget ?? (() => null),
+    scopeOf: depsOverride.scopeOf ?? (async () => null),
+  };
 }
 
 export function setPurgeDepsForTests(next: Partial<PurgeDeps>): void {
@@ -255,4 +270,21 @@ export async function purgeDocumentAsAdmin(input: PurgeDocumentAsAdminInput): Pr
   const lineageId = row ? text(row, 'lineage_id') : null;
   if (tenantKey === null || lineageId === null) return { ok: false, reason: 'unavailable' };
   return purgeTenantLineage(tenantKey, lineageId, { kind: 'admin', id: actor }, reason, input.signal);
+}
+
+export async function retryPendingPurgeObjects(_input: { limit?: number; signal: AbortSignal }): Promise<{ ok: true; records: number; cleared: number; stillPending: number } | { ok: false; reason: PurgeFailure }> {
+  return { ok: false, reason: 'unavailable' };
+}
+
+export async function rescrubRecentPurges(_input: { signal: AbortSignal }): Promise<{ ok: true; records: number; scrubbed: number } | { ok: false; reason: PurgeFailure }> {
+  return { ok: false, reason: 'unavailable' };
+}
+
+export async function isPurgeTombstoned(
+  _scope: TenantScope,
+  _sourceConnectionId: string,
+  _sourceKey: string,
+  _options: { signal: AbortSignal },
+): Promise<{ ok: true; tombstoned: boolean } | { ok: false; reason: PurgeFailure }> {
+  return { ok: false, reason: 'unavailable' };
 }

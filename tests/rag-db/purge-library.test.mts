@@ -130,6 +130,43 @@ for (const mode of MODES) {
       assert.equal(await count(world.db, 'SELECT count(*) AS n FROM rag_purge_audit WHERE lineage_id = $1', [seeded.lineageId]), 0);
     });
 
+    test('the stored files, parse-cache objects and page pictures of the lineage are gone after the purge; other lineages stay', async () => {
+      const objects = fakeStore.createFakeObjectStore();
+      objectStore.setObjectStoreForTests(objects);
+      const pictures = fakePublic.installFakePublicImageStore();
+      const seeded = await seedLineage(world, world.tenantA);
+      const other = await seedLineage(world, world.tenantA);
+      for (const key of [...seeded.objectKeys, ...other.objectKeys]) await objects.put(key, new Uint8Array([1]), { contentType: 'text/markdown' });
+      await objects.put(`${seeded.parsePrefix}result.json`, new Uint8Array([1]), { contentType: 'application/json' });
+      await objects.put(`${other.parsePrefix}result.json`, new Uint8Array([1]), { contentType: 'application/json' });
+      const picture = `rag/${world.tenantA.key}/${seeded.lineageId}/2/p1-1.png`;
+      const otherPicture = `rag/${world.tenantA.key}/${other.lineageId}/2/p1-1.png`;
+      for (const key of [picture, otherPicture]) await pictures.put(key, new Uint8Array([1]), { contentType: 'image/png' });
+
+      const result = await purge.purgeDocumentAsAdmin({
+        documentId: await currentVersion(world, seeded),
+        actorUserId: world.adminA,
+        reasonCode: 'retention_ended',
+        reasonNote: null,
+        signal: signal(),
+      });
+      assert.ok(result.ok);
+      assert.equal(result.check.result, 'verified');
+      assert.deepEqual(
+        objects.keys().filter((key) => key.includes(seeded.lineageId) || key.startsWith(seeded.parsePrefix)),
+        [],
+      );
+      assert.deepEqual(pictures.keys(), [otherPicture]);
+      for (const key of other.objectKeys) assert.ok(objects.keys().includes(key), 'another lineage keeps its files');
+      assert.ok(objects.keys().includes(`${other.parsePrefix}result.json`));
+      assert.equal(result.removed.original_files, 4);
+      assert.equal(result.removed.parse_cache_files, 1);
+      assert.equal(result.removed.page_images, 1);
+      const audit = (await rows(world.db, 'SELECT pending_object_paths, object_counts FROM rag_purge_audit WHERE id = $1', [result.auditId]))[0];
+      assert.deepEqual(audit?.pending_object_paths, []);
+      assert.equal((audit?.object_counts as Record<string, number>).original_files, 4);
+    });
+
     test('ids that are not uuids are refused before any call', async () => {
       const result = await purge.purgeDocumentAsAdmin({
         documentId: 'not-a-uuid',
