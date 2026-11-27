@@ -782,8 +782,10 @@ export {
   planPromptBudget,
   PromptOrderError,
   type BudgetMessage,
+  type FinalizeResult,
   type PromptBudgetPlan,
 } from './context/prompt-budget';
+export type { PromptBudgetTrace } from '@/lib/rag-eval/contracts.generated';
 export { modelContextLength, modelFamily } from './context/model-window';
 export { composeAnswerRules } from './generation/answer-rules';
 export { fixedText } from './lang/texts';

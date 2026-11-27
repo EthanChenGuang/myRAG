@@ -91,7 +91,9 @@ import {
   modelFamily,
   planPromptBudget,
   type BudgetMessage,
+  type FinalizeResult,
   type PromptBudgetPlan,
+  type PromptBudgetTrace,
 } from '@/lib/rag';
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
@@ -167,6 +169,62 @@ function promptBudgetExceededResponse(language: string): Response {
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
       'X-RAG-Error': PROMPT_BUDGET_EXCEEDED,
+    },
+  });
+}
+
+const BUDGET_NOTE_ID = 'system-condensed-history';
+const CONTEXT_COMPRESSION_PLUGIN = 'context-compression';
+
+interface BudgetHistoryShape {
+  keptHistory: readonly unknown[];
+  standaloneNote: string | null;
+}
+
+// D-82: the conversation sent to the model; the kept turns are a suffix of the history, so they map by count. Off: all of it
+function budgetModelHistory<T>(converted: T[], budget: BudgetHistoryShape | null): T[] {
+  if (!budget) return converted;
+  return converted.slice(Math.max(0, converted.length - 1 - budget.keptHistory.length));
+}
+
+function budgetNoteMessages(budget: BudgetHistoryShape | null): ExtendedMessage[] {
+  return budget?.standaloneNote ? [{ id: BUDGET_NOTE_ID, role: 'system', content: budget.standaloneNote }] : [];
+}
+
+function uiMessageText(message: { parts?: ReadonlyArray<{ type?: string; text?: string }> }, textOnly = false): string {
+  return (message.parts ?? [])
+    .map((part) => (part.type === 'text' && typeof part.text === 'string' ? part.text : textOnly ? '' : JSON.stringify(part)))
+    .filter((text) => text.length > 0)
+    .join('\n');
+}
+
+// D-86: the prompt_budget span; part sizes, window and decisions as counts and fixed words, never text
+function recordPromptBudgetSpan(collector: TraceCollector | null | undefined, trace: PromptBudgetTrace): void {
+  if (!collector) return;
+  const at = collector.now();
+  collector.record({
+    name: 'prompt_budget',
+    status: trace.status === 'ok' ? 'ok' : 'error',
+    startedAt: at,
+    endedAt: at,
+    counts: {
+      ...Object.fromEntries(Object.entries(trace.parts).map(([part, tokens]) => [`prompt_tokens_${part}`, tokens])),
+      window: trace.window,
+      estimated_raw_total: trace.estimated_raw_total,
+      dropped_documents: trace.dropped_documents,
+      dropped_history_turns: trace.dropped_history_turns,
+    },
+    attributes: {
+      window_source: trace.window_source,
+      context_length_unknown: trace.context_length_unknown,
+      estimator: trace.estimator.encoding,
+      estimator_family: trace.estimator.family ?? 'none',
+      factor: trace.estimator.factor,
+      factor_source: trace.estimator.factor_source,
+      near_limit: trace.near_limit,
+      overflow_mode: trace.overflow_mode,
+      standalone_kept: trace.standalone_kept,
+      status: trace.status,
     },
   });
 }
@@ -2889,6 +2947,8 @@ Context:
     // Replace the {{context}} placeholder with the actual context
     let systemPrompt;
     let claudeSystemText: string | null = null;
+    // D-80: the composed answer-rule block of this turn, counted as its own part by the post-build check
+    let budgetBuiltRules = '';
 
     // Use optimized system prompt with RAG context
     console.log('[RAG SYSTEM DEBUG] ========== System Prompt Selection ==========');
@@ -2929,13 +2989,10 @@ Context:
         ...(calcOffer ? { calculation: { mode: calcOffer.mode } } : {}),
       };
       const historyNotEvidence = ragMode !== 'bypass' && historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE);
-      systemPrompt = appendHistoryNotEvidence(
-        answerTurn.composeSystemPrompt(
-          citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage)),
-          answerRuleOptions,
-        ),
-        historyNotEvidence,
-      );
+      const decoratedPrompt = citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage));
+      const composedPrompt = answerTurn.composeSystemPrompt(decoratedPrompt, answerRuleOptions);
+      if (promptBudgetPlan && composedPrompt.startsWith(decoratedPrompt)) budgetBuiltRules = composedPrompt.slice(decoratedPrompt.length);
+      systemPrompt = appendHistoryNotEvidence(composedPrompt, historyNotEvidence);
       if (citationSession.strategy === 'claude-citations') {
         claudeSystemText = [
           appendHistoryNotEvidence(
@@ -3132,6 +3189,19 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       return msg;
     });
 
+    // D-82: when turns were dropped and the query layer condensed the question, the note is planned with the documents as packed
+    const budgetStandalone = retrievalResult?.queryPlan?.standalone?.trim();
+    if (
+      promptBudgetPlan &&
+      promptBudgetInput &&
+      budgetStandalone &&
+      budgetStandalone !== retrievalResult?.queryPlan?.original?.trim() &&
+      promptBudgetPlan.trace.dropped_history_turns > 0
+    ) {
+      const replanned = planPromptBudget({ ...promptBudgetInput, standaloneQuery: budgetStandalone, documentTarget: promptBudgetPlan.documentBudget });
+      if (replanned.status === 'ok') promptBudgetPlan = replanned;
+    }
+
     // Prepend the system messages to the original message history
     // IMPORTANT: Identity prompt MUST come FIRST to establish the AI's persona
     const systemContextMessage: ExtendedMessage = {
@@ -3152,7 +3222,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       gmailGeneralSystemMessage,
       gmailAttachmentSystemMessage,
       mediaUploadSystemMessage,
-      ...citationSession.stripHistory(convertedMessages),
+      ...budgetNoteMessages(promptBudgetPlan),
+      ...citationSession.stripHistory(budgetModelHistory(convertedMessages, promptBudgetPlan)),
     ];
 
     const messagesForModel = messagesForModelExtended.map(toMessage);
@@ -3956,8 +4027,51 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         }
       }
 
+      // D-84: the built request is checked against the window; tool schemas above the reserve cost more history, never documents
+      let promptBudgetFinal: FinalizeResult | null = null;
+      if (promptBudgetPlan) {
+        const budgetDocuments = context.length > 0 && !smallTalkTurn ? context : '';
+        let budgetSystemText = messagesForModel
+          .filter((message) => message.role === 'system' && message.id !== BUDGET_NOTE_ID)
+          .map((message) => uiMessageText(message))
+          .join('\n\n');
+        if (budgetDocuments) budgetSystemText = budgetSystemText.replace(budgetDocuments, '');
+        if (budgetBuiltRules) budgetSystemText = budgetSystemText.replace(budgetBuiltRules, '');
+        promptBudgetFinal = finalizePromptBudget(promptBudgetPlan, {
+          builtParts: {
+            system: budgetSystemText,
+            rules: budgetBuiltRules,
+            tools: await toolSchemaParts(SUPPORTS_TOOLS && !isClaudeSonnet4 ? allTools : undefined),
+            documents: budgetDocuments,
+          },
+          droppedDocuments: retrievalResult?.packing?.droppedDocuments ?? 0,
+        });
+        if (promptBudgetFinal.status === 'exceeded') {
+          console.warn('[Prompt Budget] Built request does not fit the model window; not sent', {
+            code: PROMPT_BUDGET_EXCEEDED,
+            window: promptBudgetFinal.trace.window,
+          });
+          recordPromptBudgetSpan(ragTrace?.collector, promptBudgetFinal.trace);
+          finishRagTrace();
+          return promptBudgetExceededResponse(budgetLanguage);
+        }
+        if (promptBudgetFinal.action === 'dropped_history') {
+          const regionStart = messagesForModel.length - budgetNoteMessages(promptBudgetPlan).length - budgetModelHistory(convertedMessages, promptBudgetPlan).length;
+          const rebuilt = { keptHistory: promptBudgetFinal.keptHistory, standaloneNote: promptBudgetFinal.standaloneNote };
+          messagesForModel.splice(
+            regionStart,
+            messagesForModel.length - regionStart,
+            ...[...budgetNoteMessages(rebuilt), ...citationSession.stripHistory(budgetModelHistory(convertedMessages, rebuilt))].map(toMessage),
+          );
+        }
+      }
+
       // Convert UI messages to model messages required by streamText
       const modelMessages = await convertToModelMessages(messagesForModel);
+      if (promptBudgetPlan) {
+        const budgetQuestionText = uiMessageText(toMessage(convertedMessages[convertedMessages.length - 1]!), true);
+        if (budgetQuestionText.trim()) assertQuestionLast(modelMessages as unknown as BudgetMessage[], budgetQuestionText);
+      }
       let requestReasoningDetails: Record<string, unknown> | undefined;
       const captureReasoningDetails = (openrouterMetadata: Record<string, unknown> | undefined) => {
         const reasoningContent = openrouterMetadata?.reasoning_content;
@@ -4061,6 +4175,18 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             }
           };
         }
+      }
+
+      // D-84, Pitfall B3: OpenRouter must not compress a request the budget planned
+      if (promptBudgetPlan && AI_PROVIDER === 'openrouter') {
+        const openrouterOptions = streamParams.providerOptions?.openrouter || {};
+        const plugins = Array.isArray(openrouterOptions.plugins)
+          ? openrouterOptions.plugins.filter((plugin: { id?: unknown } | null) => plugin?.id !== CONTEXT_COMPRESSION_PLUGIN)
+          : [];
+        streamParams.providerOptions = {
+          ...(streamParams.providerOptions || {}),
+          openrouter: { ...openrouterOptions, plugins: [...plugins, { id: CONTEXT_COMPRESSION_PLUGIN, enabled: false }] },
+        };
       }
 
       const normalizeWebSearchItems = (payload: any): any[] => {

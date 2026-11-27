@@ -407,10 +407,10 @@ describe('chat route prompt budget (05.2.1-21)', () => {
     it('MCP schemas larger than the reserve drop more history after the build', async () => {
       process.env.RAG_PROMPT_BUDGET = 'true';
       smallWindowModels(24000);
-      enableMcpAdmin({ zz_large_tool: { description: `Large placeholder tool. ${'schema '.repeat(5000)}`, parameters: undefined } });
+      enableMcpAdmin({ zz_large_tool: { description: `Large placeholder tool. ${'schema '.repeat(9000)}`, parameters: undefined } });
       const { params } = await post({
         model: SMALL_MODEL,
-        messages: [...history(6, 150), { role: 'user', content: 'find my latest 3 emails in gmail' }],
+        messages: [...history(6, 300), { role: 'user', content: 'find my latest 3 emails in gmail' }],
         data: { ragMode: 'flexible', sessionId: 'chat-pb-2' },
         settings: { mcpEnabled: true },
       });
@@ -419,7 +419,7 @@ describe('chat route prompt budget (05.2.1-21)', () => {
       expect(h.finals).toHaveLength(1);
       const planned = h.plans[0]!.output;
       const finalized = h.finals[0]!.output;
-      expect(finalized.action).toBe('dropped_history');
+      expect({ action: finalized.action, planned: planned.trace.parts, built: finalized.trace.parts }).toMatchObject({ action: 'dropped_history' });
       expect(finalized.trace.dropped_history_turns).toBeGreaterThan(planned.trace.dropped_history_turns);
       const conversation = sent(params!).filter((m) => m.role !== 'system');
       expect(conversation).toHaveLength(finalized.keptHistory.length + 1);
