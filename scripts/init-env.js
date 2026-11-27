@@ -328,6 +328,10 @@ RAG_BEHAVIOR_MODE=strict
 # concise: one-line answer, short fact bullets, then --- and up to 3 "↳ " follow-up questions
 RAG_ANSWER_STYLE=classic
 
+# Earlier assistant answers are not evidence: on knowledge-base turns, tell the model to take facts only
+# from this turn's context and tool results and to correct an earlier unsupported answer (default false)
+RAG_HISTORY_NOT_EVIDENCE=false
+
 # -----------------------------
 # RAG EVALUATION & SIDECAR
 # -----------------------------

@@ -5,6 +5,7 @@ import { createUIMessageStream, createUIMessageStreamResponse, streamText, type 
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { z } from 'zod/v3';
 import { createLinkUsageInstructions } from '@/lib/url-extractor';
+import { appendHistoryNotEvidence, historyNotEvidenceEnabled } from '@/lib/chat/history-not-evidence';
 import { classifyQuery } from '@/lib/query-classifier';
 import {
   buildHistoryWindow,
@@ -474,7 +475,10 @@ export async function POST(request: NextRequest) {
     const finalSystemPrompt = smallTalkTurn
       ? createEnhancedRAGPrompt(systemPrompt, '', 'bypass')
       : context.length > 0
-        ? createEnhancedRAGPrompt(systemPrompt, context, 'strict', answerLanguage)
+        ? appendHistoryNotEvidence(
+            createEnhancedRAGPrompt(systemPrompt, context, 'strict', answerLanguage),
+            historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE),
+          )
         : systemPrompt.replace('{{context}}', context);
 
     console.log('[EMBED RAG] Final system prompt preview (first 300 chars):', finalSystemPrompt.substring(0, 300));

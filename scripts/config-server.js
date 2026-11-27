@@ -566,6 +566,9 @@ ${fullValues.RAG_BEHAVIOR_MODE !== undefined ? `RAG_BEHAVIOR_MODE=${fullValues.R
 # Chat answer style: classic, concise
 ${fullValues.RAG_ANSWER_STYLE !== undefined ? `RAG_ANSWER_STYLE=${fullValues.RAG_ANSWER_STYLE}` : 'RAG_ANSWER_STYLE=classic'}
 
+# Earlier assistant answers are not evidence on knowledge-base turns: true, false
+${fullValues.RAG_HISTORY_NOT_EVIDENCE !== undefined ? `RAG_HISTORY_NOT_EVIDENCE=${fullValues.RAG_HISTORY_NOT_EVIDENCE}` : 'RAG_HISTORY_NOT_EVIDENCE=false'}
+
 # RAG Evaluation & Sidecar
 ${fullValues.RAG_EVAL_ENDPOINT_ENABLED !== undefined ? `RAG_EVAL_ENDPOINT_ENABLED=${fullValues.RAG_EVAL_ENDPOINT_ENABLED}` : 'RAG_EVAL_ENDPOINT_ENABLED=false'}
 ${fullValues.RAG_EVAL_SECRET !== undefined ? `RAG_EVAL_SECRET=${fullValues.RAG_EVAL_SECRET}` : 'RAG_EVAL_SECRET='}
@@ -1527,6 +1530,8 @@ RAG_SIMILARITY_THRESHOLD=${getEnvValue('RAG_SIMILARITY_THRESHOLD') || '0.45'}
 RAG_BEHAVIOR_MODE=${getEnvValue('RAG_BEHAVIOR_MODE') || 'strict'}
 # Chat answer style: classic, concise
 RAG_ANSWER_STYLE=${getEnvValue('RAG_ANSWER_STYLE') || 'classic'}
+# Earlier assistant answers are not evidence on knowledge-base turns: true, false
+RAG_HISTORY_NOT_EVIDENCE=${getEnvValue('RAG_HISTORY_NOT_EVIDENCE') || 'false'}
 # RAG Evaluation & Sidecar
 RAG_EVAL_ENDPOINT_ENABLED=${getEnvValue('RAG_EVAL_ENDPOINT_ENABLED') || 'false'}
 RAG_EVAL_SECRET=${getEnvValue('RAG_EVAL_SECRET') || ''}
@@ -2047,6 +2052,8 @@ RAG_SIMILARITY_THRESHOLD=${getEnvValue('RAG_SIMILARITY_THRESHOLD') || '0.45'}
 RAG_BEHAVIOR_MODE=${getEnvValue('RAG_BEHAVIOR_MODE') || 'strict'}
 # Chat answer style: classic, concise
 RAG_ANSWER_STYLE=${getEnvValue('RAG_ANSWER_STYLE') || 'classic'}
+# Earlier assistant answers are not evidence on knowledge-base turns: true, false
+RAG_HISTORY_NOT_EVIDENCE=${getEnvValue('RAG_HISTORY_NOT_EVIDENCE') || 'false'}
 # RAG Evaluation & Sidecar
 RAG_EVAL_ENDPOINT_ENABLED=${getEnvValue('RAG_EVAL_ENDPOINT_ENABLED') || 'false'}
 RAG_EVAL_SECRET=${getEnvValue('RAG_EVAL_SECRET') || ''}

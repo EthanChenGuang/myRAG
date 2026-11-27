@@ -6345,6 +6345,16 @@
                                     </label>
                                 </div>
 
+                                <div class="form-control mb-6">
+                                    <label class="label cursor-pointer justify-start gap-3">
+                                        <input type="checkbox" id="RAG_HISTORY_NOT_EVIDENCE" name="RAG_HISTORY_NOT_EVIDENCE" class="checkbox checkbox-primary" aria-describedby="rag-history-not-evidence-help">
+                                        <span class="label-text font-semibold">Earlier answers are not evidence</span>
+                                    </label>
+                                    <label class="label pl-8">
+                                        <span class="label-text-alt min-w-0 text-base-content/70" id="rag-history-not-evidence-help">On turns with knowledge-base context, tells the model to take facts only from this turn's context and tool results, and to correct an earlier answer the context does not support instead of repeating it. Off by default.</span>
+                                    </label>
+                                </div>
+
                                 <!-- Mode Cards -->
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <!-- Strict Mode Card -->
