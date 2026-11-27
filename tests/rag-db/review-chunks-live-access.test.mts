@@ -39,13 +39,31 @@ async function asService<T = Row>(db: PGlite, sql: string, params: unknown[] = [
   });
 }
 
+/** rag_chunks_visible returns SETOF uuid: read every row (the PGlite helper's rpc returns the first row only), as service_role. */
+async function chunksVisible(db: PGlite, args: Row): Promise<{ data: unknown; error: unknown }> {
+  try {
+    const found = await asService<{ id: string }>(db, 'SELECT id::text AS id FROM public.rag_chunks_visible($1, $2::uuid[], $3::text[], $4) AS id', [
+      args.p_tenant_key,
+      args.p_chunk_ids,
+      args.p_access_keys ?? null,
+      args.p_access_all ?? null,
+    ]);
+    return { data: found.map((row) => row.id), error: null };
+  } catch (error) {
+    return { data: null, error: { code: (error as { code?: string }).code ?? 'unknown', message: 'failed' } };
+  }
+}
+
 /** The product calls rpc(...).abortSignal(signal); the PGlite client returns a plain promise, so the builder method is added here. */
-function withAbortSignal(client: SupabaseClient): SupabaseClient {
+function withAbortSignal(db: PGlite, client: SupabaseClient): SupabaseClient {
   return new Proxy(client, {
     get(target, property, receiver) {
       if (property === 'rpc') {
         return (name: string, args?: Row) => {
-          const pending = (target as unknown as { rpc: (n: string, a?: Row) => Promise<unknown> }).rpc(name, args);
+          const pending =
+            name === 'rag_chunks_visible'
+              ? chunksVisible(db, args ?? {})
+              : (target as unknown as { rpc: (n: string, a?: Row) => Promise<unknown> }).rpc(name, args);
           return Object.assign(pending, { abortSignal: () => pending });
         };
       }
@@ -114,7 +132,7 @@ for (const mode of MODES) {
 
     before(async () => {
       ({ db } = await createEmptyFixtureDatabase({ deploymentMode: mode }));
-      admin = withAbortSignal(pgliteClient(db, { role: 'service_role', label: 'admin', calls: [] }) as unknown as SupabaseClient);
+      admin = withAbortSignal(db, pgliteClient(db, { role: 'service_role', label: 'admin', calls: [] }) as unknown as SupabaseClient);
       for (const id of [OWNER, MEMBER, OUTSIDER]) {
         await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, `user-${id.slice(-4)}@example.invalid`]);
       }
