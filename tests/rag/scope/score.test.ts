@@ -145,7 +145,7 @@ describe('maxDot kernel', () => {
 });
 
 // Serial, warmed up, best of three rounds: a loaded runner slows one round, while a scorer that misses the bound misses it in every round.
-describe('scope gate benchmark (D-26)', { sequential: true }, () => {
+describe('scope gate benchmark (D-26)', { concurrent: false }, () => {
   test('8 query vectors against 300 reference vectors at 2048 dimensions: p99 under 5 ms', () => {
     const dims = 2048;
     const centroids = Array.from({ length: 200 }, (_, index) => ({ kind: 'doc_type' as const, key: `k${index}`, memberCount: 1, vector: randomUnit(dims) }));
