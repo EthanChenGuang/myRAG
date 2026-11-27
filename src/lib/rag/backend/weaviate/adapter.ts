@@ -189,3 +189,25 @@ export async function searchWeaviateLegs(source: WeaviateClientSource, req: Stor
     throw mapWeaviateError(error, 'search');
   }
 }
+
+export interface WeaviateBackendDeps {
+  readClient: WeaviateClientSource;
+  revalidate: () => import('../supabase-rpc').RpcClient | null;
+  readiness?: (scope: TenantScope) => Promise<boolean>;
+  securityLog?: (line: string) => void;
+}
+
+export function createWeaviateBackend(_deps: WeaviateBackendDeps): import('../types').RetrievalBackend {
+  return {
+    id: 'weaviate',
+    async search() {
+      return { dense: [], lexical: [] };
+    },
+    async health() {
+      return { ok: false };
+    },
+    async isReady() {
+      return false;
+    },
+  };
+}
