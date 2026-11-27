@@ -43,10 +43,14 @@ export async function syncSidebarButtonConfig(
     try {
       const response = await fetchImpl(`/api/config/get-env?var=${SIDEBAR_BUTTON_ENV_NAMES[field]}`);
       if (!response.ok) continue;
-      const data = await response.json();
-      if (data.value) {
-        config[field] = data.value;
-        storage.setItem(SIDEBAR_BUTTON_STORAGE_KEYS[field], data.value);
+      const data: unknown = await response.json();
+      const value = (data as { value?: unknown } | null)?.value;
+      if (typeof value === 'string' && value) {
+        config[field] = value;
+        storage.setItem(SIDEBAR_BUTTON_STORAGE_KEYS[field], value);
+      } else {
+        config[field] = SIDEBAR_BUTTON_DEFAULTS[field];
+        storage.removeItem(SIDEBAR_BUTTON_STORAGE_KEYS[field]);
       }
     } catch {
       console.error('[Sidebar] failed to load the sidebar button setting');

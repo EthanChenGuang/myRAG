@@ -58,6 +58,7 @@ import { useSidebarReducer, SidebarAction } from './sidebar-reducer';
 import { OrganizationSwitcher } from '@/components/organization-switcher';
 import { useOrganizationStore } from '@/lib/stores/organization-store';
 import { isMultiTenant } from '@/lib/deployment-mode';
+import { SIDEBAR_BUTTON_DEFAULTS, readCachedSidebarButtonConfig, syncSidebarButtonConfig } from '@/lib/sidebar-button-config';
 import './sidebar.css';
 
 interface SidebarProps {
@@ -1067,45 +1068,24 @@ export function Sidebar({ isOpen, onClose, onNewChat, onSelectChat, userEmail, o
   }, []);
 
   // Initialize sidebar button configuration
-  const [sidebarButtonText, setSidebarButtonText] = useState<string>('myRAG');
-  const [sidebarButtonUrl, setSidebarButtonUrl] = useState<string>('https://myrag.laoxiang.app/');
+  const [sidebarButtonText, setSidebarButtonText] = useState<string>(SIDEBAR_BUTTON_DEFAULTS.text);
+  const [sidebarButtonUrl, setSidebarButtonUrl] = useState<string>(SIDEBAR_BUTTON_DEFAULTS.url);
 
   useEffect(() => {
-    // Load from localStorage first for quick initial render
-    const savedButtonText = localStorage.getItem('SIDEBAR_BUTTON_TEXT');
-    const savedButtonUrl = localStorage.getItem('SIDEBAR_BUTTON_URL');
+    let cancelled = false;
+    const cached = readCachedSidebarButtonConfig(localStorage);
+    setSidebarButtonText(cached.text);
+    setSidebarButtonUrl(cached.url);
 
-    if (savedButtonText) setSidebarButtonText(savedButtonText);
-    if (savedButtonUrl) setSidebarButtonUrl(savedButtonUrl);
+    syncSidebarButtonConfig(localStorage, (input) => fetch(input)).then((config) => {
+      if (cancelled) return;
+      setSidebarButtonText(config.text);
+      setSidebarButtonUrl(config.url);
+    });
 
-    // Then fetch latest from server
-    async function fetchSidebarButtonConfig() {
-      try {
-        // Fetch button text
-        const textResponse = await fetch('/api/config/get-env?var=NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT');
-        if (textResponse.ok) {
-          const textData = await textResponse.json();
-          if (textData.value) {
-            setSidebarButtonText(textData.value);
-            localStorage.setItem('SIDEBAR_BUTTON_TEXT', textData.value);
-          }
-        }
-
-        // Fetch button URL
-        const urlResponse = await fetch('/api/config/get-env?var=NEXT_PUBLIC_SIDEBAR_BUTTON_URL');
-        if (urlResponse.ok) {
-          const urlData = await urlResponse.json();
-          if (urlData.value) {
-            setSidebarButtonUrl(urlData.value);
-            localStorage.setItem('SIDEBAR_BUTTON_URL', urlData.value);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching sidebar button config:', error);
-      }
-    }
-
-    fetchSidebarButtonConfig();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Get organization context for workspace-aware fetching
@@ -2569,9 +2549,9 @@ export function Sidebar({ isOpen, onClose, onNewChat, onSelectChat, userEmail, o
                       href={sidebarButtonUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center space-x-2 px-3 py-2 text-sm rounded-lg hover:bg-[#FFE8DC] dark:hover:bg-[#2F2F2F] transition-all duration-200"
+                      className="flex items-center space-x-2 px-3 py-2 text-sm rounded-lg hover:bg-[#FFE8DC] dark:hover:bg-[#2F2F2F] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6417]/60"
                     >
-                      <ExternalLink className="h-4 w-4" />
+                      <ExternalLink className="h-4 w-4" aria-hidden="true" />
                       <span>{sidebarButtonText}</span>
                     </motion.a>
                   </motion.div>
