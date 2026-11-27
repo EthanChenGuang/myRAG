@@ -332,12 +332,13 @@ for (const mode of MODES) {
 
     test('with pgvector back in public every 0425 file applies', async () => {
       await db.exec(`ALTER EXTENSION vector SET SCHEMA public`);
-      // 0856 changed the rag_exact_id_documents signature that the 0425 precheck names: 0314 restores it first, 0856 runs again after.
+      // 0856 and 0930 changed signatures that the 0425 precheck names: 0306, 0308 and 0314 restore them first, 0856 and the 0930 block
+      // run again after (the 0930 operator rule).
       const all = migrationFiles(mode);
       await applyMigrationFiles(db, [
-        ...all.filter((file) => /^supabase\/migrations\/0314_/.test(file)),
+        ...all.filter((file) => /^supabase\/migrations\/(0306|0308|0314)_/.test(file)),
         ...files,
-        ...all.filter((file) => /^supabase\/migrations\/0856_/.test(file)),
+        ...all.filter((file) => /^supabase\/migrations\/(0856|0930)_/.test(file)),
       ]);
     });
   });
