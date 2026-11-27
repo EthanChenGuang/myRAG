@@ -377,7 +377,7 @@ describe('Documents sub-view (D-17, D-28, UI-SPEC 6.4)', () => {
     const page = loadPage();
     await page.init();
     const tabs = page.root.querySelectorAll('[role="tab"]').map((t) => t.textContent);
-    expect(tabs).toEqual(['Groups: 3', 'Documents', 'Enforcement']);
+    expect(tabs).toEqual(['Groups: 3', 'Documents', 'Connector mapping', 'Enforcement']);
     expect(page.count('documents')).toBe(0);
     (page.doc.getElementById('rag-access-groups-tab-documents') as FakeElement).click();
     await flush();
@@ -627,26 +627,19 @@ describe('connector documents (D-20, UI-SPEC decision 9)', () => {
     const open = button(page.row(D_2), 'Open connector mapping');
     expect(page.visibleTo(D_2).textContent).toContain('Its sharing at the source is not mapped to an access group.');
     expect(page.row(D_2).querySelector('[data-access-groups-managed]')).toBeTruthy();
-    // Until plan 44 mounts the Connector mapping sub-tab, the button is disabled and described by docs.connectorManaged.
-    expect(open.disabled).toBe(true);
-    const instance = page.context.accessGroupsPanel as { tabs: { panels: Record<string, FakeElement>; select: (id: string) => void }; renderDocuments: () => void };
-    const heading = page.doc.createElement('h4');
-    heading.setAttribute('data-access-groups-mapping-heading', '');
-    const mappingPanel = page.doc.createElement('div');
-    mappingPanel.appendChild(heading);
+    // Plan 44 mounts the Connector mapping sub-tab, so the button is active and opens it with its heading focused.
+    expect(open.disabled).toBe(false);
+    const instance = page.context.accessGroupsPanel as { tabs: { select: (id: string) => void } };
     const selected: string[] = [];
     const realSelect = instance.tabs.select;
-    instance.tabs.panels.mapping = mappingPanel;
     instance.tabs.select = (id: string) => {
       selected.push(id);
-      if (id !== 'mapping') realSelect(id);
+      realSelect(id);
     };
-    instance.renderDocuments();
-    const enabled = button(page.row(D_2), 'Open connector mapping');
-    expect(enabled.disabled).toBe(false);
-    enabled.click();
+    open.click();
     expect(selected).toEqual(['mapping']);
-    expect(page.doc.activeElement).toBe(heading);
+    expect(page.doc.activeElement?.getAttribute('data-access-groups-mapping-heading')).toBe('');
+    expect((page.doc.getElementById('rag-access-groups-panel-mapping') as FakeElement).hidden).toBe(false);
   });
 
   it('a 409 access_managed_by_connector on a single save says docs.connectorManaged and reloads', async () => {
