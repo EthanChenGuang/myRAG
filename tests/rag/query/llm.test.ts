@@ -51,10 +51,10 @@ afterEach(() => {
 
 describe('createQueryLlm', () => {
   test('returns the parsed object; the call used temperature 0 and a json response format', async () => {
-    const model = new MockLanguageModelV3({ doGenerate: jsonResult({ standalone: 'synthetic standalone question', unchanged: false }) });
+    const model = new MockLanguageModelV3({ doGenerate: jsonResult({ standalone: 'synthetic standalone question', unchanged: false, language: null }) });
     const llm = createQueryLlm({ model: 'openai/gpt-4.1-nano', apiKey: () => FAKE_KEY, languageModel: () => model });
     const out = await llm.generate(request());
-    expect(out).toEqual({ standalone: 'synthetic standalone question', unchanged: false });
+    expect(out).toEqual({ standalone: 'synthetic standalone question', unchanged: false, language: null });
     expect(model.doGenerateCalls).toHaveLength(1);
     const call = model.doGenerateCalls[0];
     expect(call.temperature).toBe(0);
@@ -79,7 +79,7 @@ describe('createQueryLlm', () => {
   });
 
   test('an aborted signal raises aborted without calling the model', async () => {
-    const model = new MockLanguageModelV3({ doGenerate: jsonResult({ standalone: 'x', unchanged: true }) });
+    const model = new MockLanguageModelV3({ doGenerate: jsonResult({ standalone: 'x', unchanged: true, language: null }) });
     const llm = createQueryLlm({ apiKey: () => FAKE_KEY, languageModel: () => model });
     const controller = new AbortController();
     controller.abort();

@@ -65,7 +65,8 @@ def items():
 
 @pytest.fixture(scope="module")
 def injection_items(items):
-    return [item for item in items if item.category in MINIMUMS]
+    # Link-injection items (plan 05.2-29) use the sec-links documents; eval/tests/test_golden_phase52.py covers them.
+    return [item for item in items if item.category in MINIMUMS and "link_injection" not in item.tags]
 
 
 @pytest.fixture(scope="module")

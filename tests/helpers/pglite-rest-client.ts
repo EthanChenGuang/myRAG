@@ -3,7 +3,7 @@ import type { PGlite } from '@electric-sql/pglite';
 /**
  * A small Supabase-js shaped client over PGlite for route tests that need real RLS. Each query runs in its own transaction as the
  * given role, with request.jwt.claim.sub set to the user, so the policies and SECURITY DEFINER helpers decide as on Supabase.
- * Supported: select (plain column list), insert and update (with select for RETURNING), eq, in, contains, lt, gt, or (the mined_at/id
+ * Supported: select (plain column list), insert and update (with select for RETURNING), eq, in, contains, lt, gt, not.is.null, or (the mined_at/id
  * keyset grammar), order, limit, maybeSingle, rpc (named arguments); auth.admin.getUserById reads auth.users as service_role.
  * Every query is appended to `calls` as `<label>:<table>`.
  */
@@ -127,6 +127,12 @@ class Query implements PromiseLike<{ data: unknown; error: unknown }> {
   contains(column: string, values: unknown[]): this {
     this.params.push(values.map(String));
     this.where.push(`${ident(column)} @> $${this.params.length}::text[]`);
+    return this;
+  }
+
+  not(column: string, operator: 'is', value: null): this {
+    if (operator !== 'is' || value !== null) throw new Error('[pglite-rest] unsupported not filter');
+    this.where.push(`${ident(column)} IS NOT NULL`);
     return this;
   }
 

@@ -24,6 +24,7 @@ import {
   finishTrace,
   groundednessEligibility,
   IDENTIFIER_NOT_FOUND,
+  contentIdentifierNorms,
   currentAttributeFilterMode,
   currentLexicalVersion,
   hashSystemPromptTemplate,
@@ -49,13 +50,31 @@ import {
   type RetrievalResult,
   type StageName,
   type StageOverrides,
+  detectMixedVersions,
+  versionConflictTrace,
+  applyAnswerPipelineToText,
+  attributeSourceChunks,
+  buildSentenceRecords,
+  CLAUDE_MAX_OUTPUT_TOKENS,
+  createAnswerTurn,
+  readAnswerConfig,
+  type AnswerTextPipelineResult,
+  type AnswerTurn,
 } from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest, type RagTrace } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
-import { buildEffectiveConfig, configHash } from '@/lib/rag-eval/trace';
+import {
+  answerRulesTraceFields,
+  buildEffectiveConfig,
+  configHash,
+  outputGuardTraceSummary,
+  residualOutputFindings,
+  retrievalBackendTrace,
+  evalTraceLanguages,
+} from '@/lib/rag-eval/trace';
 import {
   evalGroundednessRequest,
-  generateEvalAnswer,
+  generateEvalAnswerDetailed,
   isGPTGeneratorModel,
   resolveEvalPromptTemplate,
   resolveGeneratorModel,
@@ -84,6 +103,7 @@ function toRetrievalOverrides(input: RetrievalOverridesInput | undefined): Retri
     out.chunkingProfileByDocType = { ...input.chunking_profile_by_doc_type };
   }
   if (input.table_lookup != null) out.tableLookup = { ...input.table_lookup };
+  if (input.backend != null) out.backend = input.backend;
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -408,6 +428,12 @@ function errorDetail(error: unknown): string {
   return typeof status === 'number' ? `${name} (HTTP ${status})` : name;
 }
 
+/** Phase 5.2 D-04: the answer-rule options of an eval turn; the eval offers no webSearch tool. */
+interface EvalAnswerRuleOptions {
+  mode: string;
+  webSearchOffered: boolean;
+}
+
 /** D-09 and D-10 in the eval: the direct Claude call; a failure before any text falls back to chunk-alias once. */
 async function generateClaudeAnswer(input: {
   session: CitationSession;
@@ -415,31 +441,96 @@ async function generateClaudeAnswer(input: {
   conversation: EvalConversationTurn[];
   signal: AbortSignal;
   answerLanguage?: AnswerLanguageOptions;
-}): Promise<string | null> {
-  const { session } = input;
+  answerTurn: AnswerTurn | null;
+  answerRuleOptions: EvalAnswerRuleOptions;
+}): Promise<{ text: string; finishReason: string } | null> {
+  const { session, answerTurn } = input;
   let streamError: unknown = null;
   try {
     const history: ModelMessage[] = session.stripHistory(
       input.conversation.map((turn) => ({ role: turn.role, content: turn.content })),
     ) as ModelMessage[];
+    const claudeSystem = appendAnswerLanguage(session.claudeSystemPrompt(resolveEvalPromptTemplate()), input.answerLanguage);
     const stream = session.startClaude({
-      system: appendAnswerLanguage(session.claudeSystemPrompt(resolveEvalPromptTemplate()), input.answerLanguage),
+      // Phase 5.2 D-07: the chat route composes the same block into the direct Claude call's system text
+      system: answerTurn ? answerTurn.composeSystemPrompt(claudeSystem, input.answerRuleOptions) : claudeSystem,
       history,
       question: input.query,
       reasoning: false,
+      ...(answerTurn?.outputCapDecision()?.applied ? { outputCap: answerTurn.maxOutputTokens(CLAUDE_MAX_OUTPUT_TOKENS) } : {}),
       abortSignal: input.signal,
       onError(error) {
         streamError = error;
       },
     });
     const text = await stream.result.text;
-    if (text.length > 0) return text;
+    if (text.length > 0) return { text, finishReason: await stream.result.finishReason };
   } catch (error: unknown) {
     streamError = error;
   }
   console.warn('[RAG Eval] Claude citations call failed, falling back to chunk-alias:', streamError ? errorDetail(streamError) : 'empty');
   session.fallback('error');
   return null;
+}
+
+type EvalTextBlock = NonNullable<RetrievalResult['blocks']>[number];
+
+/**
+ * Phase 5.2 on the eval trace (D-62 a): the inputs of answerRulesTraceFields from the turn and the whole-text chain. The
+ * sentence records and the residual findings are computed on the final answer, the text the gates score.
+ */
+function evalAnswerRulesInput(input: {
+  answerTurn: AnswerTurn;
+  answer: string | null;
+  answerChain: AnswerTextPipelineResult | null;
+  finishReason: string | null;
+  serverRefused: boolean;
+  mixedVersions: boolean | undefined;
+  textBlocks: readonly EvalTextBlock[];
+  citationSession: CitationSession | null;
+}): Parameters<typeof answerRulesTraceFields>[0] {
+  const { answerTurn, answer, answerChain } = input;
+  const config = answerTurn.config;
+  const language = answerTurn.answerLanguage;
+  const refusedByModel = answerChain?.refused === true;
+  const generated = answer !== null && answerChain !== null;
+  // The Pydantic AnswerSentence needs a reason on a not_checked sentence; the eval runs no claim check on its answer
+  const notCheckedReason = config.claimCheck ? 'claim_check_not_run' : 'claim_check_off';
+  const sentences =
+    generated && !refusedByModel && language && (config.citationPerSentence || config.claimCheck)
+      ? buildSentenceRecords({
+          text: answer,
+          part: 0,
+          language,
+          aliases: input.citationSession?.aliases() ?? new Set<string>(),
+          truncated: answerChain.truncated,
+        }).map((sentence) => (sentence.support === 'not_checked' && !sentence.reason ? { ...sentence, reason: notCheckedReason } : sentence))
+      : null;
+  let outputGuard = null;
+  if (answerChain?.outputGuard) {
+    const summary = answerChain.outputGuard;
+    const sent = input.textBlocks.map((block) => ({ documentId: block.documentId, chunkIds: block.chunkIds, text: block.text }));
+    const attributed = [...attributeSourceChunks(sent, summary.removedTargets), ...attributeSourceChunks(sent, summary.matchedPhrases)];
+    const chunkIds = [...new Set(attributed.map((source) => source.chunkId).filter((id): id is string => typeof id === 'string'))].sort();
+    outputGuard = outputGuardTraceSummary(summary, chunkIds);
+  }
+  // D-42: one flag-mode pass of the same guard core over the final answer, whatever RAG_OUTPUT_GUARD says
+  const residualPass = generated
+    ? applyAnswerPipelineToText(answer, { language, channel: 'eval', notices: false, guard: answerTurn.guardPolicyFor('flag') })
+    : null;
+  return {
+    anyNonDefault: config.anyNonDefault,
+    answerLanguage: language,
+    refusedByServer: input.serverRefused,
+    refusedByModel,
+    finishReason: generated ? input.finishReason : null,
+    parts: answerTurn.composedParts(),
+    notices: answerChain?.notices ?? [],
+    sentences,
+    outputGuard,
+    residual: residualPass?.outputGuard ? residualOutputFindings(residualPass.outputGuard) : null,
+    mixedVersions: input.mixedVersions ?? null,
+  };
 }
 
 type EvalTraceCacheState = NonNullable<RagTrace['cache']>;
@@ -541,6 +632,19 @@ export async function POST(req: NextRequest) {
             facts: EVAL_CLAUDE_FACTS,
           })
         : null;
+    // Phase 5.2 D-07, D-64: the eval turn; with every 5.2 switch off it changes neither the prompt, the limit nor the answer
+    const answerTurn: AnswerTurn | null =
+      generatorModel !== null
+        ? createAnswerTurn({
+            config: readAnswerConfig(),
+            question: query,
+            history: [...history, { role: 'user', content: query }],
+            uiLanguage: null,
+            channel: 'eval',
+            ragMode,
+          })
+        : null;
+    const answerRuleOptions: EvalAnswerRuleOptions = { mode: ragMode, webSearchOffered: false };
 
     // D-37/D-38: the key parts of an eval lookup; the pipeline derives the eval entry profile, so no entry reaches chat or embed.
     const cacheOverride = cacheOverrideOn(options);
@@ -594,13 +698,25 @@ export async function POST(req: NextRequest) {
       const documentNames = new Map<string, string>();
       for (const doc of result.usedDocuments) documentNames.set(doc.id, doc.filename || doc.name);
       for (const chunk of result.kept) documentNames.set(chunk.document_id, chunk.document_name);
+      const textBlocks = (result.blocks ?? []).filter((block) => !block.isImage);
+      // D-37: the eval turn's allow evidence; the eval offers no webSearch tool and no tool results
+      const guardSources = {
+        blocks: () => textBlocks,
+        serverUrls: () =>
+          [...result.usedDocuments.map((doc) => doc.image_url), ...result.sourceImages.map((image) => image.url)].filter(
+            (url): url is string => typeof url === 'string' && url !== '',
+          ),
+        contextFlagged: () => result.injection?.flagged === true,
+      };
 
       let answer: string | null = null;
+      let finishReason: string | null = null;
+      let answerChain: AnswerTextPipelineResult | null = null;
       const cacheHit = isCacheHitResult(result) ? result.cacheHit : undefined;
-      const refused = cacheHit ? cacheHit.answer.is_refusal : result.refusalCandidate || result.refusal?.decision === 'refuse';
+      const serverRefused = cacheHit ? cacheHit.answer.is_refusal : result.refusalCandidate || result.refusal?.decision === 'refuse';
       if (cacheHit) {
         if (includeAnswer) answer = cacheHit.answer.answer_text;
-      } else if (generatorModel !== null && !refused) {
+      } else if (generatorModel !== null && !serverRefused) {
         // D-25: only a turn that generates records timing, so a retrieval-only run traces as before
         collector.markRequestStart(requestReceivedAt);
         await awaitPreGenerationDelay();
@@ -608,26 +724,52 @@ export async function POST(req: NextRequest) {
         const generationStart = collector.now();
         citationSession?.attach(result);
         const answerLanguage = answerLanguageOptions(result);
+        // Phase 5.2 D-30: decided once, before the composer, with the chat route's rule (the eval request sets no limit of its own)
+        if (answerTurn && answerTurn.config.maxOutputTokens.kind !== 'off') {
+          answerTurn.decideOutputCap({
+            knowledgeContext:
+              result.context.length > 0 &&
+              (result.status === 'ok' || result.status === 'degraded') &&
+              (result.blocks ?? []).some((block) => !block.isImage),
+            userMaxTokens: false,
+            reasoning: generatorModel.includes('gpt-5'),
+            approvalContinuation: false,
+          });
+        }
+        // D-04, D-07: the chat route's order: enhanced prompt, citation decoration, then the answer-rule block (with context only)
+        const decorateSystemPrompt = (prompt: string): string => {
+          if (!answerTurn || result.context.length === 0) return citationSession ? citationSession.decorateSystemPrompt(prompt) : prompt;
+          return answerTurn.composeSystemPrompt(citationSession ? citationSession.decorateSystemPrompt(prompt) : prompt, answerRuleOptions);
+        };
         try {
           if (citationSession?.strategy === 'claude-citations') {
-            answer = await generateClaudeAnswer({
+            const claude = await generateClaudeAnswer({
               session: citationSession,
               query,
               conversation: conversation ?? [],
               signal: req.signal,
               ...(answerLanguage ? { answerLanguage } : {}),
+              answerTurn,
+              answerRuleOptions,
             });
+            if (claude) {
+              answer = claude.text;
+              finishReason = claude.finishReason;
+            }
           }
           if (answer === null) {
-            answer = await generateEvalAnswer({
+            const generated = await generateEvalAnswerDetailed({
               query,
               conversation,
               context: result.context,
               ragMode,
               generatorModel,
-              ...(citationSession ? { decorateSystemPrompt: (prompt: string) => citationSession.decorateSystemPrompt(prompt) } : {}),
+              decorateSystemPrompt,
               ...(answerLanguage ? { answerLanguage } : {}),
+              outputCap: answerTurn?.outputCapDecision() ?? null,
             });
+            answer = generated.text;
+            finishReason = generated.finishReason;
             citationSession?.ingestFullText(answer);
           }
         } catch (error: unknown) {
@@ -635,10 +777,25 @@ export async function POST(req: NextRequest) {
           console.error('[RAG Eval] generation failed:', detail);
           return NextResponse.json({ error: `generation failed: ${detail}` }, { status: 500 });
         }
+        // Phase 5.2 RESEARCH Pitfall 21: the eval does not stream, so the whole-text twin of the chain runs on the answer:
+        // sentinel, output guard, then the notices as a final paragraph (D-16, D-35, D-11, D-33). Off: the answer is untouched.
+        if (answerTurn?.config.anyNonDefault && answer !== null) {
+          answerTurn.setGuardSources(guardSources);
+          answerChain = applyAnswerPipelineToText(answer, {
+            refusalText: answerTurn.sentinelRefusalText(answerRuleOptions.webSearchOffered),
+            finishReason,
+            language: answerTurn.answerLanguage,
+            channel: 'eval',
+            guard: answerTurn.guardPolicy(),
+          });
+          answer = answerChain.text;
+        }
         // The eval answer is generated whole, so its first text is the full answer
         if (answer !== null && answer.length > 0) collector.markFirstTextDelta();
         collector.record({ name: 'generation', status: 'ok', startedAt: generationStart, endedAt: collector.now() });
       }
+      const refusedByModel = answerChain?.refused === true;
+      const refused = serverRefused || refusedByModel;
       const citationFields = citationTraceFields(citationSession);
 
       let groundedness: AnswerGroundedness | null = null;
@@ -699,6 +856,31 @@ export async function POST(req: NextRequest) {
       effectiveConfig.generator_model = generatorModel;
       const redundancy = topkRedundancy(result.kept);
       const identifierTrace = identifierTraceOf(result);
+      const mixedVersions =
+        result.versionConflict && answer !== null
+          ? detectMixedVersions({ answerText: answer, conflict: result.versionConflict, blocks: result.blocks ?? [], question: query })
+          : undefined;
+      const answerRulesFields = answerTurn
+        ? answerRulesTraceFields(evalAnswerRulesInput({ answerTurn, answer, answerChain, finishReason, serverRefused, mixedVersions, textBlocks, citationSession }))
+        : {};
+      const backendTrace = retrievalBackendTrace(result.stages);
+      // LANG-10: the same languages block as the production trace; the answer language follows the chat route's rule
+      const languagesField = evalTraceLanguages({
+        collector,
+        result,
+        query,
+        answerLanguage: cacheHit
+          ? (cacheHit.answer.answer_language ?? null)
+          : refusedByModel
+            ? (answerTurn?.answerLanguage ?? null)
+            : answer !== null
+              ? (detectLanguage(answer) ?? null)
+              : null,
+      });
+      // D-32: kept chunks carry their identifiers only while the identifier filter ran, so every other trace stays unchanged.
+      const keptIdentifiers = identifierTrace
+        ? await contentIdentifierNorms(scope, result.kept.map((chunk) => chunk.content), { signal: req.signal })
+        : null;
       const trace = {
         schema_version: 1 as const,
         item_id: itemId ?? null,
@@ -728,11 +910,12 @@ export async function POST(req: NextRequest) {
           ...(chunk.legs !== undefined ? { legs: chunk.legs } : {}),
           ...(chunk.language !== undefined ? { language: chunk.language } : {}),
         })),
-        kept: result.kept.map(({ dupClusterId, alsoIn: _alsoIn, isCurrent, documentVersion, ...chunk }) => ({
+        kept: result.kept.map(({ dupClusterId, alsoIn: _alsoIn, isCurrent, documentVersion, ...chunk }, index) => ({
           ...chunk,
           ...(dupClusterId ? { dup_cluster_id: dupClusterId } : {}),
           ...(isCurrent !== undefined ? { is_current: isCurrent } : {}),
           ...(documentVersion !== undefined ? { document_version: documentVersion } : {}),
+          ...(keptIdentifiers ? { identifiers_norm: keptIdentifiers[index] ?? [] } : {}),
         })),
         ...(redundancy !== null ? { topk_redundancy: redundancy } : {}),
         ...(identifierTrace ? { identifier: identifierTrace } : {}),
@@ -746,10 +929,13 @@ export async function POST(req: NextRequest) {
         refused,
         refusal_reason: refusalReasonOf(result, refused),
         ...(v2Result ? v2TraceFields(result) : {}),
+        ...(v2Result && backendTrace ? { retrieval_backend: backendTrace } : {}),
         ...(v2Result ? (attributeFilterTrace(result.stages, currentAttributeFilterMode()) ?? {}) : {}),
         ...(Object.keys(stageCounts).length > 0 ? { stage_counts: stageCounts } : {}),
         ...(injection ? { injection } : {}),
+        ...(result.versionConflict ? { version_conflict: versionConflictTrace(result.versionConflict, mixedVersions) } : {}),
         answer,
+        ...languagesField,
         citations: citationFields?.citations ?? NO_CITATIONS,
         ...(citationFields
           ? { citation_strategy: citationFields.citation_strategy, invalid_citations: citationFields.invalid_citations }
@@ -757,6 +943,7 @@ export async function POST(req: NextRequest) {
         ...(groundedness ? { groundedness } : {}),
         ...(answer !== null ? timingTraceFields(collector) : {}),
         ...(cacheState ? { cache: cacheState } : {}),
+        ...answerRulesFields,
         stage_latency_ms: collector.toStageLatency(),
         stage_status: collector.toStageStatus(),
         effective_config: effectiveConfig,

@@ -50,3 +50,43 @@ describe('toEmbedRequestBody', () => {
     expect(Object.keys(body).sort()).toEqual(['messages', 'model']);
   });
 });
+
+describe('toEmbedRequestBody standalone-query metadata (D-22, D-17)', () => {
+  const RAG = { standaloneQuery: 'Which option controls the import format?', queryLanguage: 'en' };
+  const withMetadata = (message: UIMessage, metadata: unknown): UIMessage => ({ ...message, metadata });
+
+  it('sends metadata.rag on the user message that precedes an assistant message carrying it', () => {
+    const body = toEmbedRequestBody(
+      [
+        msg('greeting', 'assistant', [{ type: 'text', text: 'Welcome' }]),
+        msg('1', 'user', [{ type: 'text', text: 'And the import one?' }]),
+        withMetadata(msg('2', 'assistant', [{ type: 'text', text: 'answer' }]), { rag: RAG, feedbackToken: 't' }),
+        msg('3', 'user', [{ type: 'text', text: 'next' }]),
+      ],
+      MODEL,
+    );
+    expect(body.messages).toEqual([
+      { role: 'assistant', content: 'Welcome' },
+      { role: 'user', content: 'And the import one?', metadata: { rag: RAG } },
+      { role: 'assistant', content: 'answer' },
+      { role: 'user', content: 'next' },
+    ]);
+  });
+
+  it('drops a malformed rag value', () => {
+    for (const rag of [{ ...RAG, scope: 'x' }, { standaloneQuery: 'x'.repeat(1001), queryLanguage: 'en' }, 'text', null]) {
+      const body = toEmbedRequestBody(
+        [msg('1', 'user', [{ type: 'text', text: 'q' }]), withMetadata(msg('2', 'assistant', [{ type: 'text', text: 'a' }]), { rag })],
+        MODEL,
+      );
+      expect(body.messages[0]).toEqual({ role: 'user', content: 'q' });
+    }
+  });
+
+  it('adds the optional language only when one is given', () => {
+    const messages = [msg('1', 'user', [{ type: 'text', text: 'x' }])];
+    expect(toEmbedRequestBody(messages, MODEL, 'it-IT')).toEqual({ messages: [{ role: 'user', content: 'x' }], model: MODEL, language: 'it' });
+    expect(toEmbedRequestBody(messages, MODEL, '')).not.toHaveProperty('language');
+    expect(toEmbedRequestBody(messages, MODEL, undefined)).not.toHaveProperty('language');
+  });
+});

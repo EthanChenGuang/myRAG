@@ -8,7 +8,9 @@ export type LanguagePack = LanguageRegistry['packs'][number];
 /** The generated language code type (D-06): the registry codes as exported into the contracts. */
 export type Language = NonNullable<LanguageSettings['languages']>[number];
 
-type PackTexts = LanguagePack['texts'];
+type AllPackTexts = LanguagePack['texts'];
+/** The required text groups; an optional group (Phase 6.2 query_layer) is outside TEXT_KEYS and D-04 completeness. */
+type PackTexts = { [G in keyof AllPackTexts as undefined extends AllPackTexts[G] ? never : G]: AllPackTexts[G] };
 /** Phase 5.2 D-08: a fixed-text key, `<group>.<key>`, derived from the generated LanguagePack contract. */
 export type TextKey = { [G in keyof PackTexts]: `${G & string}.${keyof PackTexts[G] & string}` }[keyof PackTexts];
 /** Every fixed-text key in the order of rag_sidecar.contracts.languages.TEXT_KEYS. */

@@ -4,6 +4,7 @@ import { detectLanguage } from '../../lang/detect';
 import { getLanguageSettings } from '../../lang/settings';
 import { LEXICAL_VERSION, chunkLexicalText } from '../../lexical/chunk-text';
 import { lexicalOptionsOn, type LexicalOptions } from '../../lexical/options';
+import { afterLexicalWrite } from '../../lexical/stats-hooks';
 import type { LexicalStamp } from '../../lexical/resolve-options';
 import type { BackfillScopeResult } from '../../tenant/backfill-scope';
 import { tableRowLanguage, tableRowSeparator } from '../text/table-rows';
@@ -334,6 +335,17 @@ function recalibrationLine(version: number, candidates: number): string | null {
  * Rebuilds lexical_text for every ready current chunk whose lexical_version differs from LEXICAL_VERSION, in
  * keyset batches, without parser, sidecar, object-store or embedding calls.
  */
+/**
+ * D-17: once per tenant the run rewrote, after its last batch, the lexical statistics follow-up (bm25 only, read from the run's
+ * configuration; a run given no configuration makes no call). Best effort: it never changes the report.
+ */
+async function afterRelexWrites(input: RunRelexInput, tenants: Record<string, number>): Promise<void> {
+  if (!input.config) return;
+  for (const tenantKey of Object.keys(tenants).sort()) {
+    await afterLexicalWrite({ db: () => input.db, config: input.config }, tenantKey);
+  }
+}
+
 export async function runRelex(input: RunRelexInput): Promise<RelexReport> {
   if (stampedRun(input)) return runStampedRelex(input);
   const signal = input.signal ?? new AbortController().signal;
@@ -371,6 +383,7 @@ export async function runRelex(input: RunRelexInput): Promise<RelexReport> {
   }
 
   if (rowSerialization === null) {
+    await afterRelexWrites(input, tenants);
     input.onProgress?.(`done: ${updated} rows in ${batches} batches`);
     return { updated, batches, tenants };
   }
@@ -389,6 +402,7 @@ export async function runRelex(input: RunRelexInput): Promise<RelexReport> {
     },
   );
   if (tables === null) input.onProgress?.('table pass skipped: rag_relex_table_candidates is not installed (migration 0815)');
+  await afterRelexWrites(input, tenants);
   input.onProgress?.(`done: ${updated} rows in ${batches} batches`);
   return { updated, batches, tenants, tables: tables ?? 0 };
 }
@@ -677,6 +691,7 @@ async function runStampedRelex(input: RunRelexInput): Promise<RelexReport> {
     });
     if (tables === null) input.onProgress?.('table pass skipped: rag_relex_table_candidates is not installed (migration 0815)');
   }
+  await afterRelexWrites(input, tenants);
   if (plan.warnings.size > 0) input.onProgress?.(`warnings: ${[...plan.warnings].sort().join(', ')}`);
   const reminder = recalibrationLine(plan.version, Object.values(tenants).reduce((sum, count) => sum + count, 0));
   if (reminder) input.onProgress?.(reminder);

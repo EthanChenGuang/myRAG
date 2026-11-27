@@ -5,9 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { ingestModeGoldenPaths, mergeGoldenFiles, parseIngestRoutingFlags } from './ingest-mode.mts';
 import { dropTableSplitItems } from './table-split.mts';
+import { dropTemplatedItems } from './templated-fixtures.mts';
+import { MEASUREMENT_PATH, resolveGatesMode } from './gate-mode.mts';
 import { runEval, type EvalRequestOptions } from './run-eval.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, loadRunConfig, RunConfigError } from './run-config.mts';
 import { loadEnvOverlay, OverlayError, writeOverlayReport, type EnvOverlay } from './env-overlay.mts';
+import { phase52TierExitCode, runPhase52Tier } from './phase52-tier.mts';
 import type { DeploymentMode, FixtureMode } from './pglite-supabase.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -67,9 +70,28 @@ async function main(): Promise<number> {
       answers: { type: 'boolean', default: false },
       'no-answers': { type: 'boolean', default: false },
       'env-overlay': { type: 'string' },
+      phase52: { type: 'boolean', default: false },
+      'rag-mode': { type: 'string' },
     },
     strict: true,
   });
+
+  // 05.2-32 (D-42, D-54, D-62 a, b): --phase52 runs p52-all-off, p52-rules-on, p52-violating-partial, p52-violating-versions,
+  // p52-violating-offtopic and p52-sec-output-guard, one child run each, and fails when any of their gates fails.
+  if (values.phase52) {
+    const conflicting = ['run-config', 'base-url', 'golden', 'env-overlay', 'baseline', 'no-gate'].filter(
+      (name) => values[name as keyof typeof values] !== undefined && values[name as keyof typeof values] !== false,
+    );
+    if (conflicting.length > 0 || values['fixture-mode'] !== 'prechunked') {
+      console.error(`[Eval Harness] --phase52 runs its own configurations on the prechunked fixtures; omit ${conflicting.join(', ') || '--fixture-mode'}`);
+      return 2;
+    }
+    const results = runPhase52Tier({ repoRoot: REPO_ROOT, outDir: path.resolve(values.out as string), deploymentMode: values['deployment-mode'] });
+    for (const result of results) {
+      console.log(`[Eval Harness] Phase 5.2 ${result.name}: ${result.code === 0 ? 'PASS' : `FAIL (exit ${result.code}${result.reason ? `, ${result.reason}` : ''})`}`);
+    }
+    return phase52TierExitCode(results);
+  }
 
   // D-06, O-1: a gated run always adds the absolute gates (default eval/config/quality-gates.json, --gates names another file) to the
   // noise-band gate; only --no-gate leaves them out. --gates-mode report prints them without changing the exit code.
@@ -87,6 +109,13 @@ async function main(): Promise<number> {
   const goldenManifestFlag = values['golden-manifest']?.trim();
   if (goldenManifestFlag !== undefined && goldenManifestFlag === '') {
     console.error('[Eval Harness] --golden-manifest must not be empty');
+    return 2;
+  }
+
+  // D-34: the output-cap sweep runs each mode; every other run keeps the default strict.
+  const ragMode = values['rag-mode'];
+  if (ragMode !== undefined && ragMode !== 'strict' && ragMode !== 'balanced') {
+    console.error('[Eval Harness] --rag-mode must be strict or balanced');
     return 2;
   }
 
@@ -230,8 +259,14 @@ async function main(): Promise<number> {
   const goldenFiles = values.golden !== undefined ? [path.resolve(values.golden)] : defaultGolden.map((file) => path.resolve(REPO_ROOT, file));
   const mergedGolden = mergeGoldenFiles(goldenFiles, path.join(outDir, 'golden.merged.jsonl'));
   // table_split items run only against the isolated tenants of the inline ingest mode; other runs score without them.
+  // templated_collection items likewise run only in the inline ingest mode, which loads the templated collection for them.
   const goldenPath =
-    fixtureMode === 'ingest' && !ingestRouting ? mergedGolden : dropTableSplitItems(mergedGolden, path.join(outDir, 'golden.no-table-split.jsonl'));
+    fixtureMode === 'ingest' && !ingestRouting
+      ? mergedGolden
+      : dropTemplatedItems(
+          dropTableSplitItems(mergedGolden, path.join(outDir, 'golden.no-table-split.jsonl')),
+          path.join(outDir, 'golden.no-templated.jsonl'),
+        );
   if (runPython('rag_sidecar.contracts.validate', ['--model', 'GoldenItem', '--jsonl', goldenPath]) !== 0) {
     console.error('[Eval Harness] golden file failed Pydantic validation; nothing was run');
     return 2;
@@ -271,6 +306,7 @@ async function main(): Promise<number> {
     ...(values['cache-pairs'] ? { cachePairs: true } : {}),
     ...(values['allow-live-cache'] ? { allowLiveCache: true } : {}),
     ...(answers ? { answers: true } : {}),
+    ...(ragMode ? { ragMode } : {}),
     ...(envOverlay && Object.keys(envOverlay.env).length > 0 ? { envOverlay: envOverlay.env } : {}),
   });
 
@@ -298,6 +334,17 @@ async function main(): Promise<number> {
 
   if (!gate) return 0;
 
+  const gatesResolution = resolveGatesMode(gatesMode, {
+    fixtureMode,
+    live: Boolean(baseUrl),
+    customInputs: gatesFlag !== undefined || values.golden !== undefined,
+  });
+  if (gatesResolution.source === 'measured_tier') {
+    console.log(
+      `[Eval Harness] absolute gate mode ${gatesResolution.mode}: the mode ${path.relative(REPO_ROOT, MEASUREMENT_PATH)} records for tier ${gatesResolution.tier} (pr-smoke runs it so); --gates-mode enforce|report overrides`,
+    );
+  }
+
   const gateCode = runPython('rag_eval.gate', [
     '--report',
     path.join(outDir, 'report.json'),
@@ -310,7 +357,7 @@ async function main(): Promise<number> {
     ...(goldenManifest !== undefined ? ['--manifest', goldenManifest] : []),
     '--gates',
     gatesFile,
-    ...(gatesMode !== undefined ? ['--gates-mode', gatesMode] : []),
+    ...(gatesResolution.mode !== undefined ? ['--gates-mode', gatesResolution.mode] : []),
   ]);
   console.log(`[Eval Harness] gate: ${path.join(outDir, 'gate.md')}`);
   return gateCode;

@@ -395,6 +395,7 @@ export const ru = {
   waitingForApproval: "Ожидание вашего подтверждения...",
   executingTool: "Выполнение инструмента, пожалуйста, подождите...",
   toolError: "Произошла ошибка при выполнении инструмента.",
+  voiceUnavailable: "Голос временно недоступен. Попробуйте позже.",
   
   // Chat message action tooltips
   copyTooltip: "Копировать",

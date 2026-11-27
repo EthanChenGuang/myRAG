@@ -719,6 +719,12 @@ function terminologyUiLib() {
   return typeof window !== 'undefined' ? window : globalThis;
 }
 
+/** The Glossary view of 06.2 (glossary.js), when that script is loaded. */
+function terminologyGlossary() {
+  const w = typeof window !== 'undefined' ? window : null;
+  return w && typeof w.initGlossaryView === 'function' ? w : null;
+}
+
 function terminologyLabel(key, locale, vars) {
   const ui = terminologyUiLib();
   const text = ui.ragUiLookup(TERMINOLOGY_LABELS, key, locale, vars);
@@ -902,7 +908,7 @@ function buildIssueList(issues, kind, locale) {
         field: terminologyIssueField(issue, kind),
         severity: issue.severity === 'warning' ? 'warning' : 'error',
         code,
-        label: TERMINOLOGY_ISSUE_CODES.has(code) ? terminologyLabel('issue.' + code, locale) : code,
+        label: TERMINOLOGY_ISSUE_CODES.has(code) ? terminologyLabel('issue.' + code, locale) : (terminologyGlossary() && terminologyGlossary().glossaryImportIssueLabel(code, locale)) || code,
         message: terminologyText(issue.message),
         row: Number.isInteger(issue.row) ? issue.row : null,
       };
@@ -1020,7 +1026,7 @@ class TerminologyPanel {
     this.offset = 0;
     this.layerVersion = null;
     this.editor = null;
-    this.imports = { file: null, text: null, format: 'csv', mode: 'merge', report: null, checkedKey: null, errors: null, alert: null };
+    this.imports = { file: null, text: null, format: 'csv', mode: 'merge', report: null, checkedKey: null, errors: null, alert: null, fromGlossary: false };
     this.preview = { query: '', includeDraft: true, result: null, alert: null };
     this.candidates = { items: [], nextOffset: null, loaded: false };
     this.audit = { items: [], total: 0, loaded: false };
@@ -1091,11 +1097,14 @@ class TerminologyPanel {
     this.hosts.preview = this.el('div', { className: 'flex flex-col gap-4 min-w-0' });
     this.hosts.candidates = this.el('div', { className: 'flex flex-col gap-4 min-w-0' });
     this.hosts.history = this.el('div', { className: 'flex flex-col gap-4 min-w-0' });
+    const glossary = terminologyGlossary();
+    if (glossary) this.hosts.glossary = this.el('div', { className: 'min-w-0' });
     this.tabs = this.ui().ragUiSubTabs(this.doc, {
       label: this.t('tabs.label'),
       idPrefix: 'rag-terminology',
       tabs: [
         { id: 'entries', label: this.t('tab.entries') },
+        ...(glossary ? [{ id: 'glossary', label: glossary.glossaryLabel('tab.glossary', this.locale) }] : []),
         { id: 'import', label: this.t('tab.import') },
         { id: 'preview', label: this.t('tab.preview') },
         { id: 'candidates', label: this.t('tab.candidates') },
@@ -1231,6 +1240,7 @@ class TerminologyPanel {
     if (seq !== this.seq) return;
     if (this.tabs.current() === 'candidates') await this.loadCandidates(false);
     if (this.tabs.current() === 'history') await this.loadAudit(false);
+    if (this.tabs.current() === 'glossary') await this.showGlossary();
     this.renderImport();
     this.renderPreview();
     if (source === 'panel') this.announce(this.t('panel.loaded'));
@@ -1274,9 +1284,50 @@ class TerminologyPanel {
 
   onTab(id) {
     this.announce('');
+    if (id === 'import' && this.imports.fromGlossary) {
+      this.imports.fromGlossary = false;
+      this.renderImport();
+    }
+    if (id === 'glossary') this.showGlossary();
     if (id === 'candidates' && !this.candidates.loaded) this.loadCandidates(false);
     if (id === 'history') this.loadAudit(false);
     if (id === 'preview') this.renderPreview();
+  }
+
+  // --- Glossary view (06.2 UI-SPEC 6.2): the panel's layer, organization, status region and import flow
+
+  showGlossary() {
+    const glossary = terminologyGlossary();
+    if (!glossary || !this.hosts.glossary) return null;
+    return glossary.initGlossaryView(this.hosts.glossary, this.glossaryApi());
+  }
+
+  glossaryApi() {
+    if (this.glossaryApiCache) return this.glossaryApiCache;
+    this.glossaryApiCache = {
+      doc: this.doc,
+      locale: this.locale,
+      layer: () => this.layer,
+      enabled: () => this.enabled.slice(),
+      request: (subPath, params, init) => this.request(subPath, params, init),
+      send: (subPath, init) => this.ui().ragUiRagRequest(TERMINOLOGY_PATH + subPath, init),
+      withOrganization: (body) => this.withOrganization(body),
+      label: (key, vars) => this.t(key, vars),
+      announce: (text, isError) => this.announce(text, isError),
+      status: () => this.root.querySelector('[data-terminology-status]'),
+      changed: async () => {
+        this.audit.loaded = false;
+        await this.loadEntries();
+      },
+      openImport: () => {
+        this.tabs.select('import');
+        this.imports.fromGlossary = true;
+        this.renderImport();
+        const file = this.hosts.import.querySelector('input[type="file"]');
+        if (file && typeof file.focus === 'function') file.focus();
+      },
+    };
+    return this.glossaryApiCache;
   }
 
   /** UI-SPEC 4.1: the layer switch, a radio group; hidden in single-tenant mode. */
@@ -1300,6 +1351,7 @@ class TerminologyPanel {
         this.audit.loaded = false;
         await this.loadEntries();
         if (this.tabs.current() === 'history') await this.loadAudit(false);
+        if (this.tabs.current() === 'glossary') await this.showGlossary();
         this.renderImport();
       });
       return this.el('label', { className: 'label cursor-pointer justify-start gap-2 min-h-11 md:min-h-8', attrs: { for: id } }, [input, this.el('span', { className: 'label-text', text: this.t(key) })]);
@@ -1754,6 +1806,7 @@ class TerminologyPanel {
           this.el('label', { className: 'label py-1', attrs: { for: fileId } }, [this.el('span', { className: 'label-text', text: this.t('import.file') })]),
           file,
           this.el('p', { className: 'text-xs text-base-content/70 mt-1 max-w-prose', text: this.t('import.limits') }),
+          imp.fromGlossary && terminologyGlossary() ? terminologyGlossary().glossaryImportFormat(this.doc, this.locale) : null,
         ]),
         this.el('fieldset', { className: 'min-w-0' }, [
           this.el('legend', { className: 'text-sm font-semibold mb-1', text: this.t('import.mode') }),
@@ -1806,6 +1859,7 @@ class TerminologyPanel {
         const apply = this.btn(this.t('import.apply'), { className: 'btn btn-primary md:btn-sm', attrs: { 'aria-describedby': 'rag-terminology-apply-reason' } }, () => this.applyImport(apply, report));
         const reason = report.blocking ? this.t('import.blocked') : ready ? '' : this.t('import.needCheck');
         apply.disabled = Boolean(reason);
+        if (imp.fromGlossary && imp.mode === 'replace' && terminologyGlossary()) nodes.push(terminologyGlossary().glossaryImportReplaceWarning(this.doc, this.locale));
         nodes.push(this.el('div', { className: 'flex flex-wrap items-center gap-2' }, [apply, this.el('p', { className: 'text-sm text-base-content/70', id: 'rag-terminology-apply-reason', text: reason })]));
       }
     }

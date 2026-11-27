@@ -1,0 +1,16 @@
+{
+  "additionalProperties": false,
+  "description": "D-15: POST /v1/providers/test; only providers whose keys live in the sidecar.",
+  "properties": {
+    "provider": {
+      "const": "vectara",
+      "title": "Provider",
+      "type": "string"
+    }
+  },
+  "required": [
+    "provider"
+  ],
+  "title": "ProviderTestRequest",
+  "type": "object"
+}

@@ -103,7 +103,7 @@ export function createLangChainTransformer(options: CreateLangChainTransformerOp
 
     const captured = (capture.queries[0] ?? '').trim();
     const output = CondensedQuerySchema.safeParse(
-      history.length === 0 ? { standalone: query, unchanged: true } : { standalone: captured, unchanged: false },
+      history.length === 0 ? { standalone: query, unchanged: true, language: null } : { standalone: captured, unchanged: false, language: null },
     );
     if (!output.success || output.data.standalone.trim() === '') throw new LangChainAdapterError('invalid_output', 'condense');
     return finish.condense(input, output.data);

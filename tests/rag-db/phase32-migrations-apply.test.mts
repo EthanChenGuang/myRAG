@@ -6,11 +6,13 @@ import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles, migrationFiles } from '../../eval/harness/migrations.mts';
+import { allowListEntryFor } from '../helpers/security-definer-allow-list';
 
 /**
  * Phase 3.2 migration block 0801-0810 (plan 03.2-65, D-48). Later live Phase 3.2 files (0812-0820) redefine a few block functions
  * (rag_write_chunks 0812, rag_upload_approval_keys 0814, rag_translation_settings_set 0816, rag_translation_eligible_chunks and
- * rag_translation_pending_page 0820), so the final state of a database is the block followed by those files; the tests assert that state.
+ * rag_translation_pending_page 0820), and 0930 (Phase 4.3) redefines hybrid_search_chunks, so the final state of a database is the block
+ * followed by those files; the tests assert that state.
  */
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
@@ -39,8 +41,12 @@ function blockFiles(mode: DeploymentMode): string[] {
   return migrationFiles(mode).filter(isBlock);
 }
 
+// A file after the 08xx range that redefines a block function is its final definer too (0930 redefines hybrid_search_chunks, Phase 4.3).
 function laterFiles(mode: DeploymentMode): string[] {
-  return migrationFiles(mode).filter(isLaterPhase32);
+  const files = migrationFiles(mode);
+  const blockFunctions = namesCreated(files.filter(isBlock), 'FUNCTION');
+  const redefinesBlock = (file: string): boolean => [...namesCreated([file], 'FUNCTION')].some((name) => blockFunctions.has(name));
+  return files.filter((file) => isLaterPhase32(file) || (numberOf(file) > 899 && redefinesBlock(file)));
 }
 
 function namesCreated(files: string[], kind: 'FUNCTION' | 'TABLE'): Set<string> {
@@ -297,7 +303,10 @@ for (const mode of MODES) {
           'search_path is empty',
         );
         assert.deepEqual(
-          fns.rows.filter((row) => row.public_exec || row.anon || row.authenticated).map((row) => row.signature),
+          // The allow-listed RLS helpers (0926, Phase 4.3) are the only client-callable functions from 0801 on.
+          fns.rows
+            .filter((row) => row.public_exec || ((row.anon || row.authenticated) && allowListEntryFor(row.signature) === undefined))
+            .map((row) => row.signature),
           [],
           'no execute for PUBLIC, anon or authenticated',
         );

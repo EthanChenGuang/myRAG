@@ -138,7 +138,7 @@ describe('query-layer transforms fail soft (D-27, D-28)', () => {
     const query = 'Compare it with the alpha module';
     await install(
       [
-        { transform: 'condense', query, delay_ms: 550, output: { standalone: query, unchanged: true } },
+        { transform: 'condense', query, delay_ms: 550, output: { standalone: query, unchanged: true, language: null } },
         { transform: 'expand', query, delay_ms: SLOW_MS, output: { queries: ['synthetic expansion'] } },
         { transform: 'hyde', query, delay_ms: SLOW_MS, output: { passage: 'A synthetic passage.' } },
         { transform: 'decompose', query, delay_ms: SLOW_MS, output: { questions: ['synthetic part one', 'synthetic part two'] } },
@@ -175,7 +175,7 @@ describe('query-layer transforms fail soft (D-27, D-28)', () => {
 function outputFor(transform: Transform): unknown {
   switch (transform) {
     case 'condense':
-      return { standalone: 'What changed in the gateway?', unchanged: false };
+      return { standalone: 'What changed in the gateway?', unchanged: false, language: null };
     case 'expand':
       return { queries: ['gateway log files'] };
     case 'hyde':

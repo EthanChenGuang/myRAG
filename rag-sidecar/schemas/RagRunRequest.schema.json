@@ -486,11 +486,12 @@
                   "hyde",
                   "decompose",
                   "terminology",
-                  "semantic_cache"
+                  "semantic_cache",
+                  "scope_gate"
                 ],
                 "type": "string"
               },
-              "maxItems": 18,
+              "maxItems": 19,
               "type": "array"
             },
             {
@@ -558,6 +559,14 @@
           ],
           "default": null,
           "title": "Embedding Profile"
+        },
+        "entry_profile": {
+          "enum": [
+            "eval",
+            "voice"
+          ],
+          "title": "Entry Profile",
+          "type": "string"
         },
         "generator_model": {
           "anyOf": [
@@ -673,6 +682,12 @@
             }
           ],
           "default": null
+        },
+        "selected_model": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Selected Model",
+          "type": "string"
         },
         "semantic_cache": {
           "anyOf": [
@@ -1267,6 +1282,20 @@
           ],
           "default": null,
           "title": "Refs"
+        },
+        "scope_gate": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Gate"
         },
         "search": {
           "anyOf": [

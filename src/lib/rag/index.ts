@@ -10,6 +10,8 @@ export { isQueryLayerEnabled, isSemanticCacheActive, isV2Pipeline, voiceServerCo
 export { isSmallTalkResult } from './v2/result';
 export { buildHistoryWindow } from './query/history';
 export type { HistoryWindowLimits } from './query/history';
+export { queryTurnInputs, ragTurnMetadataFromPlan } from './query/turn-metadata';
+export type { QueryTurnInputs, RagTurnMetadata } from './query/turn-metadata';
 export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
 export { currentAttributeFilterMode, currentLexicalVersion } from './deps';
@@ -281,6 +283,7 @@ export type { ResolveVoiceScopeInput, VoiceScopeResult } from './tenant/voice';
 export { assembleContext } from './context/assemble';
 export type { AssembleInput, AssembleOutput, AssemblyCandidate, AssemblyDocumentRow } from './context/assemble';
 export { fetchAssemblyRows } from './context/fetch-rows';
+export { detectMixedVersions, versionConflictTrace, type VersionConflict } from './context/version-conflicts';
 export type { AssemblyRows } from './context/fetch-rows';
 export type {
   CitationLabel,
@@ -295,6 +298,7 @@ export type {
   UsedDocument,
 } from './types';
 export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
+export { untaggedVoiceContext } from './context/voice';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
 export {
@@ -333,12 +337,32 @@ export {
   parseBodyChannel,
   type AnswerChannel,
   type AnswerTurn,
+  type OutputGuardTurnSources,
   type TextsSource,
 } from './generation/answer-turn';
-export { guardChannelReply, guardSummaryText } from './security/channel-reply-guard';
+export { guardChannelReply, guardSummaryText, guardVoiceTranscript } from './security/channel-reply-guard';
+export { applyAnswerPipelineToText, createCalcCheckSink, type AnswerTextPipelineResult, type CalcCheckRun, type CalcCheckSink } from './generation/answer-transforms';
+export { buildSentenceRecords } from './generation/sentences-record';
+export { attributeSourceChunks } from './security/security-events';
 export { formatGuardedLinks, linkUsageInstructions } from './security/link-section';
-export type { ChannelReplyGuardInput, ChannelReplyGuardResult, SummaryGuardInput } from './security/channel-reply-guard';
+export type { ChannelReplyGuardInput, ChannelReplyGuardResult, SummaryGuardInput, VoiceTranscriptMessage } from './security/channel-reply-guard';
+export { recordOutputGuardEvents } from './security/security-events';
 export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource } from './lang/answer-language';
+// Phase 5.2.1 D-76, D-87: the voice calculation route and the voice-rag calculation offer and prompt budget.
+export { evaluateCalc } from './calc/evaluate';
+export { runCalcChecks } from './calc/check-step';
+export {
+  loadVoiceCalcSources,
+  voiceCalcSources,
+  labelTaggedVoiceContext,
+  labelledUntaggedVoiceContext,
+  MAX_VOICE_CALC_SOURCES,
+  CALC_REQUEST_JSON_SCHEMA,
+  type VoiceCalcSource,
+} from './calc/voice-sources';
+export { planPromptBudget } from './context/prompt-budget';
+export { promptBudgetConfig } from './context/prompt-budget-config';
+export { fixedText } from './lang/texts';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';
 export type { IdentifierFilterSummary } from './types';
@@ -358,7 +382,7 @@ export type {
   ClaudeStartInput,
   HistoryMessage,
 } from './generation/citations/session';
-export { mintAnswerId, scheduleAnswerFinish, shouldPersistAnswer } from './generation/answer-finish';
+export { mintAnswerId, scheduleAnswerFinish, scheduleCalcReviewEnqueue, shouldPersistAnswer } from './generation/answer-finish';
 export type { AnswerFinishDeps, AnswerFinishInput, AnswerPendingContext, ShouldPersistAnswerInput } from './generation/answer-finish';
 export { groundednessEligibility, scoreAnswerGroundedness } from './generation/groundedness';
 export type {
@@ -369,6 +393,12 @@ export type {
   ScoreAnswerGroundednessInput,
 } from './generation/groundedness';
 export { claudeTurnEligibility, preRetrievalCitations, selectCitationStrategy } from './generation/citations/strategy';
+export { buildAliasMap, createCitationLabeler } from './generation/citations/blocks';
+export { buildCalculateTool, CALCULATE_TOOL_NAME, isServerCalculateTool } from './generation/calc-tool';
+export { modelBlocksTools, turnCanUseTools } from './generation/tool-capability';
+export { mayOfferCalc, shouldOfferCalcTool } from './calc/signal';
+export { createCalcTraceHolder } from './calc/trace-holder';
+export type { CalcTraceHolder } from './calc/trace-holder';
 export { CLAUDE_FIRST_TOKEN_TIMEOUT_MS, errorStatusOf, fallbackReasonFor, firstTokenGate } from './generation/citations/fallback';
 export type { FallbackReason, FirstTokenGateResult } from './generation/citations/fallback';
 export type {
@@ -610,11 +640,27 @@ export type {
   IdentifierTestMatch,
   IdentifierTestResult,
 } from './identifiers/patterns';
+export { contentIdentifierNorms } from './retrieval/identifiers';
 export { removeDocumentObjects } from './ingest/remove-document-objects';
 export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';
 export { escapeTags, REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE } from './context/wrap';
 export { readSecurityConfig } from './security/config';
+export {
+  acknowledgeSecurityAlert,
+  checkItemDetails,
+  checkReasonOf,
+  holdUploader,
+  linkPreviewStatus,
+  listSecurityAlerts,
+  listSecurityEvents,
+  listSecurityUploaders,
+  readSecuritySettings,
+  releaseUploaderHold,
+  resolveAdminTenants,
+  SECURITY_EVENT_SOURCES,
+} from './security/security-admin';
+export type { ReviewSnapshotReader, SecurityActor, SecurityAdminDb, SecurityFailure } from './security/security-admin';
 export { injectionTraceVersions } from './security/injection-check';
 export type { ToolResultGuardMode } from './security/config';
 export { escapeToolOutput, scanToolOutput, wrapToolResultsForPrompt } from './security/tool-results';
@@ -648,11 +694,14 @@ export { isMiningWindowError, miningDisabledReason, MiningError, parseMiningDate
 export { computeFeedbackLoopStats, isStatsWindowError, MAX_STATS_WINDOW_DAYS, StatsError } from './feedback-loop/stats';
 export {
   getReviewItem,
+  getReviewItemWithSource,
+  attachReviewSources,
   getReviewItemChunks,
   grantDomainExpert,
   isReviewItemId,
   listDomainExperts,
   listReviewItems,
+  listReviewItemsWithSource,
   REVIEW_PAGE_SIZE,
   ReviewListQuerySchema,
   revokeDomainExpert,
@@ -822,3 +871,44 @@ export { IMPORT_LIMITS, importQuestions, parseQuestionFile, prepareQuestions, Qu
 export type { ImportCounts, PreparedQuestions, QuestionFileFormat } from './monitor/questions-import';
 export { guardAppEnvWrite, RAG_GATE_INVALID_REASON_MESSAGE, RAG_GATE_REQUIRED_MESSAGE } from './config-gate/guard';
 export type { AppGuardRoute, GuardAppEnvWriteInput, GuardAppEnvWriteResult } from './config-gate/guard';
+export { DRAIN_DEFAULT_BUDGET_MS, drainSlice, drainUntilEmpty } from './sync/drain';
+export type { DrainSliceOptions, DrainUntilEmptyOptions } from './sync/drain';
+export { RECONCILE_DEFAULT_BUDGET_MS, reconcileSlice } from './sync/reconcile';
+export type { ReconcileSliceOptions, ReconcileSliceResult } from './sync/reconcile';
+export { checkVectorSyncAccess } from './sync/auth';
+export type { VectorSyncAccessResult } from './sync/auth';
+export { runVectorSyncSlice } from './sync/slice';
+export type { RunVectorSyncSliceOptions, VectorSyncMode } from './sync/slice';
+export type { RpcClient } from './backend/supabase-rpc';
+export {
+  buildVectorSyncStores,
+  defaultStoreFactories,
+  isVectorSyncTarget,
+  listVectorSyncTargets,
+  readEnabledTargets,
+  readVectorSyncStatus,
+  setVectorSyncTarget,
+  VECTOR_SYNC_TARGETS,
+} from './sync/targets';
+export type { SetVectorSyncTargetResult, VectorStoreFactories, VectorSyncTargetFlag, VectorSyncTargetStatus } from './sync/targets';
+export { resolveVectorSyncAdminRpc } from './sync/admin-rpc';
+export { computeIndexCompat, envLoadedAt, INDEX_COMPAT_STORE_TIMEOUT_MS, readIndexCompat } from './backend/index-compat';
+export {
+  isProviderId,
+  PROVIDER_IDS,
+  PROVIDER_PROBE_CODES,
+  PROVIDER_PROBE_MESSAGES,
+  PROVIDER_PROBE_TIMEOUT_MS,
+  runProviderProbe,
+} from './admin/provider-probes';
+export type { ProviderId, ProviderProbeCode, ProviderProbeDeps, ProviderProbeResult, RunProviderProbeOptions } from './admin/provider-probes';
+export type {
+  IndexCompatBackend,
+  IndexCompatCode,
+  IndexCompatInput,
+  IndexCompatReport,
+  IndexCompatView,
+  IndexCompatWarning,
+  ProfileStateCounts,
+} from './backend/index-compat';
+export type { VectorStore, VectorSyncTarget } from './sync/stores/types';

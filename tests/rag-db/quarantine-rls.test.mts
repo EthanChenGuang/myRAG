@@ -162,12 +162,14 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       }
     });
 
-    test('exactly one policy applies to SELECT on each table, so no permissive leftover can reopen the read', async () => {
+    test('exactly one permissive policy applies to SELECT on each table, so no permissive leftover can reopen the read', async () => {
       const fixture = await build(mode);
       try {
         for (const table of ['documents', 'document_chunks']) {
-          const policies = (await fixture.db.query<Row>("SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = $1 AND cmd IN ('SELECT', 'ALL')", [table])).rows;
+          const policies = (await fixture.db.query<Row>("SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = $1 AND cmd IN ('SELECT', 'ALL') AND permissive = 'PERMISSIVE'", [table])).rows;
           assert.equal(policies.length, 1, `${table}: ${policies.map((row) => String(row.policyname)).join(', ')}`);
+          const restrictive = (await fixture.db.query<Row>("SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = $1 AND permissive = 'RESTRICTIVE'", [table])).rows;
+          assert.deepEqual(restrictive.map((row) => String(row.policyname)), ['rag_access_groups_restrict'], `${table}: only the 0926 restrictive policy narrows reads`);
         }
       } finally {
         await fixture.db.close();

@@ -9,9 +9,13 @@ import {
   type AnswerRecord,
   type AnswerSentence,
   type CitationRecord,
+  RagTurnMetadataSchema,
   RefusalFeedbackRequestSchema,
+  type RagTurnMetadata,
   type RefusalFeedbackRequest,
 } from '@/lib/rag-eval/contracts.generated';
+
+export type { RagTurnMetadata };
 
 export type AnswerGroundedness = AnswerRecord['groundedness'];
 export type AnswerFeedback = NonNullable<AnswerRecord['feedback']>;
@@ -47,6 +51,8 @@ export type RefusalMessageMetadata = { refusal?: true; refusalFeedback?: Refusal
 
 export type StreamAnswerMetadata = AnswerTurnMetadata & {
   ragTraceId?: string;
+  /** Phase 6.2 D-22: the turn's standalone query; the client stores it on that turn's user message. */
+  rag?: RagTurnMetadata;
   refusal?: true;
   answerId?: string;
   citations?: CitationRecord[];
@@ -69,6 +75,12 @@ export const RefusalFeedbackValueSchema = z.object({
   reasons: RefusalFeedbackRequestSchema.shape.reasons.unwrap(),
   at: z.string().min(1).max(64),
 });
+
+/** D-22: a `rag` value that passes the generated strict schema (1000-character cap), else undefined. */
+export function pickRagTurnMetadata(value: unknown): RagTurnMetadata | undefined {
+  const parsed = RagTurnMetadataSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
@@ -134,6 +146,8 @@ export function extractStreamAnswerMetadata(metadata: unknown, previous: StreamA
   const next: StreamAnswerMetadata = { ...previous };
   if (typeof source.ragTraceId === 'string' && source.ragTraceId.length > 0) next.ragTraceId = source.ragTraceId;
   if (source.refusal === true) next.refusal = true;
+  const rag = pickRagTurnMetadata(source.rag);
+  if (rag) next.rag = rag;
   return { ...next, ...pickCitationFields(source), ...pickTurnFields(source) };
 }
 

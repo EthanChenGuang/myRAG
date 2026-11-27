@@ -1,0 +1,153 @@
+{
+  "$defs": {
+    "ScopeGateCalibrationCell": {
+      "additionalProperties": false,
+      "properties": {
+        "correct_refusal_n": {
+          "minimum": 0,
+          "title": "Correct Refusal N",
+          "type": "integer"
+        },
+        "correct_refusal_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Correct Refusal Rate"
+        },
+        "embedding_profile_id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "title": "Embedding Profile Id",
+          "type": "string"
+        },
+        "false_refusal_n": {
+          "minimum": 0,
+          "title": "False Refusal N",
+          "type": "integer"
+        },
+        "false_refusal_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "False Refusal Rate"
+        },
+        "false_refusal_upper_95": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "False Refusal Upper 95"
+        },
+        "margin": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Margin"
+        },
+        "rag_mode": {
+          "enum": [
+            "strict",
+            "balanced",
+            "flexible"
+          ],
+          "title": "Rag Mode",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "calibrated",
+            "uncalibrated"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Threshold"
+        }
+      },
+      "required": [
+        "embedding_profile_id",
+        "rag_mode",
+        "threshold",
+        "margin",
+        "false_refusal_rate",
+        "false_refusal_n",
+        "correct_refusal_rate",
+        "correct_refusal_n",
+        "status"
+      ],
+      "title": "ScopeGateCalibrationCell",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Written only by `python -m rag_eval.calibrate scope` (06.2-26); one cell per profile and mode.",
+  "properties": {
+    "cells": {
+      "items": {
+        "$ref": "#/$defs/ScopeGateCalibrationCell"
+      },
+      "title": "Cells",
+      "type": "array"
+    },
+    "recorded_at": {
+      "format": "date-time",
+      "title": "Recorded At",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "source": {
+      "enum": [
+        "fixture",
+        "live"
+      ],
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "recorded_at",
+    "source"
+  ],
+  "title": "ScopeGateCalibration",
+  "type": "object"
+}

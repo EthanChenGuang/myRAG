@@ -1052,5 +1052,4480 @@
     "sha256": "79c18ebe7b811951e8311bad7103ebeae8c337ed9988ea69e8a78a66cfe029b9",
     "style": "Regular"
   },
-  "schema_version": 1
+  "schema_version": 1,
+  "templated_fixtures": [
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "羲鹜牯纡璜姣"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. 镉憬"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. 蠃虬"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQX-4101",
+            "beta_label": "杵愦耔蜇",
+            "delta_tags": [
+              "珥碥",
+              "瘐堠"
+            ],
+            "gamma_group": "鲕锾"
+          },
+          "family": "tpl-family-zh",
+          "heading_lines": [
+            "1. 镉憬",
+            "2. 畛隗",
+            "3. 鲻荠",
+            "4. 鲒舾",
+            "5. 蠃虬"
+          ],
+          "identity": "婧塄：杵愦耔蜇；粝骒ZQX-4101；塬摒鲕锾；耢钋珥碥、瘐堠。",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "鲺锫帑裱 1",
+              "鲺锫帑裱 2",
+              "鲺锫帑裱 3",
+              "鲺锫帑裱 4"
+            ],
+            "footer": [
+              "氡溥垌侃 1",
+              "氡溥垌侃 2",
+              "氡溥垌侃 3",
+              "氡溥垌侃 4"
+            ],
+            "fragment": "霭赅",
+            "top": [
+              "眙濯襻瀛 1",
+              "眙濯襻瀛 2",
+              "眙濯襻瀛 3",
+              "眙濯襻瀛 4"
+            ]
+          },
+          "member": 1,
+          "member_sentences": {
+            "section_2": "鲽眍有铗暾为鸠忉。",
+            "section_4": "谕猃在罴袤与呖鳙。"
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "71.24",
+            "sentence": "虮嬴的侪榕是71.24 mAh。",
+            "spelling": "71.24 mAh",
+            "style": "point_space",
+            "unit": "mah"
+          }
+        }
+      },
+      "file_sha256": "af49de14ea1cd47eda5c145f92a8e583dabdce6faf1b9751a710d1c953a61203",
+      "id": "tpl-family-zh-01",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-zh-01.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-zh-01.docling.json"
+        },
+        "docling": "recorded/tpl-family-zh-01.docling.json",
+        "parse_result": "recorded/tpl-family-zh-01.parse.json"
+      },
+      "size_bytes": 8598,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "羲鹜牯纡璜姣"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. 镉憬"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. 蠃虬"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQX-4102",
+            "beta_label": "咭劭埏黟",
+            "delta_tags": [
+              "瘐堠",
+              "谘嘟"
+            ],
+            "gamma_group": "菁鄯"
+          },
+          "family": "tpl-family-zh",
+          "heading_lines": [
+            "1. 镉憬",
+            "2. 畛隗",
+            "3. 鲻荠",
+            "4. 鲒舾",
+            "5. 蠃虬"
+          ],
+          "identity": "婧塄：咭劭埏黟；粝骒ZQX-4102；塬摒菁鄯；耢钋瘐堠、谘嘟。",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "鲺锫帑裱 1",
+              "鲺锫帑裱 2",
+              "鲺锫帑裱 3",
+              "鲺锫帑裱 4"
+            ],
+            "footer": [
+              "氡溥垌侃 1",
+              "氡溥垌侃 2",
+              "氡溥垌侃 3",
+              "氡溥垌侃 4"
+            ],
+            "fragment": "霭赅",
+            "top": [
+              "眙濯襻瀛 1",
+              "眙濯襻瀛 2",
+              "眙濯襻瀛 3",
+              "眙濯襻瀛 4"
+            ]
+          },
+          "member": 2,
+          "member_sentences": {
+            "section_2": "荦鹬有赈窆为狩嗤。",
+            "section_4": "饬蜊在闱垸与狒郐。"
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "76.85",
+            "sentence": "虮嬴的侪榕是76,85mAh。",
+            "spelling": "76,85mAh",
+            "style": "comma_tight",
+            "unit": "mah"
+          }
+        }
+      },
+      "file_sha256": "b59cdf74f56434957ec7dc8efa40a3b15e86aeee43508b006c6233ea3dc2f193",
+      "id": "tpl-family-zh-02",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-zh-02.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-zh-02.docling.json"
+        },
+        "docling": "recorded/tpl-family-zh-02.docling.json",
+        "parse_result": "recorded/tpl-family-zh-02.parse.json"
+      },
+      "size_bytes": 8596,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "羲鹜牯纡璜姣"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. 镉憬"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. 蠃虬"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQX-4103",
+            "beta_label": "珂僭忖埯",
+            "delta_tags": [
+              "谘嘟",
+              "珥碥"
+            ],
+            "gamma_group": "鲕锾"
+          },
+          "family": "tpl-family-zh",
+          "heading_lines": [
+            "1. 镉憬",
+            "2. 畛隗",
+            "3. 鲻荠",
+            "4. 鲒舾",
+            "5. 蠃虬"
+          ],
+          "identity": "婧塄：珂僭忖埯；粝骒ZQX-4103；塬摒鲕锾；耢钋谘嘟、珥碥。",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "鲺锫帑裱 1",
+              "鲺锫帑裱 2",
+              "鲺锫帑裱 3",
+              "鲺锫帑裱 4"
+            ],
+            "footer": [
+              "氡溥垌侃 1",
+              "氡溥垌侃 2",
+              "氡溥垌侃 3",
+              "氡溥垌侃 4"
+            ],
+            "fragment": "霭赅",
+            "top": [
+              "眙濯襻瀛 1",
+              "眙濯襻瀛 2",
+              "眙濯襻瀛 3",
+              "眙濯襻瀛 4"
+            ]
+          },
+          "member": 3,
+          "member_sentences": {
+            "section_2": "郛氍有胤鲴为邺笱。",
+            "section_4": "鹚喑在阪鋈与阈酡。"
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "83.19",
+            "sentence": "虮嬴的侪榕是83.19 MAH。",
+            "spelling": "83.19 MAH",
+            "style": "point_upper",
+            "unit": "mah"
+          }
+        }
+      },
+      "file_sha256": "187d527ae652bc0b3dd8d98c5f0b2bee3604ac54d69fdb48917dfd645da01ae5",
+      "id": "tpl-family-zh-03",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-zh-03.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-zh-03.docling.json"
+        },
+        "docling": "recorded/tpl-family-zh-03.docling.json",
+        "parse_result": "recorded/tpl-family-zh-03.parse.json"
+      },
+      "size_bytes": 8607,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "羲鹜牯纡璜姣"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. 镉憬"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. 蠃虬"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQX-4104",
+            "beta_label": "腚澶滂躞",
+            "delta_tags": [
+              "珥碥",
+              "瘐堠"
+            ],
+            "gamma_group": "菁鄯"
+          },
+          "family": "tpl-family-zh",
+          "heading_lines": [
+            "1. 镉憬",
+            "2. 畛隗",
+            "3. 鲻荠",
+            "4. 鲒舾",
+            "5. 蠃虬"
+          ],
+          "identity": "婧塄：腚澶滂躞；粝骒ZQX-4104；塬摒菁鄯；耢钋珥碥、瘐堠。",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "鲺锫帑裱 1",
+              "鲺锫帑裱 2",
+              "鲺锫帑裱 3",
+              "鲺锫帑裱 4"
+            ],
+            "footer": [
+              "氡溥垌侃 1",
+              "氡溥垌侃 2",
+              "氡溥垌侃 3",
+              "氡溥垌侃 4"
+            ],
+            "fragment": "霭赅",
+            "top": [
+              "眙濯襻瀛 1",
+              "眙濯襻瀛 2",
+              "眙濯襻瀛 3",
+              "眙濯襻瀛 4"
+            ]
+          },
+          "member": 4,
+          "member_sentences": {
+            "section_2": "菝黩有弭瘿为愫葸。",
+            "section_4": "瞠缧在莜伫与肫酰。"
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "4716.5",
+            "sentence": "虮嬴的侪榕是4'716.5 mAh。",
+            "spelling": "4'716.5 mAh",
+            "style": "apostrophe_group",
+            "unit": "mah"
+          }
+        }
+      },
+      "file_sha256": "180c338b407054c431589a50969d106f4521832fb509beadc2f160645f3638c1",
+      "id": "tpl-family-zh-04",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-zh-04.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-zh-04.docling.json"
+        },
+        "docling": "recorded/tpl-family-zh-04.docling.json",
+        "parse_result": "recorded/tpl-family-zh-04.parse.json"
+      },
+      "size_bytes": 8599,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "羲鹜牯纡璜姣"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. 镉憬"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. 蠃虬"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQX-4105",
+            "beta_label": "镤旖蓦碇",
+            "delta_tags": [
+              "瘐堠",
+              "谘嘟"
+            ],
+            "gamma_group": "鲕锾"
+          },
+          "family": "tpl-family-zh",
+          "heading_lines": [
+            "1. 镉憬",
+            "2. 畛隗",
+            "3. 鲻荠",
+            "4. 鲒舾",
+            "5. 蠃虬"
+          ],
+          "identity": "婧塄：镤旖蓦碇；粝骒ZQX-4105；塬摒鲕锾；耢钋瘐堠、谘嘟。",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "鲺锫帑裱 1",
+              "鲺锫帑裱 2",
+              "鲺锫帑裱 3",
+              "鲺锫帑裱 4"
+            ],
+            "footer": [
+              "氡溥垌侃 1",
+              "氡溥垌侃 2",
+              "氡溥垌侃 3",
+              "氡溥垌侃 4"
+            ],
+            "fragment": "霭赅",
+            "top": [
+              "眙濯襻瀛 1",
+              "眙濯襻瀛 2",
+              "眙濯襻瀛 3",
+              "眙濯襻瀛 4"
+            ]
+          },
+          "member": 5,
+          "member_sentences": {
+            "section_2": "珲鄱有缏圊为浼漪。",
+            "section_4": "哌黯在珞瘢与浣劢。"
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "5629.75",
+            "sentence": "虮嬴的侪榕是5,629.75 mAh。",
+            "spelling": "5,629.75 mAh",
+            "style": "comma_group",
+            "unit": "mah"
+          }
+        }
+      },
+      "file_sha256": "984a2cd2d2e86612d1e15fef5a981649d8aa1fb905d2ac8f07c99c9a9d16b891",
+      "id": "tpl-family-zh-05",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-zh-05.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-zh-05.docling.json"
+        },
+        "docling": "recorded/tpl-family-zh-05.docling.json",
+        "parse_result": "recorded/tpl-family-zh-05.parse.json"
+      },
+      "size_bytes": 8601,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "羲鹜牯纡璜姣"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. 镉憬"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. 蠃虬"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQX-4106",
+            "beta_label": "壑萋籴铩",
+            "delta_tags": [
+              "谘嘟",
+              "珥碥"
+            ],
+            "gamma_group": "菁鄯"
+          },
+          "family": "tpl-family-zh",
+          "heading_lines": [
+            "1. 镉憬",
+            "2. 畛隗",
+            "3. 鲻荠",
+            "4. 鲒舾",
+            "5. 蠃虬"
+          ],
+          "identity": "婧塄：壑萋籴铩；粝骒ZQX-4106；塬摒菁鄯；耢钋谘嘟、珥碥。",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "鲺锫帑裱 1",
+              "鲺锫帑裱 2",
+              "鲺锫帑裱 3",
+              "鲺锫帑裱 4"
+            ],
+            "footer": [
+              "氡溥垌侃 1",
+              "氡溥垌侃 2",
+              "氡溥垌侃 3",
+              "氡溥垌侃 4"
+            ],
+            "fragment": "霭赅",
+            "top": [
+              "眙濯襻瀛 1",
+              "眙濯襻瀛 2",
+              "眙濯襻瀛 3",
+              "眙濯襻瀛 4"
+            ]
+          },
+          "member": 6,
+          "member_sentences": {
+            "section_2": "苡湄有勰钍为耩胛。",
+            "section_4": "筠诃在鹌璺与忑呓。"
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "9372",
+            "sentence": "虮嬴的侪榕是9372 mah。",
+            "spelling": "9372 mah",
+            "style": "integer_lower",
+            "unit": "mah"
+          }
+        }
+      },
+      "file_sha256": "89d4affd3d9b163c7996e29f54cde94ca134478e81e3e4e1e1b88de4ca189f35",
+      "id": "tpl-family-zh-06",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-zh-06.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-zh-06.docling.json"
+        },
+        "docling": "recorded/tpl-family-zh-06.docling.json",
+        "parse_result": "recorded/tpl-family-zh-06.parse.json"
+      },
+      "size_bytes": 8594,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "羲鹜牯纡璜姣"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. 镉憬"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. 蠃虬"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQX-4107",
+            "beta_label": "燧芰腩喵",
+            "delta_tags": [
+              "珥碥",
+              "瘐堠"
+            ],
+            "gamma_group": "鲕锾"
+          },
+          "family": "tpl-family-zh",
+          "heading_lines": [
+            "1. 镉憬",
+            "2. 畛隗",
+            "3. 鲻荠",
+            "4. 鲒舾",
+            "5. 蠃虬"
+          ],
+          "identity": "婧塄：燧芰腩喵；粝骒ZQX-4107；塬摒鲕锾；耢钋珥碥、瘐堠。",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "鲺锫帑裱 1",
+              "鲺锫帑裱 2",
+              "鲺锫帑裱 3",
+              "鲺锫帑裱 4"
+            ],
+            "footer": [
+              "氡溥垌侃 1",
+              "氡溥垌侃 2",
+              "氡溥垌侃 3",
+              "氡溥垌侃 4"
+            ],
+            "fragment": "霭赅",
+            "top": [
+              "眙濯襻瀛 1",
+              "眙濯襻瀛 2",
+              "眙濯襻瀛 3",
+              "眙濯襻瀛 4"
+            ]
+          },
+          "member": 7,
+          "member_sentences": {
+            "section_2": "轹鲚有燹汜为缙嶷。",
+            "section_4": "葳湮在缁踮与茌臬。"
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "88.4",
+            "sentence": "虮嬴的侪榕是88,4 mAh。",
+            "spelling": "88,4 mAh",
+            "style": "comma_space",
+            "unit": "mah"
+          }
+        }
+      },
+      "file_sha256": "620e492eca1c7f5ec7a7747846ca0472cbd7be89fc8bb71e97f950286fb778f1",
+      "id": "tpl-family-zh-07",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-zh-07.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-zh-07.docling.json"
+        },
+        "docling": "recorded/tpl-family-zh-07.docling.json",
+        "parse_result": "recorded/tpl-family-zh-07.parse.json"
+      },
+      "size_bytes": 8594,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "羲鹜牯纡璜姣"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. 镉憬"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. 蠃虬"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQX-4108",
+            "beta_label": "螭缪棂蔺",
+            "delta_tags": [
+              "瘐堠",
+              "谘嘟"
+            ],
+            "gamma_group": "菁鄯"
+          },
+          "family": "tpl-family-zh",
+          "heading_lines": [
+            "1. 镉憬",
+            "2. 畛隗",
+            "3. 鲻荠",
+            "4. 鲒舾",
+            "5. 蠃虬"
+          ],
+          "identity": "婧塄：螭缪棂蔺；粝骒ZQX-4108；塬摒菁鄯；耢钋瘐堠、谘嘟。",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "鲺锫帑裱 1",
+              "鲺锫帑裱 2",
+              "鲺锫帑裱 3",
+              "鲺锫帑裱 4"
+            ],
+            "footer": [
+              "氡溥垌侃 1",
+              "氡溥垌侃 2",
+              "氡溥垌侃 3",
+              "氡溥垌侃 4"
+            ],
+            "fragment": "霭赅",
+            "top": [
+              "眙濯襻瀛 1",
+              "眙濯襻瀛 2",
+              "眙濯襻瀛 3",
+              "眙濯襻瀛 4"
+            ]
+          },
+          "member": 8,
+          "member_sentences": {
+            "section_2": "谲瘊有瑕阋为徼糍。",
+            "section_4": "骱挈在倬憩与疖魅。"
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": true,
+            "canonical": "6840",
+            "sentence": "虮嬴的侪榕是6,840 mAh。",
+            "spelling": "6,840 mAh",
+            "style": "ambiguous",
+            "unit": "mah"
+          }
+        }
+      },
+      "file_sha256": "380cede48799f409a0e71123515a3d12a7230bdbdfa2eeb8963f8f37d0aaaaa1",
+      "id": "tpl-family-zh-08",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-zh-08.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-zh-08.docling.json"
+        },
+        "docling": "recorded/tpl-family-zh-08.docling.json",
+        "parse_result": "recorded/tpl-family-zh-08.parse.json"
+      },
+      "size_bytes": 8592,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "羲鹜牯纡璜姣"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. 镉憬"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. 蠃虬"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQX-4109",
+            "beta_label": "蜈跚嵫缫",
+            "delta_tags": [
+              "谘嘟",
+              "珥碥"
+            ],
+            "gamma_group": "鲕锾"
+          },
+          "family": "tpl-family-zh",
+          "heading_lines": [
+            "1. 镉憬",
+            "2. 畛隗",
+            "3. 鲻荠",
+            "4. 鲒舾",
+            "5. 蠃虬"
+          ],
+          "identity": "婧塄：蜈跚嵫缫；粝骒ZQX-4109；塬摒鲕锾；耢钋谘嘟、珥碥。",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "鲺锫帑裱 1",
+              "鲺锫帑裱 2",
+              "鲺锫帑裱 3",
+              "鲺锫帑裱 4"
+            ],
+            "footer": [
+              "氡溥垌侃 1",
+              "氡溥垌侃 2",
+              "氡溥垌侃 3",
+              "氡溥垌侃 4"
+            ],
+            "fragment": "霭赅",
+            "top": [
+              "眙濯襻瀛 1",
+              "眙濯襻瀛 2",
+              "眙濯襻瀛 3",
+              "眙濯襻瀛 4"
+            ]
+          },
+          "member": 9,
+          "member_sentences": {
+            "section_2": "唏塍有筢谟为欤咔。",
+            "section_4": "缭邳在撄玟与妁哳。"
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "92.63",
+            "sentence": "虮嬴的侪榕是92.63mAh。",
+            "spelling": "92.63mAh",
+            "style": "point_tight",
+            "unit": "mah"
+          }
+        }
+      },
+      "file_sha256": "193e63938060a6514214beafbd2dadc2ec5f8bcd99660889350fe210496dc8c2",
+      "id": "tpl-family-zh-09",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-zh-09.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-zh-09.docling.json"
+        },
+        "docling": "recorded/tpl-family-zh-09.docling.json",
+        "parse_result": "recorded/tpl-family-zh-09.parse.json"
+      },
+      "size_bytes": 8587,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "羲鹜牯纡璜姣"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. 镉憬"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. 蠃虬"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQX-4110",
+            "beta_label": "刭僖绲辍",
+            "delta_tags": [
+              "珥碥",
+              "瘐堠"
+            ],
+            "gamma_group": "菁鄯"
+          },
+          "family": "tpl-family-zh",
+          "heading_lines": [
+            "1. 镉憬",
+            "2. 畛隗",
+            "3. 鲻荠",
+            "4. 鲒舾",
+            "5. 蠃虬"
+          ],
+          "identity": "婧塄：刭僖绲辍；粝骒ZQX-4110；塬摒菁鄯；耢钋珥碥、瘐堠。",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "鲺锫帑裱 1",
+              "鲺锫帑裱 2",
+              "鲺锫帑裱 3",
+              "鲺锫帑裱 4"
+            ],
+            "footer": [
+              "氡溥垌侃 1",
+              "氡溥垌侃 2",
+              "氡溥垌侃 3",
+              "氡溥垌侃 4"
+            ],
+            "fragment": "霭赅",
+            "top": [
+              "眙濯襻瀛 1",
+              "眙濯襻瀛 2",
+              "眙濯襻瀛 3",
+              "眙濯襻瀛 4"
+            ]
+          },
+          "member": 10,
+          "member_sentences": {
+            "section_2": "甍鳊有钏缋为娑淦。",
+            "section_4": "璋蛩在窳狍与竦黥。"
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "7204",
+            "sentence": "虮嬴的侪榕是7204 MAH。",
+            "spelling": "7204 MAH",
+            "style": "integer_upper",
+            "unit": "mah"
+          }
+        }
+      },
+      "file_sha256": "ef55a6d920c68c9857f630a8f6711b617521d4a76d872c4ca822cc32a6182336",
+      "id": "tpl-family-zh-10",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-zh-10.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-zh-10.docling.json"
+        },
+        "docling": "recorded/tpl-family-zh-10.docling.json",
+        "parse_result": "recorded/tpl-family-zh-10.parse.json"
+      },
+      "size_bytes": 8596,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "羲鹜牯纡璜姣"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. 镉憬"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. 蠃虬"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQX-4111",
+            "beta_label": "稂洚嗟鲇",
+            "delta_tags": [
+              "瘐堠",
+              "谘嘟"
+            ],
+            "gamma_group": "鲕锾"
+          },
+          "family": "tpl-family-zh",
+          "heading_lines": [
+            "1. 镉憬",
+            "2. 畛隗",
+            "3. 鲻荠",
+            "4. 鲒舾",
+            "5. 蠃虬"
+          ],
+          "identity": "婧塄：稂洚嗟鲇；粝骒ZQX-4111；塬摒鲕锾；耢钋瘐堠、谘嘟。",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "鲺锫帑裱 1",
+              "鲺锫帑裱 2",
+              "鲺锫帑裱 3",
+              "鲺锫帑裱 4"
+            ],
+            "footer": [
+              "氡溥垌侃 1",
+              "氡溥垌侃 2",
+              "氡溥垌侃 3",
+              "氡溥垌侃 4"
+            ],
+            "fragment": "霭赅",
+            "top": [
+              "眙濯襻瀛 1",
+              "眙濯襻瀛 2",
+              "眙濯襻瀛 3",
+              "眙濯襻瀛 4"
+            ]
+          },
+          "member": 11,
+          "member_sentences": {
+            "section_2": "汨獠有澧邾为戆怛。",
+            "section_4": "蕈茈在祆缈与揄孬。"
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "35.7",
+            "sentence": "虮嬴的侪榕是35.70 mAh。",
+            "spelling": "35.70 mAh",
+            "style": "trailing_zero",
+            "unit": "mah"
+          }
+        }
+      },
+      "file_sha256": "8a4835b12bab7f447bb120bfe04252c2d7aed53a58d88ab29e2579f40a6f97dc",
+      "id": "tpl-family-zh-11",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-zh-11.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-zh-11.docling.json"
+        },
+        "docling": "recorded/tpl-family-zh-11.docling.json",
+        "parse_result": "recorded/tpl-family-zh-11.parse.json"
+      },
+      "size_bytes": 8589,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "羲鹜牯纡璜姣"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. 镉憬"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. 蠃虬"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQX-4112",
+            "beta_label": "蛞缤鳄殡",
+            "delta_tags": [
+              "谘嘟",
+              "珥碥"
+            ],
+            "gamma_group": "菁鄯"
+          },
+          "family": "tpl-family-zh",
+          "heading_lines": [
+            "1. 镉憬",
+            "2. 畛隗",
+            "3. 鲻荠",
+            "4. 鲒舾",
+            "5. 蠃虬"
+          ],
+          "identity": "婧塄：蛞缤鳄殡；粝骒ZQX-4112；塬摒菁鄯；耢钋谘嘟、珥碥。",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "鲺锫帑裱 1",
+              "鲺锫帑裱 2",
+              "鲺锫帑裱 3",
+              "鲺锫帑裱 4"
+            ],
+            "footer": [
+              "氡溥垌侃 1",
+              "氡溥垌侃 2",
+              "氡溥垌侃 3",
+              "氡溥垌侃 4"
+            ],
+            "fragment": "霭赅",
+            "top": [
+              "眙濯襻瀛 1",
+              "眙濯襻瀛 2",
+              "眙濯襻瀛 3",
+              "眙濯襻瀛 4"
+            ]
+          },
+          "member": 12,
+          "member_sentences": {
+            "section_2": "婀圩有栀嫘为儇抟。",
+            "section_4": "恽踝在猕龇与泺驿。"
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "97.58",
+            "sentence": "虮嬴的侪榕是97,58 mah。",
+            "spelling": "97,58 mah",
+            "style": "comma_lower",
+            "unit": "mah"
+          }
+        }
+      },
+      "file_sha256": "484cc25a7af9550cc6dd454e38bdd0f09d48b49b2496ba801c94a403d7a2e312",
+      "id": "tpl-family-zh-12",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-zh-12.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-zh-12.docling.json"
+        },
+        "docling": "recorded/tpl-family-zh-12.docling.json",
+        "parse_result": "recorded/tpl-family-zh-12.parse.json"
+      },
+      "size_bytes": 8599,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "羲鹜牯纡嘏蓁"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "1. 镉憬 畹蜓-31"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "5. 蠃虬"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "1. 镉憬 畹蜓-32"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "5. 蠃虬"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "1. 镉憬 畹蜓-33"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "2. 畛隗"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "3. 鲻荠"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "4. 鲒舾"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. 蠃虬"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQX-4120",
+            "beta_label": "绡诠麾偎",
+            "delta_tags": [
+              "珥碥",
+              "瘐堠",
+              "谘嘟"
+            ],
+            "gamma_group": "鲕锾"
+          },
+          "contents": [
+            "1. 镉憬",
+            "2. 畛隗",
+            "3. 鲻荠",
+            "4. 鲒舾",
+            "5. 蠃虬"
+          ],
+          "designations": [
+            "畹蜓-31",
+            "畹蜓-32",
+            "畹蜓-33"
+          ],
+          "family": "tpl-family-zh",
+          "heading_lines": [
+            "1. 镉憬",
+            "2. 畛隗",
+            "3. 鲻荠",
+            "4. 鲒舾",
+            "5. 蠃虬"
+          ],
+          "identity": "婧塄：绡诠麾偎；粝骒ZQX-4120；塬摒鲕锾；耢钋珥碥、瘐堠、谘嘟。",
+          "kind": "variants",
+          "lines": {
+            "bottom": [
+              "鲺锫帑裱 1",
+              "鲺锫帑裱 2",
+              "鲺锫帑裱 3",
+              "鲺锫帑裱 4"
+            ],
+            "footer": [
+              "氡溥垌侃 1",
+              "氡溥垌侃 2",
+              "氡溥垌侃 3",
+              "氡溥垌侃 4"
+            ],
+            "fragment": "霭赅",
+            "top": [
+              "眙濯襻瀛 1",
+              "眙濯襻瀛 2",
+              "眙濯襻瀛 3",
+              "眙濯襻瀛 4"
+            ]
+          },
+          "page_count": 4,
+          "restart_heading": "1. 镉憬",
+          "variant_sentences": {
+            "畹蜓-31": [
+              "畹蜓-31的悛澌有脔赉为铕泯。",
+              "畹蜓-31的鲢镄有芈螯为镒汆。",
+              "畹蜓-31的戤桧有柘蜿为禚疠。",
+              "畹蜓-31的咛昊有峒傧为磲蟠。",
+              "畹蜓-31的劾赝有聒蛐为鳍臁。"
+            ],
+            "畹蜓-32": [
+              "畹蜓-32的刖俑有薰孱为噫鹈。",
+              "畹蜓-32的蝥幔有藓扉为昱梏。",
+              "畹蜓-32的蠖槊有禊绫为幞萁。",
+              "畹蜓-32的陟蛉有潴钭为煺翥。",
+              "畹蜓-32的溷箜有枥喃为夼舨。"
+            ],
+            "畹蜓-33": [
+              "畹蜓-33的洇诋有疱嗄为崤泔。",
+              "畹蜓-33的雩迳有庳墉为倨哔。",
+              "畹蜓-33的菪憝有莠瓿为奕圻。",
+              "畹蜓-33的鳏嗍有笃璀为鲲贲。",
+              "畹蜓-33的谵谛有蟆邕为鲱岐。"
+            ]
+          }
+        }
+      },
+      "file_sha256": "bad92958f371c2279d229f43ae515c0575f11861ca3a74862f46d11ddce01a6d",
+      "id": "tpl-variants-zh",
+      "language": "zh",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-variants-zh.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-variants-zh.docling.json"
+        },
+        "docling": "recorded/tpl-variants-zh.docling.json",
+        "parse_result": "recorded/tpl-variants-zh.parse.json"
+      },
+      "size_bytes": 12639,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Gorkkarv Vrovux Dazqux"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Gryrkzluk"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Zorkbult"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQV-4101",
+            "beta_label": "Jizdri Jurksnelt",
+            "delta_tags": [
+              "gembge",
+              "venddomb"
+            ],
+            "gamma_group": "Kivrurk"
+          },
+          "family": "tpl-family-en",
+          "heading_lines": [
+            "1. Gryrkzluk",
+            "2. Brokbyx",
+            "3. Zaskvrynd",
+            "4. Zendtrax",
+            "5. Zorkbult"
+          ],
+          "identity": "Drikpland: Jizdri Jurksnelt; pluxvromb ZQV-4101; fakgind Kivrurk; brukplaz gembge, venddomb.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Zlakgarv fezplu 1",
+              "Zlakgarv fezplu 2",
+              "Zlakgarv fezplu 3",
+              "Zlakgarv fezplu 4"
+            ],
+            "footer": [
+              "Traxplirk bufok 1",
+              "Traxplirk bufok 2",
+              "Traxplirk bufok 3",
+              "Traxplirk bufok 4"
+            ],
+            "fragment": "Jezbark fivgri",
+            "top": [
+              "Kizqyz snevromb 1",
+              "Kizqyz snevromb 2",
+              "Kizqyz snevromb 3",
+              "Kizqyz snevromb 4"
+            ]
+          },
+          "member": 1,
+          "member_sentences": {
+            "section_2": "Tryzskyz has zavqomb for the trivvurv.",
+            "section_4": "Grandvyv are skoktrov in the vrombgolt."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "47.38",
+            "sentence": "Pluplix of the jekgrork is 47.38 kHz.",
+            "spelling": "47.38 kHz",
+            "style": "point_space",
+            "unit": "khz"
+          }
+        }
+      },
+      "file_sha256": "5d7f0e2d2b077b17b51bd439b2d355d519e7e1d6d35d21b71691460e37f6a76a",
+      "id": "tpl-family-en-01",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-en-01.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-en-01.docling.json"
+        },
+        "docling": "recorded/tpl-family-en-01.docling.json",
+        "parse_result": "recorded/tpl-family-en-01.parse.json"
+      },
+      "size_bytes": 6662,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Gorkkarv Vrovux Dazqux"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Gryrkzluk"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Zorkbult"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQV-4102",
+            "beta_label": "Plykskerv Grirkdrov",
+            "delta_tags": [
+              "venddomb",
+              "gexvand"
+            ],
+            "gamma_group": "Vrufizzok"
+          },
+          "family": "tpl-family-en",
+          "heading_lines": [
+            "1. Gryrkzluk",
+            "2. Brokbyx",
+            "3. Zaskvrynd",
+            "4. Zendtrax",
+            "5. Zorkbult"
+          ],
+          "identity": "Drikpland: Plykskerv Grirkdrov; pluxvromb ZQV-4102; fakgind Vrufizzok; brukplaz venddomb, gexvand.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Zlakgarv fezplu 1",
+              "Zlakgarv fezplu 2",
+              "Zlakgarv fezplu 3",
+              "Zlakgarv fezplu 4"
+            ],
+            "footer": [
+              "Traxplirk bufok 1",
+              "Traxplirk bufok 2",
+              "Traxplirk bufok 3",
+              "Traxplirk bufok 4"
+            ],
+            "fragment": "Jezbark fivgri",
+            "top": [
+              "Kizqyz snevromb 1",
+              "Kizqyz snevromb 2",
+              "Kizqyz snevromb 3",
+              "Kizqyz snevromb 4"
+            ]
+          },
+          "member": 2,
+          "member_sentences": {
+            "section_2": "Snervqex has bryltjov for the truzbre.",
+            "section_4": "Jefok are vexgrund in the plavfu."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "52.61",
+            "sentence": "Pluplix of the jekgrork is 52,61kHz.",
+            "spelling": "52,61kHz",
+            "style": "comma_tight",
+            "unit": "khz"
+          }
+        }
+      },
+      "file_sha256": "a8de5b64f48b153c2a2b5caaa44c72f033a6b0918d1596bc3153758e27c7dd5e",
+      "id": "tpl-family-en-02",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-en-02.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-en-02.docling.json"
+        },
+        "docling": "recorded/tpl-family-en-02.docling.json",
+        "parse_result": "recorded/tpl-family-en-02.parse.json"
+      },
+      "size_bytes": 6661,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Gorkkarv Vrovux Dazqux"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Gryrkzluk"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Zorkbult"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQV-4103",
+            "beta_label": "Vambzle Favtryrv",
+            "delta_tags": [
+              "gexvand",
+              "gembge"
+            ],
+            "gamma_group": "Kivrurk"
+          },
+          "family": "tpl-family-en",
+          "heading_lines": [
+            "1. Gryrkzluk",
+            "2. Brokbyx",
+            "3. Zaskvrynd",
+            "4. Zendtrax",
+            "5. Zorkbult"
+          ],
+          "identity": "Drikpland: Vambzle Favtryrv; pluxvromb ZQV-4103; fakgind Kivrurk; brukplaz gexvand, gembge.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Zlakgarv fezplu 1",
+              "Zlakgarv fezplu 2",
+              "Zlakgarv fezplu 3",
+              "Zlakgarv fezplu 4"
+            ],
+            "footer": [
+              "Traxplirk bufok 1",
+              "Traxplirk bufok 2",
+              "Traxplirk bufok 3",
+              "Traxplirk bufok 4"
+            ],
+            "fragment": "Jezbark fivgri",
+            "top": [
+              "Kizqyz snevromb 1",
+              "Kizqyz snevromb 2",
+              "Kizqyz snevromb 3",
+              "Kizqyz snevromb 4"
+            ]
+          },
+          "member": 3,
+          "member_sentences": {
+            "section_2": "Karkzlalt has pluvkysk for the bendskek.",
+            "section_4": "Snendgraz are drumbvond in the vroxzolt."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "63.07",
+            "sentence": "Pluplix of the jekgrork is 63.07 KHZ.",
+            "spelling": "63.07 KHZ",
+            "style": "point_upper",
+            "unit": "khz"
+          }
+        }
+      },
+      "file_sha256": "0efbb0a7a6265c09fd646f4e40823e21e1e79399d689fb68dd43c5f3f0186cbc",
+      "id": "tpl-family-en-03",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-en-03.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-en-03.docling.json"
+        },
+        "docling": "recorded/tpl-family-en-03.docling.json",
+        "parse_result": "recorded/tpl-family-en-03.parse.json"
+      },
+      "size_bytes": 6664,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Gorkkarv Vrovux Dazqux"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Gryrkzluk"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Zorkbult"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQV-4104",
+            "beta_label": "Vuvplend Griskgro",
+            "delta_tags": [
+              "gembge",
+              "venddomb"
+            ],
+            "gamma_group": "Vrufizzok"
+          },
+          "family": "tpl-family-en",
+          "heading_lines": [
+            "1. Gryrkzluk",
+            "2. Brokbyx",
+            "3. Zaskvrynd",
+            "4. Zendtrax",
+            "5. Zorkbult"
+          ],
+          "identity": "Drikpland: Vuvplend Griskgro; pluxvromb ZQV-4104; fakgind Vrufizzok; brukplaz gembge, venddomb.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Zlakgarv fezplu 1",
+              "Zlakgarv fezplu 2",
+              "Zlakgarv fezplu 3",
+              "Zlakgarv fezplu 4"
+            ],
+            "footer": [
+              "Traxplirk bufok 1",
+              "Traxplirk bufok 2",
+              "Traxplirk bufok 3",
+              "Traxplirk bufok 4"
+            ],
+            "fragment": "Jezbark fivgri",
+            "top": [
+              "Kizqyz snevromb 1",
+              "Kizqyz snevromb 2",
+              "Kizqyz snevromb 3",
+              "Kizqyz snevromb 4"
+            ]
+          },
+          "member": 4,
+          "member_sentences": {
+            "section_2": "Plervvrok has jirkbuv for the judindqox.",
+            "section_4": "Kumbkaz are kaxplux in the kuzjerk."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "1204.5",
+            "sentence": "Pluplix of the jekgrork is 1'204.5 kHz.",
+            "spelling": "1'204.5 kHz",
+            "style": "apostrophe_group",
+            "unit": "khz"
+          }
+        }
+      },
+      "file_sha256": "9053bd9206a059bb742251e07e4619d984905ac632c5780ef416047b0e342c91",
+      "id": "tpl-family-en-04",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-en-04.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-en-04.docling.json"
+        },
+        "docling": "recorded/tpl-family-en-04.docling.json",
+        "parse_result": "recorded/tpl-family-en-04.parse.json"
+      },
+      "size_bytes": 6665,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Gorkkarv Vrovux Dazqux"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Gryrkzluk"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Zorkbult"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQV-4105",
+            "beta_label": "Quxsnox Snosnamb",
+            "delta_tags": [
+              "venddomb",
+              "gexvand"
+            ],
+            "gamma_group": "Kivrurk"
+          },
+          "family": "tpl-family-en",
+          "heading_lines": [
+            "1. Gryrkzluk",
+            "2. Brokbyx",
+            "3. Zaskvrynd",
+            "4. Zendtrax",
+            "5. Zorkbult"
+          ],
+          "identity": "Drikpland: Quxsnox Snosnamb; pluxvromb ZQV-4105; fakgind Kivrurk; brukplaz venddomb, gexvand.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Zlakgarv fezplu 1",
+              "Zlakgarv fezplu 2",
+              "Zlakgarv fezplu 3",
+              "Zlakgarv fezplu 4"
+            ],
+            "footer": [
+              "Traxplirk bufok 1",
+              "Traxplirk bufok 2",
+              "Traxplirk bufok 3",
+              "Traxplirk bufok 4"
+            ],
+            "fragment": "Jezbark fivgri",
+            "top": [
+              "Kizqyz snevromb 1",
+              "Kizqyz snevromb 2",
+              "Kizqyz snevromb 3",
+              "Kizqyz snevromb 4"
+            ]
+          },
+          "member": 5,
+          "member_sentences": {
+            "section_2": "Veltplurk has skyvfak for the jorvvriji.",
+            "section_4": "Vezvrubre are bombkirk in the jyvrokav."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "2317.25",
+            "sentence": "Pluplix of the jekgrork is 2,317.25 kHz.",
+            "spelling": "2,317.25 kHz",
+            "style": "comma_group",
+            "unit": "khz"
+          }
+        }
+      },
+      "file_sha256": "10c23be98c2f1194b0192320fced4c544e93192e0fb10a6b4c082c17956d45c9",
+      "id": "tpl-family-en-05",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-en-05.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-en-05.docling.json"
+        },
+        "docling": "recorded/tpl-family-en-05.docling.json",
+        "parse_result": "recorded/tpl-family-en-05.parse.json"
+      },
+      "size_bytes": 6668,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Gorkkarv Vrovux Dazqux"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Gryrkzluk"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Zorkbult"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQV-4106",
+            "beta_label": "Derkkryrv Vrixsnov",
+            "delta_tags": [
+              "gexvand",
+              "gembge"
+            ],
+            "gamma_group": "Vrufizzok"
+          },
+          "family": "tpl-family-en",
+          "heading_lines": [
+            "1. Gryrkzluk",
+            "2. Brokbyx",
+            "3. Zaskvrynd",
+            "4. Zendtrax",
+            "5. Zorkbult"
+          ],
+          "identity": "Drikpland: Derkkryrv Vrixsnov; pluxvromb ZQV-4106; fakgind Vrufizzok; brukplaz gexvand, gembge.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Zlakgarv fezplu 1",
+              "Zlakgarv fezplu 2",
+              "Zlakgarv fezplu 3",
+              "Zlakgarv fezplu 4"
+            ],
+            "footer": [
+              "Traxplirk bufok 1",
+              "Traxplirk bufok 2",
+              "Traxplirk bufok 3",
+              "Traxplirk bufok 4"
+            ],
+            "fragment": "Jezbark fivgri",
+            "top": [
+              "Kizqyz snevromb 1",
+              "Kizqyz snevromb 2",
+              "Kizqyz snevromb 3",
+              "Kizqyz snevromb 4"
+            ]
+          },
+          "member": 6,
+          "member_sentences": {
+            "section_2": "Jixsnik has buvqind for the dyvsni.",
+            "section_4": "Vikkelt are krozlumb in the gyskzlysk."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "7419",
+            "sentence": "Pluplix of the jekgrork is 7419 khz.",
+            "spelling": "7419 khz",
+            "style": "integer_lower",
+            "unit": "khz"
+          }
+        }
+      },
+      "file_sha256": "9988b26245e90819a3514c54789216cde4eb48db79e1dcc305253edfa38beeb3",
+      "id": "tpl-family-en-06",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-en-06.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-en-06.docling.json"
+        },
+        "docling": "recorded/tpl-family-en-06.docling.json",
+        "parse_result": "recorded/tpl-family-en-06.parse.json"
+      },
+      "size_bytes": 6660,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Gorkkarv Vrovux Dazqux"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Gryrkzluk"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Zorkbult"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQV-4107",
+            "beta_label": "Divsnolt Vyvgarv",
+            "delta_tags": [
+              "gembge",
+              "venddomb"
+            ],
+            "gamma_group": "Kivrurk"
+          },
+          "family": "tpl-family-en",
+          "heading_lines": [
+            "1. Gryrkzluk",
+            "2. Brokbyx",
+            "3. Zaskvrynd",
+            "4. Zendtrax",
+            "5. Zorkbult"
+          ],
+          "identity": "Drikpland: Divsnolt Vyvgarv; pluxvromb ZQV-4107; fakgind Kivrurk; brukplaz gembge, venddomb.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Zlakgarv fezplu 1",
+              "Zlakgarv fezplu 2",
+              "Zlakgarv fezplu 3",
+              "Zlakgarv fezplu 4"
+            ],
+            "footer": [
+              "Traxplirk bufok 1",
+              "Traxplirk bufok 2",
+              "Traxplirk bufok 3",
+              "Traxplirk bufok 4"
+            ],
+            "fragment": "Jezbark fivgri",
+            "top": [
+              "Kizqyz snevromb 1",
+              "Kizqyz snevromb 2",
+              "Kizqyz snevromb 3",
+              "Kizqyz snevromb 4"
+            ]
+          },
+          "member": 7,
+          "member_sentences": {
+            "section_2": "Guskplek has dukkivgix for the kembgrav.",
+            "section_4": "Plukbrark are grykkrolt in the trojibymb."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": true,
+            "canonical": "4125",
+            "sentence": "Pluplix of the jekgrork is 4,125 kHz.",
+            "spelling": "4,125 kHz",
+            "style": "ambiguous",
+            "unit": "khz"
+          }
+        }
+      },
+      "file_sha256": "068012fd2132780d60cd5937924e4def2fea29b8f6c914b01df84e7783a4eb8e",
+      "id": "tpl-family-en-07",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-en-07.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-en-07.docling.json"
+        },
+        "docling": "recorded/tpl-family-en-07.docling.json",
+        "parse_result": "recorded/tpl-family-en-07.parse.json"
+      },
+      "size_bytes": 6666,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Gorkkarv Vrovux Dazqux"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Gryrkzluk"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Zorkbult"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQV-4108",
+            "beta_label": "Boltkurk Kokkresk",
+            "delta_tags": [
+              "venddomb",
+              "gexvand"
+            ],
+            "gamma_group": "Vrufizzok"
+          },
+          "family": "tpl-family-en",
+          "heading_lines": [
+            "1. Gryrkzluk",
+            "2. Brokbyx",
+            "3. Zaskvrynd",
+            "4. Zendtrax",
+            "5. Zorkbult"
+          ],
+          "identity": "Drikpland: Boltkurk Kokkresk; pluxvromb ZQV-4108; fakgind Vrufizzok; brukplaz venddomb, gexvand.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Zlakgarv fezplu 1",
+              "Zlakgarv fezplu 2",
+              "Zlakgarv fezplu 3",
+              "Zlakgarv fezplu 4"
+            ],
+            "footer": [
+              "Traxplirk bufok 1",
+              "Traxplirk bufok 2",
+              "Traxplirk bufok 3",
+              "Traxplirk bufok 4"
+            ],
+            "fragment": "Jezbark fivgri",
+            "top": [
+              "Kizqyz snevromb 1",
+              "Kizqyz snevromb 2",
+              "Kizqyz snevromb 3",
+              "Kizqyz snevromb 4"
+            ]
+          },
+          "member": 8,
+          "member_sentences": {
+            "section_2": "Daskvryz has plivskok for the bejysk.",
+            "section_4": "Zlovbilt are gindsnurv in the girvtrak."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "38.9",
+            "sentence": "Pluplix of the jekgrork is 38,9 kHz.",
+            "spelling": "38,9 kHz",
+            "style": "comma_space",
+            "unit": "khz"
+          }
+        }
+      },
+      "file_sha256": "da9b3ee528c4ced1367662aa9fbfdff921b72e6a2ef9788242fcd10903b6a23f",
+      "id": "tpl-family-en-08",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-en-08.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-en-08.docling.json"
+        },
+        "docling": "recorded/tpl-family-en-08.docling.json",
+        "parse_result": "recorded/tpl-family-en-08.parse.json"
+      },
+      "size_bytes": 6664,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Gorkkarv Vrovux Dazqux"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Gryrkzluk"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Zorkbult"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQV-4109",
+            "beta_label": "Kykskurk Zlumbgox",
+            "delta_tags": [
+              "gexvand",
+              "gembge"
+            ],
+            "gamma_group": "Kivrurk"
+          },
+          "family": "tpl-family-en",
+          "heading_lines": [
+            "1. Gryrkzluk",
+            "2. Brokbyx",
+            "3. Zaskvrynd",
+            "4. Zendtrax",
+            "5. Zorkbult"
+          ],
+          "identity": "Drikpland: Kykskurk Zlumbgox; pluxvromb ZQV-4109; fakgind Kivrurk; brukplaz gexvand, gembge.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Zlakgarv fezplu 1",
+              "Zlakgarv fezplu 2",
+              "Zlakgarv fezplu 3",
+              "Zlakgarv fezplu 4"
+            ],
+            "footer": [
+              "Traxplirk bufok 1",
+              "Traxplirk bufok 2",
+              "Traxplirk bufok 3",
+              "Traxplirk bufok 4"
+            ],
+            "fragment": "Jezbark fivgri",
+            "top": [
+              "Kizqyz snevromb 1",
+              "Kizqyz snevromb 2",
+              "Kizqyz snevromb 3",
+              "Kizqyz snevromb 4"
+            ]
+          },
+          "member": 9,
+          "member_sentences": {
+            "section_2": "Kandvirv has vraskbru for the vrorkferk.",
+            "section_4": "Zliskzyrv are trukvryrk in the bymbkrelt."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "81.46",
+            "sentence": "Pluplix of the jekgrork is 81.46kHz.",
+            "spelling": "81.46kHz",
+            "style": "point_tight",
+            "unit": "khz"
+          }
+        }
+      },
+      "file_sha256": "1ae7c8728f2494ad6e09a9b50007c969a750de578c0a6f47fc5fb4dac7c8229f",
+      "id": "tpl-family-en-09",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-en-09.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-en-09.docling.json"
+        },
+        "docling": "recorded/tpl-family-en-09.docling.json",
+        "parse_result": "recorded/tpl-family-en-09.parse.json"
+      },
+      "size_bytes": 6665,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Gorkkarv Vrovux Dazqux"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Gryrkzluk"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Zorkbult"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQV-4110",
+            "beta_label": "Drevbryrk Plandfuv",
+            "delta_tags": [
+              "gembge",
+              "venddomb"
+            ],
+            "gamma_group": "Vrufizzok"
+          },
+          "family": "tpl-family-en",
+          "heading_lines": [
+            "1. Gryrkzluk",
+            "2. Brokbyx",
+            "3. Zaskvrynd",
+            "4. Zendtrax",
+            "5. Zorkbult"
+          ],
+          "identity": "Drikpland: Drevbryrk Plandfuv; pluxvromb ZQV-4110; fakgind Vrufizzok; brukplaz gembge, venddomb.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Zlakgarv fezplu 1",
+              "Zlakgarv fezplu 2",
+              "Zlakgarv fezplu 3",
+              "Zlakgarv fezplu 4"
+            ],
+            "footer": [
+              "Traxplirk bufok 1",
+              "Traxplirk bufok 2",
+              "Traxplirk bufok 3",
+              "Traxplirk bufok 4"
+            ],
+            "fragment": "Jezbark fivgri",
+            "top": [
+              "Kizqyz snevromb 1",
+              "Kizqyz snevromb 2",
+              "Kizqyz snevromb 3",
+              "Kizqyz snevromb 4"
+            ]
+          },
+          "member": 10,
+          "member_sentences": {
+            "section_2": "Gorksnaz has zlirvkav for the krekromb.",
+            "section_4": "Jarkvrez are vukbruv in the kruvsnolt."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "1588",
+            "sentence": "Pluplix of the jekgrork is 1588 KHZ.",
+            "spelling": "1588 KHZ",
+            "style": "integer_upper",
+            "unit": "khz"
+          }
+        }
+      },
+      "file_sha256": "9335773ac953a4bf8466a0c5e9ec98b83977c6d8973ce1600a86fea848a6f2a8",
+      "id": "tpl-family-en-10",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-en-10.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-en-10.docling.json"
+        },
+        "docling": "recorded/tpl-family-en-10.docling.json",
+        "parse_result": "recorded/tpl-family-en-10.parse.json"
+      },
+      "size_bytes": 6665,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Gorkkarv Vrovux Dazqux"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Gryrkzluk"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Zorkbult"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQV-4111",
+            "beta_label": "Snymbjix Braktraz",
+            "delta_tags": [
+              "venddomb",
+              "gexvand"
+            ],
+            "gamma_group": "Kivrurk"
+          },
+          "family": "tpl-family-en",
+          "heading_lines": [
+            "1. Gryrkzluk",
+            "2. Brokbyx",
+            "3. Zaskvrynd",
+            "4. Zendtrax",
+            "5. Zorkbult"
+          ],
+          "identity": "Drikpland: Snymbjix Braktraz; pluxvromb ZQV-4111; fakgind Kivrurk; brukplaz venddomb, gexvand.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Zlakgarv fezplu 1",
+              "Zlakgarv fezplu 2",
+              "Zlakgarv fezplu 3",
+              "Zlakgarv fezplu 4"
+            ],
+            "footer": [
+              "Traxplirk bufok 1",
+              "Traxplirk bufok 2",
+              "Traxplirk bufok 3",
+              "Traxplirk bufok 4"
+            ],
+            "fragment": "Jezbark fivgri",
+            "top": [
+              "Kizqyz snevromb 1",
+              "Kizqyz snevromb 2",
+              "Kizqyz snevromb 3",
+              "Kizqyz snevromb 4"
+            ]
+          },
+          "member": 11,
+          "member_sentences": {
+            "section_2": "Brivdyfex has fultplek for the kirkdrerk.",
+            "section_4": "Zlavvymb are bikzoz in the qyjurv."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "26.5",
+            "sentence": "Pluplix of the jekgrork is 26.50 kHz.",
+            "spelling": "26.50 kHz",
+            "style": "trailing_zero",
+            "unit": "khz"
+          }
+        }
+      },
+      "file_sha256": "4e4c81afcb12dae5c07fc5bd015e0bd4cb7b0b527d9463eb23667367bfc96338",
+      "id": "tpl-family-en-11",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-en-11.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-en-11.docling.json"
+        },
+        "docling": "recorded/tpl-family-en-11.docling.json",
+        "parse_result": "recorded/tpl-family-en-11.parse.json"
+      },
+      "size_bytes": 6662,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Gorkkarv Vrovux Dazqux"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Gryrkzluk"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Zorkbult"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQV-4112",
+            "beta_label": "Dervfa Grexzluv",
+            "delta_tags": [
+              "gexvand",
+              "gembge"
+            ],
+            "gamma_group": "Vrufizzok"
+          },
+          "family": "tpl-family-en",
+          "heading_lines": [
+            "1. Gryrkzluk",
+            "2. Brokbyx",
+            "3. Zaskvrynd",
+            "4. Zendtrax",
+            "5. Zorkbult"
+          ],
+          "identity": "Drikpland: Dervfa Grexzluv; pluxvromb ZQV-4112; fakgind Vrufizzok; brukplaz gexvand, gembge.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Zlakgarv fezplu 1",
+              "Zlakgarv fezplu 2",
+              "Zlakgarv fezplu 3",
+              "Zlakgarv fezplu 4"
+            ],
+            "footer": [
+              "Traxplirk bufok 1",
+              "Traxplirk bufok 2",
+              "Traxplirk bufok 3",
+              "Traxplirk bufok 4"
+            ],
+            "fragment": "Jezbark fivgri",
+            "top": [
+              "Kizqyz snevromb 1",
+              "Kizqyz snevromb 2",
+              "Kizqyz snevromb 3",
+              "Kizqyz snevromb 4"
+            ]
+          },
+          "member": 12,
+          "member_sentences": {
+            "section_2": "Fovkazvoz has qygrilt for the jekvylt.",
+            "section_4": "Giltvuk are barkskev in the brexvoz."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "94.07",
+            "sentence": "Pluplix of the jekgrork is 94,07 khz.",
+            "spelling": "94,07 khz",
+            "style": "comma_lower",
+            "unit": "khz"
+          }
+        }
+      },
+      "file_sha256": "6cf738a8c3684836ec9b6e32dc09616656e63a47967bfba2179743c1652b000e",
+      "id": "tpl-family-en-12",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-en-12.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-en-12.docling.json"
+        },
+        "docling": "recorded/tpl-family-en-12.docling.json",
+        "parse_result": "recorded/tpl-family-en-12.parse.json"
+      },
+      "size_bytes": 6659,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Gorkkarv Vrovux Bendplu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "1. Gryrkzluk Trizzlind-11"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "5. Zorkbult"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "1. Gryrkzluk Trizzlind-12"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "5. Zorkbult"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "1. Gryrkzluk Trizzlind-13"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "2. Brokbyx"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "3. Zaskvrynd"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "4. Zendtrax"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Zorkbult"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQV-4120",
+            "beta_label": "Skavzluv Derkgov",
+            "delta_tags": [
+              "gembge",
+              "venddomb",
+              "gexvand"
+            ],
+            "gamma_group": "Kivrurk"
+          },
+          "contents": [
+            "1. Gryrkzluk",
+            "2. Brokbyx",
+            "3. Zaskvrynd",
+            "4. Zendtrax",
+            "5. Zorkbult"
+          ],
+          "designations": [
+            "Trizzlind-11",
+            "Trizzlind-12",
+            "Trizzlind-13"
+          ],
+          "family": "tpl-family-en",
+          "heading_lines": [
+            "1. Gryrkzluk",
+            "2. Brokbyx",
+            "3. Zaskvrynd",
+            "4. Zendtrax",
+            "5. Zorkbult"
+          ],
+          "identity": "Drikpland: Skavzluv Derkgov; pluxvromb ZQV-4120; fakgind Kivrurk; brukplaz gembge, venddomb, gexvand.",
+          "kind": "variants",
+          "lines": {
+            "bottom": [
+              "Zlakgarv fezplu 1",
+              "Zlakgarv fezplu 2",
+              "Zlakgarv fezplu 3",
+              "Zlakgarv fezplu 4"
+            ],
+            "footer": [
+              "Traxplirk bufok 1",
+              "Traxplirk bufok 2",
+              "Traxplirk bufok 3",
+              "Traxplirk bufok 4"
+            ],
+            "fragment": "Jezbark fivgri",
+            "top": [
+              "Kizqyz snevromb 1",
+              "Kizqyz snevromb 2",
+              "Kizqyz snevromb 3",
+              "Kizqyz snevromb 4"
+            ]
+          },
+          "page_count": 4,
+          "restart_heading": "1. Gryrkzluk",
+          "variant_sentences": {
+            "Trizzlind-11": [
+              "Vrandgruk of Trizzlind-11 has qysktri for the drixqyrv.",
+              "Grysksno of Trizzlind-11 has zyndfult for the bembdryrv.",
+              "Jultskolt of Trizzlind-11 has plyskbro for the guxgrorv.",
+              "Krendjelt of Trizzlind-11 has zexga for the zixplamb.",
+              "Brizkrylt of Trizzlind-11 has vuvolt for the zizplixqo."
+            ],
+            "Trizzlind-12": [
+              "Fyrvtrak of Trizzlind-12 has qirkjax for the duskbruz.",
+              "Tryzfaz of Trizzlind-12 has snaxko for the tryvfoz.",
+              "Ferkdrerv of Trizzlind-12 has vizqex for the dyvzyxvo.",
+              "Qurkje of Trizzlind-12 has fivqork for the vryltplax.",
+              "Plytryz of Trizzlind-12 has ferkvuxbe for the brezgrand."
+            ],
+            "Trizzlind-13": [
+              "Fyrvvav of Trizzlind-13 has vrirkguk for the zlymbjelt.",
+              "Snizvrumb of Trizzlind-13 has fozplesk for the zembvyx.",
+              "Gabozgamb of Trizzlind-13 has fervkrek for the kovtrok.",
+              "Kobrilt of Trizzlind-13 has gyktryv for the drovdix.",
+              "Duvplork of Trizzlind-13 has qokgukqez for the karvskumb."
+            ]
+          }
+        }
+      },
+      "file_sha256": "bd32e3bc4de5a24c4b6f657ed4553e0e4f728f4ecee5cfddb40ae1c22839150b",
+      "id": "tpl-variants-en",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-variants-en.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-variants-en.docling.json"
+        },
+        "docling": "recorded/tpl-variants-en.docling.json",
+        "parse_result": "recorded/tpl-variants-en.parse.json"
+      },
+      "size_bytes": 9680,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Moluntba Musgilgli Glelvasce"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Drarlandu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Fescotru"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQW-4101",
+            "beta_label": "Voglergru Tistelu",
+            "delta_tags": [
+              "tasscosni",
+              "forevo"
+            ],
+            "gamma_group": "Scofeme"
+          },
+          "family": "tpl-family-it",
+          "heading_lines": [
+            "1. Drarlandu",
+            "2. Fidronda",
+            "3. Tustletu",
+            "4. Lunttrito",
+            "5. Fescotru"
+          ],
+          "identity": "Mafantdu: Voglergru Tistelu; mustbeve ZQW-4101; botrilde Scofeme; narzegru tasscosni, forevo.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Brizaza vintnudu 1",
+              "Brizaza vintnudu 2",
+              "Brizaza vintnudu 3",
+              "Brizaza vintnudu 4"
+            ],
+            "footer": [
+              "Fontvibu tangleva 1",
+              "Fontvibu tangleva 2",
+              "Fontvibu tangleva 3",
+              "Fontvibu tangleva 4"
+            ],
+            "fragment": "Tarbrarre bostmagro",
+            "top": [
+              "Tramansca finbrurfe 1",
+              "Tramansca finbrurfe 2",
+              "Tramansca finbrurfe 3",
+              "Tramansca finbrurfe 4"
+            ]
+          },
+          "member": 1,
+          "member_sentences": {
+            "section_2": "Fuvulglu ha verlantfa per il denstrava.",
+            "section_4": "Vorninde è tradafo nel runtscuze."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "12.46",
+            "sentence": "Zurvralgu del tavegli è 12,46 kWh.",
+            "spelling": "12,46 kWh",
+            "style": "comma_space",
+            "unit": "kwh"
+          }
+        }
+      },
+      "file_sha256": "e880f8ec9da01598cf33968687255ee3e8ca854b68fc7523ba6f79e226100565",
+      "id": "tpl-family-it-01",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-it-01.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-it-01.docling.json"
+        },
+        "docling": "recorded/tpl-family-it-01.docling.json",
+        "parse_result": "recorded/tpl-family-it-01.parse.json"
+      },
+      "size_bytes": 6704,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Moluntba Musgilgli Glelvasce"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Drarlandu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Fescotru"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQW-4102",
+            "beta_label": "Nonlesto Nantforfe",
+            "delta_tags": [
+              "forevo",
+              "firbosdru"
+            ],
+            "gamma_group": "Zirmosce"
+          },
+          "family": "tpl-family-it",
+          "heading_lines": [
+            "1. Drarlandu",
+            "2. Fidronda",
+            "3. Tustletu",
+            "4. Lunttrito",
+            "5. Fescotru"
+          ],
+          "identity": "Mafantdu: Nonlesto Nantforfe; mustbeve ZQW-4102; botrilde Zirmosce; narzegru forevo, firbosdru.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Brizaza vintnudu 1",
+              "Brizaza vintnudu 2",
+              "Brizaza vintnudu 3",
+              "Brizaza vintnudu 4"
+            ],
+            "footer": [
+              "Fontvibu tangleva 1",
+              "Fontvibu tangleva 2",
+              "Fontvibu tangleva 3",
+              "Fontvibu tangleva 4"
+            ],
+            "fragment": "Tarbrarre bostmagro",
+            "top": [
+              "Tramansca finbrurfe 1",
+              "Tramansca finbrurfe 2",
+              "Tramansca finbrurfe 3",
+              "Tramansca finbrurfe 4"
+            ]
+          },
+          "member": 2,
+          "member_sentences": {
+            "section_2": "Voscurfu ha fobastli per il gliteltri.",
+            "section_4": "Grerisdi è grollibu nel glanelna."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "15.73",
+            "sentence": "Zurvralgu del tavegli è 15.73kWh.",
+            "spelling": "15.73kWh",
+            "style": "point_tight",
+            "unit": "kwh"
+          }
+        }
+      },
+      "file_sha256": "7ffb6d895b5327f4a5fb879b858c5389fea511d11d1da8292d46c72bfe2399ec",
+      "id": "tpl-family-it-02",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-it-02.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-it-02.docling.json"
+        },
+        "docling": "recorded/tpl-family-it-02.docling.json",
+        "parse_result": "recorded/tpl-family-it-02.parse.json"
+      },
+      "size_bytes": 6704,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Moluntba Musgilgli Glelvasce"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Drarlandu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Fescotru"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQW-4103",
+            "beta_label": "Tesloldri Voltribu",
+            "delta_tags": [
+              "firbosdru",
+              "tasscosni"
+            ],
+            "gamma_group": "Scofeme"
+          },
+          "family": "tpl-family-it",
+          "heading_lines": [
+            "1. Drarlandu",
+            "2. Fidronda",
+            "3. Tustletu",
+            "4. Lunttrito",
+            "5. Fescotru"
+          ],
+          "identity": "Mafantdu: Tesloldri Voltribu; mustbeve ZQW-4103; botrilde Scofeme; narzegru firbosdru, tasscosni.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Brizaza vintnudu 1",
+              "Brizaza vintnudu 2",
+              "Brizaza vintnudu 3",
+              "Brizaza vintnudu 4"
+            ],
+            "footer": [
+              "Fontvibu tangleva 1",
+              "Fontvibu tangleva 2",
+              "Fontvibu tangleva 3",
+              "Fontvibu tangleva 4"
+            ],
+            "fragment": "Tarbrarre bostmagro",
+            "top": [
+              "Tramansca finbrurfe 1",
+              "Tramansca finbrurfe 2",
+              "Tramansca finbrurfe 3",
+              "Tramansca finbrurfe 4"
+            ]
+          },
+          "member": 3,
+          "member_sentences": {
+            "section_2": "Dirgora ha dusbridru per il femusni.",
+            "section_4": "Fescilgro è morosbre nel lusttrige."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "3208.5",
+            "sentence": "Zurvralgu del tavegli è 3.208,5 kWh.",
+            "spelling": "3.208,5 kWh",
+            "style": "point_group",
+            "unit": "kwh"
+          }
+        }
+      },
+      "file_sha256": "d06c486812512421ee0afc0c4734551445c230b40e0fbd4ee31c1e0fc545b94f",
+      "id": "tpl-family-it-03",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-it-03.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-it-03.docling.json"
+        },
+        "docling": "recorded/tpl-family-it-03.docling.json",
+        "parse_result": "recorded/tpl-family-it-03.parse.json"
+      },
+      "size_bytes": 6709,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Moluntba Musgilgli Glelvasce"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Drarlandu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Fescotru"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQW-4104",
+            "beta_label": "Grorzogo Banbratru",
+            "delta_tags": [
+              "tasscosni",
+              "forevo"
+            ],
+            "gamma_group": "Zirmosce"
+          },
+          "family": "tpl-family-it",
+          "heading_lines": [
+            "1. Drarlandu",
+            "2. Fidronda",
+            "3. Tustletu",
+            "4. Lunttrito",
+            "5. Fescotru"
+          ],
+          "identity": "Mafantdu: Grorzogo Banbratru; mustbeve ZQW-4104; botrilde Zirmosce; narzegru tasscosni, forevo.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Brizaza vintnudu 1",
+              "Brizaza vintnudu 2",
+              "Brizaza vintnudu 3",
+              "Brizaza vintnudu 4"
+            ],
+            "footer": [
+              "Fontvibu tangleva 1",
+              "Fontvibu tangleva 2",
+              "Fontvibu tangleva 3",
+              "Fontvibu tangleva 4"
+            ],
+            "fragment": "Tarbrarre bostmagro",
+            "top": [
+              "Tramansca finbrurfe 1",
+              "Tramansca finbrurfe 2",
+              "Tramansca finbrurfe 3",
+              "Tramansca finbrurfe 4"
+            ]
+          },
+          "member": 4,
+          "member_sentences": {
+            "section_2": "Triszormu ha tovanne per il torvzesca.",
+            "section_4": "Gragrelmu è tezosgo nel gristulmo."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "19.84",
+            "sentence": "Zurvralgu del tavegli è 19,84 KWH.",
+            "spelling": "19,84 KWH",
+            "style": "comma_upper",
+            "unit": "kwh"
+          }
+        }
+      },
+      "file_sha256": "74a5eb4cff1fe8e17624998b45d4e3b7eb19f95b448e45aa154e76256fcb29d5",
+      "id": "tpl-family-it-04",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-it-04.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-it-04.docling.json"
+        },
+        "docling": "recorded/tpl-family-it-04.docling.json",
+        "parse_result": "recorded/tpl-family-it-04.parse.json"
+      },
+      "size_bytes": 6706,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Moluntba Musgilgli Glelvasce"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Drarlandu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Fescotru"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQW-4105",
+            "beta_label": "Zerlisgli Dirtorza",
+            "delta_tags": [
+              "forevo",
+              "firbosdru"
+            ],
+            "gamma_group": "Scofeme"
+          },
+          "family": "tpl-family-it",
+          "heading_lines": [
+            "1. Drarlandu",
+            "2. Fidronda",
+            "3. Tustletu",
+            "4. Lunttrito",
+            "5. Fescotru"
+          ],
+          "identity": "Mafantdu: Zerlisgli Dirtorza; mustbeve ZQW-4105; botrilde Scofeme; narzegru forevo, firbosdru.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Brizaza vintnudu 1",
+              "Brizaza vintnudu 2",
+              "Brizaza vintnudu 3",
+              "Brizaza vintnudu 4"
+            ],
+            "footer": [
+              "Fontvibu tangleva 1",
+              "Fontvibu tangleva 2",
+              "Fontvibu tangleva 3",
+              "Fontvibu tangleva 4"
+            ],
+            "fragment": "Tarbrarre bostmagro",
+            "top": [
+              "Tramansca finbrurfe 1",
+              "Tramansca finbrurfe 2",
+              "Tramansca finbrurfe 3",
+              "Tramansca finbrurfe 4"
+            ]
+          },
+          "member": 5,
+          "member_sentences": {
+            "section_2": "Vinvistbu ha tarscubre per il nirvnunve.",
+            "section_4": "Nigermu è triratri nel toturvbe."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "6402.25",
+            "sentence": "Zurvralgu del tavegli è 6'402,25 kWh.",
+            "spelling": "6'402,25 kWh",
+            "style": "apostrophe_group",
+            "unit": "kwh"
+          }
+        }
+      },
+      "file_sha256": "bc49e44b01452618e012af3cd3b539d5de3697bbf3bcb7687a07b6e97b030be0",
+      "id": "tpl-family-it-05",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-it-05.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-it-05.docling.json"
+        },
+        "docling": "recorded/tpl-family-it-05.docling.json",
+        "parse_result": "recorded/tpl-family-it-05.parse.json"
+      },
+      "size_bytes": 6708,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Moluntba Musgilgli Glelvasce"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Drarlandu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Fescotru"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQW-4106",
+            "beta_label": "Tisvosca Zusguta",
+            "delta_tags": [
+              "firbosdru",
+              "tasscosni"
+            ],
+            "gamma_group": "Zirmosce"
+          },
+          "family": "tpl-family-it",
+          "heading_lines": [
+            "1. Drarlandu",
+            "2. Fidronda",
+            "3. Tustletu",
+            "4. Lunttrito",
+            "5. Fescotru"
+          ],
+          "identity": "Mafantdu: Tisvosca Zusguta; mustbeve ZQW-4106; botrilde Zirmosce; narzegru firbosdru, tasscosni.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Brizaza vintnudu 1",
+              "Brizaza vintnudu 2",
+              "Brizaza vintnudu 3",
+              "Brizaza vintnudu 4"
+            ],
+            "footer": [
+              "Fontvibu tangleva 1",
+              "Fontvibu tangleva 2",
+              "Fontvibu tangleva 3",
+              "Fontvibu tangleva 4"
+            ],
+            "fragment": "Tarbrarre bostmagro",
+            "top": [
+              "Tramansca finbrurfe 1",
+              "Tramansca finbrurfe 2",
+              "Tramansca finbrurfe 3",
+              "Tramansca finbrurfe 4"
+            ]
+          },
+          "member": 6,
+          "member_sentences": {
+            "section_2": "Fibrorgo ha ranscinna per il trusleta.",
+            "section_4": "Vingasgo è stresmabu nel dodusgu."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "8817",
+            "sentence": "Zurvralgu del tavegli è 8817 kwh.",
+            "spelling": "8817 kwh",
+            "style": "integer_lower",
+            "unit": "kwh"
+          }
+        }
+      },
+      "file_sha256": "833cc849b1a1118cf0b943702a9f54f47a3d6fb034ee988bb3f0f673aba1b95d",
+      "id": "tpl-family-it-06",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-it-06.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-it-06.docling.json"
+        },
+        "docling": "recorded/tpl-family-it-06.docling.json",
+        "parse_result": "recorded/tpl-family-it-06.parse.json"
+      },
+      "size_bytes": 6705,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Moluntba Musgilgli Glelvasce"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Drarlandu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Fescotru"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQW-4107",
+            "beta_label": "Vurlaru Grirnivu",
+            "delta_tags": [
+              "tasscosni",
+              "forevo"
+            ],
+            "gamma_group": "Scofeme"
+          },
+          "family": "tpl-family-it",
+          "heading_lines": [
+            "1. Drarlandu",
+            "2. Fidronda",
+            "3. Tustletu",
+            "4. Lunttrito",
+            "5. Fescotru"
+          ],
+          "identity": "Mafantdu: Vurlaru Grirnivu; mustbeve ZQW-4107; botrilde Scofeme; narzegru tasscosni, forevo.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Brizaza vintnudu 1",
+              "Brizaza vintnudu 2",
+              "Brizaza vintnudu 3",
+              "Brizaza vintnudu 4"
+            ],
+            "footer": [
+              "Fontvibu tangleva 1",
+              "Fontvibu tangleva 2",
+              "Fontvibu tangleva 3",
+              "Fontvibu tangleva 4"
+            ],
+            "fragment": "Tarbrarre bostmagro",
+            "top": [
+              "Tramansca finbrurfe 1",
+              "Tramansca finbrurfe 2",
+              "Tramansca finbrurfe 3",
+              "Tramansca finbrurfe 4"
+            ]
+          },
+          "member": 7,
+          "member_sentences": {
+            "section_2": "Garzobi ha lubonvu per il mandrenzu.",
+            "section_4": "Gagestbe è ninsceszi nel berfistle."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "27.3",
+            "sentence": "Zurvralgu del tavegli è 27,30 kWh.",
+            "spelling": "27,30 kWh",
+            "style": "trailing_zero",
+            "unit": "kwh"
+          }
+        }
+      },
+      "file_sha256": "16feabcb8989dd39d3588d97d5944efff2a2991d1150b7b2c987ad2eac5dd78e",
+      "id": "tpl-family-it-07",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-it-07.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-it-07.docling.json"
+        },
+        "docling": "recorded/tpl-family-it-07.docling.json",
+        "parse_result": "recorded/tpl-family-it-07.parse.json"
+      },
+      "size_bytes": 6702,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Moluntba Musgilgli Glelvasce"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Drarlandu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Fescotru"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQW-4108",
+            "beta_label": "Gladirvfu Zuvigo",
+            "delta_tags": [
+              "forevo",
+              "firbosdru"
+            ],
+            "gamma_group": "Zirmosce"
+          },
+          "family": "tpl-family-it",
+          "heading_lines": [
+            "1. Drarlandu",
+            "2. Fidronda",
+            "3. Tustletu",
+            "4. Lunttrito",
+            "5. Fescotru"
+          ],
+          "identity": "Mafantdu: Gladirvfu Zuvigo; mustbeve ZQW-4108; botrilde Zirmosce; narzegru forevo, firbosdru.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Brizaza vintnudu 1",
+              "Brizaza vintnudu 2",
+              "Brizaza vintnudu 3",
+              "Brizaza vintnudu 4"
+            ],
+            "footer": [
+              "Fontvibu tangleva 1",
+              "Fontvibu tangleva 2",
+              "Fontvibu tangleva 3",
+              "Fontvibu tangleva 4"
+            ],
+            "fragment": "Tarbrarre bostmagro",
+            "top": [
+              "Tramansca finbrurfe 1",
+              "Tramansca finbrurfe 2",
+              "Tramansca finbrurfe 3",
+              "Tramansca finbrurfe 4"
+            ]
+          },
+          "member": 8,
+          "member_sentences": {
+            "section_2": "Zurfibi ha gromostto per il gagrelme.",
+            "section_4": "Valantvo è riscebro nel rilguntmu."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": true,
+            "canonical": "2375",
+            "sentence": "Zurvralgu del tavegli è 2.375 kWh.",
+            "spelling": "2.375 kWh",
+            "style": "ambiguous",
+            "unit": "kwh"
+          }
+        }
+      },
+      "file_sha256": "db8ddc6bc9b0f5152076420dbc70a02acc253d05e65fb8e5d3bef33f7af64dae",
+      "id": "tpl-family-it-08",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-it-08.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-it-08.docling.json"
+        },
+        "docling": "recorded/tpl-family-it-08.docling.json",
+        "parse_result": "recorded/tpl-family-it-08.parse.json"
+      },
+      "size_bytes": 6703,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Moluntba Musgilgli Glelvasce"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Drarlandu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Fescotru"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQW-4109",
+            "beta_label": "Drongono Nastrunti",
+            "delta_tags": [
+              "firbosdru",
+              "tasscosni"
+            ],
+            "gamma_group": "Scofeme"
+          },
+          "family": "tpl-family-it",
+          "heading_lines": [
+            "1. Drarlandu",
+            "2. Fidronda",
+            "3. Tustletu",
+            "4. Lunttrito",
+            "5. Fescotru"
+          ],
+          "identity": "Mafantdu: Drongono Nastrunti; mustbeve ZQW-4109; botrilde Scofeme; narzegru firbosdru, tasscosni.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Brizaza vintnudu 1",
+              "Brizaza vintnudu 2",
+              "Brizaza vintnudu 3",
+              "Brizaza vintnudu 4"
+            ],
+            "footer": [
+              "Fontvibu tangleva 1",
+              "Fontvibu tangleva 2",
+              "Fontvibu tangleva 3",
+              "Fontvibu tangleva 4"
+            ],
+            "fragment": "Tarbrarre bostmagro",
+            "top": [
+              "Tramansca finbrurfe 1",
+              "Tramansca finbrurfe 2",
+              "Tramansca finbrurfe 3",
+              "Tramansca finbrurfe 4"
+            ]
+          },
+          "member": 9,
+          "member_sentences": {
+            "section_2": "Dralolgla ha brarentri per il riglindro.",
+            "section_4": "Brilninbe è moverstre nel rimistne."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "31.92",
+            "sentence": "Zurvralgu del tavegli è 31.92 kWh.",
+            "spelling": "31.92 kWh",
+            "style": "point_space",
+            "unit": "kwh"
+          }
+        }
+      },
+      "file_sha256": "b5d56cfe9aefc695f80b23382c1b87955e225dab4a31c233b7253667c8f9a9a6",
+      "id": "tpl-family-it-09",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-it-09.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-it-09.docling.json"
+        },
+        "docling": "recorded/tpl-family-it-09.docling.json",
+        "parse_result": "recorded/tpl-family-it-09.parse.json"
+      },
+      "size_bytes": 6711,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Moluntba Musgilgli Glelvasce"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Drarlandu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Fescotru"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQW-4110",
+            "beta_label": "Sceluntbe Grofuscu",
+            "delta_tags": [
+              "tasscosni",
+              "forevo"
+            ],
+            "gamma_group": "Zirmosce"
+          },
+          "family": "tpl-family-it",
+          "heading_lines": [
+            "1. Drarlandu",
+            "2. Fidronda",
+            "3. Tustletu",
+            "4. Lunttrito",
+            "5. Fescotru"
+          ],
+          "identity": "Mafantdu: Sceluntbe Grofuscu; mustbeve ZQW-4110; botrilde Zirmosce; narzegru tasscosni, forevo.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Brizaza vintnudu 1",
+              "Brizaza vintnudu 2",
+              "Brizaza vintnudu 3",
+              "Brizaza vintnudu 4"
+            ],
+            "footer": [
+              "Fontvibu tangleva 1",
+              "Fontvibu tangleva 2",
+              "Fontvibu tangleva 3",
+              "Fontvibu tangleva 4"
+            ],
+            "fragment": "Tarbrarre bostmagro",
+            "top": [
+              "Tramansca finbrurfe 1",
+              "Tramansca finbrurfe 2",
+              "Tramansca finbrurfe 3",
+              "Tramansca finbrurfe 4"
+            ]
+          },
+          "member": 10,
+          "member_sentences": {
+            "section_2": "Figrilgla ha dunlentzu per il narvfosmu.",
+            "section_4": "Virfande è dulusru nel nantgole."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "44.18",
+            "sentence": "Zurvralgu del tavegli è 44,18kWh.",
+            "spelling": "44,18kWh",
+            "style": "comma_tight",
+            "unit": "kwh"
+          }
+        }
+      },
+      "file_sha256": "5ce8458d7ad590e5b7a2ccf7d779820f7e3aa642fd418d25516e56b529cc4ea1",
+      "id": "tpl-family-it-10",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-it-10.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-it-10.docling.json"
+        },
+        "docling": "recorded/tpl-family-it-10.docling.json",
+        "parse_result": "recorded/tpl-family-it-10.parse.json"
+      },
+      "size_bytes": 6705,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Moluntba Musgilgli Glelvasce"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Drarlandu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Fescotru"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQW-4111",
+            "beta_label": "Funtasto Gislurvna",
+            "delta_tags": [
+              "forevo",
+              "firbosdru"
+            ],
+            "gamma_group": "Scofeme"
+          },
+          "family": "tpl-family-it",
+          "heading_lines": [
+            "1. Drarlandu",
+            "2. Fidronda",
+            "3. Tustletu",
+            "4. Lunttrito",
+            "5. Fescotru"
+          ],
+          "identity": "Mafantdu: Funtasto Gislurvna; mustbeve ZQW-4111; botrilde Scofeme; narzegru forevo, firbosdru.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Brizaza vintnudu 1",
+              "Brizaza vintnudu 2",
+              "Brizaza vintnudu 3",
+              "Brizaza vintnudu 4"
+            ],
+            "footer": [
+              "Fontvibu tangleva 1",
+              "Fontvibu tangleva 2",
+              "Fontvibu tangleva 3",
+              "Fontvibu tangleva 4"
+            ],
+            "fragment": "Tarbrarre bostmagro",
+            "top": [
+              "Tramansca finbrurfe 1",
+              "Tramansca finbrurfe 2",
+              "Tramansca finbrurfe 3",
+              "Tramansca finbrurfe 4"
+            ]
+          },
+          "member": 11,
+          "member_sentences": {
+            "section_2": "Finzostmu ha farentvu per il funelza.",
+            "section_4": "Lesnosgle è grurbrelo nel farmirbru."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "5931",
+            "sentence": "Zurvralgu del tavegli è 5931 KWH.",
+            "spelling": "5931 KWH",
+            "style": "integer_upper",
+            "unit": "kwh"
+          }
+        }
+      },
+      "file_sha256": "97be02fe070e468758a79b6962f1968e49d5600b2d7bf62602d5d42d666b8995",
+      "id": "tpl-family-it-11",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-it-11.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-it-11.docling.json"
+        },
+        "docling": "recorded/tpl-family-it-11.docling.json",
+        "parse_result": "recorded/tpl-family-it-11.parse.json"
+      },
+      "size_bytes": 6705,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Moluntba Musgilgli Glelvasce"
+          },
+          {
+            "level": 2,
+            "page": 1,
+            "text": "1. Drarlandu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Fescotru"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQW-4112",
+            "beta_label": "Derdintvo Fimestgra",
+            "delta_tags": [
+              "firbosdru",
+              "tasscosni"
+            ],
+            "gamma_group": "Zirmosce"
+          },
+          "family": "tpl-family-it",
+          "heading_lines": [
+            "1. Drarlandu",
+            "2. Fidronda",
+            "3. Tustletu",
+            "4. Lunttrito",
+            "5. Fescotru"
+          ],
+          "identity": "Mafantdu: Derdintvo Fimestgra; mustbeve ZQW-4112; botrilde Zirmosce; narzegru firbosdru, tasscosni.",
+          "kind": "family",
+          "lines": {
+            "bottom": [
+              "Brizaza vintnudu 1",
+              "Brizaza vintnudu 2",
+              "Brizaza vintnudu 3",
+              "Brizaza vintnudu 4"
+            ],
+            "footer": [
+              "Fontvibu tangleva 1",
+              "Fontvibu tangleva 2",
+              "Fontvibu tangleva 3",
+              "Fontvibu tangleva 4"
+            ],
+            "fragment": "Tarbrarre bostmagro",
+            "top": [
+              "Tramansca finbrurfe 1",
+              "Tramansca finbrurfe 2",
+              "Tramansca finbrurfe 3",
+              "Tramansca finbrurfe 4"
+            ]
+          },
+          "member": 12,
+          "member_sentences": {
+            "section_2": "Glasrolna ha forfirlo per il dinnune.",
+            "section_4": "Loltontri è dutrotru nel bascilgo."
+          },
+          "page_count": 4,
+          "quantity": {
+            "ambiguous": false,
+            "canonical": "58.03",
+            "sentence": "Zurvralgu del tavegli è 58,03 kwh.",
+            "spelling": "58,03 kwh",
+            "style": "comma_lower",
+            "unit": "kwh"
+          }
+        }
+      },
+      "file_sha256": "7183189324c5e9836a7f1607b4ef72dfed563c8b338f6ea95f5e239aa4c5eb2d",
+      "id": "tpl-family-it-12",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-family-it-12.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-family-it-12.docling.json"
+        },
+        "docling": "recorded/tpl-family-it-12.docling.json",
+        "parse_result": "recorded/tpl-family-it-12.parse.json"
+      },
+      "size_bytes": 6709,
+      "text_layer": "digital"
+    },
+    {
+      "doc_type": "product_technical",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Moluntba Musgilgli Lusgrafu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "1. Drarlandu Disfaba-21"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 2,
+            "text": "5. Fescotru"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "1. Drarlandu Disfaba-22"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 3,
+            "text": "5. Fescotru"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "1. Drarlandu Disfaba-23"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "2. Fidronda"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "3. Tustletu"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "4. Lunttrito"
+          },
+          {
+            "level": 2,
+            "page": 4,
+            "text": "5. Fescotru"
+          }
+        ],
+        "page_count": 4,
+        "templated": {
+          "attributes": {
+            "alpha_code": "ZQW-4120",
+            "beta_label": "Lestrelvi Vulrarze",
+            "delta_tags": [
+              "tasscosni",
+              "forevo",
+              "firbosdru"
+            ],
+            "gamma_group": "Scofeme"
+          },
+          "contents": [
+            "1. Drarlandu",
+            "2. Fidronda",
+            "3. Tustletu",
+            "4. Lunttrito",
+            "5. Fescotru"
+          ],
+          "designations": [
+            "Disfaba-21",
+            "Disfaba-22",
+            "Disfaba-23"
+          ],
+          "family": "tpl-family-it",
+          "heading_lines": [
+            "1. Drarlandu",
+            "2. Fidronda",
+            "3. Tustletu",
+            "4. Lunttrito",
+            "5. Fescotru"
+          ],
+          "identity": "Mafantdu: Lestrelvi Vulrarze; mustbeve ZQW-4120; botrilde Scofeme; narzegru tasscosni, forevo, firbosdru.",
+          "kind": "variants",
+          "lines": {
+            "bottom": [
+              "Brizaza vintnudu 1",
+              "Brizaza vintnudu 2",
+              "Brizaza vintnudu 3",
+              "Brizaza vintnudu 4"
+            ],
+            "footer": [
+              "Fontvibu tangleva 1",
+              "Fontvibu tangleva 2",
+              "Fontvibu tangleva 3",
+              "Fontvibu tangleva 4"
+            ],
+            "fragment": "Tarbrarre bostmagro",
+            "top": [
+              "Tramansca finbrurfe 1",
+              "Tramansca finbrurfe 2",
+              "Tramansca finbrurfe 3",
+              "Tramansca finbrurfe 4"
+            ]
+          },
+          "page_count": 4,
+          "restart_heading": "1. Drarlandu",
+          "variant_sentences": {
+            "Disfaba-21": [
+              "Vurulni di Disfaba-21 ha lelgrusra per il zeszubo.",
+              "Dangada di Disfaba-21 ha gildora per il brenzordi.",
+              "Zurbilsca di Disfaba-21 ha tentzutri per il gongobri.",
+              "Delubra di Disfaba-21 ha losrastma per il vunzado.",
+              "Labostdo di Disfaba-21 ha filnigra per il firgrizo."
+            ],
+            "Disfaba-22": [
+              "Nuntborgo di Disfaba-22 ha bromunbra per il norvtabu.",
+              "Bangunscu di Disfaba-22 ha tulfuste per il trangurto.",
+              "Zorfurfo di Disfaba-22 ha zoborda per il birvfoza.",
+              "Genentdru di Disfaba-22 ha brabrisre per il lulgrorbu.",
+              "Grunzaldu di Disfaba-22 ha gorvbanfo per il gismirvgu."
+            ],
+            "Disfaba-23": [
+              "Drastremo di Disfaba-23 ha guntgovo per il scabantfu.",
+              "Rungolsca di Disfaba-23 ha misgastbo per il datrasmo.",
+              "Glatisglu di Disfaba-23 ha scololdra per il vervbufi.",
+              "Gitentsci di Disfaba-23 ha destvuto per il fistrente.",
+              "Veglolbre di Disfaba-23 ha rarosmo per il madasmi."
+            ]
+          }
+        }
+      },
+      "file_sha256": "12151ef06d42a8050e74e2e79d29d436dcf66ec26a772612110daa647be55f55",
+      "id": "tpl-variants-it",
+      "language": "it",
+      "mime": "application/pdf",
+      "path": "pdf/tpl-variants-it.pdf",
+      "profile_id": "product_technical@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/tpl-variants-it.docling.json"
+        },
+        "docling": "recorded/tpl-variants-it.docling.json",
+        "parse_result": "recorded/tpl-variants-it.parse.json"
+      },
+      "size_bytes": 9697,
+      "text_layer": "digital"
+    }
+  ]
 }

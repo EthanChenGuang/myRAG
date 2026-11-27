@@ -251,3 +251,88 @@ describe('AGENTS.md reflects the Phase 6 query layer and semantic cache', () => 
     expect(section15).toContain('`src/lib/rag/query/llm`');
   });
 });
+
+describe('AGENTS.md reflects Phase 6.1 (embedding fine-tuning)', () => {
+  const section6 = AGENTS.slice(AGENTS.indexOf('## 6. RAG & Data Pipeline'), AGENTS.indexOf('## 7. AI Model Management'));
+
+  test.each([
+    '### Embedding fine-tuning (Phase 6.1)',
+    '`RAG_FINETUNE=off`',
+    '`ft-a-1024`',
+    '`ft-b-1024`',
+    '`npm run rag:finetune -- ',
+    '`npm run rag:embedding -- ft-consent',
+    'python -m rag_eval.finetune ',
+    'prune',
+    '06.1-19',
+  ])('section 6 mentions %s', (fragment) => {
+    expect(section6).toContain(fragment);
+  });
+
+  test('the fold sentence names Phase 6.1', () => {
+    expect(AGENTS).toContain('Phase 6.1 (0651–0654)');
+  });
+});
+
+describe('AGENTS.md reflects Phase 5.2 (grounded answers and output safety)', () => {
+  const section6 = AGENTS.slice(AGENTS.indexOf('## 6. RAG & Data Pipeline'), AGENTS.indexOf('## 7. AI Model Management'));
+  const section11 = AGENTS.slice(AGENTS.indexOf('## 11. WhatsApp Integration'), AGENTS.indexOf('## 12. Payments & Auth'));
+  const section14 = AGENTS.slice(AGENTS.indexOf('## 14. Behaviour to Preserve'), AGENTS.indexOf('## 15. Quality Checklist'));
+  const start = section6.indexOf('### Grounded answers and output safety (Phase 5.2)');
+  const next = start === -1 ? -1 : section6.indexOf('\n### ', start + 1);
+  const subsection = start === -1 ? '' : section6.slice(start, next === -1 ? undefined : next);
+  const SWITCHES = [
+    'RAG_REGISTRY_TEXTS',
+    'RAG_PARTIAL_ANSWER_RULE',
+    'RAG_CONTEXT_RELEVANCE_RULE',
+    'RAG_CITATION_PER_SENTENCE',
+    'RAG_CLAIM_CHECK',
+    'RAG_GROUNDEDNESS_LLM_JUDGE',
+    'RAG_GROUNDEDNESS_JUDGE_MODEL',
+    'RAG_MAX_OUTPUT_TOKENS',
+    'RAG_OUTPUT_GUARD',
+    'RAG_VERSION_LABELS',
+    'RAG_SECURITY_EVENTS',
+    'RAG_UPLOADER_ALERT_THRESHOLD',
+    'RAG_UPLOADER_ALERT_WINDOW_HOURS',
+    'RAG_UPLOADER_HOLD',
+  ];
+
+  test('section 6 has the Phase 5.2 subsection', () => {
+    expect(start).toBeGreaterThan(-1);
+  });
+
+  test('the defaults line states the fourteen switches with the defaults of src/lib/env.ts', () => {
+    const envSource = fs.readFileSync(path.resolve(__dirname, '../../src/lib/env.ts'), 'utf8');
+    const defaults = subsection.split('\n').find((line) => line.startsWith('- Every Phase 5.2 switch')) ?? '';
+    const stated = new Map([...defaults.matchAll(/`(RAG_[A-Z0-9_]+)=([^`]*)`/g)].map(([, name, value]) => [name, value]));
+    for (const name of SWITCHES) {
+      const match = envSource.match(new RegExp(`${name}: process\\.env\\.${name} \\|\\| '([^']*)'`));
+      expect(match, name).not.toBeNull();
+      expect(`${name}=${stated.get(name)}`).toBe(`${name}=${match?.[1]}`);
+    }
+  });
+
+  test.each([
+    'Migrations 0940–0945',
+    'not folded',
+    're-run 0410',
+    'python -m rag_eval.sweep output-cap',
+    'python -m rag_eval.calibrate groundedness-judge',
+    'eval/config/phase52-comparison.json',
+    '`%%NO_ANSWER_IN_CONTEXT%%`',
+    'The judge sends the answer and its context blocks to',
+  ])('the subsection mentions %s', (fragment) => {
+    expect(subsection).toContain(fragment);
+  });
+
+  test('section 11 names WhatsApp filtering and the Baileys link previews', () => {
+    expect(section11).toContain('`RAG_OUTPUT_GUARD`');
+    expect(section11).toContain('link preview');
+  });
+
+  test('section 14 keeps the strict refusal uncut in the question language with every Phase 5.2 switch on', () => {
+    expect(section14).toContain('Phase 5.2 is additive');
+    expect(section14).toContain('never cut');
+  });
+});

@@ -221,3 +221,73 @@ def test_cli_writes_the_paired_report_json(tmp_path):
     assert code == 0
     written = PairedReport.model_validate(json.loads(out_path.read_text(encoding="utf-8")))
     assert written.all_zero is True and written.seed == SEED
+
+
+INTERVAL_VECTORS = (
+    [1.0, 0.0, 0.0, 0.0],
+    [0.5, -0.25, 0.0, 1.0, -1.0, 0.25],
+    [-0.1, -0.2, 0.3],
+)
+# Recorded from _bootstrap_interval before the shared resampling generator (plan 07-24, A-10).
+RECORDED_INTERVALS = {
+    0: (0.0, 0.75),
+    1: (-0.4166666666666667, 0.5833333333333334),
+    2: (-0.20000000000000004, 0.3),
+}
+
+
+def test_paired_p_value_is_zero_when_every_difference_is_positive():
+    from rag_eval.paired import paired_p_value
+
+    assert paired_p_value([0.1, 0.5, 1.0]) == 0.0
+
+
+def test_paired_p_value_is_one_when_every_difference_is_negative_or_zero():
+    from rag_eval.paired import paired_p_value
+
+    assert paired_p_value([-0.1, -0.5, -1.0]) == 1.0
+    assert paired_p_value([0.0, 0.0, 0.0]) == 1.0
+
+
+def test_paired_p_value_is_none_without_differences():
+    from rag_eval.paired import paired_p_value
+
+    assert paired_p_value([]) is None
+
+
+def test_paired_p_value_is_deterministic_and_counts_resamples_at_or_below_zero():
+    import math
+    import random
+
+    from rag_eval.paired import paired_p_value
+
+    differences = [0.5, -0.25, 0.0, 1.0, -1.0, 0.25]
+    first = paired_p_value(differences)
+    assert first == paired_p_value(differences)
+    rng = random.Random(SEED)
+    n = len(differences)
+    at_or_below = sum(
+        1
+        for _ in range(RESAMPLES)
+        if math.fsum(differences[i] for i in rng.choices(range(n), k=n)) / n <= 0
+    )
+    assert first == at_or_below / RESAMPLES
+    assert 0.0 < first < 1.0
+
+
+def test_paired_p_value_shares_the_interval_draws():
+    from rag_eval.paired import _bootstrap_interval, _resample_means, paired_p_value
+
+    differences = [0.5, -0.25, 0.0, 1.0, -1.0, 0.25]
+    means = list(_resample_means(differences))
+    assert len(means) == RESAMPLES
+    ordered = sorted(means)
+    assert _bootstrap_interval(differences) == (ordered[249], ordered[9749])
+    assert paired_p_value(differences) == sum(1 for mean in means if mean <= 0) / RESAMPLES
+
+
+def test_existing_intervals_are_unchanged():
+    from rag_eval.paired import _bootstrap_interval
+
+    for index, vector in enumerate(INTERVAL_VECTORS):
+        assert _bootstrap_interval(vector) == RECORDED_INTERVALS[index]

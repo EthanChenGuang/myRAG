@@ -10,10 +10,15 @@ from rag_sidecar.contracts.answer_checks import (
     OutputGuardSummary,
     VersionConflict,
 )
+from rag_sidecar.contracts.calc import CalcCheck, CalcOrigin, DecimalString
+from rag_sidecar.contracts.prompt_budget import PromptBudgetTrace
 from rag_sidecar.contracts.answers import AnswerGroundedness, CitationRecord, CitationStrategy
 from rag_sidecar.contracts.ingest import DocType
+from rag_sidecar.contracts.language_monitor import TraceLanguages
 from rag_sidecar.contracts.omit import omit_default_schema, omit_none_schema
 from rag_sidecar.contracts.query import QueryFramework, QueryParamsOverride, QueryPlan, QueryTransformToggles
+from rag_sidecar.contracts.query_additions import AnswerStructure, ModelRoute, SpeculativeTrace
+from rag_sidecar.contracts.scope_gate import ScopeGateResult
 from rag_sidecar.contracts.retrieval import (
     ChunkingProfile,
     RetrievalFilters,
@@ -71,6 +76,7 @@ StageName = Literal[
     "decompose",
     "terminology",
     "semantic_cache",
+    "scope_gate",
 ]
 
 STAGE_COUNT = len(get_args(StageName))
@@ -99,6 +105,7 @@ class StageTimeoutsMs(_Contract):
     decompose: _TimeoutMs | None = None
     terminology: _TimeoutMs | None = None
     semantic_cache: _TimeoutMs | None = None
+    scope_gate: _TimeoutMs | None = None
 
 
 class RagRunOptions(_Contract):
@@ -122,6 +129,12 @@ class RagRunOptions(_Contract):
     cache_seed_answer: str | None = Field(default=None, min_length=1, max_length=4000)
     embedding_bindings: dict[DocType, BindingProfileId] | None = Field(default=None, max_length=6)
     domain_control_leg: DocType | None = None
+    entry_profile: Literal["eval", "voice"] = Field(
+        default="eval", exclude_if=lambda value: value == "eval", json_schema_extra=omit_default_schema
+    )
+    selected_model: str | None = Field(
+        default=None, min_length=1, max_length=200, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
 
 
 class RagRunRequest(_Contract):
@@ -265,7 +278,12 @@ class TraceRetrievalBackend(_Contract):
 
 
 RefusalReason = Literal[
-    "no_relevant_context", "below_threshold", "below_similarity_floor", "injection_filtered", "identifier_not_found"
+    "no_relevant_context",
+    "below_threshold",
+    "below_similarity_floor",
+    "injection_filtered",
+    "identifier_not_found",
+    "out_of_scope",
 ]
 
 
@@ -310,6 +328,24 @@ class TraceResidualOutputFindings(_Contract):
 
 def _optional_field(**kwargs: object) -> object:
     return Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema, **kwargs)  # type: ignore[arg-type]
+
+
+class TraceCalcObserved(_Contract):
+    """D-77: what the answer showed of a calculation, recorded with the check on or off."""
+
+    stated: DecimalString | None = None
+    steps_listed: bool
+    tool_used: bool
+    origin: CalcOrigin | None = None
+
+
+class TraceUsage(_Contract):
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+
+
+# A short error code from the generation step; never provider text.
+AnswerErrorCode = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")]
 
 
 class RagTrace(_Contract):
@@ -375,6 +411,20 @@ class RagTrace(_Contract):
     finish_reason: FinishReason | None = _optional_field()
     answer_rules_parts: list[AnswerRulePartId] | None = _optional_field()
     notices: list[AnswerNotice] | None = _optional_field()
+    # Phase 5.2.1 (D-77, D-86); absent on traces recorded before it.
+    calc: list[CalcCheck] | None = _optional_field()
+    calc_observed: TraceCalcObserved | None = _optional_field()
+    prompt_budget: PromptBudgetTrace | None = _optional_field()
+    usage: TraceUsage | None = _optional_field()
+    answer_error: AnswerErrorCode | None = _optional_field()
+    # Phase 6.2 (D-20, D-21, D-26, P-10); absent on traces recorded before it. Counts, codes and scores only.
+    scope_gate: ScopeGateResult | None = _optional_field()
+    model_route: ModelRoute | None = _optional_field()
+    speculative: SpeculativeTrace | None = _optional_field()
+    answer_structure: AnswerStructure | None = _optional_field()
+    searches_counted: int | None = _optional_field(ge=0)
+    # Phase 7 LANG-10; absent on traces recorded before it.
+    languages: TraceLanguages | None = _optional_field()
 
     @model_validator(mode="after")
     def _phase52_rules(self) -> "RagTrace":

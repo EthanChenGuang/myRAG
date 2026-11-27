@@ -1,0 +1,22 @@
+{
+  "description": "Synthetic Phase 6.2 fixture documents for the isolated q62 tenant: two scope dimensions with invented values, one invented term per language whose required translation appears in another language's document, and passages adjacent to an off-domain topic that no fixture document covers.",
+  "vocabulary": [
+    { "dimension": "region", "value": "zone-oriel", "label": "Zone Oriel" },
+    { "dimension": "region", "value": "zone-pallas", "label": "Zone Pallas" },
+    { "dimension": "department", "value": "unit-corvid", "label": "Unit Corvid" },
+    { "dimension": "department", "value": "unit-lumen", "label": "Unit Lumen" }
+  ],
+  "document_scopes": {
+    "q62-scope-oriel-corvid.en.md": ["department:unit-corvid", "region:zone-oriel"],
+    "q62-scope-pallas-lumen.en.md": ["department:unit-lumen", "region:zone-pallas"],
+    "q62-scope-oriel-corvid.it.md": ["department:unit-corvid", "region:zone-oriel"],
+    "q62-scope-pallas-lumen.it.md": ["department:unit-lumen", "region:zone-pallas"],
+    "q62-scope-oriel-corvid.zh.md": ["department:unit-corvid", "region:zone-oriel"],
+    "q62-scope-pallas-lumen.zh.md": ["department:unit-lumen", "region:zone-pallas"]
+  },
+  "glossary": [
+    { "canonical": "modulo velmora", "variants": ["velmora card"], "language": "en", "target_language": "it" },
+    { "canonical": "泰索登记簿", "variants": ["registro tessaro"], "language": "it", "target_language": "zh" },
+    { "canonical": "lanxu slip", "variants": ["蓝序单"], "language": "zh", "target_language": "en" }
+  ]
+}

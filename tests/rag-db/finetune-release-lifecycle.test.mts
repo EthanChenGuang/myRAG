@@ -1,13 +1,12 @@
 import { after, before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import type { PGlite } from '@electric-sql/pglite';
 import { FIXTURE_USER_ID, createFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { createTwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
+import { compactFixtureCorpus, removeCompactCorpus } from '../helpers/compact-corpus.mts';
 import {
   LEGACY,
   QUERY_PROMPT,
-  REPO_ROOT,
   SLOT_A,
   corpusTenant,
   grantRegisterBind,
@@ -41,19 +40,23 @@ after(async () => {
 for (const mode of MODES) {
   describe(`fine-tune slot lifecycle (${mode})`, () => {
     let db: PGlite;
+    let corpusDir: string | undefined;
     const tenant = corpusTenant(mode);
 
     before(async () => {
+      // The lifecycle re-embeds every current chunk into the slot and tests nothing about duplicates, so it runs on the compact corpus.
+      corpusDir = compactFixtureCorpus();
       db =
         mode === 'multi-tenant'
-          ? (await createTwoTenantDatabase()).db
-          : (await createFixtureDatabase({ deploymentMode: mode, corpusDir: path.join(REPO_ROOT, 'eval/fixtures/corpus') })).db;
+          ? (await createTwoTenantDatabase({ corpusDir })).db
+          : (await createFixtureDatabase({ deploymentMode: mode, corpusDir })).db;
       await installFixtureProductionModel(db);
       await harness.use(db, mode);
     });
 
     after(async () => {
       await db?.close();
+      removeCompactCorpus(corpusDir);
     });
 
     beforeEach(async () => {

@@ -1,0 +1,1152 @@
+{
+  "body": {
+    "children": [
+      {
+        "$ref": "#/texts/0"
+      },
+      {
+        "$ref": "#/texts/1"
+      },
+      {
+        "$ref": "#/texts/2"
+      },
+      {
+        "$ref": "#/texts/3"
+      },
+      {
+        "$ref": "#/texts/4"
+      },
+      {
+        "$ref": "#/texts/5"
+      },
+      {
+        "$ref": "#/texts/6"
+      },
+      {
+        "$ref": "#/texts/7"
+      },
+      {
+        "$ref": "#/texts/8"
+      },
+      {
+        "$ref": "#/texts/9"
+      },
+      {
+        "$ref": "#/texts/10"
+      },
+      {
+        "$ref": "#/texts/11"
+      },
+      {
+        "$ref": "#/texts/12"
+      },
+      {
+        "$ref": "#/texts/13"
+      },
+      {
+        "$ref": "#/texts/14"
+      },
+      {
+        "$ref": "#/texts/15"
+      },
+      {
+        "$ref": "#/texts/16"
+      },
+      {
+        "$ref": "#/texts/17"
+      },
+      {
+        "$ref": "#/texts/18"
+      },
+      {
+        "$ref": "#/texts/19"
+      },
+      {
+        "$ref": "#/texts/20"
+      },
+      {
+        "$ref": "#/texts/21"
+      },
+      {
+        "$ref": "#/texts/22"
+      },
+      {
+        "$ref": "#/texts/23"
+      },
+      {
+        "$ref": "#/texts/24"
+      },
+      {
+        "$ref": "#/texts/25"
+      },
+      {
+        "$ref": "#/texts/26"
+      },
+      {
+        "$ref": "#/texts/27"
+      },
+      {
+        "$ref": "#/texts/28"
+      },
+      {
+        "$ref": "#/texts/29"
+      },
+      {
+        "$ref": "#/texts/30"
+      },
+      {
+        "$ref": "#/texts/31"
+      },
+      {
+        "$ref": "#/texts/32"
+      },
+      {
+        "$ref": "#/texts/33"
+      },
+      {
+        "$ref": "#/texts/34"
+      },
+      {
+        "$ref": "#/texts/35"
+      }
+    ],
+    "content_layer": "body",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/body"
+  },
+  "form_items": [],
+  "furniture": {
+    "children": [],
+    "content_layer": "furniture",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/furniture"
+  },
+  "groups": [],
+  "key_value_items": [],
+  "name": "tpl-family-en-01",
+  "origin": {
+    "binary_hash": 4014,
+    "filename": "tpl-family-en-01.pdf",
+    "mimetype": "application/pdf"
+  },
+  "pages": {
+    "1": {
+      "page_no": 1,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "2": {
+      "page_no": 2,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "3": {
+      "page_no": 3,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "4": {
+      "page_no": 4,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    }
+  },
+  "pictures": [],
+  "schema_name": "DoclingDocument",
+  "tables": [],
+  "texts": [
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Kizqyz snevromb 1",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 71.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/0",
+      "text": "Kizqyz snevromb 1"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 1,
+      "orig": "Gorkkarv Vrovux Dazqux",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 103.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 77.0
+          },
+          "charspan": [
+            0,
+            22
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/1",
+      "text": "Gorkkarv Vrovux Dazqux"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Drikpland: Jizdri Jurksnelt; pluxvromb ZQV-4101; fakgind Kivrurk; brukplaz gembge, venddomb.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 144.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 113.0
+          },
+          "charspan": [
+            0,
+            92
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/2",
+      "text": "Drikpland: Jizdri Jurksnelt; pluxvromb ZQV-4101; fakgind Kivrurk; brukplaz gembge, venddomb."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "1. Gryrkzluk",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 176.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 150.0
+          },
+          "charspan": [
+            0,
+            12
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/3",
+      "text": "1. Gryrkzluk"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Zlosko of the jevdyk is zlyndkosk and borvtryrv.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 201.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 186.0
+          },
+          "charspan": [
+            0,
+            48
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/4",
+      "text": "Zlosko of the jevdyk is zlyndkosk and borvtryrv."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Jezbark fivgri",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 218.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 207.5
+          },
+          "charspan": [
+            0,
+            14
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/5",
+      "text": "Jezbark fivgri"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Grizagez of the zandderv is qorvsnirv and skurvji.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 240.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 224.5
+          },
+          "charspan": [
+            0,
+            50
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/6",
+      "text": "Grizagez of the zandderv is qorvsnirv and skurvji."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Zlakgarv fezplu 1",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 801.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 790.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/7",
+      "text": "Zlakgarv fezplu 1"
+    },
+    {
+      "children": [],
+      "content_layer": "furniture",
+      "label": "page_footer",
+      "orig": "Traxplirk bufok 1",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 819.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 808.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/8",
+      "text": "Traxplirk bufok 1"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Kizqyz snevromb 2",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 71.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/9",
+      "text": "Kizqyz snevromb 2"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "2. Brokbyx",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 103.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 77.0
+          },
+          "charspan": [
+            0,
+            10
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/10",
+      "text": "2. Brokbyx"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Qabrilt of the snesnyz is snumbke and kykjok.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 128.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 113.0
+          },
+          "charspan": [
+            0,
+            45
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/11",
+      "text": "Qabrilt of the snesnyz is snumbke and kykjok."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Tryzskyz has zavqomb for the trivvurv.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 150.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 134.5
+          },
+          "charspan": [
+            0,
+            38
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/12",
+      "text": "Tryzskyz has zavqomb for the trivvurv."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Jezbark fivgri",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 167.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 156.0
+          },
+          "charspan": [
+            0,
+            14
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/13",
+      "text": "Jezbark fivgri"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Zluvzobaz of the barvskusk is zekzev and zendgrilt.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 188.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 173.0
+          },
+          "charspan": [
+            0,
+            51
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/14",
+      "text": "Zluvzobaz of the barvskusk is zekzev and zendgrilt."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Zlakgarv fezplu 2",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 801.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 790.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/15",
+      "text": "Zlakgarv fezplu 2"
+    },
+    {
+      "children": [],
+      "content_layer": "furniture",
+      "label": "page_footer",
+      "orig": "Traxplirk bufok 2",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 819.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 808.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/16",
+      "text": "Traxplirk bufok 2"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Kizqyz snevromb 3",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 71.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/17",
+      "text": "Kizqyz snevromb 3"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "3. Zaskvrynd",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 103.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 77.0
+          },
+          "charspan": [
+            0,
+            12
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/18",
+      "text": "3. Zaskvrynd"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Zuvguxdra of the krymbderk is jondskaz and baztravo.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 128.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 113.0
+          },
+          "charspan": [
+            0,
+            52
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/19",
+      "text": "Zuvguxdra of the krymbderk is jondskaz and baztravo."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Pluplix of the jekgrork is 47.38 kHz.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 150.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 134.5
+          },
+          "charspan": [
+            0,
+            37
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/20",
+      "text": "Pluplix of the jekgrork is 47.38 kHz."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Jezbark fivgri",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 167.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 156.0
+          },
+          "charspan": [
+            0,
+            14
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/21",
+      "text": "Jezbark fivgri"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Dundgraz of the kruvgisk is zlombjymb and jezqu.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 188.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 173.0
+          },
+          "charspan": [
+            0,
+            48
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/22",
+      "text": "Dundgraz of the kruvgisk is zlombjymb and jezqu."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "4. Zendtrax",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 220.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 194.5
+          },
+          "charspan": [
+            0,
+            11
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/23",
+      "text": "4. Zendtrax"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Dyxbirk of the snekrosk is drirvvo and vryrvqalt.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 246.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 230.5
+          },
+          "charspan": [
+            0,
+            49
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/24",
+      "text": "Dyxbirk of the snekrosk is drirvvo and vryrvqalt."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Zlakgarv fezplu 3",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 801.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 790.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/25",
+      "text": "Zlakgarv fezplu 3"
+    },
+    {
+      "children": [],
+      "content_layer": "furniture",
+      "label": "page_footer",
+      "orig": "Traxplirk bufok 3",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 819.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 808.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/26",
+      "text": "Traxplirk bufok 3"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Kizqyz snevromb 4",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 71.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/27",
+      "text": "Kizqyz snevromb 4"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Grandvyv are skoktrov in the vrombgolt.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 92.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 77.0
+          },
+          "charspan": [
+            0,
+            39
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/28",
+      "text": "Grandvyv are skoktrov in the vrombgolt."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Jezbark fivgri",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 109.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 98.5
+          },
+          "charspan": [
+            0,
+            14
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/29",
+      "text": "Jezbark fivgri"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Draxka of the zlyltbok is qyvvryv and bryvvask.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 131.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 115.5
+          },
+          "charspan": [
+            0,
+            47
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/30",
+      "text": "Draxka of the zlyltbok is qyvvryv and bryvvask."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "5. Zorkbult",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 163.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 137.0
+          },
+          "charspan": [
+            0,
+            11
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/31",
+      "text": "5. Zorkbult"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Troxdraz of the krembqusk is boltgrend and zleltkirv.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 188.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 173.0
+          },
+          "charspan": [
+            0,
+            53
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/32",
+      "text": "Troxdraz of the krembqusk is boltgrend and zleltkirv."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Jurvdemb of the bevkalt is zozfoz and gyndgryk.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 210.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 194.5
+          },
+          "charspan": [
+            0,
+            47
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/33",
+      "text": "Jurvdemb of the bevkalt is zozfoz and gyndgryk."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Zlakgarv fezplu 4",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 801.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 790.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/34",
+      "text": "Zlakgarv fezplu 4"
+    },
+    {
+      "children": [],
+      "content_layer": "furniture",
+      "label": "page_footer",
+      "orig": "Traxplirk bufok 4",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 819.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 808.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/35",
+      "text": "Traxplirk bufok 4"
+    }
+  ],
+  "version": "1.11.0",
+  "x_rag_sidecar": {
+    "parser": "docling",
+    "parser_version": "docling-2.107.1"
+  }
+}

@@ -58,6 +58,7 @@ export function queryLayerVariantLimits(
 
 const CUT_TRANSFORM: Record<Exclude<QueryVariantKind, 'original' | 'terminology'>, SkippedTransform['transform']> = {
   condensed: 'condense_history',
+  history_fallback: 'condense_history',
   translated: 'translate',
   sub_question: 'decompose',
   expanded: 'expand',

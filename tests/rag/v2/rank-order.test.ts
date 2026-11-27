@@ -83,7 +83,7 @@ function row(index: number, over: Partial<RankedHit>, ranks: Record<string, numb
       rank: index + 1,
       documentId: `d${index}`,
       similarity: 0.9,
-      content: `vorpel ${index} quandry ${index}`,
+      content: over.dupClusterId ? `vorpel quandry ${over.dupClusterId}` : `vorpel ${index} quandry ${index}`,
       ...over,
     }),
     score: 1 / (60 + index + 1),

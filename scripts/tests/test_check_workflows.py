@@ -472,6 +472,152 @@ class TsJobsTest(unittest.TestCase):
         self.assertTrue(any("continue-on-error" in e for e in self.errors_for(jobs)))
 
 
+QDRANT_REF = "qdrant/qdrant:v1.20.2@sha256:" + "a" * 64
+WEAVIATE_REF = "semitechnologies/weaviate:1.40.7@sha256:" + "b" * 64
+COMPOSE_FIXTURE = f"""
+services:
+  qdrant:
+    image: {QDRANT_REF}
+  weaviate:
+    image: {WEAVIATE_REF}
+"""
+PULL_RUN = """for image in "$QDRANT_IMAGE" "$WEAVIATE_IMAGE"; do
+  for attempt in 1 2 3; do
+    docker pull "$image" && break
+    if [ "$attempt" -eq 3 ]; then exit 1; fi
+    sleep $((attempt * 20))
+  done
+done
+"""
+
+
+def canary_job() -> dict:
+    return {
+        "runs-on": "ubuntu-latest",
+        "timeout-minutes": 20,
+        "env": {"QDRANT_IMAGE": QDRANT_REF, "WEAVIATE_IMAGE": WEAVIATE_REF},
+        "steps": [
+            {"uses": "actions/checkout@" + "1" * 40},
+            {"uses": "actions/setup-node@" + "2" * 40, "with": {"node-version": "22", "cache": "npm"}},
+            {"run": "npm ci --ignore-scripts"},
+            {"name": "Per-run keys", "run": 'echo "QDRANT_API_KEY=$(openssl rand -hex 24)" >> "$GITHUB_ENV"'},
+            {"name": "Pull", "run": PULL_RUN},
+            {"name": "Start", "run": 'docker run -d --name qdrant "$QDRANT_IMAGE"\ndocker run -d --name weaviate "$WEAVIATE_IMAGE"'},
+            {
+                "name": "Wait",
+                "run": "for i in $(seq 1 60); do curl -sf http://127.0.0.1:6333/readyz && curl -sf http://127.0.0.1:8080/v1/.well-known/ready && exit 0; sleep 2; done; exit 1",
+            },
+            {
+                "name": "Canary",
+                "run": "npx vitest run tests/rag/canary tests/rag/backend-conformance",
+                "env": {"CI_BACKEND_CANARY": "1", "RAG_CANARY_BACKENDS": "pgvector,weaviate,qdrant"},
+            },
+        ],
+    }
+
+
+class BackendCanaryJobTest(unittest.TestCase):
+    def errors_for(self, job: dict | None, compose: str = COMPOSE_FIXTURE) -> list[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "docker-compose.backends.yml"
+            path.write_text(compose, encoding="utf-8")
+            errors: list[str] = []
+            check_workflows.check_backend_canary(job, errors, path)
+            return errors
+
+    def assert_reported(self, job: dict | None, needle: str, compose: str = COMPOSE_FIXTURE) -> None:
+        errors = self.errors_for(job, compose)
+        self.assertTrue(any(needle in e for e in errors), errors)
+
+    def step(self, job: dict, name: str) -> dict:
+        return next(s for s in job["steps"] if s.get("name") == name)
+
+    def test_the_fixture_is_valid(self):
+        self.assertEqual(self.errors_for(canary_job()), [])
+
+    def test_repository_workflow_has_a_valid_job(self):
+        self.assertIn("backend-canary", check_workflows.PR_JOBS)
+        job = check_workflows.load(check_workflows.PR)[0]["jobs"].get("backend-canary")
+        errors: list[str] = []
+        check_workflows.check_backend_canary(job, errors)
+        self.assertEqual(errors, [])
+
+    def test_missing_job_is_reported(self):
+        self.assert_reported(None, "backend-canary missing")
+
+    def test_an_image_without_a_digest_is_reported(self):
+        job = canary_job()
+        job["env"]["QDRANT_IMAGE"] = "qdrant/qdrant:v1.20.2"
+        self.assert_reported(job, "without an @sha256 digest")
+
+    def test_a_literal_pull_without_a_digest_is_reported(self):
+        job = canary_job()
+        self.step(job, "Start")["run"] += "\ndocker pull semitechnologies/weaviate:latest"
+        self.assert_reported(job, "without an @sha256 digest")
+
+    def test_a_digest_other_than_the_compose_file_is_reported(self):
+        job = canary_job()
+        job["env"]["WEAVIATE_IMAGE"] = "semitechnologies/weaviate:1.40.7@sha256:" + "c" * 64
+        self.assert_reported(job, "differs from docker-compose.backends.yml")
+
+    def test_a_compose_digest_change_is_reported(self):
+        self.assert_reported(canary_job(), "differs from docker-compose.backends.yml", COMPOSE_FIXTURE.replace("a" * 64, "d" * 64))
+
+    def test_a_pull_without_a_retry_loop_is_reported(self):
+        job = canary_job()
+        self.step(job, "Pull")["run"] = 'docker pull "$QDRANT_IMAGE"\ndocker pull "$WEAVIATE_IMAGE"'
+        self.assert_reported(job, "retry")
+
+    def test_a_wrong_backend_list_is_reported(self):
+        job = canary_job()
+        self.step(job, "Canary")["env"]["RAG_CANARY_BACKENDS"] = "pgvector,qdrant"
+        self.assert_reported(job, "RAG_CANARY_BACKENDS")
+
+    def test_a_missing_canary_flag_is_reported(self):
+        job = canary_job()
+        self.step(job, "Canary")["env"]["CI_BACKEND_CANARY"] = "0"
+        self.assert_reported(job, "CI_BACKEND_CANARY")
+
+    def test_continue_on_error_is_reported(self):
+        job = canary_job()
+        job["continue-on-error"] = True
+        self.assert_reported(job, "continue-on-error")
+        job = canary_job()
+        self.step(job, "Canary")["continue-on-error"] = True
+        self.assert_reported(job, "continue-on-error")
+
+    def test_a_job_condition_is_reported(self):
+        job = canary_job()
+        job["if"] = "contains(github.event.head_commit.message, 'canary')"
+        self.assert_reported(job, "must run on every")
+
+    def test_a_dropped_suite_is_reported(self):
+        job = canary_job()
+        self.step(job, "Canary")["run"] = "npx vitest run tests/rag/canary"
+        self.assert_reported(job, "tests/rag/backend-conformance")
+
+    def test_a_missing_health_wait_is_reported(self):
+        job = canary_job()
+        job["steps"] = [s for s in job["steps"] if s.get("name") != "Wait"]
+        self.assert_reported(job, "/readyz")
+
+    def test_a_long_timeout_is_reported(self):
+        job = canary_job()
+        job["timeout-minutes"] = 30
+        self.assert_reported(job, "timeout-minutes")
+
+    def test_fixed_keys_are_reported(self):
+        job = canary_job()
+        job["steps"] = [s for s in job["steps"] if s.get("name") != "Per-run keys"]
+        self.assert_reported(job, "openssl rand")
+
+    def test_a_docker_hub_token_from_secrets_is_reported(self):
+        text = check_workflows.PR.read_text(encoding="utf-8")
+        text += "\n# docker login -u bot -p ${{ secrets.DOCKERHUB_TOKEN }}\n"
+        errors = DbTestsStepTest.pr_errors(self, text)
+        self.assertTrue(any("must not reference secrets." in e for e in errors), errors)
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -502,6 +648,9 @@ def weekly_fixture() -> dict:
                     {"uses": "actions/checkout@" + "a" * 40, "if": gate, "with": {"clean": False}},
                     {"name": "Sync eval project", "if": gate, "run": "uv sync --directory eval --locked --all-extras"},
                     {"name": "Failure report", "if": gate, "run": "uv run --directory eval python -m rag_eval.failure_report --since x"},
+                    {"name": "Drift", "if": gate, "run": "uv run --directory eval python -m rag_eval.drift --tenant t --set s"},
+                    {"name": "Stale scan", "if": gate, "run": "uv run --directory eval python -m rag_eval.golden_set stale-scan --golden g"},
+                    {"name": "Re-review", "if": gate, "run": "uv run --directory eval python -m rag_eval.golden_set re-review --golden g"},
                     {
                         "name": "Weekly report",
                         "if": gate,
@@ -580,6 +729,372 @@ class WeeklyReportJobTest(unittest.TestCase):
         data = weekly_fixture()
         del self.steps(data)[1]["with"]
         self.assertTrue(any("clean: false" in e for e in self.errors_for(data)))
+
+
+    def test_the_weekly_lifecycle_steps_must_run(self):
+        for needle in ("rag_eval.drift", "golden_set stale-scan", "golden_set re-review"):
+            data = weekly_fixture()
+            data["jobs"]["weekly-report"]["steps"] = [s for s in self.steps(data) if needle not in str(s.get("run", ""))]
+            self.assertTrue(any(needle in e for e in self.errors_for(data)), needle)
+
+    def test_the_lifecycle_steps_run_before_the_weekly_report(self):
+        data = weekly_fixture()
+        steps = self.steps(data)
+        steps.append(steps.pop(4))
+        self.assertTrue(any("before the weekly report" in e for e in self.errors_for(data)))
+
+
+TENANT_GATE = "env.HAS_PRIVATE_EVAL == 'true'"
+
+
+def tenant_nightly_fixture() -> dict:
+    return {
+        "on": {"schedule": [{"cron": "0 3 * * *"}, {"cron": WEEKLY_CRON}], "workflow_dispatch": None},
+        "jobs": {
+            "tenant-nightly": {
+                "if": f"github.event.schedule != '{WEEKLY_CRON}'",
+                "runs-on": "ubuntu-latest",
+                "env": {"HAS_ADMIN_BEARER": "${{ secrets.RAG_ADMIN_BEARER != '' }}"},
+                "steps": [
+                    {
+                        "name": "Detect private eval data and the admin token",
+                        "run": (
+                            'if [ "$HAS_ADMIN_BEARER" = "true" ] && [ -d eval/golden/private ] && [ -n "$(ls -A eval/golden/private)" ]; then\n'
+                            '  echo "HAS_PRIVATE_EVAL=true" >> "$GITHUB_ENV"\n'
+                            "else\n"
+                            '  echo "HAS_PRIVATE_EVAL=false" >> "$GITHUB_ENV"\n'
+                            f'  echo "{check_workflows.TENANT_NIGHTLY_SKIP_NOTICE}"\n'
+                            "fi\n"
+                        ),
+                    },
+                    {"uses": "actions/checkout@" + "a" * 40, "if": TENANT_GATE, "with": {"clean": False}},
+                    {"name": "Sync eval project", "if": TENANT_GATE, "run": "uv sync --directory eval --locked --all-extras"},
+                    {
+                        "name": "Drain",
+                        "if": TENANT_GATE,
+                        "env": {"RAG_ADMIN_BEARER": "${{ secrets.RAG_ADMIN_BEARER }}", "RAG_APP_URL": "${{ secrets.RAG_APP_URL }}"},
+                        "run": 'uv run --directory eval python -m rag_eval.tenant_nightly --drain --base-url "$RAG_APP_URL"',
+                    },
+                ],
+            }
+        },
+    }
+
+
+class TenantNightlyJobTest(unittest.TestCase):
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_tenant_nightly(data, errors)
+        return errors
+
+    def steps(self, data: dict) -> list[dict]:
+        return data["jobs"]["tenant-nightly"]["steps"]
+
+    def test_the_fixture_is_valid(self):
+        self.assertEqual(self.errors_for(tenant_nightly_fixture()), [])
+
+    def test_repository_nightly_has_a_valid_tenant_nightly_job(self):
+        self.assertEqual(self.errors_for(check_workflows.load(check_workflows.NIGHTLY)[0]), [])
+
+    def test_missing_job_is_reported(self):
+        data = tenant_nightly_fixture()
+        del data["jobs"]["tenant-nightly"]
+        self.assertTrue(any("'tenant-nightly' missing" in e for e in self.errors_for(data)))
+
+    def test_an_ungated_step_is_reported(self):
+        data = tenant_nightly_fixture()
+        del self.steps(data)[3]["if"]
+        self.assertTrue(any("HAS_PRIVATE_EVAL == 'true'" in e for e in self.errors_for(data)))
+
+    def test_a_missing_skip_notice_is_reported(self):
+        data = tenant_nightly_fixture()
+        self.steps(data)[0]["run"] = self.steps(data)[0]["run"].replace("::notice::", "")
+        self.assertTrue(any("first step" in e for e in self.errors_for(data)))
+
+    def test_the_guard_must_require_the_admin_bearer(self):
+        data = tenant_nightly_fixture()
+        data["jobs"]["tenant-nightly"]["env"] = {}
+        self.assertTrue(any("secrets.RAG_ADMIN_BEARER" in e for e in self.errors_for(data)))
+        data = tenant_nightly_fixture()
+        self.steps(data)[0]["run"] = self.steps(data)[0]["run"].replace('[ "$HAS_ADMIN_BEARER" = "true" ] && ', "")
+        self.assertTrue(any("HAS_ADMIN_BEARER" in e for e in self.errors_for(data)))
+
+    def test_a_secret_interpolated_in_a_run_script_is_reported(self):
+        data = tenant_nightly_fixture()
+        self.steps(data)[3]["run"] += ' --token "${{ secrets.RAG_ADMIN_BEARER }}"'
+        self.assertTrue(any("not interpolated into run" in e for e in self.errors_for(data)))
+
+    def test_an_upload_artifact_step_is_reported(self):
+        data = tenant_nightly_fixture()
+        self.steps(data).append({"uses": "actions/upload-artifact@" + "b" * 40, "if": TENANT_GATE, "with": {"path": "eval/golden/private"}})
+        self.assertTrue(any("upload" in e for e in self.errors_for(data)))
+
+    def test_the_drain_must_run(self):
+        data = tenant_nightly_fixture()
+        self.steps(data)[3]["run"] = "uv run --directory eval python -m rag_eval.tenant_nightly"
+        self.assertTrue(any("--drain" in e for e in self.errors_for(data)))
+
+    def test_the_bearer_reaches_the_drain_through_step_env(self):
+        data = tenant_nightly_fixture()
+        del self.steps(data)[3]["env"]
+        self.assertTrue(any("step env" in e for e in self.errors_for(data)))
+
+    def test_the_job_does_not_run_on_the_weekly_schedule(self):
+        data = tenant_nightly_fixture()
+        del data["jobs"]["tenant-nightly"]["if"]
+        self.assertTrue(any("daily schedule" in e for e in self.errors_for(data)))
+
+
+MONITOR_GATE = "env.HAS_MONITOR_SECRETS == 'true'"
+
+
+def monitor_fixture() -> dict:
+    return {
+        "on": {"schedule": [{"cron": "0 3 * * *"}, {"cron": WEEKLY_CRON}], "workflow_dispatch": None},
+        "jobs": {
+            "monitor": {
+                "if": f"github.event.schedule != '{WEEKLY_CRON}'",
+                "runs-on": "ubuntu-latest",
+                "env": {
+                    "HAS_MONITOR_SECRETS": "${{ secrets.NEXT_PUBLIC_SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}"
+                },
+                "steps": [
+                    {
+                        "name": "Skip notice",
+                        "if": "env.HAS_MONITOR_SECRETS != 'true'",
+                        "run": f'echo "{check_workflows.MONITOR_SKIP_NOTICE}"',
+                    },
+                    {"uses": "actions/checkout@" + "a" * 40, "if": MONITOR_GATE},
+                    {"name": "Install Node dependencies", "if": MONITOR_GATE, "run": "npm ci --ignore-scripts"},
+                    {
+                        "name": "Daily monitor",
+                        "if": MONITOR_GATE,
+                        "env": {
+                            "NEXT_PUBLIC_SUPABASE_URL": "${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}",
+                            "SUPABASE_SERVICE_ROLE_KEY": "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}",
+                        },
+                        "run": "npm run rag:monitor",
+                    },
+                ],
+            }
+        },
+    }
+
+
+class MonitorJobTest(unittest.TestCase):
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_monitor_job(data, errors)
+        return errors
+
+    def steps(self, data: dict) -> list[dict]:
+        return data["jobs"]["monitor"]["steps"]
+
+    def test_the_fixture_is_valid(self):
+        self.assertEqual(self.errors_for(monitor_fixture()), [])
+
+    def test_repository_nightly_has_a_valid_monitor_job(self):
+        self.assertEqual(self.errors_for(check_workflows.load(check_workflows.NIGHTLY)[0]), [])
+
+    def test_missing_job_is_reported(self):
+        data = monitor_fixture()
+        del data["jobs"]["monitor"]
+        self.assertTrue(any("'monitor' missing" in e for e in self.errors_for(data)))
+
+    def test_an_ungated_step_is_reported(self):
+        data = monitor_fixture()
+        del self.steps(data)[3]["if"]
+        self.assertTrue(any("HAS_MONITOR_SECRETS == 'true'" in e for e in self.errors_for(data)))
+
+    def test_a_missing_skip_notice_is_reported(self):
+        data = monitor_fixture()
+        del self.steps(data)[0]
+        self.assertTrue(any("skip-notice" in e for e in self.errors_for(data)))
+
+    def test_the_guard_needs_both_supabase_secrets(self):
+        for secret in ("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+            data = monitor_fixture()
+            job = data["jobs"]["monitor"]
+            job["env"]["HAS_MONITOR_SECRETS"] = job["env"]["HAS_MONITOR_SECRETS"].replace(f"secrets.{secret} != ''", "true")
+            self.assertTrue(any(f"secrets.{secret}" in e for e in self.errors_for(data)), secret)
+
+    def test_a_secret_interpolated_in_a_run_script_is_reported(self):
+        data = monitor_fixture()
+        self.steps(data)[3]["run"] = 'SUPABASE_SERVICE_ROLE_KEY="${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" npm run rag:monitor'
+        self.assertTrue(any("not interpolated into run" in e for e in self.errors_for(data)))
+
+    def test_the_secrets_reach_the_monitor_through_step_env(self):
+        data = monitor_fixture()
+        del self.steps(data)[3]["env"]["SUPABASE_SERVICE_ROLE_KEY"]
+        self.assertTrue(any("SUPABASE_SERVICE_ROLE_KEY through step env" in e for e in self.errors_for(data)))
+
+    def test_the_monitor_must_run(self):
+        data = monitor_fixture()
+        self.steps(data)[3]["run"] = "npm run lint"
+        self.assertTrue(any("rag:monitor" in e for e in self.errors_for(data)))
+
+    def test_an_upload_artifact_step_is_reported(self):
+        data = monitor_fixture()
+        self.steps(data).append({"uses": "actions/upload-artifact@" + "b" * 40, "if": MONITOR_GATE, "with": {"path": "out"}})
+        self.assertTrue(any("upload" in e for e in self.errors_for(data)))
+
+
+class NightlyTriggersTest(unittest.TestCase):
+    def test_a_push_trigger_on_nightly_is_reported(self):
+        data = check_workflows.load(check_workflows.NIGHTLY)[0]
+        data = dict(data)
+        data["on"] = {**check_workflows.triggers(data), "push": {"branches": ["main"]}}
+        errors: list[str] = []
+        check_workflows.check_nightly_triggers(data, errors)
+        self.assertTrue(any("'push' must not be used" in e for e in errors))
+
+    def test_the_repository_nightly_triggers_are_valid(self):
+        errors: list[str] = []
+        check_workflows.check_nightly_triggers(check_workflows.load(check_workflows.NIGHTLY)[0], errors)
+        self.assertEqual(errors, [])
+
+
+class OnlineJudgeMirrorTest(unittest.TestCase):
+    def runner(self, data: dict) -> dict:
+        return next(s for s in data["jobs"]["online-judge"]["steps"] if "rag_eval.online_judge" in str(s.get("run", "")))
+
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_online_judge(data, errors)
+        return errors
+
+    def test_the_repository_online_judge_passes_the_mirror_inputs(self):
+        self.assertEqual(self.errors_for(check_workflows.load(check_workflows.NIGHTLY)[0]), [])
+
+    def test_the_mirror_inputs_must_reach_the_step_env(self):
+        for name in ("RAG_APP_URL", "RAG_ADMIN_BEARER"):
+            data = check_workflows.load(check_workflows.NIGHTLY)[0]
+            self.runner(data).get("env", {}).pop(name, None)
+            self.assertTrue(any(name in e for e in self.errors_for(data)), name)
+
+    def test_the_base_url_flag_must_be_passed(self):
+        data = check_workflows.load(check_workflows.NIGHTLY)[0]
+        self.runner(data)["run"] = "uv run --directory eval python -m rag_eval.online_judge"
+        self.assertTrue(any("--base-url" in e for e in self.errors_for(data)))
+
+
+JUDGE_GATE = "env.HAS_JUDGE_KEYS == 'true'"
+
+
+def judge_calibration_fixture() -> dict:
+    return {
+        "on": {"schedule": [{"cron": "41 5 1 * *"}], "workflow_dispatch": None},
+        "permissions": {"contents": "read"},
+        "env": dict(check_workflows.TELEMETRY),
+        "jobs": {
+            "calibrate": {
+                "runs-on": "ubuntu-latest",
+                "env": {
+                    "HAS_JUDGE_KEYS": (
+                        "${{ secrets.OPENROUTER_API_KEY != '' && secrets.OPENAI_API_KEY != '' && vars.RAG_JUDGE_GENERATOR_MODEL != '' }}"
+                    )
+                },
+                "steps": [
+                    {"name": "Skip notice", "if": "env.HAS_JUDGE_KEYS != 'true'", "run": f'echo "{check_workflows.JUDGE_CALIBRATION_SKIP_NOTICE}"'},
+                    {"uses": "actions/checkout@" + "a" * 40, "if": JUDGE_GATE},
+                    {"name": "Sync eval project", "if": JUDGE_GATE, "run": "uv sync --directory eval --locked --all-extras"},
+                    {
+                        "name": "Seed calibration",
+                        "if": JUDGE_GATE,
+                        "env": {"OPENROUTER_API_KEY": "${{ secrets.OPENROUTER_API_KEY }}", "OPENAI_API_KEY": "${{ secrets.OPENAI_API_KEY }}"},
+                        "run": (
+                            'uv run --directory eval python -m rag_eval.judge_calibration run --seed-only --generator-model "$M" '
+                            "--write --out eval/out/judge-calibration"
+                        ),
+                    },
+                    {
+                        "uses": "actions/upload-artifact@" + "b" * 40,
+                        "if": f"always() && {JUDGE_GATE}",
+                        "with": {"name": "judge-calibration", "path": "eval/config/judge-calibration.json\neval/out/judge-calibration\n"},
+                    },
+                ],
+            }
+        },
+    }
+
+
+class JudgeCalibrationWorkflowTest(unittest.TestCase):
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_judge_calibration(data, errors)
+        return errors
+
+    def steps(self, data: dict) -> list[dict]:
+        return data["jobs"]["calibrate"]["steps"]
+
+    def test_the_fixture_is_valid(self):
+        self.assertEqual(self.errors_for(judge_calibration_fixture()), [])
+
+    def test_the_repository_workflow_exists_and_is_valid(self):
+        self.assertTrue(check_workflows.JUDGE_CALIBRATION_WORKFLOW.exists())
+        self.assertEqual(self.errors_for(check_workflows.load(check_workflows.JUDGE_CALIBRATION_WORKFLOW)[0]), [])
+
+    def test_a_missing_schedule_is_reported(self):
+        data = judge_calibration_fixture()
+        del data["on"]["schedule"]
+        self.assertTrue(any("schedule" in e for e in self.errors_for(data)))
+
+    def test_a_missing_dispatch_is_reported(self):
+        data = judge_calibration_fixture()
+        del data["on"]["workflow_dispatch"]
+        self.assertTrue(any("workflow_dispatch" in e for e in self.errors_for(data)))
+
+    def test_write_permissions_are_reported(self):
+        for scope in ("contents", "pull-requests"):
+            data = judge_calibration_fixture()
+            data["permissions"] = {"contents": "read", scope: "write"}
+            self.assertTrue(any("write" in e for e in self.errors_for(data)), scope)
+            data = judge_calibration_fixture()
+            data["jobs"]["calibrate"]["permissions"] = {scope: "write"}
+            self.assertTrue(any("write" in e for e in self.errors_for(data)), scope)
+
+    def test_an_ungated_step_is_reported(self):
+        data = judge_calibration_fixture()
+        del self.steps(data)[3]["if"]
+        self.assertTrue(any("HAS_JUDGE_KEYS == 'true'" in e for e in self.errors_for(data)))
+
+    def test_a_missing_skip_notice_is_reported(self):
+        data = judge_calibration_fixture()
+        del self.steps(data)[0]
+        self.assertTrue(any("skip-notice" in e for e in self.errors_for(data)))
+
+    def test_the_guard_needs_the_judge_keys(self):
+        for secret in ("OPENROUTER_API_KEY", "OPENAI_API_KEY"):
+            data = judge_calibration_fixture()
+            job = data["jobs"]["calibrate"]
+            job["env"]["HAS_JUDGE_KEYS"] = job["env"]["HAS_JUDGE_KEYS"].replace(f"secrets.{secret} != ''", "true")
+            self.assertTrue(any(f"secrets.{secret}" in e for e in self.errors_for(data)), secret)
+
+    def test_a_secret_interpolated_in_a_run_script_is_reported(self):
+        data = judge_calibration_fixture()
+        self.steps(data)[3]["run"] += ' --key "${{ secrets.OPENAI_API_KEY }}"'
+        self.assertTrue(any("not interpolated into run" in e for e in self.errors_for(data)))
+
+    def test_the_seed_calibration_must_run(self):
+        data = judge_calibration_fixture()
+        self.steps(data)[3]["run"] = "uv run --directory eval python -m rag_eval.judge_calibration run --generator-model x"
+        self.assertTrue(any("--seed-only" in e for e in self.errors_for(data)))
+
+    def test_the_result_must_be_uploaded(self):
+        data = judge_calibration_fixture()
+        del self.steps(data)[4]
+        self.assertTrue(any("artifact" in e for e in self.errors_for(data)))
+
+    def test_private_files_must_not_be_uploaded(self):
+        data = judge_calibration_fixture()
+        self.steps(data)[4]["with"]["path"] += "eval/golden/private/judge-calibration\n"
+        self.assertTrue(any("eval/golden/private" in e for e in self.errors_for(data)))
+
+    def test_pushing_or_opening_a_pull_request_is_reported(self):
+        for command in ("git push origin HEAD", "gh pr create --fill"):
+            data = judge_calibration_fixture()
+            self.steps(data)[3]["run"] += f" && {command}"
+            self.assertTrue(any("pull request" in e for e in self.errors_for(data)), command)
 
 
 class SidecarPythonJobTest(unittest.TestCase):
@@ -685,6 +1200,12 @@ class AbsoluteGatesTest(unittest.TestCase):
         step["run"] = step["run"].replace("--out eval/out/negative-prompt", "--out eval/out/negative-prompt --gates-mode report")
         self.assertTrue(any("eval/out/negative-prompt" in e for e in self.errors_for(pr, nightly)))
 
+    def test_a_prompt_control_without_explicit_enforce_is_reported(self):
+        pr, nightly = self.workflows()
+        step = self.step(pr, "gate-negative-control", "no-refusal-directive.overlay.json")
+        step["run"] = step["run"].replace(" --gates-mode enforce", "")
+        self.assertTrue(any("--gates-mode enforce" in e for e in self.errors_for(pr, nightly)))
+
     def test_another_gates_file_is_reported(self):
         pr, nightly = self.workflows()
         self.step(pr, "eval-smoke", "npm run test-rag -- --out eval/out/smoke")["run"] += " --gates eval/out/lax-gates.json"
@@ -762,3 +1283,380 @@ class AbsoluteGatesTest(unittest.TestCase):
             broken = Path(tmp) / "broken.json"
             broken.write_text("{not json", encoding="utf-8")
             self.assertTrue(any("broken.json" in e for e in self.errors_for(pr, nightly, broken)))
+
+
+class ReleaseGateWorkflowTest(unittest.TestCase):
+    """D-33, D-36, research F-3: one failing example per rule of check_release_gate."""
+
+    def workflow(self) -> dict:
+        import copy
+
+        import yaml
+
+        data = yaml.safe_load(check_workflows.RELEASE_GATE.read_text(encoding="utf-8"))
+        return copy.deepcopy(data)
+
+    def known_refs(self) -> set[str]:
+        refs: set[str] = set()
+        for path in (check_workflows.PR, check_workflows.NIGHTLY):
+            refs.update(check_workflows.uses_refs(check_workflows.load(path)[0]))
+        return refs
+
+    def errors_for(self, data: dict, text: str | None = None) -> list[str]:
+        import yaml
+
+        errors: list[str] = []
+        check_workflows.check_release_gate(data, text if text is not None else yaml.safe_dump(data), errors, self.known_refs())
+        return errors
+
+    def on(self, data: dict) -> dict:
+        return data["on"] if "on" in data else data[True]
+
+    def steps(self, data: dict) -> list[dict]:
+        return data["jobs"]["gate"]["steps"]
+
+    def step(self, data: dict, needle: str) -> dict:
+        return next(s for s in self.steps(data) if needle in str(s.get("run", "")))
+
+    def assert_error(self, data: dict, fragment: str, text: str | None = None) -> None:
+        errors = self.errors_for(data, text)
+        self.assertTrue(any(fragment in e for e in errors), f"no error containing {fragment!r} in {errors}")
+
+    def test_repository_workflow_passes(self):
+        text = check_workflows.RELEASE_GATE.read_text(encoding="utf-8")
+        errors: list[str] = []
+        check_workflows.check_release_gate(self.workflow(), text, errors, self.known_refs())
+        self.assertEqual(errors, [])
+
+    def test_top_level_statuses_write_fails(self):
+        data = self.workflow()
+        data["permissions"] = {"contents": "read", "statuses": "write"}
+        self.assert_error(data, "top-level permissions")
+
+    def test_job_named_like_the_status_fails(self):
+        data = self.workflow()
+        data["jobs"]["rag-release-gate"] = data["jobs"].pop("gate")
+        self.assert_error(data, "no job may be named rag-release-gate")
+        data = self.workflow()
+        data["jobs"]["gate"]["name"] = "rag-release-gate"
+        self.assert_error(data, "no job may be named rag-release-gate")
+
+    def test_job_permissions_beyond_the_gate_set_fail(self):
+        data = self.workflow()
+        data["jobs"]["gate"]["permissions"]["contents"] = "write"
+        self.assert_error(data, "permissions must be exactly")
+
+    def test_pull_request_triggers_fail(self):
+        for trigger in ("pull_request", "pull_request_target"):
+            data = self.workflow()
+            self.on(data)[trigger] = {"branches": ["main"]}
+            self.assert_error(data, f"trigger '{trigger}' must not be used")
+
+    def test_push_to_another_branch_fails(self):
+        data = self.workflow()
+        self.on(data)["push"] = {"branches": ["main", "feature"]}
+        self.assert_error(data, "push must trigger on branches [main] only")
+        data = self.workflow()
+        self.on(data)["push"] = {"branches": ["main"], "tags": ["v*"]}
+        self.assert_error(data, "push must trigger on branches [main] only")
+
+    def test_dispatch_inputs_are_required(self):
+        data = self.workflow()
+        self.on(data)["workflow_dispatch"]["inputs"]["sha"]["required"] = False
+        self.assert_error(data, "required 'sha' input")
+        data = self.workflow()
+        del self.on(data)["workflow_dispatch"]["inputs"]["override_reason"]
+        self.assert_error(data, "optional 'override_reason' input")
+
+    def test_inputs_inside_run_fail(self):
+        for expr in ("${{ inputs.sha }}", "${{ inputs.override_reason }}", "${{ github.event.inputs.sha }}"):
+            data = self.workflow()
+            self.step(data, "rag_eval.release_gate run")["run"] = f"uv run --directory eval python -m rag_eval.release_gate run --sha {expr}"
+            self.assert_error(data, "only through env")
+
+    def test_secret_inside_run_fails(self):
+        data = self.workflow()
+        self.step(data, "rag_eval.release_gate run")["run"] += " --key ${{ secrets.OPENAI_API_KEY }}"
+        self.assert_error(data, "not interpolated into run")
+
+    def test_missing_sha_validation_fails(self):
+        data = self.workflow()
+        self.steps(data).pop(0)
+        self.assert_error(data, "must check GATE_SHA")
+
+    def test_no_pending_post_before_the_gate_fails(self):
+        data = self.workflow()
+        steps = self.steps(data)
+        pending = next(s for s in steps if "state=pending" in str(s.get("run", "")))
+        steps.remove(pending)
+        self.assert_error(data, "pending rag-release-gate status must be posted before")
+        data = self.workflow()
+        steps = self.steps(data)
+        pending = next(s for s in steps if "state=pending" in str(s.get("run", "")))
+        steps.remove(pending)
+        steps.insert(len(steps) - 1, pending)
+        self.assert_error(data, "pending rag-release-gate status must be posted before")
+
+    def test_posting_step_without_always_fails(self):
+        data = self.workflow()
+        del self.step(data, "post-release-status.mjs")["if"]
+        self.assert_error(data, "if: always()")
+        data = self.workflow()
+        self.step(data, "post-release-status.mjs")["if"] = "success()"
+        self.assert_error(data, "if: always()")
+
+    def test_unpinned_or_unknown_action_fails(self):
+        data = self.workflow()
+        checkout = next(s for s in self.steps(data) if str(s.get("uses", "")).startswith("actions/checkout@"))
+        checkout["uses"] = "actions/checkout@v4"
+        self.assert_error(data, "pinned to a 40-hex commit sha")
+        data = self.workflow()
+        self.steps(data).append({"uses": "someone/new-action@" + "c" * 40})
+        self.assert_error(data, "not a pinned action already used")
+        text = check_workflows.RELEASE_GATE.read_text(encoding="utf-8").replace(" # v4.4.0", "", 1)
+        import yaml
+
+        self.assert_error(yaml.safe_load(text), "needs a '# vX.Y.Z' comment", text)
+
+    def test_checkout_must_use_the_gate_sha(self):
+        data = self.workflow()
+        checkout = next(s for s in self.steps(data) if str(s.get("uses", "")).startswith("actions/checkout@"))
+        del checkout["with"]
+        self.assert_error(data, "checkout must check out ref")
+
+    def test_override_takes_the_triggering_actor_through_env(self):
+        data = self.workflow()
+        del self.step(data, "rag_eval.release_gate override")["env"]["TRIGGERING_ACTOR"]
+        self.assert_error(data, "github.triggering_actor")
+        data = self.workflow()
+        self.step(data, "rag_eval.release_gate override")["env"]["TRIGGERING_ACTOR"] = "${{ github.actor }}"
+        self.assert_error(data, "github.triggering_actor")
+
+    def test_judge_keys_reach_the_gate_through_step_env(self):
+        data = self.workflow()
+        del self.step(data, "rag_eval.release_gate run")["env"]["OPENAI_API_KEY"]
+        self.assert_error(data, "receive OPENAI_API_KEY through step env")
+
+    def test_concurrency_must_not_cancel(self):
+        data = self.workflow()
+        data["concurrency"]["cancel-in-progress"] = True
+        self.assert_error(data, "cancel-in-progress false")
+
+
+class PrSmokeAggregateTest(unittest.TestCase):
+    """D-37: one aggregate pr-smoke job that only real success satisfies, run on trunk and main pushes."""
+
+    def workflow(self) -> dict:
+        import yaml
+
+        return yaml.safe_load(check_workflows.PR.read_text(encoding="utf-8"))
+
+    def errors_for(self, data: dict) -> list[str]:
+        import yaml
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "pr-smoke.yml"
+            path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+            original = check_workflows.PR
+            check_workflows.PR = path
+            try:
+                errors: list[str] = []
+                check_workflows.check_pr_aggregate(check_workflows.load(path)[0], errors)
+                return errors
+            finally:
+                check_workflows.PR = original
+
+    def on(self, data: dict) -> dict:
+        return data["on"] if "on" in data else data[True]
+
+    def aggregate(self, data: dict) -> dict:
+        return data["jobs"][check_workflows.AGGREGATE_JOB]
+
+    def assert_error(self, data: dict, fragment: str) -> None:
+        errors = self.errors_for(data)
+        self.assertTrue(any(fragment in e for e in errors), f"no error containing {fragment!r} in {errors}")
+
+    def test_repository_workflow_passes(self):
+        self.assertEqual(self.errors_for(self.workflow()), [])
+
+    def test_the_aggregate_is_a_checked_pr_job(self):
+        self.assertIn(check_workflows.AGGREGATE_JOB, check_workflows.PR_JOBS)
+
+    def test_missing_aggregate_fails(self):
+        data = self.workflow()
+        del data["jobs"][check_workflows.AGGREGATE_JOB]
+        self.assert_error(data, "job 'pr-smoke' missing")
+
+    def test_needs_missing_a_job_fails(self):
+        data = self.workflow()
+        self.aggregate(data)["needs"] = [n for n in self.aggregate(data)["needs"] if n != "docker-build"]
+        self.assert_error(data, "needs must list every other job")
+
+    def test_needs_missing_a_newly_added_job_fails(self):
+        data = self.workflow()
+        data["jobs"]["extra-job"] = {"runs-on": "ubuntu-latest", "steps": [{"run": "true"}]}
+        self.assert_error(data, "extra-job")
+
+    def test_without_always_fails(self):
+        data = self.workflow()
+        del self.aggregate(data)["if"]
+        self.assert_error(data, "if: always()")
+        data = self.workflow()
+        self.aggregate(data)["if"] = "success()"
+        self.assert_error(data, "if: always()")
+
+    def test_a_step_accepting_skipped_fails(self):
+        data = self.workflow()
+        step = self.aggregate(data)["steps"][0]
+        step["run"] = 'for r in $RESULTS; do case "$r" in success|skipped) ;; *) exit 1;; esac; done'
+        self.assert_error(data, "skipped")
+
+    def test_results_must_come_from_needs_through_env(self):
+        data = self.workflow()
+        self.aggregate(data)["steps"][0]["env"] = {"RESULTS": "success"}
+        self.assert_error(data, "join(needs.*.result")
+
+    def test_push_without_the_trunk_branch_fails(self):
+        data = self.workflow()
+        self.on(data)["push"] = {"branches": ["main"]}
+        self.assert_error(data, "claude/ecstatic-hamilton-86gtwv")
+        data = self.workflow()
+        self.on(data)["push"] = {"branches": [check_workflows.TRUNK_BRANCH]}
+        self.assert_error(data, "'main'")
+
+    def test_a_secret_in_the_aggregate_fails(self):
+        data = self.workflow()
+        self.aggregate(data)["steps"][0]["env"]["TOKEN"] = "${{ secrets.GITHUB_TOKEN }}"
+        self.assert_error(data, "secrets.")
+
+    def run_loop(self, results: str) -> int:
+        import subprocess
+
+        step = self.aggregate(self.workflow())["steps"][0]
+        proc = subprocess.run(["bash", "-c", step["run"]], env={"RESULTS": results, "PATH": "/usr/bin:/bin"}, capture_output=True, text=True)
+        return proc.returncode
+
+    def test_the_loop_rejects_a_skipped_job(self):
+        self.assertNotEqual(self.run_loop("success success skipped"), 0)
+
+    def test_the_loop_rejects_failure_and_cancelled(self):
+        self.assertNotEqual(self.run_loop("success failure"), 0)
+        self.assertNotEqual(self.run_loop("cancelled success"), 0)
+
+    def test_the_loop_rejects_no_results(self):
+        self.assertNotEqual(self.run_loop(""), 0)
+
+    def test_the_loop_accepts_only_success(self):
+        self.assertEqual(self.run_loop("success"), 0)
+        self.assertEqual(self.run_loop("success success success"), 0)
+
+
+class PromoteProductionWorkflowTest(unittest.TestCase):
+    """D-35, O-5: one failing example per rule of check_promote_production."""
+
+    def workflow(self) -> dict:
+        import yaml
+
+        return yaml.safe_load(check_workflows.PROMOTE.read_text(encoding="utf-8"))
+
+    def known_refs(self) -> set[str]:
+        refs: set[str] = set()
+        for path in (check_workflows.PR, check_workflows.NIGHTLY):
+            refs.update(check_workflows.uses_refs(check_workflows.load(path)[0]))
+        return refs
+
+    def errors_for(self, data: dict, text: str | None = None) -> list[str]:
+        import yaml
+
+        errors: list[str] = []
+        check_workflows.check_promote_production(data, text if text is not None else yaml.safe_dump(data), errors, self.known_refs())
+        return errors
+
+    def on(self, data: dict) -> dict:
+        return data["on"] if "on" in data else data[True]
+
+    def job(self, data: dict) -> dict:
+        return data["jobs"]["promote"]
+
+    def step(self, data: dict) -> dict:
+        return next(s for s in self.job(data)["steps"] if "promote-production.mjs" in str(s.get("run", "")))
+
+    def assert_error(self, data: dict, fragment: str) -> None:
+        errors = self.errors_for(data)
+        self.assertTrue(any(fragment in e for e in errors), f"no error containing {fragment!r} in {errors}")
+
+    def test_repository_workflow_passes(self):
+        text = check_workflows.PROMOTE.read_text(encoding="utf-8")
+        errors: list[str] = []
+        check_workflows.check_promote_production(self.workflow(), text, errors, self.known_refs())
+        self.assertEqual(errors, [])
+
+    def test_a_push_trigger_fails(self):
+        data = self.workflow()
+        self.on(data)["push"] = {"branches": ["main"]}
+        self.assert_error(data, "workflow_dispatch only")
+
+    def test_other_triggers_fail(self):
+        for trigger in ("pull_request", "schedule", "workflow_run"):
+            data = self.workflow()
+            self.on(data)[trigger] = {}
+            self.assert_error(data, "workflow_dispatch only")
+
+    def test_sha_input_is_required_and_alone(self):
+        data = self.workflow()
+        self.on(data)["workflow_dispatch"]["inputs"]["sha"]["required"] = False
+        self.assert_error(data, "required 'sha' input")
+        data = self.workflow()
+        self.on(data)["workflow_dispatch"]["inputs"]["force"] = {"type": "boolean"}
+        self.assert_error(data, "unexpected workflow_dispatch inputs")
+
+    def test_inputs_sha_inside_run_fails(self):
+        data = self.workflow()
+        self.step(data)["run"] = "node scripts/ci/promote-production.mjs --sha ${{ inputs.sha }}"
+        self.assert_error(data, "only through env")
+
+    def test_a_secret_inside_run_fails(self):
+        data = self.workflow()
+        self.step(data)["run"] += " && echo ${{ secrets.VERCEL_TOKEN }}"
+        self.assert_error(data, "not interpolated into run")
+
+    def test_a_write_permission_fails(self):
+        data = self.workflow()
+        self.job(data)["permissions"]["statuses"] = "write"
+        self.assert_error(data, "permissions must be exactly")
+        data = self.workflow()
+        self.job(data)["permissions"]["contents"] = "write"
+        self.assert_error(data, "permissions must be exactly")
+        data = self.workflow()
+        data["permissions"] = {"contents": "write"}
+        self.assert_error(data, "top-level permissions")
+
+    def test_env_must_carry_the_sha_and_the_vercel_settings(self):
+        for key in ("PROMOTE_SHA", "GH_TOKEN", "VERCEL_TOKEN", "VERCEL_PROJECT_ID", "VERCEL_TEAM_ID"):
+            data = self.workflow()
+            del self.step(data)["env"][key]
+            self.assert_error(data, key)
+        data = self.workflow()
+        self.step(data)["env"]["PROMOTE_SHA"] = "${{ github.sha }}"
+        self.assert_error(data, "PROMOTE_SHA")
+
+    def test_the_promote_command_is_required(self):
+        data = self.workflow()
+        self.step(data)["run"] = "echo nothing"
+        self.assert_error(data, "no step runs")
+
+    def test_checkout_of_the_promoted_sha_fails(self):
+        data = self.workflow()
+        checkout = next(s for s in self.job(data)["steps"] if str(s.get("uses", "")).startswith("actions/checkout@"))
+        checkout.setdefault("with", {})["ref"] = "${{ inputs.sha }}"
+        self.assert_error(data, "must not check out")
+
+    def test_an_unknown_action_fails(self):
+        data = self.workflow()
+        self.job(data)["steps"].append({"uses": "someone/new-action@" + "d" * 40})
+        self.assert_error(data, "not a pinned action already used")
+
+    def test_concurrency_must_not_cancel(self):
+        data = self.workflow()
+        data["concurrency"]["cancel-in-progress"] = True
+        self.assert_error(data, "cancel-in-progress false")

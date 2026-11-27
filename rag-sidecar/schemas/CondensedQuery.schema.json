@@ -1,6 +1,22 @@
 {
   "additionalProperties": false,
   "properties": {
+    "language": {
+      "anyOf": [
+        {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Language"
+    },
     "standalone": {
       "title": "Standalone",
       "type": "string"
@@ -12,7 +28,8 @@
   },
   "required": [
     "standalone",
-    "unchanged"
+    "unchanged",
+    "language"
   ],
   "title": "CondensedQuery",
   "type": "object"

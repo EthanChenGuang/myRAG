@@ -14,6 +14,7 @@ export {
   type AccessScope,
   type AccessScopeMode,
 } from './access-brand';
+
 export { accessRpcArgs, accessTableFilter, sameAccessFilter, type ScopeAccessFilter } from './access-filter';
 import type { ScopeAccessFilter } from './access-filter';
 
@@ -29,7 +30,7 @@ function accessGroupsOn(): boolean {
   return loadRagConfig(getRagDeps().ragEnv()).accessGroups === 'on';
 }
 
-/** D-09: whether RAG_DOC_ACCESS_GROUPS is on, for a route that would otherwise look up an identity it does not need while off. */
+/** True while RAG_DOC_ACCESS_GROUPS is on; read paths outside retrieval use it to skip access work while the switch is off. */
 export function accessGroupsEnabled(): boolean {
   return accessGroupsOn();
 }

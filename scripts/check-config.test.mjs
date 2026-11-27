@@ -17,6 +17,7 @@ const TRACKED = [
 ];
 const MANIFEST = 'scripts/rag/env-manifest.json';
 const GENERATED = 'src/lib/rag/config-gate/rag-affecting.generated.json';
+const VENDOR_INVENTORY = 'config/rag/vendor-data-flow.json';
 
 function run(root) {
   const result = spawnSync(process.execPath, [SCRIPT, '--root', root], { encoding: 'utf8' });
@@ -31,11 +32,33 @@ function write(root, relative, text) {
 
 function copyRealTree() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-config-'));
-  for (const relative of [...TRACKED, MANIFEST, GENERATED]) {
+  for (const relative of [...TRACKED, MANIFEST, GENERATED, VENDOR_INVENTORY]) {
     const source = path.join(REPO, relative);
     if (fs.existsSync(source)) write(root, relative, fs.readFileSync(source, 'utf8'));
   }
   return root;
+}
+
+const SECRET_LIKE = /(KEY|SECRET|TOKEN|PASSWORD)/;
+
+function templateValue(initEnvText, name) {
+  const match = String(initEnvText ?? '').match(new RegExp(`^${name}=(.*)$`, 'm'));
+  return match ? match[1] : '';
+}
+
+/** Complete D-14 metadata for a managed fixture entry that states none, so older fixtures test only their own rule. */
+function withFixtureMetadata(entry, initEnvText) {
+  if (entry.status !== 'managed' || 'type' in entry || 'group' in entry || 'label' in entry) return entry;
+  const secret = SECRET_LIKE.test(entry.name);
+  return {
+    ...entry,
+    group: 'data',
+    label: entry.name,
+    type: secret ? 'secret' : 'string',
+    requires: [],
+    default: secret ? '' : templateValue(initEnvText, entry.name),
+    ...(secret ? { provider: 'sidecar' } : {}),
+  };
 }
 
 function syntheticTree({ files = {}, manifest, raw = false }) {
@@ -45,7 +68,9 @@ function syntheticTree({ files = {}, manifest, raw = false }) {
     ? manifest
     : {
         ...manifest,
-        vars: (manifest.vars ?? []).map((entry) => ('ragAffecting' in entry ? entry : { ...entry, ragAffecting: false })),
+        vars: (manifest.vars ?? []).map((entry) =>
+          withFixtureMetadata('ragAffecting' in entry ? entry : { ...entry, ragAffecting: false }, files['scripts/init-env.js']),
+        ),
       };
   write(root, MANIFEST, JSON.stringify(stated, null, 2));
   if (!raw) {
@@ -412,7 +437,10 @@ test('fails when COHERE_BASE_URL is missing from the config UI', () => {
   const root = copyRealTree();
   try {
     const file = path.join(root, 'scripts/config-ui/index.html');
-    const text = fs.readFileSync(file, 'utf8').replace(/COHERE_BASE_URL/g, 'REMOVED_COHERE_BASE_URL');
+    const text = fs
+      .readFileSync(file, 'utf8')
+      .replace(/COHERE_BASE_URL/g, 'REMOVED_COHERE_BASE_URL')
+      .replace(/<script src="rag-panels\/rag-pipeline\.js"><\/script>\n?/g, '');
     fs.writeFileSync(file, text);
     const { code, out } = run(root);
     assert.equal(code, 1);
@@ -513,8 +541,8 @@ test('does not discover an ANTHROPIC name embedded in a longer identifier', () =
   }
 });
 
-const OPUS_JSON = '{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"}';
-const OPUS_LITERAL = "{ id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },";
+const OPUS_JSON = '{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1","contextLength":200000}';
+const OPUS_LITERAL = "{ id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1', contextLength: 200000 },";
 const TEST_MODEL = 'anthropic/claude-test-9';
 
 function jsonEntry(id, anthropicId) {
@@ -692,9 +720,11 @@ const PHASE6_NAMES = [
   'REDIS_URL',
 ];
 
+/** In index.html, also drops the generated-section loader (plan 07-20), so the name is absent from the whole Config UI. */
 function removeName(root, relative, name) {
   const file = path.join(root, relative);
-  const text = fs.readFileSync(file, 'utf8').replace(new RegExp(`(?<![A-Z0-9_])${name}(?![A-Z0-9_])`, 'g'), 'REMOVED_NAME');
+  let text = fs.readFileSync(file, 'utf8').replace(new RegExp(`(?<![A-Z0-9_])${name}(?![A-Z0-9_])`, 'g'), 'REMOVED_NAME');
+  if (relative === 'scripts/config-ui/index.html') text = text.replace(/<script src="rag-panels\/rag-pipeline\.js"><\/script>\n?/g, '');
   fs.writeFileSync(file, text);
 }
 
@@ -1002,14 +1032,17 @@ test('the vector-backend secrets are masked by the config server and the sync se
 });
 
 test('the config UI offers pgvector, weaviate and qdrant for both backend selects and hides the keys', () => {
+  // Plan 07-20: the generated RAG pipeline section renders enum options in manifest order and every secret as a password field.
   const html = fs.readFileSync(path.join(REPO, 'scripts/config-ui/index.html'), 'utf8');
+  assert.match(html, /<script src="rag-panels\/rag-pipeline\.js"><\/script>/);
+  const vars = new Map(JSON.parse(fs.readFileSync(path.join(REPO, MANIFEST), 'utf8')).vars.map((v) => [v.name, v]));
   for (const name of ['RAG_RETRIEVAL_BACKEND', 'RAG_RETRIEVAL_BACKEND_VOICE']) {
-    const select = html.match(new RegExp(`<select id="${name}"[\\s\\S]*?</select>`));
-    assert.ok(select, `${name} select`);
-    for (const option of ['pgvector', 'weaviate', 'qdrant']) assert.match(select[0], new RegExp(`value="${option}"`), `${name} ${option}`);
+    assert.equal(vars.get(name)?.type, 'enum', `${name} select`);
+    for (const option of ['pgvector', 'weaviate', 'qdrant']) assert.ok(vars.get(name).options.includes(option), `${name} ${option}`);
   }
   for (const name of VECTOR_BACKEND_SECRETS) {
-    assert.match(html, new RegExp(`<input type="password" id="${name}"`), `${name} is a password input`);
+    assert.equal(vars.get(name)?.type, 'secret', `${name} is a password input`);
+    assert.doesNotMatch(html, new RegExp(`<input[^>]*id="${name}"[^>]*type="text"`), `${name} is never a text input`);
   }
 });
 
@@ -1237,6 +1270,386 @@ test('the default run fails and names --write-rag-affecting when the generated l
     const missing = run(root);
     assert.equal(missing.code, 1, missing.out);
     assert.match(missing.out, /--write-rag-affecting/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+const PHASE_62_DEFAULTS = {
+  RAG_QUERY_DECOMPOSE_COMPLETENESS: 'true',
+  RAG_QUERY_SUBQ_FILTERS: 'false',
+  RAG_DECOMPOSED_ANSWER: 'true',
+  RAG_TRANSLATION_GLOSSARY: 'false',
+  RAG_LANGID_SIDECAR: 'false',
+  RAG_MODEL_ROUTING: 'off',
+  RAG_ROUTING_FAST_MODEL: 'anthropic/claude-haiku-5.5',
+  RAG_ROUTING_QUALITY_MODEL: 'anthropic/claude-sonnet-5.5',
+  RAG_SPECULATIVE_RETRIEVAL: 'false',
+  RAG_QUERY_HISTORY_FALLBACK: 'true',
+  RAG_WHATSAPP_HISTORY: 'false',
+  RAG_SCOPE_GATE: 'false',
+};
+const PHASE_62_NAMES = Object.keys(PHASE_62_DEFAULTS);
+
+test('the manifest lists the twelve Phase 6.2 names as managed and RAG-affecting (06.2 D-28)', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(REPO, MANIFEST), 'utf8'));
+  const byName = new Map(manifest.vars.map((entry) => [entry.name, entry]));
+  for (const name of PHASE_62_NAMES) {
+    assert.equal(byName.get(name)?.status, 'managed', name);
+    assert.deepEqual(byName.get(name)?.knownGaps, [], name);
+    assert.equal(byName.get(name)?.ragAffecting, true, name);
+  }
+});
+
+test('fails when any Phase 6.2 name is removed from any single location', () => {
+  for (const name of PHASE_62_NAMES) {
+    for (const [relative, location] of [
+      ['scripts/init-env.js', 'init-env'],
+      ['src/lib/env.ts', 'env-ts'],
+      ['scripts/config-server.js', 'config-server'],
+      ['scripts/config-ui/index.html', 'config-ui'],
+    ]) {
+      const root = copyRealTree();
+      try {
+        removeName(root, relative, name);
+        const { code, out } = run(root);
+        assert.equal(code, 1, `${name} removed from ${location}: ${out}`);
+        assert.match(out, new RegExp(`${name} \\[${location}\\] missing from this location`));
+      } finally {
+        cleanup(root);
+      }
+    }
+  }
+});
+
+test('the Phase 6.2 defaults match D-28 and D-35 in init-env, env.ts and all three config-server templates', () => {
+  const init = fs.readFileSync(path.join(REPO, 'scripts/init-env.js'), 'utf8');
+  const envTs = fs.readFileSync(path.join(REPO, 'src/lib/env.ts'), 'utf8');
+  const server = fs.readFileSync(path.join(REPO, 'scripts/config-server.js'), 'utf8');
+  for (const [name, value] of Object.entries(PHASE_62_DEFAULTS)) {
+    assert.match(init, new RegExp(`^${name}=${value.replace(/[.\\/]/g, '\\$&')}$`, 'm'), `init-env ${name}`);
+    assert.ok(envTs.includes(`${name}: process.env.${name} || '${value}',`), `env.ts ${name}`);
+    assert.deepEqual(templatesMissing(server, name), [], `config-server ${name}`);
+    for (const [label, block] of templateBlocks(server)) {
+      assert.ok(block.includes(`'${name}=${value}'`) || block.includes(`getEnvValue('${name}') || '${value}'`), `${label} template default for ${name}`);
+    }
+  }
+});
+
+function replaceIn(root, relative, from, to) {
+  const full = path.join(root, relative);
+  const text = fs.readFileSync(full, 'utf8');
+  assert.ok(text.includes(from), `${relative} holds ${from}`);
+  fs.writeFileSync(full, text.split(from).join(to));
+}
+
+test('fails and names the variable when a routing model id in a tracked location is not in the model lists (06.2 D-19)', () => {
+  const cases = [
+    ['scripts/init-env.js', 'init-env', 'RAG_ROUTING_FAST_MODEL=anthropic/claude-haiku-5.5', 'RAG_ROUTING_FAST_MODEL=vendor/not-listed', 'RAG_ROUTING_FAST_MODEL'],
+    ['src/lib/env.ts', 'env-ts', "RAG_ROUTING_QUALITY_MODEL || 'anthropic/claude-sonnet-5.5'", "RAG_ROUTING_QUALITY_MODEL || 'vendor/not-listed'", 'RAG_ROUTING_QUALITY_MODEL'],
+    ['scripts/config-server.js', 'config-server', "getEnvValue('RAG_ROUTING_FAST_MODEL') || 'anthropic/claude-haiku-5.5'", "getEnvValue('RAG_ROUTING_FAST_MODEL') || 'vendor/not-listed'", 'RAG_ROUTING_FAST_MODEL'],
+  ];
+  for (const [relative, location, from, to, name] of cases) {
+    const root = copyRealTree();
+    try {
+      replaceIn(root, relative, from, to);
+      const { code, out } = run(root);
+      assert.equal(code, 1, `${location}: ${out}`);
+      assert.match(out, new RegExp(`${name} \\[${location}\\] .*vendor/not-listed.* not in the OpenRouter model list`));
+    } finally {
+      cleanup(root);
+    }
+  }
+});
+
+test('fails when a routing model id names the auto entry or is empty in a tracked location', () => {
+  for (const [to, pattern] of [
+    ['RAG_ROUTING_QUALITY_MODEL=auto', /RAG_ROUTING_QUALITY_MODEL \[init-env\] .*must not be auto/],
+    ['RAG_ROUTING_QUALITY_MODEL=', /RAG_ROUTING_QUALITY_MODEL \[init-env\] .*must name a listed model/],
+  ]) {
+    const root = copyRealTree();
+    try {
+      replaceIn(root, 'scripts/init-env.js', 'RAG_ROUTING_QUALITY_MODEL=anthropic/claude-sonnet-5.5', to);
+      const { code, out } = run(root);
+      assert.equal(code, 1, `${to}: ${out}`);
+      assert.match(out, pattern);
+    } finally {
+      cleanup(root);
+    }
+  }
+});
+
+test('fails when .env.local sets a routing model id that is not in the model lists, and passes with a listed one', () => {
+  const root = copyRealTree();
+  try {
+    const managed = JSON.parse(fs.readFileSync(path.join(root, MANIFEST), 'utf8'))
+      .vars.filter((entry) => entry.status === 'managed')
+      .map((entry) => `${entry.name}=`);
+    const base = managed.filter((line) => !line.startsWith('RAG_ROUTING_')).join('\n');
+    write(root, '.env.local', `${base}\nRAG_ROUTING_FAST_MODEL=anthropic/claude-haiku-5.5\nRAG_ROUTING_QUALITY_MODEL=vendor/not-listed\n`);
+    const bad = run(root);
+    assert.equal(bad.code, 1, bad.out);
+    assert.match(bad.out, /RAG_ROUTING_QUALITY_MODEL \[env-local\] .*vendor\/not-listed.* not in the OpenRouter model list/);
+    write(root, '.env.local', `${base}\nRAG_ROUTING_FAST_MODEL=anthropic/claude-haiku-5.5\nRAG_ROUTING_QUALITY_MODEL=anthropic/claude-sonnet-5.5\n`);
+    const good = run(root);
+    assert.doesNotMatch(good.out, /RAG_ROUTING_/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+// D-14 metadata rules (plan 07-18). Each fixture writes NAME=<template> into all four tracked files.
+
+const LOADER = '<script src="rag-panels/rag-pipeline.js"></script>\n';
+
+function metaTree(entries, { templates = {}, configUi, decision } = {}) {
+  const lines = entries.map((entry) => `${entry.name}=${templates[entry.name] ?? entry.default ?? ''}`).join('\n') + '\n';
+  const files = Object.fromEntries(TRACKED.map((f) => [f, lines]));
+  if (configUi !== undefined) files['scripts/config-ui/index.html'] = configUi;
+  const root = syntheticTree({ files, manifest: { schemaVersion: 1, vars: entries.map((e) => ({ status: 'managed', knownGaps: [], ...e })) } });
+  if (decision) write(root, 'eval/decisions/04.1-retrieval-defaults.json', JSON.stringify(decision));
+  return root;
+}
+
+const okBool = { name: 'RAG_META_SWITCH', group: 'retrieval', label: 'Meta switch', type: 'bool', requires: [], default: 'false' };
+
+function metaRun(entries, options) {
+  const root = metaTree(entries, options);
+  try {
+    return run(root);
+  } finally {
+    cleanup(root);
+  }
+}
+
+test('metadata: a complete managed entry passes', () => {
+  const { code, out } = metaRun([okBool]);
+  assert.equal(code, 0, out);
+});
+
+test('metadata: a managed entry without group, label or type is reported', () => {
+  for (const field of ['group', 'label', 'type']) {
+    const entry = { ...okBool };
+    delete entry[field];
+    const { code, out } = metaRun([entry]);
+    assert.equal(code, 1, field);
+    assert.match(out, new RegExp(`RAG_META_SWITCH \\[manifest\\] missing metadata: ${field}`), field);
+  }
+});
+
+test('metadata: type toggle is not a valid type', () => {
+  const { code, out } = metaRun([{ ...okBool, type: 'toggle' }]);
+  assert.equal(code, 1);
+  assert.match(out, /RAG_META_SWITCH \[manifest\] invalid metadata type "toggle"/);
+});
+
+test('metadata: an enum without options and a string with options each report one violation', () => {
+  const { code, out } = metaRun([
+    { ...okBool, name: 'RAG_META_ENUM', type: 'enum', default: 'off' },
+    { ...okBool, name: 'RAG_META_TEXT', type: 'string', default: '', options: ['a'] },
+  ]);
+  assert.equal(code, 1);
+  assert.equal(out.split('\n').filter((l) => /^RAG_META_ENUM \[/.test(l)).length, 1, out);
+  assert.equal(out.split('\n').filter((l) => /^RAG_META_TEXT \[/.test(l)).length, 1, out);
+  assert.match(out, /RAG_META_ENUM \[manifest\] enum metadata needs options/);
+  assert.match(out, /RAG_META_TEXT \[manifest\] options are allowed only on enum metadata/);
+});
+
+test('metadata: a bool default other than true or false is refused; the same switch as an off/on enum passes', () => {
+  for (const value of ['on', 'off', '1', 'yes']) {
+    const { code, out } = metaRun([{ ...okBool, default: value }]);
+    assert.equal(code, 1, value);
+    assert.match(out, /RAG_META_SWITCH \[manifest\] bool default must be true or false/, value);
+  }
+  const { code, out } = metaRun([{ ...okBool, type: 'enum', options: ['off', 'on'], default: 'off' }]);
+  assert.equal(code, 0, out);
+});
+
+test('metadata: an empty bool default passes only while the init-env.js template is empty', () => {
+  assert.equal(metaRun([{ ...okBool, default: '' }]).code, 0);
+  const { code, out } = metaRun([{ ...okBool, default: '' }], { templates: { RAG_META_SWITCH: 'true' } });
+  assert.equal(code, 1);
+  assert.match(out, /RAG_META_SWITCH \[manifest\] default differs from init-env\.js/);
+});
+
+test('metadata: help must be a non-empty single-line string; no help passes', () => {
+  for (const help of ['', 42, 'first line\nsecond line']) {
+    const { code, out } = metaRun([{ ...okBool, help }]);
+    assert.equal(code, 1, JSON.stringify(help));
+    assert.equal(out.split('\n').filter((l) => /^RAG_META_SWITCH \[/.test(l)).length, 1, out);
+    assert.match(out, /RAG_META_SWITCH \[manifest\] help must be a non-empty single-line string/);
+  }
+  assert.equal(metaRun([{ ...okBool, help: 'One plain line.' }]).code, 0);
+});
+
+test('metadata: requires naming an unknown variable is reported; a known name with a value passes', () => {
+  const { code, out } = metaRun([{ ...okBool, requires: ['RAG_META_MISSING=v2'] }]);
+  assert.equal(code, 1);
+  assert.match(out, /RAG_META_SWITCH \[manifest\] requires names an unknown variable RAG_META_MISSING/);
+  const other = { ...okBool, name: 'RAG_META_MODE', type: 'enum', options: ['legacy', 'v2'], default: 'legacy' };
+  assert.equal(metaRun([other, { ...okBool, requires: ['RAG_META_MODE=v2'] }]).code, 0);
+  const bad = metaRun([other, { ...okBool, requires: ['RAG_META_MODE=v3'] }]);
+  assert.equal(bad.code, 1);
+  assert.match(bad.out, /RAG_META_SWITCH \[manifest\] requires RAG_META_MODE=v3, which is not one of its options/);
+});
+
+test('metadata: url and secret entries need a provider', () => {
+  const { code, out } = metaRun([
+    { ...okBool, name: 'RAG_META_URL', type: 'url', default: '' },
+    { ...okBool, name: 'RAG_META_API_KEY', type: 'secret', default: '' },
+  ]);
+  assert.equal(code, 1);
+  assert.match(out, /RAG_META_URL \[manifest\] missing metadata: provider/);
+  assert.match(out, /RAG_META_API_KEY \[manifest\] missing metadata: provider/);
+  assert.equal(metaRun([{ ...okBool, name: 'RAG_META_URL', type: 'url', default: '', provider: 'sidecar' }]).code, 0);
+});
+
+test('metadata: a default that differs from init-env.js, an enum default outside its options and a filled secret default are reported', () => {
+  const differs = metaRun([{ ...okBool, default: 'true' }], { templates: { RAG_META_SWITCH: 'false' } });
+  assert.equal(differs.code, 1);
+  assert.match(differs.out, /RAG_META_SWITCH \[manifest\] default differs from init-env\.js \("true" vs "false"\)/);
+  const outside = metaRun([{ ...okBool, type: 'enum', options: ['off', 'on'], default: 'auto' }]);
+  assert.equal(outside.code, 1);
+  assert.match(outside.out, /RAG_META_SWITCH \[manifest\] enum default must be one of its options/);
+  const secret = metaRun([{ ...okBool, name: 'RAG_META_API_KEY', type: 'secret', provider: 'sidecar', default: 'placeholder' }]);
+  assert.equal(secret.code, 1);
+  assert.match(secret.out, /RAG_META_API_KEY \[manifest\] secret default must be empty/);
+});
+
+test('metadata: an implicit-in-templates name of a flipped 04.1 decision must have an empty default (04.1 D-25)', () => {
+  const pipeline = { ...okBool, name: 'RAG_PIPELINE', type: 'enum', options: ['legacy', 'v2'] };
+  const decision = { status: 'flip', defaults: { RAG_PIPELINE: 'v2' }, implicit_in_templates: ['RAG_PIPELINE'] };
+  assert.equal(metaRun([{ ...pipeline, default: '' }], { decision }).code, 0);
+  const { code, out } = metaRun([{ ...pipeline, default: 'v2' }], { decision, templates: { RAG_PIPELINE: 'v2' } });
+  assert.equal(code, 1);
+  assert.equal(out.split('\n').filter((l) => /^RAG_PIPELINE \[/.test(l)).length, 1, out);
+  assert.match(out, /RAG_PIPELINE \[manifest\] default must be empty: implicit in templates \(04\.1 D-25\)/);
+  const notFlipped = { ...decision, status: 'not_flipped' };
+  assert.equal(metaRun([{ ...pipeline, default: 'legacy' }], { decision: notFlipped }).code, 0);
+});
+
+test('metadata: the type must agree with config-server secret detection for the name', () => {
+  const keyAsString = metaRun([{ ...okBool, name: 'RAG_META_API_KEY', type: 'string', default: '' }]);
+  assert.equal(keyAsString.code, 1);
+  assert.match(keyAsString.out, /RAG_META_API_KEY \[manifest\] name is detected as a secret, so metadata type must be secret/);
+  const plainAsSecret = metaRun([{ ...okBool, name: 'RAG_META_PLAIN', type: 'secret', provider: 'sidecar', default: '' }]);
+  assert.equal(plainAsSecret.code, 1);
+  assert.match(plainAsSecret.out, /RAG_META_PLAIN \[manifest\] metadata type secret but the name is not detected as a secret/);
+});
+
+test('metadata: a legacy entry without metadata reports nothing', () => {
+  const root = syntheticTree({
+    files: Object.fromEntries(TRACKED.map((f) => [f, 'RAG_META_OLD=1\n'])),
+    manifest: { schemaVersion: 1, vars: [{ name: 'RAG_META_OLD', status: 'legacy', knownGaps: [] }] },
+  });
+  try {
+    const { code, out } = run(root);
+    assert.equal(code, 0, out);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('metadata: with the rag-pipeline.js loader a complete entry needs no literal in index.html', () => {
+  const generated = metaRun([okBool], { configUi: LOADER });
+  assert.equal(generated.code, 0, generated.out);
+  const noLoader = metaRun([okBool], { configUi: '<div></div>\n' });
+  assert.equal(noLoader.code, 1);
+  assert.match(noLoader.out, /RAG_META_SWITCH \[config-ui\] missing from this location/);
+  const incomplete = { ...okBool };
+  delete incomplete.label;
+  const partial = metaRun([incomplete], { configUi: LOADER });
+  assert.equal(partial.code, 1);
+  assert.match(partial.out, /RAG_META_SWITCH \[config-ui\] missing from this location/);
+});
+
+test('metadata: every managed entry of the real manifest is complete and on/off switches are enums', () => {
+  const manifest = realManifest();
+  const incomplete = manifest.vars
+    .filter((v) => v.status === 'managed' && !(v.group && v.label && v.type && 'default' in v))
+    .map((v) => v.name);
+  assert.deepEqual(incomplete, []);
+  const byName = new Map(manifest.vars.map((v) => [v.name, v]));
+  for (const name of ['RAG_INGEST_ASYNC', 'RAG_EMBEDDING_PROFILES', 'RAG_PARSE_ESCALATION']) {
+    assert.equal(byName.get(name).type, 'enum', name);
+  }
+  assert.deepEqual(byName.get('RAG_INGEST_ASYNC').options, ['off', 'on']);
+  assert.deepEqual(byName.get('RAG_PARSE_ESCALATION').options, ['on', 'off']);
+  assert.match(byName.get('RAG_EVAL_ENDPOINT_ENABLED').help, /document content/);
+  assert.match(byName.get('RAG_INJECTION_LAKERA').help, /third party/);
+});
+
+function vendorEntry(overrides = {}) {
+  return {
+    vendor: 'other-vendor',
+    name: 'Other vendor',
+    hosts: ['api.example.com'],
+    content: ['query'],
+    switch: null,
+    opt_in: true,
+    multi_tenant: 'allowed',
+    retention: 'to_verify',
+    training: 'to_verify',
+    providers: [],
+    ...overrides,
+  };
+}
+
+const acmeKey = { name: 'RAG_ACME_API_KEY', group: 'retrieval', label: 'Acme key', type: 'secret', requires: [], default: '', provider: 'acme' };
+const acmeUrl = { name: 'RAG_ACME_URL', group: 'retrieval', label: 'Acme URL', type: 'url', requires: [], default: '', provider: 'acme' };
+
+function inventoryRun(entries, vendors) {
+  const root = metaTree(entries);
+  if (vendors !== undefined) write(root, VENDOR_INVENTORY, JSON.stringify({ schema_version: 1, vendors }));
+  try {
+    return run(root);
+  } finally {
+    cleanup(root);
+  }
+}
+
+test('vendor inventory: a managed secret whose provider has no inventory entry is reported (D-20)', () => {
+  const { code, out } = inventoryRun([acmeKey], [vendorEntry()]);
+  assert.equal(code, 1, out);
+  assert.match(out, /RAG_ACME_API_KEY \[manifest\] provider acme has no vendor data-flow entry/);
+});
+
+test('vendor inventory: a managed url is checked too, and a missing inventory reports the provider', () => {
+  const { code, out } = inventoryRun([acmeUrl]);
+  assert.equal(code, 1, out);
+  assert.match(out, /RAG_ACME_URL \[manifest\] provider acme has no vendor data-flow entry/);
+});
+
+test('vendor inventory: an entry naming the provider as its vendor id or in providers passes', () => {
+  assert.equal(inventoryRun([acmeKey, acmeUrl], [vendorEntry({ vendor: 'acme' })]).code, 0);
+  const viaProviders = inventoryRun([acmeKey], [vendorEntry({ providers: ['acme'] })]);
+  assert.equal(viaProviders.code, 0, viaProviders.out);
+});
+
+test('vendor inventory: in-deployment providers (app, sidecar, webhook) need no entry', () => {
+  for (const provider of ['app', 'sidecar', 'webhook']) {
+    const { code, out } = inventoryRun([{ ...acmeKey, provider }], [vendorEntry()]);
+    assert.equal(code, 0, `${provider}: ${out}`);
+  }
+});
+
+test('vendor inventory: an unreadable inventory is a violation', () => {
+  const root = metaTree([acmeKey]);
+  write(root, VENDOR_INVENTORY, '{ not json');
+  try {
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /vendor-data-flow\.json is not valid JSON/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('vendor inventory: every managed url and secret provider of the real repository has an entry', () => {
+  const root = copyRealTree();
+  try {
+    const { out } = run(root);
+    assert.doesNotMatch(out, /has no vendor data-flow entry/);
   } finally {
     cleanup(root);
   }

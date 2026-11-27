@@ -158,7 +158,7 @@ test('tests and eval never import @langchain directly', () => {
 
 describe('condense', () => {
   test('with history the standalone is the rewrite captured by the retriever', async () => {
-    const { transformer, fake } = langchain([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: false } }]);
+    const { transformer, fake } = langchain([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: false, language: null } }]);
     const result = await transformer.condense({ query: FOLLOW_UP, history: HISTORY, language: 'en', protectedTokens: [], signal: signal() });
     expect(result).toEqual({ standalone: CONDENSED, passThrough: false, skip: null });
     expect(fake.calls).toHaveLength(1);
@@ -166,14 +166,14 @@ describe('condense', () => {
   });
 
   test('with empty history the query passes straight through and the chat model is not called', async () => {
-    const { transformer, fake } = langchain([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: false } }]);
+    const { transformer, fake } = langchain([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: false, language: null } }]);
     const result = await transformer.condense({ query: FOLLOW_UP, history: [], language: 'en', protectedTokens: [], signal: signal() });
     expect(result).toEqual({ standalone: FOLLOW_UP, passThrough: true, skip: null });
     expect(fake.calls).toHaveLength(0);
   });
 
   test('a rewrite that drops a protected token falls back to the original through the shared post-checks', async () => {
-    const { transformer } = langchain([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: 'How do I fix the timeout?', unchanged: false } }]);
+    const { transformer } = langchain([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: 'How do I fix the timeout?', unchanged: false, language: null } }]);
     const result = await transformer.condense({ query: FOLLOW_UP, history: HISTORY, language: 'en', protectedTokens: ['QX-210'], signal: signal() });
     expect(result).toEqual({ standalone: FOLLOW_UP, passThrough: false, skip: { kind: 'condense', reason: 'protected_token_lost' } });
   });
@@ -188,7 +188,7 @@ describe('condense', () => {
     await expect(failing.condense({ query: FOLLOW_UP, history: HISTORY, language: 'en', protectedTokens: [], signal: signal() })).rejects.toMatchObject({
       kind: 'error',
     });
-    const slow = langchain([{ transform: 'condense', query: FOLLOW_UP, delay_ms: 5000, output: { standalone: CONDENSED, unchanged: false } }]);
+    const slow = langchain([{ transform: 'condense', query: FOLLOW_UP, delay_ms: 5000, output: { standalone: CONDENSED, unchanged: false, language: null } }]);
     const controller = new AbortController();
     const pending = slow.transformer.condense({ query: FOLLOW_UP, history: HISTORY, language: 'en', protectedTokens: [], signal: controller.signal });
     setTimeout(() => controller.abort(), 20);
@@ -197,7 +197,7 @@ describe('condense', () => {
   });
 
   test('the prompt is the vendored contextualize text, the history data block and the shared suffix', async () => {
-    const { transformer, fake } = langchain([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: false } }]);
+    const { transformer, fake } = langchain([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: false, language: null } }]);
     await transformer.condense({ query: FOLLOW_UP, history: HISTORY, language: 'en', protectedTokens: ['QX-210'], signal: signal() });
     const prompt = fake.calls[0].prompt;
     expect(prompt.startsWith('Given a chat history and the latest user question')).toBe(true);
@@ -207,7 +207,7 @@ describe('condense', () => {
   });
 
   test('braces in history are sent literally, never read as template variables', async () => {
-    const { transformer, fake } = langchain([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: false } }]);
+    const { transformer, fake } = langchain([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: false, language: null } }]);
     const history: HistoryTurn[] = [{ role: 'user', content: 'Module QX-210 prints {input} and {chat_history} in its log.' }];
     await transformer.condense({ query: FOLLOW_UP, history, language: 'en', protectedTokens: [], signal: signal() });
     expect(fake.calls[0].prompt).toContain('prints {input} and {chat_history} in its log.');
@@ -263,7 +263,7 @@ describe('no Hub, no scope', () => {
     const SENTINEL = 'tenant-sentinel-7f3a';
     const extra = { scope: { tenantKey: SENTINEL }, tenantKey: SENTINEL, filters: { document_ids: [SENTINEL] }, metadata: { tenant: SENTINEL } };
     const { transformer, fake } = langchain([
-      { transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: false } },
+      { transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: false, language: null } },
       { transform: 'expand', query: EXPAND_QUERY, output: { queries: ['how to configure module QX-210'] } },
       { transform: 'hyde', query: EXPAND_QUERY, output: { passage: 'Module QX-210 is configured in three steps.' } },
     ]);
@@ -295,7 +295,7 @@ describe('shapes on the fixture inputs', () => {
       const lc = await transformer.condense(input);
       const native = await llamaindexCondense(input);
       expect(lc).toEqual(native);
-      expect(CondensedQuerySchema.safeParse({ standalone: lc.standalone, unchanged: lc.passThrough }).success).toBe(true);
+      expect(CondensedQuerySchema.safeParse({ standalone: lc.standalone, unchanged: lc.passThrough, language: null }).success).toBe(true);
     }
   });
 

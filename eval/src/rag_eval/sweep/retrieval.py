@@ -495,6 +495,9 @@ def main(argv: list[str] | None = None) -> int:
     from rag_eval.sweep.diversity import register as register_diversity
 
     register_diversity(commands)
+    from rag_eval.sweep.output_cap import register as register_output_cap
+
+    register_output_cap(commands)
     args = parser.parse_args(argv)
     return args.handler(args)
 

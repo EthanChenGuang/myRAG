@@ -31,11 +31,22 @@ interface VoiceRoute {
 }
 
 const LOADERS = {
+  'voice-calc': () => import('@/app/api/internal/voice-calc/route'),
   'voice-chat': () => import('@/app/api/internal/voice-chat/route'),
   'voice-rag': () => import('@/app/api/internal/voice-rag/route'),
   'voice-timing': () => import('@/app/api/internal/voice-timing/route'),
 };
 const BODIES: Record<string, unknown> = {
+  'voice-calc': {
+    action: 'execute',
+    question: 'synthetic question',
+    request: {
+      operands: [{ name: 'a', source: { kind: 'question' }, value: '1' }],
+      steps: [{ id: 'r', op: 'add', args: ['a', 'a'] }],
+      result: 'r',
+    },
+    sources: [],
+  },
   'voice-timing': { traceId: '0123456789abcdef0123456789abcdef', ttft_ms: 500, pre_generation_ms: 200 },
 };
 const ROUTES = Object.keys(LOADERS) as Array<keyof typeof LOADERS>;

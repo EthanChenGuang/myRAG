@@ -445,4 +445,5 @@ export const sw = {
   waitingForApproval: "Inasubiri idhini yako...",
   executingTool: "Inaendesha zana, tafadhali subiri...",
   toolError: "Hitilafu imetokea wakati wa kuendesha zana.",
+  voiceUnavailable: "Sauti haipatikani kwa muda. Tafadhali jaribu tena baadaye.",
 };

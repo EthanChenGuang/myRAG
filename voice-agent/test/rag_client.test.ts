@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createHash } from 'node:crypto';
-import { RAGClient, scopeTokenBinding, type HistoryTurn } from '../src/rag_client.js';
+import { parseContextLength, RAGClient, scopeTokenBinding, type HistoryTurn } from '../src/rag_client.js';
 
 type Seen = { url?: string; method?: string; headers: http.IncomingHttpHeaders; body: any };
 
@@ -427,4 +427,182 @@ test('reportTiming resolves after its short timeout when the server never answer
     assert.equal(text.includes('token-placeholder'), false);
     assert.equal(text.includes('key-placeholder'), false);
     assert.match(text, /"failures":1/);
+});
+
+// Phase 5.2.1 D-76, D-87: calculation offer, voice-calc calls and the agent window
+
+const CHUNK_A = '11111111-1111-4111-8111-111111111111';
+const CHUNK_B = '22222222-2222-4222-8222-222222222222';
+const TOOL_SCHEMA = { type: 'object', properties: { steps: { type: 'array' } }, required: ['steps'] };
+const CALC_OFFER = {
+    offered: true,
+    check: true,
+    sources: [
+        { alias: 'S1', chunk_id: CHUNK_A },
+        { alias: 'S2', chunk_id: CHUNK_B },
+    ],
+    tool_schema: TOOL_SCHEMA,
+};
+const CALC_RESULTS = [
+    { document_id: 'doc-a', chunk_id: CHUNK_A, content: 'alpha 10', similarity: 0.9 },
+    { document_id: 'doc-b', chunk_id: CHUNK_B, content: 'beta 20', similarity: 0.8 },
+];
+
+function quietDebug<T>(fn: () => Promise<T>): Promise<T> {
+    const saved = console.debug;
+    console.debug = () => {};
+    return fn().finally(() => {
+        console.debug = saved;
+    });
+}
+
+test('a response without calc keeps today\'s context string and carries no calc data', async () => {
+    reply(200, { results: CALC_RESULTS });
+    const client = new RAGClient(baseUrl, 'key-placeholder', { contextLength: null });
+    const result = await client.query('q', 'token-placeholder');
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.context, '[Context from document doc-a]: alpha 10\n\n[Context from document doc-b]: beta 20');
+    assert.equal('calc' in result, false);
+});
+
+test('a response with calc labels each result with its alias and exposes offered, check, sources and tool_schema', async () => {
+    reply(200, { results: CALC_RESULTS, calc: CALC_OFFER });
+    const client = new RAGClient(baseUrl, 'key-placeholder', { contextLength: null });
+    const result = await client.query('q', 'token-placeholder');
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.context, '[S1] [Context from document doc-a]: alpha 10\n\n[S2] [Context from document doc-b]: beta 20');
+    assert.deepEqual(result.calc, CALC_OFFER);
+});
+
+test('with calc and a server context string the context is used as returned', async () => {
+    reply(200, { results: CALC_RESULTS, calc: CALC_OFFER, context: SERVER_CONTEXT });
+    const client = new RAGClient(baseUrl, 'key-placeholder', { contextLength: null });
+    const result = await client.query('q', 'token-placeholder');
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.context, SERVER_CONTEXT);
+    assert.deepEqual(result.calc, CALC_OFFER);
+});
+
+for (const [label, calc] of [
+    ['offered false', { ...CALC_OFFER, offered: false }],
+    ['no tool schema', { ...CALC_OFFER, tool_schema: null }],
+    ['check not boolean', { ...CALC_OFFER, check: 'yes' }],
+    ['a source without a valid alias', { ...CALC_OFFER, sources: [{ alias: 'X1', chunk_id: CHUNK_A }] }],
+    ['not an object', 'calc'],
+] as const) {
+    test(`a calc member with ${label} is ignored`, async () => {
+        reply(200, { results: CALC_RESULTS, calc });
+        const client = new RAGClient(baseUrl, 'key-placeholder', { contextLength: null });
+        const result = await client.query('q', 'token-placeholder');
+        assert.equal(result.ok, true);
+        if (!result.ok) return;
+        assert.equal('calc' in result, false);
+        assert.equal(result.context, '[Context from document doc-a]: alpha 10\n\n[Context from document doc-b]: beta 20');
+    });
+}
+
+const CALC_REQUEST = { operands: [{ name: 'a', value: '10', source: { kind: 'chunk', alias: 'S1' } }], steps: [], result: 'a' };
+const CALC_RESULT = { status: 'ok', value: '10', unit: null, steps: [], reject_reason: null };
+
+test('executeCalc posts the execute body to voice-calc with the api key and scope token', async () => {
+    reply(200, { result: CALC_RESULT });
+    const client = new RAGClient(baseUrl, 'key-placeholder', { contextLength: null });
+    const result = await client.executeCalc(CALC_REQUEST, 'synthetic question', CALC_OFFER.sources, 'token-placeholder');
+    assert.deepEqual(result, CALC_RESULT);
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].url, '/api/internal/voice-calc');
+    assert.equal(seen[0].headers['x-api-key'], 'key-placeholder');
+    assert.equal(seen[0].headers['x-rag-scope-token'], 'token-placeholder');
+    assert.deepEqual(seen[0].body, { action: 'execute', question: 'synthetic question', request: CALC_REQUEST, sources: CALC_OFFER.sources });
+});
+
+test('checkCalc posts the check body and returns checks, notices and replacement', async () => {
+    const check = { checks: [{ status: 'corrected', stated: '12', recomputed: '10' }], notices: [], replacement: { start: 4, end: 6, text: '10' } };
+    reply(200, { check });
+    const client = new RAGClient(baseUrl, 'key-placeholder', { contextLength: null });
+    const traces = [{ origin: 'tool' as const, request: CALC_REQUEST, result: CALC_RESULT, anchor_offset: 0 }];
+    const result = await client.checkCalc('Sum 12 [S1].', traces, 'synthetic question', CALC_OFFER.sources, 'token-placeholder');
+    assert.deepEqual(result, check);
+    assert.equal(seen[0].url, '/api/internal/voice-calc');
+    assert.equal(seen[0].headers['x-rag-scope-token'], 'token-placeholder');
+    assert.deepEqual(seen[0].body, { action: 'check', question: 'synthetic question', answer_text: 'Sum 12 [S1].', traces, sources: CALC_OFFER.sources });
+});
+
+test('checkCalc yields null when the route answers check null (check switch off)', async () => {
+    reply(200, { check: null });
+    const client = new RAGClient(baseUrl, 'key-placeholder', { contextLength: null });
+    assert.equal(await client.checkCalc('text', [], 'q', [], 'token-placeholder'), null);
+});
+
+for (const status of [400, 404, 500, 503]) {
+    test(`a ${status} answer from voice-calc yields null and a counted failure`, async () => {
+        reply(status, { error: 'x' });
+        const client = new RAGClient(baseUrl, 'key-placeholder', { contextLength: null });
+        const lines: unknown[][] = [];
+        const saved = console.debug;
+        console.debug = (...args: unknown[]) => {
+            lines.push(args);
+        };
+        try {
+            assert.equal(await client.executeCalc(CALC_REQUEST, 'q', CALC_OFFER.sources, 'token-placeholder'), null);
+            assert.equal(await client.checkCalc('text', [], 'q', CALC_OFFER.sources, 'token-placeholder'), null);
+        } finally {
+            console.debug = saved;
+        }
+        assert.equal(client.calcFailureCount(), 2);
+        const text = JSON.stringify(lines);
+        assert.match(text, /"failures":2/);
+        assert.equal(text.includes('token-placeholder'), false);
+        assert.equal(text.includes('synthetic'), false);
+    });
+}
+
+test('a malformed voice-calc answer yields null', async () => {
+    reply(200, { result: 'not an object' });
+    const client = new RAGClient(baseUrl, 'key-placeholder', { contextLength: null });
+    assert.equal(await quietDebug(() => client.executeCalc(CALC_REQUEST, 'q', [], 'token-placeholder')), null);
+    reply(200, { check: { checks: 'x' } });
+    assert.equal(await quietDebug(() => client.checkCalc('text', [], 'q', [], 'token-placeholder')), null);
+});
+
+test('with a context length the voice-rag body carries modelContextLength and historyTokens', async () => {
+    reply(200, { results: [] });
+    const client = new RAGClient(baseUrl, 'key-placeholder', { contextLength: 32768 });
+    await client.query('q', 'token-placeholder', 'user-id-placeholder', undefined, 420);
+    assert.deepEqual(seen[0].body, { query: 'q', userId: 'user-id-placeholder', matchCount: 5, modelContextLength: 32768, historyTokens: 420 });
+    await client.query('q', 'token-placeholder', 'user-id-placeholder');
+    assert.deepEqual(seen[1]?.body ?? seen[0].body, { query: 'q', userId: 'user-id-placeholder', matchCount: 5, modelContextLength: 32768, historyTokens: 0 });
+});
+
+test('VOICE_AGENT_CONTEXT_LENGTH sets the window; unset or invalid leaves the body as today', async () => {
+    const saved = process.env.VOICE_AGENT_CONTEXT_LENGTH;
+    const savedWarn = console.warn;
+    console.warn = () => {};
+    try {
+        process.env.VOICE_AGENT_CONTEXT_LENGTH = '16384';
+        reply(200, { results: [] });
+        await new RAGClient(baseUrl, 'key-placeholder').query('q', 'token-placeholder', undefined, undefined, 7);
+        assert.deepEqual(seen[0].body, { query: 'q', matchCount: 5, modelContextLength: 16384, historyTokens: 7 });
+        for (const value of [undefined, '', '0', '-5', 'abc', '1.5', '512', '20000000']) {
+            if (value === undefined) delete process.env.VOICE_AGENT_CONTEXT_LENGTH;
+            else process.env.VOICE_AGENT_CONTEXT_LENGTH = value;
+            reply(200, { results: [] });
+            await new RAGClient(baseUrl, 'key-placeholder').query('q', 'token-placeholder', undefined, undefined, 7);
+            assert.deepEqual(seen[0].body, { query: 'q', matchCount: 5 }, `value ${String(value)}`);
+        }
+    } finally {
+        if (saved === undefined) delete process.env.VOICE_AGENT_CONTEXT_LENGTH;
+        else process.env.VOICE_AGENT_CONTEXT_LENGTH = saved;
+        console.warn = savedWarn;
+    }
+});
+
+test('parseContextLength accepts integers within the voice-rag range only', () => {
+    assert.equal(parseContextLength('8192'), 8192);
+    assert.equal(parseContextLength(' 1024 '), 1024);
+    assert.equal(parseContextLength('10000000'), 10000000);
+    for (const value of [undefined, '', '0', '1023', '10000001', 'abc', '2e4', '4096.0']) assert.equal(parseContextLength(value), null, String(value));
 });

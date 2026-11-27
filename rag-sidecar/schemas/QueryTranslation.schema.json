@@ -1,6 +1,22 @@
 {
   "additionalProperties": false,
   "properties": {
+    "source_language": {
+      "anyOf": [
+        {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Source Language"
+    },
     "target_language": {
       "enum": [
         "zh",
@@ -17,7 +33,8 @@
   },
   "required": [
     "target_language",
-    "text"
+    "text",
+    "source_language"
   ],
   "title": "QueryTranslation",
   "type": "object"

@@ -440,6 +440,22 @@ describe('harness dispatch', () => {
   });
 });
 
+describe('answers-on citation options (05.2-32)', () => {
+  const noAnswerQuestion = 'What colour is the R-1 lamp?';
+  const noAnswerQuestions = new Map([[noAnswerQuestion, 'en']]);
+
+  test('every Phase 5.2 fake answers the other items as the instruction-sensitive generator with the same options does', async () => {
+    const installed = evalFakeLanguageModelFactory(ITEMS, { noAnswerQuestions });
+    const sys = system(CONTEXT_PARTIAL, ['partial_answer']);
+    const expected = fakeCitationAnswer({ system: sys, question: noAnswerQuestion, noAnswerQuestions });
+    expect(expected).not.toBe(fakeCitationAnswer({ system: sys, question: noAnswerQuestion }));
+    for (const id of [RULE_FOLLOWING, 'fake/violating-partial-v1', 'fake/repeating-injection-v1']) {
+      const answer = await (installed(id) as unknown as LanguageModelV3).doGenerate(callOptions(sys, noAnswerQuestion));
+      expect(answer.content[0], id).toMatchObject({ text: expected });
+    }
+  });
+});
+
 describe('run configs', () => {
   const RUNS = path.join(process.cwd(), 'eval/config/runs');
   const RULE_SWITCHES = ['RAG_PARTIAL_ANSWER_RULE', 'RAG_CONTEXT_RELEVANCE_RULE', 'RAG_VERSION_LABELS', 'RAG_CITATION_PER_SENTENCE', 'RAG_CITATIONS'];
@@ -477,6 +493,13 @@ describe('run configs', () => {
 
   test('the output-guard run is the recommended security configuration plus enforce, with security events off', () => {
     const recommended = load('sec-recommended').env;
-    expect(load('p52-sec-output-guard').env).toEqual({ ...recommended, RAG_OUTPUT_GUARD: 'enforce', RAG_SECURITY_EVENTS: 'false' });
+    // 05.2-32: labelled blocks for the repeating fake, and the fixture corpus's own link host on the allowlist (D-42).
+    expect(load('p52-sec-output-guard').env).toEqual({
+      ...recommended,
+      RAG_OUTPUT_GUARD: 'enforce',
+      RAG_SECURITY_EVENTS: 'false',
+      RAG_CITATIONS: 'true',
+      RAG_OUTPUT_LINK_ALLOWLIST: 'help.fixture-site.example',
+    });
   });
 });

@@ -21,7 +21,7 @@ import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import { v4 as uuidv4 } from 'uuid';
 import { env } from '@/lib/env';
-import OpenAI from 'openai';
+import { getOpenRouterClient } from '@/lib/openrouter';
 import { z } from 'zod/v3';
 
 // Initialize Supabase admin client
@@ -35,11 +35,6 @@ const supabaseAdmin = createClient(
     }
   }
 );
-
-// Initialize OpenAI client for title generation
-const openai = new OpenAI({
-  apiKey: env.OPENAI_API_KEY,
-});
 
 // Token-based chunking utilities (reuse from process-document)
 function estimateTokens(text: string): number {
@@ -95,34 +90,43 @@ function plainTitle(text: string): string {
     .trim();
 }
 
-// Generate a title using OpenAI
-async function generateTitle(content: string): Promise<string> {
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a helpful assistant that generates concise, descriptive titles for AI-generated content. The title should be 5-10 words, capturing the main topic or purpose of the content. Do not include quotes or special formatting.'
-        },
-        {
-          role: 'user',
-          content: `Generate a concise title for this AI response:\n\n${content.substring(0, 1000)}...`
-        }
-      ],
-      max_tokens: 50,
-      temperature: 0.7,
-    });
+const TITLE_TIMEOUT_MS = 10000;
 
-    return plainTitle(response.choices[0]?.message?.content ?? '') || 'AI Response';
+function fallbackTitle(content: string): string {
+  const firstLine = content.split('\n').find((line) => plainTitle(line) !== '') ?? '';
+  const plain = plainTitle(firstLine);
+  const firstSentence = plain.match(/^[^.!?]+[.!?]?/)?.[0]?.trim();
+  if (!firstSentence) return 'AI Response';
+  return firstSentence.length > 50 ? firstSentence.substring(0, 50).trim() + '...' : firstSentence;
+}
+
+async function generateTitle(content: string): Promise<string> {
+  const client = getOpenRouterClient();
+  if (!client) return fallbackTitle(content);
+  try {
+    const response = await client.chat.completions.create(
+      {
+        model: env.CHAT_TITLE_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a helpful assistant that generates concise, descriptive titles for AI-generated content. The title should be 5-10 words, capturing the main topic or purpose of the content. Do not include quotes or special formatting.'
+          },
+          {
+            role: 'user',
+            content: `Generate a concise title for this AI response:\n\n${content.substring(0, 1000)}...`
+          }
+        ],
+        max_tokens: 50,
+        temperature: 0.7,
+      },
+      { timeout: TITLE_TIMEOUT_MS, maxRetries: 0 },
+    );
+
+    return plainTitle(response.choices[0]?.message?.content ?? '') || fallbackTitle(content);
   } catch (error) {
     console.error('[AI to RAG] Title generation failed:', error instanceof Error ? error.message : 'unknown error');
-    // Fallback: Extract first sentence or use default
-    const firstLine = content.split('\n').find((line) => plainTitle(line) !== '') ?? '';
-    const plain = plainTitle(firstLine);
-    const firstSentence = plain.match(/^[^.!?]+[.!?]?/)?.[0]?.trim();
-    if (!firstSentence) return 'AI Response';
-    return firstSentence.length > 50 ? firstSentence.substring(0, 50).trim() + '...' : firstSentence;
+    return fallbackTitle(content);
   }
 }
 

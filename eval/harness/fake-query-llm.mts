@@ -60,7 +60,7 @@ export function loadFakeQueryLlmTable(path: string = DEFAULT_FAKE_QUERY_LLM_TABL
 function defaultOutput(transform: QueryLlmTransform, input: string, target: Lang | undefined): unknown {
   switch (transform) {
     case 'condense':
-      return { standalone: input, unchanged: true };
+      return { standalone: input, unchanged: true, language: null };
     case 'expand':
       return { queries: [] };
     case 'decompose':
@@ -68,7 +68,7 @@ function defaultOutput(transform: QueryLlmTransform, input: string, target: Lang
     case 'hyde':
       return { passage: input };
     case 'translate':
-      return { target_language: target ?? 'en', text: '' };
+      return { target_language: target ?? 'en', text: '', source_language: null };
   }
 }
 
