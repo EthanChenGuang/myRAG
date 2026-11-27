@@ -41,6 +41,7 @@ import { effectiveCacheThreshold } from '../cache/threshold';
 import type { CacheHit, CacheKeyParts, CacheTicket, EntryProfile } from '../cache/types';
 import { resolveFinalResultCount } from '../config';
 import { effectiveVersionScope } from './filters';
+import { collectRequiredTerms, type RequiredTerm } from './completeness';
 import type { RpcClient } from '../backend/supabase-rpc';
 
 export type QueryLayerShortCircuit = { kind: 'small_talk' } | { kind: 'cache_hit' };
@@ -125,6 +126,11 @@ function usableHistory(history: readonly HistoryTurn[] | undefined): HistoryTurn
 function postCheckReason(reason: PostCheckSkipReason): SkippedTransform['reason'] {
   if (reason === 'empty') return 'error';
   return reason;
+}
+
+/** D-03: the required-term inputs for the decomposed (standalone) question. */
+async function requiredTermsFor(args: { query: string; gate: GateResult }): Promise<RequiredTerm[]> {
+  return collectRequiredTerms(args.query, args.gate);
 }
 
 function gateDetail(gate: GateResult): string {
@@ -583,6 +589,8 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     ...extra,
   });
   const base = { query: standalone, language: gate.lang, protectedTokens: gate.protectedTokens, limits };
+  // D-04: inert under the master switch (effective = raw && layer on); off keeps the D-15 checks exactly as before.
+  const completenessOn = config.queryAdditions.effective.completeness;
 
   const translateSkips: TranslateSkip[] = [];
   const runTranslate = handledTranslate && routed.has('translate');
@@ -617,7 +625,12 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
             failed: (value) => callFailed(value.skipped),
             detail: (value) => (value.notCompound ? 'not_compound' : undefined),
           }),
-          (stageSignal) => transformer.decompose({ ...base, signal: stageSignal }),
+          async (stageSignal) =>
+            transformer.decompose({
+              ...base,
+              ...(completenessOn ? { requiredTerms: await requiredTermsFor({ query: standalone, gate }) } : {}),
+              signal: stageSignal,
+            }),
         )
       : null,
     runTranslate
@@ -691,6 +704,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     expanded: expanded?.variants.map((variant) => variant.text) ?? [],
     hyde: hypothetical?.variant ? { text: hypothetical.variant.text, protectedOk: hypothetical.variant.protectedOk } : null,
     subQuestions: subQuestions?.variants.map((variant) => variant.text) ?? [],
+    ...(subQuestions?.completeness ? { completeness: subQuestions.completeness } : {}),
   });
 
   if (ctx.afterTransforms) await ctx.afterTransforms(standalone);

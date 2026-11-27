@@ -22,6 +22,8 @@ export interface BuildQueryPlanInput {
   hyde?: { text: string; protectedOk: boolean } | null;
   /** Sub-questions in order, at most 4 (D-08). */
   subQuestions?: readonly string[];
+  /** D-04: the completeness counts; absent while the check did not run, so the plan is unchanged with the switch off. */
+  completeness?: QueryPlan['completeness'];
 }
 
 /** QueryPlan.variants holds at most 8 entries (D-08 hard cap of 8 searches). */
@@ -84,6 +86,7 @@ export function buildQueryPlan(input: BuildQueryPlanInput): QueryPlan {
     sub_questions: [...subQuestions],
     skipped: [...(input.skipped ?? [])],
     framework: input.framework,
+    ...(input.completeness ? { completeness: { ...input.completeness } } : {}),
   };
 }
 
