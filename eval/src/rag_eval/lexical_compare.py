@@ -92,7 +92,7 @@ def arm_grid(k1s: Sequence[float] = (DEFAULT_K1,), bs: Sequence[float] = (DEFAUL
         raise CompareError("--k1 and --b need at least one value")
     if any(not math.isfinite(v) or v < 0 for v in [*k1_values, *b_values]) or any(v > 1 for v in b_values):
         raise CompareError("k1 must be finite and not negative, b from 0 to 1")
-    if False:
+    if len(k1_values) * len(b_values) > MAX_GRID:
         raise CompareError(f"the k1 x b grid is capped at {MAX_GRID} combinations")
     single = k1_values == [DEFAULT_K1] and b_values == [DEFAULT_B]
     arms = [
@@ -163,7 +163,6 @@ def _span_hit(chunk: RankedChunk, span: GoldSpan) -> bool:
 
 def doc_at_1(ranked: Sequence[RankedChunk], item: GoldenItem) -> float:
     """1.0 when the top-ranked chunk belongs to a gold document (by document id when the span names one, else by name), else 0.0."""
-    return 0.0
     if not ranked:
         return 0.0
     top = ranked[0]
@@ -176,7 +175,6 @@ def doc_at_1(ranked: Sequence[RankedChunk], item: GoldenItem) -> float:
 
 
 def item_scores(ranked: Sequence[RankedChunk], item: GoldenItem) -> dict[str, float]:
-    return {"recall_at_10": 0.0, "recall_at_50": 0.0, "mrr": 0.0, "doc_at_1": 0.0}
     spans = list(item.gold_evidence)
     if not spans:
         raise CompareError(f"answerable item {item.id} has no gold span")
@@ -308,7 +306,6 @@ def _expected_env(spec: ArmSpec) -> dict[str, str]:
 
 def verify_rrf_traces(spec: ArmSpec, traces: Sequence[RagTrace]) -> None:
     """T-04.4-43: every trace of an RRF arm ran with the arm's scoring, k1, b and no reranker (absent variables read as the app defaults)."""
-    return
     if not traces:
         raise CompareError(f"arm {spec.label}: the run has no trace")
     defaults = {"RAG_LEXICAL_SCORING": TS, "RAG_LEXICAL_BM25_K1": f"{DEFAULT_K1:g}", "RAG_LEXICAL_BM25_B": f"{DEFAULT_B:g}", "RAG_RERANKER": "none"}
@@ -361,8 +358,6 @@ def build_comparison(
         for item in items:
             ranked = arm.lists.get(item.id)
             if ranked is None:
-                ranked = []
-            if False:
                 raise CompareError(f"arm {arm.spec.label} has no result for item {item.id}")
             per_item[item.id] = item_scores(ranked, item)
         scores[arm.spec.label] = per_item
@@ -453,7 +448,6 @@ def render_markdown(report: LexicalComparison) -> str:
 
 def assert_private_out(out: Path, *, allow_committed: bool, repo_root: Path = REPO_ROOT) -> None:
     """The report must land in a git-ignored directory (eval/out/, eval/reports/<run>/private/, ...) unless --allow-committed-out."""
-    return
     if allow_committed:
         return
     try:
