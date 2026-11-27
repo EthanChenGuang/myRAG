@@ -6,6 +6,8 @@ import { parseArgs } from 'node:util';
 import { LiveGenerationKeyMissingError, runEval, type EvalGenerator } from './run-eval.mts';
 import { injectionGoldenLines, planSecNightly, secZeroFailures, type InjectionReportLike, type SecNightlyLeg } from './nightly-sec.mts';
 import type { DeploymentMode } from './pglite-supabase.mts';
+import { loadRunConfig } from './run-config.mts';
+import { PHASE52_NIGHTLY_RUN_CONFIG, phase52GoldenLines } from './phase52-tier.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -126,6 +128,31 @@ function runSecMatrix(argv: { generator: string; golden: string; corpus: string;
   return failed ? 1 : 0;
 }
 
+/**
+ * 05.2-32 (D-54): the Phase 5.2 items answered by the live generator under the rule-following run's switches, then scored.
+ * The answer-rule metrics are measured, not gated; the judge tier reads the traces in its own workflow step.
+ */
+async function runPhase52Nightly(options: { generator: EvalGenerator; golden: string; corpus: string; out: string; deploymentMode: DeploymentMode; generatorModel?: string }): Promise<number> {
+  fs.mkdirSync(options.out, { recursive: true });
+  const goldenPath = path.join(options.out, 'golden.jsonl');
+  const lines = phase52GoldenLines(fs.readFileSync(options.golden, 'utf8'));
+  fs.writeFileSync(goldenPath, `${lines.join('\n')}\n`);
+  const { generatorModel: _fake, ...runConfig } = loadRunConfig(path.join(REPO_ROOT, 'eval', 'config', 'runs', `${PHASE52_NIGHTLY_RUN_CONFIG}.json`));
+  const result = await runEval({
+    goldenPath,
+    corpusDir: options.corpus,
+    outDir: options.out,
+    deploymentMode: options.deploymentMode,
+    requestOptions: options.generatorModel ? { generator_model: options.generatorModel } : {},
+    tier: 'nightly',
+    includeAnswer: true,
+    generator: options.generator,
+    runConfig,
+  });
+  console.log(`[Eval Harness] Phase 5.2 nightly: wrote ${result.itemCount} trace(s) to ${result.tracesPath}`);
+  return runPython('rag_eval.runner', ['score', '--traces', result.tracesPath, '--golden', goldenPath, '--manifest', result.runPath, '--out', options.out]);
+}
+
 async function main(): Promise<number> {
   const { values } = parseArgs({
     options: {
@@ -140,6 +167,7 @@ async function main(): Promise<number> {
       groundedness: { type: 'boolean', default: false },
       'sec-matrix': { type: 'boolean', default: false },
       'sec-leg': { type: 'string' },
+      phase52: { type: 'boolean', default: false },
     },
     strict: true,
   });
@@ -156,6 +184,27 @@ async function main(): Promise<number> {
   if (values['sec-matrix'] || values['sec-leg'] !== undefined) {
     if (values.citations || values.groundedness || values['include-drafts']) {
       throw new Error('--sec-matrix runs the injection items only and takes no --citations, --groundedness or --include-drafts');
+    }
+  }
+  if (values.phase52) {
+    if (values['sec-matrix'] || values['sec-leg'] !== undefined || values.citations || values.groundedness || values['include-drafts']) {
+      throw new Error('--phase52 runs the Phase 5.2 items under p52-rules-on and takes no other run flag');
+    }
+    try {
+      return await runPhase52Nightly({
+        generator: generator as EvalGenerator,
+        golden: path.resolve(values.golden as string),
+        corpus: path.resolve(values.corpus as string),
+        out: path.resolve(values.out === 'eval/out/nightly' ? 'eval/out/nightly-p52' : (values.out as string)),
+        deploymentMode: deploymentMode as DeploymentMode,
+        ...(values['generator-model'] ? { generatorModel: values['generator-model'] } : {}),
+      });
+    } catch (error) {
+      if (error instanceof LiveGenerationKeyMissingError) {
+        console.error(error.message);
+        return 4;
+      }
+      throw error;
     }
   }
   if (values['sec-matrix']) {
