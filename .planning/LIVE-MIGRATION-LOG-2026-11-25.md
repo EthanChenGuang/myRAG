@@ -1240,14 +1240,14 @@ Merged with `--no-ff` in this order; each carries its SUMMARY. The 04.3 chain wa
 | Branch | Plan | Migration |
 |---|---|---|
 | `exec/03.3-20` | 03.3-20 templated collection in inline ingest-mode runs, 78 templated golden items | none |
-| `exec/06-45` | 06-45 | none |
+| `exec/06-45` | 06-45 Phase 6 close-out (gates, agents guide) | none |
 | `exec/04.3-04` | 04.3-04 access_groups on parents and derived stores, relabel propagation, client guard, version inheritance, drift check | first in 0921 (edited in place), now 0923 part 1; 0410 entries |
 | `exec/04.3-05` | 04.3-05 resolver, embed group lookup, label setter, visibility checks, enforcement and security event writers | first in 0922 (edited in place), now 0923 part 2; 0410 entry |
 | `exec/04.3-06` | 04.3-06 restrictive access-group read policies | 0923_access_rls* renumbered to 0926; 0410 entries |
 | `exec/04.3-12` | 04.3-12 semantic cache access recheck and relabel invalidation | 0931; 0410 entry |
 | `exec/04.3-16` | 04.3-16 A-09 dense scan rule for restricted callers | none |
 | `exec/04.4-07` | 04.4-07 lexical statistics purge hook | 0903 |
-| `exec/04.4-08`, `04.4-09`, `04.4-12` | 04.4 BM25 caller, lexstats CLI and the rest of the BM25 wiring | none |
+| `exec/04.4-08`, `04.4-09`, `04.4-12` | 04.4-08 BM25 in the retrieval path, 04.4-09 `rag:lexstats` CLI, 04.4-12 BM25 lexical benchmark | none |
 | `exec/05.2.1-01` to `-04`, `-06` to `-08` | 05.2.1 calculation tool and prompt budget | 0950 (05.2.1-06), 0967 edited in place |
 
 ### Migrations to apply live, in order
