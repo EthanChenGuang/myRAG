@@ -496,12 +496,12 @@ describe('vector sync purge RPCs through the fake edge (multi-tenant)', () => {
 
   test('a rag_ function created inside the test resolves without registering it in the fake edge', async () => {
     await db.exec(
-      "CREATE OR REPLACE FUNCTION public.rag_test_probe_0740(p_value integer) RETURNS integer LANGUAGE sql SET search_path = '' AS $$ SELECT p_value + 1 $$; GRANT EXECUTE ON FUNCTION public.rag_test_probe_0740(integer) TO service_role;",
+      "CREATE OR REPLACE FUNCTION public.rag_test_probe_0740(p_value integer) RETURNS TABLE (next_value integer) LANGUAGE sql SET search_path = '' AS $$ SELECT p_value + 1 $$; GRANT EXECUTE ON FUNCTION public.rag_test_probe_0740(integer) TO service_role;",
     );
     try {
       const response = await client.rpc('rag_test_probe_0740', { p_value: 41 });
       assert.equal(response.error, null);
-      assert.equal(response.data, 42);
+      assert.deepEqual(response.data, [{ next_value: 42 }]);
     } finally {
       await db.exec('DROP FUNCTION public.rag_test_probe_0740(integer)');
     }
