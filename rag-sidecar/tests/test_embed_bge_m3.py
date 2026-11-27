@@ -334,7 +334,10 @@ def test_lock_holds_the_extra_with_the_already_locked_versions():
 
 
 def test_the_base_install_imports_no_torch_or_transformers_at_start():
-    code = "import sys, rag_sidecar.main, rag_sidecar.embed; print(int('torch' in sys.modules or 'transformers' in sys.modules))"
+    code = (
+        "import sys, rag_sidecar.main, rag_sidecar.embed;"
+        "print(int('torch' in sys.modules or 'transformers' in sys.modules))"
+    )
     done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True, cwd=SIDECAR_DIR)
     assert done.stdout.strip().splitlines()[-1] == "0"
 
