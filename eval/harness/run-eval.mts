@@ -697,6 +697,46 @@ async function writeLexicalOverlap(session: InProcessEval, deploymentMode: Deplo
   fs.writeFileSync(path.join(outDir, OVERLAP_FILE), `${JSON.stringify(report, null, 2)}\n`);
 }
 
+/** Report-only tie diagnostic (quick-44): off unless the eval process sets EVAL_LEXICAL_TIES_CATEGORIES (comma-separated categories). */
+function tieCategories(): string[] {
+  return (process.env.EVAL_LEXICAL_TIES_CATEGORIES ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value !== '');
+}
+
+async function writeLexicalTies(session: InProcessEval, deploymentMode: DeploymentMode, items: readonly GoldenItem[], outDir: string): Promise<void> {
+  const stats = session.lexicalStats;
+  if (!stats) return;
+  const { fixtureLexicalTies, TIES_FILE, TIES_K } = await import('./lexical-stats.mts');
+  const { tenantHash } = await import('./lexical-leg-run.mts');
+  const { loadRagConfig } = await import('../../src/lib/rag/config.ts');
+  const { getRagDeps } = await import('../../src/lib/rag/deps.ts');
+  const { lexicalOptionsOn } = await import('../../src/lib/rag/lexical/options.ts');
+  const { resolveLexicalOptions } = await import('../../src/lib/rag/lexical/resolve-options.ts');
+  const { storeScopeForTenantKey } = await import('../../src/lib/rag/tenant/store-scope.ts');
+  const { queryLanguage } = await import('../../src/lib/rag/query/language.ts');
+  const config = loadRagConfig(getRagDeps().ragEnv());
+  const tenantKey = deploymentMode === 'multi-tenant' ? `u:${session.fixtureUserId}` : 's:default';
+  const scope = storeScopeForTenantKey(tenantKey);
+  const report = await fixtureLexicalTies(
+    session.fixtureDb,
+    tenantKey,
+    items.map((item) => ({ id: item.id, question: item.question, category: item.category ?? null })),
+    tieCategories(),
+    TIES_K,
+    {
+      tenantHash: tenantHash(tenantKey),
+      k1: stats.k1,
+      b: stats.b,
+      ...(lexicalOptionsOn(config)
+        ? { lexicalOptionsFor: async (question: string) => (await resolveLexicalOptions(scope, config, { language: queryLanguage(question) })).options }
+        : {}),
+    },
+  );
+  fs.writeFileSync(path.join(outDir, TIES_FILE), `${JSON.stringify(report, null, 2)}\n`);
+}
+
 export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const {
     goldenPath,
@@ -1050,6 +1090,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         throw new Error(`[Eval Harness] fake edge recorded ${edgeErrors} unsupported or failed request(s): ${sample}`);
       }
       if (inProcess.lexicalStats && !cachePairs) await writeLexicalOverlap(inProcess, deploymentMode, routed.main, outDir);
+      if (inProcess.lexicalStats && !cachePairs && tieCategories().length > 0) await writeLexicalTies(inProcess, deploymentMode, routed.main, outDir);
     }
   } finally {
     restoreConsole();
