@@ -88,6 +88,7 @@
     <script src="rag-panels/chunking-validate.js"></script>
     <script src="rag-panels/chunking-profiles.js"></script>
     <script src="rag-panels/refusal-calibration.js"></script>
+    <script src="rag-panels/identifier-patterns.js"></script>
     <script src="rag-panels/injection-defense.js"></script>
     <script src="rag-panels/review-labelling.js"></script>
     <script src="rag-panels/review-admin.js"></script>
@@ -9779,7 +9780,7 @@
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
                                 <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG Administration</h2>
-                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, tags, versions and translation, and the embedding and chunking profiles, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
+                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, tags, versions and translation, the embedding and chunking profiles, and identifier patterns, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
 
                                 <div class="grid gap-6">
                                     <section id="rag-administration-languages" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-languages-title">
@@ -10509,6 +10510,18 @@
                                             <div data-chunking-status class="text-sm mt-4" role="status" aria-live="polite"></div>
                                         </div>
                                     </section>
+
+                                    <!-- rag-identifier-patterns:start -->
+                                    <section id="rag-administration-identifiers" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-identifier-patterns-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-identifier-patterns-title" class="text-lg font-semibold mb-2 text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-identifier-patterns-title>Identifier patterns</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-identifier-patterns-description>Formats of your own identifiers, written as patterns. Text that matches a pattern is kept whole in keyword search and stored in one form, so different spellings of one identifier match each other.</p>
+                                            <div data-identifier-patterns-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-identifier-patterns-content></div>
+                                            <div data-identifier-patterns-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                        </div>
+                                    </section>
+                                    <!-- rag-identifier-patterns:end -->
 
                                     <section id="rag-administration-refusal" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-refusal-title">
                                         <div class="card-body">

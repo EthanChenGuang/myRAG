@@ -132,7 +132,7 @@ describe('view builders (UI-SPEC 6.4, 6.5, 6.7)', () => {
         { raw: 'AB-1234', normalized: 'ab1234', source: 'built_in', start: 4, end: 11 },
         { raw: 'ab 1234', normalized: 'ab1234', source: ID1, start: 16, end: 23 },
         { raw: 'AB-1234', normalized: 'ab1234', source: 'draft', start: 40, end: 47 },
-        { raw: 'EF​12', normalized: 'ef12', source: ID3, start: 50, end: 55 },
+        { raw: 'EF\u200B12', normalized: 'ef12', source: ID3, start: 50, end: 55 },
       ],
       [{ id: ID1, name: 'Saved shape' }],
     );
@@ -486,8 +486,12 @@ describe('index.html skeleton (UI-SPEC 6.1)', () => {
     expect(source).not.toMatch(/innerHTML|insertAdjacentHTML|outerHTML/);
     expect(source).not.toMatch(/localStorage|sessionStorage|document\.cookie|Authorization/);
     expect(source).not.toMatch(/console\./);
+    // index.html sets .hidden { display: none !important }, so 'hidden md:table-cell' never shows; use max-md:hidden.
+    expect(source).not.toMatch(/['\s]hidden (md|lg):/);
+    // A real NodeList has forEach only; array methods need Array.from (the fake DOM returns arrays).
+    expect(source.replace(/Array\.from\([^)]*querySelectorAll\([^)]*\)\)/g, '')).not.toMatch(/querySelectorAll\([^)]*\)\s*\.(find|filter|map|some|every)\(/);
     for (const name of source.matchAll(/^(?:function|class|const|let|var)\s+([A-Za-z_$][\w$]*)/gm)) {
-      expect(name[1], 'top-level name prefix').toMatch(/^(IdentifierPatterns|IDENTIFIER_PATTERNS_|identifierPatterns)/);
+      expect(name[1], 'top-level name prefix').toMatch(/^(IdentifierPatterns|IDENTIFIER_PATTERNS_|identifierPatterns|mapIdentifierPatternsError$|initIdentifierPatternsPanel$)/);
     }
   });
 });
@@ -857,7 +861,7 @@ describe('panel (UI-SPEC 6.3 to 7)', () => {
           status: 200,
           body: {
             success: true,
-            matches: [{ raw: `${XSS_PAYLOAD}​‮`, normalized: XSS_PAYLOAD, source: ID1, start: 0, end: 5 }],
+            matches: [{ raw: `${XSS_PAYLOAD}\u200B\u202E`, normalized: XSS_PAYLOAD, source: ID1, start: 0, end: 5 }],
             tested: { pattern_ids: [ID1] },
             truncated: false,
             total: 1,
