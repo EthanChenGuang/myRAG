@@ -184,3 +184,25 @@ export function inboundText(text: string, options: { sessionId?: string; from?: 
 export function settleTitles(harness: WhatsAppHarness): void {
   for (const row of harness.tables.chats) if (row.title === 'New Chat') row.title = 'Synthetic chat';
 }
+
+/** Creates one sender's conversation with a set title up front, so the handler finds it and never generates a title. */
+export function seedConversation(harness: WhatsAppHarness, senderJid: string, ownerId: string = OWNER_ID): string {
+  const chatId = uuid();
+  harness.tables.chats.push({ id: chatId, user_id: ownerId, messages: [], title: 'Synthetic chat' });
+  harness.tables.whatsapp_conversations.push({
+    id: uuid(),
+    chat_id: chatId,
+    whatsapp_jid: senderJid,
+    phone_number: senderJid.split('@')[0],
+    contact_name: null,
+    user_id: ownerId,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+  });
+  return chatId;
+}
+
+/** A placeholder individual JID for the n-th synthetic sender (never a real number). */
+export function placeholderJid(n: number): string {
+  return `1000${String(n).padStart(7, '0')}@s.whatsapp.net`;
+}
