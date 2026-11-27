@@ -690,3 +690,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - 03.3-25 [d06c02ec], it-locale [295ea121], comet [c7aa47ec]
   - sidebar-hide DONE [fa81af29] -> archived
   Only the walkthrough desk has not confirmed; it pauses with the owner anyway.
+- 22:03Z RESUME ALL (user request): sent resume to 14 executors and builders, plus the owner desk (eval t35-37) and the walkthrough desk. Self-check re-armed.
