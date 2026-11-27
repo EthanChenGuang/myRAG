@@ -42,6 +42,8 @@ export interface CalcChecksOutcome {
   primary: CalcCheck | null;
   notices: AnswerNotice[];
   reviewReasons: CalcReviewReason[];
+  /** D-76: present only for a corrected primary check: its stated span in rawText and the recomputed value to put there. */
+  replacement?: { start: number; end: number; text: string };
 }
 
 const DECIMAL_STRING = /^-?[0-9]{1,30}(\.[0-9]{1,30})?$/;
@@ -88,6 +90,7 @@ function traceMissing(match: NumberMatch): CalcCheck {
 interface Classified {
   check: CalcCheck;
   noticeValue: string | null;
+  spanValue?: string | null;
 }
 
 function checkTraces(input: RunCalcChecksInput): Classified[] {
@@ -155,9 +158,21 @@ function reasonsFor(checks: readonly CalcCheck[]): CalcReviewReason[] {
   return reasons;
 }
 
+function replacementOf(last: Classified | undefined): CalcChecksOutcome['replacement'] | null {
+  if (!last || last.check.status !== 'corrected' || !last.check.stated_span || typeof last.spanValue !== 'string') return null;
+  return { start: last.check.stated_span.start, end: last.check.stated_span.end, text: last.spanValue };
+}
+
 function outcome(classified: readonly Classified[], language: string): CalcChecksOutcome {
   const checks = classified.map((c) => c.check);
-  return { checks, primary: checks.length > 0 ? checks[checks.length - 1] : null, notices: noticesFor(classified, language), reviewReasons: reasonsFor(checks) };
+  const replacement = replacementOf(classified[classified.length - 1]);
+  return {
+    checks,
+    primary: checks.length > 0 ? checks[checks.length - 1] : null,
+    notices: noticesFor(classified, language),
+    reviewReasons: reasonsFor(checks),
+    ...(replacement ? { replacement } : {}),
+  };
 }
 
 function log(checks: readonly CalcCheck[]): void {

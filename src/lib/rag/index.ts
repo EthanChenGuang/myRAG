@@ -232,6 +232,21 @@ export { formatGuardedLinks, linkUsageInstructions } from './security/link-secti
 export type { ChannelReplyGuardInput, ChannelReplyGuardResult, SummaryGuardInput, VoiceTranscriptMessage } from './security/channel-reply-guard';
 export { attributeSourceChunks, recordOutputGuardEvents } from './security/security-events';
 export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource } from './lang/answer-language';
+// Phase 5.2.1 D-76, D-87: the voice calculation route and the voice-rag calculation offer and prompt budget.
+export { evaluateCalc } from './calc/evaluate';
+export { runCalcChecks } from './calc/check-step';
+export { shouldOfferCalcTool } from './calc/signal';
+export {
+  loadVoiceCalcSources,
+  voiceCalcSources,
+  labelTaggedVoiceContext,
+  labelledUntaggedVoiceContext,
+  MAX_VOICE_CALC_SOURCES,
+  type VoiceCalcSource,
+} from './calc/voice-sources';
+export { planPromptBudget } from './context/prompt-budget';
+export { promptBudgetConfig } from './context/prompt-budget-config';
+export { fixedText } from './lang/texts';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';
 export type { IdentifierFilterSummary } from './types';

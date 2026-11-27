@@ -43,6 +43,8 @@ export interface CalcCheckOutcome {
   check: CalcCheck;
   /** The recomputed value formatted in the answer language with its unit, for notices.calc_corrected; null otherwise. */
   noticeValue: string | null;
+  /** The recomputed value formatted like noticeValue but without the unit, to replace stated_span; null unless corrected. */
+  spanValue?: string | null;
 }
 
 export interface StatedNumberOptions {
@@ -241,8 +243,9 @@ export function checkCalculation(input: CheckInput): CalcCheckOutcome {
   }
   const places =
     recomputed.roundPlaces ?? (stated.power === 0 && stated.places <= DISPLAY_PLACES ? stated.places : fractionDigits(result.value));
-  const noticeValue = formatNumber(recomputed.exact, places, numberFormatFor(input.answerLanguage), result.unit);
-  return { check: { ...located, status: 'corrected' }, noticeValue };
+  const format = numberFormatFor(input.answerLanguage);
+  const noticeValue = formatNumber(recomputed.exact, places, format, result.unit);
+  return { check: { ...located, status: 'corrected' }, noticeValue, spanValue: formatNumber(recomputed.exact, places, format) };
 }
 
 /**

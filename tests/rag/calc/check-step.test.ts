@@ -53,6 +53,13 @@ describe('runCalcChecks', () => {
     expect(out.reviewReasons).toEqual(['calc_mismatch']);
   });
 
+  test('D-76: a corrected primary carries its stated span and the recomputed value without the unit; verified has none', () => {
+    const text = 'First 100 [S1]. Then 45 [S2].';
+    const out = run({ traces: [toolTrace(ADD_AB), toolTrace(ADD_CD)], rawText: text });
+    expect(out.replacement).toEqual({ start: text.indexOf('45'), end: text.indexOf('45') + 2, text: '40' });
+    expect(run({ traces: [toolTrace(ADD_AB)], rawText: 'First 100 [S1].' }).replacement).toBeUndefined();
+  });
+
   test('only an invalid block marker: one trace_invalid check and one calc_not_verified notice', () => {
     const out = run({ invalid: 1, rawText: 'The total is 100 [S1].' });
     expect(out.checks).toHaveLength(1);
