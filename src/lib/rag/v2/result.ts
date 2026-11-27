@@ -19,12 +19,15 @@ import type { TemporalQueryContext } from '../query/temporal-query-detector';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import { getRagDeps } from '../deps';
 import type { SecurityConfig } from '../security/config';
+import { readAnswerConfig } from '../generation/answer-config';
 import {
   attributeFilterHashBlock,
   computeRetrievalConfigHash,
   lexicalScoringHashBlock,
   securityHashComponent,
+  answerRulesHashComponent,
   terminologyHashBlock,
+  type AnswerRulesHashConfig,
   type AttributeFilterHashStage,
   type RetrievalConfigHashQueryLayer,
   type TerminologyHashStage,
@@ -36,6 +39,8 @@ import { effectiveRetrievalParams } from './retrieval-params';
 import { effectiveTuningParams, tuningHashComponent } from './tuning-params';
 import type { TranslationHashField } from './translation-legs';
 import type { AssembleOutput } from '../context/assemble';
+import { recordAnswerConflict } from '../context/version-conflicts';
+import { scopeKey } from '../tenant/scope';
 import type { QueryPlan, RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 import type { LexicalStamp } from '../lexical/resolve-options';
 import type { SearchIdentifiers } from './stages/search';
@@ -90,6 +95,8 @@ export interface BuildV2ResultInput {
 }
 
 export interface RequestConfigHashInput {
+  /** Phase 5.2 D-58: the answer switches; read from the environment when absent. */
+  answerConfig?: AnswerRulesHashConfig;
   input: RunRetrievalInput;
   config: RagConfig;
   profile: Profile;
@@ -144,6 +151,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
       ...(config.monolingual ? { monolingual: true as const } : {}),
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
+    answerRules: answerRulesHashComponent(ctx.answerConfig ?? readAnswerConfig()),
     tuning: tuningHashComponent(
       config,
       effectiveTuningParams(profile, config, evalTuningOverrides(profile, input.stageOverrides?.retrievalOverrides), { embeddingProfileId: ctx.embeddingProfileId }),
@@ -381,7 +389,11 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
       retrievalConfigHash,
       refusal,
       queryLanguage,
+      ...(assembly.versionConflict ? { versionConflict: assembly.versionConflict } : {}),
     };
+    if (assembly.versionConflict && profile !== 'eval' && input.scope) {
+      recordAnswerConflict({ tenantKey: scopeKey(input.scope), conflict: assembly.versionConflict, traceId: collector.traceId });
+    }
   }
 
   // D-25: fire-and-forget; the response never waits on the miss log.
