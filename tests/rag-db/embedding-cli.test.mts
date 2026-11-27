@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
+import { corpusWithoutDuplicateCopies } from '../helpers/corpus-without-duplicate-copies.mts';
 
 const LEGACY = 'openai-3-small-1536';
 const VOYAGE = 'voyage-4-large-2048';
@@ -33,7 +34,8 @@ describe('rag:embedding CLI over the gated pointer flip', () => {
   let queryDims: number[];
 
   before(async () => {
-    fixture = await createTwoTenantDatabase();
+    // The duplicate-passage copies are left out: see corpusWithoutDuplicateCopies (every full re-embed here builds a halfvec HNSW).
+    fixture = await createTwoTenantDatabase({ corpusDir: corpusWithoutDuplicateCopies() });
     edge = await startFakeEdge({ db: fixture.db });
     Object.assign(process.env, fixtureProcessEnv(edge.url));
     process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';

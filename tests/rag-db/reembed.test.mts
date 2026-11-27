@@ -2,6 +2,7 @@ import { after, afterEach, before, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
+import { corpusWithoutDuplicateCopies } from '../helpers/corpus-without-duplicate-copies.mts';
 
 const LEGACY = 'openai-3-small-1536';
 const VOYAGE = 'voyage-4-large-2048';
@@ -636,7 +637,7 @@ describe('re-embed job (src/lib/rag/ingest/reembed)', () => {
 
   before(async () => {
     const { fixtureProcessEnv, startFakeEdge } = await import('../../eval/harness/fake-edge.mts');
-    fixture = await createTwoTenantDatabase();
+    fixture = await createTwoTenantDatabase({ corpusDir: corpusWithoutDuplicateCopies() });
     edge = await startFakeEdge({ db: fixture.db });
     Object.assign(process.env, fixtureProcessEnv(edge.url));
     process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
@@ -1282,7 +1283,8 @@ describe('scripts/rag/reprocess-documents.js', () => {
 
   before(async () => {
     const { fixtureProcessEnv, startFakeEdge } = await import('../../eval/harness/fake-edge.mts');
-    fixture = await createTwoTenantDatabase();
+    // The legacy mode refuses any document above version 1, so this database has no lineage versions (see corpusWithoutDuplicateCopies).
+    fixture = await createTwoTenantDatabase({ corpusDir: corpusWithoutDuplicateCopies({ withoutLineages: true }) });
     edge = await startFakeEdge({ db: fixture.db });
     childEnv = fixtureProcessEnv(edge.url);
   });
