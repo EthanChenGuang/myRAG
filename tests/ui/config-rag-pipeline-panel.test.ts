@@ -444,7 +444,8 @@ describe('the real page after the hand-written RAG Modes inputs were removed (07
     for (const id of ['RAG_INJECTION_CHECK', 'LAKERA_GUARD_API_KEY', 'RAG_EVAL_ENDPOINT_ENABLED', 'RAG_SIDECAR_URL', 'LANGFUSE_ENABLED', 'RAG_CITATIONS', 'RAG_PIPELINE', 'RAG_QUERY_LAYER', 'RAG_INGEST_PIPELINE']) {
       expect(indexHtml, id).not.toMatch(new RegExp(`<(input|select|textarea)\\b[^>]*\\bid="${id}"`));
     }
-    for (const comment of ['<!-- Evaluation & Sidecar -->', '<!-- Langfuse tracing -->', '<!-- Citations and groundedness -->']) expect(indexHtml).not.toContain(comment);
+    for (const comment of ['<!-- Evaluation & Sidecar -->', '<!-- Langfuse tracing -->', '<!-- Citations and groundedness -->', '<!-- Vector backends -->']) expect(indexHtml).not.toContain(comment);
+    for (const id of ['RAG_RETRIEVAL_BACKEND', 'QDRANT_URL', 'WEAVIATE_API_KEY']) expect(indexHtml, id).not.toMatch(new RegExp(`<(input|select)\\b[^>]*\\bid="${id}"`));
     expect(indexHtml.match(/id="injection-defense-summary"/g)).toHaveLength(1);
     const section = indexHtml.indexOf('id="rag-pipeline-settings"');
     const afterSection = indexHtml.indexOf('</section>', section);

@@ -63,16 +63,16 @@ function storedId(name: string): string {
 function box(): string {
   const start = html.indexOf('<div id="rag-tuning-switches"');
   expect(start, 'the tuning switch box exists').toBeGreaterThan(-1);
-  const end = html.indexOf('<!-- Vector backends -->', start);
+  const end = html.indexOf('<!-- Query layer -->', start);
   return html.slice(start, end);
 }
 
 describe('Phase 4.2 retrieval tuning switches in the Config UI (plan 04.2-02, UI-SPEC 6.2)', () => {
-  it('has exactly one box, after the Phase 4 box and at the end of the Retrieval pipeline card (plan 07-20 moved the fields after it)', () => {
+  it('has exactly one box, after the Phase 4 box and at the end of the Retrieval pipeline card (plan 07-20 moved the fields after it and the Vector backends card)', () => {
     expect([...html.matchAll(/id="rag-tuning-switches"/g)]).toHaveLength(1);
     const phase4 = html.indexOf('Phase 4 retrieval switches (off = current behaviour)');
     const tuning = html.indexOf('id="rag-tuning-switches"');
-    const next = html.indexOf('<!-- Vector backends -->');
+    const next = html.indexOf('<!-- Query layer -->');
     expect(phase4).toBeGreaterThan(-1);
     expect(tuning).toBeGreaterThan(phase4);
     expect(next).toBeGreaterThan(tuning);

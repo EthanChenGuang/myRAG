@@ -172,7 +172,7 @@ describe('Phase 3.3 switches in the Config UI (03.3-UI-SPEC section 10)', () => 
     expect(pos('RAG_LEXICAL_QUANTITY')).toBeGreaterThan(Math.max(boxStart, pos('RAG_LEXICAL_STEM_IT')));
     expect(pos('RAG_LEXICAL_QUANTITY')).toBeLessThan(pos('RAG_VERSION_SCOPE'));
     expect(pos('RAG_ATTRIBUTE_FILTER')).toBeGreaterThan(pos('RAG_IDENTIFIER_FILTER'));
-    expect(pos('RAG_ATTRIBUTE_FILTER')).toBeLessThan(html.indexOf('<!-- Vector backends -->', boxStart));
+    expect(pos('RAG_ATTRIBUTE_FILTER')).toBeLessThan(html.indexOf('<!-- Query layer -->', boxStart));
   });
 
   it('5. aria-describedby names the help ids, each present once', () => {

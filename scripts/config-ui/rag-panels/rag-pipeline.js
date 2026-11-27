@@ -672,7 +672,10 @@ class RagPipelineSettings {
   }
 
   hostedValueNodes(entry) {
-    if (entry.type === 'secret') return [this.doc.createTextNode(this.t('row.hostedValue', { value: this.t(entry.secret && entry.secret.state === 'set' ? 'secret.set' : 'secret.unset') }))];
+    if (entry.type === 'secret') {
+      if (!entry.secret || entry.secret.state !== 'set') return [this.doc.createTextNode(this.t('row.hostedUnset'))];
+      return [this.doc.createTextNode(this.t('row.hostedValue', { value: this.t('secret.set') }))];
+    }
     if (entry.value === null || entry.value === '') return [this.doc.createTextNode(this.t('row.hostedUnset'))];
     return ragUiTemplateNodes(this.doc, this.t('row.hostedValue'), { value: entry.value }, ['value']);
   }

@@ -1031,14 +1031,17 @@ test('the vector-backend secrets are masked by the config server and the sync se
 });
 
 test('the config UI offers pgvector, weaviate and qdrant for both backend selects and hides the keys', () => {
+  // Plan 07-20: the generated RAG pipeline section renders enum options in manifest order and every secret as a password field.
   const html = fs.readFileSync(path.join(REPO, 'scripts/config-ui/index.html'), 'utf8');
+  assert.match(html, /<script src="rag-panels\/rag-pipeline\.js"><\/script>/);
+  const vars = new Map(JSON.parse(fs.readFileSync(path.join(REPO, MANIFEST), 'utf8')).vars.map((v) => [v.name, v]));
   for (const name of ['RAG_RETRIEVAL_BACKEND', 'RAG_RETRIEVAL_BACKEND_VOICE']) {
-    const select = html.match(new RegExp(`<select id="${name}"[\\s\\S]*?</select>`));
-    assert.ok(select, `${name} select`);
-    for (const option of ['pgvector', 'weaviate', 'qdrant']) assert.match(select[0], new RegExp(`value="${option}"`), `${name} ${option}`);
+    assert.equal(vars.get(name)?.type, 'enum', `${name} select`);
+    for (const option of ['pgvector', 'weaviate', 'qdrant']) assert.ok(vars.get(name).options.includes(option), `${name} ${option}`);
   }
   for (const name of VECTOR_BACKEND_SECRETS) {
-    assert.match(html, new RegExp(`<input type="password" id="${name}"`), `${name} is a password input`);
+    assert.equal(vars.get(name)?.type, 'secret', `${name} is a password input`);
+    assert.doesNotMatch(html, new RegExp(`<input[^>]*id="${name}"[^>]*type="text"`), `${name} is never a text input`);
   }
 });
 
