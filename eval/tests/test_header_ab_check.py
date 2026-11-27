@@ -23,7 +23,7 @@ def _main(*argv: str) -> int:
     return main(list(argv))
 
 
-def _item(item_id: str, category: str, doc: str, quote: str, *, provenance: str, pair_of: str | None = None) -> GoldenItem:
+def _item(item_id: str, category: str, doc: str, quote: str, *, provenance: str, pair_of: str | None = None, split: str = "dev") -> GoldenItem:
     return GoldenItem(
         pair_of=pair_of,
         id=item_id,
@@ -35,7 +35,7 @@ def _item(item_id: str, category: str, doc: str, quote: str, *, provenance: str,
         gold_evidence=[{"document": doc, "section": "1. Bel", "quote": quote}],
         review_status="approved",
         provenance=provenance,
-        split="dev",
+        split=split,
         tags=[],
     )
 
@@ -85,7 +85,9 @@ def _trace(item_id: str, kept: list[tuple[str, str]]) -> RagTrace:
 
 
 def _golden(*, provenance: str = "synthetic_fixture", near_miss: int = ITEMS) -> list[GoldenItem]:
-    items: list[GoldenItem] = []
+    items: list[GoldenItem] = [
+        _item("nm-test", "cache_near_miss", "fendel-test.md", "fendel test zorrin", provenance=provenance, pair_of="gen-00", split="test")
+    ]
     for index in range(near_miss):
         items.append(_item(f"nm-{index:02d}", "cache_near_miss", f"fendel-{index:02d}.md", f"fendel {index} zorrin", provenance=provenance, pair_of=f"gen-{index % ITEMS:02d}"))
     for index in range(ITEMS):
@@ -285,3 +287,11 @@ def test_the_rehearsal_spec_runs_both_arms_in_ingest_mode():
     assert set(by_name) == {"tpl-recommended-ingest", "tpl-recommended-no-header-ingest"}
     assert by_name["tpl-recommended-no-header-ingest"].base == "eval/config/runs/tpl-recommended-no-header.json"
     assert all(run.fixture_mode == "ingest" and run.switches == {"RAG_CITATIONS": "true"} for run in spec.runs)
+
+
+def test_paired_counts_read_the_gated_split_only(tmp_path):
+    on, off = _world(tmp_path, on_miss=frozenset({"nm-test"}))
+    code, result, _ = _run(tmp_path, on, off, "--population", "fixture")
+    assert code == 0
+    assert result["target"]["worsened"] == 0
+    assert result["target"]["paired_mean_difference"] == 0.0
