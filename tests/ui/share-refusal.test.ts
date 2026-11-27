@@ -51,8 +51,8 @@ describe('syncResultLines', () => {
   });
 
   it('formats the count for the language', () => {
-    expect(syncResultLines({ failClosed: 1200 }, 'single', 'en')[0]).toContain('1,200');
-    expect(syncResultLines({ failClosed: 1200 }, 'single', 'it')[0]).toContain('1.200');
+    expect(syncResultLines({ failClosed: 12000 }, 'single', 'en')[0]).toContain('12,000');
+    expect(syncResultLines({ failClosed: 12000 }, 'single', 'it')[0]).toContain('12.000');
   });
 
   it('adds nothing in multi-tenant mode', () => {
