@@ -890,3 +890,14 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - Live items 05.2-39/40 belong to the owner.
   - Archived.
 - PHASE VERIFICATION ROUND: all 13 requested phases now have reports (3.1.1, 3.2.1, 3.2 pending final, 3.3 pending, 4.1, 4.1.1, 4.2, 4.3, 4.4, 5.1.1, 5.2, 5.3, 6.2).
+- 23:50Z The owner asked to clean up and launch more agents. Nothing was left to archive: the 20 live sessions are all mid-work or waiting on suites; train builders are kept. Nudged the NF-1 hotfix (idle 50 min, probably a background-suite timeout).
+- 23:50Z why.py (trunk=main, planning = t39 + plan-62/41/07 fixes). Dispatched:
+  - 04.1-18 (from quick-41 + plan-41-fixes);
+  - 05.2.1-23 (t39 + packing-budget-routes);
+  - 06.3-05 and 06.3-08 (06.3-04 + t40; 07xx numbers);
+  - 07-37 (t40);
+  - hotfix UF-1 (fix/uf1-direct-insert, mig 0991);
+  - VERIFY 6 and VERIFY 6.1;
+  - quick-43-apply-test (G8).
+  - Remaining READY items are owner checkpoints (03.3-26, 04.4-15, 06-46). 06.3-14 waits for 07-37.
+- MIGRATION MAP: 0986 doc-types / 0987 scope-access / 0988 review-writers / 0989 NF-1 / 0990 rih / 0991 UF-1.
