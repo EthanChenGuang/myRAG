@@ -216,9 +216,10 @@ export function createFakeWeaviate(options: FakeWeaviateOptions = {}): FakeWeavi
         },
       },
       aggregate: {
-        async overAll() {
-          record('aggregate');
-          return { totalCount: shard(name, tenant).size };
+        async overAll(opts?: { filters?: WeaviateFilterValue }) {
+          record('aggregate', opts);
+          const part = shard(name, tenant);
+          return { totalCount: opts?.filters ? sorted(part).filter((o) => evaluateFilter(opts.filters, o)).length : part.size };
         },
       },
     };
@@ -271,6 +272,9 @@ export function createFakeWeaviate(options: FakeWeaviateOptions = {}): FakeWeavi
     collectionsByName: collections,
     collections: {
       use: (name: string) => handle(name),
+      async listAll() {
+        return [...collections.keys()].sort().map((name) => ({ name }));
+      },
       async exists(name: string) {
         return collections.has(name);
       },

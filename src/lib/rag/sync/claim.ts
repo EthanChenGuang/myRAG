@@ -1,7 +1,7 @@
 import { RetrievalBackendError, rpcRows, type RpcClient } from '@/lib/rag/backend/supabase-rpc';
 import type { SyncRow } from './servable';
 
-export type OutboxEntity = 'chunk' | 'document' | 'profile' | 'tenant';
+export type OutboxEntity = 'chunk' | 'document' | 'profile' | 'tenant' | 'purge';
 
 export interface OutboxRow {
   id: number | string;
