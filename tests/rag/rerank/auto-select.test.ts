@@ -208,7 +208,7 @@ describe('describeReranker and the config hash under auto', () => {
   it('records the resolved provider and model, never auto', () => {
     const keyed = loadRagConfig(env({ COHERE_API_KEY: COHERE_KEY }));
     expect(describeReranker(keyed, 'chat', 'en')).toEqual({ id: 'cohere', model: 'rerank-v5.0-pro' });
-    expect(describeReranker(keyed, 'voice', 'en')).toEqual({ id: 'cohere', model: 'rerank-v5.0-fast' });
+    expect(describeReranker(keyed, 'voice', 'en')).toEqual({ id: 'local_bm25', model: 'bm25-v2' });
     expect(JSON.stringify(describeReranker(keyed, 'chat', 'en'))).not.toContain(COHERE_KEY);
     resetRagConfigForTests();
     const keyless = loadRagConfig(env());
@@ -228,7 +228,7 @@ describe('describeReranker and the config hash under auto', () => {
     resetRagConfigForTests();
     const explicitCohere = loadRagConfig(env({ RAG_RERANKER: 'cohere', COHERE_API_KEY: COHERE_KEY }));
     expect(hashFor(autoKeyed, 'chat')).toBe(hashFor(explicitCohere, 'chat'));
-    expect(hashFor(autoKeyed, 'voice')).toBe(hashFor(explicitCohere, 'voice'));
+    expect(hashFor(autoKeyed, 'voice')).toBe(hashFor(explicitLocal, 'voice'));
     expect(hashFor(autoKeyed, 'chat')).not.toBe(hashFor(autoKeyless, 'chat'));
   });
 });

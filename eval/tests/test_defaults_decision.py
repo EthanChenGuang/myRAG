@@ -280,7 +280,8 @@ def test_a_pending_live_result_records_g7_not_run_and_keeps_the_code_default(tmp
     assert record.g7.status == "pending_live"
     assert record.g7.models == []
     assert record.hosted.basis == "pending_live"
-    assert record.auto_hosted_profiles == ["chat", "embed", "eval", "voice"]
+    assert record.auto_hosted_profiles == ["chat", "embed", "eval"]
+    assert [(d.profile, d.reason) for d in record.hosted.dropped] == [("voice", dd.VOICE_UNMEASURED)]
     assert record.status == "flip"
 
 
