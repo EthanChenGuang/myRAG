@@ -217,6 +217,16 @@ myrag/
 - `embedding_model_versions`, `rag_finetune_consent` and every `rag_finetune_*` function are service_role only. A tenant-scope model serves only its own tenant.
 - Live items (plan 06.1-19): real export and training, endpoint binding, re-embed and the real-item profile comparison before activation. Fixture runs prove wiring only.
 
+### Gates and monitoring (Phase 5.3)
+- Six switches, all off by default (`src/lib/env.ts`, `PHASE53_SWITCH_DEFAULTS` in `src/lib/rag/monitor/config.ts`): `RAG_MONITOR=false`, `RAG_MONITOR_WEBHOOK_URL=` (https only), `RAG_MONITOR_WEBHOOK_SECRET=` (secret, at least 32 characters, else unset), `RAG_CONFIG_GATE=off` (`off | warn | enforce`), `RAG_CONFIG_GATE_LIVE=false`, `RAG_REPRESENTATIVE_SAMPLE=false`. Off writes no row to the 0960–0978 tables, changes no response, and the monitor, alert, judge-score, sample, drift and cluster routes answer 404 (`tests/rag-e2e/defaults-equal-phase53.test.mts`).
+- Committed config files, each validated by its contract: `eval/config/quality-gates.json` (absolute ceilings and floors, set composition, lifecycle), `eval/config/monitor-alerts.json` and `eval/config/release-gate.json` (all three edited through pull requests), and `eval/config/judge-calibration.json`, written only by `python -m rag_eval.judge_calibration`. Thresholds live in these files, not in env vars.
+- Absolute gates: `rag_eval.gate --gates` adds the false-answer and false-refusal ceilings and the composition and stale-share checks to the noise band; exit codes 10 (noise band), 11 (ceiling or floor), 12 (composition or stale share). `--gates-mode report` prints them without changing the exit code; the prechunked smoke tiers run in report mode until the ceilings are ratified (`eval/reports/phase-05.3/absolute-gate-measurement.md`). Golden set version and manifest hash: `python -m rag_eval.golden_set`.
+- Config gate: with `RAG_CONFIG_GATE=enforce` a RAG-affecting save needs a passed check of the proposed settings hash or a recorded override reason on all five env writers (Config UI server `POST /api/config` and `POST /api/config/create` with force; app `POST /api/config`, `/api/config/models`, `/api/config/rag-prompt`) and on `POST /api/config/languages`; `warn` records and never blocks. Each written change gets a `rag_config_change_records` row (key names and hashes only). Backfill and re-embed completions request a tenant nightly (`rag_eval_run_requests`) only with the gate on; `python -m rag_eval.tenant_nightly` drains them.
+- Release gate: the commit status `rag-release-gate` (`python -m rag_eval.release_gate`); `skipped` and `failed` both report `failure`, skipped is not passed. Production is promoted only through `promote-production` (`scripts/ci/promote-production.mjs`), on a `success` status from an accepted creator.
+- Monitor: `npm run rag:monitor -- daily | sample [--tenant <key>] | drift-inputs --tenant <key> | record-change | test-alert --tenant <key>` (daily aggregation, rules and alerts need `RAG_MONITOR=true` and the retrieval log on; the weekly sample needs `RAG_REPRESENTATIVE_SAMPLE=true`, `RAG_RETRIEVAL_LOG=masked_query` and `RAG_DOMAIN_EXPERT_REVIEW=true`). `python -m rag_eval.drift` and `python -m rag_eval.representativeness` read counts and cluster shares only; `npm run rag:questions-import` imports historical questions masked and deduplicated, with provenance `historical`, and prints counts only.
+- Migrations 0960–0978 are not folded into the setup files. Their tables and `rag_*` functions are service_role only. The DATA-24 purge hook `rag_purge_hook_golden_items` (0976) clears the golden evidence index and answer-check labels of a purged lineage.
+- CI: jobs that need private eval data (tenant nightly, weekly report, weekly drift) always skip on hosted runners. Log prefixes `[Monitor]`, `[Config Gate]`, `[Release Gate]` carry counts and ids only.
+
 ---
 
 ## 7. AI Model Management
@@ -319,6 +329,7 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 - Citations and groundedness are additive: strict refusal and the "knowledge base temporarily unavailable" message are produced before generation and never carry citations; webSearch with Exa, `source_images` and the `{{context}}` placeholder are unchanged with every Phase 5 switch on or off.
 - The prompt-injection defense is additive: with every Phase 5.1 switch on or off, strict "information not available", the webSearch strict path with Exa and `source_images` are unchanged. `NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=true` renders markdown images in answers only from same-origin, Supabase storage and configured image hosts (others become plain links); it is inlined at build time, so it takes effect only after a rebuild.
 - The query layer is additive: small talk skips retrieval only under the layer (`RAG_QUERY_LAYER=true`), where the model answers conversationally instead of the strict "information not available" refusal; with the layer off strict refusal is unchanged, and a knowledge-base question still refuses as before. Cache hits carry `cache: hit` in the message metadata with the original trace id; webSearch with Exa, `source_images`, voice and embed chat behave as before with every Phase 6 switch off.
+- Phase 5.3 is additive: with its six switches off, strict "information not available", webSearch with Exa, `source_images`, the `{{context}}` placeholder, voice and embed chat behave as before, and no monitor, sample or gate row is written.
 - Phase 3.2 is additive: with every Phase 3.2 switch at its default, strict "information not available", webSearch with Exa, `source_images`, the `{{context}}` placeholder, voice and embed chat behave as before; quarantined and `pending_review` versions never reach retrieval, and an ingestion-side setting change never rebuilds anything without an admin starting it.
 - Phase 5.2 is additive: with every Phase 5.2 switch off, strict "information not available", webSearch with Exa, `source_images`, the `{{context}}` placeholder, voice and embed chat behave as before. With the switches on, the strict refusal and the "knowledge base temporarily unavailable" message stream in the question's language, are never cut by the output cap and carry no citations; links and credential requests are filtered without blocking the rest of the answer.
 - Source extraction now preserves `webSearch` tool results, document sources, and `source_images` through streaming and final message persistence; keep sidebar toggle click handling intact.
@@ -354,6 +365,14 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 | `npm run rag:lexstats` | Per-tenant BM25 lexical statistics: enable, rebuild, compact, check, status, disable (Phase 4.4) |
 | `cd rag-sidecar && docker build --target docling` | Docling parse image; host sizing start ~4 GB RAM, 2 CPUs, one parse worker |
 | `cd rag-sidecar && docker build --target bge-m3` | BGE-M3 embedding image (`RAG_BGE_M3_SERVING=sidecar`); weights baked at a pinned revision, plan 4–5 GB RAM on CPU |
+| `npm run rag:monitor` | Phase 5.3 monitor CLI: `daily`, `sample`, `drift-inputs`, `record-change`, `test-alert` |
+| `npm run rag:questions-import` | Import historical questions into the review queue (masked, deduplicated, counts only) |
+| `uv run --directory eval python -m rag_eval.release_gate` | Release gate; posts the `rag-release-gate` commit status |
+| `uv run --directory eval python -m rag_eval.tenant_nightly` | Drain the tenant nightly requests |
+| `uv run --directory eval python -m rag_eval.judge_calibration` | Judge calibration; the only writer of `eval/config/judge-calibration.json` |
+| `uv run --directory eval python -m rag_eval.golden_set` | Golden set lifecycle, version and manifest hash |
+| `uv run --directory eval python -m rag_eval.drift` | Weekly query drift against the test set |
+| `uv run --directory eval python -m rag_eval.representativeness` | Test-set coverage of the query clusters |
 | `scripts/init-env.js` | Default environment template |
 
 ---

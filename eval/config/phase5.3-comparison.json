@@ -1,0 +1,71 @@
+{
+  "schema_version": 2,
+  "phase": "05.3",
+  "noise": "eval/config/noise.json",
+  "baselines": {
+    "prechunked": "eval/baselines/fixture-baseline.json",
+    "ingest": "eval/baselines/fixture-ingest-baseline.json"
+  },
+  "runs": [
+    {
+      "name": "off-prechunked",
+      "fixture_mode": "prechunked",
+      "switches": {
+        "RAG_MONITOR": "false",
+        "RAG_MONITOR_WEBHOOK_URL": "",
+        "RAG_CONFIG_GATE": "off",
+        "RAG_CONFIG_GATE_LIVE": "false",
+        "RAG_REPRESENTATIVE_SAMPLE": "false"
+      },
+      "harness_flags": [],
+      "checks": [
+        "paired_all_zero",
+        "characterization",
+        {
+          "kind": "latency_budget",
+          "profile": "chat"
+        }
+      ]
+    },
+    {
+      "name": "off-ingest",
+      "fixture_mode": "ingest",
+      "switches": {
+        "RAG_MONITOR": "false",
+        "RAG_MONITOR_WEBHOOK_URL": "",
+        "RAG_CONFIG_GATE": "off",
+        "RAG_CONFIG_GATE_LIVE": "false",
+        "RAG_REPRESENTATIVE_SAMPLE": "false"
+      },
+      "harness_flags": [],
+      "checks": [
+        "paired_all_zero",
+        "characterization",
+        {
+          "kind": "latency_budget",
+          "profile": "chat"
+        }
+      ]
+    }
+  ],
+  "commands": {
+    "characterization": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/rag/characterize-chat.test.ts",
+      "tests/rag/characterize-chat-overview.test.ts",
+      "tests/rag/characterize-embed.test.ts",
+      "tests/rag/characterize-voice.test.ts",
+      "tests/chat-strict.test.ts",
+      "tests/chat-websearch.test.ts",
+      "tests/chat-source-images.test.ts"
+    ]
+  },
+  "fixture_note": "Fixture corpus only: the harness runs the eval profile with the six Phase 5.3 switches at their defaults; the monitor, sample, drift and config-gate paths never run on it. The defaults-equal test tests/rag-e2e/defaults-equal-phase53.test.mts covers the entry points, the empty 0960-0979 tables and the 404 routes.",
+  "notes": [
+    "Phase 5.3 (D-60 step 10): off sets every Phase 5.3 switch to its default and must equal the committed fixture baselines, paired differences all zero; no Phase 5.2 closing report exists, so this mirrors the Phase 5.1.1 closing comparison (eval/reports/phase-05.1.1/comparison.json) with the same command and checks. The characterization command holds the off-state chat, embed, voice, strict, webSearch and source_images tests.",
+    "RAG_MONITOR_WEBHOOK_SECRET is not set: a schema-2 spec refuses any credential-like name, and unset is its default.",
+    "latency_budget: every stage p95 with a chat budget in eval/config/latency-budgets.json and the retrieval total p95 stay within budget."
+  ]
+}
