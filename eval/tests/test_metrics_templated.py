@@ -6,13 +6,13 @@ from pathlib import Path
 import pytest
 from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.golden import GoldenItem
+from test_report_runner import _manifest
+from test_templated_off_inputs import off_report
 
 import rag_eval.metrics as metrics_module
 from rag_eval.metrics import aggregate, score_items
 from rag_eval.report import _render_markdown, build_report, write_report
 from rag_eval.templated_fixtures import load_templated_fixtures
-from test_report_runner import _manifest
-from test_templated_off_inputs import off_report
 
 SNAPSHOT = Path(__file__).parent / "data" / "templated-off"
 ASKED = "vorlo-family-01.pdf"

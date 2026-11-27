@@ -2,10 +2,10 @@
 
 from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.report import EvalReport
+from test_report_runner import QUOTE, _four_items, _manifest, _trace
 
 from rag_eval.metrics import score_items
 from rag_eval.report import build_report
-from test_report_runner import QUOTE, _four_items, _manifest, _trace
 
 
 def _with_candidates(trace: RagTrace, rows: list[tuple[str, str, dict[str, int]]]) -> RagTrace:
