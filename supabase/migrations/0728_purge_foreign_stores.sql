@@ -55,8 +55,159 @@ AS $$
    ORDER BY v.relation
 $$;
 
+-- One step per store: the reserved hook name first, then the owner phase's hook, then (for plain per-document tables) a guarded delete
+-- by tenant and version id. Every hook is resolved by its fixed signature; relation names are literals of this file (%I) and values are
+-- bound with USING. A store with neither hook nor relation adds no key to the counts.
+CREATE OR REPLACE FUNCTION public.rag_purge_foreign_stores(p_tenant_key text, p_lineage_id uuid, p_version_ids uuid[])
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_ids uuid[] := COALESCE(p_version_ids, '{}'::uuid[]);
+  v_counts jsonb := '{}'::jsonb;
+  v_n bigint;
+BEGIN
+  PERFORM public.rag_ingest_assert_tenant_key(p_tenant_key);
+  IF p_lineage_id IS NULL THEN
+    RAISE EXCEPTION 'invalid_argument' USING ERRCODE = '22023';
+  END IF;
+
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_translations(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_translations($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('translations', COALESCE(v_n, 0));
+  ELSIF pg_catalog.to_regprocedure('public.rag_purge_hook_chunk_translations(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_chunk_translations($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('translations', COALESCE(v_n, 0));
+  ELSIF pg_catalog.to_regclass('public.chunk_translations') IS NOT NULL THEN
+    EXECUTE pg_catalog.format('DELETE FROM %I.%I t WHERE t.tenant_key = $1 AND t.document_id = ANY ($2)', 'public', 'chunk_translations')
+      USING p_tenant_key, v_ids;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('translations', v_n);
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_chunk_translation_gaps(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_chunk_translation_gaps($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('translation_gaps', COALESCE(v_n, 0));
+  ELSIF pg_catalog.to_regclass('public.chunk_translation_gaps') IS NOT NULL THEN
+    EXECUTE pg_catalog.format('DELETE FROM %I.%I t WHERE t.tenant_key = $1 AND t.document_id = ANY ($2)', 'public', 'chunk_translation_gaps')
+      USING p_tenant_key, v_ids;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('translation_gaps', v_n);
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_table_rows(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_table_rows($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('table_rows', COALESCE(v_n, 0));
+  ELSIF pg_catalog.to_regclass('public.rag_table_rows') IS NOT NULL THEN
+    EXECUTE pg_catalog.format('DELETE FROM %I.%I t WHERE t.tenant_key = $1 AND t.document_id = ANY ($2)', 'public', 'rag_table_rows')
+      USING p_tenant_key, v_ids;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('table_rows', v_n);
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_duplicate_clusters(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_duplicate_clusters($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('duplicate_groups', COALESCE(v_n, 0));
+  ELSIF pg_catalog.to_regprocedure('public.rag_purge_hook_dup_clusters(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_dup_clusters($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('duplicate_groups', COALESCE(v_n, 0));
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_supersession(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_supersession($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('supersession', COALESCE(v_n, 0));
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_rebuild(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_rebuild($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('rebuild', COALESCE(v_n, 0));
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_recaption(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_recaption($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('recaption', COALESCE(v_n, 0));
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_scope_tags(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_scope_tags($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('scope_tags', COALESCE(v_n, 0));
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_identifiers(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_identifiers($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('identifiers', COALESCE(v_n, 0));
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_golden_items(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_golden_items($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('golden_items', COALESCE(v_n, 0));
+  END IF;
+
+  RETURN v_counts;
+END
+$$;
+
+-- Rows still present per foreign store, for rag_purge_verify. A store is reported only when its relation exists.
+CREATE OR REPLACE FUNCTION public.rag_purge_foreign_leftovers(p_tenant_key text, p_lineage_id uuid, p_version_ids uuid[])
+RETURNS TABLE (store text, remaining bigint)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_ids uuid[] := COALESCE(p_version_ids, '{}'::uuid[]);
+  v_step record;
+  v_n bigint;
+  v_total bigint;
+  v_seen boolean;
+  v_last text := NULL;
+BEGIN
+  PERFORM public.rag_ingest_assert_tenant_key(p_tenant_key);
+  IF p_lineage_id IS NULL THEN
+    RAISE EXCEPTION 'invalid_argument' USING ERRCODE = '22023';
+  END IF;
+
+  FOR v_step IN
+    SELECT * FROM (VALUES
+      (1, 'translations', 'chunk_translations', 't.document_id = ANY ($2)'),
+      (2, 'translation_gaps', 'chunk_translation_gaps', 't.document_id = ANY ($2)'),
+      (3, 'table_rows', 'rag_table_rows', 't.document_id = ANY ($2)'),
+      (4, 'duplicate_groups', 'rag_dup_clusters', 't.source_document_ids OPERATOR(pg_catalog.&&) $2'),
+      (5, 'supersession', 'rag_supersession_candidates',
+          't.document_id = ANY ($2) OR t.candidate_document_id = ANY ($2) OR t.older_document_id = ANY ($2)'),
+      (6, 'supersession', 'rag_supersession_links',
+          't.older_document_id = ANY ($2) OR t.newer_document_id = ANY ($2) OR t.older_lineage_id = $3 OR t.newer_lineage_id = $3'),
+      (7, 'rebuild', 'rag_rebuild_items', 't.document_id = ANY ($2) OR t.new_document_id = ANY ($2) OR t.lineage_id = $3'),
+      (8, 'rebuild', 'rag_rebuild_saved_vectors', 't.document_id = ANY ($2)'),
+      (9, 'recaption', 'rag_recaption_items', 't.document_id = ANY ($2)')
+    ) AS s(ord, store, relation, predicate)
+    ORDER BY s.ord
+  LOOP
+    IF v_last IS DISTINCT FROM v_step.store THEN
+      IF v_last IS NOT NULL AND v_seen THEN
+        store := v_last;
+        remaining := v_total;
+        RETURN NEXT;
+      END IF;
+      v_last := v_step.store;
+      v_total := 0;
+      v_seen := false;
+    END IF;
+    IF pg_catalog.to_regclass(pg_catalog.format('public.%I', v_step.relation)) IS NOT NULL THEN
+      EXECUTE pg_catalog.format('SELECT pg_catalog.count(*) FROM %I.%I t WHERE t.tenant_key = $1 AND (%s)', 'public', v_step.relation, v_step.predicate)
+        INTO v_n USING p_tenant_key, v_ids, p_lineage_id;
+      v_total := v_total + v_n;
+      v_seen := true;
+    END IF;
+  END LOOP;
+  IF v_last IS NOT NULL AND v_seen THEN
+    store := v_last;
+    remaining := v_total;
+    RETURN NEXT;
+  END IF;
+END
+$$;
+
 REVOKE ALL ON FUNCTION public.rag_purge_store_inventory() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_purge_store_inventory() TO service_role;
+REVOKE ALL ON FUNCTION public.rag_purge_foreign_stores(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_purge_foreign_leftovers(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_purge_foreign_stores(text, uuid, uuid[]) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_purge_foreign_leftovers(text, uuid, uuid[]) TO service_role;
 
 NOTIFY pgrst, 'reload schema';
 
