@@ -10366,6 +10366,7 @@
           "generation": "ok",
           "search": "ok"
         },
+        "stale_index_drop": 2,
         "used_documents": [
           {
             "document_id": "doc-001",

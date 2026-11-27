@@ -289,6 +289,9 @@ class RagTrace(_Contract):
     refusal: TraceRefusal | None = None
     retrieval_config_hash: str | None = None
     context_tokens: int | None = Field(default=None, ge=0)
+    stale_index_drop: int | None = Field(
+        default=None, ge=0, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
     stage_counts: dict[str, dict[str, float]] = Field(default_factory=dict)
     answer: str | None = None
     citations: list[CitationRecord]

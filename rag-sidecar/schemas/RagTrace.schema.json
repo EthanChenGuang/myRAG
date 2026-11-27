@@ -1571,6 +1571,11 @@
       "title": "Stage Status",
       "type": "object"
     },
+    "stale_index_drop": {
+      "minimum": 0,
+      "title": "Stale Index Drop",
+      "type": "integer"
+    },
     "topk_redundancy": {
       "maximum": 1,
       "minimum": 0,

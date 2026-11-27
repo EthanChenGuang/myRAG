@@ -2649,7 +2649,8 @@ def build_samples() -> dict[str, dict[str, Any]]:
                 update={
                     "retrieval_backend": TraceRetrievalBackend(
                         backend="weaviate", fallback_reason="backend_not_ready", tenant_validation_dropped=0
-                    )
+                    ),
+                    "stale_index_drop": 2,
                 }
             )
             .model_dump(mode="json"),
