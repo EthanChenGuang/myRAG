@@ -1,7 +1,8 @@
 /**
  * Monitoring panel (OBS-03, D-20 to D-27; UI-SPEC 6.7, 6.12 and 12.4): the summary of the daily monitor, the Alerts view (entries with
  * evidence, Acknowledge alert, Resolve alert, Run monitor now) and its Settings (the monitor group of #rag-phase053-settings, with Remove
- * webhook). The Test set coverage sub-view is a host filled by plan 05.3-45. Alerts carry ids, codes and counts only: no question,
+ * webhook). The Test set coverage sub-view (UI-SPEC 6.8) follows #workspace-selector and reads the drift route: numbers, server states,
+ * topic group ids and neutral share bars, with no label or example generated for a group. Alerts carry ids, codes and counts only: no question,
  * answer, chunk or document text, no override reason, no full hash, no dedup key and no raw breakdown JSON; the webhook URL and secret are
  * never read back. With RAG_MONITOR off nothing is requested. DOM through the gates-ui helpers (cuiEl, createElement, textContent).
  */
@@ -34,6 +35,7 @@ const MONITOR_GATES =
         gatesUiFetch,
         gatesUiSubTabs,
         gatesUiConfirm,
+        gatesUiShareBar,
       }
     : require('./gates-ui.js');
 
@@ -49,6 +51,36 @@ const MONITOR_MAX_TRACES = 10;
 const MONITOR_RUN_TIMEOUT_MS = 60000;
 const MONITOR_RECORD_CHANGE_COMMAND = 'npm run rag:monitor -- record-change --keys <names> --reason <text>';
 const MONITOR_REFUSAL_COMMAND = 'python -m rag_eval.calibrate refusal';
+const MONITOR_DRIFT_API = '/api/rag/admin/monitor/drift';
+const MONITOR_DRIFT_COMMAND = 'python -m rag_eval.drift --tenant <key> --set <private set directory>';
+const MONITOR_COVERAGE_WEEKS = 8;
+const MONITOR_COVERAGE_MAX_GROUPS = 40;
+const MONITOR_NOVEL_GROUP = 'novel';
+const MONITOR_DASH = '\u2014';
+const MONITOR_DRIFT_STATES = {
+  ok: { key: 'cov.state.ok', tone: 'badge-ghost', icon: 'bi-dash-circle' },
+  warn: { key: 'cov.state.warn', tone: 'badge-warning badge-outline', icon: 'bi-exclamation-triangle' },
+  alert: { key: 'cov.state.alert', tone: 'badge-warning', icon: 'bi-exclamation-triangle-fill' },
+};
+const MONITOR_GROUP_STATES = {
+  under: { key: 'group.state.under', tone: 'badge-warning', icon: 'bi-exclamation-triangle-fill' },
+  off: { key: 'group.state.off', tone: 'badge-warning badge-outline', icon: 'bi-exclamation-triangle' },
+  ok: { key: 'group.state.ok', tone: 'badge-ghost', icon: 'bi-dash-circle' },
+};
+const MONITOR_GAP_RESULTS = {
+  failed: { key: 'gap.state.alert', tone: 'badge-warning', icon: 'bi-exclamation-triangle-fill' },
+  insufficient_n: { key: 'verdict.insufficient', tone: 'badge-ghost', icon: 'bi-dash-circle' },
+  insufficient_sample: { key: 'verdict.insufficient', tone: 'badge-ghost', icon: 'bi-dash-circle' },
+  passed: { key: 'cov.state.ok', tone: 'badge-ghost', icon: 'bi-dash-circle' },
+};
+// Votes and refusals (UI-SPEC 6.8): which metric of the route's rates[] fills which column, online or offline.
+const MONITOR_RATE_COLUMNS = [
+  { key: 'cov.col.votes', metric: 'not_helpful_rate', side: 'online' },
+  { key: 'cov.col.refusals', metric: 'refusal_rate', side: 'online' },
+  { key: 'cov.col.offlineRefusal', metric: 'refusal_rate', side: 'offline' },
+  { key: 'cov.col.falseRefusal', metric: 'false_refusal_rate', side: 'offline' },
+  { key: 'cov.col.correctRefusal', metric: 'correct_refusal_rate', side: 'offline' },
+];
 const MONITOR_RATE_RULES = [
   'refusal_rate',
   'zero_result_rate',
@@ -211,6 +243,50 @@ const MONITOR_LABELS = {
     "warn.monitorNeedsLog": "Monitoring is on, but the retrieval log is off. The monitor will write nothing until the log is at the level ids or masked_query.",
     "warn.webhookHttps": "The webhook URL must start with https://.",
     "action.refreshCoverage": "Refresh coverage",
+    "cov.loading": "Loading test set coverage…",
+    "cov.week": "Week of {date}",
+    "cov.divergence": "Difference between real questions and the test set",
+    "cov.divergence.help": "0 means the same mix of topic groups, 1 means no overlap. Limits: warning {warn}, alert {alert}.",
+    "cov.state.ok": "Within limits",
+    "cov.state.warn": "Warning",
+    "cov.state.alert": "Alert",
+    "cov.trend": "Last 8 weeks",
+    "cov.col.week": "Week",
+    "cov.col.difference": "Difference",
+    "cov.noWeek": "No report for this week",
+    "cov.groups": "Topic groups",
+    "cov.groups.help": "Groups are formed from masked questions and are named by id only.",
+    "cov.col.group": "Topic group",
+    "cov.col.production": "Real questions",
+    "cov.col.test": "Test set",
+    "cov.col.items": "Test items",
+    "group.novel": "Not in any group",
+    "group.state.under": "Under-covered",
+    "group.state.off": "Outside tolerance",
+    "group.state.ok": "Within tolerance",
+    "cov.nextSample": "Under-covered groups get up to half of the next weekly sample.",
+    "cov.scores": "Score on the test set",
+    "cov.unweighted": "Unweighted (the score the limits use)",
+    "cov.weighted": "Weighted by real-question share (report only)",
+    "cov.uncovered": "Share of real questions with no test item",
+    "cov.gaps": "Offline and online scores",
+    "cov.gaps.help": "A gap above {limit} with enough data raises an alert.",
+    "cov.col.offline": "Offline score",
+    "cov.col.online": "Online judge mean",
+    "cov.col.gap": "Gap",
+    "gap.state.alert": "Above the limit",
+    "cov.rates": "Votes and refusals next to the offline refusal results",
+    "cov.col.votes": "Not-helpful votes (online)",
+    "cov.col.refusals": "Refusals (online)",
+    "cov.col.falseRefusal": "False refusals (offline)",
+    "cov.col.correctRefusal": "Correct refusals (offline)",
+    "cov.empty.title": "No coverage report yet",
+    "cov.empty.body": "The weekly job compares this workspace's test set with the last 30 days of real questions. It runs where the test set is stored: {command}.",
+    "cov.off.title": "Test set coverage is off",
+    "cov.off.body": "The weekly comparison is stored only while Weekly sampling is on. To start, set Weekly sampling to On under Question sources, Settings, and save.",
+    "cov.withN": "{value} (n = {n})",
+    "cov.col.offlineRefusal": "Refusals (offline)",
+    "cov.loaded": "Test set coverage loaded: {week}.",
     "count.item": "{label}: {value}",
     "status.acknowledged.plain": "Acknowledged",
     "status.resolved.plain": "Resolved",
@@ -358,6 +434,50 @@ const MONITOR_LABELS = {
     "warn.monitorNeedsLog": "监控已开启，但检索日志处于关闭状态。在日志级别设为 ids 或 masked_query 之前，监控不会写入任何内容。",
     "warn.webhookHttps": "Webhook 地址必须以 https:// 开头。",
     "action.refreshCoverage": "刷新覆盖情况",
+    "cov.loading": "正在加载测试集覆盖…",
+    "cov.week": "{date} 所在周",
+    "cov.divergence": "真实问题与测试集的差异",
+    "cov.divergence.help": "0 表示主题分组构成相同，1 表示完全不重合。限值：提醒 {warn}，告警 {alert}。",
+    "cov.state.ok": "在限值内",
+    "cov.state.warn": "提醒",
+    "cov.state.alert": "告警",
+    "cov.trend": "最近 8 周",
+    "cov.col.week": "周",
+    "cov.col.difference": "差异",
+    "cov.noWeek": "该周没有报告",
+    "cov.groups": "主题分组",
+    "cov.groups.help": "分组由脱敏后的问题聚合而成，只用 ID 命名。",
+    "cov.col.group": "主题分组",
+    "cov.col.production": "真实问题",
+    "cov.col.test": "测试集",
+    "cov.col.items": "测试条目数",
+    "group.novel": "不属于任何分组",
+    "group.state.under": "覆盖不足",
+    "group.state.off": "超出容差",
+    "group.state.ok": "在容差内",
+    "cov.nextSample": "覆盖不足的分组最多占下一次每周抽样的一半。",
+    "cov.scores": "测试集得分",
+    "cov.unweighted": "未加权（限值使用的得分）",
+    "cov.weighted": "按真实问题占比加权（仅报告）",
+    "cov.uncovered": "没有对应测试条目的真实问题占比",
+    "cov.gaps": "离线与在线得分",
+    "cov.gaps.help": "数据充足且差距超过 {limit} 时会触发告警。",
+    "cov.col.offline": "离线得分",
+    "cov.col.online": "在线评判均值",
+    "cov.col.gap": "差距",
+    "gap.state.alert": "超过限值",
+    "cov.rates": "投票和拒答与离线拒答结果对照",
+    "cov.col.votes": "“没有帮助”投票（在线）",
+    "cov.col.refusals": "拒答（在线）",
+    "cov.col.falseRefusal": "错误拒答（离线）",
+    "cov.col.correctRefusal": "正确拒答（离线）",
+    "cov.empty.title": "尚无覆盖报告",
+    "cov.empty.body": "每周任务会将该工作区的测试集与最近 30 天的真实问题进行比较。它在存放测试集的机器上运行：{command}。",
+    "cov.off.title": "测试集覆盖已关闭",
+    "cov.off.body": "只有在每周抽样开启时才会保存每周对比。若要开始，请在“问题来源”的“设置”中将“每周抽样”设为开启并保存。",
+    "cov.withN": "{value}（n = {n}）",
+    "cov.col.offlineRefusal": "拒答（离线）",
+    "cov.loaded": "测试集覆盖已加载：{week}。",
     "count.item": "{label}：{value}",
     "status.acknowledged.plain": "已确认",
     "status.resolved.plain": "已解决",
@@ -505,6 +625,50 @@ const MONITOR_LABELS = {
     "warn.monitorNeedsLog": "Il monitoraggio è attivo ma il log di recupero è disattivato. Il monitoraggio non scriverà nulla finché il log non è al livello ids o masked_query.",
     "warn.webhookHttps": "L’URL del webhook deve iniziare con https://.",
     "action.refreshCoverage": "Aggiorna copertura",
+    "cov.loading": "Caricamento della copertura del set di test…",
+    "cov.week": "Settimana del {date}",
+    "cov.divergence": "Differenza tra domande reali e set di test",
+    "cov.divergence.help": "0 indica la stessa composizione di gruppi di argomenti, 1 nessuna sovrapposizione. Limiti: attenzione {warn}, allarme {alert}.",
+    "cov.state.ok": "Entro i limiti",
+    "cov.state.warn": "Attenzione",
+    "cov.state.alert": "Allarme",
+    "cov.trend": "Ultime 8 settimane",
+    "cov.col.week": "Settimana",
+    "cov.col.difference": "Differenza",
+    "cov.noWeek": "Nessun report per questa settimana",
+    "cov.groups": "Gruppi di argomenti",
+    "cov.groups.help": "I gruppi sono formati da domande mascherate e sono identificati solo da un ID.",
+    "cov.col.group": "Gruppo di argomenti",
+    "cov.col.production": "Domande reali",
+    "cov.col.test": "Set di test",
+    "cov.col.items": "Elementi di test",
+    "group.novel": "In nessun gruppo",
+    "group.state.under": "Poco coperto",
+    "group.state.off": "Fuori tolleranza",
+    "group.state.ok": "Entro la tolleranza",
+    "cov.nextSample": "Ai gruppi poco coperti va fino a metà del prossimo campione settimanale.",
+    "cov.scores": "Punteggio sul set di test",
+    "cov.unweighted": "Non pesato (il punteggio usato dai limiti)",
+    "cov.weighted": "Pesato per quota di domande reali (solo report)",
+    "cov.uncovered": "Quota di domande reali senza elementi di test",
+    "cov.gaps": "Punteggi offline e online",
+    "cov.gaps.help": "Uno scarto superiore a {limit} con dati sufficienti genera un avviso.",
+    "cov.col.offline": "Punteggio offline",
+    "cov.col.online": "Media del giudice online",
+    "cov.col.gap": "Scarto",
+    "gap.state.alert": "Sopra il limite",
+    "cov.rates": "Voti e rifiuti accanto ai risultati offline sui rifiuti",
+    "cov.col.votes": "Voti \"non utile\" (online)",
+    "cov.col.refusals": "Rifiuti (online)",
+    "cov.col.falseRefusal": "Rifiuti indebiti (offline)",
+    "cov.col.correctRefusal": "Rifiuti corretti (offline)",
+    "cov.empty.title": "Nessun report di copertura",
+    "cov.empty.body": "Il job settimanale confronta il set di test di quest'area di lavoro con le domande reali degli ultimi 30 giorni. Si esegue dove è conservato il set di test: {command}.",
+    "cov.off.title": "La copertura del set di test è disattivata",
+    "cov.off.body": "Il confronto settimanale viene salvato solo con il campionamento settimanale attivo. Per iniziare, imposta Campionamento settimanale su Attivo in Fonti delle domande, Impostazioni, e salva.",
+    "cov.withN": "{value} (n = {n})",
+    "cov.col.offlineRefusal": "Rifiuti (offline)",
+    "cov.loaded": "Copertura del set di test caricata: {week}.",
     "count.item": "{label}: {value}",
     "status.acknowledged.plain": "Preso in carico",
     "status.resolved.plain": "Risolto",
@@ -850,6 +1014,188 @@ function monitorEvidenceView(alert, locale) {
   };
 }
 
+// Test set coverage (UI-SPEC 6.8, 8.1, 11): pure builders over the drift route's named fields only.
+
+const MONITOR_DAY_MS = 86400000;
+
+/** The Monday of an ISO week label (YYYY-Www) as a UTC Date, or null. */
+function monitorIsoMonday(label) {
+  const match = typeof label === 'string' ? /^(\d{4})-W(\d{2})$/.exec(label) : null;
+  if (!match) return null;
+  const year = Number(match[1]);
+  const week = Number(match[2]);
+  if (week < 1 || week > 53) return null;
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const monday = new Date(jan4.getTime() - ((jan4.getUTCDay() || 7) - 1) * MONITOR_DAY_MS + (week - 1) * 7 * MONITOR_DAY_MS);
+  return monitorIsoWeek(monday) === label ? monday : null;
+}
+
+/** The ISO week label (YYYY-Www) of a UTC date. */
+function monitorIsoWeek(date) {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const year = d.getUTCFullYear();
+  const week = Math.ceil(((d.getTime() - Date.UTC(year, 0, 1)) / MONITOR_DAY_MS + 1) / 7);
+  return year + '-W' + String(week).padStart(2, '0');
+}
+
+function monitorStateBadge(table, state, locale) {
+  const entry = typeof state === 'string' && monitorHas(table, state) ? table[state] : null;
+  if (!entry) return null;
+  const label = monitorHas(MONITOR_LABELS.en, entry.key) ? monitorLabel(entry.key, locale) : MONITOR_GATES.gatesUiLabel(entry.key, locale);
+  return { key: entry.key, label, tone: entry.tone, icon: entry.icon };
+}
+
+function monitorShare(value) {
+  return monitorFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+}
+
+function monitorOrDash(text) {
+  return text === '' ? MONITOR_DASH : text;
+}
+
+function monitorWithN(text, n, locale) {
+  return monitorLabel('cov.withN', locale, { value: monitorOrDash(text), n: MONITOR_GATES.gatesUiNumber(monitorFinite(n) ? n : 0, locale) });
+}
+
+function monitorSliceText(slice, locale) {
+  const { gatesUiLabel, gatesUiLanguageName } = MONITOR_GATES;
+  const value = String(slice === undefined || slice === null ? '' : slice);
+  if (value === 'all' || value === 'overall' || value === '') return gatesUiLabel('slice.overall', locale);
+  const match = /^language:([a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?)$/.exec(value);
+  if (match) return gatesUiLabel('slice.language', locale, { language: gatesUiLanguageName(match[1], locale) });
+  return value;
+}
+
+function monitorCoverageTrend(r, week, locale) {
+  const { gatesUiScore } = MONITOR_GATES;
+  const byWeek = {};
+  for (const point of Array.isArray(r.trend) ? r.trend : []) {
+    if (point && typeof point === 'object' && typeof point.week === 'string' && !monitorHas(byWeek, point.week)) byWeek[point.week] = point;
+  }
+  const monday = monitorIsoMonday(week);
+  const rows = [];
+  for (let i = 0; i < MONITOR_COVERAGE_WEEKS; i += 1) {
+    const label = monitorIsoWeek(new Date(monday.getTime() - i * 7 * MONITOR_DAY_MS));
+    const start = monitorIsoMonday(label);
+    const date = start ? MONITOR_GATES.gatesUiDate(start.toISOString().slice(0, 10), locale) : null;
+    const point = monitorHas(byWeek, label) ? byWeek[label] : null;
+    const divergence = point && monitorFinite(point.divergence) ? gatesUiScore(point.divergence, locale) : '';
+    rows.push({
+      week: label,
+      text: date ? date.text : label,
+      iso: date ? date.iso : null,
+      current: i === 0,
+      missing: !point,
+      divergence: monitorOrDash(divergence),
+      badge: point ? monitorStateBadge(MONITOR_DRIFT_STATES, point.state, locale) : null,
+    });
+  }
+  return rows;
+}
+
+function monitorCoverageGroups(r, locale) {
+  const { gatesUiPercent, gatesUiNumber } = MONITOR_GATES;
+  const all = (Array.isArray(r.clusters) ? r.clusters : []).filter((c) => c && typeof c === 'object' && typeof c.id === 'string' && c.id !== '');
+  const sorted = all.slice().sort((a, b) => monitorShare(b.production_share) - monitorShare(a.production_share) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const novel = sorted.filter((c) => c.id === MONITOR_NOVEL_GROUP).slice(0, 1);
+  const kept = sorted.filter((c) => c.id !== MONITOR_NOVEL_GROUP).slice(0, MONITOR_COVERAGE_MAX_GROUPS).concat(novel);
+  const clusters = sorted.filter((c) => kept.includes(c));
+  let largest = 0;
+  for (const c of clusters) largest = Math.max(largest, monitorShare(c.production_share), monitorShare(c.test_share));
+  const cell = (value) => ({ text: monitorOrDash(gatesUiPercent(value, locale)), bar: largest > 0 ? monitorShare(value) / largest : 0 });
+  return clusters.map((c) => {
+    const isNovel = c.id === MONITOR_NOVEL_GROUP;
+    return {
+      id: c.id,
+      name: isNovel ? monitorLabel('group.novel', locale) : c.id,
+      novel: isNovel,
+      production: cell(c.production_share),
+      test: cell(c.test_share),
+      items: monitorOrDash(gatesUiNumber(c.test_items, locale)),
+      badge: monitorStateBadge(MONITOR_GROUP_STATES, c.state, locale),
+    };
+  });
+}
+
+function monitorCoverageScores(r, locale) {
+  const scores = r.scores && typeof r.scores === 'object' && !Array.isArray(r.scores) ? r.scores : null;
+  if (!scores) return null;
+  const { gatesUiScore, gatesUiPercent } = MONITOR_GATES;
+  const rows = [];
+  if (monitorFinite(scores.unweighted)) rows.push({ key: 'cov.unweighted', label: monitorLabel('cov.unweighted', locale), text: gatesUiScore(scores.unweighted, locale) });
+  if (monitorFinite(scores.weighted)) rows.push({ key: 'cov.weighted', label: monitorLabel('cov.weighted', locale), text: gatesUiScore(scores.weighted, locale) });
+  if (monitorFinite(scores.uncovered_share)) rows.push({ key: 'cov.uncovered', label: monitorLabel('cov.uncovered', locale), text: gatesUiPercent(scores.uncovered_share, locale) });
+  return rows.length > 0 ? rows : null;
+}
+
+function monitorCoverageGaps(r, limits, locale) {
+  const list = (Array.isArray(r.gaps) ? r.gaps : []).filter((g) => g && typeof g === 'object' && typeof g.slice === 'string');
+  if (list.length === 0) return null;
+  const { gatesUiScore } = MONITOR_GATES;
+  return {
+    rows: list.map((g) => ({
+      slice: monitorSliceText(g.slice, locale),
+      offline: monitorOrDash(gatesUiScore(g.offline, locale)),
+      online: monitorWithN(gatesUiScore(g.online, locale), g.online_n, locale),
+      gap: monitorOrDash(gatesUiScore(g.gap, locale)),
+      badge: monitorStateBadge(MONITOR_GAP_RESULTS, g.result, locale),
+    })),
+    help: monitorMessage('cov.gaps.help', locale, { limit: monitorFinite(limits.gap) ? gatesUiScore(limits.gap, locale) : MONITOR_DASH }),
+  };
+}
+
+function monitorCoverageRates(r, locale) {
+  const list = (Array.isArray(r.rates) ? r.rates : []).filter((x) => x && typeof x === 'object' && typeof x.slice === 'string' && typeof x.metric === 'string');
+  const columns = MONITOR_RATE_COLUMNS.filter((col) => list.some((x) => x.metric === col.metric && monitorFinite(x[col.side])));
+  if (columns.length === 0) return null;
+  const { gatesUiPercent } = MONITOR_GATES;
+  const slices = [];
+  for (const x of list) if (!slices.includes(x.slice) && columns.some((col) => col.metric === x.metric)) slices.push(x.slice);
+  const rows = slices.map((slice) => ({
+    slice: monitorSliceText(slice, locale),
+    cells: columns.map((col) => {
+      const row = list.find((x) => x.slice === slice && x.metric === col.metric);
+      const value = row ? gatesUiPercent(row[col.side], locale) : '';
+      return col.side === 'online' && row && value !== '' ? monitorWithN(value, row.online_n, locale) : monitorOrDash(value);
+    }),
+  }));
+  return {
+    columns: [{ key: 'col.questions', label: MONITOR_GATES.gatesUiLabel('col.questions', locale) }].concat(columns.map((col) => ({ key: col.key, label: monitorLabel(col.key, locale) }))),
+    rows,
+  };
+}
+
+/** UI-SPEC 6.8: the Test set coverage view of one drift route answer. Every state comes from the server; nothing is compared here. */
+function monitorCoverageView(report, locale) {
+  const r = monitorObject(report);
+  const week = monitorIsoMonday(r.week) ? r.week : null;
+  if (!week) {
+    return {
+      empty: true,
+      emptyTitle: monitorLabel('cov.empty.title', locale),
+      emptyBody: monitorMessage('cov.empty.body', locale, { command: { code: MONITOR_DRIFT_COMMAND } }),
+    };
+  }
+  const { gatesUiScore, gatesUiDate } = MONITOR_GATES;
+  const limits = monitorObject(r.limits);
+  const date = gatesUiDate(monitorIsoMonday(week).toISOString().slice(0, 10), locale);
+  return {
+    empty: false,
+    week: { label: week, text: monitorLabel('cov.week', locale, { date: date ? date.text : week }), iso: date ? date.iso : null },
+    divergence: { text: monitorOrDash(gatesUiScore(r.divergence, locale)), badge: monitorStateBadge(MONITOR_DRIFT_STATES, r.state, locale) },
+    limits: monitorMessage('cov.divergence.help', locale, {
+      warn: monitorFinite(limits.warn) ? gatesUiScore(limits.warn, locale) : MONITOR_DASH,
+      alert: monitorFinite(limits.alert) ? gatesUiScore(limits.alert, locale) : MONITOR_DASH,
+    }),
+    trend: monitorCoverageTrend(r, week, locale),
+    groups: monitorCoverageGroups(r, locale),
+    scores: monitorCoverageScores(r, locale),
+    gaps: monitorCoverageGaps(r, limits, locale),
+    rates: monitorCoverageRates(r, locale),
+  };
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // Panel
 
@@ -874,6 +1220,7 @@ class MonitorPanel {
     this.tenant = '';
     this.tenants = [];
     this.entrySeq = 0;
+    this.coverage = { data: null, loading: false, seq: 0, built: false };
     this.hosts = {
       title: root.querySelector('[data-monitor-title]'),
       description: root.querySelector('[data-monitor-description]'),
@@ -954,6 +1301,7 @@ class MonitorPanel {
       if (this.hosts.status) this.hosts.status.setAttribute('tabindex', '-1');
       this.buildChrome();
       this.mountSettings();
+      this.bindCoverageWorkspace();
     }
     return this.refresh();
   }
@@ -998,12 +1346,296 @@ class MonitorPanel {
   async refresh() {
     this.renderSummary();
     if (this.current === 'alerts') return this.loadAlerts(false);
-    if (this.current === 'coverage') {
-      if (typeof window !== 'undefined' && typeof window.initMonitorCoverage === 'function') window.initMonitorCoverage(this);
-      return;
-    }
+    if (this.current === 'coverage') return this.loadCoverage();
     this.renderWebhookState();
     this.renderSettingsWarnings();
+  }
+
+  // -------------------------------------------------------------------------------------------------------------------------------------
+  // Test set coverage (UI-SPEC 6.8): one GET per load; the only action is Refresh coverage.
+
+  /** The saved Weekly sampling switch: the drift route answers 404 while it is off, so nothing is requested then. */
+  sampleEnabled() {
+    const c = this.config();
+    if (monitorHas(c, 'RAG_REPRESENTATIVE_SAMPLE')) return monitorTrue(c.RAG_REPRESENTATIVE_SAMPLE);
+    const input = document.getElementById('RAG_REPRESENTATIVE_SAMPLE');
+    return input ? monitorTrue(input.value) : false;
+  }
+
+  coverageOrganization() {
+    const selector = document.getElementById('workspace-selector');
+    return selector && selector.value ? String(selector.value) : null;
+  }
+
+  coverageWorkspaceName() {
+    const id = this.coverageOrganization();
+    const selector = document.getElementById('workspace-selector');
+    if (!id || !selector) return null;
+    const option = Array.from(selector.querySelectorAll('option')).find((o) => o.getAttribute('value') === id);
+    const name = option ? String(option.textContent || '').replace(/^[^\p{L}\p{N}]+/u, '').trim() : '';
+    return name || null;
+  }
+
+  bindCoverageWorkspace() {
+    const selector = document.getElementById('workspace-selector');
+    if (!selector || selector.getAttribute('data-monitor-coverage-bound')) return;
+    selector.setAttribute('data-monitor-coverage-bound', '1');
+    selector.addEventListener('change', () => {
+      this.coverage.data = null;
+      this.coverage.seq += 1;
+      this.coverage.loading = false;
+      if (this.current === 'coverage') this.loadCoverage();
+    });
+  }
+
+  buildCoverageView() {
+    const host = this.views.coverage && this.views.coverage.querySelector('[data-monitor-coverage-host]');
+    if (!host || this.coverage.built) return host;
+    const { gatesUiIcon } = MONITOR_GATES;
+    this.coverage.built = true;
+    this.coverageWorkspace = this.el('p', { className: 'text-sm break-words min-w-0' });
+    this.coverageWeek = this.el('p', { className: 'text-sm tabular-nums' });
+    this.coverageRefresh = this.el('button', { className: 'btn btn-outline btn-sm', attrs: { type: 'button' }, on: { click: () => this.loadCoverage() } }, [
+      gatesUiIcon('bi-arrow-clockwise'),
+      this.t('action.refreshCoverage'),
+    ]);
+    this.coverageHeader = this.el('div', { className: 'flex flex-wrap items-center gap-x-4 gap-y-2 mb-4' }, [
+      this.coverageWorkspace,
+      this.el('div', { className: 'flex flex-wrap items-center gap-2 md:ml-auto' }, [this.coverageWeek, this.coverageRefresh]),
+    ]);
+    this.coverageAlert = this.el('div', { className: 'mb-4 empty:mb-0' });
+    this.coverageBody = this.el('div', { className: 'min-w-0', attrs: { 'data-monitor-coverage-body': '' } });
+    host.replaceChildren(this.coverageHeader, this.coverageAlert, this.coverageBody);
+    return host;
+  }
+
+  renderCoverageHeader(view, showRefresh) {
+    const name = this.coverageWorkspaceName();
+    this.coverageWorkspace.textContent = name ? this.t('workspace.line', { name }) : '';
+    this.coverageWorkspace.classList.toggle('hidden', !name);
+    this.coverageWeek.replaceChildren();
+    if (view && !view.empty && view.week) {
+      if (view.week.iso) this.coverageWeek.appendChild(this.el('time', { text: view.week.text, attrs: { datetime: view.week.iso } }));
+      else this.coverageWeek.textContent = view.week.text;
+    }
+    this.coverageRefresh.classList.toggle('hidden', !showRefresh);
+  }
+
+  setCoverageBusy(busy) {
+    const { gatesUiSetBusy, gatesUiSpinner, gatesUiIcon, gatesUiLoadingBlock } = MONITOR_GATES;
+    this.coverage.loading = busy;
+    gatesUiSetBusy(this.coverageBody, busy && Boolean(this.coverage.data));
+    this.coverageRefresh.disabled = busy;
+    this.coverageRefresh.replaceChildren(busy ? gatesUiSpinner() : gatesUiIcon('bi-arrow-clockwise'), this.t('action.refreshCoverage'));
+    if (busy && !this.coverage.data) {
+      this.coverageBody.replaceChildren(gatesUiLoadingBlock(this.t('cov.loading')));
+      this.setStatus(this.t('cov.loading'));
+    }
+  }
+
+  /** Loads the coverage of the workspace in #workspace-selector; content already shown stays dimmed while it loads. */
+  async loadCoverage() {
+    if (!this.buildCoverageView()) return;
+    const { gatesUiEmptyBlock, gatesUiErrorAlert, gatesUiSetBusy } = MONITOR_GATES;
+    if (!this.sampleEnabled()) {
+      this.coverage.data = null;
+      this.coverageAlert.replaceChildren();
+      this.renderCoverageHeader(null, false);
+      this.coverageBody.replaceChildren(gatesUiEmptyBlock(this.t('cov.off.title'), this.t('cov.off.body')));
+      return;
+    }
+    if (this.coverage.loading) return;
+    const seq = (this.coverage.seq += 1);
+    this.renderCoverageHeader(this.coverage.data, true);
+    this.setCoverageBusy(true);
+    const organizationId = this.coverageOrganization();
+    const query = organizationId ? '?organizationId=' + encodeURIComponent(organizationId) : '';
+    const result = await this.request(MONITOR_DRIFT_API + query, { method: 'GET' });
+    if (seq !== this.coverage.seq) return;
+    this.setCoverageBusy(false);
+    if (!result.ok) {
+      const mapped = MONITOR_GATES.gatesUiMapError(result, this.locale, { view: this.t('tab.coverage'), switchedOn: true, appUrl: this.appUrl });
+      this.coverageAlert.replaceChildren(gatesUiErrorAlert(mapped, this.locale, () => this.loadCoverage()));
+      if (this.coverage.data && mapped.kind !== 'signIn' && mapped.kind !== 'switchedOff') gatesUiSetBusy(this.coverageBody, true);
+      else {
+        this.coverage.data = null;
+        this.coverageBody.replaceChildren();
+      }
+      this.setStatus(mapped, true);
+      return;
+    }
+    const view = monitorCoverageView(result.body, this.locale);
+    this.coverage.data = view;
+    this.coverageAlert.replaceChildren();
+    this.renderCoverageHeader(view, true);
+    this.coverageBody.replaceChildren(...this.coverageEls(view));
+    this.setStatus(view.empty ? view.emptyTitle : this.t('cov.loaded', { week: view.week.text }));
+  }
+
+  coverageBadge(badge) {
+    if (!badge) return null;
+    return this.el('span', { className: 'badge badge-sm gap-1 h-auto shrink-0 whitespace-nowrap ' + badge.tone }, [MONITOR_GATES.gatesUiIcon(badge.icon), badge.label]);
+  }
+
+  coverageSection(key, children) {
+    this.entrySeq += 1;
+    const id = 'rag-monitor-cov-' + this.entrySeq;
+    return this.el('section', { className: 'flex flex-col gap-2 min-w-0', attrs: { 'aria-labelledby': id, 'data-monitor-coverage-section': key } }, [
+      this.el('h4', { className: 'text-base font-semibold text-balance', text: this.t(key), attrs: { id } }),
+      ...children,
+    ]);
+  }
+
+  /** A table inside a focusable scroll region (UI-SPEC 9 item 12, 10): columns [{ label, numeric }], rows of cells (first is the row head). */
+  coverageTable(caption, columns, rows, attr) {
+    const head = this.el('tr', null, columns.map((c) => this.el('th', { className: 'text-xs font-semibold' + (c.numeric ? ' text-right' : ''), text: c.label, attrs: { scope: 'col' } })));
+    const table = this.el('table', { className: 'table table-sm' }, [
+      this.el('caption', { className: 'sr-only', text: caption }),
+      this.el('thead', null, [head]),
+      this.el('tbody', null, rows),
+    ]);
+    const attrs = { tabindex: '0', role: 'region', 'aria-label': caption };
+    if (attr) attrs[attr] = '';
+    return this.el('div', { className: 'overflow-x-auto max-w-full rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', attrs }, [table]);
+  }
+
+  coverageCell(textValue, numeric) {
+    return this.el('td', { className: 'text-sm align-top' + (numeric ? ' text-right tabular-nums whitespace-nowrap' : ' break-words'), text: textValue });
+  }
+
+  coverageRowHead(textValue, code) {
+    const th = this.el('th', { className: 'font-normal text-sm align-top break-words', attrs: { scope: 'row' } });
+    if (code) th.appendChild(this.el('code', { className: 'font-mono text-xs break-all', text: textValue, attrs: { translate: 'no' } }));
+    else th.textContent = textValue;
+    return th;
+  }
+
+  coverageResultCell(badge) {
+    const b = this.coverageBadge(badge);
+    return this.el('td', { className: 'align-top' }, b ? [b] : []);
+  }
+
+  coverageShareCell(share) {
+    return this.el('td', { className: 'align-top' }, [
+      this.el('div', { className: 'flex items-center justify-end md:justify-start gap-2' }, [
+        this.el('span', { className: 'text-sm tabular-nums text-right md:w-14 shrink-0', text: share.text }),
+        MONITOR_GATES.gatesUiShareBar(share.bar),
+      ]),
+    ]);
+  }
+
+  coverageEls(view) {
+    const { gatesUiEmptyBlock, gatesUiMessageEl } = MONITOR_GATES;
+    if (view.empty) return [gatesUiEmptyBlock(view.emptyTitle, view.emptyBody)];
+    const sections = [];
+
+    const value = this.el('p', { className: 'flex flex-wrap items-center gap-2' }, [this.el('span', { className: 'text-sm font-semibold tabular-nums', text: view.divergence.text })]);
+    const badge = this.coverageBadge(view.divergence.badge);
+    if (badge) value.appendChild(badge);
+    const trendRows = view.trend.map((row) => {
+      const week = this.el('th', { className: 'font-normal text-sm align-top whitespace-nowrap', attrs: { scope: 'row' } }, [
+        row.iso ? this.el('time', { text: row.text, attrs: { datetime: row.iso } }) : row.text,
+      ]);
+      const difference = row.missing
+        ? this.el('td', { className: 'text-sm align-top text-right tabular-nums' }, [
+            this.el('span', { text: row.divergence, attrs: { 'aria-hidden': 'true' } }),
+            this.el('span', { className: 'sr-only', text: this.t('cov.noWeek') }),
+          ])
+        : this.coverageCell(row.divergence, true);
+      return this.el('tr', { className: row.current ? 'font-semibold' : '', attrs: { 'data-monitor-coverage-week': row.week } }, [week, difference, this.coverageResultCell(row.badge)]);
+    });
+    sections.push(
+      this.coverageSection('cov.divergence', [
+        value,
+        gatesUiMessageEl('p', 'text-sm text-base-content/70 max-w-prose tabular-nums', view.limits),
+        this.coverageTable(
+          this.t('cov.trend'),
+          [{ label: this.t('cov.col.week') }, { label: this.t('cov.col.difference'), numeric: true }, { label: MONITOR_GATES.gatesUiLabel('col.result', this.locale) }],
+          trendRows,
+          'data-monitor-coverage-trend',
+        ),
+      ]),
+    );
+
+    if (view.groups.length > 0) {
+      const rows = view.groups.map((g) =>
+        this.el('tr', { attrs: { 'data-monitor-coverage-group': g.id } }, [
+          this.coverageRowHead(g.name, !g.novel),
+          this.coverageShareCell(g.production),
+          this.coverageShareCell(g.test),
+          this.coverageCell(g.items, true),
+          this.coverageResultCell(g.badge),
+        ]),
+      );
+      sections.push(
+        this.coverageSection('cov.groups', [
+          this.el('p', { className: 'text-sm text-base-content/70 max-w-prose', text: this.t('cov.groups.help') }),
+          this.coverageTable(
+            this.t('cov.groups'),
+            [
+              { label: this.t('cov.col.group') },
+              { label: this.t('cov.col.production') },
+              { label: this.t('cov.col.test') },
+              { label: this.t('cov.col.items'), numeric: true },
+              { label: MONITOR_GATES.gatesUiLabel('col.result', this.locale) },
+            ],
+            rows,
+            'data-monitor-coverage-groups',
+          ),
+          this.el('p', { className: 'text-sm text-base-content/70 max-w-prose', text: this.t('cov.nextSample') }),
+        ]),
+      );
+    }
+
+    if (view.scores) {
+      const dl = this.el(
+        'dl',
+        { className: 'grid grid-cols-1 md:grid-cols-[auto_auto] md:justify-start gap-x-6 gap-y-1 max-w-3xl' },
+        view.scores.flatMap((row) => [
+          this.el('dt', { className: 'text-sm text-base-content/70', text: row.label }),
+          this.el('dd', { className: 'text-sm tabular-nums mb-1 md:mb-0', text: row.text }),
+        ]),
+      );
+      sections.push(this.coverageSection('cov.scores', [dl]));
+    }
+
+    if (view.gaps) {
+      const rows = view.gaps.rows.map((g) =>
+        this.el('tr', null, [this.coverageRowHead(g.slice, false), this.coverageCell(g.offline, true), this.coverageCell(g.online, true), this.coverageCell(g.gap, true), this.coverageResultCell(g.badge)]),
+      );
+      sections.push(
+        this.coverageSection('cov.gaps', [
+          this.coverageTable(
+            this.t('cov.gaps'),
+            [
+              { label: MONITOR_GATES.gatesUiLabel('col.questions', this.locale) },
+              { label: this.t('cov.col.offline'), numeric: true },
+              { label: this.t('cov.col.online'), numeric: true },
+              { label: this.t('cov.col.gap'), numeric: true },
+              { label: MONITOR_GATES.gatesUiLabel('col.result', this.locale) },
+            ],
+            rows,
+            'data-monitor-coverage-gaps',
+          ),
+          gatesUiMessageEl('p', 'text-sm text-base-content/70 max-w-prose tabular-nums', view.gaps.help),
+        ]),
+      );
+    }
+
+    if (view.rates) {
+      const rows = view.rates.rows.map((r) => this.el('tr', null, [this.coverageRowHead(r.slice, false), ...r.cells.map((c) => this.coverageCell(c, true))]));
+      sections.push(
+        this.coverageSection('cov.rates', [
+          this.coverageTable(
+            this.t('cov.rates'),
+            view.rates.columns.map((c, i) => ({ label: c.label, numeric: i > 0 })),
+            rows,
+            'data-monitor-coverage-rates',
+          ),
+        ]),
+      );
+    }
+    return [this.el('div', { className: 'flex flex-col gap-6 min-w-0' }, sections)];
   }
 
   // -------------------------------------------------------------------------------------------------------------------------------------
@@ -1725,6 +2357,7 @@ if (typeof module !== 'undefined' && module.exports) {
     monitorSettingsWarnings,
     monitorAlertView,
     monitorEvidenceView,
+    monitorCoverageView,
     MonitorPanel,
     initMonitorPanel,
   };
