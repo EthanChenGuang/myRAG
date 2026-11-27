@@ -10,15 +10,21 @@ import {
 
 export const runtime = 'nodejs'; // Force Node.js runtime
 
-// Add debugging to help identify environment variable issues
-if (!process.env.OPENAI_API_KEY && env.NEXT_PUBLIC_VOICE_PROVIDER === 'openai') {
-  console.error('OpenAI API key is not configured in environment variables');
+const VOICE_UNAVAILABLE_MESSAGE = 'Voice is temporarily unavailable.';
+
+let openaiClient: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  openaiClient ??= new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return openaiClient;
 }
 
-// Initialize OpenAI with API key from environment variable
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function voiceUnavailable(reason: string) {
+  console.warn('[Audio API] Voice unavailable:', reason);
+  return NextResponse.json(
+    { success: false, error: 'voice_unavailable', message: VOICE_UNAVAILABLE_MESSAGE },
+    { status: 503 },
+  );
+}
 
 // Shared function to handle audio generation
 async function handleAudioRequest(
@@ -35,10 +41,7 @@ async function handleAudioRequest(
 
   // Validate provider availability
   if (provider === 'openai' && !process.env.OPENAI_API_KEY) {
-    return new NextResponse(
-      'OpenAI API key is not configured. Please add OPENAI_API_KEY to your .env.local file.',
-      { status: 500 }
-    );
+    return voiceUnavailable('OPENAI_API_KEY is not configured');
   }
 
   if (provider === 'elevenlabs' && !isElevenLabsConfigured()) {
@@ -46,10 +49,7 @@ async function handleAudioRequest(
     if (process.env.OPENAI_API_KEY) {
       console.warn('ElevenLabs not configured, falling back to OpenAI');
     } else {
-      return new NextResponse(
-        'Neither ElevenLabs nor OpenAI API keys are configured.',
-        { status: 500 }
-      );
+      return voiceUnavailable('no voice provider is configured');
     }
   }
 
@@ -85,10 +85,10 @@ async function handleAudioRequest(
 
     // Use OpenAI (default or fallback)
     if (!process.env.OPENAI_API_KEY) {
-      return new NextResponse('No TTS provider available', { status: 500 });
+      return voiceUnavailable('no TTS provider available');
     }
 
-    const response = await openai.audio.speech.create({
+    const response = await getOpenAI().audio.speech.create({
       model: "tts-1",
       voice: "onyx",
       input: text,
@@ -123,10 +123,10 @@ async function handleAudioRequest(
 
     // Use OpenAI (default or fallback)
     if (!process.env.OPENAI_API_KEY) {
-      return new NextResponse('No STT provider available', { status: 500 });
+      return voiceUnavailable('no STT provider available');
     }
 
-    const transcription = await openai.audio.transcriptions.create({
+    const transcription = await getOpenAI().audio.transcriptions.create({
       file: audioFile,
       model: "whisper-1",
     });

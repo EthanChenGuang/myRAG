@@ -397,6 +397,7 @@ export const lt = {
   waitingForApproval: "Laukiama jūsų patvirtinimo...",
   executingTool: "Vykdomas įrankis, palaukite...",
   toolError: "Įvyko klaida vykdant įrankį.",
+  voiceUnavailable: "Balsas laikinai nepasiekiamas. Bandykite vėliau.",
   
   // Chat message action tooltips
   copyTooltip: "Kopijuoti",
