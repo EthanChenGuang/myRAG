@@ -12,11 +12,24 @@ import re
 from pathlib import Path
 
 import pytest
-from rag_eval.paths import REPO_ROOT
 from rag_sidecar.contracts import ParseResult
-from rag_sidecar.contracts.templated import AttributeHeaderTemplate, AttributeImportRow, AttributeSchema, TenantRulesFile
+from rag_sidecar.contracts.templated import (
+    AttributeHeaderTemplate,
+    AttributeImportRow,
+    AttributeSchema,
+    TenantRulesFile,
+)
 from test_fixture_pii import phone_violations
-from test_ingest_fixtures import OFF_SUBJECT_WORDS, _read, _sha256, generate, requires_reportlab, specs
+from test_ingest_fixtures import (
+    OFF_SUBJECT_WORDS,
+    _read,
+    _sha256,
+    generate,
+    requires_reportlab,
+    specs,
+)
+
+from rag_eval.paths import REPO_ROOT
 
 INGEST = REPO_ROOT / "eval/fixtures/ingest"
 TEMPLATED_DIR = INGEST / "templated"
@@ -415,4 +428,4 @@ def test_the_python_loader_returns_every_fixture_and_the_five_data_files():
 def test_the_loader_has_no_regular_expression_on_fixture_patterns():
     source = Path(REPO_ROOT / "eval/src/rag_eval/templated_fixtures.py")
     assert source.is_file(), "rag_eval.templated_fixtures is missing"
-    assert not re.search(r"\bre\.(compile|match|search|fullmatch|findall|finditer|sub|split)\b|^import re$", source.read_text(encoding="utf-8"), re.M)
+    assert not re.search(r"\bre\.(compile|match|search|fullmatch|findall|finditer|sub|split)\b|^import re$", source.read_text(encoding="utf-8"), re.MULTILINE)

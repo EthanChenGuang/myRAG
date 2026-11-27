@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "section_rule_sets": [
+    {
+      "name": "templated fixture sections",
+      "doc_type": "product_technical",
+      "enabled": true,
+      "headings": [
+        {
+          "pattern": "^1\\.\\s*镉憬",
+          "flags": "u",
+          "name": "section_1",
+          "level": 2,
+          "required": false,
+          "restart": true
+        },
+        {
+          "pattern": "^2\\.\\s*畛隗",
+          "flags": "u",
+          "name": "section_2",
+          "level": 2,
+          "required": false,
+          "restart": false
+        },
+        {
+          "pattern": "^3\\.\\s*鲻荠",
+          "flags": "u",
+          "name": "section_3",
+          "level": 2,
+          "required": false,
+          "restart": false
+        },
+        {
+          "pattern": "^4\\.\\s*鲒舾",
+          "flags": "u",
+          "name": "section_4",
+          "level": 2,
+          "required": false,
+          "restart": false
+        },
+        {
+          "pattern": "^5\\.\\s*蠃虬",
+          "flags": "u",
+          "name": "section_5",
+          "level": 2,
+          "required": false,
+          "restart": false
+        },
+        {
+          "pattern": "^1\\.\\s*Gryrkzluk",
+          "flags": "u",
+          "name": "section_1",
+          "level": 2,
+          "required": false,
+          "restart": true
+        },
+        {
+          "pattern": "^2\\.\\s*Brokbyx",
+          "flags": "u",
+          "name": "section_2",
+          "level": 2,
+          "required": false,
+          "restart": false
+        },
+        {
+          "pattern": "^3\\.\\s*Zaskvrynd",
+          "flags": "u",
+          "name": "section_3",
+          "level": 2,
+          "required": false,
+          "restart": false
+        },
+        {
+          "pattern": "^4\\.\\s*Zendtrax",
+          "flags": "u",
+          "name": "section_4",
+          "level": 2,
+          "required": false,
+          "restart": false
+        },
+        {
+          "pattern": "^5\\.\\s*Zorkbult",
+          "flags": "u",
+          "name": "section_5",
+          "level": 2,
+          "required": false,
+          "restart": false
+        },
+        {
+          "pattern": "^1\\.\\s*Drarlandu",
+          "flags": "u",
+          "name": "section_1",
+          "level": 2,
+          "required": false,
+          "restart": true
+        },
+        {
+          "pattern": "^2\\.\\s*Fidronda",
+          "flags": "u",
+          "name": "section_2",
+          "level": 2,
+          "required": false,
+          "restart": false
+        },
+        {
+          "pattern": "^3\\.\\s*Tustletu",
+          "flags": "u",
+          "name": "section_3",
+          "level": 2,
+          "required": false,
+          "restart": false
+        },
+        {
+          "pattern": "^4\\.\\s*Lunttrito",
+          "flags": "u",
+          "name": "section_4",
+          "level": 2,
+          "required": false,
+          "restart": false
+        },
+        {
+          "pattern": "^5\\.\\s*Fescotru",
+          "flags": "u",
+          "name": "section_5",
+          "level": 2,
+          "required": false,
+          "restart": false
+        }
+      ],
+      "require_increasing_numbers": true,
+      "skip_toc": true,
+      "toc_min_run": 3
+    }
+  ],
+  "boilerplate_rules": []
+}
