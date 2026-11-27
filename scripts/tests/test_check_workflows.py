@@ -832,6 +832,125 @@ class OnlineJudgeMirrorTest(unittest.TestCase):
         self.assertTrue(any("--base-url" in e for e in self.errors_for(data)))
 
 
+JUDGE_GATE = "env.HAS_JUDGE_KEYS == 'true'"
+
+
+def judge_calibration_fixture() -> dict:
+    return {
+        "on": {"schedule": [{"cron": "41 5 1 * *"}], "workflow_dispatch": None},
+        "permissions": {"contents": "read"},
+        "env": dict(check_workflows.TELEMETRY),
+        "jobs": {
+            "calibrate": {
+                "runs-on": "ubuntu-latest",
+                "env": {
+                    "HAS_JUDGE_KEYS": (
+                        "${{ secrets.OPENROUTER_API_KEY != '' && secrets.OPENAI_API_KEY != '' && vars.RAG_JUDGE_GENERATOR_MODEL != '' }}"
+                    )
+                },
+                "steps": [
+                    {"name": "Skip notice", "if": "env.HAS_JUDGE_KEYS != 'true'", "run": f'echo "{check_workflows.JUDGE_CALIBRATION_SKIP_NOTICE}"'},
+                    {"uses": "actions/checkout@" + "a" * 40, "if": JUDGE_GATE},
+                    {"name": "Sync eval project", "if": JUDGE_GATE, "run": "uv sync --directory eval --locked --all-extras"},
+                    {
+                        "name": "Seed calibration",
+                        "if": JUDGE_GATE,
+                        "env": {"OPENROUTER_API_KEY": "${{ secrets.OPENROUTER_API_KEY }}", "OPENAI_API_KEY": "${{ secrets.OPENAI_API_KEY }}"},
+                        "run": (
+                            'uv run --directory eval python -m rag_eval.judge_calibration run --seed-only --generator-model "$M" '
+                            "--write --out eval/out/judge-calibration"
+                        ),
+                    },
+                    {
+                        "uses": "actions/upload-artifact@" + "b" * 40,
+                        "if": f"always() && {JUDGE_GATE}",
+                        "with": {"name": "judge-calibration", "path": "eval/config/judge-calibration.json\neval/out/judge-calibration\n"},
+                    },
+                ],
+            }
+        },
+    }
+
+
+class JudgeCalibrationWorkflowTest(unittest.TestCase):
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_judge_calibration(data, errors)
+        return errors
+
+    def steps(self, data: dict) -> list[dict]:
+        return data["jobs"]["calibrate"]["steps"]
+
+    def test_the_fixture_is_valid(self):
+        self.assertEqual(self.errors_for(judge_calibration_fixture()), [])
+
+    def test_the_repository_workflow_exists_and_is_valid(self):
+        self.assertTrue(check_workflows.JUDGE_CALIBRATION_WORKFLOW.exists())
+        self.assertEqual(self.errors_for(check_workflows.load(check_workflows.JUDGE_CALIBRATION_WORKFLOW)[0]), [])
+
+    def test_a_missing_schedule_is_reported(self):
+        data = judge_calibration_fixture()
+        del data["on"]["schedule"]
+        self.assertTrue(any("schedule" in e for e in self.errors_for(data)))
+
+    def test_a_missing_dispatch_is_reported(self):
+        data = judge_calibration_fixture()
+        del data["on"]["workflow_dispatch"]
+        self.assertTrue(any("workflow_dispatch" in e for e in self.errors_for(data)))
+
+    def test_write_permissions_are_reported(self):
+        for scope in ("contents", "pull-requests"):
+            data = judge_calibration_fixture()
+            data["permissions"] = {"contents": "read", scope: "write"}
+            self.assertTrue(any("write" in e for e in self.errors_for(data)), scope)
+            data = judge_calibration_fixture()
+            data["jobs"]["calibrate"]["permissions"] = {scope: "write"}
+            self.assertTrue(any("write" in e for e in self.errors_for(data)), scope)
+
+    def test_an_ungated_step_is_reported(self):
+        data = judge_calibration_fixture()
+        del self.steps(data)[3]["if"]
+        self.assertTrue(any("HAS_JUDGE_KEYS == 'true'" in e for e in self.errors_for(data)))
+
+    def test_a_missing_skip_notice_is_reported(self):
+        data = judge_calibration_fixture()
+        del self.steps(data)[0]
+        self.assertTrue(any("skip-notice" in e for e in self.errors_for(data)))
+
+    def test_the_guard_needs_the_judge_keys(self):
+        for secret in ("OPENROUTER_API_KEY", "OPENAI_API_KEY"):
+            data = judge_calibration_fixture()
+            job = data["jobs"]["calibrate"]
+            job["env"]["HAS_JUDGE_KEYS"] = job["env"]["HAS_JUDGE_KEYS"].replace(f"secrets.{secret} != ''", "true")
+            self.assertTrue(any(f"secrets.{secret}" in e for e in self.errors_for(data)), secret)
+
+    def test_a_secret_interpolated_in_a_run_script_is_reported(self):
+        data = judge_calibration_fixture()
+        self.steps(data)[3]["run"] += ' --key "${{ secrets.OPENAI_API_KEY }}"'
+        self.assertTrue(any("not interpolated into run" in e for e in self.errors_for(data)))
+
+    def test_the_seed_calibration_must_run(self):
+        data = judge_calibration_fixture()
+        self.steps(data)[3]["run"] = "uv run --directory eval python -m rag_eval.judge_calibration run --generator-model x"
+        self.assertTrue(any("--seed-only" in e for e in self.errors_for(data)))
+
+    def test_the_result_must_be_uploaded(self):
+        data = judge_calibration_fixture()
+        del self.steps(data)[4]
+        self.assertTrue(any("artifact" in e for e in self.errors_for(data)))
+
+    def test_private_files_must_not_be_uploaded(self):
+        data = judge_calibration_fixture()
+        self.steps(data)[4]["with"]["path"] += "eval/golden/private/judge-calibration\n"
+        self.assertTrue(any("eval/golden/private" in e for e in self.errors_for(data)))
+
+    def test_pushing_or_opening_a_pull_request_is_reported(self):
+        for command in ("git push origin HEAD", "gh pr create --fill"):
+            data = judge_calibration_fixture()
+            self.steps(data)[3]["run"] += f" && {command}"
+            self.assertTrue(any("pull request" in e for e in self.errors_for(data)), command)
+
+
 class SidecarPythonJobTest(unittest.TestCase):
     """The sidecar tests need chunking, preflight and hidden-text together; a sync or run that names fewer removes the others."""
 

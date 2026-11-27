@@ -19,6 +19,7 @@ NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
 RAY_OPTIONAL = ROOT / ".github" / "workflows" / "ray-optional.yml"
 RELEASE_GATE = ROOT / ".github" / "workflows" / "rag-release-gate.yml"
 PROMOTE = ROOT / ".github" / "workflows" / "promote-production.yml"
+JUDGE_CALIBRATION_WORKFLOW = ROOT / ".github" / "workflows" / "judge-calibration.yml"
 MEASUREMENT = ROOT / "eval" / "reports" / "phase-05.3" / "absolute-gate-measurement.json"
 DOCKERFILE = ROOT / "rag-sidecar" / "Dockerfile"
 SIDECAR_CONFIG_DIR = ROOT / "rag-sidecar" / "config" / "rag"
@@ -71,6 +72,7 @@ WEEKLY_SKIP_NOTICE = "::notice::no private eval data on this runner, skipping we
 TENANT_NIGHTLY_JOB = "tenant-nightly"
 TENANT_NIGHTLY_SKIP_NOTICE = "::notice::no private eval data or admin token on this runner, skipping tenant nightly"
 MONITOR_JOB = "monitor"
+JUDGE_CALIBRATION_SKIP_NOTICE = "::notice::judge keys or generator model not configured, skipping judge calibration"
 WEEKLY_LIFECYCLE = ("rag_eval.drift", "rag_eval.golden_set stale-scan", "rag_eval.golden_set re-review")
 MONITOR_SKIP_NOTICE = "::notice::supabase service-role secrets not configured, skipping monitor"
 SEC_SMOKE_STEP = "npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec"
@@ -824,6 +826,10 @@ def check_monitor_job(data: dict, errors: list[str]) -> None:
         if str(step.get("uses", "")).startswith("actions/upload-artifact@"):
             errors.append(f"{name} must not upload an artifact")
     _check_no_leaks(name, steps, errors, private=False)
+
+
+def check_judge_calibration(data: dict, errors: list[str]) -> None:
+    pass
 
 
 def check_nightly_triggers(data: dict, errors: list[str]) -> None:
