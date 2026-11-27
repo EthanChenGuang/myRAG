@@ -27,7 +27,7 @@ const MIGRATION = 'supabase/migrations/0984_review_items_access_sets.sql';
 const GRANTS_MIGRATION = 'supabase/migrations/0410_security_definer_rpc_grants.sql';
 const ENQUEUE = 'rag_enqueue_review_item(text, text, jsonb, jsonb, jsonb)';
 const OLD_ENQUEUE = 'rag_enqueue_review_item(text, text, jsonb, jsonb)';
-const HELPER = 'rag_review_access_sets(text, jsonb, uuid[])';
+const HELPER = 'rag_review_access_sets(text, jsonb, uuid[], boolean)';
 const CONFIG = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'config/rag/feedback-mining.json'), 'utf8')) as Row;
 const SINCE = '2026-11-16T00:00:00Z';
 const UNTIL = '2026-11-23T00:00:00Z';
@@ -174,7 +174,7 @@ for (const mode of MODES) {
         groupA = (await rows<{ id: string }>(db, "INSERT INTO rag_access_groups (key, name) VALUES ('group-a', 'Group') RETURNING id"))[0]!.id;
       }
       await db.query('INSERT INTO rag_access_group_members (group_id, user_id) VALUES ($1, $2)', [groupA, MEMBER]);
-      await db.query('INSERT INTO rag_domain_experts (tenant_key, user_id) VALUES ($1, $2), ($1, $3) ON CONFLICT DO NOTHING', [tenantKey, MEMBER, OUTSIDER]);
+      await db.query('INSERT INTO rag_domain_experts (tenant_key, user_id) VALUES ($1, $2), ($1, $3), ($1, $4) ON CONFLICT DO NOTHING', [tenantKey, MEMBER, OUTSIDER, OWNER]);
       ({ documentId: restrictedDoc, chunkId: restrictedChunk } = await createDocument([`g:${groupA}`]));
       ({ documentId: openDoc, chunkId: openChunk } = await createDocument(['all']));
     });
@@ -328,7 +328,7 @@ for (const mode of MODES) {
         await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0950_calc_review_reasons.sql'), 'utf8'));
         await db.exec(sql);
         const signatures = await rows<{ sig: string }>(db, "SELECT p.oid::regprocedure::text AS sig FROM pg_proc p WHERE p.proname = 'rag_enqueue_review_item'");
-        assert.deepEqual(signatures.map((s) => s.sig), [`${ENQUEUE}`]);
+        assert.deepEqual(signatures.map((s) => s.sig.replace(/,(?! )/g, ', ')), [ENQUEUE]);
         const id = await enqueue('output_guard', { chunk_ids: [restrictedChunk] });
         assert.deepEqual(await setsOf(id), [[`g:${groupA}`]]);
       });
