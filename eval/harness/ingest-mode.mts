@@ -16,6 +16,7 @@ import { applyFixtureProcessEnv } from './process-env.mts';
 import { RunConfigError } from './run-config.mts';
 import { isTableSplitItem, loadTableSplitTenants, tableSplitCorpusParts, type TableSplitTenant } from './table-split.mts';
 import { isTemplatedItem, loadTemplatedFixtures, type TemplatedFixture } from './templated-fixtures.mts';
+import { phase33ProcessEnv, phase33SeedParts, seedTemplatedTenant } from './templated-seed.mts';
 import type { ChunkingProfile } from '../../src/lib/rag-eval/contracts.generated.ts';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { IngestInput } from '@/lib/rag/ingest/types';
@@ -184,6 +185,7 @@ function ingestCorpusSha256(
   tableSplitDocType?: string,
   ingestEnv?: Record<string, string>,
   templated: TemplatedFixture[] = [],
+  seedParts: readonly string[] = [],
 ): string {
   const hash = crypto.createHash('sha256').update('fixture-mode:ingest').update(Buffer.from([0])).update(corpusSha256);
   for (const fixture of parseFixtures) hash.update(Buffer.from([0])).update(`parse:${fixture.filename}:${fixture.sha256}`);
@@ -192,6 +194,7 @@ function ingestCorpusSha256(
   if (tableSplit && tableSplitDocType) hash.update(Buffer.from([0])).update(`table_split_doc_type:${tableSplitDocType}`);
   for (const fixture of templated) hash.update(Buffer.from([0])).update(`templated:${fixture.file_name}:${fixture.file_sha256}`);
   for (const name of Object.keys(ingestEnv ?? {}).sort()) hash.update(Buffer.from([0])).update(`ingest_env:${name}=${ingestEnv?.[name]}`);
+  for (const part of seedParts) hash.update(Buffer.from([0])).update(part);
   return hash.digest('hex');
 }
 
@@ -473,6 +476,9 @@ export async function buildIngestFixtureDatabase(options: {
   const templatedFixtures = templated
     ? loadTemplatedFixtures().fixtures.filter((fixture) => templatedWanted === null || templatedWanted.has(fixture.id))
     : [];
+  // Plan 03.3-23: the Phase 3.3 data the layered switches need is seeded before the first document and enters the hash.
+  const seedParts = phase33SeedParts(options.ingestEnv);
+  if (seedParts.length > 0 && options.continueFrom) throw new RunConfigError('[Eval Harness] Phase 3.3 seeding runs only on a fresh build');
   const corpusSha256 = ingestCorpusSha256(
     corpus.corpusSha256,
     includeTyped ? allParseFixtures : [],
@@ -481,6 +487,7 @@ export async function buildIngestFixtureDatabase(options: {
     options.tableSplitDocType,
     options.ingestEnv,
     templatedFixtures,
+    seedParts,
   );
   const parseById = new Map(allParseFixtures.map((fixture) => [fixture.id, fixture]));
 
@@ -521,6 +528,7 @@ export async function buildIngestFixtureDatabase(options: {
           RAG_PARSE_VLM_DETECT: 'false',
         }
       : {}),
+    ...phase33ProcessEnv(options.ingestEnv),
     ...options.processEnv,
   };
   const cleanups: Array<() => Promise<void> | void> = [];
@@ -548,6 +556,9 @@ export async function buildIngestFixtureDatabase(options: {
       options.continueFrom?.scope ??
       (deploymentMode === 'multi-tenant' ? mintScope('personal', empty.fixtureUserId, null) : mintScope('single', null, null));
     const tenant = scope;
+    if (seedParts.length > 0) {
+      await seedTemplatedTenant({ db: empty.db, scope: tenant, fixtureUserId: empty.fixtureUserId, deploymentMode, buildEnv: options.ingestEnv });
+    }
 
     const corpusWork = (docs: typeof corpusSlice): IngestWork[] =>
       docs.filter((doc) => !isPrechunkedOnlyDocument(doc.relpath)).map((doc) => ({

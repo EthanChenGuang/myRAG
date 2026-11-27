@@ -424,8 +424,9 @@ export async function seedFixtureFeatures(
   const { loadRagConfig } = await import('@/lib/rag/config');
   const { getRagDeps } = await import('@/lib/rag/deps');
   const config = loadRagConfig(getRagDeps().ragEnv());
-  const { lexicalDictionary, lexicalStemIt, identifierIndex, tableLookup, dupClusters } = config.v2;
-  const lexical = lexicalDictionary || lexicalStemIt || identifierIndex;
+  const { lexicalDictionary, lexicalStemIt, identifierIndex, tableLookup, dupClusters, lexicalQuantity } = config.v2;
+  // Plan 03.3-23: RAG_LEXICAL_QUANTITY is the fourth lexical switch (lexicalOptionsOn); rag:relex moves the chunks to version 6 to 9.
+  const lexical = lexicalDictionary || lexicalStemIt || identifierIndex || lexicalQuantity;
   const report: FixtureFeatureReport = {
     switches: [],
     relexed: null,
@@ -439,6 +440,7 @@ export async function seedFixtureFeatures(
     ...(lexicalDictionary ? ['RAG_LEXICAL_DICTIONARY'] : []),
     ...(lexicalStemIt ? ['RAG_LEXICAL_STEM_IT'] : []),
     ...(identifierIndex ? ['RAG_IDENTIFIER_INDEX'] : []),
+    ...(lexicalQuantity ? ['RAG_LEXICAL_QUANTITY'] : []),
     ...(tableLookup ? ['RAG_TABLE_LOOKUP'] : []),
     ...(dupClusters ? ['RAG_DUP_CLUSTERS'] : []),
   ];
