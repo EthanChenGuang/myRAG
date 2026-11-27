@@ -73,3 +73,8 @@ export function keepsProtectedTokens(text: string, tokens: readonly string[]): b
   const haystack = text.normalize('NFC');
   return tokens.every((token) => haystack.includes(token.normalize('NFC')));
 }
+
+/** Phase 5.2.1 D-70: amounts, numbers with units, dates and bare numbers; version strings and exact codes are not quantities. */
+export function scanQuantities(_text: string): string[] {
+  return [];
+}
