@@ -659,7 +659,12 @@ class SecurityEventsPanel {
 
   dayText(value) {
     const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? securityEventsText(value) : date.toISOString().slice(0, 10);
+    if (Number.isNaN(date.getTime())) return securityEventsText(value);
+    try {
+      return new Intl.DateTimeFormat(this.locale, { dateStyle: 'medium' }).format(date);
+    } catch {
+      return date.toISOString().slice(0, 10);
+    }
   }
 
   /** A label whose one placeholder is an element (a time); the rest of the template stays text. */
@@ -676,7 +681,7 @@ class SecurityEventsPanel {
   }
 
   workspaceEl(row) {
-    return row.workspaceIsKey ? this.codeEl(row.workspace) : this.el('span', { className: '[overflow-wrap:anywhere]', text: row.workspace });
+    return row.workspaceIsKey ? this.codeEl(row.workspace) : this.el('span', { className: 'break-words', text: row.workspace });
   }
 
   /** The uploader cell (UI-SPEC 6.13.2): name, an e-mail line only when returned, a bare id in monospace; never a link. */
@@ -704,16 +709,18 @@ class SecurityEventsPanel {
 
   /** RAG_SECURITY_EVENTS off: the data views show events.off with a link to the setting instead of an empty table. */
   eventsOffBlock() {
-    return this.ui().ragUiAlert(this.doc, {
-      tone: 'info',
-      icon: 'info-circle',
-      body: [this.t('events.off')],
-      actions: [this.settingLink(SECURITY_EVENTS_SETTINGS.events)],
-    });
+    return securityEventsAlertText(
+      this.ui().ragUiAlert(this.doc, {
+        tone: 'info',
+        icon: 'info-circle',
+        body: [this.t('events.off')],
+        actions: [this.settingLink(SECURITY_EVENTS_SETTINGS.events)],
+      }),
+    );
   }
 
   setAlert(node) {
-    if (this.alertHost) this.alertHost.replaceChildren(...(node ? [node] : []));
+    if (this.alertHost) this.alertHost.replaceChildren(...(node ? [securityEventsAlertText(node)] : []));
   }
 
   toolbar(view, extra) {
@@ -823,9 +830,11 @@ class SecurityEventsPanel {
     if (mapped.kind === 'signIn' || mapped.kind === 'workspace') {
       this.data[view] = null;
       host.replaceChildren(
-        mapped.kind === 'signIn'
-          ? ui.ragUiSignInAlert(this.doc, this.locale, reload)
-          : ui.ragUiAlert(this.doc, { tone: 'warning', icon: 'person-lock', body: [mapped.message], actions: [ui.ragUiReloadButton(this.doc, this.locale, reload)] }),
+        securityEventsAlertText(
+          mapped.kind === 'signIn'
+            ? ui.ragUiSignInAlert(this.doc, this.locale, reload)
+            : ui.ragUiAlert(this.doc, { tone: 'warning', icon: 'person-lock', body: [mapped.message], actions: [ui.ragUiReloadButton(this.doc, this.locale, reload)] }),
+        ),
       );
       this.setAlert(null);
     } else {
@@ -895,7 +904,7 @@ class SecurityEventsPanel {
 
   holdButton(target, label) {
     const button = this.el('button', {
-      className: 'btn btn-primary md:btn-sm',
+      className: 'btn btn-primary md:btn-sm whitespace-nowrap',
       text: this.t('action.hold'),
       attrs: { type: 'button', 'aria-label': this.t('action.hold.aria', { uploader: label }), 'data-security-hold': target.uploader.id },
     });
@@ -905,7 +914,7 @@ class SecurityEventsPanel {
 
   releaseButton(target, label) {
     const button = this.el('button', {
-      className: 'btn btn-outline md:btn-sm',
+      className: 'btn btn-outline md:btn-sm whitespace-nowrap',
       text: this.t('action.release'),
       attrs: { type: 'button', 'aria-label': this.t('action.release.aria', { uploader: label }), 'data-security-release': target.uploader.id },
     });
@@ -928,7 +937,9 @@ class SecurityEventsPanel {
     if (open.length === 0) {
       if (data.alertLevel === 0) {
         nodes.push(
-          this.ui().ragUiAlert(this.doc, { tone: 'info', icon: 'info-circle', body: [this.t('alerts.levelZero')], actions: [this.settingLink(SECURITY_EVENTS_SETTINGS.level)] }),
+          securityEventsAlertText(
+            this.ui().ragUiAlert(this.doc, { tone: 'info', icon: 'info-circle', body: [this.t('alerts.levelZero')], actions: [this.settingLink(SECURITY_EVENTS_SETTINGS.level)] }),
+          ),
         );
       } else {
         nodes.push(this.emptyBlock(this.t('alerts.empty.title'), this.t('alerts.empty.body')));
@@ -1000,9 +1011,9 @@ class SecurityEventsPanel {
       this.el('thead', {}, [
         this.el('tr', {}, [
           this.th(this.t('col.uploaderName')),
-          multi ? this.th(this.t('col.workspace'), 'hidden md:table-cell') : null,
+          multi ? this.th(this.t('col.workspace'), 'max-md:hidden') : null,
           this.th(this.t('col.events'), 'text-right'),
-          this.th(this.t('col.opened'), 'hidden md:table-cell'),
+          this.th(this.t('col.opened'), 'max-md:hidden'),
           this.th(this.t('col.uploads')),
         ]),
       ]),
@@ -1012,9 +1023,9 @@ class SecurityEventsPanel {
         rows.map((row) =>
           this.el('tr', { attrs: { 'data-security-acknowledged-row': row.id } }, [
             this.el('th', { className: 'font-normal min-w-0 max-w-xs', attrs: { scope: 'row' } }, [this.uploaderEl(row.uploader)]),
-            multi ? this.el('td', { className: 'hidden md:table-cell' }, [this.workspaceEl(row)]) : null,
+            multi ? this.el('td', { className: 'max-md:hidden' }, [this.workspaceEl(row)]) : null,
             this.el('td', { className: 'text-right tabular-nums', text: this.ui().ragUiFormatNumber(row.events, this.locale) }),
-            this.el('td', { className: 'hidden md:table-cell' }, [this.timeEl(row.openedAt)]),
+            this.el('td', { className: 'max-md:hidden' }, [this.timeEl(row.openedAt)]),
             this.el('td', {}, [this.uploadsCell(row)]),
           ]),
         ),
@@ -1043,12 +1054,12 @@ class SecurityEventsPanel {
     const multi = securityEventsMultiWorkspace(data.items);
     const table = this.el('table', { className: 'table table-sm' }, [
       this.el('caption', { className: 'sr-only', text: this.t('caption.uploaders') }),
-      this.el('thead', { className: 'hidden md:table-header-group' }, [
+      this.el('thead', { className: 'max-md:hidden' }, [
         this.el('tr', {}, [
           this.th(this.t('col.uploaderName')),
           multi ? this.th(this.t('col.workspace')) : null,
           this.th(this.t('col.events'), 'text-right'),
-          this.th(this.t('col.last'), 'hidden lg:table-cell'),
+          this.th(this.t('col.last'), 'max-lg:hidden'),
           this.th(this.t('col.uploads')),
           this.th(this.t('col.actions')),
         ]),
@@ -1069,15 +1080,18 @@ class SecurityEventsPanel {
     return this.el('tr', { className: 'flex flex-col md:table-row border-t border-base-300 md:border-t-0', attrs: { 'data-security-uploader-row': row.uploader.id, 'data-security-row-key': row.key } }, [
       this.el('th', { className: cell + ' font-normal min-w-0 md:max-w-xs', attrs: { scope: 'row' } }, [this.uploaderEl(row.uploader)]),
       multi ? this.el('td', { className: cell }, [this.workspaceEl(row)]) : null,
-      this.el('td', { className: cell + ' md:text-right tabular-nums', text: this.ui().ragUiFormatNumber(row.events, this.locale) }),
-      this.el('td', { className: 'hidden lg:table-cell align-top' }, [this.timeEl(row.lastEventAt)]),
+      this.el('td', { className: cell + ' md:text-right tabular-nums' }, [
+        this.el('span', { className: 'md:hidden text-xs text-base-content/70', text: this.t('col.events') + (this.locale === 'zh' ? '：' : ': ') }),
+        this.el('span', { text: this.ui().ragUiFormatNumber(row.events, this.locale) }),
+      ]),
+      this.el('td', { className: 'max-lg:hidden align-top' }, [this.timeEl(row.lastEventAt)]),
       this.el('td', { className: cell }, [this.uploadsCell(row)]),
       this.el('td', { className: cell + ' pt-0 md:pt-2' }, action ? [action] : []),
     ]);
   }
 
   filterSelect(id, labelKey, options, value, onChange) {
-    const select = this.el('select', { className: 'select select-bordered select-sm w-full', id });
+    const select = this.el('select', { className: 'select select-bordered select-sm w-full', id, attrs: { name: id } });
     for (const option of options) {
       const el = this.el('option', { text: option.label, attrs: { value: option.value } });
       if (option.value === value) el.setAttribute('selected', '');
@@ -1123,7 +1137,7 @@ class SecurityEventsPanel {
   sourceBadge(row) {
     const ui = this.ui();
     if (!row.sourceKnown) return ui.ragUiCodeSentence(this.doc, this.locale, row.source, this.t('code.unknown'));
-    return this.el('span', { className: 'badge badge-outline badge-sm gap-1 h-auto text-left' }, [
+    return this.el('span', { className: 'badge badge-outline badge-sm gap-1 h-auto text-left md:whitespace-nowrap' }, [
       ui.ragUiIcon(this.doc, SECURITY_EVENTS_SOURCE_ICONS[row.source]),
       this.el('span', { text: this.t('source.' + row.source) }),
     ]);
@@ -1161,12 +1175,12 @@ class SecurityEventsPanel {
       this.el('thead', {}, [
         this.el('tr', {}, [
           this.th(this.t('col.time')),
-          multi ? this.th(this.t('col.workspace'), 'hidden md:table-cell') : null,
+          multi ? this.th(this.t('col.workspace'), 'max-md:hidden') : null,
           this.th(this.t('col.check')),
           this.th(this.t('col.result')),
-          this.th(this.t('col.document'), 'hidden md:table-cell'),
-          this.th(this.t('col.uploader'), 'hidden md:table-cell'),
-          this.th(this.t('col.rules'), 'hidden lg:table-cell'),
+          this.th(this.t('col.document'), 'max-md:hidden'),
+          this.th(this.t('col.uploader'), 'max-md:hidden'),
+          this.th(this.t('col.rules'), 'max-lg:hidden'),
         ]),
       ]),
       this.el('tbody', {}, data.items.map((row) => this.renderEventRow(row, multi))),
@@ -1178,19 +1192,19 @@ class SecurityEventsPanel {
 
   renderEventRow(row, multi) {
     const rules = row.rules.length
-      ? this.el('span', { className: 'font-mono text-xs break-all', text: row.rules.join(', '), attrs: { translate: 'no' } })
+      ? this.el('span', { className: 'font-mono text-xs break-words', text: row.rules.join(', '), attrs: { translate: 'no' } })
       : this.el('span', { text: '—' });
     return this.el('tr', { attrs: { 'data-security-event-row': row.id, 'data-security-row-key': row.id } }, [
-      this.el('td', { className: 'align-top whitespace-nowrap' }, [this.timeEl(row.createdAt)]),
-      multi ? this.el('td', { className: 'align-top hidden md:table-cell' }, [this.workspaceEl(row)]) : null,
-      this.el('td', { className: 'align-top min-w-0' }, [
+      this.el('td', { className: 'align-top md:whitespace-nowrap' }, [this.timeEl(row.createdAt)]),
+      multi ? this.el('td', { className: 'align-top max-md:hidden' }, [this.workspaceEl(row)]) : null,
+      this.el('td', { className: 'align-top min-w-[9rem]' }, [
         this.sourceBadge(row),
         this.el('span', { className: 'md:hidden mt-1 flex flex-col gap-1 text-xs text-base-content/70 min-w-0' }, [this.documentEl(row), this.uploaderEl(row.uploader)]),
       ]),
       this.el('td', { className: 'align-top' }, [this.resultEl(row)]),
-      this.el('td', { className: 'align-top hidden md:table-cell min-w-0 max-w-xs' }, [this.documentEl(row)]),
-      this.el('td', { className: 'align-top hidden md:table-cell min-w-0 max-w-xs' }, [this.uploaderEl(row.uploader)]),
-      this.el('td', { className: 'align-top hidden lg:table-cell min-w-0 max-w-xs' }, [rules]),
+      this.el('td', { className: 'align-top max-md:hidden min-w-0 max-w-xs' }, [this.documentEl(row)]),
+      this.el('td', { className: 'align-top max-md:hidden min-w-0 max-w-xs' }, [this.uploaderEl(row.uploader)]),
+      this.el('td', { className: 'align-top max-lg:hidden min-w-0 max-w-xs' }, [rules]),
     ]);
   }
 
@@ -1213,7 +1227,7 @@ class SecurityEventsPanel {
     else if (data.state === 'subset') block = [ok('preview.subset'), this.hostList(data.hosts)];
     else if (data.state === 'mismatch') {
       block = [
-        ui.ragUiAlert(this.doc, {
+        securityEventsAlertText(ui.ragUiAlert(this.doc, {
           tone: 'warning',
           icon: 'exclamation-triangle',
           body: [
@@ -1221,7 +1235,7 @@ class SecurityEventsPanel {
             this.hostList(data.notAllowed),
             this.el('p', { className: 'text-sm mt-2' }, ui.ragUiTemplateNodes(this.doc, this.t('preview.fix'), { variable: SECURITY_EVENTS_PREVIEW_VARIABLE }, ['variable'])),
           ],
-        }),
+        })),
       ];
     } else block = [this.el('p', { className: 'text-sm text-base-content/70', text: this.t('preview.unknown') })];
     host.replaceChildren(
@@ -1358,6 +1372,16 @@ class SecurityEventsPanel {
     const status = this.statusEl();
     if (status && typeof status.focus === 'function') status.focus();
   }
+}
+
+/**
+ * Alert text keeps the alert's own content colour: the page rule [data-theme="dark"] .card-body p (index.html) would turn it
+ * pale on the warning and info fills, below 4.5:1.
+ */
+function securityEventsAlertText(node) {
+  if (!node || typeof node.querySelectorAll !== 'function') return node;
+  for (const p of Array.from(node.querySelectorAll('p'))) p.classList.add('!text-current');
+  return node;
 }
 
 /** The page banner (UI-SPEC 6.13.1): rendered or removed; not dismissible, no alert role. */
