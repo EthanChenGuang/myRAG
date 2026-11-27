@@ -1,0 +1,153 @@
+{
+  "$defs": {
+    "RedTeamDocument": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "structure": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Structure",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 20000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "structure",
+        "text"
+      ],
+      "title": "RedTeamDocument",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attack_documents": {
+      "items": {
+        "$ref": "#/$defs/RedTeamDocument"
+      },
+      "minItems": 1,
+      "title": "Attack Documents",
+      "type": "array"
+    },
+    "canary": {
+      "maxLength": 128,
+      "minLength": 6,
+      "pattern": "^[A-Za-z0-9._:-]+$",
+      "title": "Canary",
+      "type": "string"
+    },
+    "carrier": {
+      "enum": [
+        "body_text",
+        "hidden_text",
+        "link_text",
+        "link_target",
+        "table_cell",
+        "image_caption",
+        "conversation_turn"
+      ],
+      "title": "Carrier",
+      "type": "string"
+    },
+    "forbidden_claims": {
+      "items": {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Forbidden Claims",
+      "type": "array"
+    },
+    "goal": {
+      "maxLength": 300,
+      "minLength": 1,
+      "title": "Goal",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "injected_quotes": {
+      "items": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Injected Quotes",
+      "type": "array"
+    },
+    "language": {
+      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+      "title": "Language",
+      "type": "string"
+    },
+    "legitimate_documents": {
+      "items": {
+        "$ref": "#/$defs/RedTeamDocument"
+      },
+      "title": "Legitimate Documents",
+      "type": "array"
+    },
+    "provenance": {
+      "enum": [
+        "synthetic",
+        "production"
+      ],
+      "title": "Provenance",
+      "type": "string"
+    },
+    "question": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Question",
+      "type": "string"
+    },
+    "review_item_id": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Review Item Id"
+    },
+    "technique": {
+      "pattern": "^[a-z][a-z_]{0,28}$",
+      "title": "Technique",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "technique",
+    "language",
+    "carrier",
+    "goal",
+    "question",
+    "attack_documents",
+    "injected_quotes",
+    "canary",
+    "provenance"
+  ],
+  "title": "RedTeamCorpusItem",
+  "type": "object"
+}

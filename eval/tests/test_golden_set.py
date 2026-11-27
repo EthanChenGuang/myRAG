@@ -387,8 +387,11 @@ def test_committed_manifests_start_at_version_one_all_active():
     # Version 1 recorded the set when 05.3-06 created the manifests; train 30 bumped it twice: version 2 added only the
     # 36 Phase 4.2 items of plan 04.2-37 (tag phase42), version 3 changed only the six small_talk items the Phase 6 gate fix
     # marked conversational. Version 4 (the merge of train 30 into 05.3-16) added only the 25 items of plan 05.3-15
-    # (tag phase53_fixture). Version 5 (train 33) added only the 48 Phase 5.2 items of plan 05.2-29. Version 6 added only
-    # the 57 multi_step_calc and context_overflow items of plan 05.2.1-12. Every item is still active.
+    # (tag phase53_fixture). Version 5 (train 33) added only the 48 Phase 5.2 items of plan 05.2-29. Version 6 of the
+    # ingest manifest only (plan 03.3-20) added the templated collection items and five no-answer items in its vocabulary.
+    # The 57 multi_step_calc and context_overflow items of plan 05.2.1-12 are version 6 of the fixture manifest and
+    # version 7 of the ingest manifest; version 7 of the ingest manifest also adds ingest-tpl-no-answer-en-06 and -it-06, which
+    # the merge of train 37 into 05.2.1-17 needed to keep the en and it ingest no-answer shares at their minimum. Every item is still active.
     golden = load_golden(FIXTURE_GOLDEN)
     phase42 = sorted(item.id for item in golden if "phase42" in item.tags)
     phase53 = sorted(item.id for item in golden if "phase53_fixture" in item.tags)
@@ -401,10 +404,18 @@ def test_committed_manifests_start_at_version_one_all_active():
     phase521 = sorted(item.id for item in golden if item.category in ("multi_step_calc", "context_overflow"))
     assert len(phase42) == 36 and len(conversational) == 6 and len(phase53) == 25 and len(phase52) == 48
     assert len(phase521) == 57
+    templated = sorted(item.id for item in load_golden(INGEST_GOLDEN) if item.id.startswith("ingest-tpl-"))
+    assert len(templated) == 85
+    merge_addition = ["ingest-tpl-no-answer-en-06", "ingest-tpl-no-answer-it-06"]
     for path in (FIXTURE_MANIFEST, INGEST_MANIFEST):
         manifest = golden_set.load_manifest(path)
-        assert manifest.version == 6
-        assert [entry.version for entry in manifest.changelog] == [1, 2, 3, 4, 5, 6]
+        expected = 7 if path == INGEST_MANIFEST else 6
+        assert manifest.version == expected
+        assert [entry.version for entry in manifest.changelog] == list(range(1, expected + 1))
+        calc_entry = manifest.changelog[6] if path == INGEST_MANIFEST else manifest.changelog[5]
+        if path == INGEST_MANIFEST:
+            assert sorted(manifest.changelog[5].added) == sorted(set(templated) - set(merge_addition))
+            assert not manifest.changelog[5].changed
         assert sorted(manifest.changelog[1].added) == phase42
         assert not manifest.changelog[1].changed
         assert sorted(manifest.changelog[2].changed) == conversational
@@ -413,6 +424,6 @@ def test_committed_manifests_start_at_version_one_all_active():
         assert not manifest.changelog[3].changed
         assert sorted(manifest.changelog[4].added) == phase52
         assert not manifest.changelog[4].changed
-        assert sorted(manifest.changelog[5].added) == phase521
-        assert not manifest.changelog[5].changed
+        assert sorted(calc_entry.added) == sorted(phase521 + (merge_addition if path == INGEST_MANIFEST else []))
+        assert not calc_entry.changed
         assert all(entry.status == "active" for entry in manifest.items)

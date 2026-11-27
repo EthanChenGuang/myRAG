@@ -70,6 +70,7 @@ export interface BgeM3ProviderOptions {
   serving?: () => BgeM3Serving | Promise<BgeM3Serving>;
   /** Defaults to RAG_SIDECAR_URL and RAG_SIDECAR_SECRET. */
   sidecar?: () => BgeM3SidecarConfig;
+  /** The sidecar request, and the hosted client's request when given. */
   fetch?: typeof fetch;
 }
 
@@ -210,6 +211,7 @@ export function createBgeM3Provider(options: BgeM3ProviderOptions = {}): Embeddi
       baseURL: config.baseUrl,
       maxRetries: 0,
       timeout: config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      ...(options.fetch ? { fetch: options.fetch as never } : {}),
     });
 
     const vectors: number[][] = [];

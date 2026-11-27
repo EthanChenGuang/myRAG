@@ -56,6 +56,8 @@ export type Layer = z.infer<typeof LayerSchema>;
 const OrganizationId = z.string().uuid().nullish();
 const ExpectedVersion = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 const QueryInt = (max: number) => z.coerce.number().int().min(0).max(max);
+/** 06.2 D-15: a Glossary list filter is a language code by shape; whether it is enabled does not matter for reading. */
+const LanguageFilter = z.string().max(35).regex(/^[a-z]{2,3}(-[a-z0-9]{2,8})*$/);
 
 /** The entry fields of the generated contract; id, layer and suppression come from the URL and the scope, never from the body. */
 const EntryFields = TerminologyEntrySchema.omit({ id: true, layer: true, suppresses_entry_id: true });
@@ -74,6 +76,9 @@ export const ListQuerySchema = z
     search: z.string().max(64).nullish(),
     limit: QueryInt(100).nullish(),
     offset: QueryInt(1_000_000).nullish(),
+    kind: TerminologyEntrySchema.shape.kind.nullish(),
+    source_language: LanguageFilter.nullish(),
+    target_language: LanguageFilter.nullish(),
   })
   .strict();
 export const ImportBodySchema = z

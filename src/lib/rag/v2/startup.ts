@@ -3,6 +3,7 @@ import { getChunkingCoverage, type ChunkingCoverageRow } from '../chunking/profi
 import { loadRagConfig, type RagConfig, type RagEnvInput } from '../config';
 import { getRagDeps } from '../deps';
 import { icuSegmentsChinese } from '../lexical/icu-check';
+import { countReadyLexstatsTenants } from '../lexical/stats';
 import { resolveEffectivePipeline } from './readiness';
 
 function compareSemver(a: string, b: string): number {
@@ -199,6 +200,16 @@ async function runChecks(deps: V2StartupDeps): Promise<V2StartupVerdict> {
       'attribute_filter_hard_approximate',
       'warn',
       'RAG_ATTRIBUTE_FILTER=hard with RAG_EXACT_SCAN_CUTOFF=0 and RAG_HNSW_ITERATIVE_SCAN=off: filtered dense searches can return fewer chunks than asked',
+    );
+  }
+
+  // D-25: informational only; a tenant without ready statistics is served by ts_rank_cd. A count, never a tenant key.
+  if (config.v2.lexicalScoring.mode === 'bm25' && admin) {
+    const ready = await countReadyLexstatsTenants(admin);
+    logOnce(
+      'lexical_scoring_bm25',
+      'warn',
+      `RAG_LEXICAL_SCORING=bm25: tenants with ready lexical statistics: ${ready ?? 'unknown'}; any other tenant is served by ts_rank_cd until npm run rag:lexstats rebuilds it`,
     );
   }
 

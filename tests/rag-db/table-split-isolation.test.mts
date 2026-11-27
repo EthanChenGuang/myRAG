@@ -71,7 +71,8 @@ function retrieved(chunks: TraceChunk[]): string[] {
   );
 }
 
-const oldLines = () => goldenLines().filter(({ item }) => item.category !== 'table_split');
+/** The templated collection items (03.3-20) need the templated build and are not part of this comparison. */
+const oldLines = () => goldenLines().filter(({ item }) => item.category !== 'table_split' && !item.id.startsWith('ingest-tpl-'));
 const firstEnglishTableItem = () => goldenLines().find(({ item }) => item.category === 'table_split' && item.language === 'en');
 
 const EVAL_SECRET = 'table-split-isolation-eval-secret-000000';

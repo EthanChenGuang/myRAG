@@ -1,3 +1,4 @@
+import type { ScopeAccessFilter } from '../tenant/access';
 import type { TenantScope } from '../tenant/scope';
 
 export type BackendId = 'pgvector' | 'weaviate' | 'qdrant';
@@ -40,6 +41,8 @@ export type RetrievalFilterInput = Omit<RetrievalFilters, 'currentOnly' | 'effec
 export interface BackendCapabilities {
   versionScope?: boolean;
   identifierFilter?: boolean;
+  /** D-05: the backend applies BackendSearchRequest.access before ranking. */
+  accessFilter?: boolean;
 }
 
 export interface RankedHitDocument {
@@ -85,13 +88,32 @@ export interface BackendSearchRequest {
   versionScope?: VersionScope;
   /** D-31, D-45: normalized identifiers; every leg keeps only chunks that carry one of them. */
   identifiersNorm?: string[];
+  /** D-05, A-14: scopeAccessFilter(scope); the backend checks it against the scope and filters every leg by it. */
+  access: ScopeAccessFilter;
+  /** D-28: set by the search stage on every lexical call while RAG_LEXICAL_SCORING=bm25 is in effect; absent means ts_rank_cd. */
+  lexicalScoring?: LexicalScoringRequest;
   signal: AbortSignal;
 }
+
+/** k1 and b come from server config only (config.v2.lexicalScoring). */
+export interface LexicalScoringRequest {
+  mode: 'bm25';
+  k1: number;
+  b: number;
+}
+
+/** D-25: how a request with lexicalScoring was served; bm25 by the BM25 function, the others by the unchanged ts_rank_cd leg. */
+export type LexicalScoringOutcome = 'bm25' | 'stats_unavailable' | 'bm25_failed';
 
 export interface BackendLegsMeta {
   denseMode: 'ann' | 'exact' | null;
   /** External backends (D-10): store ids that failed re-validation in this request. */
   tenantValidationDropped?: number;
+  /** D-13, A-09: the exact-scan cutoff and iterative scan a keys access filter sent; absent when the configured values were sent. */
+  accessExactCutoff?: number;
+  accessIterativeScan?: 'off' | 'relaxed_order' | 'strict_order';
+  /** Present only for a request that carried lexicalScoring and had a lexical leg to serve. */
+  lexicalScoring?: LexicalScoringOutcome;
 }
 
 export interface BackendLegs {

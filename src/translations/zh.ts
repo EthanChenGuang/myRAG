@@ -399,6 +399,7 @@ export const zh = {
   waitingForApproval: "等待您的批准...",
   executingTool: "执行工具中，请稍候...",
   toolError: "运行工具时发生错误。",
+  voiceUnavailable: "语音暂不可用，请稍后再试。",
   
   // Chat message action tooltips
   copyTooltip: "复制",

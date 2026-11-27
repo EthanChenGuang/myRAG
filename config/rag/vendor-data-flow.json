@@ -1,0 +1,297 @@
+{
+  "schema_version": 1,
+  "vendors": [
+    {
+      "vendor": "anthropic",
+      "name": "Anthropic (direct Claude Citations answer path)",
+      "hosts": [
+        "api.anthropic.com"
+      ],
+      "content": [
+        "query",
+        "chunk_text",
+        "answer"
+      ],
+      "switch": "RAG_CLAUDE_CITATIONS",
+      "opt_in": true,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": [
+        "anthropic"
+      ]
+    },
+    {
+      "vendor": "cohere",
+      "name": "Cohere rerank (RAG_RERANKER=cohere, or auto with COHERE_API_KEY set)",
+      "hosts": [
+        "api.cohere.com"
+      ],
+      "content": [
+        "query",
+        "chunk_text"
+      ],
+      "switch": "RAG_RERANKER",
+      "opt_in": true,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": [
+        "cohere"
+      ]
+    },
+    {
+      "vendor": "deepinfra",
+      "name": "DeepInfra hosted BGE-M3 embeddings (profile bge-m3-1024, RAG_BGE_M3_SERVING=hosted)",
+      "hosts": [
+        "api.deepinfra.com"
+      ],
+      "content": [
+        "query",
+        "chunk_text"
+      ],
+      "switch": "RAG_BGE_M3_SERVING",
+      "opt_in": true,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": [
+        "deepinfra"
+      ]
+    },
+    {
+      "vendor": "exa",
+      "name": "Exa web search (per-request webSearch toggle, needs EXA_API_KEY)",
+      "hosts": [
+        "api.exa.ai"
+      ],
+      "content": [
+        "query"
+      ],
+      "switch": null,
+      "opt_in": true,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": []
+    },
+    {
+      "vendor": "ft_endpoint",
+      "name": "Operator fine-tuned embedding endpoint (RAG_FT_SLOT_A/B_BASE_URL; host set by the operator)",
+      "hosts": [
+        "ft-endpoint.operator.invalid"
+      ],
+      "content": [
+        "query",
+        "chunk_text"
+      ],
+      "switch": "RAG_FINETUNE",
+      "opt_in": true,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": [
+        "ft_endpoint"
+      ]
+    },
+    {
+      "vendor": "judge",
+      "name": "Eval LLM judge (operator-run eval harness: OpenRouter judge models, OpenAI embeddings for metrics)",
+      "hosts": [
+        "openrouter.ai",
+        "api.openai.com"
+      ],
+      "content": [
+        "query",
+        "chunk_text",
+        "answer"
+      ],
+      "switch": null,
+      "opt_in": true,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": []
+    },
+    {
+      "vendor": "lakera",
+      "name": "Lakera Guard prompt-injection check on retrieved chunks",
+      "hosts": [
+        "api.lakera.ai"
+      ],
+      "content": [
+        "chunk_text"
+      ],
+      "switch": "RAG_INJECTION_LAKERA",
+      "opt_in": true,
+      "multi_tenant": "requires_ack",
+      "ack_switch": "RAG_INJECTION_LAKERA_MULTI_TENANT_ACK",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": [
+        "lakera"
+      ]
+    },
+    {
+      "vendor": "langfuse",
+      "name": "Langfuse tracing (masked query and answer text only with LANGFUSE_CAPTURE_CONTENT=true)",
+      "hosts": [
+        "cloud.langfuse.com"
+      ],
+      "content": [
+        "traces"
+      ],
+      "switch": "LANGFUSE_ENABLED",
+      "opt_in": true,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": [
+        "langfuse"
+      ]
+    },
+    {
+      "vendor": "llamacloud",
+      "name": "LlamaCloud LlamaParse document parsing",
+      "hosts": [
+        "api.cloud.llamaindex.ai"
+      ],
+      "content": [
+        "file_bytes"
+      ],
+      "switch": "RAG_PARSER_ALLOW_CLOUD",
+      "opt_in": false,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": []
+    },
+    {
+      "vendor": "openai",
+      "name": "OpenAI embeddings, image captioning and transcription",
+      "hosts": [
+        "api.openai.com"
+      ],
+      "content": [
+        "query",
+        "chunk_text",
+        "file_bytes"
+      ],
+      "switch": "RAG_OPENAI_EMBEDDINGS_VIA",
+      "opt_in": false,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": []
+    },
+    {
+      "vendor": "openrouter",
+      "name": "OpenRouter chat generation, query layer and LLM judge models",
+      "hosts": [
+        "openrouter.ai"
+      ],
+      "content": [
+        "query",
+        "chunk_text",
+        "answer"
+      ],
+      "switch": null,
+      "opt_in": false,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": []
+    },
+    {
+      "vendor": "prompt_guard",
+      "name": "Hugging Face Hub (Prompt Guard weights at image build; nothing uploaded, scoring runs in the sidecar)",
+      "hosts": [
+        "huggingface.co"
+      ],
+      "content": [
+        "chunk_text"
+      ],
+      "switch": "RAG_INJECTION_PROMPT_GUARD",
+      "opt_in": true,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": []
+    },
+    {
+      "vendor": "qdrant",
+      "name": "Qdrant external retrieval backend (cluster host from QDRANT_URL)",
+      "hosts": [
+        "cloud.qdrant.io"
+      ],
+      "content": [
+        "vectors",
+        "lexical_text"
+      ],
+      "switch": "RAG_RETRIEVAL_BACKEND",
+      "opt_in": true,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": [
+        "qdrant"
+      ]
+    },
+    {
+      "vendor": "vectara",
+      "name": "Vectara HHEM groundedness scoring, called from the sidecar",
+      "hosts": [
+        "api.vectara.io"
+      ],
+      "content": [
+        "chunk_text",
+        "answer"
+      ],
+      "switch": "RAG_GROUNDEDNESS_VECTARA_OPT_IN",
+      "opt_in": true,
+      "multi_tenant": "requires_ack",
+      "ack_switch": "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": []
+    },
+    {
+      "vendor": "voyage",
+      "name": "Voyage rerank and embedding profiles",
+      "hosts": [
+        "api.voyageai.com"
+      ],
+      "content": [
+        "query",
+        "chunk_text"
+      ],
+      "switch": "RAG_RERANKER",
+      "opt_in": true,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": [
+        "voyage"
+      ]
+    },
+    {
+      "vendor": "weaviate",
+      "name": "Weaviate external retrieval backend (cluster host from WEAVIATE_URL)",
+      "hosts": [
+        "weaviate.cloud"
+      ],
+      "content": [
+        "vectors",
+        "lexical_text"
+      ],
+      "switch": "RAG_RETRIEVAL_BACKEND",
+      "opt_in": true,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": [
+        "weaviate"
+      ]
+    }
+  ]
+}

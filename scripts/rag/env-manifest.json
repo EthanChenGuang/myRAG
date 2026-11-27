@@ -11,91 +11,196 @@
       "name": "ANTHROPIC_API_KEY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "generation",
+      "label": "Anthropic API key",
+      "type": "secret",
+      "requires": [],
+      "default": "",
+      "provider": "anthropic",
+      "help": "Stays on the server; only its presence is reported."
     },
     {
       "name": "ANTHROPIC_BASE_URL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Anthropic base URL",
+      "type": "url",
+      "requires": [],
+      "default": "",
+      "provider": "anthropic",
+      "help": "For tests and recorded streams only. Leave empty to use https://api.anthropic.com/v1."
     },
     {
       "name": "COHERE_API_KEY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "ranking",
+      "label": "Cohere API key",
+      "type": "secret",
+      "requires": [],
+      "default": "",
+      "provider": "cohere"
     },
     {
       "name": "COHERE_BASE_URL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "ranking",
+      "label": "Cohere base URL",
+      "type": "url",
+      "requires": [],
+      "default": "",
+      "provider": "cohere"
     },
     {
       "name": "DEEPINFRA_API_KEY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "data",
+      "label": "DeepInfra API key",
+      "type": "secret",
+      "requires": [],
+      "default": "",
+      "provider": "deepinfra"
     },
     {
       "name": "DEEPINFRA_BASE_URL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "DeepInfra base URL",
+      "type": "url",
+      "requires": [],
+      "default": "https://api.deepinfra.com/v1/openai",
+      "provider": "deepinfra"
     },
     {
       "name": "LAKERA_GUARD_API_KEY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "security",
+      "label": "Lakera Guard API key",
+      "type": "secret",
+      "requires": [],
+      "default": "",
+      "provider": "lakera",
+      "help": "Stays on the server; only its presence is reported."
     },
     {
       "name": "LAKERA_GUARD_BASE_URL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Lakera Guard base URL",
+      "type": "url",
+      "requires": [],
+      "default": "",
+      "provider": "lakera",
+      "help": "Leave empty to use https://api.lakera.ai. Regional hosts such as the EU one are allowed; HTTPS only."
     },
     {
       "name": "LANGFUSE_BASE_URL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "observability",
+      "label": "Langfuse base URL",
+      "type": "url",
+      "requires": [
+        "LANGFUSE_ENABLED=true"
+      ],
+      "default": "https://cloud.langfuse.com",
+      "provider": "langfuse"
     },
     {
       "name": "LANGFUSE_CAPTURE_CONTENT",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "observability",
+      "label": "Send prompt and answer text to Langfuse",
+      "type": "bool",
+      "requires": [
+        "LANGFUSE_ENABLED=true"
+      ],
+      "default": "false",
+      "help": "When off, only metadata is sent to Langfuse."
     },
     {
       "name": "LANGFUSE_ENABLED",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "observability",
+      "label": "Langfuse tracing",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "LANGFUSE_PUBLIC_KEY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "observability",
+      "label": "Langfuse public key",
+      "type": "secret",
+      "requires": [
+        "LANGFUSE_ENABLED=true"
+      ],
+      "default": "",
+      "provider": "langfuse"
     },
     {
       "name": "LANGFUSE_REVIEW_SAMPLE_RATE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "observability",
+      "label": "Review sample rate",
+      "type": "number",
+      "requires": [
+        "LANGFUSE_ENABLED=true"
+      ],
+      "default": "0",
+      "help": "Share of traces queued for human review, 0 to 1. Exported text is PII-masked."
     },
     {
       "name": "LANGFUSE_SAMPLE_RATE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "observability",
+      "label": "Trace sample rate",
+      "type": "number",
+      "requires": [
+        "LANGFUSE_ENABLED=true"
+      ],
+      "default": "0.1",
+      "help": "Share of requests traced, 0 to 1."
     },
     {
       "name": "LANGFUSE_SECRET_KEY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "observability",
+      "label": "Langfuse secret key",
+      "type": "secret",
+      "requires": [
+        "LANGFUSE_ENABLED=true"
+      ],
+      "default": "",
+      "provider": "langfuse"
     },
     {
       "name": "LLAMACLOUD_ADAPTIVE_LONG_TABLE",
@@ -197,13 +302,24 @@
       "name": "NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Answer image allowlist",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Images from other hosts render as plain links. Inlined at build time, so a change takes effect only after a rebuild."
     },
     {
       "name": "NEXT_PUBLIC_RAG_INGEST_REALTIME",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "data",
+      "label": "Realtime job updates",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "NEXT_PUBLIC_RAG_MODE",
@@ -295,13 +411,27 @@
       "name": "RAG_ANSWER_FEEDBACK",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "observability",
+      "label": "Answer feedback",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_ANSWER_STYLE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Answer style",
+      "type": "enum",
+      "options": [
+        "classic",
+        "concise"
+      ],
+      "requires": [],
+      "default": "classic"
     },
     {
       "name": "RAG_BEHAVIOR_MODE",
@@ -313,7 +443,16 @@
       "name": "RAG_BGE_M3_SERVING",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "BGE-M3 serving",
+      "type": "enum",
+      "options": [
+        "hosted",
+        "sidecar"
+      ],
+      "requires": [],
+      "default": "hosted"
     },
     {
       "name": "RAG_CACHE_ENABLED",
@@ -324,34 +463,96 @@
       "ragAffecting": true
     },
     {
+      "name": "RAG_CALC_CHECK",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Calculation check",
+      "type": "bool",
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "false",
+      "help": "Recomputes the numbers an answer states and flags a mismatch for review."
+    },
+    {
+      "name": "RAG_CALC_TOOL",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Calculation tool",
+      "type": "bool",
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "false",
+      "help": "Lets the model pass calculations to the exact calculate tool instead of computing them itself."
+    },
+    {
       "name": "RAG_CAPTION_LANGUAGE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Image caption language",
+      "type": "enum",
+      "options": [
+        "en",
+        "document"
+      ],
+      "requires": [],
+      "default": "en"
     },
     {
       "name": "RAG_CITATIONS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Inline citations",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_CITATION_PER_SENTENCE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Citation per sentence",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Needs inline citations or Claude Citations."
     },
     {
       "name": "RAG_CLAIM_CHECK",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Claim check",
+      "type": "bool",
+      "requires": [
+        "RAG_GROUNDEDNESS=true"
+      ],
+      "default": "false",
+      "help": "Runs after the stream ends. It never delays, deletes or blocks text. Needs groundedness scoring."
     },
     {
       "name": "RAG_CLAUDE_CITATIONS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Claude Citations",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Needs an Anthropic API key. Claude models go to the Anthropic API directly; other models keep inline citations."
     },
     {
       "name": "RAG_COMPLETENESS_CONFIDENCE",
@@ -366,37 +567,92 @@
       "name": "RAG_CONTEXT_COMPRESSION",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "ranking",
+      "label": "Context compression",
+      "type": "bool",
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "false"
     },
     {
       "name": "RAG_CONTEXT_EDGE_ORDER",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "ranking",
+      "label": "Context edge order",
+      "type": "bool",
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "false"
+    },
+    {
+      "name": "RAG_CONTEXT_OVERFLOW",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Context overflow",
+      "type": "enum",
+      "options": [
+        "truncate",
+        "refine"
+      ],
+      "requires": [
+        "RAG_PROMPT_BUDGET=true"
+      ],
+      "default": "truncate",
+      "help": "What happens when the documents do not fit: truncate drops the lowest-ranked ones, refine answers in several passes."
     },
     {
       "name": "RAG_CONTEXT_RELEVANCE_RULE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Context relevance rule",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Strict mode gives the “information not available” text; other modes label a general answer."
     },
     {
       "name": "RAG_CONTEXT_TAGGING",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Context tagging",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Wraps each retrieved chunk in a tagged block and tells the model to ignore instructions inside it."
     },
     {
       "name": "RAG_CONTEXT_TOKEN_BUDGET",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "ranking",
+      "label": "Context token budget",
+      "type": "number",
+      "requires": [],
+      "default": "6000"
     },
     {
       "name": "RAG_DISABLED_STAGES",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Disabled stages",
+      "type": "string",
+      "requires": [],
+      "default": "",
+      "help": "Comma-separated optional stages to skip; empty runs every stage."
     },
     {
       "name": "RAG_DIVERSITY_WEIGHT",
@@ -408,22 +664,59 @@
       "ragAffecting": true
     },
     {
+      "name": "RAG_DOC_ACCESS_GROUPS",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Document access groups",
+      "type": "enum",
+      "options": [
+        "off",
+        "on"
+      ],
+      "requires": [],
+      "default": "off"
+    },
+    {
       "name": "RAG_DOC_TRANSLATION",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Document translation",
+      "type": "enum",
+      "options": [
+        "off",
+        "on"
+      ],
+      "requires": [],
+      "default": "off"
     },
     {
       "name": "RAG_DOC_TRANSLATION_MODEL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Translation model",
+      "type": "string",
+      "requires": [
+        "RAG_DOC_TRANSLATION=on"
+      ],
+      "default": ""
     },
     {
       "name": "RAG_DOC_TYPE_LLM_DETECT",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Model-assisted document type detection",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "false uses rules only."
     },
     {
       "name": "RAG_DOCUMENT_COMPLETENESS_THRESHOLD",
@@ -440,127 +733,305 @@
       "name": "RAG_DOMAIN_EXPERT_REVIEW",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "evaluation",
+      "label": "Expert review queue",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Opens the Review queue under RAG administration to granted experts and allows mining. Mining also needs the retrieval log at “IDs, scores and the masked question”."
     },
     {
       "name": "RAG_EFFECTIVE_DATES",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Effective dates",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_EFFECTIVE_DATE_LLM_EXTRACT",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Model-assisted effective dates",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_EMBED_BATCH_MODE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Embedding batch mode",
+      "type": "enum",
+      "options": [
+        "sync",
+        "batch_api"
+      ],
+      "requires": [],
+      "default": "sync"
     },
     {
       "name": "RAG_EMBED_FEEDBACK",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "observability",
+      "label": "Embed answer rating",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Visitors rate an answer as helpful or not helpful through a signed token that is valid for one answer. Needs the secret below and the retrieval log on."
     },
     {
       "name": "RAG_EMBED_FEEDBACK_SECRET",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "observability",
+      "label": "Embed feedback secret",
+      "type": "secret",
+      "requires": [
+        "RAG_EMBED_FEEDBACK=true"
+      ],
+      "default": "",
+      "provider": "app",
+      "help": "At least 32 characters; with a shorter value the rating stays off. Stays on the server; only its presence is reported. Generate one with openssl rand -hex 32."
+    },
+    {
+      "name": "RAG_EMBED_ACCESS_GROUP",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Embedded chat access group",
+      "type": "string",
+      "requires": [],
+      "default": ""
     },
     {
       "name": "RAG_EMBED_TENANT",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Embedded chat tenant",
+      "type": "string",
+      "requires": [],
+      "default": "",
+      "help": "s:default, o:<uuid> or u:<uuid>. Empty means s:default in single-tenant and fails closed in multi-tenant."
     },
     {
       "name": "RAG_EMBEDDING_PROFILES",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Embedding profile registry",
+      "type": "enum",
+      "options": [
+        "off",
+        "on"
+      ],
+      "requires": [],
+      "default": "off",
+      "help": "off keeps the single configured embedding model."
     },
     {
       "name": "RAG_DOMAIN_EMBEDDINGS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Domain embeddings",
+      "type": "enum",
+      "options": [
+        "off",
+        "on"
+      ],
+      "requires": [
+        "RAG_EMBEDDING_PROFILES=on"
+      ],
+      "default": "off",
+      "help": "Adds a domain embedding leg for document types with an active binding. Needs embedding profiles on."
     },
     {
       "name": "RAG_FINETUNE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Fine-tuned embeddings",
+      "type": "enum",
+      "options": [
+        "off",
+        "on"
+      ],
+      "requires": [],
+      "default": "off",
+      "help": "off keeps today’s behaviour: search never uses the slots and the fine-tune commands refuse to run."
     },
     {
       "name": "RAG_FT_EMBED_API_KEY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "data",
+      "label": "Slot endpoint API key",
+      "type": "secret",
+      "requires": [],
+      "default": "",
+      "provider": "ft_endpoint",
+      "help": "Shared by both slots. Stays on the server; only its presence is reported. May stay empty on a private network."
     },
     {
       "name": "RAG_FT_SLOT_A_BASE_URL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Slot A base URL",
+      "type": "url",
+      "requires": [
+        "RAG_FINETUNE=on"
+      ],
+      "default": "",
+      "provider": "ft_endpoint",
+      "help": "Empty leaves slot A unconfigured. The app uses no fallback host."
     },
     {
       "name": "RAG_FT_SLOT_A_MODEL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Slot A model version",
+      "type": "string",
+      "requires": [
+        "RAG_FINETUNE=on"
+      ],
+      "default": "",
+      "help": "Enter the model recorded on the slot profile; the startup check compares the two."
     },
     {
       "name": "RAG_FT_SLOT_A_QUERY_PROMPT",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Slot A query prompt",
+      "type": "string",
+      "requires": [
+        "RAG_FINETUNE=on"
+      ],
+      "default": "",
+      "help": "Prefix the app adds to each query before embedding it."
     },
     {
       "name": "RAG_FT_SLOT_A_DOCUMENT_PROMPT",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Slot A document prompt",
+      "type": "string",
+      "requires": [
+        "RAG_FINETUNE=on"
+      ],
+      "default": "",
+      "help": "Prefix the app adds to each passage before embedding it."
     },
     {
       "name": "RAG_FT_SLOT_B_BASE_URL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Slot B base URL",
+      "type": "url",
+      "requires": [
+        "RAG_FINETUNE=on"
+      ],
+      "default": "",
+      "provider": "ft_endpoint",
+      "help": "Empty leaves slot B unconfigured. The app uses no fallback host."
     },
     {
       "name": "RAG_FT_SLOT_B_MODEL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Slot B model version",
+      "type": "string",
+      "requires": [
+        "RAG_FINETUNE=on"
+      ],
+      "default": "",
+      "help": "Enter the model recorded on the slot profile; the startup check compares the two."
     },
     {
       "name": "RAG_FT_SLOT_B_QUERY_PROMPT",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Slot B query prompt",
+      "type": "string",
+      "requires": [
+        "RAG_FINETUNE=on"
+      ],
+      "default": "",
+      "help": "Prefix the app adds to each query before embedding it."
     },
     {
       "name": "RAG_FT_SLOT_B_DOCUMENT_PROMPT",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Slot B document prompt",
+      "type": "string",
+      "requires": [
+        "RAG_FINETUNE=on"
+      ],
+      "default": "",
+      "help": "Prefix the app adds to each passage before embedding it."
     },
     {
       "name": "RAG_DOMAIN_EMBEDDING_MAX_LEGS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Domain embedding legs per query",
+      "type": "number",
+      "requires": [
+        "RAG_DOMAIN_EMBEDDINGS=on"
+      ],
+      "default": "2",
+      "help": "0 to 5. 0 keeps bindings without extra search legs."
     },
     {
       "name": "RAG_DOMAIN_EMBEDDING_TIMEOUT_MS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Domain embedding leg timeout (ms)",
+      "type": "number",
+      "requires": [
+        "RAG_DOMAIN_EMBEDDINGS=on"
+      ],
+      "default": "800",
+      "help": "100 to 5000 ms. A leg that runs longer is skipped."
     },
     {
       "name": "RAG_ENABLE_ADJACENT_CHUNKS",
@@ -595,13 +1066,27 @@
       "name": "RAG_EVAL_ALLOWED_SCOPES",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "evaluation",
+      "label": "Evaluation allowed scopes",
+      "type": "string",
+      "requires": [
+        "RAG_EVAL_ENDPOINT_ENABLED=true"
+      ],
+      "default": "",
+      "help": "Multi-tenant only. Comma-separated workspaces the evaluation endpoint may read; empty denies every workspace."
     },
     {
       "name": "RAG_EVAL_ENDPOINT_ENABLED",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "evaluation",
+      "label": "Evaluation endpoint",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "The endpoint returns document content. Keep it off in production unless an evaluation run needs it."
     },
     {
       "name": "RAG_EVAL_RETRIEVAL_MIN_SIMILARITY",
@@ -618,19 +1103,38 @@
       "name": "RAG_EVAL_SECRET",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "evaluation",
+      "label": "Evaluation endpoint secret",
+      "type": "secret",
+      "requires": [
+        "RAG_EVAL_ENDPOINT_ENABLED=true"
+      ],
+      "default": "",
+      "provider": "app"
     },
     {
       "name": "RAG_EXACT_ID_LOOKUP",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Exact identifier lookup",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "false keeps vector and keyword retrieval only."
     },
     {
       "name": "RAG_EXACT_SCAN_CUTOFF",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Exact-scan row cutoff",
+      "type": "number",
+      "requires": [],
+      "default": "0"
     },
     {
       "name": "RAG_EXACT_THRESHOLD",
@@ -685,49 +1189,112 @@
       "name": "RAG_GROUNDEDNESS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Groundedness scoring",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Scored by the sidecar after the stream ends; it does not delay the answer."
     },
     {
       "name": "RAG_GROUNDEDNESS_JUDGE_MODEL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Judge model",
+      "type": "string",
+      "requires": [
+        "RAG_GROUNDEDNESS=true"
+      ],
+      "default": "",
+      "help": "⚠️ Answer sentences and the document passages sent with them go to this model’s provider. Choose a model from a different family than the answer model."
     },
     {
       "name": "RAG_GROUNDEDNESS_LLM_JUDGE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Judge model for uncovered languages",
+      "type": "bool",
+      "requires": [
+        "RAG_GROUNDEDNESS=true",
+        "RAG_GROUNDEDNESS_JUDGE_MODEL"
+      ],
+      "default": "false",
+      "help": "Off keeps “Not checked” for those languages."
     },
     {
       "name": "RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Groundedness premise cap (tokens)",
+      "type": "number",
+      "requires": [
+        "RAG_GROUNDEDNESS=true"
+      ],
+      "default": "3000"
     },
     {
       "name": "RAG_GROUNDEDNESS_TIMEOUT_MS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Groundedness timeout (ms)",
+      "type": "number",
+      "requires": [
+        "RAG_GROUNDEDNESS=true"
+      ],
+      "default": "20000"
     },
     {
       "name": "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Multi-tenant Vectara acknowledgement",
+      "type": "bool",
+      "requires": [
+        "RAG_GROUNDEDNESS_VECTARA_OPT_IN=true"
+      ],
+      "default": "false",
+      "help": "⚠️ Tick this only after the Vectara data-retention terms were recorded in live verification. Without it, multi-tenant deployments never send data to Vectara."
     },
     {
       "name": "RAG_GROUNDEDNESS_VECTARA_OPT_IN",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Vectara hosted scorer",
+      "type": "bool",
+      "requires": [
+        "RAG_GROUNDEDNESS=true"
+      ],
+      "default": "false",
+      "help": "Sends the answer and its context to Vectara. Without it, only the local scorer runs."
     },
     {
       "name": "RAG_HIDDEN_TEXT_CHECK",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Hidden text check",
+      "type": "enum",
+      "options": [
+        "off",
+        "flag",
+        "quarantine"
+      ],
+      "requires": [],
+      "default": "off"
     },
     {
       "name": "RAG_HIGH_THRESHOLD",
@@ -741,55 +1308,129 @@
       "name": "RAG_HISTORY_NOT_EVIDENCE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Earlier answers are not evidence",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_HNSW_ITERATIVE_SCAN",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "HNSW iterative scan",
+      "type": "enum",
+      "options": [
+        "off",
+        "relaxed_order",
+        "strict_order"
+      ],
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "off"
     },
     {
       "name": "RAG_INGEST_ASYNC",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Queued ingestion",
+      "type": "enum",
+      "options": [
+        "off",
+        "on"
+      ],
+      "requires": [
+        "RAG_INGEST_PIPELINE=unified"
+      ],
+      "default": "off"
     },
     {
       "name": "RAG_INGEST_LINK_CHECK",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Link check at ingestion",
+      "type": "enum",
+      "options": [
+        "off",
+        "flag",
+        "quarantine"
+      ],
+      "requires": [],
+      "default": "off"
     },
     {
       "name": "RAG_INGEST_PIPELINE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Ingest pipeline",
+      "type": "enum",
+      "options": [
+        "legacy",
+        "unified"
+      ],
+      "requires": [],
+      "default": "legacy",
+      "help": "legacy keeps the current document writers; unified uses the single ingest pipeline."
     },
     {
       "name": "RAG_INGEST_WORKER_CONCURRENCY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "sidecar",
+      "label": "Worker concurrency",
+      "type": "number",
+      "requires": [],
+      "default": "2"
     },
     {
       "name": "RAG_INGEST_JOB_RETENTION_DAYS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "sidecar",
+      "label": "Job retention (days)",
+      "type": "number",
+      "requires": [],
+      "default": "90"
     },
     {
       "name": "RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "sidecar",
+      "label": "Maintenance interval (seconds)",
+      "type": "number",
+      "requires": [
+        "RAG_INGEST_MAINTENANCE=on"
+      ],
+      "default": "3600"
     },
     {
       "name": "RAG_INGEST_MAINTENANCE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "sidecar",
+      "label": "Ingestion maintenance",
+      "type": "enum",
+      "options": [
+        "on",
+        "off"
+      ],
+      "requires": [],
+      "default": "on"
     },
     {
       "name": "RAG_INITIAL_MATCH_COUNT",
@@ -803,199 +1444,452 @@
       "name": "RAG_INJECTION_CHECK",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Retrieval-time injection check",
+      "type": "enum",
+      "options": [
+        "off",
+        "flag",
+        "drop",
+        "downweight"
+      ],
+      "requires": [],
+      "default": "off",
+      "help": "flag records suspicious chunks; drop removes them and is the recommended mode; downweight only lowers their rank and is weaker than drop."
     },
     {
       "name": "RAG_INJECTION_LAKERA",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Lakera Guard hosted detector",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "⚠️ Sends chunk text to Lakera, a third party. Listed in the vendor inventory (ADM-04)."
     },
     {
       "name": "RAG_INJECTION_LAKERA_MULTI_TENANT_ACK",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Multi-tenant Lakera acknowledgement",
+      "type": "bool",
+      "requires": [
+        "RAG_INJECTION_LAKERA=true"
+      ],
+      "default": "false",
+      "help": "⚠️ Tick this only after the Lakera data-retention terms were recorded in live verification. Without it, multi-tenant deployments never send data to Lakera."
     },
     {
       "name": "RAG_INJECTION_PROMPT_GUARD",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Prompt Guard detector",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Optional model detector in the sidecar; English and Italian only."
     },
     {
       "name": "RAG_INJECTION_SCAN",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Prompt injection scan",
+      "type": "enum",
+      "options": [
+        "off",
+        "quarantine"
+      ],
+      "requires": [],
+      "default": "off",
+      "help": "quarantine holds suspicious chunks back until an admin releases them."
     },
     {
       "name": "RAG_INVOICE_LLM_EXTRACT",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Model-assisted invoice extraction",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "false uses rules only."
     },
     {
       "name": "RAG_LANGUAGE_AWARE_INGEST",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Language-aware ingestion",
+      "type": "enum",
+      "options": [
+        "off",
+        "on"
+      ],
+      "requires": [],
+      "default": "off"
     },
     {
       "name": "RAG_LEXICAL_SEARCH",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Lexical search leg",
+      "type": "bool",
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "false"
     },
     {
       "name": "RAG_LEXICAL_TRANSLATION",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Lexical query translation",
+      "type": "bool",
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "false"
     },
     {
       "name": "RAG_LEXICAL_DICTIONARY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Dictionary terms as single search terms",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_LEXICAL_STEM_IT",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Italian stemming",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_LEXICAL_SCORING",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Lexical scoring",
+      "type": "enum",
+      "options": [
+        "ts_rank_cd",
+        "bm25"
+      ],
+      "requires": [
+        "RAG_PIPELINE=v2",
+        "RAG_LEXICAL_SEARCH=true"
+      ],
+      "default": "ts_rank_cd",
+      "help": "ts_rank_cd keeps the current keyword ranking. bm25 ranks keyword matches by how rare each term is in this knowledge base and by text length. It needs RAG_LEXICAL_SEARCH on and statistics built with npm run rag:lexstats."
     },
     {
       "name": "RAG_LEXICAL_BM25_K1",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "BM25 k1",
+      "type": "number",
+      "requires": [
+        "RAG_LEXICAL_SCORING=bm25"
+      ],
+      "default": "1.2",
+      "help": "Term-frequency saturation, from 0.5 to 3. Used only with bm25."
     },
     {
       "name": "RAG_LEXICAL_BM25_B",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "BM25 b",
+      "type": "number",
+      "requires": [
+        "RAG_LEXICAL_SCORING=bm25"
+      ],
+      "default": "0.75",
+      "help": "Length normalisation, from 0 (none) to 1 (full). Used only with bm25."
     },
     {
       "name": "RAG_MAX_OUTPUT_TOKENS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Answer length limit",
+      "type": "string",
+      "requires": [],
+      "default": "off"
     },
     {
       "name": "RAG_OUTPUT_GUARD",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Answer guard",
+      "type": "enum",
+      "options": [
+        "off",
+        "flag",
+        "enforce"
+      ],
+      "requires": [],
+      "default": "off"
     },
     {
       "name": "RAG_PARTIAL_ANSWER_RULE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Partial answer rule",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Strict mode. Balanced mode labels anything that is not from the documents."
+    },
+    {
+      "name": "RAG_PROMPT_BUDGET",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Prompt budget",
+      "type": "bool",
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "false",
+      "help": "Fits documents and history into the model context window before the call."
     },
     {
       "name": "RAG_REGISTRY_TEXTS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Language registry texts",
+      "type": "bool",
+      "requires": [
+        "RAG_SUPPORTED_LANGUAGES"
+      ],
+      "default": "false",
+      "help": "Off keeps today’s texts. English answers read the same either way. Needs supported languages."
     },
     {
       "name": "RAG_SECURITY_EVENTS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "security",
+      "label": "Security events",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Stores ids only: no question, answer or document text."
     },
     {
       "name": "RAG_UPLOADER_ALERT_THRESHOLD",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "security",
+      "label": "Uploader alert threshold",
+      "type": "number",
+      "requires": [],
+      "default": "0",
+      "help": "An alert opens above this number. 0 means no alerts."
     },
     {
       "name": "RAG_UPLOADER_ALERT_WINDOW_HOURS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "security",
+      "label": "Uploader alert window (hours)",
+      "type": "number",
+      "requires": [],
+      "default": "24"
     },
     {
       "name": "RAG_UPLOADER_HOLD",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Hold uploads of alerted uploaders",
+      "type": "enum",
+      "options": [
+        "off",
+        "manual",
+        "auto"
+      ],
+      "requires": [],
+      "default": "off",
+      "help": "Held uploads wait in Upload approvals. Documents that are already searchable are not touched."
     },
     {
       "name": "RAG_VERSION_LABELS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "generation",
+      "label": "Version labels",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Two versions that disagree are sent to Versions and dates for your decision. Apply the version-label migration first."
     },
     {
       "name": "RAG_VERSION_SCOPE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Version scope filter",
+      "type": "bool",
+      "requires": [
+        "RAG_LEXICAL_SEARCH=true"
+      ],
+      "default": "false"
     },
     {
       "name": "RAG_EMBED_VERSION_SCOPE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Version scope in embedded chat",
+      "type": "bool",
+      "requires": [
+        "RAG_VERSION_SCOPE=true"
+      ],
+      "default": "false"
     },
     {
       "name": "RAG_TABLE_LOOKUP",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Table row lookup",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_DUP_CLUSTERS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "ranking",
+      "label": "Duplicate clusters",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_RESULT_DIVERSITY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "ranking",
+      "label": "Result diversity",
+      "type": "enum",
+      "options": [
+        "off",
+        "collapse",
+        "mmr"
+      ],
+      "requires": [],
+      "default": "off",
+      "help": "off keeps every result. collapse keeps the best passage of each duplicate cluster and lists the other documents under its citation. mmr does the same, then prefers passages that differ from each other."
     },
     {
       "name": "RAG_IDENTIFIER_INDEX",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Identifier index",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_IDENTIFIER_FILTER",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Identifier filter",
+      "type": "bool",
+      "requires": [
+        "RAG_IDENTIFIER_INDEX=true"
+      ],
+      "default": "false"
     },
     {
       "name": "RAG_TERMINOLOGY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "query",
+      "label": "Terminology query expansion",
+      "type": "bool",
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "false"
     },
     {
       "name": "RAG_TERMINOLOGY_DENSE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "query",
+      "label": "Terminology dense variant",
+      "type": "bool",
+      "requires": [
+        "RAG_TERMINOLOGY=true"
+      ],
+      "default": "false"
     },
     {
       "name": "RAG_TERMINOLOGY_MINING",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "query",
+      "label": "Terminology mining",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_LOW_THRESHOLD",
@@ -1069,79 +1963,172 @@
       "name": "RAG_OUTPUT_LINK_ALLOWLIST",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Allowed link domains",
+      "type": "string",
+      "requires": [],
+      "default": ""
     },
     {
       "name": "RAG_PARENT_CHILD",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Parent-child expansion",
+      "type": "bool",
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "false"
     },
     {
       "name": "RAG_PARSE_ESCALATION",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Parse escalation",
+      "type": "enum",
+      "options": [
+        "on",
+        "off"
+      ],
+      "requires": [],
+      "default": "on"
     },
     {
       "name": "RAG_PARSE_POLL_BUDGET_MS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Parse wait budget (ms)",
+      "type": "number",
+      "requires": [],
+      "default": "45000",
+      "help": "How long one request waits for a sidecar parse job, 1000 to 55000."
     },
     {
       "name": "RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Premium pages per document",
+      "type": "number",
+      "requires": [
+        "RAG_PARSE_ROUTING=tiered"
+      ],
+      "default": "200"
     },
     {
       "name": "RAG_PARSE_PREMIUM_PAGE_BUDGET",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Premium page budget per month",
+      "type": "number",
+      "requires": [
+        "RAG_PARSE_ROUTING=tiered"
+      ],
+      "default": "0"
     },
     {
       "name": "RAG_PARSE_PROGRESSIVE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Progressive publishing",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_PARSE_ROUTING",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Parse routing",
+      "type": "enum",
+      "options": [
+        "fixed",
+        "tiered"
+      ],
+      "requires": [
+        "RAG_INGEST_PIPELINE=unified",
+        "RAG_INGEST_ASYNC=on"
+      ],
+      "default": "fixed"
     },
     {
       "name": "RAG_PARSE_VLM_DETECT",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Vision-model page detection",
+      "type": "bool",
+      "requires": [
+        "RAG_PARSE_ROUTING=tiered"
+      ],
+      "default": "false"
     },
     {
       "name": "RAG_PARSE_VLM_MODEL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Vision model",
+      "type": "string",
+      "requires": [
+        "RAG_PARSE_ROUTING=tiered"
+      ],
+      "default": ""
     },
     {
       "name": "RAG_PARSER",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Document parser",
+      "type": "enum",
+      "options": [
+        "llamaparse",
+        "docling"
+      ],
+      "requires": [],
+      "default": "llamaparse",
+      "help": "llamaparse is the current parser; docling runs in the sidecar."
     },
     {
       "name": "RAG_PARSER_ALLOW_CLOUD",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Allow cloud parsers",
+      "type": "bool",
+      "requires": [],
+      "default": "true"
     },
     {
       "name": "RAG_PDF_IMAGE_CHUNKS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "PDF image chunks",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "false keeps text chunks only."
     },
     {
       "name": "RAG_PERFORMANCE_MODE",
@@ -1156,7 +2143,17 @@
       "name": "RAG_PIPELINE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Retrieval pipeline",
+      "type": "enum",
+      "options": [
+        "legacy",
+        "v2"
+      ],
+      "requires": [],
+      "default": "legacy",
+      "help": "legacy keeps the current retrieval path; v2 uses the Phase 4 staged pipeline (switches below)."
     },
     {
       "name": "RAG_POST_CONTEXT",
@@ -1174,28 +2171,56 @@
       "name": "RAG_PRIMARY_LANGUAGE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Primary language",
+      "type": "string",
+      "requires": [
+        "RAG_SUPPORTED_LANGUAGES"
+      ],
+      "default": ""
     },
     {
       "name": "RAG_QUERY_CONDENSE",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Condense a multi-turn question into a standalone query (inert while RAG_QUERY_LAYER is false)",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Condense follow-up questions",
+      "type": "bool",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "true"
     },
     {
       "name": "RAG_QUERY_DATE_NORMALIZE",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Normalize relative dates in the query to absolute ranges (inert while RAG_QUERY_LAYER is false)",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Normalize relative dates",
+      "type": "bool",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "true"
     },
     {
       "name": "RAG_QUERY_DECOMPOSE",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Split compound questions into sub-queries (inert while RAG_QUERY_LAYER is false)",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Decompose compound questions",
+      "type": "bool",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "true"
     },
     {
       "name": "RAG_QUERY_ENHANCEMENT",
@@ -1209,111 +2234,256 @@
       "name": "RAG_QUERY_EXPAND",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Add paraphrase variants of the query (inert while RAG_QUERY_LAYER is false)",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Expand with paraphrases",
+      "type": "bool",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "true"
     },
     {
       "name": "RAG_QUERY_FRAMEWORK",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Query-layer implementation: llamaindex (native port) or langchain",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Query-layer framework",
+      "type": "enum",
+      "options": [
+        "llamaindex",
+        "langchain"
+      ],
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "llamaindex"
     },
     {
       "name": "RAG_QUERY_HYDE",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Hypothetical-answer (HyDE) variant on the dense leg; off by default and never used in voice",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Hypothetical answer (HyDE) variant",
+      "type": "bool",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "false",
+      "help": "HyDE is off by default and is never used in voice."
     },
     {
       "name": "RAG_QUERY_LAYER",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Master switch for the Phase 6 query layer (rewrite gate and transforms); false keeps today's behaviour",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Query layer",
+      "type": "bool",
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "false",
+      "help": "Off keeps the current retrieval path unchanged."
     },
     {
       "name": "RAG_QUERY_LLM_MODEL",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "OpenRouter model used for query rewriting, expansion, decomposition and translation",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Query model",
+      "type": "string",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "openai/gpt-4.1-nano"
     },
     {
       "name": "RAG_QUERY_TRANSLATE",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Add a translated variant for cross-language retrieval (inert while RAG_QUERY_LAYER is false)",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Translate for cross-language search",
+      "type": "bool",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "true"
     },
     {
       "name": "RAG_QUERY_TRANSLATE_DISABLED_PROFILES",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Comma-separated embedding profiles for which the translate transform is skipped",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Profiles without translation",
+      "type": "string",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "",
+      "help": "Comma-separated embedding profiles that skip the translate transform; empty translates for every profile."
     },
     {
       "name": "RAG_QUERY_VOICE_TRANSFORMS",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Transforms allowed on the voice path: condense_history, normalize_dates, translate",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Voice transforms",
+      "type": "string",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "condense_history,normalize_dates",
+      "help": "allowed: condense_history, normalize_dates, translate; voice always uses the native condense."
     },
     {
       "name": "RAG_QWEN_EMBED_FALLBACK",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Qwen embedding fallback host",
+      "type": "enum",
+      "options": [
+        "openrouter",
+        "none"
+      ],
+      "requires": [],
+      "default": "openrouter",
+      "help": "Used when the primary host is unavailable: openrouter tries the other host (DeepInfra when OpenRouter is primary and a DeepInfra key is set); none disables it."
     },
     {
       "name": "RAG_QWEN_EMBED_PRIMARY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Qwen embedding primary host",
+      "type": "enum",
+      "options": [
+        "deepinfra",
+        "openrouter"
+      ],
+      "requires": [],
+      "default": "deepinfra",
+      "help": "deepinfra needs the DeepInfra API key; openrouter needs only the OpenRouter API key."
     },
     {
       "name": "RAG_REFUSAL_FEEDBACK",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "observability",
+      "label": "Refusal feedback",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Under an “information not available” or “knowledge base unavailable” message, the user can say whether an answer was expected. Needs the retrieval log on."
     },
     {
       "name": "RAG_REFUSAL_FLOOR",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "ranking",
+      "label": "Refusal floor",
+      "type": "enum",
+      "options": [
+        "similarity",
+        "legacy_rule"
+      ],
+      "requires": [],
+      "default": "similarity",
+      "help": "Fallback used when no calibrated refusal threshold applies to a request"
     },
     {
       "name": "RAG_REFUSAL_THRESHOLD",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "ranking",
+      "label": "Threshold refusal",
+      "type": "bool",
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "false"
     },
     {
       "name": "RAG_RERANK_TIER_CHAT",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "ranking",
+      "label": "Chat rerank tier",
+      "type": "enum",
+      "options": [
+        "quality",
+        "fast"
+      ],
+      "requires": [],
+      "default": "quality"
     },
     {
       "name": "RAG_RERANK_TIER_VOICE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "ranking",
+      "label": "Voice rerank tier",
+      "type": "enum",
+      "options": [
+        "quality",
+        "fast"
+      ],
+      "requires": [],
+      "default": "fast"
     },
     {
       "name": "RAG_RERANK_VOYAGE_MODEL_BY_LANG",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "ranking",
+      "label": "Voyage rerank model by language",
+      "type": "string",
+      "requires": [],
+      "default": "",
+      "help": "Per-language model override decided by eval, for example zh=rerank-2.5"
     },
     {
       "name": "RAG_RERANKER",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "ranking",
+      "label": "Reranker",
+      "type": "enum",
+      "options": [
+        "none",
+        "auto",
+        "cohere",
+        "voyage",
+        "local_bm25"
+      ],
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "none"
     },
     {
       "name": "RAG_RERANKING",
@@ -1336,66 +2506,133 @@
       "name": "RAG_RETRIEVAL_LOG",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "observability",
+      "label": "Retrieval log",
+      "type": "enum",
+      "options": [
+        "off",
+        "ids",
+        "masked_query"
+      ],
+      "requires": [],
+      "default": "off",
+      "help": "One row per chat, embed and voice retrieval, written after the response. Never stores answers, passage text or document names. Weekly mining needs the masked question. A workspace can lower its own level under RAG administration, Feedback loop."
     },
     {
       "name": "RAG_RETRIEVAL_LOG_RETENTION_DAYS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "observability",
+      "label": "Log retention (days)",
+      "type": "number",
+      "requires": [],
+      "default": "30",
+      "help": "Rows older than this are deleted by mining, by Purge expired data and by the optional schedule. 1 to 365; any other value is read as 30."
     },
     {
       "name": "RAG_RETRIEVAL_PARAMS_OVERRIDE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Retrieval params override (emergency)",
+      "type": "string",
+      "requires": [],
+      "default": ""
     },
     {
       "name": "RAG_SCOPE_TAGS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Scope tags",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_SCOPE_TAG_SUGGEST",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Scope tag suggestions",
+      "type": "bool",
+      "requires": [
+        "RAG_SCOPE_TAGS=true"
+      ],
+      "default": "false"
     },
     {
       "name": "RAG_SEMANTIC_CACHE",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Semantic answer cache backend: off, pgvector or redisvl",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Semantic cache backend",
+      "type": "enum",
+      "options": [
+        "off",
+        "pgvector",
+        "redisvl"
+      ],
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "off"
     },
     {
       "name": "RAG_SEMANTIC_CACHE_EMBED_STORE",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Store embed-widget answers in the cache; false keeps embed check-only",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Store embed widget answers",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "embed widget answers are only read from the cache unless this is on."
     },
     {
       "name": "RAG_SEMANTIC_CACHE_MAX_DISTANCE",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Maximum cosine distance for a cache hit",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Cache hit max distance",
+      "type": "number",
+      "requires": [],
+      "default": "0.05"
     },
     {
       "name": "RAG_SEMANTIC_CACHE_REFUSAL_TTL",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Lifetime of a cached refusal in seconds",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Cached refusal lifetime (seconds)",
+      "type": "number",
+      "requires": [],
+      "default": "600"
     },
     {
       "name": "RAG_SEMANTIC_CACHE_TTL",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Lifetime of a cached answer in seconds",
-      "ragAffecting": true
+      "group": "query",
+      "label": "Cached answer lifetime (seconds)",
+      "type": "number",
+      "requires": [],
+      "default": "3600"
     },
     {
       "name": "RAG_SEMANTIC_CLASSIFICATION",
@@ -1410,13 +2647,25 @@
       "name": "RAG_SIDECAR_SECRET",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "sidecar",
+      "label": "Sidecar secret",
+      "type": "secret",
+      "requires": [],
+      "default": "",
+      "provider": "sidecar"
     },
     {
       "name": "RAG_SIDECAR_URL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "sidecar",
+      "label": "Sidecar URL",
+      "type": "url",
+      "requires": [],
+      "default": "",
+      "provider": "sidecar"
     },
     {
       "name": "RAG_SIMILARITY_THRESHOLD",
@@ -1430,25 +2679,51 @@
       "name": "RAG_SOURCE_OPEN_SIGNAL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "observability",
+      "label": "Count opened sources",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Counts when a user opens a source or citation of their own answer. A weak signal: mining uses it only together with another one. Needs the retrieval log on."
     },
     {
       "name": "RAG_STAGE_TIMEOUTS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Stage timeouts",
+      "type": "string",
+      "requires": [],
+      "default": "",
+      "help": "Per-stage time budgets in milliseconds; optional profile.stage=ms prefix (e.g. voice.rerank=200)."
     },
     {
       "name": "RAG_SUPERSESSION_DETECT",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Supersession detection",
+      "type": "enum",
+      "options": [
+        "off",
+        "on"
+      ],
+      "requires": [],
+      "default": "off"
     },
     {
       "name": "RAG_SUPPORTED_LANGUAGES",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Supported languages",
+      "type": "string",
+      "requires": [],
+      "default": ""
     },
     {
       "name": "RAG_SYSTEM_PROMPT",
@@ -1464,13 +2739,27 @@
       "name": "RAG_TABLE_HEADER_REPEAT",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Table header repeat",
+      "type": "enum",
+      "options": [
+        "profile",
+        "always"
+      ],
+      "requires": [],
+      "default": "always"
     },
     {
       "name": "RAG_TABLE_ROW_SERIALIZATION",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Table row serialization",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_TEMPORAL_BOOST",
@@ -1501,195 +2790,621 @@
       "name": "RAG_TOOL_RESULT_GUARD",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Tool result guard",
+      "type": "enum",
+      "options": [
+        "off",
+        "tag",
+        "tag_and_flag"
+      ],
+      "requires": [],
+      "default": "off",
+      "help": "tag wraps web search and MCP results as untrusted data for the model; tag_and_flag also runs the injection check on them."
     },
     {
       "name": "RAG_UPLOAD_APPROVAL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "security",
+      "label": "Upload approval",
+      "type": "enum",
+      "options": [
+        "off",
+        "members",
+        "all"
+      ],
+      "requires": [
+        "RAG_INGEST_PIPELINE=unified"
+      ],
+      "default": "off"
     },
     {
       "name": "RAG_VOICE_TOKEN_SECRET",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "security",
+      "label": "Voice token secret",
+      "type": "secret",
+      "requires": [],
+      "default": "",
+      "provider": "app"
     },
     {
       "name": "RAG_VOICE_TOKEN_TTL_SECONDS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "security",
+      "label": "Voice token lifetime (seconds)",
+      "type": "number",
+      "requires": [],
+      "default": "3600"
     },
     {
       "name": "REDIS_URL",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": false,
       "description": "RedisVL connection URL for the semantic cache; read by the sidecar only, never by the app",
-      "ragAffecting": false
+      "group": "sidecar",
+      "label": "Redis URL",
+      "type": "secret",
+      "requires": [],
+      "default": "",
+      "provider": "sidecar",
+      "help": "Used by the sidecar for the redisvl backend. Stays on the server; only its presence is reported."
     },
     {
       "name": "VOICE_MAX_ACTIVE_ROOMS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "sidecar",
+      "label": "Max concurrent voice rooms",
+      "type": "number",
+      "requires": [],
+      "default": "4",
+      "help": "Must equal VOICE_AGENT_MAX_SESSIONS on the voice agent"
     },
     {
       "name": "VOYAGE_API_KEY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "data",
+      "label": "Voyage API key",
+      "type": "secret",
+      "requires": [],
+      "default": "",
+      "provider": "voyage"
     },
     {
       "name": "VOYAGE_BASE_URL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Voyage base URL",
+      "type": "url",
+      "requires": [],
+      "default": "https://api.voyageai.com/v1",
+      "provider": "voyage"
     },
     {
       "name": "RAG_RETRIEVAL_BACKEND",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "backends",
+      "label": "Chat retrieval backend",
+      "type": "enum",
+      "options": [
+        "pgvector",
+        "weaviate",
+        "qdrant"
+      ],
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "pgvector",
+      "help": "Backend for chat and embedded chat retrieval."
     },
     {
       "name": "RAG_RETRIEVAL_BACKEND_VOICE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "backends",
+      "label": "Voice retrieval backend",
+      "type": "enum",
+      "options": [
+        "pgvector",
+        "weaviate",
+        "qdrant"
+      ],
+      "requires": [],
+      "default": "pgvector",
+      "help": "Set separately from chat; voice has a lower latency budget."
     },
     {
       "name": "RAG_VECTOR_SYNC_SECRET",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "backends",
+      "label": "Vector sync secret",
+      "type": "secret",
+      "requires": [],
+      "default": "",
+      "provider": "app"
     },
     {
       "name": "RAG_VECTOR_SYNC_MAX_LAG_SECONDS",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "backends",
+      "label": "Max sync lag (seconds)",
+      "type": "number",
+      "requires": [],
+      "default": "300"
     },
     {
       "name": "WEAVIATE_URL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "backends",
+      "label": "Weaviate URL",
+      "type": "url",
+      "requires": [
+        "RAG_RETRIEVAL_BACKEND=weaviate"
+      ],
+      "default": "",
+      "provider": "weaviate"
     },
     {
       "name": "WEAVIATE_API_KEY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "backends",
+      "label": "Weaviate write API key",
+      "type": "secret",
+      "requires": [
+        "RAG_RETRIEVAL_BACKEND=weaviate"
+      ],
+      "default": "",
+      "provider": "weaviate"
     },
     {
       "name": "WEAVIATE_READ_API_KEY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "backends",
+      "label": "Weaviate read API key",
+      "type": "secret",
+      "requires": [
+        "RAG_RETRIEVAL_BACKEND=weaviate"
+      ],
+      "default": "",
+      "provider": "weaviate"
     },
     {
       "name": "QDRANT_URL",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "backends",
+      "label": "Qdrant URL",
+      "type": "url",
+      "requires": [
+        "RAG_RETRIEVAL_BACKEND=qdrant"
+      ],
+      "default": "",
+      "provider": "qdrant"
     },
     {
       "name": "QDRANT_API_KEY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "backends",
+      "label": "Qdrant write API key",
+      "type": "secret",
+      "requires": [
+        "RAG_RETRIEVAL_BACKEND=qdrant"
+      ],
+      "default": "",
+      "provider": "qdrant"
     },
     {
       "name": "QDRANT_READ_API_KEY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false
+      "ragAffecting": false,
+      "group": "backends",
+      "label": "Qdrant read API key",
+      "type": "secret",
+      "requires": [
+        "RAG_RETRIEVAL_BACKEND=qdrant"
+      ],
+      "default": "",
+      "provider": "qdrant"
     },
     {
       "name": "RAG_OPENAI_EMBEDDINGS_VIA",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": true,
       "description": "Host for the OpenAI embedding model: openai or openrouter (same model, same vectors; no Batch API through OpenRouter)",
-      "ragAffecting": true
+      "group": "data",
+      "label": "OpenAI embedding host",
+      "type": "enum",
+      "options": [
+        "openai",
+        "openrouter"
+      ],
+      "requires": [],
+      "default": "openai",
+      "help": "openrouter sends the same embedding model through OpenRouter with the OpenRouter API key (same vectors, no re-embed); the OpenAI Batch API is then unavailable and backfills embed immediately."
     },
     {
       "name": "RAG_SECTION_RULES",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Section rules",
+      "type": "enum",
+      "options": [
+        "off",
+        "on"
+      ],
+      "requires": [
+        "RAG_INGEST_PIPELINE=unified"
+      ],
+      "default": "off"
     },
     {
       "name": "RAG_PAGE_BOILERPLATE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Page boilerplate removal",
+      "type": "enum",
+      "options": [
+        "off",
+        "detect",
+        "rules",
+        "both"
+      ],
+      "requires": [
+        "RAG_INGEST_PIPELINE=unified"
+      ],
+      "default": "off"
     },
     {
       "name": "RAG_DOC_ATTRIBUTES",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Document attributes",
+      "type": "bool",
+      "requires": [
+        "RAG_INGEST_PIPELINE=unified"
+      ],
+      "default": "false"
     },
     {
       "name": "RAG_ATTRIBUTE_HEADER",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Attribute header in search text",
+      "type": "bool",
+      "requires": [
+        "RAG_DOC_ATTRIBUTES=true"
+      ],
+      "default": "false"
     },
     {
       "name": "RAG_ATTRIBUTE_FILTER",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Attribute filter",
+      "type": "enum",
+      "options": [
+        "off",
+        "hard",
+        "soft"
+      ],
+      "requires": [
+        "RAG_DOC_ATTRIBUTES=true",
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "off",
+      "help": "off ignores attributes. hard limits retrieval to the documents whose attributes match a value named in the question or sent with the request, and searches again without the limit when that finds nothing. soft keeps every document and ranks the matching ones higher. Needs document attributes and the v2 pipeline."
     },
     {
       "name": "RAG_LEXICAL_QUANTITY",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Numbers with units as single search terms",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_CONFIG_GATE",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": false,
       "description": "Pre-save setting check in the Config UI: off | warn | enforce (off saves at once, as before).",
-      "ragAffecting": false
+      "group": "evaluation",
+      "label": "Setting check before save",
+      "type": "enum",
+      "options": [
+        "off",
+        "warn",
+        "enforce"
+      ],
+      "requires": [],
+      "default": "off"
     },
     {
       "name": "RAG_CONFIG_GATE_LIVE",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": false,
       "description": "Adds a live chat-model layer to the setting check; no effect while RAG_CONFIG_GATE=off.",
-      "ragAffecting": false
+      "group": "evaluation",
+      "label": "Live layer of the setting check",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_MONITOR",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": false,
       "description": "Daily monitor over the retrieval log; off runs nothing, stores nothing and its routes answer 404.",
-      "ragAffecting": false
+      "group": "observability",
+      "label": "Daily monitor",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
     },
     {
       "name": "RAG_MONITOR_WEBHOOK_SECRET",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": false,
       "description": "Optional HMAC-SHA256 signing secret for monitor webhook deliveries, at least 32 characters.",
-      "ragAffecting": false
+      "group": "observability",
+      "label": "Monitor webhook signing secret",
+      "type": "secret",
+      "requires": [
+        "RAG_MONITOR=true"
+      ],
+      "default": "",
+      "provider": "webhook"
     },
     {
       "name": "RAG_MONITOR_WEBHOOK_URL",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": false,
       "description": "Optional https:// admin webhook for monitor alerts; treated as a secret, never shown or logged.",
-      "ragAffecting": false
+      "group": "observability",
+      "label": "Monitor webhook URL",
+      "type": "secret",
+      "requires": [
+        "RAG_MONITOR=true"
+      ],
+      "default": "",
+      "provider": "webhook"
     },
     {
       "name": "RAG_REPRESENTATIVE_SAMPLE",
       "status": "managed",
       "knownGaps": [],
+      "ragAffecting": false,
       "description": "Weekly representative sample of real questions into the review queue; needs masked_query logging and expert review.",
-      "ragAffecting": false
+      "group": "evaluation",
+      "label": "Representative sample",
+      "type": "bool",
+      "requires": [
+        "RAG_RETRIEVAL_LOG=masked_query",
+        "RAG_DOMAIN_EXPERT_REVIEW=true"
+      ],
+      "default": "false"
+    },
+    {
+      "name": "RAG_QUERY_HISTORY_FALLBACK",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Adds a history_fallback variant (previous question plus follow-up) when condense was skipped; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true,
+      "group": "query",
+      "label": "History fallback variant",
+      "type": "bool",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "true"
+    },
+    {
+      "name": "RAG_QUERY_DECOMPOSE_COMPLETENESS",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Checks that decomposed sub-questions cover every protected token of the question; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true,
+      "group": "query",
+      "label": "Sub-question completeness check",
+      "type": "bool",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "true"
+    },
+    {
+      "name": "RAG_QUERY_SUBQ_FILTERS",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Lets each sub-question narrow its own search with filters that can only narrow the tenant scope; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true,
+      "group": "query",
+      "label": "Sub-question filters",
+      "type": "bool",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "false"
+    },
+    {
+      "name": "RAG_DECOMPOSED_ANSWER",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Answers a decomposed question in one part per sub-question, each with its own citations; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true,
+      "group": "query",
+      "label": "Answer per sub-question",
+      "type": "bool",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "true"
+    },
+    {
+      "name": "RAG_TRANSLATION_GLOSSARY",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Enforces the translation glossary in query translation, document translation and rewriting; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true,
+      "group": "query",
+      "label": "Translation glossary",
+      "type": "bool",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "false"
+    },
+    {
+      "name": "RAG_LANGID_SIDECAR",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Asks the sidecar language detector about short or mixed-script questions the built-in detector is unsure of; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true,
+      "group": "query",
+      "label": "Sidecar language detector",
+      "type": "bool",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "false"
+    },
+    {
+      "name": "RAG_MODEL_ROUTING",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Routing for the Auto model entry: off sends Auto to the quality model, auto routes simple lookups to the fast model; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true,
+      "group": "query",
+      "label": "Auto model routing",
+      "type": "enum",
+      "options": [
+        "off",
+        "auto"
+      ],
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "off",
+      "help": "Off sends the Auto model entry to the quality model; auto routes simple lookups to the fast model."
+    },
+    {
+      "name": "RAG_ROUTING_FAST_MODEL",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Fast model id for Auto routing; must be listed in the OpenRouter model list and not be auto",
+      "ragAffecting": true,
+      "group": "query",
+      "label": "Routing fast model",
+      "type": "string",
+      "requires": [
+        "RAG_MODEL_ROUTING=auto"
+      ],
+      "default": "anthropic/claude-haiku-5.5",
+      "help": "Must be listed in the OpenRouter model list and must not be auto."
+    },
+    {
+      "name": "RAG_ROUTING_QUALITY_MODEL",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Quality model id for Auto routing; must be listed in the OpenRouter model list and not be auto",
+      "ragAffecting": true,
+      "group": "query",
+      "label": "Routing quality model",
+      "type": "string",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "anthropic/claude-sonnet-5.5",
+      "help": "Must be listed in the OpenRouter model list and must not be auto."
+    },
+    {
+      "name": "RAG_SPECULATIVE_RETRIEVAL",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Starts embedding and search of the original question while the transforms run; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true,
+      "group": "query",
+      "label": "Speculative retrieval",
+      "type": "bool",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "false"
+    },
+    {
+      "name": "RAG_WHATSAPP_HISTORY",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Sends recent turns of the same WhatsApp sender and session with each message; applies to the WhatsApp channel itself",
+      "ragAffecting": true,
+      "group": "query",
+      "label": "WhatsApp conversation history",
+      "type": "bool",
+      "requires": [],
+      "default": "false"
+    },
+    {
+      "name": "RAG_SCOPE_GATE",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Skips retrieval for questions clearly outside the workspace's own documents; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true,
+      "group": "query",
+      "label": "Scope gate",
+      "type": "bool",
+      "requires": [
+        "RAG_QUERY_LAYER=true"
+      ],
+      "default": "false"
     }
   ]
 }

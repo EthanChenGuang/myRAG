@@ -29,9 +29,10 @@ afterEach(() => {
 
 const PHASE42_STAGES = ['table_lookup', 'diversify', 'identifier_resolve', 'identifier_guard'];
 const PHASE33_STAGES = ['attribute_resolve'];
+const PHASE62_STAGES = ['scope_gate'];
 
 function phase4Disabled(config: { disabledStages: ReadonlySet<string> }): string[] {
-  const skip = new Set<string>([...QUERY_LAYER_STAGES, ...PHASE42_STAGES, ...PHASE33_STAGES]);
+  const skip = new Set<string>([...QUERY_LAYER_STAGES, ...PHASE42_STAGES, ...PHASE33_STAGES, ...PHASE62_STAGES]);
   return [...config.disabledStages].filter((name) => !skip.has(name)).sort();
 }
 
@@ -91,6 +92,7 @@ const CHAT_DEFAULTS = {
   identifier_resolve: 1000,
   identifier_guard: 1000,
   attribute_resolve: 1000,
+  scope_gate: 20,
 };
 
 describe('stage tables', () => {
@@ -125,6 +127,7 @@ describe('stage tables', () => {
       'identifier_guard',
       'terminology',
       'attribute_resolve',
+      'scope_gate',
     ]);
   });
 
@@ -148,6 +151,8 @@ describe('stage tables', () => {
     expect(PROFILE_STAGE_DEFAULTS.eval.terminology).toBe(1000);
     expect(PROFILE_STAGE_DEFAULTS.voice.attribute_resolve).toBe(500);
     expect(PROFILE_STAGE_DEFAULTS.eval.attribute_resolve).toBe(1000);
+    expect(PROFILE_STAGE_DEFAULTS.eval.scope_gate).toBe(60000);
+    expect(PROFILE_STAGE_DEFAULTS.voice).not.toHaveProperty('scope_gate');
   });
 });
 
@@ -832,7 +837,7 @@ describe('query layer', () => {
     }
     expect(config.timeouts.chat.condense).toBe(400);
     expect(config.timeouts.embed.condense).toBe(600);
-    expect(config.timeouts.voice).toMatchObject({ condense: 300, query_gate: 50, normalize_dates: 50, translate: 300 });
+    expect(config.timeouts.voice).toMatchObject({ condense: 300, query_gate: 50, normalize_dates: 50, translate: 250 });
     for (const stage of [...QUERY_LAYER_STAGES, 'translate'] as const) expect(config.timeouts.eval[stage]).toBe(60000);
     expect(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_STAGE_TIMEOUTS: 'translate=900' }).timeouts.chat.translate).toBe(900);
   });
@@ -1444,5 +1449,77 @@ describe('Phase 4.4 lexical scoring (D-05)', () => {
     expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'bm25' })).not.toBe(base);
     expect(loadRagConfig({ ...ON, RAG_LEXICAL_BM25_K1: '2' })).not.toBe(base);
     expect(loadRagConfig({ ...ON, RAG_LEXICAL_BM25_B: '0.5' })).not.toBe(base);
+  });
+});
+
+describe('RAG_DOC_ACCESS_GROUPS (04.3-01, D-09)', () => {
+  function accessWarnings(): string[] {
+    return configWarnings().filter((line) => line.includes('RAG_DOC_ACCESS_GROUPS'));
+  }
+
+  test('unset, empty and off resolve to off without a warning', () => {
+    expect(loadRagConfig({}).accessGroups).toBe('off');
+    resetRagConfigForTests();
+    expect(loadRagConfig({ RAG_DOC_ACCESS_GROUPS: '' }).accessGroups).toBe('off');
+    resetRagConfigForTests();
+    expect(loadRagConfig({ RAG_DOC_ACCESS_GROUPS: ' off ' }).accessGroups).toBe('off');
+    expect(accessWarnings()).toEqual([]);
+  });
+
+  test('on and ON resolve to on', () => {
+    expect(loadRagConfig({ RAG_DOC_ACCESS_GROUPS: 'on' }).accessGroups).toBe('on');
+    resetRagConfigForTests();
+    expect(loadRagConfig({ RAG_DOC_ACCESS_GROUPS: ' ON ' }).accessGroups).toBe('on');
+    expect(accessWarnings()).toEqual([]);
+  });
+
+  test('an unknown value resolves to off and warns with the variable name', () => {
+    const config = loadRagConfig({ RAG_DOC_ACCESS_GROUPS: 'enabled' });
+    expect(config.accessGroups).toBe('off');
+    expect(config.warnings.some((line) => line.includes('RAG_DOC_ACCESS_GROUPS'))).toBe(true);
+    expect(accessWarnings().length).toBeGreaterThan(0);
+  });
+
+  test('a changed value is not served from the memo of another value', () => {
+    expect(loadRagConfig({ RAG_DOC_ACCESS_GROUPS: 'off' }).accessGroups).toBe('off');
+    expect(loadRagConfig({ RAG_DOC_ACCESS_GROUPS: 'on' }).accessGroups).toBe('on');
+  });
+});
+
+describe('RAG_EMBED_ACCESS_GROUP and the access_scope stage name (04.3-01, D-07, D-08)', () => {
+  test('embedAccessGroup is the trimmed value and empty when unset', () => {
+    expect(loadRagConfig({}).embedAccessGroup).toBe('');
+    resetRagConfigForTests();
+    expect(loadRagConfig({ RAG_EMBED_ACCESS_GROUP: '  group-a  ' }).embedAccessGroup).toBe('group-a');
+    resetRagConfigForTests();
+    expect(loadRagConfig({ RAG_EMBED_ACCESS_GROUP: '   ' }).embedAccessGroup).toBe('');
+  });
+
+  test('access_scope is not an optional stage', () => {
+    expect((OPTIONAL_STAGES as readonly string[]).includes('access_scope')).toBe(false);
+    expect((CORE_STAGES as readonly string[]).includes('access_scope')).toBe(false);
+  });
+
+  test('RAG_DISABLED_STAGES=access_scope is refused with the unknown-stage warning', () => {
+    const unknown = loadRagConfig({ RAG_DISABLED_STAGES: 'not_a_stage' });
+    resetRagConfigForTests();
+    const config = loadRagConfig({ RAG_DISABLED_STAGES: 'access_scope' });
+    expect([...config.disabledStages].map(String)).not.toContain('access_scope');
+    expect(config.warnings).toEqual([expect.stringContaining('Unknown stage in RAG_DISABLED_STAGES')]);
+    expect(config.warnings[0]).toContain('access_scope');
+    expect(unknown.warnings[0]!.replace('not_a_stage', 'access_scope')).toBe(config.warnings[0]);
+  });
+
+  test('access_scope has a report-only latency budget for chat, embed and voice', () => {
+    const budgets = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'eval/config/latency-budgets.json'), 'utf8'));
+    expect(budgets.profiles.chat.stages.access_scope).toBe(25);
+    expect(budgets.profiles.embed.stages.access_scope).toBe(25);
+    expect(budgets.profiles.voice.stages.access_scope).toBe(15);
+  });
+
+  test('the eval pin pins RAG_DOC_ACCESS_GROUPS off and leaves RAG_EMBED_ACCESS_GROUP out', () => {
+    const pinned = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'eval/config/rag-eval-env.json'), 'utf8'));
+    expect(pinned.RAG_DOC_ACCESS_GROUPS).toBe('off');
+    expect(pinned).not.toHaveProperty('RAG_EMBED_ACCESS_GROUP');
   });
 });

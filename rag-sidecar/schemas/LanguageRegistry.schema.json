@@ -44,6 +44,19 @@
           "default": null,
           "title": "Calculation"
         },
+        "calculation_block": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Calculation Block"
+        },
         "citation": {
           "anyOf": [
             {
@@ -272,6 +285,32 @@
           "default": null,
           "title": "Badge Verified"
         },
+        "condensed_question": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Condensed Question"
+        },
+        "earlier_draft": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Earlier Draft"
+        },
         "effective_from": {
           "anyOf": [
             {
@@ -450,6 +489,18 @@
     "LanguagePack": {
       "additionalProperties": false,
       "properties": {
+        "calc_intent_terms": {
+          "items": {
+            "maxLength": 24,
+            "minLength": 1,
+            "pattern": "^[^\\s\\d](?:\\D*[^\\s\\d])?$",
+            "type": "string"
+          },
+          "maxItems": 40,
+          "minItems": 1,
+          "title": "Calc Intent Terms",
+          "type": "array"
+        },
         "code": {
           "pattern": "^[a-z]{2,3}$",
           "title": "Code",
@@ -499,6 +550,9 @@
           "minLength": 1,
           "title": "Native Name",
           "type": "string"
+        },
+        "number_format": {
+          "$ref": "#/$defs/NumberFormat"
         },
         "ocr_codes": {
           "$ref": "#/$defs/LanguageOcrCodes"
@@ -587,6 +641,8 @@
         "groundedness",
         "effective_date_patterns",
         "version_markers",
+        "number_format",
+        "calc_intent_terms",
         "fixtures",
         "pack_version"
       ],
@@ -629,6 +685,9 @@
         },
         "notices": {
           "$ref": "#/$defs/NoticeTexts"
+        },
+        "query_layer": {
+          "$ref": "#/$defs/QueryLayerTexts"
         }
       },
       "required": [
@@ -637,6 +696,30 @@
         "instructions"
       ],
       "title": "LanguageTexts",
+      "type": "object"
+    },
+    "MagnitudeWord": {
+      "additionalProperties": false,
+      "properties": {
+        "power": {
+          "maximum": 12,
+          "minimum": 1,
+          "title": "Power",
+          "type": "integer"
+        },
+        "word": {
+          "maxLength": 24,
+          "minLength": 1,
+          "pattern": "^[^\\s\\d](?:\\D*[^\\s\\d])?$",
+          "title": "Word",
+          "type": "string"
+        }
+      },
+      "required": [
+        "word",
+        "power"
+      ],
+      "title": "MagnitudeWord",
       "type": "object"
     },
     "NoticeTexts": {
@@ -815,6 +898,52 @@
       "title": "NoticeTexts",
       "type": "object"
     },
+    "NumberFormat": {
+      "additionalProperties": false,
+      "description": "How numbers are written in this language (Phase 5.2.1 D-74): data the calculation check normalizes with, never code branches.",
+      "properties": {
+        "decimal_marks": {
+          "items": {
+            "pattern": "^\\D$",
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Decimal Marks",
+          "type": "array"
+        },
+        "fullwidth_digits": {
+          "title": "Fullwidth Digits",
+          "type": "boolean"
+        },
+        "group_separators": {
+          "items": {
+            "pattern": "^\\D$",
+            "type": "string"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Group Separators",
+          "type": "array"
+        },
+        "magnitude_words": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MagnitudeWord"
+          },
+          "maxItems": 20,
+          "title": "Magnitude Words",
+          "type": "array"
+        }
+      },
+      "required": [
+        "group_separators",
+        "decimal_marks",
+        "fullwidth_digits"
+      ],
+      "title": "NumberFormat",
+      "type": "object"
+    },
     "QuantityNotation": {
       "additionalProperties": false,
       "description": "Language-neutral unit symbols and number separators for quantity tokens (Phase 3.3 D-31, D-32).\n\nOne character may be both a decimal and a grouping separator: an ambiguous separator is read both ways.",
@@ -856,6 +985,105 @@
         "grouping_separators"
       ],
       "title": "QuantityNotation",
+      "type": "object"
+    },
+    "QueryLayerTexts": {
+      "additionalProperties": false,
+      "description": "Phase 6.2 D-11, D-26: optional texts of the decomposed-answer block and the scope gate.\n\nNot part of TEXT_KEYS or D-04 completeness: a pack without them stays complete and the feature that needs one\nfalls back to its switch-off behaviour.",
+      "properties": {
+        "decomposed_answer_block_label": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decomposed Answer Block Label"
+        },
+        "decomposed_answer_cite_own": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decomposed Answer Cite Own"
+        },
+        "decomposed_answer_compare_order": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decomposed Answer Compare Order"
+        },
+        "decomposed_answer_intro": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decomposed Answer Intro"
+        },
+        "decomposed_answer_parts": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decomposed Answer Parts"
+        },
+        "scope_gate_notice": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Gate Notice"
+        },
+        "scope_gate_prompt_rule": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Gate Prompt Rule"
+        }
+      },
+      "title": "QueryLayerTexts",
       "type": "object"
     }
   },

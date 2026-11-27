@@ -4,7 +4,7 @@ import { drainUntilEmpty } from '@/lib/rag/sync/drain';
 import { RECONCILE_PRUNE_DAYS, bucketOf, idHash64, reconcileSlice } from '@/lib/rag/sync/reconcile';
 import { createFakeVectorStore, type FakeVectorStore } from '@/lib/rag/sync/stores/fake';
 import type { VectorStore } from '@/lib/rag/sync/stores/types';
-import { createFakeRpc, fakeClock, type FakeChunk, type FakeClock, type FakeRpc } from './fake-rpc';
+import { createFakeRpc, fakeClock, keyedScalarClient, type FakeChunk, type FakeClock, type FakeRpc } from './fake-rpc';
 
 const TENANT_A = 'u:00000000-0000-4000-8000-0000000000a1';
 const TENANT_B = 'u:00000000-0000-4000-8000-0000000000b1';
@@ -153,6 +153,28 @@ describe('reconcileSlice', () => {
     expect(state(rpc, TENANT_A)).toBe('ready');
     expect(store.points(PROFILE, TENANT_A).some((p) => p.id === FOREIGN_ID)).toBe(false);
     expect(store.points(PROFILE, TENANT_A).find((p) => p.id === staleId)?.payload.content_hash).toBe(`h-${staleId.slice(-4)}`);
+  });
+
+  it('drift is detected and repaired when scalar RPCs answer one row keyed by the function name (the PGlite edge shape)', async () => {
+    const { clock, rpc, store } = setup();
+    const client = keyedScalarClient(rpc.client);
+    addDoc(rpc, 1, 3);
+    await buildTenant(rpc, store, clock, TENANT_A);
+    const control = await reconcileSlice({ stores: [store], rpc: client, now: clock.now, ...quiet });
+    expect(control.reports[0]).toMatchObject({ state: 'ready', repairs_enqueued: 0 });
+    expect(control.pruned).toBe(0);
+
+    await store.deleteIds(PROFILE, TENANT_A, [chunkId(1, 2)]);
+    clock.t += 1000;
+    const first = await reconcileSlice({ stores: [store], rpc: client, now: clock.now, ...quiet });
+    expect(first.reports[0]).toMatchObject({ missing: 1, repairs_enqueued: 1, state: 'stale' });
+    expect(state(rpc, TENANT_A)).toBe('stale');
+
+    await drainUntilEmpty({ store, rpc: client, now: clock.now, ...quiet });
+    clock.t += 1000;
+    const second = await reconcileSlice({ stores: [store], rpc: client, now: clock.now, ...quiet });
+    expect(second.reports[0]).toMatchObject({ missing: 0, state: 'ready' });
+    expect(Number.isFinite(second.pruned)).toBe(true);
   });
 
   it('drift with equal counts and equal id sets: a stale lexical_version alone is caught by the content digest', async () => {

@@ -22,6 +22,7 @@ import {
   finishTrace,
   groundednessEligibility,
   IDENTIFIER_NOT_FOUND,
+  contentIdentifierNorms,
   currentAttributeFilterMode,
   currentLexicalVersion,
   hashSystemPromptTemplate,
@@ -66,6 +67,8 @@ import {
   configHash,
   outputGuardTraceSummary,
   residualOutputFindings,
+  retrievalBackendTrace,
+  evalTraceLanguages,
 } from '@/lib/rag-eval/trace';
 import {
   evalGroundednessRequest,
@@ -98,6 +101,7 @@ function toRetrievalOverrides(input: RetrievalOverridesInput | undefined): Retri
     out.chunkingProfileByDocType = { ...input.chunking_profile_by_doc_type };
   }
   if (input.table_lookup != null) out.tableLookup = { ...input.table_lookup };
+  if (input.backend != null) out.backend = input.backend;
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -850,6 +854,24 @@ export async function POST(req: NextRequest) {
       const answerRulesFields = answerTurn
         ? answerRulesTraceFields(evalAnswerRulesInput({ answerTurn, answer, answerChain, finishReason, serverRefused, mixedVersions, textBlocks, citationSession }))
         : {};
+      const backendTrace = retrievalBackendTrace(result.stages);
+      // LANG-10: the same languages block as the production trace; the answer language follows the chat route's rule
+      const languagesField = evalTraceLanguages({
+        collector,
+        result,
+        query,
+        answerLanguage: cacheHit
+          ? (cacheHit.answer.answer_language ?? null)
+          : refusedByModel
+            ? (answerTurn?.answerLanguage ?? null)
+            : answer !== null
+              ? (detectLanguage(answer) ?? null)
+              : null,
+      });
+      // D-32: kept chunks carry their identifiers only while the identifier filter ran, so every other trace stays unchanged.
+      const keptIdentifiers = identifierTrace
+        ? await contentIdentifierNorms(scope, result.kept.map((chunk) => chunk.content), { signal: req.signal })
+        : null;
       const trace = {
         schema_version: 1 as const,
         item_id: itemId ?? null,
@@ -879,11 +901,12 @@ export async function POST(req: NextRequest) {
           ...(chunk.legs !== undefined ? { legs: chunk.legs } : {}),
           ...(chunk.language !== undefined ? { language: chunk.language } : {}),
         })),
-        kept: result.kept.map(({ dupClusterId, alsoIn: _alsoIn, isCurrent, documentVersion, ...chunk }) => ({
+        kept: result.kept.map(({ dupClusterId, alsoIn: _alsoIn, isCurrent, documentVersion, ...chunk }, index) => ({
           ...chunk,
           ...(dupClusterId ? { dup_cluster_id: dupClusterId } : {}),
           ...(isCurrent !== undefined ? { is_current: isCurrent } : {}),
           ...(documentVersion !== undefined ? { document_version: documentVersion } : {}),
+          ...(keptIdentifiers ? { identifiers_norm: keptIdentifiers[index] ?? [] } : {}),
         })),
         ...(redundancy !== null ? { topk_redundancy: redundancy } : {}),
         ...(identifierTrace ? { identifier: identifierTrace } : {}),
@@ -897,11 +920,13 @@ export async function POST(req: NextRequest) {
         refused,
         refusal_reason: refusalReasonOf(result, refused),
         ...(v2Result ? v2TraceFields(result) : {}),
+        ...(v2Result && backendTrace ? { retrieval_backend: backendTrace } : {}),
         ...(v2Result ? (attributeFilterTrace(result.stages, currentAttributeFilterMode()) ?? {}) : {}),
         ...(Object.keys(stageCounts).length > 0 ? { stage_counts: stageCounts } : {}),
         ...(injection ? { injection } : {}),
         ...(result.versionConflict ? { version_conflict: versionConflictTrace(result.versionConflict, mixedVersions) } : {}),
         answer,
+        ...languagesField,
         citations: citationFields?.citations ?? NO_CITATIONS,
         ...(citationFields
           ? { citation_strategy: citationFields.citation_strategy, invalid_citations: citationFields.invalid_citations }

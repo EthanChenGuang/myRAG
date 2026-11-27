@@ -1,4 +1,7 @@
 import crypto from 'node:crypto';
+import type { TraceCollector } from '../rag/trace/collector';
+import { traceLanguagesOf } from '../rag/trace/languages';
+import type { RetrievalResult } from '../rag/types';
 import type { AnswerNotice, AnswerSentence, OutputGuardSummary, RagTrace } from './contracts.generated';
 
 export const ENDPOINT_VERSION = 'rag-eval/1';
@@ -164,4 +167,55 @@ export function answerRulesTraceFields(input: AnswerRulesTraceInput): Partial<An
     ...(input.parts && input.parts.length > 0 ? { answer_rules_parts: [...input.parts] } : {}),
     ...(input.notices && input.notices.length > 0 ? { notices: input.notices.map((notice) => ({ ...notice })) } : {}),
   };
+}
+
+type TraceBackend = NonNullable<RagTrace['retrieval_backend']>;
+
+const TRACE_BACKENDS: ReadonlySet<string> = new Set<TraceBackend['backend']>(['pgvector', 'weaviate', 'qdrant']);
+const TRACE_FALLBACKS: ReadonlySet<string> = new Set<NonNullable<TraceBackend['fallback_reason']>>([
+  'backend_not_ready',
+  'backend_error',
+  'backend_slow',
+  'filter_unsupported',
+]);
+
+interface StageAttributesLike {
+  name: string;
+  attributes?: Record<string, string | number | boolean>;
+}
+
+/**
+ * D-25: RagTrace.retrieval_backend from the search span (the last search record wins, as with the identifier rerun). Absent when no
+ * search stage recorded a backend, so a trace without a v2 search keeps its shape.
+ */
+export function retrievalBackendTrace(stages: readonly StageAttributesLike[]): TraceBackend | undefined {
+  const search = [...stages].reverse().find((stage) => stage.name === 'search' && typeof stage.attributes?.backend === 'string');
+  const attributes = search?.attributes;
+  if (!attributes || !TRACE_BACKENDS.has(String(attributes.backend))) return undefined;
+  const reason = attributes.fallback_reason;
+  const dropped = attributes.tenant_validation_dropped;
+  return {
+    backend: attributes.backend as TraceBackend['backend'],
+    fallback_reason: typeof reason === 'string' && TRACE_FALLBACKS.has(reason) ? (reason as TraceBackend['fallback_reason']) : null,
+    tenant_validation_dropped: typeof dropped === 'number' && Number.isInteger(dropped) && dropped >= 0 ? dropped : 0,
+  };
+}
+
+export interface EvalTraceLanguagesInput {
+  collector: Pick<TraceCollector, 'setLanguages' | 'languages'>;
+  result: RetrievalResult;
+  query: string;
+  /** The answer's language code (the chat route's rule: the detected answer, the registry refusal or the cached answer), or null. */
+  answerLanguage: string | null;
+}
+
+/**
+ * LANG-10 on the eval trace: the collector's languages block, from the FBK-01 derivation. The eval writes no retrieval log, so the
+ * answer language is put on the request's own holder first; finishTrace then reads the same block.
+ */
+export function evalTraceLanguages(input: EvalTraceLanguagesInput): Pick<RagTrace, 'languages'> {
+  if (input.result.logOutcome) input.result.logOutcome.answerLanguage = input.answerLanguage;
+  input.collector.setLanguages(traceLanguagesOf(input.result, input.query));
+  const block = input.collector.languages();
+  return block ? { languages: block } : {};
 }

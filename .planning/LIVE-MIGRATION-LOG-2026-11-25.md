@@ -1143,3 +1143,206 @@ Numbers are unique across `supabase/migrations` (0706 in the 07 block, 0900-0902
 - Corpus hash (f95a702d...), both phase42 dump digests and the fingerprint backfill count (149 + 3) are re-pinned for the three sec-link-topics documents. Local gates: tsc 0 errors, check-config and check-rag-boundary ok, `tests/rag-db/*.test.mts` 4087 tests, 0 failed.
 - Setup files after the PR #125 merge: main's Phase 4.1.1 section (0471-0473) follows Phase 6, then the Phase 6.1 section closes the file; `schema-equality.test.mts` and AGENTS.md list both folds.
 - Merge conflicts (both intents kept): `feedback_loop.py` / `review-access.ts` / `exports.ts` / review item route (05.2 check reasons and check_details plus 05.3 sample reasons, `source` and `getReviewItemWithSource`; golden export keeps the Python twin's channel and reason enums plus `source`); `src/lib/rag/index.ts` (union of exports); setup files (train 32's Phase 5.1.1 and Phase 6 sections, then the 06.1-18 Phase 6.1 section, header now "after 0603"); `schema-equality.test.mts`, `agents-guide.test.ts`, `AGENTS.md` (all three folds); `config-server.js` (train 32's encoded wildcard join); `sources-provider.tsx` / `sources-sidebar.tsx` (04.2-26 provenance fields and 05.2 version line both kept); `answer-checks.ts` / `answer-turn.ts` (05.2-22 version_conflict); `review-labelling.js` (both reason lists; check-raised items skip the answer check and chunks load); eval fixture count tests (sums of both additions). `ingestion-schema` replays 0706 in its 0351 re-run; `ingest-mode-routing` leaves the link-injection items out of the train-30 comparison.
+
+## Train 34: 0708, 0709, 0740, 0920 and 0410 r17 (to apply after train 34 reaches `origin/main`)
+
+Branch `ci/merge-train-34`, built on `ci/merge-train-33` (45ef38b8) with `origin/main` merged after PR #127 (train 33) landed as f0a990cd; main's tree equals train 33's, so that merge changes nothing. Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+All 23 branches carry their own SUMMARY and are merged with `--no-ff` in this order; none skipped. `exec/04.3-03`, `exec/05.3-43` and `exec/05.2-38` are still in progress and are not in this train.
+
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/03.2.1-03` | 03.2.1-03 BGE-M3 in the profile comparison, inactive-profile parity | none |
+| `exec/03.2.1-05` | 03.2.1-05 BGE-M3 live verification record | none |
+| `exec/04.1.1-15` | 04.1.1-15 summary (its other content was already in train 33) | none |
+| `exec/04.3-01` | 04.3-01 access-group switch and embed group setting | none |
+| `exec/04.3-02` | 04.3-02 access group stores and seam inventory | 0920 (common, single-, multi-tenant); 0410 entry (r17) |
+| `exec/05.2-31` | 05.2-31 eval answer path runs the production composition | none |
+| `exec/05.2-32` | 05.2-32 Phase 5.2 metrics, gates and CI wiring (`eval-smoke-p52`) | none |
+| `exec/05.2-26` | 05.2-26 output-cap sweep and judge calibration | none |
+| `exec/05.3-23`, `-38`, `-39`, `-40`, `-42`, `-44`, `-45` | 05.3 config-server save guard, release-gate workflow, required `pr-smoke` check, weekly gates, pre-save check dialog, monitoring panel, test set coverage | none |
+| `exec/07-12` | 07-12 backend factory, readiness and pgvector fallback | none |
+| `exec/07-13` | 07-13 drain route, kick, CLI and scheduler recipe | 0708 |
+| `exec/07-14` | 07-14 cross-tenant canary suite | none |
+| `exec/07-15` | 07-15 index-compat warning and sync-target admin routes | 0709 |
+| `exec/07-16` | 07-16 backend canary CI job (`backend-canary`) | none |
+| `exec/07-35` | 07-35 vector sync purges and stale-id repair | 0740 |
+| `exec/07-36` | 07-36 purges in the drain, vendor stores and reconcile | none (`supabase/optional/vector-sync-schedule.sql` is optional) |
+| `exec/05-26` | 05-26 live verification summary | none |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0708_vector_sync_status.sql` | Needs 0701 (live). `rag_vector_sync_status()`: counts per target only. SECURITY INVOKER, empty search_path, service_role only. **DROP:** `DROP FUNCTION IF EXISTS public.rag_vector_sync_status()`, re-created at once. |
+| 2 | `0709_backend_index_state_counts.sql` | Needs 0707 (live). `rag_backend_index_state_counts()`: tenants per (target, profile, state). SECURITY INVOKER, service_role only. **DROP:** `DROP FUNCTION IF EXISTS public.rag_backend_index_state_counts()`, re-created at once. |
+| 3 | `0740_vector_sync_purge.sql` | Needs 0701-0707 (live). Tables `vector_sync_purges`, `vector_sync_purge_targets` (IF NOT EXISTS) and the purge enqueue, row, complete, status, purged-documents, reopen and stale-enqueue functions (CREATE OR REPLACE); grants in the file, service_role only. The 0703 claim functions are unchanged. **DROP:** none. |
+| 4 | `0920_access_groups_tables.sql` | Needs 0942 (live, `rag_security_events`). Access group, member, settings (one row, `enforced` false), connector map, sharing rules, document principals, access security events and audit tables, RLS on. **DROP:** `DROP TRIGGER IF EXISTS` for `rag_access_groups_immutable_key` and `rag_connector_group_map_same_tenant`, `DROP POLICY IF EXISTS rag_access_group_members_select_own`, each re-created at once. |
+| 5 | `0920_access_groups_tables.multi-tenant.sql` | After 4. `organization_id` NOT NULL with a cascading foreign key, generated `tenant_key` `o:<organization_id>`, member insert requires an `organization_members` row, deleting it removes the memberships (SECURITY DEFINER trigger function `rag_access_groups_on_org_member_delete`). **DROP:** `DROP TRIGGER IF EXISTS` for `rag_access_group_members_require_org_member` and `rag_access_groups_on_org_member_delete` (on `organization_members`), each re-created at once. Apply with the owner present (trigger on `organization_members`). The `.single-tenant.sql` variant is not for production. |
+| 6 | `0410_security_definer_rpc_grants.sql` (r17) | +4 lines since r16: guarded REVOKE/GRANT (service_role only) for `rag_access_groups_on_org_member_delete()`. Grants only; run it last. |
+
+Numbers are unique across `supabase/migrations` (0708, 0709 after 0707; 0740 in the 07 block; 0920 with its two mode files in the 4.3 block). None is folded into the setup files; all are idempotent (CREATE OR REPLACE, IF NOT EXISTS, DROP ... IF EXISTS before each CREATE TRIGGER, CREATE POLICY and plain CREATE FUNCTION). The combined live SQL (the five files verbatim in this order, each after a `-- ==== <file>` line, then the 0410 r17 delta as a `DO $r17$` block, with the DROP sections listed in its header) is `train34-live.sql` in the orchestrator scratchpad.
+
+### Operator actions
+- Apply the table above after train 33 is live; 0920 multi-tenant with the owner present.
+- Every new switch ships off (access groups `RAG_DOC_ACCESS_GROUPS`, external vector backends, the vector sync kick does nothing while no target is enabled). Two new npm scripts (`rag:vector-sync`, `rag:reconcile`); no new npm package.
+
+### Deviations
+- Baselines: kept train 33's `fixture-baseline.json` and `fixture-ingest-baseline.json` (05.2-32 re-recorded the same fixture inputs on train 32; the two differ only in run metadata). The explicit-legacy smoke tiers on the merged tree report `paired.all_zero == true` for both, so nothing is re-recorded.
+- Conflict resolutions (both intents kept): `src/lib/rag/index.ts` (union of exports, train 33's `guardVoiceTranscript` kept); `eval/harness/run-nightly.mts` and `run-smoke.mts` (both new CLI options); `rag-eval/trace.ts`, `v2/config-hash.ts`, the eval run route (05.2 answer-rule fields and 07-12 `retrieval_backend` together); `.github/workflows/pr-smoke.yml` and `check-workflows.py` (the `backend-canary` job and the `pr-smoke` aggregate; the aggregate now needs `eval-smoke-p52` and `backend-canary` too, because it must list every other job); `config-security-events-panel.test.ts` (05.3-42's stricter CSS assertion, which holds on the tree); fixture count and comment hunks and `ingest-mode-routing.test.mts` take train 33's version (its link-injection accounting replaces 05.2-32's filter for the same items); `schema-equality.test.mts` and `AGENTS.md` keep train 33's Phase 6.1 fold.
+- Train fix: 07-13's kick imports `after` from `next/server` in the ingest writer, which the PGlite harness reaches statically, so four tests that set the global AsyncLocalStorage after their static imports failed at load. `tests/helpers/next-async-storage.mts` is imported first in them.
+
+## Train 35: 0921, 0922, 0930, 0932 and 0410 r18 (to apply after train 35 reaches `origin/main`)
+
+Branch `ci/merge-train-35`, built on `ci/merge-train-34` (1eb70f84), then `origin/main` merged after PR #129 (train 34) landed as 7651adbc (adds only c453e3a2, the ts-db shard rebalance renames). PR #130. Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+Merged with `--no-ff` in this order; each carries its SUMMARY. `exec/04.2-32` and `exec/04.2-33` are still running and are not in this train. 05.3-43 and 05.2-38 were built from main and self-merged their dependencies (05.3-42; train 33, 05.2-26, 05.2-32), which train 34 already holds.
+
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/04.3-03` | 04.3-03 access_groups columns, `rag_access_enforced` and the access-filtered `hybrid_search_chunks` (tracer) | 0921, 0922, 0930; 0410 entries (r18) |
+| train fix | BM25 leg access filter (orchestrator decision) | 0932 |
+| `exec/05.3-43` | 05.3-43 Setting checks panel, refusal calibration pending and shift marks | none |
+| `exec/05.2-38` | 05.2-38 Phase 5.2 comparison spec and report, `truncation_rate`, AGENTS.md Phase 5.2 section | none |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0921_access_groups_columns.sql` | Needs 0920 (train 34). `documents.access_groups` and `document_chunks.access_groups` (`text[] NOT NULL DEFAULT '{all}'`, ADD COLUMN IF NOT EXISTS: no rewrite), inline CHECK constraints (built-in functions only, the `rag_access_keys_valid` rule; added only when missing, replaced when an earlier version called the function; validates every existing row), two GIN indexes (IF NOT EXISTS, not CONCURRENTLY: writes to both tables wait while they build), trigger copying the document's groups to its chunks. **DROP:** `DROP TRIGGER IF EXISTS document_chunks_access_groups_from_document`, re-created at once. Run in a quiet window. |
+| 2 | `0922_access_resolution.sql` | `rag_access_enforced()` reads `rag_access_group_settings` (seeded `enforced` false by 0920). service_role only. **DROP:** none. |
+| 3 | `0930_access_retrieval_functions.sql` | Needs 0856 (live) and 0922. **DROP:** a `DO $drop_overloads$` block drops every `public.hybrid_search_chunks` overload in the catalog, then one 28-argument function is created in the same transaction (0856 arguments unchanged plus `p_access_keys text[] DEFAULT NULL`, `p_access_all boolean DEFAULT false`), service_role only. Named-argument callers of the 0856 shape keep working. Re-running any lower file that defines `hybrid_search_chunks` (0407, 0413, 0602, 0802, 0856, a setup file) requires re-running 0930. |
+| 4 | `0932_access_bm25_search.sql` | Train fix. Needs 0904 (live), 0921, 0922. `rag_bm25_search_chunks` gains `p_access_keys text[] DEFAULT NULL`, `p_access_all boolean DEFAULT false` with the 0930 predicate (`c.access_groups && keys AND d.access_groups && keys` before the candidate ORDER BY/LIMIT; `access_scope_required` 42501 when enforced without keys, `access_keys_empty` 22023). Without it the BM25 leg would ignore access groups once `RAG_DOC_ACCESS_GROUPS` is on. **DROP:** a `DO $drop_overloads$` block drops every `rag_bm25_search_chunks` overload, one function re-created in the same transaction; SECURITY INVOKER, service_role only (grants in the file; 0410 covers SECURITY DEFINER functions only, so it has no entry). Re-running 0904 requires re-running 0932. |
+| 5 | `0410_security_definer_rpc_grants.sql` (r18) | +8 lines since r17: guarded REVOKE/GRANT (service_role only) for `rag_access_enforced()` and `rag_access_groups_from_document()`. Grants only; run it last. |
+
+Numbers are unique (0921, 0922, 0930, 0932 in the 4.3 block after 0920; 0931 is taken by exec/04.3-12; no mode files). None is folded into the setup files; all are idempotent. The combined live SQL (the four files verbatim in this order after `-- ==== <file>` lines, then the 0410 r18 delta as a `DO $r18$` block, DROP sections listed in its header) is `train35-live.sql` in the orchestrator scratchpad.
+
+### Operator actions
+- Apply the table above after train 34 is live; 0921 in a quiet window (CHECK validation and non-concurrent GIN builds on `documents` and `document_chunks`).
+- `RAG_DOC_ACCESS_GROUPS` stays off; with it off, retrieval sends no new argument and the request body is today's.
+- Fixed on the train (orchestrator decision): the 0921 CHECK constraints first called `rag_access_keys_valid(text[])`, which only service_role may execute, so every INSERT or UPDATE of `documents` / `document_chunks` as `authenticated` failed with 42501 (CI: lexical-stats-triggers, document-attributes, security-gaps-rls, semantic-cache-canary). Granting the function to the client roles would break the repo rule that no `rag_*` function is client-callable unless it is an allow-listed SECURITY DEFINER, so the constraints now state the same rule inline with built-in functions only; `rag_access_keys_valid` stays service_role only. A database that ran the earlier 0921 gets its function-calling constraints dropped and re-added inline. `tests/rag-db/access-groups-client-writes.test.mts` covers owner insert and update with the default array, invalid keys still rejected, and the inline rule agreeing with the function.
+
+### Deviations
+- Characterization snapshots (`chat`, `embed`, `voice`, `voice-v2-default`) re-recorded on the merged tree (`UPDATE_CHARACTERIZATION=1`): no entry added or removed; changes are order swaps among the `dup-passage-*` copies, two equal-score `p52-rules-v1/v2` zh swaps, and `voice-v2-default` scores moving at most 5.6e-4 (the cause 04.3-03 recorded: the 0921 column changes PGlite tuple layout). A second run without the update flag passes.
+- Same change on both sides, train 34's version kept: `tests/rag-db/schema-equality.test.mts` (Phase 4.1.1 fold, ordering only), `eval/harness/run-smoke.mts` (option order), `src/lib/rag/index.ts` (`attributeSourceChunks` export).
+- Train fixes: `ingestion-schema` (0351 replay) re-runs 0930 after the 08xx files, since 0802/0856 re-create `hybrid_search_chunks` (the diff was exactly that overload and its grant); train 34's Qdrant, Weaviate, fallback, canary and vector-sync tracer test requests gain `access: { mode: 'off' }` (required by 04.3-03; tsc 6 errors to 0); `phase32-migrations-apply` counts 0930 among the final definers of a block function; `phase32-all-off` parses the `'{all}'::text[]` default.
+- Train fix (orchestrator decision): `tests/rag-db/bm25-filter-parity.test.mts` signature parity failed because 0930 gave `hybrid_search_chunks` the access parameters and `rag_bm25_search_chunks` (0904) did not; 0932 adds them, the parity file gains five access cases and a test that a chunk of a group the caller lacks is left out by the BM25 leg (and returned with access off, to a member and to an admin). No TypeScript code calls `rag_bm25_search_chunks` yet (`RAG_LEXICAL_SCORING=bm25` is not wired to a caller on this tree), so there is no caller to pass the access arguments; the plan that wires it must send `accessRpcArgs(req.access)` as pgvector does.
+- Train fix: `src/lib/rag/backend/pgvector.ts` imported `tenant/access`, which loads `deps` (server env) at import, so `table-lookup` (which imports pgvector) failed with `OPENAI_API_KEY is required on the server`. The pure helpers moved to `tenant/access-filter.ts` (re-exported by `tenant/access`), and pgvector loads `scopeAccessFilter` lazily inside `search()`.
+- Not changed, raised: `backendForRequest` does not yet route by `accessFilter`, so an external backend ignores `req.access` (04.3-03 SUMMARY; Phase 7 07-38/39 own it). Harmless while `RAG_DOC_ACCESS_GROUPS` is off.
+
+## Train 36: 0903, 0923, 0926, 0931, 0950 and 0410 r19 (to apply after train 35 is live)
+
+Branch `ci/merge-train-36`, built on `ci/merge-train-35` (PR #130, merged again at 0724e0f2). It stacks on #130 and merges after it. Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+Merged with `--no-ff` in this order; each carries its SUMMARY. The 04.3 chain was built on `exec/04.3-03` and 05.2.1 on `exec/05.2-38`, both already in train 35.
+
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/03.3-20` | 03.3-20 templated collection in inline ingest-mode runs, 78 templated golden items | none |
+| `exec/06-45` | 06-45 Phase 6 close-out (gates, agents guide) | none |
+| `exec/04.3-04` | 04.3-04 access_groups on parents and derived stores, relabel propagation, client guard, version inheritance, drift check | first in 0921 (edited in place), now 0923 part 1; 0410 entries |
+| `exec/04.3-05` | 04.3-05 resolver, embed group lookup, label setter, visibility checks, enforcement and security event writers | first in 0922 (edited in place), now 0923 part 2; 0410 entry |
+| `exec/04.3-06` | 04.3-06 restrictive access-group read policies | 0923_access_rls* renumbered to 0926; 0410 entries |
+| `exec/04.3-12` | 04.3-12 semantic cache access recheck and relabel invalidation | 0931; 0410 entry |
+| `exec/04.3-16` | 04.3-16 A-09 dense scan rule for restricted callers | none |
+| `exec/04.4-07` | 04.4-07 lexical statistics purge hook | 0903 |
+| `exec/04.4-08`, `04.4-09`, `04.4-12` | 04.4-08 BM25 in the retrieval path, 04.4-09 `rag:lexstats` CLI, 04.4-12 BM25 lexical benchmark | none |
+| `exec/05.2.1-01` to `-04`, `-06` to `-08` | 05.2.1 calculation tool and prompt budget | 0950 (05.2.1-06), 0967 edited in place |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0903_lexical_stats_purge_hook.sql` | Needs 0900-0902 (live). `rag_purge_hook_lexical_stats`, SECURITY INVOKER, service_role only. **DROP:** none. |
+| 2 | `0923_access_labels_and_resolution.sql` | Train fix: plans 04.3-04 and 04.3-05 had edited 0921 and 0922, which ship with train 35; their additions live here (part 1, part 2). Needs 0921, 0922 (train 35). Part 1: `access_groups` on `document_parents`, `chunk_translations`, `rag_table_rows` (ADD COLUMN IF NOT EXISTS, no rewrite), one-off aligning UPDATEs, the train 35 inline CHECK rule on those tables (validates every row), three GIN indexes (not CONCURRENTLY), copy and relabel-propagation triggers, `rag_documents_access_guard` (client writes cannot set labels: `access_groups_server_only`), `rag_documents_access_inherit`, `rag_access_groups_drift()`. Part 2: the 04.3-05 service-role functions and a widened `rag_access_audit_tenant_key_check`. **DROP:** DROP TRIGGER IF EXISTS on every trigger it creates (re-created); DROP CONSTRAINT `<table>_access_groups_check` only when it still calls `rag_access_keys_valid` (none after train 35); DROP CONSTRAINT IF EXISTS `rag_access_audit_tenant_key_check` (re-added). Run in a quiet window. |
+| 3 | `0926_access_rls.sql`, then `0926_access_rls.multi-tenant.sql` | 04.3-06, renumbered from 0923 (it needs `document_parents.access_groups` from 0923; 0924 and 0925 are claimed by exec/04.3-20 and exec/04.3-30). Helpers `rag_caller_access_keys()` and the restrictive policy `rag_access_groups_restrict` on documents, chunks, parents (TO anon, authenticated). With `rag_access_group_settings.enforced` false they change no read. `rag_access_enforced()` becomes executable by anon and authenticated (allow-listed RLS helper). **DROP:** DROP POLICY IF EXISTS `rag_access_groups_restrict` on the three tables (re-created). |
+| 4 | `0931_access_derived_stores.sql` | Needs 0603 (live) and 0922. `rag_cache_check` gains `p_access_keys`, `p_access_all`; relabel invalidation trigger. **DROP:** `DO $drop_overloads$` drops every `rag_cache_check` overload, one function re-created in the same transaction; DROP TRIGGER IF EXISTS `rag_access_semantic_cache_update` (re-created). |
+| 5 | `0950_calc_review_reasons.sql` | Widens the review-reason checks by `calc_mismatch`, `calc_unverified`; rebuilds `rag_mine_failed_queries` and `rag_enqueue_review_item` from 0944. **DROP:** DROP CONSTRAINT IF EXISTS on `rag_answer_records_review_reasons_check` and `rag_review_items_reasons_check` (re-added wider). |
+| 6 | `0410_security_definer_rpc_grants.sql` (r19) | +9 guarded entries since r18: service_role only for the 0923 trigger functions (`rag_access_groups_propagate*`, `rag_documents_access_inherit`), `rag_access_user_in_tenant`, `rag_semantic_cache_on_access_update`; `rag_access_enforced`, `rag_caller_access_keys`, `rag_caller_is_access_admin` move to the authenticated-callable section (anon, authenticated, service_role). Grants only; run it last. |
+
+Not re-run live: `0967_rag_review_item_strata.sql` was edited in place by 05.2.1-06 only so that a fresh build in file order keeps the two calc reasons (0967 sorts after 0950); production already ran 0967, and 0950 widens the same check. 0921 and 0922 are byte-identical to train 35.
+
+Numbers are unique across `origin/exec/*` and `origin/ci/*` (0903; 0923 and 0926 in the 4.3 block; 0931; 0950; 0932 is train 35's). None is folded into the setup files; all are idempotent. The combined live SQL (files verbatim after `-- ==== <file>` lines, then the 0410 r19 delta as two DO blocks, DROP sections listed in its header) is `train36-live.sql` in the orchestrator scratchpad. Checked on PGlite: a fresh multi-tenant build of the train 35 tree plus `train36-live.sql` applied twice gives the same catalog (columns, constraints, indexes, functions, grants, triggers, policies) as a fresh build of this train; a fresh build of this train equals a fresh build with the in-place 0921/0922 edits, in both modes.
+
+### Operator actions
+- Apply the table above after train 35 is live; 0923 in a quiet window (CHECK validation and non-concurrent GIN builds on `document_parents`, `chunk_translations`, `rag_table_rows`).
+- `RAG_DOC_ACCESS_GROUPS` and `RAG_LEXICAL_SCORING` stay at their defaults.
+- After 0923, client roles can no longer change `documents.access_groups` (`access_groups_server_only`); labels are set through `rag_set_document_access_groups`.
+
+### Deviations
+- Train fix: 04.3-04/04.3-05 in-place edits of 0921/0922 moved to 0923; 0923_access_rls* renumbered to 0926 (tests, allow-list reasons and the 0410 comment follow). 0923 part 1 uses train 35's inline CHECK rule (same rule as 04.3-04's, train 35's text kept).
+- Conflict resolution (04.4-08 x train 35 access filter and backend factory): `pgvector.ts` keeps the dense scan args (04.3-16) and the BM25 path (04.4-08), passing the forced scan meta through both; the BM25 call gets every hybrid argument, so `p_access_keys` / `p_access_all` reach `rag_bm25_search_chunks` (0932). `search.ts` keeps the per-request backend resolution and wraps it for lexical scoring. `v2/startup` is now imported lazily in pgvector, like `tenant/access`, so table-lookup still loads without the server env.
+- Tests added: BM25 access arguments (keys, admin_all, ts_rank_cd fallback) in `tests/rag/backend/pgvector-bm25.test.ts`; a BM25 leg through the pgvector backend on PGlite in `tests/rag-db/access-selective-recall.test.mts` (member gets only their group, nothing for a term only another group carries, admin gets it).
+- Tests adjusted: `access-groups-client-writes` (train 35) sets labels by a server write (the 0923 guard refuses client relabels); `access-resolution` (04.3-05) allows client execute on `rag_access_enforced` (0926); `pgvector-bm25` requests carry `access`; `check-config.test.mjs` anchors carry 05.2.1-02's `contextLength`; two `typecheck:new` fixes (03.3-20, 04.3-05 tests).
+- Later train fixes (no migration change): `origin/main` merged after #130 (fbb6bc3c) and #132 (`run-smoke.mts` imports both sides); chunk snapshots gain keys for the 39 recorded templated parses of 03.3-20 (every existing digest unchanged); the train-31 baseline invariant allows the 03.3-20 ingest items; `eval-v2-overlay` lists the four 05.2.1 switches; `phase42-schema` lists `rag_table_rows.access_groups`; `phase32-migrations-apply` accepts the allow-listed 0926 RLS helpers in its 0801-and-later grant check. GitHub CI green on f1ffdd4d (26 jobs).
+
+## Train 37: 0924, 0925, 0934, 0980 and 0410 r20 (to apply after train 36 is live)
+
+Branch `ci/merge-train-37`, built on `origin/main` 274d0456 (train 36 merged), with `origin/main` be569250 (#133) merged in. Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+Merged with `--no-ff` in phase/plan order; each exec branch carries its SUMMARY. None of the listed branches was already in `origin/main`.
+
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/03.3-23` | 03.3-23 Phase 3.3 seeding for the layered eval switches | none |
+| `exec/04.2-32` | 04.2-32 retrieval tuning additions | none |
+| `exec/04.3-13` | 04.3-13 answer records, retrieval log and review queue under access label sets (brings 04.3-07) | 0934; 0410 entry |
+| `exec/04.3-21`, `-22`, `-24`, `-31`, `-33` | 04.3 admin routes and UI (brings 04.3-20, 04.3-30) | 0924 (04.3-20), 0925 (04.3-30); 0410 entries |
+| `exec/04.4-14` | 04.4-14 BM25 phase gates and run config | none (`supabase/optional/lexical-stats-schedule.sql` is optional, not a migration) |
+| `verify/05`, `verify/05.1`, `verify/06` | phase verification reports | none |
+| `exec/05.2.1-14`, `-15`, `-18`, `-19` | 05.2.1 calculation offer, voice calc, checks, close-out | none |
+| `exec/06.2-03`, `-05`, `-07`, `-08`, `-09`, `-34`, `-37` | 06.2 query-layer additions (brings 06.2-01, -02, -04, -40) | 0980 (06.2-04); 0410 entry |
+| `exec/07-19`, `-20`, `-21`, `-24`, `-40`, `-41` | 07 provider tests, generated Config UI section, release defaults, language monitor and calibration (brings 07-18) | none |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0924_access_admin.sql` | Needs 0920-0923, 0926 (live). Access-group admin functions behind `/api/rag/access-groups/*`; `rag_access_group_members_list`, `rag_access_member_candidates` SECURITY DEFINER (read `auth.users`), all `search_path = ''`, service_role only. One index `rag_access_audit_lineage_idx` (not CONCURRENTLY, small table). **DROP:** none. |
+| 2 | `0925_access_connectors.sql` | Needs 0923 (`rag_set_document_access_groups`). Table `rag_connector_document_access` (RLS on, service_role only) and connector mapping functions; `rag_connector_match_members` SECURITY DEFINER. **DROP:** none. |
+| 3 | `0934_access_derived_stores_sets.sql` | `access_sets jsonb` (nullable) on `rag_answer_records`, `rag_retrieval_log`, `rag_review_items`; `rag_caller_reads_access_sets(text, jsonb)` (DEFINER, authenticated + service_role). **DROP:** DROP CONSTRAINT IF EXISTS the three `*_access_sets_check` (re-added); DROP POLICY IF EXISTS `rag_retrieval_log_access_sets`, `rag_review_items_access_sets` (re-created RESTRICTIVE FOR SELECT TO authenticated). |
+| 4 | `0980_term_translation_target.sql` | Needs 0471/0472 (stops with 55000 otherwise). **DROP:** DROP FUNCTION IF EXISTS `rag_term_list_entries(uuid, text, integer, integer, text)`; re-created with three optional filters (eight arguments, new ones default NULL). |
+| 5 | `0410_security_definer_rpc_grants.sql` (r20) | +5 guarded entries since r19: service_role only for `rag_access_group_members_list`, `rag_access_member_candidates`, `rag_connector_match_members`, the eight-argument `rag_term_list_entries`; `rag_caller_reads_access_sets` in the authenticated-callable section. Grants only; run last. |
+
+Numbers are unique across `supabase/migrations` (the repeated numbers are common / `.single-tenant` / `.multi-tenant` triples). No migration already in `origin/main` is changed except the guarded 0410 lines. All four new files are idempotent and not folded into the setup files. The combined live SQL (files verbatim after `-- ==== <file>` lines, then the r20 delta, then read-only verify queries; DROP sections listed in its header) is `train37-live.sql` in the orchestrator scratchpad. The r20 delta:
+
+```sql
+DO $r20_service_role_only$
+BEGIN
+  IF to_regprocedure('public.rag_access_group_members_list(text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_access_group_members_list(text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_access_group_members_list(text, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_access_member_candidates(text, uuid, text, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_access_member_candidates(text, uuid, text, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_access_member_candidates(text, uuid, text, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_connector_match_members(text, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_connector_match_members(text, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_connector_match_members(text, text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_list_entries(uuid, text, integer, integer, text, text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text, text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text, text, text, text) TO service_role;
+  END IF;
+END
+$r20_service_role_only$;
+
+DO $r20_authenticated_callable$
+BEGIN
+  IF to_regprocedure('public.rag_caller_reads_access_sets(text, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_caller_reads_access_sets(text, jsonb) FROM PUBLIC, anon;
+    GRANT EXECUTE ON FUNCTION public.rag_caller_reads_access_sets(text, jsonb) TO authenticated, service_role;
+  END IF;
+END
+$r20_authenticated_callable$;
+```
+
+### Operator actions
+- Apply the table above after train 36 is live; deploy the app with this train (the Glossary list calls the eight-argument `rag_term_list_entries`).
+- `RAG_DOC_ACCESS_GROUPS` stays off; the new Phase 6.2 and 5.2.1 switches keep their defaults.
+
+### Deviations
+- Conflict resolutions: review item routes keep the strata source reads (main) and pass the 04.3-13 masked options through `listReviewItemsWithSource` / `getReviewItemWithSource`; `sameAccessFilter` and `accessRpcArgs` stay in `tenant/access-filter.ts` (train 35) with the 04.3-07 key-set comparison; `language-packs.json` keeps the 05.2.1 calculation texts and adds the 06.2 `query_layer` group; the eval harness runs the 03.3 templated collection and the 06.2 q62 tenant side by side (q62 parts hashed after the seed parts, so builds without either keep their corpus hash); the default model lists keep `contextLength` and add 06.2-07's `auto` entry; sidecar contracts keep 05.2.1, 06.2 and 07 models, with schemas, `samples.json` and `contracts.generated.ts` regenerated by `npm run gen:schemas`.
+- 07-18/07-20 (generated Config UI section): the sixteen 05.2.1/06.2 manifest entries got group, label, type, requires and default metadata; the hand-written query transforms stay removed, the eleven 06.2 controls stay hand-written in the Query layer card. Tests adjusted: `config-query-additions-card` (Transforms box without the moved parents), `config-query-additions-script` (parents placed in the generated section of the harness).
+- Train fixes: duplicate `shouldOfferCalcTool` export; `params-hash` run-config check pins ts_rank_cd on both sides (04.4-13's bm25 run config); 07-41 language-confidence calibration re-run.

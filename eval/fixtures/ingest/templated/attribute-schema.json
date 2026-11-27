@@ -1,0 +1,36 @@
+{
+  "definitions": [
+    {
+      "key": "alpha_code",
+      "type": "code",
+      "filterable": true,
+      "in_header": false,
+      "in_identifier_index": true,
+      "soft": false
+    },
+    {
+      "key": "beta_label",
+      "type": "text",
+      "filterable": true,
+      "in_header": true,
+      "in_identifier_index": false,
+      "soft": false
+    },
+    {
+      "key": "gamma_group",
+      "type": "text",
+      "filterable": true,
+      "in_header": true,
+      "in_identifier_index": false,
+      "soft": true
+    },
+    {
+      "key": "delta_tags",
+      "type": "text_list",
+      "filterable": false,
+      "in_header": true,
+      "in_identifier_index": false,
+      "soft": false
+    }
+  ]
+}

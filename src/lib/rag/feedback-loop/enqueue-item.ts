@@ -4,7 +4,7 @@ import { readFeedbackLoopConfig } from './config';
 /** The immediate route into the review queue (D-55); service role only (0944, locked again in 0410). */
 export const ENQUEUE_REVIEW_RPC = 'rag_enqueue_review_item';
 
-export type EnqueueReviewReason = 'claim_unsupported' | 'output_guard' | 'version_conflict';
+export type EnqueueReviewReason = 'claim_unsupported' | 'output_guard' | 'version_conflict' | 'calc_mismatch' | 'calc_unverified';
 
 export interface EnqueueReviewItemInput {
   tenantKey: string;

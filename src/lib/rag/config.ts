@@ -34,6 +34,7 @@ export const OPTIONAL_STAGES = [
   'identifier_guard',
   'terminology',
   'attribute_resolve',
+  'scope_gate',
 ] as const;
 
 /** Phase 6 query-layer stages (D-05); translate is the shared Phase 4 slot and is not listed here. */
@@ -139,12 +140,21 @@ const QUERY_EVAL: StageTimeouts = {
   semantic_cache: 60000,
 };
 
-/** The translate budget while the query layer serves the slot (D-27); with the layer off the Phase 4 value stays. */
+/** The translate budget while the query layer serves the slot (D-27, Phase 6.2 D-16 for voice); with the layer off the Phase 4 value stays. */
 const QUERY_LAYER_TRANSLATE: Partial<Record<Profile, number>> = {
   chat: 600,
   embed: 600,
   media: 600,
+  voice: 250,
   eval: 60000,
+};
+
+/** Phase 6.2 D-26: the in-process scope gate; voice has no entry because the stage never runs there (scopeGateEnabledFor). */
+const SCOPE_GATE_TIMEOUTS: Partial<Record<Profile, StageTimeouts>> = {
+  chat: { scope_gate: 20 },
+  embed: { scope_gate: 20 },
+  media: { scope_gate: 20 },
+  eval: { scope_gate: 60000 },
 };
 
 function mergeProfileDefaults(legacy: StageTimeouts, v2: StageTimeouts, extra?: StageTimeouts): StageTimeouts {
@@ -152,8 +162,8 @@ function mergeProfileDefaults(legacy: StageTimeouts, v2: StageTimeouts, extra?: 
 }
 
 export const PROFILE_STAGE_DEFAULTS: Record<Profile, StageTimeouts> = {
-  chat: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.chat, ...QUERY_STANDARD }),
-  embed: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.embed, ...QUERY_STANDARD }),
+  chat: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.chat, ...QUERY_STANDARD, ...SCOPE_GATE_TIMEOUTS.chat }),
+  embed: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.embed, ...QUERY_STANDARD, ...SCOPE_GATE_TIMEOUTS.embed }),
   eval: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, {
     ...V2_EVAL,
     translate: 1000,
@@ -164,8 +174,9 @@ export const PROFILE_STAGE_DEFAULTS: Record<Profile, StageTimeouts> = {
     compress: 1000,
     injection_check: INJECTION_CHECK_TIMEOUTS.eval,
     ...QUERY_EVAL,
+    ...SCOPE_GATE_TIMEOUTS.eval,
   }),
-  media: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.media, ...QUERY_STANDARD }),
+  media: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.media, ...QUERY_STANDARD, ...SCOPE_GATE_TIMEOUTS.media }),
   voice: {
     ...mergeProfileDefaults(
       {
@@ -298,6 +309,41 @@ export interface QueryLayerConfig {
   voiceTransforms: VoiceTransform[];
 }
 
+/** Phase 6.2 D-28 switches gated by the query layer; RAG_WHATSAPP_HISTORY is separate (D-24). */
+export interface QueryAdditionSwitches {
+  completeness: boolean;
+  subqFilters: boolean;
+  decomposedAnswer: boolean;
+  translationGlossary: boolean;
+  langidSidecar: boolean;
+  speculativeRetrieval: boolean;
+  historyFallback: boolean;
+  scopeGate: boolean;
+}
+
+export interface QueryAdditionsConfig {
+  /** As parsed, kept while the layer is off. */
+  raw: QueryAdditionSwitches;
+  /** What runs: raw and the query layer on (which implies RAG_PIPELINE=v2). */
+  effective: QueryAdditionSwitches;
+  /** D-24: applies to the WhatsApp channel by itself, independent of the query layer. */
+  whatsappHistory: boolean;
+}
+
+export type ModelRoutingMode = 'off' | 'auto';
+
+export interface ModelRoutingConfig {
+  requestedMode: ModelRoutingMode;
+  /** Effective: 'off' unless requested and the query layer is on. */
+  mode: ModelRoutingMode;
+  fastModel: string;
+  qualityModel: string;
+}
+
+/** D-35: ids that already exist in the model lists; routing stays off through RAG_MODEL_ROUTING=off. */
+export const DEFAULT_ROUTING_FAST_MODEL = 'anthropic/claude-haiku-5.5';
+export const DEFAULT_ROUTING_QUALITY_MODEL = 'anthropic/claude-sonnet-5.5';
+
 export interface SemanticCacheConfig {
   backend: SemanticCacheBackend;
   ttl: number;
@@ -334,6 +380,8 @@ export interface RagEnvInput {
   RAG_CONTEXT_TOKEN_BUDGET?: string;
   RAG_PARENT_CHILD?: string;
   RAG_HNSW_ITERATIVE_SCAN?: string;
+  RAG_DOC_ACCESS_GROUPS?: string;
+  RAG_EMBED_ACCESS_GROUP?: string;
   RAG_EXACT_SCAN_CUTOFF?: string;
   RAG_LEXICAL_TRANSLATION?: string;
   RAG_LEXICAL_DICTIONARY?: string;
@@ -379,6 +427,18 @@ export interface RagEnvInput {
   RAG_QUERY_HYDE?: string;
   RAG_QUERY_TRANSLATE_DISABLED_PROFILES?: string;
   RAG_QUERY_VOICE_TRANSFORMS?: string;
+  RAG_QUERY_DECOMPOSE_COMPLETENESS?: string;
+  RAG_QUERY_SUBQ_FILTERS?: string;
+  RAG_DECOMPOSED_ANSWER?: string;
+  RAG_TRANSLATION_GLOSSARY?: string;
+  RAG_LANGID_SIDECAR?: string;
+  RAG_MODEL_ROUTING?: string;
+  RAG_ROUTING_FAST_MODEL?: string;
+  RAG_ROUTING_QUALITY_MODEL?: string;
+  RAG_SPECULATIVE_RETRIEVAL?: string;
+  RAG_QUERY_HISTORY_FALLBACK?: string;
+  RAG_WHATSAPP_HISTORY?: string;
+  RAG_SCOPE_GATE?: string;
   RAG_SEMANTIC_CACHE?: string;
   RAG_SEMANTIC_CACHE_TTL?: string;
   RAG_SEMANTIC_CACHE_REFUSAL_TTL?: string;
@@ -423,8 +483,14 @@ export interface RagConfig {
   /** Raw comma-separated domains; the output link filter parses it. */
   outputLinkAllowlist: string;
   queryLayer: QueryLayerConfig;
+  queryAdditions: QueryAdditionsConfig;
+  modelRouting: ModelRoutingConfig;
   semanticCache: SemanticCacheConfig;
   backend: BackendConfig;
+  /** D-09: document access groups; anything but on resolves to off. */
+  accessGroups: AccessGroupsMode;
+  /** D-07: the access-group key embedded chat and WhatsApp answer for, trimmed; empty when unset. */
+  embedAccessGroup: string;
   warnings: string[];
 }
 
@@ -587,6 +653,16 @@ function parseIterativeScan(raw: string | undefined, warnings: string[]): Iterat
   if (value === '' || value === 'off') return 'off';
   if (value === 'relaxed_order' || value === 'strict_order') return value;
   problem(warnings, `iterative-scan:${value}`, 'Unsupported RAG_HNSW_ITERATIVE_SCAN value, using off', { value });
+  return 'off';
+}
+
+export type AccessGroupsMode = 'off' | 'on';
+
+function parseAccessGroups(raw: string | undefined, warnings: string[]): AccessGroupsMode {
+  const value = (raw ?? '').trim().toLowerCase();
+  if (value === '' || value === 'off') return 'off';
+  if (value === 'on') return 'on';
+  problem(warnings, `access-groups:${value}`, 'Unsupported RAG_DOC_ACCESS_GROUPS value, using off', { value });
   return 'off';
 }
 
@@ -955,6 +1031,47 @@ function parseQueryLayer(env: RagEnvInput, pipeline: 'legacy' | 'v2', warnings: 
   };
 }
 
+function parseRoutingModel(name: string, raw: string | undefined, fallback: string, warnings: string[]): string {
+  const value = (raw ?? '').trim();
+  if (value === '') return fallback;
+  if (MODEL_ID_PATTERN.test(value)) return value;
+  problem(warnings, `${name}-invalid`, `Invalid ${name}, using ${fallback}`, { length: value.length }, '[Query Layer]');
+  return fallback;
+}
+
+/** D-28: the true defaults are inert while the layer is off, like every other switch here; only whatsappHistory stands alone (D-24). */
+function parseQueryAdditions(env: RagEnvInput, queryLayer: QueryLayerConfig, warnings: string[]): { queryAdditions: QueryAdditionsConfig; modelRouting: ModelRoutingConfig } {
+  const flag = (name: string, raw: string | undefined, defaultValue: boolean) => parsePrefixedBoolean(name, raw, defaultValue, '[Query Layer]', warnings);
+  const raw: QueryAdditionSwitches = {
+    completeness: flag('RAG_QUERY_DECOMPOSE_COMPLETENESS', env.RAG_QUERY_DECOMPOSE_COMPLETENESS, true),
+    subqFilters: flag('RAG_QUERY_SUBQ_FILTERS', env.RAG_QUERY_SUBQ_FILTERS, false),
+    decomposedAnswer: flag('RAG_DECOMPOSED_ANSWER', env.RAG_DECOMPOSED_ANSWER, true),
+    translationGlossary: flag('RAG_TRANSLATION_GLOSSARY', env.RAG_TRANSLATION_GLOSSARY, false),
+    langidSidecar: flag('RAG_LANGID_SIDECAR', env.RAG_LANGID_SIDECAR, false),
+    speculativeRetrieval: flag('RAG_SPECULATIVE_RETRIEVAL', env.RAG_SPECULATIVE_RETRIEVAL, false),
+    historyFallback: flag('RAG_QUERY_HISTORY_FALLBACK', env.RAG_QUERY_HISTORY_FALLBACK, true),
+    scopeGate: flag('RAG_SCOPE_GATE', env.RAG_SCOPE_GATE, false),
+  };
+  const on = queryLayer.enabled;
+  const effective = Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, on && value])) as unknown as QueryAdditionSwitches;
+
+  const routingRaw = (env.RAG_MODEL_ROUTING ?? '').trim().toLowerCase();
+  let requestedMode: ModelRoutingMode = 'off';
+  if (routingRaw === 'auto') requestedMode = 'auto';
+  else if (routingRaw !== '' && routingRaw !== 'off') {
+    problem(warnings, `model-routing:${routingRaw.slice(0, 32)}`, 'Unsupported RAG_MODEL_ROUTING value, expected off or auto, using off', { length: routingRaw.length }, '[Query Layer]');
+  }
+  return {
+    queryAdditions: { raw, effective, whatsappHistory: flag('RAG_WHATSAPP_HISTORY', env.RAG_WHATSAPP_HISTORY, false) },
+    modelRouting: {
+      requestedMode,
+      mode: on ? requestedMode : 'off',
+      fastModel: parseRoutingModel('RAG_ROUTING_FAST_MODEL', env.RAG_ROUTING_FAST_MODEL, DEFAULT_ROUTING_FAST_MODEL, warnings),
+      qualityModel: parseRoutingModel('RAG_ROUTING_QUALITY_MODEL', env.RAG_ROUTING_QUALITY_MODEL, DEFAULT_ROUTING_QUALITY_MODEL, warnings),
+    },
+  };
+}
+
 function parseCacheDistance(raw: string | undefined, warnings: string[]): number {
   const value = (raw ?? '').trim();
   if (value === '') return DEFAULT_SEMANTIC_CACHE_MAX_DISTANCE;
@@ -1190,6 +1307,8 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_SCOPE_TAGS ?? '',
     env.RAG_DOC_TRANSLATION ?? '',
     env.RAG_BGE_M3_SERVING ?? '',
+    env.RAG_DOC_ACCESS_GROUPS ?? '',
+    (env.RAG_EMBED_ACCESS_GROUP ?? '').trim(),
     env.RAG_OUTPUT_LINK_ALLOWLIST ?? '',
     env.RAG_EMBEDDING_PROFILES ?? '',
     env.RAG_DOMAIN_EMBEDDINGS ?? '',
@@ -1207,6 +1326,18 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_QUERY_HYDE ?? '',
     env.RAG_QUERY_TRANSLATE_DISABLED_PROFILES ?? '',
     env.RAG_QUERY_VOICE_TRANSFORMS ?? '',
+    env.RAG_QUERY_DECOMPOSE_COMPLETENESS ?? '',
+    env.RAG_QUERY_SUBQ_FILTERS ?? '',
+    env.RAG_DECOMPOSED_ANSWER ?? '',
+    env.RAG_TRANSLATION_GLOSSARY ?? '',
+    env.RAG_LANGID_SIDECAR ?? '',
+    env.RAG_MODEL_ROUTING ?? '',
+    env.RAG_ROUTING_FAST_MODEL ?? '',
+    env.RAG_ROUTING_QUALITY_MODEL ?? '',
+    env.RAG_SPECULATIVE_RETRIEVAL ?? '',
+    env.RAG_QUERY_HISTORY_FALLBACK ?? '',
+    env.RAG_WHATSAPP_HISTORY ?? '',
+    env.RAG_SCOPE_GATE ?? '',
     env.RAG_SEMANTIC_CACHE ?? '',
     env.RAG_SEMANTIC_CACHE_TTL ?? '',
     env.RAG_SEMANTIC_CACHE_REFUSAL_TTL ?? '',
@@ -1253,6 +1384,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
   const disabledStages = parseDisabled(env.RAG_DISABLED_STAGES, warnings);
   const overrideByProfile = parseTimeouts(env.RAG_STAGE_TIMEOUTS, warnings);
   const queryLayer = parseQueryLayer(env, pipeline, warnings);
+  const { queryAdditions, modelRouting } = parseQueryAdditions(env, queryLayer, warnings);
   const semanticCache = parseSemanticCache(env, pipeline, warnings);
 
   const timeouts = {} as Record<Profile, StageTimeouts>;
@@ -1302,6 +1434,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
   const operatorDisabledStages: ReadonlySet<StageName> = new Set(disabledStages);
   applyV2DisabledStages(v2, disabledStages);
   applyQueryLayerDisabledStages(queryLayer, semanticCache, disabledStages);
+  if (!queryAdditions.effective.scopeGate) disabledStages.add('scope_gate');
 
   const config: RagConfig = {
     pipeline,
@@ -1321,8 +1454,12 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     bgeM3Serving: parseNamedChoice('RAG_BGE_M3_SERVING', env.RAG_BGE_M3_SERVING, ['hosted', 'sidecar'], 'hosted', warnings),
     outputLinkAllowlist: (env.RAG_OUTPUT_LINK_ALLOWLIST ?? '').trim(),
     queryLayer,
+    queryAdditions,
+    modelRouting,
     semanticCache,
     backend: parseBackend(env, warnings),
+    accessGroups: parseAccessGroups(env.RAG_DOC_ACCESS_GROUPS, warnings),
+    embedAccessGroup: (env.RAG_EMBED_ACCESS_GROUP ?? '').trim(),
     warnings,
   };
   memo.set(snapshot, config);
@@ -1364,6 +1501,11 @@ export function warnInjectionCheckDisabled(config: RagConfig, injectionCheck: st
 /** D-18, D-19: the dense terminology variant never runs in voice and needs the stage switch. */
 export function terminologyDenseFor(config: RagConfig, profile: Profile): boolean {
   return config.v2.terminology && config.v2.terminologyDense && profile !== 'voice';
+}
+
+/** D-26: the scope gate never runs in voice until a voice latency measurement within budget is recorded. */
+export function scopeGateEnabledFor(config: RagConfig, profile: Profile): boolean {
+  return !config.disabledStages.has('scope_gate') && profile !== 'voice';
 }
 
 export function resetRagConfigForTests(): void {

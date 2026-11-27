@@ -30,6 +30,7 @@ describe('v2 contract literals type-check', () => {
       denseVector: null,
       lexicalTokens: ['hello'],
       lexicalLanguages: null,
+      access: { mode: 'off' },
       filters,
       denseLimit: 0,
       lexicalLimit: 10,

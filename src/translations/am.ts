@@ -395,6 +395,7 @@ cancelTool: "ተው",
   waitingForApproval: "ማጽደቅዎን በመጠበቅ ላይ...",
   executingTool: "መሳሪያ በሂደት ላይ፣ እባክዎ ይጠብቁ...",
   toolError: "መሳሪያውን በመስራት ጊዜ ስህተት ተፈጥሯል.",
+  voiceUnavailable: "ድምፅ ለጊዜው አይገኝም። እባክዎ ቆይተው እንደገና ይሞክሩ።",
   
   // Chat message action tooltips
   copyTooltip: "ኮፒ አድርግ",

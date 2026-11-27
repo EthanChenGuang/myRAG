@@ -1,0 +1,86 @@
+{
+  "phase": "03.2.1",
+  "plan": "03.2.1-05",
+  "requirement": "EMB-11",
+  "decisions": ["D-26", "D-27", "D-54"],
+  "tolerance": {
+    "source": "D-26",
+    "min_cosine": 0.9999,
+    "max_component_diff": 0.001,
+    "note": "Fixed by D-26; a live result beyond it blocks the sidecar serving switch and never widens the tolerance."
+  },
+  "activation": "Nothing is activated by this record. Activation stays with the operator: npm run rag:embedding -- record-evidence <comparison.json> --target bge-m3-1024, then the EMB-05 gate through npm run rag:embedding -- activate bge-m3-1024.",
+  "data_policy": "Figures, file names, dates and ids only. No document or chunk text is written here.",
+  "items": [
+    {
+      "id": "bge_m3_weights_revision",
+      "status": "done",
+      "date": "2026-11-27",
+      "by": "executor of plan 03.2.1-02 (owner-delegated checkpoint)",
+      "evidence": "Copied from the 03.2.1-02 checkpoint answer: BAAI/bge-m3 revision 5617a9f61b028005a4858fdac845db406aefb181, licence mit, pytorch_model.bin 2,271,145,830 bytes with LFS sha256 b5e0ce3470abf5ef3831aa1bd5553b486803e83251590ab7ff35a117cf6aad38, checked through the Hugging Face API; the bake re-checked every file hash after download.",
+      "reason": ""
+    },
+    {
+      "id": "bge_m3_hosted_vectors_recorded",
+      "status": "not_done",
+      "date": "",
+      "by": "",
+      "evidence": "Only the sidecar recording exists: eval/fixtures/embeddings/bge-m3-sidecar.json (real model, CPU, 15 vectors). eval/fixtures/embeddings/bge-m3-hosted.json is absent.",
+      "reason": "Copied from the 03.2.1-02 checkpoint answer: DeepInfra answers HTTP 402 'You need positive balance to do inference' for the account the proxy uses; a payment by the owner is needed. Still out of credit on 2026-11-27 (orchestrator note).",
+      "command": "DEEPINFRA_API_KEY=<key> uv run --directory eval python ../eval/fixtures/embeddings/record_bge_m3.py --mode hosted --out ../eval/fixtures/embeddings/bge-m3-hosted.json",
+      "prerequisites": ["DeepInfra account with a positive balance"],
+      "dry_run": {
+        "command": "uv run --directory eval python ../eval/fixtures/embeddings/record_bge_m3.py --compare ../eval/fixtures/embeddings/bge-m3-hosted.json ../eval/fixtures/embeddings/bge-m3-sidecar.json",
+        "exit": 2,
+        "result": "not comparable: bge-m3-hosted.json unreadable (file missing), as expected while the hosted recording is pending"
+      }
+    },
+    {
+      "id": "migration_0811_live",
+      "status": "not_done",
+      "date": "",
+      "by": "",
+      "evidence": "Copied from the 03.2.1-02 checkpoint answer: 0811 is present on the eval project (bge-m3-1024 halfvec 1024 'available', both *_bge_m3_1024_hnsw indexes; read-only check through the Management API).",
+      "reason": "The 03.2.1-02 answer reports 0811 only on the eval project; the push to the production database was not done and stays an operator action (executors never touch production).",
+      "command": "supabase db push (applies supabase/migrations/0811_bge_m3_profile.sql after 0801-0810); check: select status from embedding_profiles where id = 'bge-m3-1024' returns 'available'",
+      "prerequisites": ["Operator access to the production Supabase project", "SUPABASE_ACCESS_TOKEN for a non-interactive push"]
+    },
+    {
+      "id": "bge_m3_hosted_vs_sidecar_real_chunks",
+      "status": "not_done",
+      "date": "",
+      "by": "",
+      "evidence": "",
+      "reason": "Task 2 checkpoint of 03.2.1-05 answered by the executor under the owner's delegation (owner unavailable): skip. The hosted API cannot be called (DeepInfra HTTP 402), no sidecar host runs the bge-m3 image, and the executor has no tenant with real documents. No figures exist, so nothing is recorded as passed.",
+      "command": "python eval/fixtures/embeddings/record_bge_m3.py --mode hosted --texts <local file> --out <local a>; python eval/fixtures/embeddings/record_bge_m3.py --mode sidecar --texts <local file> --out <local b> (on the sidecar host); python eval/fixtures/embeddings/record_bge_m3.py --compare <local a> <local b>",
+      "prerequisites": ["DeepInfra key with balance", "a sidecar host running docker build --target bge-m3 rag-sidecar", "a tenant with real documents; a handful of real chunk texts per language exported to a local file outside the repository"],
+      "dry_run": {
+        "command": "uv run --directory eval python ../eval/fixtures/embeddings/record_bge_m3.py --compare ../eval/fixtures/embeddings/bge-m3-sidecar.json ../eval/fixtures/embeddings/bge-m3-sidecar.json; uv run --directory eval pytest -q tests/test_record_bge_m3.py",
+        "exit": 0,
+        "result": "compare mode runs on the committed recording (15/15 within tolerance against itself, figures only, no text printed); the record script tests pass"
+      }
+    },
+    {
+      "id": "bge_m3_real_comparison",
+      "status": "not_done",
+      "date": "",
+      "by": "",
+      "evidence": "",
+      "reason": "Task 2 checkpoint of 03.2.1-05 answered by the executor under the owner's delegation (owner unavailable): skip. It needs the hosted API (DeepInfra HTTP 402), a sidecar host with the bge-m3 image and a tenant with real documents and bge-m3-1024 backfilled side by side; none is available. Throughput, latency and cost were not measured in either serving mode.",
+      "command": "Backfill side by side: npm run rag:reembed -- --profile bge-m3-1024 (never activate). Run the real comparison once with RAG_BGE_M3_SERVING=hosted and once with sidecar, then: uv run --directory eval python -m rag_eval.profile_compare_cli --active-gated <a.json> --active-candidate <b.json> --arm bge-m3-1024 <g.json> <c.json> --serving <serving.json> --noise eval/config/noise.json --pre-migration-meta <meta.json> --backfill-run-id <run_id> --out <comparison.json> --text-out <comparison.txt> (without --wiring-proof). Record ingest chunks/s, embed-stage p50/p95 and cost for each mode; neither serving block may read 'not measured'.",
+      "prerequisites": ["DeepInfra key with balance", "a sidecar host running the bge-m3 image", "a tenant with real documents", "migration 0811 on the target database"],
+      "dry_run": {
+        "command": "node --import tsx eval/harness/run-profile-compare.mts --out eval/out/03.2.1-05-compare; uv run --directory eval pytest -q tests/test_profile_compare.py",
+        "exit": 0,
+        "result": "fixture wiring proof on 2026-11-27: the bge-m3-1024 arm is present; 'serving hosted [fixture embedder]' measures the fixture embedder only and 'serving sidecar: not measured'; output under eval/out/ (not committed); profile_compare tests pass"
+      }
+    }
+  ],
+  "runbook": [
+    "1. Top up DeepInfra. Record the hosted vectors of the fixture texts (bge_m3_hosted_vectors_recorded command), run --compare against bge-m3-sidecar.json, commit bge-m3-hosted.json, then rerun plan 03.2.1-02 Task 4 (identity test tests/rag/bge-m3-identity.test.ts and the nightly job).",
+    "2. Push 0811 to the production database (migration_0811_live command) and read the profile status.",
+    "3. Real chunks: export a handful of real chunk texts per language to a local file outside the repository; record hosted and sidecar vectors and compare (bge_m3_hosted_vs_sidecar_real_chunks command). Note the smallest cosine, the largest component difference and the exit status. Delete the three local files; commit none.",
+    "4. Real comparison: backfill bge-m3-1024 side by side on that tenant, run the comparison in both serving modes (bge_m3_real_comparison command), keep the report, note throughput, p50/p95 and cost per mode.",
+    "5. Report per item: done or not done, date, who, figures or reason. No document text. Then rerun plan 03.2.1-05 Task 3 to fill this record. Activate nothing here."
+  ]
+}

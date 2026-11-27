@@ -82,7 +82,15 @@ def _noise() -> NoiseConfig:
 def test_noise_file_matches_decided_band():
     noise = _noise()
     assert (noise.k, noise.floor) == (3, 0.02)
-    assert noise.gated_slice_prefixes == ["overall", "language:", "category:cross_lingual", "pair:", "category:table_split"]
+    assert noise.gated_slice_prefixes == [
+        "overall",
+        "language:",
+        "category:cross_lingual",
+        "pair:",
+        "category:table_split",
+        "category:version_compare",
+        "category:scoped_compound",
+    ]
     assert noise.metrics["false_refusal_rate"] == "lower"
 
 

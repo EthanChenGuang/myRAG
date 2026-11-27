@@ -534,6 +534,32 @@
       "title": "ScopeFilter",
       "type": "object"
     },
+    "SubQuestionGold": {
+      "additionalProperties": false,
+      "description": "D-09: the gold spans one sub-question must retrieve; each is also a gold_evidence span.",
+      "properties": {
+        "gold_spans": {
+          "items": {
+            "$ref": "#/$defs/GoldSpan"
+          },
+          "minItems": 1,
+          "title": "Gold Spans",
+          "type": "array"
+        },
+        "index": {
+          "exclusiveMaximum": 4,
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "gold_spans"
+      ],
+      "title": "SubQuestionGold",
+      "type": "object"
+    },
     "TableAnswer": {
       "additionalProperties": false,
       "description": "The one cell a table_split item asks for, plus same-unit values from other cells (D-45).",
@@ -681,7 +707,10 @@
         "stale_version",
         "off_topic_context",
         "multi_step_calc",
-        "context_overflow"
+        "context_overflow",
+        "version_compare",
+        "scoped_compound",
+        "glossary"
       ],
       "title": "Category",
       "type": "string"
@@ -828,6 +857,14 @@
       ],
       "title": "Split",
       "type": "string"
+    },
+    "sub_questions": {
+      "items": {
+        "$ref": "#/$defs/SubQuestionGold"
+      },
+      "maxItems": 4,
+      "title": "Sub Questions",
+      "type": "array"
     },
     "table_answer": {
       "$ref": "#/$defs/TableAnswer"

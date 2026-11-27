@@ -319,7 +319,7 @@ describe('the terminology stage in the query group (D-15, D-21)', () => {
       { role: 'assistant', content: 'The first placeholder item is described in section one.' },
     ];
     const followUp = 'What about it?';
-    installQueryLlm([{ transform: 'condense', query: followUp, output: { standalone: 'What about the termalpha item?', unchanged: false } }]);
+    installQueryLlm([{ transform: 'condense', query: followUp, output: { standalone: 'What about the termalpha item?', unchanged: false, language: null } }]);
     const { out, collector } = await runQuery(followUp, { env: { RAG_QUERY_LAYER: 'true', RAG_QUERY_TRANSLATE: 'false' }, history });
     expect(out.queryLayer?.plan?.standalone).toBe('What about the termalpha item?');
     expect(collector.stages().find((row) => row.name === 'terminology')?.counts).toMatchObject({ matches: 1 });

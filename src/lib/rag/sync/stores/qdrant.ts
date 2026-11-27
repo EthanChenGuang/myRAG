@@ -39,6 +39,10 @@ export const QDRANT_PAYLOAD_KEYS = [
 
 const PAGE = 256;
 const DELETE_BATCH = 256;
+/** RET-05 purges: document ids per points-delete and per count. */
+const PURGE_BATCH = 100;
+const CHUNK_COLLECTION_RE = /^myrag_chunks_[a-z0-9_-]{1,128}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 type Params<K extends keyof QdrantApi> = Parameters<QdrantApi[K]>[1];
 
@@ -57,6 +61,20 @@ function fail(action: string, error: unknown): never {
   const status = qdrantErrorStatus(error);
   if (status === 404) throw new BackendNotReadyError('qdrant', 'collection_missing');
   throw new Error(`[Vector Sync] qdrant: ${action} failed (${status === null ? 'unreachable' : `http_${status}`})`);
+}
+
+function requireChunkCollection(name: string): string {
+  if (typeof name !== 'string' || !CHUNK_COLLECTION_RE.test(name)) throw new Error('[Vector Sync] qdrant: not a chunk collection');
+  return name;
+}
+
+function requireDocumentIds(ids: string[]): string[] {
+  for (const id of ids) if (typeof id !== 'string' || !UUID_RE.test(id)) throw new Error('[Vector Sync] qdrant: invalid document id');
+  return ids;
+}
+
+function documentAny(ids: string[]): QdrantFilter {
+  return { must: [{ key: 'document_id', match: { any: [...ids] } }] };
 }
 
 export function qdrantPayload(payload: VectorPointPayload): Record<(typeof QDRANT_PAYLOAD_KEYS)[number], string | number | null> {
@@ -93,15 +111,37 @@ export function createQdrantStore(deps: QdrantStoreDeps): VectorStore {
     }
   }
 
-  async function countWhere(profileId: string, tenantKey: string, filter: QdrantFilter | undefined): Promise<number> {
+  async function countIn(collection: string, tenantKey: string, filter: QdrantFilter | undefined): Promise<number> {
     const scope = storeScopeForTenantKey(requireKey(tenantKey));
     const body = scopedCount(scope, { ...(filter ? { filter } : {}), exact: true });
     try {
-      const result = await write.count(qdrantCollectionName(profileId), body as Params<'count'>);
+      const result = await write.count(collection, body as Params<'count'>);
       return result.count;
     } catch (error) {
       fail('count', error);
     }
+  }
+
+  async function countWhere(profileId: string, tenantKey: string, filter: QdrantFilter | undefined): Promise<number> {
+    return countIn(qdrantCollectionName(profileId), tenantKey, filter);
+  }
+
+  /** A purge sweeps collections the worker may never have ensured; a missing one holds nothing. */
+  async function orZero(run: () => Promise<number>): Promise<number> {
+    try {
+      return await run();
+    } catch (error) {
+      if (error instanceof BackendNotReadyError && error.reason === 'collection_missing') return 0;
+      throw error;
+    }
+  }
+
+  async function purgeCount(collection: string, tenantKey: string, documentIds: string[]): Promise<number> {
+    let total = 0;
+    for (let i = 0; i < documentIds.length; i += PURGE_BATCH) {
+      total += await countIn(collection, tenantKey, documentAny(documentIds.slice(i, i + PURGE_BATCH)));
+    }
+    return total;
   }
 
   async function deleteIdList(profileId: string, tenantKey: string, ids: string[]): Promise<number> {
@@ -204,6 +244,42 @@ export function createQdrantStore(deps: QdrantStoreDeps): VectorStore {
     },
     async count(profileId: string, tenantKey: string): Promise<number> {
       return countWhere(profileId, tenantKey, undefined);
+    },
+    async listCollections(): Promise<string[]> {
+      let result: Awaited<ReturnType<QdrantApi['getCollections']>>;
+      try {
+        result = await write.getCollections();
+      } catch (error) {
+        fail('list_collections', error);
+      }
+      return result.collections.map((c) => c.name).filter((name) => CHUNK_COLLECTION_RE.test(name)).sort();
+    },
+    async deleteDocuments(collection: string, tenantKey: string, documentIds: string[]): Promise<number> {
+      const name = requireChunkCollection(collection);
+      const scope = storeScopeForTenantKey(requireKey(tenantKey));
+      const ids = requireDocumentIds(documentIds);
+      return orZero(async () => {
+        let deleted = 0;
+        for (let i = 0; i < ids.length; i += PURGE_BATCH) {
+          const filter = documentAny(ids.slice(i, i + PURGE_BATCH));
+          const present = await countIn(name, tenantKey, filter);
+          if (present === 0) continue;
+          const body = scopedDeleteByFilter(scope, filter);
+          try {
+            await write.delete(name, { ...(body as object), wait: true } as Params<'delete'>);
+          } catch (error) {
+            fail('delete', error);
+          }
+          deleted += present;
+        }
+        return deleted;
+      });
+    },
+    async countDocumentPoints(collection: string, tenantKey: string, documentIds: string[]): Promise<number> {
+      const name = requireChunkCollection(collection);
+      requireKey(tenantKey);
+      const ids = requireDocumentIds(documentIds);
+      return orZero(() => purgeCount(name, tenantKey, ids));
     },
     searchLegs: (req) => reader.searchLegs(req),
     health: () => reader.health(),

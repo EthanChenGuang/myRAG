@@ -12,7 +12,7 @@ const EMBED_MODEL = 'openai/gpt-4o-mini';
 const embedTransport = new DefaultChatTransport<UIMessage>({
   api: '/api/embed/chat',
   prepareSendMessagesRequest: ({ messages }) => ({
-    body: toEmbedRequestBody(messages, EMBED_MODEL),
+    body: toEmbedRequestBody(messages, EMBED_MODEL, typeof navigator === 'undefined' ? undefined : navigator.language),
   }),
 });
 

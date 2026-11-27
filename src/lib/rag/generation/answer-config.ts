@@ -6,6 +6,7 @@ export type MaxOutputTokens =
   | { readonly kind: 'fixed'; readonly value: number };
 export type OutputGuardMode = 'off' | 'flag' | 'enforce';
 export type UploaderHoldMode = 'off' | 'manual' | 'auto';
+export type ContextOverflowMode = 'truncate' | 'refine';
 
 export type AnswerConfigWarningCode =
   | 'max_output_tokens_invalid'
@@ -16,7 +17,9 @@ export type AnswerConfigWarningCode =
   | 'invalid_uploader_alert_window_hours'
   | 'per_sentence_needs_citations'
   | 'judge_needs_model'
-  | 'claim_check_needs_groundedness';
+  | 'claim_check_needs_groundedness'
+  | 'invalid_context_overflow'
+  | 'overflow_needs_budget';
 
 /** The message names the variable only; a configured value is never repeated in it. */
 export interface AnswerConfigWarning {
@@ -39,6 +42,12 @@ export interface AnswerConfig {
   readonly uploaderAlertThreshold: number;
   readonly uploaderAlertWindowHours: number;
   readonly uploaderHold: UploaderHoldMode;
+  readonly calcTool: boolean;
+  /** Valid without the tool: the check also serves the trailing-block path (05.2.1 D-72, D-73). */
+  readonly calcCheck: boolean;
+  readonly promptBudget: boolean;
+  /** `refine` only while the prompt budget is on (05.2.1 D-85). */
+  readonly contextOverflow: ContextOverflowMode;
   /** True when any resolved switch differs from its default; the judge model and the window alone change no behaviour. */
   readonly anyNonDefault: boolean;
   readonly warnings: readonly AnswerConfigWarning[];
@@ -54,6 +63,7 @@ const MIN_ALERT_WINDOW_HOURS = 1;
 const MAX_ALERT_WINDOW_HOURS = 720;
 const OUTPUT_GUARD_MODES: readonly OutputGuardMode[] = ['off', 'flag', 'enforce'];
 const UPLOADER_HOLD_MODES: readonly UploaderHoldMode[] = ['off', 'manual', 'auto'];
+const CONTEXT_OVERFLOW_MODES: readonly ContextOverflowMode[] = ['truncate', 'refine'];
 const INTEGER_PATTERN = /^\d+$/;
 
 const OFF: MaxOutputTokens = Object.freeze({ kind: 'off' });
@@ -159,6 +169,23 @@ export function readAnswerConfig(source: AnswerEnvSource = process.env): AnswerC
     warnings,
   );
 
+  const calcTool = isOn(source.RAG_CALC_TOOL);
+  const calcCheck = isOn(source.RAG_CALC_CHECK);
+  const promptBudget = isOn(source.RAG_PROMPT_BUDGET);
+  let contextOverflow = parseMode(
+    source.RAG_CONTEXT_OVERFLOW,
+    CONTEXT_OVERFLOW_MODES,
+    { code: 'invalid_context_overflow', message: 'RAG_CONTEXT_OVERFLOW is not truncate or refine; using truncate' },
+    warnings,
+  );
+  if (contextOverflow === 'refine' && !promptBudget) {
+    contextOverflow = 'truncate';
+    warnings.push({
+      code: 'overflow_needs_budget',
+      message: 'RAG_CONTEXT_OVERFLOW needs RAG_PROMPT_BUDGET; using truncate',
+    });
+  }
+
   let citationPerSentence = isOn(source.RAG_CITATION_PER_SENTENCE);
   if (citationPerSentence && !generation.citations && !generation.claudeCitations) {
     citationPerSentence = false;
@@ -196,7 +223,11 @@ export function readAnswerConfig(source: AnswerEnvSource = process.env): AnswerC
     versionLabels ||
     securityEvents ||
     uploaderAlertThreshold !== 0 ||
-    uploaderHold !== 'off';
+    uploaderHold !== 'off' ||
+    calcTool ||
+    calcCheck ||
+    promptBudget ||
+    contextOverflow !== 'truncate';
 
   return Object.freeze({
     registryTexts,
@@ -213,6 +244,10 @@ export function readAnswerConfig(source: AnswerEnvSource = process.env): AnswerC
     uploaderAlertThreshold,
     uploaderAlertWindowHours,
     uploaderHold,
+    calcTool,
+    calcCheck,
+    promptBudget,
+    contextOverflow,
     anyNonDefault,
     warnings: Object.freeze(warnings.map((warning) => Object.freeze({ ...warning }))),
   });

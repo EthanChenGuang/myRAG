@@ -41,7 +41,13 @@ Category = Literal[
     "off_topic_context",
     "multi_step_calc",
     "context_overflow",
+    "version_compare",
+    "scoped_compound",
+    "glossary",
 ]
+# Phase 6.2 D-09, D-15: multi-part items that need at least two scored sub-questions.
+SUB_QUESTION_CATEGORIES = frozenset({"version_compare", "scoped_compound"})
+MAX_GOLD_SUB_QUESTIONS = 4
 INJECTION_CATEGORIES = frozenset({"injection", "injection_evasive"})
 CACHE_PAIR_CATEGORIES = frozenset({"cache_paraphrase", "cache_near_miss"})
 ANSWER_RULE_CATEGORIES = frozenset({"partial_answer", "stale_version", "off_topic_context"})
@@ -72,6 +78,10 @@ class GoldSpan(OmitNoneModel):
     section: str
     quote: str = Field(min_length=2)
     document_id: str | None = Field(default=None, pattern=UUID_PATTERN, json_schema_extra=omit_none_schema)
+
+
+def _omit_default(schema: dict[str, Any]) -> None:
+    schema.pop("default", None)
 
 
 def _optional_object_schema(schema: dict[str, Any]) -> None:
@@ -234,6 +244,13 @@ class OverflowSpec(_Contract):
         return self
 
 
+class SubQuestionGold(_Contract):
+    """D-09: the gold spans one sub-question must retrieve; each is also a gold_evidence span."""
+
+    index: int = Field(ge=0, lt=MAX_GOLD_SUB_QUESTIONS)
+    gold_spans: list[GoldSpan] = Field(min_length=1)
+
+
 class GoldenItem(_Contract):
     id: str = Field(pattern=ITEM_ID_PATTERN)
     question: str
@@ -296,6 +313,29 @@ class GoldenItem(_Contract):
         exclude_if=lambda value: value is None,
         json_schema_extra=_optional_object_schema,
     )
+    sub_questions: list[SubQuestionGold] = Field(
+        default_factory=list,
+        max_length=MAX_GOLD_SUB_QUESTIONS,
+        exclude_if=lambda value: value == [],
+        json_schema_extra=_omit_default,
+    )
+
+    @model_validator(mode="after")
+    def _check_sub_questions(self) -> "GoldenItem":
+        if self.category in SUB_QUESTION_CATEGORIES:
+            if not self.answerable:
+                raise ValueError("version_compare and scoped_compound items must be answerable")
+            if len(self.sub_questions) < 2:
+                raise ValueError("version_compare and scoped_compound items need at least two sub_questions")
+        if not self.sub_questions:
+            return self
+        if [sub.index for sub in self.sub_questions] != list(range(len(self.sub_questions))):
+            raise ValueError("sub_questions indexes must be unique, in order and start at 0")
+        gold = set(self.gold_evidence)
+        for sub in self.sub_questions:
+            if any(span not in gold for span in sub.gold_spans):
+                raise ValueError("sub_questions gold_spans must be gold_evidence spans")
+        return self
 
     @model_validator(mode="after")
     def _check_evidence_groups(self) -> "GoldenItem":

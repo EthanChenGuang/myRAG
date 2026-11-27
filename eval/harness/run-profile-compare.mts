@@ -37,9 +37,47 @@ function seedHarnessEnv(): void {
   }
 }
 
+const VOYAGE = 'voyage-4-large-2048';
+const BGE_M3 = 'bge-m3-1024';
+const BGE_M3_FIXTURE_HOST = 'fixture-bge-m3';
+type ServingMode = 'hosted' | 'sidecar';
+
+interface ServingMeasurement {
+  mode: ServingMode;
+  measured: boolean;
+  source?: string;
+  ingest_chunks_per_second?: number | null;
+  query_embed_p50_ms?: number | null;
+  query_embed_p95_ms?: number | null;
+  usd_per_million_tokens?: number | null;
+  run_tokens?: number | null;
+  run_cost_usd?: number | null;
+}
+
 async function installHarnessEmbeddingProviders(): Promise<void> {
   const registry = await import('../../src/lib/rag/embeddings/registry');
+  const { BGE_M3_MODEL_ID } = await import('../../src/lib/rag/embeddings/types');
   registry.setEmbeddingProvidersForTests({
+    'bge-m3': {
+      id: 'bge-m3',
+      model: BGE_M3_MODEL_ID,
+      maxInputTokens: 8192,
+      supportedDims: [1024],
+      normalize: true,
+      async embedDocuments(texts, opts) {
+        const { embedText } = await import('./fixture-embedder.mts');
+        return {
+          vectors: texts.map((text) => embedText(text, opts.dims)),
+          model: BGE_M3_MODEL_ID,
+          host: BGE_M3_FIXTURE_HOST,
+          usage: { tokens: texts.length },
+        };
+      },
+      async embedQuery(text, opts) {
+        const { embedText } = await import('./fixture-embedder.mts');
+        return { vectors: [embedText(text, opts.dims)], model: BGE_M3_MODEL_ID, host: BGE_M3_FIXTURE_HOST, usage: { tokens: 1 } };
+      },
+    },
     voyage: {
       id: 'voyage',
       model: 'voyage-4-large',
@@ -68,17 +106,44 @@ async function installHarnessEmbeddingProviders(): Promise<void> {
   });
 }
 
+/**
+ * The fixture run measures the serving mode RAG_BGE_M3_SERVING selects, with the fixture embedder standing in for it; the other mode is
+ * reported unmeasured. Live figures for both modes are plan 03.2.1-05.
+ */
+async function bgeM3Serving(
+  backfill: { chunks: number; tokens: number; seconds: number },
+  gatedReportPath: string,
+): Promise<ServingMeasurement[]> {
+  const { priceFor } = await import('../../src/lib/rag/embeddings/prices');
+  const price = priceFor('bge-m3').usdPerMillionTokens;
+  const report = JSON.parse(fs.readFileSync(gatedReportPath, 'utf8')) as { latency?: Record<string, { p50_ms: number; p95_ms: number }> | null };
+  const embed = report.latency?.embed ?? null;
+  const measuredMode: ServingMode = process.env.RAG_BGE_M3_SERVING === 'sidecar' ? 'sidecar' : 'hosted';
+  const measured: ServingMeasurement = {
+    mode: measuredMode,
+    measured: true,
+    source: 'fixture embedder',
+    ingest_chunks_per_second: backfill.seconds > 0 ? Number((backfill.chunks / backfill.seconds).toFixed(3)) : null,
+    query_embed_p50_ms: embed ? embed.p50_ms : null,
+    query_embed_p95_ms: embed ? embed.p95_ms : null,
+    usd_per_million_tokens: measuredMode === 'hosted' ? price : null,
+    run_tokens: backfill.tokens,
+    run_cost_usd: measuredMode === 'hosted' ? (backfill.tokens * price) / 1_000_000 : null,
+  };
+  return (['hosted', 'sidecar'] as const).map((mode) => (mode === measuredMode ? measured : { mode, measured: false }));
+}
+
 async function main(): Promise<number> {
   const { values } = parseArgs({
     options: {
-      target: { type: 'string' },
+      target: { type: 'string', multiple: true },
       out: { type: 'string', default: 'eval/out/compare' },
       corpus: { type: 'string', default: 'eval/fixtures/corpus' },
     },
     strict: true,
   });
-  const VOYAGE = 'voyage-4-large-2048';
-  const target = values.target?.trim() || VOYAGE;
+  const requested = (values.target ?? []).map((value) => value.trim()).filter(Boolean);
+  const targets = [...new Set(requested.length > 0 ? requested : [VOYAGE, BGE_M3])];
   const outDir = path.resolve(values.out as string);
   fs.mkdirSync(outDir, { recursive: true });
 
@@ -95,7 +160,7 @@ async function main(): Promise<number> {
   const corpus = loadCorpus(corpusDir);
   const half = Math.ceil(corpus.documents.length / 2);
 
-  let runId = '';
+  const runIds = new Map<string, string>();
   const full = await buildIngestFixtureDatabase({
     deploymentMode: 'single-tenant',
     corpusDir,
@@ -107,21 +172,34 @@ async function main(): Promise<number> {
       const { fixtureAdminClient } = await import('./ingest-fakes.mts');
       const { createReembedWriter } = await import('../../src/lib/rag/ingest/writer.ts');
       const writer = createReembedWriter({ db: fixtureAdminClient(state.edge.url), signal: new AbortController().signal });
-      const started = await writer.start({ profileId: target, tenantKey: null, actor: 'profile-compare-harness', derivedFrom: null });
-      runId = started.runId;
+      for (const target of targets) {
+        const started = await writer.start({ profileId: target, tenantKey: null, actor: 'profile-compare-harness', derivedFrom: null });
+        runIds.set(target, started.runId);
+      }
     },
   });
 
   const ingestEdge = full.buildState.edge;
   const { fixtureAdminClient } = await import('./ingest-fakes.mts');
   const { runReembed } = await import('../../src/lib/rag/ingest/reembed/run.ts');
-  const backfill = await runReembed({
-    db: fixtureAdminClient(ingestEdge.url),
-    resumeRunId: runId,
-    batchSize: 16,
-    signal: new AbortController().signal,
-  });
-  if (!runId) runId = backfill.runId;
+  const backfills = new Map<string, { status: string; reason?: string | null; chunks: number; tokens: number; seconds: number }>();
+  for (const target of targets) {
+    const startedAt = performance.now();
+    const backfill = await runReembed({
+      db: fixtureAdminClient(ingestEdge.url),
+      resumeRunId: runIds.get(target),
+      batchSize: 16,
+      signal: new AbortController().signal,
+    });
+    if (!runIds.get(target)) runIds.set(target, backfill.runId);
+    backfills.set(target, {
+      status: backfill.status,
+      reason: backfill.reason,
+      chunks: backfill.chunksEmbedded,
+      tokens: backfill.tokens,
+      seconds: (performance.now() - startedAt) / 1000,
+    });
+  }
 
   // Refresh RAG deps on the ingest edge before in-process eval (matches run-smoke fixture ordering).
   const { applyFixtureProcessEnv } = await import('./process-env.mts');
@@ -133,14 +211,24 @@ async function main(): Promise<number> {
   });
   const deps = await import('../../src/lib/rag/deps');
   deps.resetRagDepsForTests();
-  if (backfill.status !== 'completed') {
-    throw new Error(`re-embed for ${target} failed: ${backfill.reason ?? 'unknown'}`);
+  for (const [target, backfill] of backfills) {
+    if (backfill.status !== 'completed') {
+      throw new Error(`re-embed for ${target} failed: ${backfill.reason ?? 'unknown'}`);
+    }
   }
 
-  const goldenPath = mergeGoldenFiles(
+  const mergedPath = mergeGoldenFiles(
     ingestModeGoldenPaths().map((file) => path.join(REPO_ROOT, file)),
     path.join(outDir, 'golden.merged.jsonl'),
   );
+  // The table_split tenants are not loaded by this one-database build; their items need a separately loaded session.
+  const { isTableSplitItem } = await import('./table-split.mts');
+  const goldenPath = path.join(outDir, 'golden.jsonl');
+  const kept = fs
+    .readFileSync(mergedPath, 'utf8')
+    .split('\n')
+    .filter((line) => line.trim() !== '' && !isTableSplitItem(JSON.parse(line) as { category: string }));
+  fs.writeFileSync(goldenPath, `${kept.join('\n')}\n`);
 
   const inProcess = await prepareInProcessEval({
     corpusDir,
@@ -193,35 +281,47 @@ async function main(): Promise<number> {
   try {
     const activeGated = await runProfileEval({ outDir: path.join(outDir, 'active-gated') });
     const activeCandidate = await runProfileEval({ outDir: path.join(outDir, 'active-candidate'), candidateMetrics: true });
-    const targetGated = await runProfileEval({ outDir: path.join(outDir, 'target-gated'), embeddingProfileId: target });
-    const targetCandidate = await runProfileEval({
-      outDir: path.join(outDir, 'target-candidate'),
-      embeddingProfileId: target,
-      candidateMetrics: true,
-    });
+    const armArgs: string[] = [];
+    const serving: Record<string, ServingMeasurement[]> = {};
+    for (const target of targets) {
+      const gated = await runProfileEval({ outDir: path.join(outDir, `${target}-gated`), embeddingProfileId: target });
+      const candidate = await runProfileEval({
+        outDir: path.join(outDir, `${target}-candidate`),
+        embeddingProfileId: target,
+        candidateMetrics: true,
+      });
+      armArgs.push('--arm', target, gated, candidate);
+      if (target === BGE_M3) serving[target] = await bgeM3Serving(backfills.get(target)!, gated);
+    }
 
+    const firstRunId = runIds.get(targets[0]!)!;
     const preMigration = path.join(outDir, 'pre-migration.json');
-    fs.writeFileSync(preMigration, JSON.stringify({ run_id: runId, corpus_documents_before_run: half }, null, 2));
+    fs.writeFileSync(
+      preMigration,
+      JSON.stringify({ run_id: firstRunId, run_ids: Object.fromEntries(runIds), corpus_documents_before_run: half }, null, 2),
+    );
+    const servingPath = path.join(outDir, 'serving.json');
+    fs.writeFileSync(servingPath, JSON.stringify(serving, null, 2));
 
     return runPython('rag_eval.profile_compare_cli', [
       '--active-gated',
       activeGated,
       '--active-candidate',
       activeCandidate,
-      '--target-gated',
-      targetGated,
-      '--target-candidate',
-      targetCandidate,
-      '--target-profile',
-      target,
+      ...armArgs,
+      '--serving',
+      servingPath,
+      '--wiring-proof',
       '--noise',
       NOISE_PATH,
       '--pre-migration-meta',
       preMigration,
       '--backfill-run-id',
-      runId,
+      firstRunId,
       '--out',
       path.join(outDir, 'comparison.json'),
+      '--text-out',
+      path.join(outDir, 'comparison.txt'),
     ]);
   } finally {
     await inProcess.close();

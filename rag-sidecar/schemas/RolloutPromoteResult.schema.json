@@ -1,0 +1,120 @@
+{
+  "$defs": {
+    "RolloutLanguageComparison": {
+      "additionalProperties": false,
+      "description": "One language and measure: the candidate arm now, the same tenants before the rollout, the other tenants now.",
+      "properties": {
+        "candidate_before": {
+          "$ref": "#/$defs/RolloutMeasure"
+        },
+        "candidate_now": {
+          "$ref": "#/$defs/RolloutMeasure"
+        },
+        "incumbent_now": {
+          "$ref": "#/$defs/RolloutMeasure"
+        },
+        "language": {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+          "title": "Language",
+          "type": "string"
+        },
+        "metric": {
+          "enum": [
+            "refusal_rate",
+            "not_helpful_rate",
+            "judge_score"
+          ],
+          "title": "Metric",
+          "type": "string"
+        },
+        "verdict": {
+          "enum": [
+            "holds",
+            "worse",
+            "insufficient",
+            "unmeasured"
+          ],
+          "title": "Verdict",
+          "type": "string"
+        }
+      },
+      "required": [
+        "language",
+        "metric",
+        "candidate_now",
+        "candidate_before",
+        "incumbent_now",
+        "verdict"
+      ],
+      "title": "RolloutLanguageComparison",
+      "type": "object"
+    },
+    "RolloutMeasure": {
+      "additionalProperties": false,
+      "properties": {
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "n"
+      ],
+      "title": "RolloutMeasure",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The answer of a promote attempt; a refusal changes nothing and carries one code.",
+  "properties": {
+    "comparisons": {
+      "items": {
+        "$ref": "#/$defs/RolloutLanguageComparison"
+      },
+      "title": "Comparisons",
+      "type": "array"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "refusal": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_]{0,63}(:[a-z0-9][a-z0-9_.-]{0,63}){0,3}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Refusal"
+    },
+    "rollout_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Rollout Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "rollout_id",
+    "ok"
+  ],
+  "title": "RolloutPromoteResult",
+  "type": "object"
+}

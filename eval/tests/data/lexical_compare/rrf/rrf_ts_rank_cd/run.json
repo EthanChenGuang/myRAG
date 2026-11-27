@@ -1,0 +1,51 @@
+{
+  "corpus_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "created_at": "2026-01-01T00:00:00Z",
+  "deployment_mode": "single",
+  "edge_errors": 0,
+  "effective_config_hash": "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "embedder": {
+    "id": "fixture-embedder",
+    "source_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "version": "3"
+  },
+  "embedding_profile": null,
+  "git_sha": null,
+  "golden_filter": {
+    "gate_split": "dev",
+    "review_statuses": [
+      "approved"
+    ]
+  },
+  "golden_path": "eval/fixtures/golden.jsonl",
+  "golden_sha256": "47eb4309c2fb709e27372c42942c11b56d84b54452e772c91951a910d87e6ff2",
+  "item_count": 4,
+  "request_options": {
+    "cache_seed_answer": null,
+    "citations": false,
+    "degrade": null,
+    "disabled_stages": null,
+    "domain_control_leg": null,
+    "embedding_bindings": null,
+    "embedding_profile": null,
+    "generator_model": null,
+    "groundedness": false,
+    "max_results": 10,
+    "organization_id": null,
+    "query_framework": null,
+    "query_layer": null,
+    "query_params": null,
+    "query_transforms": null,
+    "retrieval_filters": null,
+    "retrieval_overrides": null,
+    "semantic_cache": null,
+    "stage_timeouts_ms": null,
+    "user_id": null
+  },
+  "run_config": null,
+  "run_config_hash": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+  "run_id": "run-test",
+  "schema_version": 1,
+  "sql_sha256": {},
+  "tier": "smoke"
+}

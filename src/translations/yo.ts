@@ -395,6 +395,7 @@ export const yo = {
   waitingForApproval: "Ndúró fún ìfọwọ́sí rẹ...",
   executingTool: "Ṣiṣẹ́ irinṣẹ́, jọ̀wọ́ dúró...",
   toolError: "Àṣìṣe kan wáyé nigbà ṣiṣẹ́ irinṣẹ́ náà.",
+  voiceUnavailable: "Ohùn kò sí fún ìgbà díẹ̀. Jọ̀wọ́ gbìyànjú lẹ́ẹ̀kan sí i nígbà míì.",
   
   // Chat message action tooltips
   copyTooltip: "Ṣẹ̀dà",

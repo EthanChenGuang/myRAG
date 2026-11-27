@@ -10,6 +10,8 @@ export { isQueryLayerEnabled, isSemanticCacheActive, isV2Pipeline, voiceServerCo
 export { isSmallTalkResult } from './v2/result';
 export { buildHistoryWindow } from './query/history';
 export type { HistoryWindowLimits } from './query/history';
+export { queryTurnInputs, ragTurnMetadataFromPlan } from './query/turn-metadata';
+export type { QueryTurnInputs, RagTurnMetadata } from './query/turn-metadata';
 export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
 export { currentAttributeFilterMode, currentLexicalVersion } from './deps';
@@ -26,6 +28,110 @@ export { isTenantScope, scopeKey } from './tenant/scope';
 export { evalScope } from './tenant/eval';
 export type { EvalScopeInput, EvalScopeOutcome } from './tenant/eval';
 export type { TenantScope } from './tenant/scope';
+export {
+  ACCESS_ADMIN_HASH,
+  accessScopeTiming,
+  accessTableFilter,
+  bodyNamesAccessGroups,
+  resolveAccessScope,
+  uploadAccessKeys,
+} from './tenant/access';
+export { scopeAccessFilter } from './tenant/access';
+export { accessGroupsEnabled } from './tenant/access';
+export { getAccessStartupVerdict, syncAccessEnforcementNow, verifyAccessGroupsStartup } from './tenant/access-startup';
+export type { AccessStartupStatus, AccessStartupVerdict } from './tenant/access-startup';
+export { createCitationRecheck, recordSecurityEvent, visibleChunkIds, visibleDocumentIds } from './access/visibility';
+export type { SecurityEventInput, VisibilityOptions, VisibilityResult } from './access/visibility';
+export { ACCESS_GROUPS_REASONS, AccessGroupsError, accessReasonOf } from './access/errors';
+export type { AccessGroupsReason, AccessServiceDeps } from './access/errors';
+export {
+  ACCESS_CANDIDATES_MAX,
+  ACCESS_GROUP_KEY_RE,
+  ACCESS_GROUP_NAME_MAX,
+  ACCESS_GROUPS_PAGE_SIZE,
+  addMember,
+  createGroup,
+  deleteGroup,
+  groupImpact,
+  listGroups,
+  listMembers,
+  memberCandidates,
+  myGroups,
+  removeMember,
+  renameGroup,
+} from './access/groups';
+export type {
+  AccessGroup,
+  AccessGroupDeleteResult,
+  AccessGroupImpact,
+  AccessGroupListItem,
+  AccessGroupMember,
+  AccessGroupPage,
+  AccessGroupRef,
+  AccessGroupSource,
+  AccessMemberCandidate,
+  MyAccessGroups,
+} from './access/groups';
+export {
+  ACCESS_DOCUMENTS_MAX_IDS,
+  ACCESS_DOCUMENTS_PAGE_SIZE,
+  documentAccessCounts,
+  documentAudiences,
+  listAccessDocuments,
+  setDocumentsAccess,
+  setUploadAccess,
+} from './access/documents';
+export type {
+  AccessAudienceKind,
+  AccessDocumentCounts,
+  AccessDocumentFilter,
+  AccessDocumentPage,
+  DocumentAudience,
+  DocumentsAccessInput,
+  SetDocumentsAccessResult,
+  UploadAccessOutcome,
+} from './access/documents';
+export { accessStatus, runAccessDrift, syncAccessStatus } from './access/status';
+export type { AccessDriftRow, AccessEmbedGroupStatus, AccessStatus, AccessStatusDeps } from './access/status';
+export {
+  applyConnectorAccess,
+  connectorFailClosedCounts,
+  deleteConnectorMap,
+  listConnectorMap,
+  listSharingRules,
+  matchConnectorMembers,
+  setConnectorMap,
+  setSharingRule,
+  CONNECTOR_MAX_ADDRESSES,
+  CONNECTOR_MAX_PRINCIPALS,
+  CONNECTOR_PROVIDERS,
+} from './access/connector';
+export type {
+  ApplyConnectorAccessInput,
+  ConnectorAccessReason,
+  ConnectorAccessResult,
+  ConnectorFailClosedCount,
+  ConnectorMapKind,
+  ConnectorMapOutcome,
+  ConnectorMapPage,
+  ConnectorMapRow,
+  ConnectorPrincipal,
+  ConnectorProvider,
+  SetConnectorMapInput,
+  SetSharingRuleInput,
+  SharingRuleKind,
+  SharingRuleOutcome,
+  SharingRuleRow,
+} from './access/connector';
+export type {
+  AccessIdentity,
+  AccessScopeRefusalReason,
+  ResolveAccessScopeInput,
+  ResolveAccessScopeResult,
+  UploadAccessChoice,
+  UploadAccessResult,
+} from './tenant/access';
+export type { ScopeAccessFilter } from './tenant/access';
 export { getTerminologyLexicon, TerminologyUnavailableError } from './terminology/lexicon';
 export type { TerminologyLexicon, TerminologyLexiconOptions } from './terminology/lexicon';
 export {
@@ -226,12 +332,28 @@ export {
   type TextsSource,
 } from './generation/answer-turn';
 export { guardChannelReply, guardSummaryText, guardVoiceTranscript } from './security/channel-reply-guard';
-export { applyAnswerPipelineToText, type AnswerTextPipelineResult } from './generation/answer-transforms';
+export { applyAnswerPipelineToText, createCalcCheckSink, type AnswerTextPipelineResult, type CalcCheckRun, type CalcCheckSink } from './generation/answer-transforms';
 export { buildSentenceRecords } from './generation/sentences-record';
+export { attributeSourceChunks } from './security/security-events';
 export { formatGuardedLinks, linkUsageInstructions } from './security/link-section';
 export type { ChannelReplyGuardInput, ChannelReplyGuardResult, SummaryGuardInput, VoiceTranscriptMessage } from './security/channel-reply-guard';
-export { attributeSourceChunks, recordOutputGuardEvents } from './security/security-events';
+export { recordOutputGuardEvents } from './security/security-events';
 export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource } from './lang/answer-language';
+// Phase 5.2.1 D-76, D-87: the voice calculation route and the voice-rag calculation offer and prompt budget.
+export { evaluateCalc } from './calc/evaluate';
+export { runCalcChecks } from './calc/check-step';
+export {
+  loadVoiceCalcSources,
+  voiceCalcSources,
+  labelTaggedVoiceContext,
+  labelledUntaggedVoiceContext,
+  MAX_VOICE_CALC_SOURCES,
+  CALC_REQUEST_JSON_SCHEMA,
+  type VoiceCalcSource,
+} from './calc/voice-sources';
+export { planPromptBudget } from './context/prompt-budget';
+export { promptBudgetConfig } from './context/prompt-budget-config';
+export { fixedText } from './lang/texts';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';
 export type { IdentifierFilterSummary } from './types';
@@ -251,7 +373,7 @@ export type {
   ClaudeStartInput,
   HistoryMessage,
 } from './generation/citations/session';
-export { mintAnswerId, scheduleAnswerFinish, shouldPersistAnswer } from './generation/answer-finish';
+export { mintAnswerId, scheduleAnswerFinish, scheduleCalcReviewEnqueue, shouldPersistAnswer } from './generation/answer-finish';
 export type { AnswerFinishDeps, AnswerFinishInput, AnswerPendingContext, ShouldPersistAnswerInput } from './generation/answer-finish';
 export { groundednessEligibility, scoreAnswerGroundedness } from './generation/groundedness';
 export type {
@@ -262,6 +384,12 @@ export type {
   ScoreAnswerGroundednessInput,
 } from './generation/groundedness';
 export { claudeTurnEligibility, preRetrievalCitations, selectCitationStrategy } from './generation/citations/strategy';
+export { buildAliasMap, createCitationLabeler } from './generation/citations/blocks';
+export { buildCalculateTool, CALCULATE_TOOL_NAME, isServerCalculateTool } from './generation/calc-tool';
+export { modelBlocksTools, turnCanUseTools } from './generation/tool-capability';
+export { mayOfferCalc, shouldOfferCalcTool } from './calc/signal';
+export { createCalcTraceHolder } from './calc/trace-holder';
+export type { CalcTraceHolder } from './calc/trace-holder';
 export { CLAUDE_FIRST_TOKEN_TIMEOUT_MS, errorStatusOf, fallbackReasonFor, firstTokenGate } from './generation/citations/fallback';
 export type { FallbackReason, FirstTokenGateResult } from './generation/citations/fallback';
 export type {
@@ -503,6 +631,7 @@ export type {
   IdentifierTestMatch,
   IdentifierTestResult,
 } from './identifiers/patterns';
+export { contentIdentifierNorms } from './retrieval/identifiers';
 export { removeDocumentObjects } from './ingest/remove-document-objects';
 export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';
@@ -733,3 +862,44 @@ export { IMPORT_LIMITS, importQuestions, parseQuestionFile, prepareQuestions, Qu
 export type { ImportCounts, PreparedQuestions, QuestionFileFormat } from './monitor/questions-import';
 export { guardAppEnvWrite, RAG_GATE_INVALID_REASON_MESSAGE, RAG_GATE_REQUIRED_MESSAGE } from './config-gate/guard';
 export type { AppGuardRoute, GuardAppEnvWriteInput, GuardAppEnvWriteResult } from './config-gate/guard';
+export { DRAIN_DEFAULT_BUDGET_MS, drainSlice, drainUntilEmpty } from './sync/drain';
+export type { DrainSliceOptions, DrainUntilEmptyOptions } from './sync/drain';
+export { RECONCILE_DEFAULT_BUDGET_MS, reconcileSlice } from './sync/reconcile';
+export type { ReconcileSliceOptions, ReconcileSliceResult } from './sync/reconcile';
+export { checkVectorSyncAccess } from './sync/auth';
+export type { VectorSyncAccessResult } from './sync/auth';
+export { runVectorSyncSlice } from './sync/slice';
+export type { RunVectorSyncSliceOptions, VectorSyncMode } from './sync/slice';
+export type { RpcClient } from './backend/supabase-rpc';
+export {
+  buildVectorSyncStores,
+  defaultStoreFactories,
+  isVectorSyncTarget,
+  listVectorSyncTargets,
+  readEnabledTargets,
+  readVectorSyncStatus,
+  setVectorSyncTarget,
+  VECTOR_SYNC_TARGETS,
+} from './sync/targets';
+export type { SetVectorSyncTargetResult, VectorStoreFactories, VectorSyncTargetFlag, VectorSyncTargetStatus } from './sync/targets';
+export { resolveVectorSyncAdminRpc } from './sync/admin-rpc';
+export { computeIndexCompat, envLoadedAt, INDEX_COMPAT_STORE_TIMEOUT_MS, readIndexCompat } from './backend/index-compat';
+export {
+  isProviderId,
+  PROVIDER_IDS,
+  PROVIDER_PROBE_CODES,
+  PROVIDER_PROBE_MESSAGES,
+  PROVIDER_PROBE_TIMEOUT_MS,
+  runProviderProbe,
+} from './admin/provider-probes';
+export type { ProviderId, ProviderProbeCode, ProviderProbeDeps, ProviderProbeResult, RunProviderProbeOptions } from './admin/provider-probes';
+export type {
+  IndexCompatBackend,
+  IndexCompatCode,
+  IndexCompatInput,
+  IndexCompatReport,
+  IndexCompatView,
+  IndexCompatWarning,
+  ProfileStateCounts,
+} from './backend/index-compat';
+export type { VectorStore, VectorSyncTarget } from './sync/stores/types';

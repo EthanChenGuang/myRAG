@@ -41,6 +41,7 @@ from rag_sidecar.ingest.worker import IngestWorker, RealClock
 from rag_sidecar.parse.converter import Converter, default_converter
 from rag_sidecar.parse.jobs import JobRunner, QueueFull
 from rag_sidecar.parse.upload import BODY_ALLOWANCE_BYTES, MalformedUpload, UploadTooLarge, read_upload
+from rag_sidecar.providers_test import build_providers_test_router
 from rag_sidecar.security.router import build_hidden_text_router
 from rag_sidecar.settings import SidecarSettings, load_settings
 
@@ -362,6 +363,7 @@ def create_app(
     v1.include_router(build_hidden_text_router(resolved))
     v1.include_router(build_embed_router(active_embedder))
     v1.include_router(build_cache_router(resolved, cache_service))
+    v1.include_router(build_providers_test_router(resolved))
     app.include_router(v1)
     return app
 

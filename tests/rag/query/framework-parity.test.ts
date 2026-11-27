@@ -108,8 +108,8 @@ describe('LangChain translate', () => {
 
   test('returns one QueryTranslation-valid variant per target with the shared translate prompt', async () => {
     const entries: FakeLangChainEntry[] = [
-      { transform: 'translate', query: QUERY, output: { target_language: 'zh', text: ZH } },
-      { transform: 'translate', query: QUERY, output: { target_language: 'it', text: IT } },
+      { transform: 'translate', query: QUERY, output: { target_language: 'zh', text: ZH, source_language: null } },
+      { transform: 'translate', query: QUERY, output: { target_language: 'it', text: IT, source_language: null } },
     ];
     const fake = createFakeLangChainChatModel({ table: { version: 1, entries } });
     const transformer = createLangChainTransformer({ chatModelFactory: () => fake, deps: { finish: QUERY_TRANSFORM_FINISHERS } });
@@ -122,7 +122,7 @@ describe('LangChain translate', () => {
       skipped: [],
     });
     for (const variant of result.variants) {
-      expect(QueryTranslationSchema.safeParse({ target_language: variant.language, text: variant.text }).success).toBe(true);
+      expect(QueryTranslationSchema.safeParse({ target_language: variant.language, text: variant.text, source_language: null }).success).toBe(true);
     }
     expect(fake.structuredRequests.map((r) => r.name)).toEqual(['QueryTranslation', 'QueryTranslation']);
     expect(fake.calls.map((c) => c.prompt.includes('Translate the search query below into'))).toEqual([true, true]);
@@ -130,7 +130,7 @@ describe('LangChain translate', () => {
 
   test('matches native on a missing target, an invalid output, a failed call and an abort', async () => {
     const entries: FakeLangChainEntry[] = [
-      { transform: 'translate', query: QUERY, output: { target_language: 'zh', text: ZH } },
+      { transform: 'translate', query: QUERY, output: { target_language: 'zh', text: ZH, source_language: null } },
       { transform: 'translate', query: 'synthetic translate invalid probe', fail: 'invalid' },
       { transform: 'translate', query: 'synthetic translate error probe', fail: 'error' },
     ];
@@ -154,7 +154,7 @@ describe('the five transforms on the fixture inputs', () => {
     for (const entry of fixtureInputs()) {
       const input = { query: entry.query, history: HISTORY, language: languageOf(entry), protectedTokens: [], signal: signal() };
       const [a, b] = [await native.condense(input), await langchain.condense(input)];
-      for (const result of [a, b]) expect(CondensedQuerySchema.safeParse({ standalone: result.standalone, unchanged: result.passThrough }).success).toBe(true);
+      for (const result of [a, b]) expect(CondensedQuerySchema.safeParse({ standalone: result.standalone, unchanged: result.passThrough, language: null }).success).toBe(true);
       differences.condense = [...(differences.condense ?? []), ...differingFields(a, b)];
     }
   });
@@ -204,7 +204,7 @@ describe('the five transforms on the fixture inputs', () => {
       const input = { query: entry.query, language, targets: LANGS.filter((l) => l !== language), protectedTokens: [], signal: signal() };
       const [a, b] = [await native.translate(input), await langchain.translate(input)];
       for (const result of [a, b]) {
-        for (const v of result.variants) expect(QueryTranslationSchema.safeParse({ target_language: v.language, text: v.text }).success).toBe(true);
+        for (const v of result.variants) expect(QueryTranslationSchema.safeParse({ target_language: v.language, text: v.text, source_language: null }).success).toBe(true);
       }
       translated += b.variants.length;
       differences.translate = [...(differences.translate ?? []), ...differingFields(a, b)];

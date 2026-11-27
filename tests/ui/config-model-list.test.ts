@@ -150,3 +150,52 @@ describe('Models can be reordered without dragging', () => {
     expect(modelConfig.openrouterModels.map((m) => m.id)).toEqual(['b', 'c', 'a']);
   });
 });
+
+describe('Auto model entry in the five model locations (06.2 D-19, UI-SPEC 6.5)', () => {
+  const root = path.resolve(import.meta.dirname, '../..');
+  const read = (relative: string) => fs.readFileSync(path.join(root, relative), 'utf8');
+  const AUTO = /\{\s*(['"]?)id\1\s*:\s*(['"])auto\2\s*,\s*(['"]?)displayName\3\s*:\s*(['"])Auto\4\s*\}/g;
+
+  /** The ids of the OpenRouter array that starts right after `anchor`. */
+  function idsAfter(text: string, anchor: RegExp): string[] {
+    const match = anchor.exec(text);
+    expect(match, String(anchor)).not.toBeNull();
+    const start = text.indexOf('[', match!.index + match![0].length);
+    let depth = 0;
+    let end = start;
+    for (let i = start; i < text.length; i += 1) {
+      if (text[i] === '[') depth += 1;
+      else if (text[i] === ']' && --depth === 0) {
+        end = i;
+        break;
+      }
+    }
+    return [...text.slice(start, end).matchAll(/(['"]?)id\1\s*:\s*(['"])([^'"]+)\2/g)].map((m) => m[3]);
+  }
+
+  const lists: Array<[string, RegExp]> = [
+    ['scripts/init-env.js', /DEFAULT_OPENROUTER_MODELS\s*=\s*'/],
+    ['scripts/config-server.js', /DEFAULT_OPENROUTER_MODELS\s*=\s*'/],
+    ['src/lib/env.ts', /NEXT_PUBLIC_OPENROUTER_MODELS:\s*process\.env\.NEXT_PUBLIC_OPENROUTER_MODELS\s*\|\|\s*JSON\.stringify\(/],
+    ['scripts/config-ui/index.html', /defaultOpenRouterModels\s*=[^\n]*?JSON\.stringify\(/],
+    ['scripts/config-ui/index.html', /openrouterModels:\s*safeJsonParse\(\s*defaultOpenRouterModels\s*,\s*/],
+    ['scripts/config-ui/index.html', /openrouterModels:\s*(?=\[\s*\{)/],
+  ];
+
+  it.each(lists.map(([file, anchor], index) => [`${file} #${index}`, file, anchor] as const))('%s lists auto second, directly after the default model', (_label, file, anchor) => {
+    const ids = idsAfter(read(file), anchor);
+    expect(ids[0]).toBe('anthropic/claude-sonnet-4.5');
+    expect(ids[1]).toBe('auto');
+    expect(ids.filter((id) => id === 'auto')).toHaveLength(1);
+  });
+
+  it('writes the entry with only id and displayName, and only in the OpenRouter lists', () => {
+    expect(read('scripts/init-env.js').match(AUTO)).toHaveLength(1);
+    expect(read('scripts/config-server.js').match(AUTO)).toHaveLength(1);
+    expect(read('src/lib/env.ts').match(AUTO)).toHaveLength(1);
+    expect(read('scripts/config-ui/index.html').match(AUTO)).toHaveLength(3);
+    for (const file of ['scripts/init-env.js', 'scripts/config-server.js', 'src/lib/env.ts', 'scripts/config-ui/index.html']) {
+      expect(read(file).match(/(['"]?)id\1\s*:\s*(['"])auto\2/g)?.length ?? 0, file).toBe(file.endsWith('index.html') ? 3 : 1);
+    }
+  });
+});

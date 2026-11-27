@@ -1,3 +1,4 @@
+import { CALC_BLOCK_CLOSE, CALC_BLOCK_OPEN } from '../calc/block-tag';
 import { OUTPUT_POLICY_NOTICE, OUTPUT_POLICY_NOTICE_UNTAGGED } from '../context/wrap';
 import { fixedText, type TextKey, type TextParams } from '../lang/texts';
 import type { AnswerConfig } from './answer-config';
@@ -30,8 +31,8 @@ export interface AnswerRulesInput {
   webSearchOffered: boolean;
   /** D-32; set from the output-cap rules by plan 05.2-10. */
   capApplies: boolean;
-  /** D-70; set by Phase 5.2.1. */
-  calcOffered: boolean;
+  /** Phase 5.2.1 D-70, D-72: part 6, set only when the calculation is offered; tool or trailing-block mode. */
+  calculation?: { mode: 'tool' | 'trailing_block' } | null;
   contextTagging: boolean;
 }
 
@@ -73,7 +74,12 @@ function plan(input: AnswerRulesInput): Part[] {
     if (config.partialAnswerRule && mode === 'balanced') parts.push(registry('general_knowledge', 'instructions.general_knowledge'));
     if (config.partialAnswerRule && strict && webSearch) parts.push(registry('web_separation', 'instructions.web_separation'));
     if (config.versionLabels) parts.push(registry('version', 'instructions.version'));
-    if (input.calcOffered && !voice) parts.push(registry('calculation', 'instructions.calculation'));
+    const calc = input.calculation?.mode;
+    if (calc === 'tool') parts.push(registry('calculation', 'instructions.calculation'));
+    // D-72: no stream transform runs on the voice answer, so the trailing block is never asked for there.
+    if (calc === 'trailing_block' && !voice) {
+      parts.push({ id: 'calculation', text: () => fixedText('instructions.calculation_block', language, { open: CALC_BLOCK_OPEN, close: CALC_BLOCK_CLOSE }) });
+    }
     if (input.capApplies && !voice) parts.push(registry('concise', 'instructions.concise'));
   }
   if (config.outputGuard === 'flag' || config.outputGuard === 'enforce') {
