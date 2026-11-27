@@ -396,6 +396,8 @@ export { softDeleteLineage } from './ingest/soft-delete';
 export { removeDocumentObjects } from './ingest/remove-document-objects';
 export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';
+export { purgeDocumentAsAdmin, PURGE_ADMIN_REASON_CODES } from './ingest/purge';
+export type { PurgeAdminReasonCode, PurgeCheck, PurgeCheckResult, PurgeDocumentAsAdminInput, PurgeFailure, PurgeLineageResult } from './ingest/purge';
 export { escapeTags, REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE } from './context/wrap';
 export { readSecurityConfig } from './security/config';
 export { injectionTraceVersions } from './security/injection-check';
