@@ -383,7 +383,7 @@ function notionInput(extra: Record<string, unknown> = {}) {
 
 function notionNango(page: unknown, connection: unknown | (() => never)) {
   const calls: Array<Record<string, unknown>> = [];
-  const getConnection = vi.fn(async (_key: string, _id: string) => (typeof connection === 'function' ? (connection as () => never)() : connection));
+  const getConnection = vi.fn<(key: string, id: string) => Promise<unknown>>(async () => (typeof connection === 'function' ? (connection as () => never)() : connection));
   const proxy = vi.fn(async (config: Record<string, unknown>) => {
     calls.push(config);
     return { data: page };

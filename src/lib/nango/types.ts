@@ -152,6 +152,8 @@ export interface NangoFileRecord {
   modified_at?: string;
   parent_id?: string;
   web_url?: string;
+  /** Dropbox: the shared folder that holds the file (files/list_folder sharing_info.parent_shared_folder_id). */
+  parent_shared_folder_id?: string;
 }
 
 /**
