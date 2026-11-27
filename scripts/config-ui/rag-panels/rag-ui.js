@@ -377,7 +377,7 @@ function ragUiNextId(prefix) {
  */
 function ragUiSubTabs(doc, { label, idPrefix, tabs, selected, onSelect }) {
   const prefix = idPrefix || ragUiNextId('rag-tabs');
-  const tablist = ragUiEl(doc, 'div', { className: 'tabs tabs-bordered flex-wrap mb-4', attrs: { role: 'tablist', 'aria-label': label } });
+  const tablist = ragUiEl(doc, 'div', { className: 'tabs tabs-bordered flex flex-wrap mb-4', attrs: { role: 'tablist', 'aria-label': label } });
   const buttons = [];
   const panels = {};
   let current = selected || (tabs[0] && tabs[0].id);
@@ -402,7 +402,7 @@ function ragUiSubTabs(doc, { label, idPrefix, tabs, selected, onSelect }) {
     const tabId = prefix + '-tab-' + tab.id;
     const panelId = prefix + '-panel-' + tab.id;
     const button = ragUiEl(doc, 'button', {
-      className: 'tab',
+      className: 'tab h-auto min-h-8 py-1',
       id: tabId,
       text: tab.label,
       attrs: { type: 'button', role: 'tab', 'aria-controls': panelId },
