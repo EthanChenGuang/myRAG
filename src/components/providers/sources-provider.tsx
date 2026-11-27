@@ -374,3 +374,7 @@ export function debugSources() {
     });
   }
 } 
+
+export function documentSourceFields(_raw: unknown): Partial<Source> {
+  return {};
+}

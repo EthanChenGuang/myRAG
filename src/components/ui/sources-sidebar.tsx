@@ -511,3 +511,15 @@ export function SourcesSidebar({
     </>
   );
 } 
+
+export function sourceVersionView(_source: Source, _listHasSuperseded: boolean): null {
+  return null;
+}
+
+export function sourceAlsoInView(_source: Source): null {
+  return null;
+}
+
+export function listHasSupersededEntry(_sources: readonly Source[]): boolean {
+  return false;
+}
