@@ -5,6 +5,7 @@ import { mintScope } from '@/lib/rag/tenant/scope';
 import { createEnhancedRAGPrompt } from '@/lib/rag/generation/prompt';
 import { runRetrieval } from '@/lib/rag';
 import { readSecurityConfig } from '@/lib/rag/security/config';
+import { requestLanguageId } from '@/lib/rag/lang/langid-client';
 import { fakeEmbedder, fakeRpcClient, installDeps, uninstallDeps } from './helpers/pipeline-fakes';
 
 const SECRET_WORD = 'zebrafishquartz';
@@ -39,6 +40,16 @@ afterEach(() => {
 });
 
 describe('retrieval hot paths do not log user query content', () => {
+  test('sidecar language ID failures', async () => {
+    const failing = (async () => new Response('{}', { status: 500 })) as unknown as typeof fetch;
+    const invalid = (async () => new Response('{"language":"en"}', { status: 200 })) as unknown as typeof fetch;
+    for (const fetchImpl of [failing, invalid]) {
+      await requestLanguageId(`tell me about ${SECRET_WORD}`, ['en', 'it'], { timeoutMs: 30, url: 'http://sidecar.test', secret: 'placeholder', fetch: fetchImpl });
+    }
+    expect(vi.mocked(console.warn).mock.calls.length).toBeGreaterThan(0);
+    expect(loggedText()).not.toContain(SECRET_WORD);
+  });
+
   test('voice keyword fallback', async () => {
     await voiceKeywordFallback({
       access: { mode: 'off' },
