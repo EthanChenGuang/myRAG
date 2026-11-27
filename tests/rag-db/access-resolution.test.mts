@@ -245,6 +245,21 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
         assert.equal((await resolve(MEMBER_B, `u:${MEMBER_A}`)).is_admin, false, 'someone else on a personal tenant');
         assert.deepEqual((await resolve(MEMBER_B, `u:${MEMBER_A}`)).group_ids, []);
       });
+
+      test('a membership row left behind for a non-member of the organization grants no group', async () => {
+        // Bypass the member trigger the way a restore or a race could, then resolve: the organization check in the resolver still holds.
+        await db.exec('ALTER TABLE rag_access_group_members DISABLE TRIGGER rag_access_group_members_require_org_member');
+        try {
+          await db.query('INSERT INTO rag_access_group_members (group_id, user_id) VALUES ($1, $2)', [fx.groupA, OTHER_USER]);
+        } finally {
+          await db.exec('ALTER TABLE rag_access_group_members ENABLE TRIGGER rag_access_group_members_require_org_member');
+        }
+        try {
+          assert.deepEqual(await resolve(OTHER_USER), { is_admin: false, group_ids: [], effective_keys: ['all'] });
+        } finally {
+          await db.query('DELETE FROM rag_access_group_members WHERE group_id = $1 AND user_id = $2', [fx.groupA, OTHER_USER]);
+        }
+      });
     }
 
     test('the resolver refuses a tenant key of the other deployment mode', async () => {
