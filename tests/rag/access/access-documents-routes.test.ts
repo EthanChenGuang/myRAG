@@ -86,7 +86,10 @@ async function load() {
   vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => fakeClient(), getSupabase: () => ({}) }));
   const documents = await import('@/app/api/rag/access-groups/documents/route');
   const access = await import('@/app/api/rag/access-groups/documents/access/route');
-  return { documents, access };
+  const status = await import('@/app/api/rag/access-groups/status/route');
+  const sync = await import('@/app/api/rag/access-groups/status/sync/route');
+  const drift = await import('@/app/api/rag/access-groups/drift/route');
+  return { documents, access, status, sync, drift };
 }
 
 function req(url: string, init: { method?: string; authorization?: string; body?: unknown; rawBody?: string } = {}) {
@@ -194,6 +197,7 @@ afterEach(() => {
   vi.resetModules();
   delete process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
   delete process.env.RAG_DOC_ACCESS_GROUPS;
+  delete process.env.RAG_EMBED_ACCESS_GROUP;
 });
 
 type Loaded = Awaited<ReturnType<typeof load>>;
@@ -387,5 +391,147 @@ describe('access document routes: organization admins (multi-tenant)', () => {
     const mismatch = await put(loaded, { organizationId: '00000000-0000-4000-8000-0000000024c2', documentIds: [DOC_OTHER], everyone: true }, ORG_O);
     expect(mismatch.status).toBe(400);
     expect(state.rpcCalls.filter((call) => call.fn === 'rag_set_document_access_groups')).toEqual([]);
+  });
+});
+
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const getStatus = (l: Loaded) => l.status.GET(req('/api/rag/access-groups/status'));
+const runSync = (l: Loaded) => l.sync.POST(req('/api/rag/access-groups/status/sync', { method: 'POST' }));
+const runDrift = (l: Loaded) => l.drift.POST(req('/api/rag/access-groups/drift', { method: 'POST' }));
+const enforcementCalls = () => state.rpcCalls.filter((call) => /^rag_access_(enforced|set_enforced|readiness|groups_drift|group_by_key)$/.test(call.fn));
+
+describe('access enforcement routes: status, sync and label check (A-03, A-08, D-03, D-07)', () => {
+  it('GET status as an operator returns the switch, the database flag, readiness, the embed group and the check time', async () => {
+    process.env.RAG_EMBED_ACCESS_GROUP = 'group-a';
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_access_enforced = { data: true, error: null };
+    state.outcomes.rag_access_group_by_key = { data: [{ id: GROUP_A, key: 'group-a', name: 'Group A', source: 'manual', created_at: '2026-11-27T08:00:00.000Z' }], error: null };
+    const response = await getStatus(loaded);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const body = await response.json();
+    expect(body).toEqual({
+      success: true,
+      status: {
+        runningSwitch: 'on',
+        databaseFlag: true,
+        status: 'not_checked',
+        ready: false,
+        reasons: [],
+        objects: [],
+        embedGroup: { key: 'group-a', valid: true, exists: true, name: 'Group A' },
+        checkedAt: null,
+      },
+    });
+    const text = JSON.stringify(body);
+    expect(text).not.toContain(GROUP_A);
+    expect(text).not.toContain('s:default');
+    expect(state.rpcCalls.find((call) => call.fn === 'rag_access_group_by_key')?.args).toEqual({ p_tenant_key: 's:default', p_key: 'group-a' });
+  });
+
+  it('GET status reports a missing embed group as not found and no embed group when none is configured', async () => {
+    process.env.RAG_EMBED_ACCESS_GROUP = 'group-z';
+    let loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_access_group_by_key = { data: [], error: null };
+    expect((await (await getStatus(loaded)).json()).status.embedGroup).toEqual({ key: 'group-z', valid: true, exists: false, name: null });
+
+    delete process.env.RAG_EMBED_ACCESS_GROUP;
+    loaded = await load();
+    expect((await (await getStatus(loaded)).json()).status.embedGroup).toBeNull();
+  });
+
+  it('POST status/sync writes the flag, reruns the checks and returns the new verdict with its time', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    let flag = false;
+    state.outcomes.rag_access_set_enforced = (args) => {
+      flag = args.p_enforced === true;
+      return { data: flag, error: null };
+    };
+    state.outcomes.rag_access_enforced = () => ({ data: flag, error: null });
+    state.outcomes.rag_access_readiness = { data: [{ ready: true, reasons: [], objects: [] }], error: null };
+    const response = await runSync(loaded);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(state.rpcCalls).toContainEqual({ fn: 'rag_access_set_enforced', args: { p_enforced: true } });
+    expect(body.status.databaseFlag).toBe(true);
+    expect(body.status.reasons).not.toContain('flag_write_failed');
+    expect(body.status.checkedAt).toMatch(ISO_RE);
+    expect(body.status.status).not.toBe('not_checked');
+  });
+
+  it('POST status/sync reports a failed flag write in the reasons and stays not ready', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_access_set_enforced = { data: null, error: { code: '42501', message: 'permission denied' } };
+    state.outcomes.rag_access_enforced = { data: false, error: null };
+    const body = await (await runSync(loaded)).json();
+    expect(body.success).toBe(true);
+    expect(body.status).toMatchObject({ runningSwitch: 'on', databaseFlag: false, status: 'not_ready', ready: false });
+    expect(body.status.reasons).toContain('flag_write_failed');
+    expect(JSON.stringify(body)).not.toContain('permission denied');
+  });
+
+  it('POST drift returns the differing rows per existing store and the time, with no repair action', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_access_groups_drift = {
+      data: [
+        { store: 'document_chunks', rows: 3 },
+        { store: 'rag_parent_passages', rows: 0 },
+      ],
+      error: null,
+    };
+    const response = await runDrift(loaded);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const body = await response.json();
+    expect(Object.keys(body).sort()).toEqual(['checkedAt', 'stores', 'success']);
+    expect(body.stores).toEqual([
+      { store: 'document_chunks', rows: 3 },
+      { store: 'rag_parent_passages', rows: 0 },
+    ]);
+    expect(body.checkedAt).toMatch(ISO_RE);
+    expect(state.rpcCalls.filter((call) => call.fn === 'rag_access_groups_drift')).toEqual([{ fn: 'rag_access_groups_drift', args: {} }]);
+  });
+
+  it('POST drift answers 503 access_groups_unavailable when the check fails, without the database message', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_access_groups_drift = { data: null, error: { code: 'XX000', message: 'internal detail' } };
+    const response = await runDrift(loaded);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ success: false, error: 'access_groups_unavailable' });
+  });
+
+  it('a member gets 403 Admin access required and no session 401, with no enforcement call', async () => {
+    const loaded = await load();
+    state.session = { id: MEMBER_A };
+    for (const response of [await getStatus(loaded), await runSync(loaded), await runDrift(loaded)]) {
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({ success: false, error: 'Admin access required' });
+    }
+    state.session = null;
+    for (const response of [await getStatus(loaded), await runSync(loaded), await runDrift(loaded)]) expect(response.status).toBe(401);
+    expect(enforcementCalls()).toEqual([]);
+  });
+
+  it('an organization admin without an admin session cannot read status, sync or run the label check (multi-tenant)', async () => {
+    state.mode = 'multi-tenant';
+    state.tables.organization_members = [{ organization_id: ORG_O, user_id: ORG_ADMIN_ID, role: 'owner' }];
+    const loaded = await load();
+    state.session = { id: ORG_ADMIN_ID };
+    for (const response of [
+      await getStatus(loaded),
+      await runSync(loaded),
+      await runDrift(loaded),
+      await loaded.status.GET(req(`/api/rag/access-groups/status?organizationId=${ORG_O}`)),
+    ]) {
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({ success: false, error: 'Admin access required' });
+    }
+    expect(enforcementCalls()).toEqual([]);
   });
 });
