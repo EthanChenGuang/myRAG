@@ -128,3 +128,43 @@ Runs: v2-lexical-dict-on, v2-default.
 | v2-lexical-stem-it-on | prechunked | 0.7211 | 0.6395 | `045679f1f4d9` |
 
 > Fixture corpus only: every gate, threshold and rule here was committed before any gated run (D-37, pre-registration). Reference runs are single fixture runs, so the noise band against a reference is the noise floor (spread 0), as in phase_compare.
+
+## Phase close (plan 04.2-32, hand-written; the sections above are written by the gate tool)
+
+### ROADMAP 4.2 success criteria
+
+| # | Criterion | Shown by |
+| --- | --- | --- |
+| 1 | Pool 25 in the sweep grid, cap 25, nDCG@k in the sweep report | plans 04.2-05 and 04.2-12 (`eval/reports/retrieval-sweep-fixture/`); live sweep is 04.2-33 |
+| 2 | Dictionary term matches after relex; stemming flips only on an it gain | `dictionary` gate PASS (04.2-19); `stem_it` rule keep_off (`eval/decisions/04.2-lexical.md`) |
+| 3 | `versions: all` or a range retrieves both versions; cache bypass | `versions` gate PASS (superseded_kept 3 of 3); plans 04.2-15, 04.2-18, 04.2-21, 04.2-39 |
+| 4 | TTFT on the trace for text, embed and voice; the injected delay fails the CI gate | plans 04.2-10 and 04.2-11; the TTFT gate in `tests/rag-e2e` passes (305 of 305); live numbers are 04.2-33 |
+| 5 | Table lookup leg within the verified tenant, header kept, no LLM SQL, canary includes the row store | `table` gate PASS; plans 04.2-17, 04.2-24, 04.2-30; `tests/rag-db/v2-two-tenant-matrix.test.mts` |
+| 6 | Duplicate clusters per tenant; collapse or mmr keeps intent coverage and limits redundancy | `diversity` gate PASS (intent coverage 1.0, redundancy over the limit 0, no slice drop); plans 04.2-16, 04.2-20, 04.2-22, 04.2-29, plus the 04.2-32 value-token fix |
+| 7 | Refusal calibration lists every candidate threshold; per-mode cells; unset targets equal the Phase 4 result | plan 04.2-07; `refusal_mode_cells` rule keep on the refreshed fixture result (it and zh mode cells not calibrated or failed holdout) |
+| 8 | Identifier index and filter: only the asked identifier, near misses never in context, suggestions | `identifier` gate PASS (precision 1.0 and leakage 0.0 on 12 of 12; descriptive slice equal to the reference) |
+
+### Report-only numbers (v2-default, prechunked fixture)
+- nDCG at context k: overall 0.6506; en 0.5669, it 0.6805, zh 0.7134. Per-category values are in `harness/v2-default/report.json`.
+- TTFT and pre-generation (fake edge, so not a latency claim): cache state `bypass` only (the semantic cache is off): n 248, p50 50 ms, p95 71 ms. There are no cache hits on the fixture.
+- Stage latencies against `eval/config/latency-budgets.json` are in each run's `report.md`; they are report-only until the live 04.2-33 measurement.
+
+### Full suite (exit codes, 2026-11-27, tree `exec/04.2-32`)
+
+| Command | Exit |
+| --- | --- |
+| `npx vitest run` (full) | 0 (706 files, 12,927 tests) |
+| `node --import tsx --test tests/*.test.mts` | 0 (174) |
+| `node --import tsx --test tests/rag-db/*.test.mts` | 0 after two test-fixture fixes. Run in three chunks; the first run failed `diversify-e2e` and `v2-two-tenant-matrix` (dup_cluster path) on fixture copies that differed in a digit token; both were re-run alone and pass (2 of 2, and 290 of 290 with phase33-two-tenant and semantic-cache-canary) |
+| `node --import tsx --test tests/rag-e2e/*.test.mts` | 0 (305) |
+| `uv run --directory eval pytest -q` | 0 (2,295) |
+| `cd rag-sidecar && uv run pytest -q` | 0 (2,675 passed, 12 skipped) |
+| `npm test --prefix voice-agent` (with the tsc ratchet) | 0 |
+| `node scripts/check-config.mjs`, `node scripts/ci/check-rag-boundary.mjs` (with its node test), config self-tests, gen-zod test | 0 |
+| `npm run gen:schemas && git diff --exit-code` | 0 |
+| `npx next typegen && npx tsc --noEmit -p tsconfig.json`, `npm run typecheck:new` | 0 |
+| workflow check, sibling-types tsc ratchet (voice-agent, baileys-whatsapp) | 0 |
+| `node scripts/ci/check-frontend-design-summary.mjs <phase dir>` | 0 after the `## Design skills` section was added to `04.2-32-SUMMARY.md` (it was 2 before) |
+| `npm run lint` | 1, pre-existing: 17,650 errors repo-wide (`eslint .` also lints `.claude/` and `.cursor/`). The files changed by this plan have the same error count as on origin/main (0, 0, 0, 1) |
+| `npm run test-rag -- --out eval/out/p32-smoke` | 11, pre-existing: the absolute gate fails on false_refusal_rate language:en 0.3143 > 0.25; origin/main gives the same number |
+| `npm run test-rag -- --fixture-mode ingest --out eval/out/p32-smoke-ingest` | 0 |
