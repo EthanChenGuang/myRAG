@@ -570,3 +570,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   PR #134 ts-checks failed on typecheck:new (rag-db .mts test typing). Train builder agent a575ef9 is fixing it.
   Still not launched: 06.3-14 (waits for 07-37), 07-37 (waits for Phase 6.3 to close, which needs auto=false 06.3-04/06.3-15 with the owner), and auto=false 04.4-15, 06-46, 06.3-04, 06.3-15.
 - 14:28Z PROD DEPLOY READY: main be569250 (PR #133) -> dpl_6zkPHRaLQeH8tTX7GSSGktam6TVy, myrag.laoxiang.app 200.
+- 14:34Z ACCOUNT 5-HOUR USAGE LIMIT hit ~14:28Z (resets 18:20Z). All executors (04.3-14/44/47/48/49, 06.2-10/15/16, 05.2.1-12, 03.3-25) and the train-37 agent a575ef9 stopped with 429. PR #134 red: ts-checks (typecheck:new), ts-db 10/10 (4 fails), ts-vitest 1/3. Resume scheduled at 18:22Z (trig_01VJmhmoWioveugjdZNwApMq); 14:45 self-check cancelled.
