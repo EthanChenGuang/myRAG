@@ -93,6 +93,14 @@ export interface VectorStore {
   listDocumentIds(profileId: string, tenantKey: string, documentId: string): Promise<string[]>;
   scanTenant(profileId: string, tenantKey: string, page: { after: string | null; limit: number }): Promise<StoreScanPage>;
   count(profileId: string, tenantKey: string): Promise<number>;
+  /**
+   * RET-05 purges: every `myrag_chunks_` collection the store holds (vendor names), synced or not, so a retired profile's
+   * collection is swept too. The two calls below take one of these names and act inside the caller's tenant only; a collection
+   * without that tenant deletes and counts zero.
+   */
+  listCollections(): Promise<string[]>;
+  deleteDocuments(collection: string, tenantKey: string, documentIds: string[]): Promise<number>;
+  countDocumentPoints(collection: string, tenantKey: string, documentIds: string[]): Promise<number>;
   searchLegs(req: StoreSearchRequest): Promise<StoreLegs>;
   health(): Promise<StoreHealth>;
 }
