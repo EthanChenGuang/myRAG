@@ -60,6 +60,9 @@ function rowKey(row: SnapshotRow): string {
 function defaultValue(column: ColumnInfo): unknown {
   if (column.default === null) return null;
   if (/^'\{\}'::[a-z_ ]+\[\]$/.test(column.default)) return [];
+  // 0921 (04.3-03): access_groups text[] NOT NULL DEFAULT '{all}'.
+  const textArray = /^'\{([a-z0-9_,-]+)\}'::text\[\]$/.exec(column.default);
+  if (textArray) return (textArray[1] as string).split(',');
   if (column.default === 'false') return false;
   if (column.default === 'true') return true;
   throw new Error(`[Phase 3.2 All-off] no rule for the default ${column.default} of ${column.name}`);
