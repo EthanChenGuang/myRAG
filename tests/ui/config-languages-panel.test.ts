@@ -352,6 +352,35 @@ describe('Languages panel states (UI-SPEC 6.2.2, 7.2)', () => {
     expect(page.status.textContent).toBe('English is now the primary language.');
   });
 
+  it('choosing a primary after an automatic move announces the last choice, not the earlier one', async () => {
+    const page = await mounted();
+    toggle(useBox(page.content, 'zh'), false);
+    toggle(useBox(page.content, 'zh'), true);
+    const zh = primaryRadio(page.content, 'zh');
+    zh.checked = true;
+    zh.dispatch('change');
+    expect(page.status.textContent).toBe('中文 is now the primary language.');
+    const en = primaryRadio(page.content, 'en');
+    en.checked = true;
+    en.dispatch('change');
+    expect(page.status.textContent).toBe('English is now the primary language.');
+  });
+
+  it('Reset selection clears a primary announcement that no longer applies', async () => {
+    const page = await mounted({
+      get: {
+        status: 200,
+        body: languagesAnswer({ configured: true, languages: ['zh', 'en'], primary: 'zh', variablesSet: { RAG_SUPPORTED_LANGUAGES: true, RAG_PRIMARY_LANGUAGE: true } }),
+      },
+    });
+    const en = primaryRadio(page.content, 'en');
+    en.checked = true;
+    en.dispatch('change');
+    expect(page.status.textContent).toBe('English is now the primary language.');
+    buttonByText(page.content, 'Reset selection').click();
+    expect(page.status.textContent).toBe('');
+  });
+
   it('exactly one language: its radio is checked and the monolingual note shows', async () => {
     const page = await mounted({ counts: { status: 401, body: {} } });
     toggle(useBox(page.content, 'it'), true);
@@ -419,13 +448,41 @@ describe('Languages panel states (UI-SPEC 6.2.2, 7.2)', () => {
       post: (body) => ({ status: 200, body: { success: true, ...(body as Json), warnings: [], verifiedAgainstActiveProfile: false } }),
     });
     const findings = findingsHost(page);
-    expect(findings.textContent).toContain('The embedding profile could not be read from the database, so the languages were not verified against the active profile.');
+    expect(findings.textContent).toContain('The languages were not verified against the active embedding profile.');
     expect(findings.querySelector('.alert')!.className).toContain('alert-warning');
     expect(findings.querySelector('.alert')!.getAttribute('role')).toBeNull();
     expect(page.section.querySelectorAll('.badge-success, .alert-success, .bi-check-circle')).toEqual([]);
     buttonByText(page.content, 'Save languages').click();
     await flush();
-    expect(findingsHost(page).textContent).toContain('were not verified against the active profile');
+    expect(findingsHost(page).textContent).toContain('were not verified against the active embedding profile');
+  });
+
+  it('profiles on: the warning says the Config UI does not read the active profile, never that a read failed', async () => {
+    const page = await mounted({
+      get: { status: 200, body: languagesAnswer({ verifiedAgainstActiveProfile: false, notVerifiedReason: 'profiles_on' }) },
+    });
+    const text = findingsHost(page).textContent;
+    expect(text).toContain('Embedding profiles are on (RAG_EMBEDDING_PROFILES), and the Config UI does not read the active profile from the database');
+    expect(text).not.toContain('could not be read');
+  });
+
+  it('no declarations file: the warning says no embedding profile was checked', async () => {
+    const page = await mounted({
+      get: { status: 200, body: languagesAnswer({ verifiedAgainstActiveProfile: false, notVerifiedReason: 'no_declarations' }) },
+    });
+    const text = findingsHost(page).textContent;
+    expect(text).toContain('No embedding language declarations are installed, so the languages were not checked against an embedding profile.');
+    expect(text).not.toContain('could not be read');
+  });
+
+  it('every not-verified reason has zh, en and it copy', () => {
+    const { LANGUAGES_LABELS } = loadModule();
+    for (const locale of ['en', 'zh', 'it'] as const) {
+      for (const key of ['warn.notVerified', 'warn.notVerified.profiles_on', 'warn.notVerified.no_declarations', 'warn.notVerified.default_not_active']) {
+        expect(LANGUAGES_LABELS[locale][key], locale + ' ' + key).toBeTruthy();
+      }
+      expect(LANGUAGES_LABELS[locale]['warn.notVerified']).not.toMatch(/could not be read|无法读取|non è stato possibile leggere/);
+    }
   });
 
   it('a save answered with verifiedAgainstActiveProfile false keeps the warning even when the load said true', async () => {
@@ -435,7 +492,7 @@ describe('Languages panel states (UI-SPEC 6.2.2, 7.2)', () => {
     expect(findingsHost(page).textContent).not.toContain('not verified');
     buttonByText(page.content, 'Save languages').click();
     await flush();
-    expect(findingsHost(page).textContent).toContain('were not verified against the active profile');
+    expect(findingsHost(page).textContent).toContain('were not verified against the active embedding profile');
   });
 
   it('a refused save shows one sentence per code in one error alert, keeps the selection and focuses the alert', async () => {
@@ -495,6 +552,26 @@ describe('Languages panel states (UI-SPEC 6.2.2, 7.2)', () => {
     await flush();
     const alert = findingsHost(page).querySelector('.alert-warning')!;
     expect(alert.textContent).toContain('Answers in 中文 are not checked for groundedness');
+  });
+
+  it('a groundedness warning already shown as a note under the table is not repeated in an alert after the save', async () => {
+    const page = await mounted({
+      get: {
+        status: 200,
+        body: languagesAnswer({ packs: [pack('en', 'English', 'English'), pack('it', 'Italiano', 'Italian', { groundedness: 'none' })] }),
+      },
+      post: (body) => ({
+        status: 200,
+        body: { success: true, ...(body as Json), warnings: [{ code: 'groundedness_not_checked', language: 'it' }], verifiedAgainstActiveProfile: true },
+      }),
+    });
+    toggle(useBox(page.content, 'it'), true);
+    buttonByText(page.content, 'Save languages').click();
+    await flush();
+    const occurrences = page.section.textContent.split('Answers in Italiano are not checked for groundedness').length - 1;
+    expect(occurrences).toBe(1);
+    expect(noteText(page)).toContain('Answers in Italiano are not checked for groundedness');
+    expect(findingsHost(page).querySelector('.alert-warning')).toBeNull();
   });
 
   it('config server unreachable: no banner, the unavailable sentence with Reload panel that loads again', async () => {
