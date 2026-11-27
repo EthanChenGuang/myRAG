@@ -33,7 +33,8 @@ export interface CollectionSpec {
 export interface CollectionInfo {
   profileId: string;
   dims: number;
-  tenants: number;
+  /** Null for a store that keeps no tenant registry (Qdrant: one shared collection, tenants are a payload index). */
+  tenants: number | null;
 }
 
 export interface StoreHit {
