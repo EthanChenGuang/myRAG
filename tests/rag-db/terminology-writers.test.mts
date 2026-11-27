@@ -34,7 +34,7 @@ const PUBLIC_FUNCTIONS = [
   'public.rag_term_delete_entry(uuid, text, uuid, bigint)',
   'public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint)',
   'public.rag_term_apply_import(uuid, text, jsonb, text, bigint)',
-  'public.rag_term_list_entries(uuid, text, integer, integer, text)',
+  'public.rag_term_list_entries(uuid, text, integer, integer, text, text, text, text)',
   'public.rag_term_list_audit(uuid, text, integer, integer)',
 ];
 

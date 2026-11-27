@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TerminologyEntry, TerminologyValidationIssue } from '@/lib/rag-eval/contracts.generated';
 import { getLanguageRegistry } from '@/lib/rag/lang/registry';
-import { validateEntries, type TerminologyValidationContext } from '@/lib/rag/terminology/validate';
+import { validateEntries, withTranslationDefaults, type TerminologyValidationContext } from '@/lib/rag/terminology/validate';
 
 const LANGS = getLanguageRegistry().packs.map((pack) => pack.code);
 const [L1, L2] = [LANGS[0]!, LANGS[1]!];
@@ -182,9 +182,40 @@ describe('validateEntries: languages and translation pairs (D-24 rules 7 to 9, D
     expect(validateEntries([pair('术语甲乙丙', 'termalpha')], ctx())).toEqual([]);
   });
 
+  it.each<[string, Partial<TerminologyEntry>, string]>([
+    ['target missing', { target_language: null }, 'target_language_required'],
+    ['source equal to target', { target_language: L1 as TerminologyEntry['target_language'] }, 'target_language_same'],
+    ['source missing', { source_language: null }, 'invalid_translation'],
+  ])('reports a translation pair with %s as its own code (06.2 D-36)', (_label, extra, code) => {
+    expect(errors(validateEntries([pair('术语甲乙丙', 'termalpha', extra)], ctx()))).toContain(code);
+  });
+
+  it('reports a target language that is not enabled as target_language_not_enabled', () => {
+    const third = LANGS[2]!;
+    const issues = validateEntries([pair('术语甲乙丙', 'termalpha', { target_language: third as TerminologyEntry['target_language'] })], ctx({ enabledLanguages: [L1, L2] }));
+    expect(errors(issues)).toEqual(['target_language_not_enabled']);
+  });
+
+  it('keeps one source term with different target languages apart, and reports two required targets for one pair as a conflict', () => {
+    const third = LANGS[2]! as TerminologyEntry['target_language'];
+    expect(validateEntries([pair('术语甲乙丙', 'termalpha'), pair('术语甲乙丙', 'termine alfa', { target_language: third })], ctx())).toEqual([]);
+    const issues = validateEntries([pair('术语甲乙丙', 'termalpha'), pair('术语甲乙丙', 'termine alfa')], ctx());
+    expect(errors(issues)).toEqual(['conflict']);
+  });
+
+  it('withTranslationDefaults forces one_way and fills the source language from the language of a translation pair only', () => {
+    expect(withTranslationDefaults({ kind: 'translation', language: L1, mode: 'equivalent', source_language: null })).toEqual({
+      kind: 'translation',
+      language: L1,
+      mode: 'one_way',
+      source_language: L1,
+    });
+    expect(withTranslationDefaults({ kind: 'translation', language: L1, source_language: L2 })).toMatchObject({ mode: 'one_way', source_language: L2 });
+    const plain = { kind: 'synonym', language: L1, mode: 'equivalent', source_language: null };
+    expect(withTranslationDefaults(plain)).toBe(plain);
+  });
+
   it.each<[string, Partial<TerminologyEntry>]>([
-    ['target missing', { target_language: null }],
-    ['source equal to target', { target_language: L1 as TerminologyEntry['target_language'] }],
     ['language different from source', { language: L2 as TerminologyEntry['language'] }],
     ['mode equivalent', { mode: 'equivalent' }],
   ])('rejects a translation pair with %s', (_label, extra) => {
@@ -197,7 +228,8 @@ describe('validateEntries: languages and translation pairs (D-24 rules 7 to 9, D
   });
 
   it('rejects a translation language that is not enabled', () => {
-    expect(errors(validateEntries([pair('术语甲乙丙', 'termalpha')], ctx({ enabledLanguages: [L1] })))).toContain('invalid_language');
+    expect(errors(validateEntries([pair('术语甲乙丙', 'termalpha')], ctx({ enabledLanguages: [L1] })))).toEqual(['target_language_not_enabled']);
+    expect(errors(validateEntries([pair('术语甲乙丙', 'termalpha')], ctx({ enabledLanguages: [L2] })))).toContain('invalid_language');
   });
 
   it('keeps translation pairs out of same-language chains and conflicts', () => {

@@ -161,8 +161,13 @@ describe('terminologyEnabledLanguages and listEntries (D-35)', () => {
     expect(result.items[0]).not.toHaveProperty('normalized_variants');
     expect(fake.calls[0]).toEqual({
       fn: 'rag_term_list_entries',
-      args: { p_actor: ACTOR, p_layer_key: 'shared', p_limit: 100, p_offset: 0, p_search: 'alpha' },
+      args: { p_actor: ACTOR, p_layer_key: 'shared', p_limit: 100, p_offset: 0, p_search: 'alpha', p_kind: null, p_source_language: null, p_target_language: null },
     });
+  });
+
+  it('passes the Glossary filters through to the list read (06.2 D-15)', async () => {
+    await admin.listEntries({ actorUserId: ACTOR, layerKey: 'shared', kind: 'translation', sourceLanguage: HAN, targetLanguage: LATIN, signal });
+    expect(fake.calls[0]!.args).toMatchObject({ p_kind: 'translation', p_source_language: HAN, p_target_language: LATIN });
   });
 
   it('reports version 0 and no hash for a layer without a row', async () => {
@@ -311,7 +316,7 @@ describe('createEntry and updateEntry (D-05, D-22, D-24, D-32)', () => {
       entry: { canonical: 'term alpha beta', variants: ['termalpha'], language: LATIN, kind: 'translation', source_language: LATIN, target_language: LATIN },
       signal,
     });
-    expect(!equal.ok && equal.issues?.map((issue) => issue.code)).toContain('invalid_translation');
+    expect(!equal.ok && equal.issues?.map((issue) => issue.code)).toContain('target_language_same');
     expect(upserts()).toHaveLength(0);
   });
 
