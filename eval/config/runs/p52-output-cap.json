@@ -1,0 +1,9 @@
+{
+  "name": "p52-output-cap",
+  "env": {
+    "RAG_CITATIONS": "true",
+    "RAG_CITATION_PER_SENTENCE": "true"
+  },
+  "overrides": null,
+  "generator_model": "fake/cap-aware-v1"
+}
