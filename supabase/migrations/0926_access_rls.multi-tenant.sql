@@ -1,4 +1,4 @@
--- 0923 (multi-tenant): restrictive client read policies for access groups (Phase 4.3, SEC-12; D-04, D-15, A-01, A-02).
+-- 0926 (multi-tenant): restrictive client read policies for access groups (Phase 4.3, SEC-12; D-04, D-15, A-01, A-02).
 -- rag_access_groups_restrict on documents, document_chunks and document_parents, TO anon, authenticated: a row stays readable when
 -- enforcement is off, when its access_groups overlap the caller's keys, or when the caller is an owner or admin of the row's own
 -- organization (public.is_org_admin(organization_id), which reads auth.uid() only and is already executable by anon). An admin of another

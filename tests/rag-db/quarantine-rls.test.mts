@@ -169,7 +169,7 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
           const policies = (await fixture.db.query<Row>("SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = $1 AND cmd IN ('SELECT', 'ALL') AND permissive = 'PERMISSIVE'", [table])).rows;
           assert.equal(policies.length, 1, `${table}: ${policies.map((row) => String(row.policyname)).join(', ')}`);
           const restrictive = (await fixture.db.query<Row>("SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = $1 AND permissive = 'RESTRICTIVE'", [table])).rows;
-          assert.deepEqual(restrictive.map((row) => String(row.policyname)), ['rag_access_groups_restrict'], `${table}: only the 0923 restrictive policy narrows reads`);
+          assert.deepEqual(restrictive.map((row) => String(row.policyname)), ['rag_access_groups_restrict'], `${table}: only the 0926 restrictive policy narrows reads`);
         }
       } finally {
         await fixture.db.close();

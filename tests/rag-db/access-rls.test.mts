@@ -6,7 +6,7 @@ import { applyMigrationFiles, migrationFiles } from '../../eval/harness/migratio
 
 // Phase 4.3 plan 06 (SEC-12; D-09, D-15, A-01, A-02): restrictive SELECT policies on documents, document_chunks and document_parents narrow
 // direct client reads (anon key or a user token) to the caller's access keys while enforcement is on, give the tenant's admins every row,
-// and change nothing while it is off. The flag-off baseline is read on the same rows before 0923 is applied. Neutral synthetic fixtures.
+// and change nothing while it is off. The flag-off baseline is read on the same rows before 0926 is applied. Neutral synthetic fixtures.
 
 type Role = 'anon' | 'authenticated';
 type Row = Record<string, unknown>;
@@ -26,7 +26,7 @@ const DOC_A = id('9633', 2);
 const DOC_B = id('9633', 3);
 const DOC_OTHER = id('9633', 4);
 
-const RLS_FILE = /\/0923_access_rls(\.(single|multi)-tenant)?\.sql$/;
+const RLS_FILE = /\/0926_access_rls(\.(single|multi)-tenant)?\.sql$/;
 
 async function rows<T = Row>(db: PGlite, sql: string, params: unknown[] = []): Promise<T[]> {
   return (await db.query<T>(sql, params)).rows;
@@ -154,12 +154,12 @@ for (const mode of ['single-tenant', 'multi-tenant'] as DeploymentMode[]) {
       await db?.close();
     });
 
-    test('the 0923 files exist for this mode', () => {
+    test('the 0926 files exist for this mode', () => {
       const names = migrationFiles(mode).filter((file) => RLS_FILE.test(file));
-      assert.deepEqual(names.map((file) => file.split('/').pop()), ['0923_access_rls.sql', `0923_access_rls.${mode}.sql`]);
+      assert.deepEqual(names.map((file) => file.split('/').pop()), ['0926_access_rls.sql', `0926_access_rls.${mode}.sql`]);
     });
 
-    test('with enforcement off every caller reads exactly the rows it read before 0923', async () => {
+    test('with enforcement off every caller reads exactly the rows it read before 0926', async () => {
       await setEnforced(db, false);
       for (const caller of callers) {
         assert.deepEqual(await readAll(db, caller.role, caller.user), baseline.get(caller.label), caller.label);
@@ -266,7 +266,7 @@ for (const mode of ['single-tenant', 'multi-tenant'] as DeploymentMode[]) {
       }
     });
 
-    test('re-applying 0923 is idempotent', async () => {
+    test('re-applying 0926 is idempotent', async () => {
       await applyMigrationFiles(db, migrationFiles(mode).filter((file) => RLS_FILE.test(file)));
       await setEnforced(db, true);
       try {

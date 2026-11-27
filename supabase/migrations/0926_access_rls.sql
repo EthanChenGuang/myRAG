@@ -1,4 +1,4 @@
--- 0923: access-group helpers for the restrictive client read policies (Phase 4.3, SEC-12; D-09, D-15, A-01, A-02).
+-- 0926: access-group helpers for the restrictive client read policies (Phase 4.3, SEC-12; D-09, D-15, A-01, A-02).
 -- rag_caller_access_keys() returns the access keys of the calling client: 'all' for everyone, plus 'u:<auth.uid()>' and 'g:<group id>' for
 -- each rag_access_group_members row of a signed-in user. It takes no argument and reads identity only from auth.uid(), so a caller cannot
 -- name another user. STABLE SECURITY DEFINER (rag_access_group_members is not readable by anon) with an empty search_path. The mode files

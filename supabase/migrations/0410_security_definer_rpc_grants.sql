@@ -6,7 +6,7 @@
 --   Section 1: service-role-only RPCs. EXECUTE is revoked from PUBLIC, anon and authenticated and granted to service_role.
 --   Section 2: authenticated-callable RPCs and RLS helpers. EXECUTE is revoked from PUBLIC and anon and granted to authenticated and service_role.
 --              Only the helpers that policies without a TO clause evaluate for anon (is_org_member, is_org_owner, is_org_admin, check_admin_status) keep anon,
---              and the three helpers of the 0923 restrictive access-group policies (TO anon, authenticated): rag_access_enforced, rag_caller_access_keys,
+--              and the three helpers of the 0926 restrictive access-group policies (TO anon, authenticated): rag_access_enforced, rag_caller_access_keys,
 --              rag_caller_is_access_admin.
 --
 -- The authoritative allow-list is tests/helpers/security-definer-allow-list.ts; tests/rag/search-rpc-grants.test.ts replays the setup files and the

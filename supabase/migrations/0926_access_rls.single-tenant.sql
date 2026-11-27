@@ -1,4 +1,4 @@
--- 0923 (single-tenant): restrictive client read policies for access groups (Phase 4.3, SEC-12; D-15, A-01, A-02).
+-- 0926 (single-tenant): restrictive client read policies for access groups (Phase 4.3, SEC-12; D-15, A-01, A-02).
 -- The single-tenant read policies on documents, document_chunks and document_parents have no TO clause, so anon reads them; the restrictive
 -- policy rag_access_groups_restrict is therefore TO anon, authenticated. A row stays readable when enforcement is off, when its access_groups
 -- overlap the caller's keys, or when the caller is an admin (admin_users) of the one tenant. Restrictive policies are ANDed with the existing

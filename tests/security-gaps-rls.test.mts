@@ -296,7 +296,7 @@ GRANT EXECUTE ON FUNCTION get_workspace_context(text, uuid), get_user_org_ids(uu
 GRANT EXECUTE ON FUNCTION is_admin(uuid), create_organization_safe(text, text, uuid, boolean) TO PUBLIC;
 `;
 
-// The recursive state predates 0923, whose restrictive policies depend on is_org_admin; drop them first so the old function can go.
+// The recursive state predates 0926, whose restrictive policies depend on is_org_admin; drop them first so the old function can go.
 const MULTI_RECURSIVE_ORG_POLICIES_OLD_STATE = `
 DROP POLICY IF EXISTS rag_access_groups_restrict ON documents;
 DROP POLICY IF EXISTS rag_access_groups_restrict ON document_chunks;
@@ -584,7 +584,7 @@ multiTenantSuite('existing database after the patch, applied twice', async () =>
   await fixture.db.exec(MULTI_RECURSIVE_ORG_POLICIES_OLD_STATE);
   await fixture.db.exec(read('supabase/patches/2026-11-security-review-multi-tenant.sql'));
   await fixture.db.exec(read('supabase/patches/2026-11-security-review-multi-tenant.sql'));
-  await fixture.db.exec(read('supabase/migrations/0923_access_rls.multi-tenant.sql'));
+  await fixture.db.exec(read('supabase/migrations/0926_access_rls.multi-tenant.sql'));
   return fixture;
 });
 
