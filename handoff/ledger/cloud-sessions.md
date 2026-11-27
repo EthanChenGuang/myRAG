@@ -788,3 +788,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - 06.2-42 Task 1 dispatched (exec/06.2-42, to checkpoint).
   - G2 (systemPromptHash) was unowned; added to quick-62-hash-bench.
   - Train note: plan-62-fixes must merge before the 06.2-26/41/42 executions reach a train.
+- 22:46Z plan-62-fixes follow-ups A (32 now confirm-only) and B (06-46 cmd fixes) pushed; DONE. Route exec/plan-62-fixes to train 41 (it must come before 06.2-41/42/26). Archived.
