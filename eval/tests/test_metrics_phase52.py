@@ -127,7 +127,7 @@ def _trace(
     return RagTrace.model_validate(payload)
 
 
-def _partial_trace(answer: str, *, cited: bool = True) -> RagTrace:
+def _partial_trace(answer: str, *, cited: bool = True, sentences: list[dict] | None = None) -> RagTrace:
     context = f"[S1] {COVERED_DOC}\n{COVERED_QUOTE}."
     return _trace(
         PARTIAL.id,
@@ -136,6 +136,7 @@ def _partial_trace(answer: str, *, cited: bool = True) -> RagTrace:
         kept=[("c1", COVERED_DOC, f"{COVERED_QUOTE}.")],
         citations=[_citation("S1", "c1", COVERED_DOC, f"{COVERED_QUOTE}.")] if cited else [],
         query=PARTIAL.question,
+        sentences=sentences,
     )
 
 
@@ -313,8 +314,9 @@ def test_an_all_off_run_reports_no_allowlisted_link_rate():
 
 
 def test_the_report_groups_each_metric_by_language_and_category_and_adds_uncited_to_strategy_slices():
-    partial = _partial_trace(f"{COVERED_QUOTE}. [S1] how long one firing takes: 59.")
-    partial = partial.model_copy(update={"sentences": [_sentence(0), _sentence(1, cited=False)]})
+    partial = _partial_trace(
+        f"{COVERED_QUOTE}. [S1] how long one firing takes: 59.", sentences=[_sentence(0), _sentence(1, cited=False)]
+    )
     stale = _trace(STALE.id, answer="19:15. [S2] Or 18:30. [S1]")
     report = answer_rule_metrics([partial, stale], [PARTIAL, STALE])
     assert report is not None
