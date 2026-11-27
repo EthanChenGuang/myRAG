@@ -16,12 +16,25 @@ export interface ChannelReplyGuardInput {
   /** The server-side owner of the channel session; never taken from the incoming message. */
   ownerUserId?: string | null;
   channel: 'whatsapp';
+  /** URLs of the turn's webSearch results read from the chat stream (allow rule 2). */
+  webResultUrls?: readonly string[];
+  /** The turn's context was flagged: web result URLs are listed as flagged and allow nothing. */
+  webResultsFlagged?: boolean;
+  /** The answer language from the chat stream; used only when it is one of the supported languages. */
+  answerLanguage?: string | null;
 }
 
 export interface ChannelReplyGuardResult {
   text: string;
   /** True whenever the guard is not off: the provider is asked never to fetch a link preview for the reply. */
   linkPreviewOff: boolean;
+}
+
+function replyLanguage(answerLanguage: string | null | undefined): string {
+  if (languageVariablesUnset()) return '';
+  const settings = getLanguageSettings();
+  if (answerLanguage && settings.languages.includes(answerLanguage)) return answerLanguage;
+  return settings.primary ?? '';
 }
 
 function hasFindings(summary: OutputGuardLinkSummary): boolean {
@@ -51,14 +64,15 @@ async function recordFindings(summary: OutputGuardLinkSummary, input: ChannelRep
 
 /**
  * D-40, D-41: the whole-text guard for a non-streamed channel reply. Off returns the text unchanged and reads no language
- * setting. Enforce fails closed (a guard failure throws); flag keeps the text. The policy is the allowlist, the site host
- * and the user's message; web result URLs are not available here, so a web-result link outside the allowlist is replaced.
+ * setting. Enforce fails closed (a guard failure throws); flag keeps the text. The policy is the allowlist, the site host,
+ * the user's message and the turn's webSearch result URLs read from the chat stream (none allowed when the turn was flagged).
  */
 export async function guardChannelReply(input: ChannelReplyGuardInput): Promise<ChannelReplyGuardResult> {
   const mode = readAnswerConfig().outputGuard;
   if (mode === 'off') return { text: input.text, linkPreviewOff: false };
 
-  const language = languageVariablesUnset() ? '' : getLanguageSettings().primary ?? '';
+  const language = replyLanguage(input.answerLanguage);
+  const flagged = input.webResultsFlagged === true;
   let result: { text: string; summary: OutputGuardLinkSummary };
   try {
     result = guardWholeText(input.text, {
@@ -67,6 +81,7 @@ export async function guardChannelReply(input: ChannelReplyGuardInput): Promise<
         allowlistValue: env.RAG_OUTPUT_LINK_ALLOWLIST,
         siteUrl: env.NEXT_PUBLIC_SITE_URL,
         userMessage: input.userMessage,
+        webResultUrls: (input.webResultUrls ?? []).map((url) => ({ url, flagged })),
       }),
       placeholder: fixedText('notices.link_removed', language),
       language,
