@@ -23,7 +23,7 @@ date: 2026-11-27
 - `node scripts/ci/check-rag-boundary.mjs`, `node scripts/check-config.mjs`, `node scripts/ci/check-language-literals.mjs`, `node scripts/ci/check-settings-classification.mjs`: pass
 - `npx vitest run tests/ui tests/rag/embeddings tests/api/config-gate-writers.test.ts tests/rag/ingest`: 179 files, 3429 passed, 1 skipped
 - `npx vitest run tests/rag/embeddings/bge-m3-via.test.ts` after the probe-text fix: 14 passed
-- Full `npx vitest run` (env.ts changed): see the final report
+- Full `npx vitest run` (env.ts changed): 755 files passed, 3 skipped; 14330 tests passed, 90 skipped (started just before the probe-text fix; bge-m3-via.test.ts was rerun after it)
 - `node --test scripts/tests/*.node-test.mjs`: 326 passed
 - eval pytest (test_openai_route, test_judge_offline, test_judge_calibration): 49 passed; earlier session 152 + 60 passed
 - `check-workflows.py`: OK
