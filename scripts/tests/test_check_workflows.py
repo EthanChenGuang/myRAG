@@ -461,6 +461,20 @@ class TsJobsTest(unittest.TestCase):
         jobs["ts-tsx"]["timeout-minutes"] = 60
         self.assertTrue(any("ts-tsx must set timeout-minutes" in e for e in self.errors_for(jobs)))
 
+    def test_ts_db_may_take_up_to_its_own_cap_but_not_more(self):
+        jobs = self.jobs()
+        jobs["ts-db"]["timeout-minutes"] = 40
+        self.assertFalse(any("ts-db must set timeout-minutes" in e for e in self.errors_for(jobs)))
+        jobs["ts-db"]["timeout-minutes"] = 41
+        self.assertTrue(any("ts-db must set timeout-minutes <= 40" in e for e in self.errors_for(jobs)))
+        jobs["ts-db"].pop("timeout-minutes")
+        self.assertTrue(any("ts-db must set timeout-minutes" in e for e in self.errors_for(jobs)))
+
+    def test_the_ts_db_cap_does_not_raise_the_other_jobs(self):
+        jobs = self.jobs()
+        jobs["ts-vitest"]["timeout-minutes"] = 40
+        self.assertTrue(any("ts-vitest must set timeout-minutes <= 25" in e for e in self.errors_for(jobs)))
+
     def test_the_root_ratchet_is_reported(self):
         jobs = self.jobs()
         jobs["ts-checks"]["steps"].append({"run": "node scripts/ci/tsc-ratchet.mjs --baseline scripts/ci/tsc-baseline.json"})
