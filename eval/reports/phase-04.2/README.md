@@ -89,14 +89,21 @@ Runs: v2-lexical-dict-on, v2-default.
 
 - language:it recall_at_10 gain 0.0000 does not exceed the noise band 0.0200
 
-### refusal_mode_cells (D-23, D-24): `commit`
+### refusal_mode_cells (D-23, D-24): `keep`
 
 | Number | Value |
 | --- | --- |
-| bases_skipped_insufficient_data | 3 |
-| mode_cells_evaluated | 9 |
+| bases_skipped_insufficient_data | 1 |
+| mode_cells_evaluated | 15 |
 
-- every condition of the rule holds
+- cohere|fake-quality-v1|it|cross|balanced: not calibrated on dev (no_separation)
+- cohere|fake-quality-v1|it|cross|flexible: not calibrated on dev (no_separation)
+- cohere|fake-quality-v1|it|cross|strict: base cell has no threshold to compare
+- cohere|fake-quality-v1|it|same|balanced: holdout check not passed (failed_holdout)
+- cohere|fake-quality-v1|it|same|flexible: holdout check not passed (failed_holdout)
+- cohere|fake-quality-v1|zh|same|balanced: not calibrated on dev (no_separation)
+- cohere|fake-quality-v1|zh|same|flexible: not calibrated on dev (no_separation)
+- cohere|fake-quality-v1|zh|same|strict: base cell has no threshold to compare
 
 
 ## Report-only
