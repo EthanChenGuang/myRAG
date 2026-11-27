@@ -33,8 +33,16 @@ const CI_LANGUAGES = { RAG_SUPPORTED_LANGUAGES: 'zh,en,it', RAG_PRIMARY_LANGUAGE
  * D-12, A-12: the backends this run covers. Unset means pgvector only (the default `npx vitest run`); otherwise exactly the listed
  * names, each of which must be a retrieval backend id.
  */
-export function canaryBackends(_env: Record<string, string | undefined> = process.env): BackendId[] {
-  return ['pgvector'];
+export function canaryBackends(env: Record<string, string | undefined> = process.env): BackendId[] {
+  const raw = (env.RAG_CANARY_BACKENDS ?? '').trim();
+  if (raw === '') return ['pgvector'];
+  const names = raw.split(',').map((name) => name.trim());
+  const out: BackendId[] = [];
+  for (const name of names) {
+    if (!(RETRIEVAL_BACKEND_IDS as readonly string[]).includes(name)) throw new Error(`[Canary] unknown backend in RAG_CANARY_BACKENDS: ${name}`);
+    if (!out.includes(name as BackendId)) out.push(name as BackendId);
+  }
+  return out;
 }
 
 /** A-9: the backend-canary CI job covers exactly these; anything else fails the guard. */
@@ -53,11 +61,42 @@ export type GuardFetch = (url: string, init: { signal: AbortSignal }) => Promise
  * Returns the problems found; an empty list means the configured legs will really run.
  */
 export async function canaryGuardProblems(
-  _env: Record<string, string | undefined> = process.env,
-  _fetchImpl: GuardFetch = (url, init) => fetch(url, init),
-  _timeoutMs = 5_000,
+  env: Record<string, string | undefined> = process.env,
+  fetchImpl: GuardFetch = (url, init) => fetch(url, init),
+  timeoutMs = 5_000,
 ): Promise<string[]> {
-  return [];
+  const problems: string[] = [];
+  const ci = env.CI_BACKEND_CANARY === '1';
+  let listed: BackendId[] = [];
+  try {
+    listed = canaryBackends(env);
+  } catch (error) {
+    problems.push(error instanceof Error ? error.message : String(error));
+  }
+  if (ci) {
+    const exact = listed.length === CI_CANARY_BACKENDS.length && CI_CANARY_BACKENDS.every((id) => listed.includes(id));
+    if (!exact) problems.push(`RAG_CANARY_BACKENDS must be exactly ${CI_CANARY_BACKENDS.join(',')} in the backend-canary job (got "${env.RAG_CANARY_BACKENDS ?? ''}")`);
+  }
+  const targets = (ci ? (['weaviate', 'qdrant'] as VectorSyncTarget[]) : listed.filter(isExternalBackend)).sort();
+  for (const target of targets) {
+    const { urlVar, path } = SERVICE_CHECKS[target];
+    const base = (env[urlVar] ?? '').trim();
+    if (base === '') {
+      problems.push(`${urlVar} is not set for the ${target} canary leg`);
+      continue;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetchImpl(`${base.replace(/\/+$/, '')}${path}`, { signal: controller.signal });
+      if (response.status !== 200) problems.push(`${target} health check ${path} answered ${response.status}`);
+    } catch (error) {
+      problems.push(`${target} health check ${path} failed (${error instanceof Error ? error.name : 'error'})`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return problems;
 }
 
 export function isExternalBackend(id: BackendId): id is VectorSyncTarget {
