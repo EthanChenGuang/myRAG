@@ -762,3 +762,161 @@ class AbsoluteGatesTest(unittest.TestCase):
             broken = Path(tmp) / "broken.json"
             broken.write_text("{not json", encoding="utf-8")
             self.assertTrue(any("broken.json" in e for e in self.errors_for(pr, nightly, broken)))
+
+
+class ReleaseGateWorkflowTest(unittest.TestCase):
+    """D-33, D-36, research F-3: one failing example per rule of check_release_gate."""
+
+    def workflow(self) -> dict:
+        import copy
+
+        import yaml
+
+        data = yaml.safe_load(check_workflows.RELEASE_GATE.read_text(encoding="utf-8"))
+        return copy.deepcopy(data)
+
+    def known_refs(self) -> set[str]:
+        refs: set[str] = set()
+        for path in (check_workflows.PR, check_workflows.NIGHTLY):
+            refs.update(check_workflows.uses_refs(check_workflows.load(path)[0]))
+        return refs
+
+    def errors_for(self, data: dict, text: str | None = None) -> list[str]:
+        import yaml
+
+        errors: list[str] = []
+        check_workflows.check_release_gate(data, text if text is not None else yaml.safe_dump(data), errors, self.known_refs())
+        return errors
+
+    def on(self, data: dict) -> dict:
+        return data["on"] if "on" in data else data[True]
+
+    def steps(self, data: dict) -> list[dict]:
+        return data["jobs"]["gate"]["steps"]
+
+    def step(self, data: dict, needle: str) -> dict:
+        return next(s for s in self.steps(data) if needle in str(s.get("run", "")))
+
+    def assert_error(self, data: dict, fragment: str, text: str | None = None) -> None:
+        errors = self.errors_for(data, text)
+        self.assertTrue(any(fragment in e for e in errors), f"no error containing {fragment!r} in {errors}")
+
+    def test_repository_workflow_passes(self):
+        text = check_workflows.RELEASE_GATE.read_text(encoding="utf-8")
+        errors: list[str] = []
+        check_workflows.check_release_gate(self.workflow(), text, errors, self.known_refs())
+        self.assertEqual(errors, [])
+
+    def test_top_level_statuses_write_fails(self):
+        data = self.workflow()
+        data["permissions"] = {"contents": "read", "statuses": "write"}
+        self.assert_error(data, "top-level permissions")
+
+    def test_job_named_like_the_status_fails(self):
+        data = self.workflow()
+        data["jobs"]["rag-release-gate"] = data["jobs"].pop("gate")
+        self.assert_error(data, "no job may be named rag-release-gate")
+        data = self.workflow()
+        data["jobs"]["gate"]["name"] = "rag-release-gate"
+        self.assert_error(data, "no job may be named rag-release-gate")
+
+    def test_job_permissions_beyond_the_gate_set_fail(self):
+        data = self.workflow()
+        data["jobs"]["gate"]["permissions"]["contents"] = "write"
+        self.assert_error(data, "permissions must be exactly")
+
+    def test_pull_request_triggers_fail(self):
+        for trigger in ("pull_request", "pull_request_target"):
+            data = self.workflow()
+            self.on(data)[trigger] = {"branches": ["main"]}
+            self.assert_error(data, f"trigger '{trigger}' must not be used")
+
+    def test_push_to_another_branch_fails(self):
+        data = self.workflow()
+        self.on(data)["push"] = {"branches": ["main", "feature"]}
+        self.assert_error(data, "push must trigger on branches [main] only")
+        data = self.workflow()
+        self.on(data)["push"] = {"branches": ["main"], "tags": ["v*"]}
+        self.assert_error(data, "push must trigger on branches [main] only")
+
+    def test_dispatch_inputs_are_required(self):
+        data = self.workflow()
+        self.on(data)["workflow_dispatch"]["inputs"]["sha"]["required"] = False
+        self.assert_error(data, "required 'sha' input")
+        data = self.workflow()
+        del self.on(data)["workflow_dispatch"]["inputs"]["override_reason"]
+        self.assert_error(data, "optional 'override_reason' input")
+
+    def test_inputs_inside_run_fail(self):
+        for expr in ("${{ inputs.sha }}", "${{ inputs.override_reason }}", "${{ github.event.inputs.sha }}"):
+            data = self.workflow()
+            self.step(data, "rag_eval.release_gate run")["run"] = f"uv run --directory eval python -m rag_eval.release_gate run --sha {expr}"
+            self.assert_error(data, "only through env")
+
+    def test_secret_inside_run_fails(self):
+        data = self.workflow()
+        self.step(data, "rag_eval.release_gate run")["run"] += " --key ${{ secrets.OPENAI_API_KEY }}"
+        self.assert_error(data, "not interpolated into run")
+
+    def test_missing_sha_validation_fails(self):
+        data = self.workflow()
+        self.steps(data).pop(0)
+        self.assert_error(data, "must check GATE_SHA")
+
+    def test_no_pending_post_before_the_gate_fails(self):
+        data = self.workflow()
+        steps = self.steps(data)
+        pending = next(s for s in steps if "state=pending" in str(s.get("run", "")))
+        steps.remove(pending)
+        self.assert_error(data, "pending rag-release-gate status must be posted before")
+        data = self.workflow()
+        steps = self.steps(data)
+        pending = next(s for s in steps if "state=pending" in str(s.get("run", "")))
+        steps.remove(pending)
+        steps.insert(len(steps) - 1, pending)
+        self.assert_error(data, "pending rag-release-gate status must be posted before")
+
+    def test_posting_step_without_always_fails(self):
+        data = self.workflow()
+        del self.step(data, "post-release-status.mjs")["if"]
+        self.assert_error(data, "if: always()")
+        data = self.workflow()
+        self.step(data, "post-release-status.mjs")["if"] = "success()"
+        self.assert_error(data, "if: always()")
+
+    def test_unpinned_or_unknown_action_fails(self):
+        data = self.workflow()
+        checkout = next(s for s in self.steps(data) if str(s.get("uses", "")).startswith("actions/checkout@"))
+        checkout["uses"] = "actions/checkout@v4"
+        self.assert_error(data, "pinned to a 40-hex commit sha")
+        data = self.workflow()
+        self.steps(data).append({"uses": "someone/new-action@" + "c" * 40})
+        self.assert_error(data, "not a pinned action already used")
+        text = check_workflows.RELEASE_GATE.read_text(encoding="utf-8").replace(" # v4.4.0", "", 1)
+        import yaml
+
+        self.assert_error(yaml.safe_load(text), "needs a '# vX.Y.Z' comment", text)
+
+    def test_checkout_must_use_the_gate_sha(self):
+        data = self.workflow()
+        checkout = next(s for s in self.steps(data) if str(s.get("uses", "")).startswith("actions/checkout@"))
+        del checkout["with"]
+        self.assert_error(data, "checkout must check out ref")
+
+    def test_override_takes_the_triggering_actor_through_env(self):
+        data = self.workflow()
+        del self.step(data, "rag_eval.release_gate override")["env"]["TRIGGERING_ACTOR"]
+        self.assert_error(data, "github.triggering_actor")
+        data = self.workflow()
+        self.step(data, "rag_eval.release_gate override")["env"]["TRIGGERING_ACTOR"] = "${{ github.actor }}"
+        self.assert_error(data, "github.triggering_actor")
+
+    def test_judge_keys_reach_the_gate_through_step_env(self):
+        data = self.workflow()
+        del self.step(data, "rag_eval.release_gate run")["env"]["OPENAI_API_KEY"]
+        self.assert_error(data, "receive OPENAI_API_KEY through step env")
+
+    def test_concurrency_must_not_cancel(self):
+        data = self.workflow()
+        data["concurrency"]["cancel-in-progress"] = True
+        self.assert_error(data, "cancel-in-progress false")
