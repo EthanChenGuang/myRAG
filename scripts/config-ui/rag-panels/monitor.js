@@ -14,7 +14,13 @@ function monitorSummaryView() {
 function monitorSettingsWarnings() {
   return [];
 }
+function monitorAlertView() {
+  return {};
+}
+function monitorEvidenceView() {
+  return {};
+}
 function initMonitorPanel() {}
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { MONITOR_LABELS, MonitorPanel, monitorSummaryView, monitorSettingsWarnings, initMonitorPanel };
+  module.exports = { MONITOR_LABELS, MonitorPanel, monitorSummaryView, monitorSettingsWarnings, monitorAlertView, monitorEvidenceView, initMonitorPanel };
 }
