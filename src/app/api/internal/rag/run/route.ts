@@ -66,6 +66,7 @@ import {
   configHash,
   outputGuardTraceSummary,
   residualOutputFindings,
+  retrievalBackendTrace,
 } from '@/lib/rag-eval/trace';
 import {
   evalGroundednessRequest,
@@ -98,6 +99,7 @@ function toRetrievalOverrides(input: RetrievalOverridesInput | undefined): Retri
     out.chunkingProfileByDocType = { ...input.chunking_profile_by_doc_type };
   }
   if (input.table_lookup != null) out.tableLookup = { ...input.table_lookup };
+  if (input.backend != null) out.backend = input.backend;
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -850,6 +852,7 @@ export async function POST(req: NextRequest) {
       const answerRulesFields = answerTurn
         ? answerRulesTraceFields(evalAnswerRulesInput({ answerTurn, answer, answerChain, finishReason, serverRefused, mixedVersions, textBlocks, citationSession }))
         : {};
+      const backendTrace = retrievalBackendTrace(result.stages);
       const trace = {
         schema_version: 1 as const,
         item_id: itemId ?? null,
@@ -897,6 +900,7 @@ export async function POST(req: NextRequest) {
         refused,
         refusal_reason: refusalReasonOf(result, refused),
         ...(v2Result ? v2TraceFields(result) : {}),
+        ...(v2Result && backendTrace ? { retrieval_backend: backendTrace } : {}),
         ...(v2Result ? (attributeFilterTrace(result.stages, currentAttributeFilterMode()) ?? {}) : {}),
         ...(Object.keys(stageCounts).length > 0 ? { stage_counts: stageCounts } : {}),
         ...(injection ? { injection } : {}),

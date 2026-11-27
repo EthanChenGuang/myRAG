@@ -165,3 +165,35 @@ export function answerRulesTraceFields(input: AnswerRulesTraceInput): Partial<An
     ...(input.notices && input.notices.length > 0 ? { notices: input.notices.map((notice) => ({ ...notice })) } : {}),
   };
 }
+
+type TraceBackend = NonNullable<RagTrace['retrieval_backend']>;
+
+const TRACE_BACKENDS: ReadonlySet<string> = new Set<TraceBackend['backend']>(['pgvector', 'weaviate', 'qdrant']);
+const TRACE_FALLBACKS: ReadonlySet<string> = new Set<NonNullable<TraceBackend['fallback_reason']>>([
+  'backend_not_ready',
+  'backend_error',
+  'backend_slow',
+  'filter_unsupported',
+]);
+
+interface StageAttributesLike {
+  name: string;
+  attributes?: Record<string, string | number | boolean>;
+}
+
+/**
+ * D-25: RagTrace.retrieval_backend from the search span (the last search record wins, as with the identifier rerun). Absent when no
+ * search stage recorded a backend, so a trace without a v2 search keeps its shape.
+ */
+export function retrievalBackendTrace(stages: readonly StageAttributesLike[]): TraceBackend | undefined {
+  const search = [...stages].reverse().find((stage) => stage.name === 'search' && typeof stage.attributes?.backend === 'string');
+  const attributes = search?.attributes;
+  if (!attributes || !TRACE_BACKENDS.has(String(attributes.backend))) return undefined;
+  const reason = attributes.fallback_reason;
+  const dropped = attributes.tenant_validation_dropped;
+  return {
+    backend: attributes.backend as TraceBackend['backend'],
+    fallback_reason: typeof reason === 'string' && TRACE_FALLBACKS.has(reason) ? (reason as TraceBackend['fallback_reason']) : null,
+    tenant_validation_dropped: typeof dropped === 'number' && Number.isInteger(dropped) && dropped >= 0 ? dropped : 0,
+  };
+}

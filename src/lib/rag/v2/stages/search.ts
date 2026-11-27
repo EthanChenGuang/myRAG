@@ -1,5 +1,6 @@
 import type { RpcClient } from '../../backend/supabase-rpc';
-import { backendForRequest, getRetrievalBackend } from '../../backend/registry';
+import { resolveRetrievalBackend } from '../../backend/factory';
+import { backendForRequest } from '../../backend/registry';
 import type { BackendLegs, RankedHit, RetrievalFilters, VersionScope } from '../../backend/types';
 import type { AssemblyDocumentRow, TableRowAttachment } from '../../context/assemble';
 import { fetchAssemblyRows } from '../../context/fetch-rows';
@@ -25,7 +26,7 @@ import type { LexicalOptions } from '../../lexical/options';
 import type { LexicalStamp } from '../../lexical/resolve-options';
 import { scopeKey, type TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
-import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
+import type { Profile, QueryVariant, RetrievalBackendSelection, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
 import { terminologyParams } from '../../terminology/expand';
 import { reserveTerminologyHits } from '../../terminology/reserve';
@@ -251,6 +252,15 @@ export const IDENTIFIER_RESOLVE_FAILED = 'identifier_resolve_failed';
 function buildFilters(input: RunRetrievalInput): RetrievalFilters {
   const { versionScope: _versionScope, ...extra } = input.retrievalFilters ?? {};
   return { currentOnly: true, ...extra };
+}
+
+/** D-25: the search span's backend fields; ids and counts only. */
+export function backendAttributes(selection: RetrievalBackendSelection): Record<string, string | number> {
+  return {
+    backend: selection.backend,
+    tenant_validation_dropped: selection.tenantValidationDropped,
+    ...(selection.fallbackReason ? { fallback_reason: selection.fallbackReason } : {}),
+  };
 }
 
 function joinDetail(parts: readonly (string | undefined)[]): string | undefined {
@@ -494,15 +504,22 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const fallbackFilters = attributes?.fallbackFilters ?? null;
   const attributeActive = attributes !== null && (attributes.softIds.length > 0 || fallbackFilters !== null);
   type SoftOutcome = { legs: BackendLegs | null; failed: boolean };
+  // D-11, D-24: one backend per request; every variant, binding, translation, term and soft call goes through it.
+  const resolved = resolveRetrievalBackend(profile, config, stageOverrides?.retrievalOverrides);
 
   // D-31: with found identifiers every leg is first filtered to chunks carrying one; an empty filtered search reruns once without it.
   const runLegs = async (identifiersNorm: string[] | undefined, legCodes: readonly string[]) => {
     const identifierArg = identifiersNorm ? { identifiersNorm } : {};
     const route =
       historyScope || identifiersNorm
-        ? backendForRequest({ ...(historyScope ? { versionScope: historyScope } : {}), ...identifierArg })
-        : { backend: getRetrievalBackend() };
+        ? backendForRequest({ ...(historyScope ? { versionScope: historyScope } : {}), ...identifierArg }, resolved.backend)
+        : { backend: resolved.backend };
     const backend = route.backend;
+    const selection = (): RetrievalBackendSelection =>
+      backend === resolved.backend
+        ? resolved.selection()
+        : { backend: backend.id, fallbackReason: null, tenantValidationDropped: 0, degraded: false };
+    const externalChoice = resolved.choice !== 'pgvector';
     const versionCodes = [
       versions.ignored ? VERSIONS_IGNORED : undefined,
       historyScope ? SUPERSEDED_DENSE_UNAVAILABLE : undefined,
@@ -770,6 +787,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         ...attributeCodes(value),
       ]);
     const hasVersionCodes = versionCodes.some((code) => code !== undefined);
+    // D-11: the fallback reason is a detail code only when a fallback happened, so the default detail is unchanged.
+    const backendCodes = (): (string | undefined)[] => [selection().fallbackReason ?? undefined];
 
     let searchValue: Awaited<ReturnType<typeof runBackendSearch>>['legsByVariant'];
     let domainLists: RankedList[] = [];
@@ -813,9 +832,11 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           searched.lexicalDetail,
           ...attributeCodes(searched),
           ...versionCodes,
+          ...backendCodes(),
         ])!,
         counts: searchCounts(searched),
         candidatesOut: searched.denseTotal + searched.lexicalTotal,
+        attributes: backendAttributes(selection()),
       });
     } else {
       const searched = requireValue(
@@ -827,13 +848,15 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           {
             candidatesOut: (value) => value.denseTotal + value.lexicalTotal,
             counts: searchCounts,
+            attributes: () => backendAttributes(selection()),
             ...(ctx.searchDelegate ? { failureDetail: delegateFailureDetail } : {}),
-            ...(bindings || translations || hasVersionCodes || dictionaryDetailOn || attributeActive
+            ...(bindings || translations || hasVersionCodes || dictionaryDetailOn || attributeActive || externalChoice
               ? {
                   // D-19, D-30: a dropped binding or translation leg degrades the stage; the original legs and the answer continue.
                   // D-12: a backend that cannot serve the version scope is replaced by pgvector and degrades the stage too.
-                  status: (value) => (extraFailed(value) || versionDegraded ? 'degraded' : 'ok'),
-                  detail: (value) => joinDetail([extraDetail(value), ...versionCodes]),
+                  // D-11: an external backend served by pgvector (not ready, error, slow) degrades the stage.
+                  status: (value) => (extraFailed(value) || versionDegraded || selection().degraded ? 'degraded' : 'ok'),
+                  detail: (value) => joinDetail([extraDetail(value), ...versionCodes, ...backendCodes()]),
                 }
               : {}),
           },
