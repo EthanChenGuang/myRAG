@@ -1,5 +1,6 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import type { PGlite } from '@electric-sql/pglite';
 import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
@@ -195,5 +196,29 @@ describe('vector sync CLI over the PGlite fixture (multi-tenant)', () => {
     const s = io();
     await main(['vector-sync', 'status'], s.io, deps());
     assert.match(s.out[0], /^\[Vector Sync\] qdrant: disabled, /);
+  });
+});
+
+describe('vector sync scheduler recipe (supabase/optional/vector-sync-schedule.sql)', () => {
+  const sql = fs.readFileSync('supabase/optional/vector-sync-schedule.sql', 'utf8');
+
+  test('Vault-stored placeholders, the 58 s pg_net timeout, minutely drain, daily reconcile and a cleanup job', () => {
+    assert.ok(sql.includes("'<APP_URL>'") && sql.includes("'<RAG_VECTOR_SYNC_SECRET>'"));
+    assert.equal((sql.match(/vault\.create_secret/g) ?? []).length, 2);
+    assert.equal((sql.match(/timeout_milliseconds := 58000/g) ?? []).length, 2);
+    assert.match(sql, /'rag-vector-sync-drain',\s*'\* \* \* \* \*'/);
+    assert.match(sql, /'rag-vector-sync-reconcile',\s*'17 3 \* \* \*'/);
+    assert.match(sql, /cron\.job_run_details/);
+    assert.match(sql, /NOT A MIGRATION/);
+  });
+
+  test('no job command embeds the secret: every Authorization header reads it from Vault', () => {
+    for (const header of sql.match(/'Authorization', [^\n]+/g) ?? []) assert.match(header, /vault\.decrypted_secrets/);
+    assert.ok(!/Bearer [A-Za-z0-9_-]{16,}/.test(sql));
+  });
+
+  test('the recipe is outside the migrations and vercel.json has no crons entry', () => {
+    assert.ok(!fs.readdirSync('supabase/migrations').some((name) => name.includes('vector-sync-schedule')));
+    assert.ok(!fs.readFileSync('vercel.json', 'utf8').includes('"crons"'));
   });
 });

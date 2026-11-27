@@ -32,6 +32,8 @@
     "rag:rebuild": "tsx src/lib/rag/ingest/rebuild/cli.ts",
     "rag:translate": "tsx src/lib/rag/ingest/translate/cli.ts",
     "rag:embedding": "tsx src/lib/rag/embeddings/cli.ts",
+    "rag:vector-sync": "tsx src/lib/rag/sync/cli.ts vector-sync",
+    "rag:reconcile": "tsx src/lib/rag/sync/cli.ts reconcile",
     "test": "vitest run",
     "test-rag": "tsx eval/harness/run-smoke.mts",
     "typecheck:new": "node scripts/typecheck-new.mjs",
