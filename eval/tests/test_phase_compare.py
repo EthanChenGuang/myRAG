@@ -32,6 +32,8 @@ from rag_eval.phase_compare import (
     SwitchComparisonSpec,
     absolute_zero_check,
     below_limit_check,
+    materialise_run_config,
+    RunSpec,
     category_noise_check,
     citation_validity_check,
     command_result,
@@ -1748,3 +1750,15 @@ def test_committed_phase52_spec_gates_off_on_violating_guard_and_capped_runs():
         for c in run.checks
         if getattr(c, "kind", None) == "below_limit"
     )
+
+
+def test_materialise_run_config_keeps_the_base_generator_model(tmp_path: Path):
+    """05.2-38: a base run config's generator_model (the Phase 5.2 fakes) reaches the harness; dropping it ran every Phase 5.2
+    comparison leg with the default fake, so the answer-rule gates keyed on the generator passed without applying."""
+    base = tmp_path / "base.json"
+    base.write_text(json.dumps({"name": "b", "env": {"RAG_CITATIONS": "true"}, "overrides": None, "generator_model": "fake/rule-following-v1"}))
+    config = materialise_run_config(RunSpec(name="r", base=str(base), fixture_mode="prechunked", env={}), [])
+    assert config["generator_model"] == "fake/rule-following-v1"
+    plain = tmp_path / "plain.json"
+    plain.write_text(json.dumps({"name": "p", "env": {}, "overrides": None}))
+    assert "generator_model" not in materialise_run_config(RunSpec(name="r", base=str(plain), fixture_mode="prechunked", env={}), [])
