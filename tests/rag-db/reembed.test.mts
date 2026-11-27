@@ -3,6 +3,21 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
 
+/**
+ * The fixture corpus without the 04.2-37 duplicate-passage templates, whose 90 generated copies are most of its chunks. The re-embed
+ * job suite walks every chunk several times (full run, --derive-from, resume); over the whole corpus it outgrew the CI shard timeout,
+ * and the generated copies exercise nothing the other documents do not. Removed in the suite's after().
+ */
+async function corpusWithoutDuplicateCopies(): Promise<string> {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const source = path.join(process.cwd(), 'eval/fixtures/corpus');
+  const target = fs.mkdtempSync(path.join(os.tmpdir(), 'reembed-corpus-'));
+  fs.cpSync(source, target, { recursive: true, filter: (file) => !/^dup-passage\.template\./.test(path.basename(file)) });
+  return target;
+}
+
 const LEGACY = 'openai-3-small-1536';
 const VOYAGE = 'voyage-4-large-2048';
 const QWEN_2048 = 'qwen3-8b-2048';
@@ -633,10 +648,12 @@ describe('re-embed job (src/lib/rag/ingest/reembed)', () => {
   let supabaseModule: typeof import('@/lib/supabase');
   let targetsModule: typeof import('@/lib/rag/ingest/embedding-targets');
   let legacyTexts: string[] = [];
+  let corpusDir = '';
 
   before(async () => {
     const { fixtureProcessEnv, startFakeEdge } = await import('../../eval/harness/fake-edge.mts');
-    fixture = await createTwoTenantDatabase();
+    corpusDir = await corpusWithoutDuplicateCopies();
+    fixture = await createTwoTenantDatabase({ corpusDir });
     edge = await startFakeEdge({ db: fixture.db });
     Object.assign(process.env, fixtureProcessEnv(edge.url));
     process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
@@ -673,6 +690,7 @@ describe('re-embed job (src/lib/rag/ingest/reembed)', () => {
   after(async () => {
     await edge?.close();
     await fixture?.db.close();
+    if (corpusDir) (await import('node:fs')).rmSync(corpusDir, { recursive: true, force: true });
   });
 
   const rows = async (sql: string, params: unknown[] = []): Promise<Row[]> => (await fixture.db.query<Row>(sql, params)).rows;
