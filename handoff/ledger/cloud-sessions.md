@@ -732,3 +732,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - Phase verifiers: 4.4, 3.3, 3.1.1, 5.2.
   Respected HOLD: 04.3-53/54, 05.2-39/40, 05.3-49/50, 06.2-13/19/33.
   Waiting on predecessors: 05.2.1-25, 06.3-24/25, 07-32/33/50.
+- 22:29Z 06.2-36 DONE (4c28c5e7). Added the 6.2 canary rows to the two-tenant matrix (352/0); deps.ts now reads RAG_SCOPE_GATE and RAG_WHATSAPP_HISTORY; full vitest 16070/0. Archived -> train 41. Told quick-deps-switches to match that form and to add RAG_MODEL_ROUTING.
