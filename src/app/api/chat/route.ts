@@ -57,6 +57,8 @@ import {
   repairOwnerMembership,
   resolveTenantScope,
   accessGroupsEnabled,
+  createCitationRecheck,
+  scheduleSecurityEvent,
   bodyNamesAccessGroups,
   resolveAccessScope,
   runRetrieval,
@@ -150,6 +152,18 @@ function withToolResultNotice(prompt: string): string {
   const tagged = `${REFERENCE_NOTICE}\n<documents>`;
   if (prompt.includes(tagged)) return prompt.replace(tagged, () => `${REFERENCE_NOTICE}\n${TOOL_RESULT_SENTENCE}\n<documents>`);
   return `${prompt}\n\n${TOOL_RESULT_NOTICE}`;
+}
+
+/** D-26: the citation access recheck of this request's scope; a scope the check cannot read fails closed, so every citation is dropped. */
+function citationRecheckFor(scope: TenantScope | null) {
+  if (!scope) return undefined;
+  try {
+    return createCitationRecheck(scope);
+  } catch {
+    return async (): Promise<ReadonlySet<string>> => {
+      throw new Error('[RAG Access] citation recheck unavailable');
+    };
+  }
 }
 
 const documentReferenceTool = tool({
@@ -2017,6 +2031,7 @@ IMPORTANT:
       env.NEXT_PUBLIC_REASONING_ENABLED === 'true' &&
       reasoningSettings?.enabled !== false &&
       Boolean(reasoningSettings?.enabled || reasoningSettings?.effort || reasoningSettings?.maxOutputTokens);
+    const citationRecheck = citationRecheckFor(scope);
     const citationSession = createCitationSession({
       capabilities: citationCapabilities,
       ragMode,
@@ -2031,6 +2046,7 @@ IMPORTANT:
         reasoning: reasoningRequested,
         attachments: hasAttachedImage,
       },
+      ...(citationRecheck ? { recheck: citationRecheck } : {}),
     });
 
     // Only web-chat answers of a signed-in user outside ghost chats get an answerId and a record
@@ -4525,17 +4541,34 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             const status = isAborted ? 'aborted' : generationFailed || finishReason === 'error' ? 'error' : 'ok';
             const fallbackReason = citationSession.fallbackReason;
             const answerTrace = answerTraceFields(answerTurn, citationSession.truncatedMarkers());
-            const rules = [...(fallbackReason ? [`citation_strategy_fallback:${fallbackReason}`] : []), ...answerTrace.rules];
+            const accessCheck = citationSession.accessCheck();
+            const rules = [
+              ...(fallbackReason ? [`citation_strategy_fallback:${fallbackReason}`] : []),
+              ...answerTrace.rules,
+              ...(accessCheck && accessCheck.violations > 0 ? ['access_violation'] : []),
+              ...(accessCheck?.failed ? ['access_recheck_failed'] : []),
+            ];
+            const counts = accessCheck ? { ...answerTrace.counts, access_violations: accessCheck.violations } : answerTrace.counts;
             ragTrace.collector.record({
               name: 'generation',
               status,
               startedAt: aiStartTime,
               endedAt: ragTrace.collector.now(),
               ...(rules.length > 0 ? { rules } : {}),
-              ...(answerTrace.counts ? { counts: answerTrace.counts } : {}),
+              ...(counts ? { counts } : {}),
             });
           }
           finishRagTrace();
+          // D-26: a citation the caller may not see leaves an id-only security event, written after the response
+          const deniedCitations = citationSession.accessCheck();
+          if (scope && deniedCitations && !deniedCitations.failed && deniedCitations.violations > 0) {
+            scheduleSecurityEvent(scope, {
+              event: 'citation_access_violation',
+              chunkIds: deniedCitations.chunkIds,
+              documentIds: deniedCitations.documentIds,
+              requestId: ragTraceId ?? answerId ?? null,
+            });
+          }
           const responseText = responseMessage.parts
             .map((part) => (part.type === 'text' ? part.text : ''))
             .join('');
