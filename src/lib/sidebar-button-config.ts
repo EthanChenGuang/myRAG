@@ -5,11 +5,6 @@ export interface SidebarButtonConfig {
 
 type SidebarButtonField = keyof SidebarButtonConfig;
 
-export const SIDEBAR_BUTTON_DEFAULTS: Readonly<SidebarButtonConfig> = {
-  text: 'myRAG',
-  url: 'https://myrag.laoxiang.app/',
-};
-
 export const SIDEBAR_BUTTON_STORAGE_KEYS: Readonly<Record<SidebarButtonField, string>> = {
   text: 'SIDEBAR_BUTTON_TEXT',
   url: 'SIDEBAR_BUTTON_URL',
@@ -20,41 +15,51 @@ const SIDEBAR_BUTTON_ENV_NAMES: Readonly<Record<SidebarButtonField, string>> = {
   url: 'NEXT_PUBLIC_SIDEBAR_BUTTON_URL',
 };
 
-const FIELDS: readonly SidebarButtonField[] = ['text', 'url'];
-
 export type SidebarButtonStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 export type SidebarButtonFetch = (input: string) => Promise<Pick<Response, 'ok' | 'json'>>;
 
-export function readCachedSidebarButtonConfig(storage: SidebarButtonStorage): SidebarButtonConfig {
-  const config: SidebarButtonConfig = { ...SIDEBAR_BUTTON_DEFAULTS };
-  for (const field of FIELDS) {
-    const saved = storage.getItem(SIDEBAR_BUTTON_STORAGE_KEYS[field]);
-    if (saved) config[field] = saved;
+export function clearSidebarButtonCache(storage: SidebarButtonStorage): void {
+  try {
+    storage.removeItem(SIDEBAR_BUTTON_STORAGE_KEYS.text);
+    storage.removeItem(SIDEBAR_BUTTON_STORAGE_KEYS.url);
+  } catch {
+    // storage can be unavailable (private mode); nothing is read from it
   }
-  return config;
 }
 
+export function isSafeSidebarButtonUrl(url: string): boolean {
+  if (url.startsWith('/')) return !url.startsWith('//') && !url.startsWith('/\\');
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'https:' || protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+async function fetchServerValue(fetchImpl: SidebarButtonFetch, field: SidebarButtonField): Promise<string | null> {
+  try {
+    const response = await fetchImpl(`/api/config/get-env?var=${SIDEBAR_BUTTON_ENV_NAMES[field]}`);
+    if (!response.ok) return null;
+    const data: unknown = await response.json();
+    const value = (data as { value?: unknown } | null)?.value;
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+  } catch {
+    console.error('[Sidebar] failed to load the sidebar button setting');
+    return null;
+  }
+}
+
+/**
+ * Returns the button only when this page load's server answers confirm both a text and a safe URL; anything else hides it.
+ * Values are never cached: the legacy localStorage keys are removed on every call.
+ */
 export async function syncSidebarButtonConfig(
   storage: SidebarButtonStorage,
   fetchImpl: SidebarButtonFetch,
-): Promise<SidebarButtonConfig> {
-  const config = readCachedSidebarButtonConfig(storage);
-  for (const field of FIELDS) {
-    try {
-      const response = await fetchImpl(`/api/config/get-env?var=${SIDEBAR_BUTTON_ENV_NAMES[field]}`);
-      if (!response.ok) continue;
-      const data: unknown = await response.json();
-      const value = (data as { value?: unknown } | null)?.value;
-      if (typeof value === 'string' && value) {
-        config[field] = value;
-        storage.setItem(SIDEBAR_BUTTON_STORAGE_KEYS[field], value);
-      } else {
-        config[field] = SIDEBAR_BUTTON_DEFAULTS[field];
-        storage.removeItem(SIDEBAR_BUTTON_STORAGE_KEYS[field]);
-      }
-    } catch {
-      console.error('[Sidebar] failed to load the sidebar button setting');
-    }
-  }
-  return config;
+): Promise<SidebarButtonConfig | null> {
+  clearSidebarButtonCache(storage);
+  const [text, url] = await Promise.all([fetchServerValue(fetchImpl, 'text'), fetchServerValue(fetchImpl, 'url')]);
+  if (!text || !url || !isSafeSidebarButtonUrl(url)) return null;
+  return { text, url };
 }
