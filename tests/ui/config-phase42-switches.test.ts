@@ -299,7 +299,7 @@ describe('Phase 4.2 tuning box: pointer and combination notes in the markup', ()
     expect(source).not.toContain('insertAdjacentHTML');
     expect(source).not.toMatch(/\bfetch\(|ragFetch\(/);
     for (const m of source.matchAll(/^(?:function|const|let|var|class)\s+([A-Za-z_$][\w$]*)/gm)) {
-      expect(m[1], 'top-level prefix').toMatch(/^(RetrievalTuning|RETRIEVAL_TUNING_|retrievalTuning)/);
+      expect(m[1], 'top-level prefix').toMatch(/^(RetrievalTuning|RETRIEVAL_TUNING_|retrievalTuning|bindRetrievalTuning)/);
     }
   });
 });
