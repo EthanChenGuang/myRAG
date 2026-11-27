@@ -5,7 +5,7 @@ Verdict: **FAIL** over off_identity, diversity, identifier, table, versions, dic
 | Gate | Decision | Verdict | Offenders |
 | --- | --- | --- | --- |
 | off_identity | D-37 | PASS | 0 |
-| diversity | D-22 | PASS | 0 |
+| diversity | D-22 | FAIL | 6 |
 | identifier | D-32 | PASS | 0 |
 | table | ROADMAP-4.2-SC3 | PASS | 0 |
 | versions | ROADMAP-4.2-SC5 | PASS | 0 |
@@ -34,19 +34,27 @@ Runs: v2-diversity-collapse, v2-diversity-mmr, v2-default.
 | v2-diversity-mmr.items | 6 |
 | v2-diversity-mmr.max_redundancy_over_limit | 0.0000 |
 
+Offenders:
+- v2-diversity-collapse: category:stale_version:recall_at_5 dropped beyond the noise band (0.8000 < 0.9800, v2-default 1.0000)
+- v2-diversity-collapse: category:stale_version:recall_at_10 dropped beyond the noise band (0.8000 < 0.9800, v2-default 1.0000)
+- v2-diversity-collapse: category:stale_version:mrr dropped beyond the noise band (0.4500 < 0.5300, v2-default 0.5500)
+- v2-diversity-mmr: category:stale_version:recall_at_5 dropped beyond the noise band (0.8000 < 0.9800, v2-default 1.0000)
+- v2-diversity-mmr: category:stale_version:recall_at_10 dropped beyond the noise band (0.8000 < 0.9800, v2-default 1.0000)
+- v2-diversity-mmr: category:stale_version:mrr dropped beyond the noise band (0.4500 < 0.5300, v2-default 0.5500)
+
 ## identifier (D-32)
 
 Runs: v2-identifier-on, v2-default.
 
 | Number | Value |
 | --- | --- |
-| descriptive.mrr | 0.6096 |
-| descriptive.mrr.reference | 0.6096 |
-| descriptive.recall_at_10 | 0.6901 |
-| descriptive.recall_at_10.reference | 0.6901 |
-| descriptive.recall_at_5 | 0.6736 |
-| descriptive.recall_at_5.reference | 0.6736 |
-| descriptive_items | 138 |
+| descriptive.mrr | 0.6110 |
+| descriptive.mrr.reference | 0.6110 |
+| descriptive.recall_at_10 | 0.7180 |
+| descriptive.recall_at_10.reference | 0.7180 |
+| descriptive.recall_at_5 | 0.7030 |
+| descriptive.recall_at_5.reference | 0.7030 |
+| descriptive_items | 159 |
 | identifier_precision | 1.0000 |
 | identifier_precision_n | 12 |
 | items | 12 |
@@ -84,8 +92,8 @@ Runs: v2-lexical-dict-on, v2-default.
 | band | 0.0200 |
 | dropped_slices | 0 |
 | gain | 0.0000 |
-| on | 0.7373 |
-| reference | 0.7373 |
+| on | 0.7721 |
+| reference | 0.7721 |
 
 - language:it recall_at_10 gain 0.0000 does not exceed the noise band 0.0200
 
@@ -108,16 +116,16 @@ Runs: v2-lexical-dict-on, v2-default.
 
 | Run | Mode | Recall@10 | MRR | Run config hash |
 | --- | --- | --- | --- | --- |
-| off-prechunked | prechunked | 0.6214 | 0.6031 | `17350e6cd947` |
-| off-ingest | ingest | 0.7512 | 0.6707 | `ac8f87d45153` |
-| v2-default | prechunked | 0.6792 | 0.6085 | `bd2514e85db8` |
-| v2-default-phase42-off | prechunked | 0.6792 | 0.6085 | `8dccac43f6fc` |
-| v2-diversity-collapse | prechunked | 0.6792 | 0.6085 | `b581b683b475` |
-| v2-diversity-mmr | prechunked | 0.6792 | 0.6064 | `46bb67866dcc` |
-| v2-identifier-on | prechunked | 0.7717 | 0.6933 | `51c381e27231` |
-| v2-table-lookup-on | prechunked | 0.6792 | 0.6085 | `4c542c55241a` |
-| v2-version-scope-on | prechunked | 0.6879 | 0.6085 | `fab385fa4103` |
-| v2-lexical-dict-on | prechunked | 0.6792 | 0.6117 | `5bafb006d90e` |
-| v2-lexical-stem-it-on | prechunked | 0.6792 | 0.6085 | `20c3313beb97` |
+| off-prechunked | prechunked | 0.6709 | 0.6399 | `44165cead4b3` |
+| off-ingest | ingest | 0.7790 | 0.6924 | `a48430c9ab66` |
+| v2-default | prechunked | 0.7211 | 0.6370 | `5db73f8fe8d5` |
+| v2-default-phase42-off | prechunked | 0.7211 | 0.6370 | `d3c0e87071dd` |
+| v2-diversity-collapse | prechunked | 0.7111 | 0.6320 | `2903b4e3b17f` |
+| v2-diversity-mmr | prechunked | 0.7161 | 0.6308 | `9e2ad503708b` |
+| v2-identifier-on | prechunked | 0.8015 | 0.7107 | `687faee57136` |
+| v2-table-lookup-on | prechunked | 0.7211 | 0.6370 | `c24c3113c85e` |
+| v2-version-scope-on | prechunked | 0.7286 | 0.6370 | `c864ed9e5b74` |
+| v2-lexical-dict-on | prechunked | 0.7211 | 0.6398 | `e4a92e5ec75c` |
+| v2-lexical-stem-it-on | prechunked | 0.7211 | 0.6395 | `045679f1f4d9` |
 
 > Fixture corpus only: every gate, threshold and rule here was committed before any gated run (D-37, pre-registration). Reference runs are single fixture runs, so the noise band against a reference is the noise floor (spread 0), as in phase_compare.
