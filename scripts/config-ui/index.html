@@ -6530,13 +6530,14 @@
                                             </div>
                                             <div class="form-control">
                                                 <label class="label" for="RAG_RERANKER"><span class="label-text">Reranker</span></label>
-                                                <select id="RAG_RERANKER" name="RAG_RERANKER" translate="no" class="select select-bordered w-full">
+                                                <select id="RAG_RERANKER" name="RAG_RERANKER" translate="no" aria-describedby="rag-reranker-help" class="select select-bordered w-full">
                                                     <option value="none" selected>none</option>
                                                     <option value="auto">auto</option>
                                                     <option value="cohere">cohere</option>
                                                     <option value="voyage">voyage</option>
                                                     <option value="local_bm25">local_bm25</option>
                                                 </select>
+                                                <p class="label-text-alt text-base-content/70 max-w-prose mt-1" id="rag-reranker-help">With <code class="font-mono text-xs" translate="no">auto</code> and <code class="font-mono text-xs" translate="no">COHERE_API_KEY</code> set, the query and candidate text are sent to <span translate="no">Cohere</span> for chat, embed and eval; without a key, reranking stays local.</p>
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div class="form-control">
