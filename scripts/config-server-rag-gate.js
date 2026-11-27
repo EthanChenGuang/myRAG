@@ -13,7 +13,7 @@ const dotenv = require('dotenv');
 const gateCore = require('../src/lib/rag/config-gate/gate-core.cjs');
 const { ragAffectingDiff, ragSettingsHash } = require('../src/lib/rag/config-gate/settings-hash.cjs');
 const { isSecretName, hasUrlCredentials } = require('../src/lib/rag/config-gate/secret-name.cjs');
-const ragAffecting = require('../src/lib/rag/config-gate/rag-affecting.generated.json');
+const RAG_AFFECTING_FILE = path.join(__dirname, '../src/lib/rag/config-gate/rag-affecting.generated.json');
 
 const CHECK_TIMEOUT_MS = 600000;
 const CHECK_DIR = gateCore.CHECK_DIR;
@@ -78,8 +78,17 @@ class LayerError extends Error {
   }
 }
 
+let cachedNames = null;
+
+/** The generated RAG-affecting list, read as data like eval/harness/env-overlay.mts does. */
 function names() {
-  return Array.isArray(ragAffecting.names) ? ragAffecting.names : [];
+  if (!cachedNames) {
+    // Fails closed: an unreadable list throws (the route answers 500) instead of treating every change as not RAG-affecting.
+    const raw = JSON.parse(fs.readFileSync(RAG_AFFECTING_FILE, 'utf8'));
+    if (!Array.isArray(raw.names) || raw.names.length === 0) throw new Error('rag-affecting list is empty');
+    cachedNames = raw.names.filter((name) => typeof name === 'string');
+  }
+  return cachedNames;
 }
 
 function isPlainObject(value) {
