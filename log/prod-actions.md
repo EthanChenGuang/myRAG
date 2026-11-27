@@ -26,3 +26,26 @@
 - Owner set up the local dev environment (WSL, Node 22, repo at main be569250). The Config UI connects to EVAL, in multi-tenant mode.
 - EVAL write: the owner created one test auth user plus one admin_users row from the Config UI "Setup Primary Admin". The credentials are only in the owner's local .env.local.
 - The walkthroughs were handed to a separate session, session_01X342skiWFj6Vkcw6omyGGS (owner's request).
+
+## 2026-11-27 ~20:10 UTC: train 37 applied on PROD ppvywaxrycaxrtrrditl (owner approved: "同意，执行吧")
+- Source: sql/train37-live.sql (09c95717). Each migration section is byte-identical to origin/main 00afa6d9 (diffed).
+- Pre-check: none of the 3 access_sets CHECKs or the 2 access_sets policies existed, so the 0934 DROP ... IF EXISTS were no-ops. rag_term_list_entries existed only with 5 args. enforced=false, rag_access_audit had 0 rows.
+- Applied in order (apply_migration):
+  - train37_0924_access_admin, version 20261127171104
+  - train37_0925_access_connectors, version 20261127200845
+  - train37_0934_access_derived_stores_sets, version 20261127200928
+  - train37_0980_term_translation_target, version 20261127201020
+  - train37_0410_r20_delta, version 20261127201032
+- Fidelity: the md5 of every stored statement equals the md5 of its section file (no deviation this time).
+  - A first 0924 attempt never ran: its approval prompt was dropped when the worker restarted.
+- Verify:
+  - 41 rag_access_*/rag_connector_*/term functions, all with search_path="".
+  - anon can execute none, except rag_access_enforced() (by design since train 36).
+  - authenticated can execute only rag_access_enforced and rag_caller_reads_access_sets.
+  - service_role can execute all.
+  - Only the 8-arg rag_term_list_entries remains.
+  - access_sets column exists on rag_answer_records, rag_retrieval_log and rag_review_items.
+  - Policies: 2 RESTRICTIVE SELECT TO authenticated. CHECKs: 3 validated.
+  - rag_connector_document_access: RLS on, no anon/authenticated SELECT.
+  - 0 non-NULL access_sets rows. enforced=false.
+- No existing row was written or rewritten.
