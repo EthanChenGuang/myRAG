@@ -209,12 +209,23 @@ function hiddenTextNeedsSidecar(posted) {
 }
 
 // API endpoint to update .env.local file
-app.post('/api/config', (req, res) => {
+app.post('/api/config', async (req, res) => {
   try {
     // Allow either { config, fullValues } or just { config } in the request body
     // If only config is provided, use it as fullValues too
     const { config } = req.body;
-    const rawFullValues = req.body.fullValues || req.body.config || req.body;
+    let rawFullValues = req.body.fullValues || req.body.config || req.body;
+    if (rawFullValues === req.body) {
+      // The control fields of the request are never env names (Phase 5.3 D-15, UI-SPEC 6.12).
+      const { ragGate: _ragGate, clear: _clear, ...rest } = req.body;
+      rawFullValues = rest;
+    }
+
+    const clear = req.body.clear;
+    if (clear !== undefined && (!Array.isArray(clear) || !clear.every((name) => typeof name === 'string' && ragGate.clearableNames.includes(name)))) {
+      return res.status(400).json({ success: false, error: 'invalid_clear' });
+    }
+    const cleared = Array.isArray(clear) ? [...new Set(clear)] : [];
 
     // Filter out invalid environment variable names and template placeholders
     const fullValues = filterValidEnvVars(rawFullValues);
@@ -225,6 +236,7 @@ app.post('/api/config', (req, res) => {
         delete fullValues[name];
       }
     }
+    for (const name of cleared) fullValues[name] = '';
 
     // A value must stay on one .env.local line: line breaks other than \n are refused, \n is stored as the literal \n
     const refused = [];
@@ -265,7 +277,7 @@ app.post('/api/config', (req, res) => {
       key.endsWith('_KEY')
     );
 
-    if (!hasConfigValues) {
+    if (!hasConfigValues && cleared.length === 0) {
       console.error('API: No valid configuration values found in request');
       return res.status(400).json({ error: "No valid configuration values found. Please ensure you're sending the configuration data correctly." });
     }
@@ -277,8 +289,12 @@ app.post('/api/config', (req, res) => {
     console.log('DEFAULT_OPENAI_MODELS:', DEFAULT_OPENAI_MODELS);
     console.log('DEFAULT_OPENROUTER_MODELS:', DEFAULT_OPENROUTER_MODELS);
 
+    const envExists = fs.existsSync(envPath);
+    const beforeValues = envExists ? dotenv.parse(fs.readFileSync(envPath, 'utf8')) : {};
+    let contentToWrite;
+
     // First check if the file exists
-    if (!fs.existsSync(envPath)) {
+    if (!envExists) {
       // If it doesn't exist, create a new one with default structure
       const newContent = `# myRAG Configuration
 
@@ -840,7 +856,7 @@ ${fullValues.MCP_CUSTOM_SERVERS !== undefined ? `MCP_CUSTOM_SERVERS=${fullValues
 ${fullValues.ADMIN_EMAIL ? `ADMIN_EMAIL=${fullValues.ADMIN_EMAIL}` : 'ADMIN_EMAIL='}
 ${fullValues.ADMIN_PASSWORD ? `ADMIN_PASSWORD=${fullValues.ADMIN_PASSWORD}` : 'ADMIN_PASSWORD='}`
 
-      fs.writeFileSync(envPath, newContent);
+      contentToWrite = newContent;
     } else {
       // If it exists, try to update values while preserving structure
       const rawContent = fs.readFileSync(envPath, 'utf8');
@@ -917,19 +933,37 @@ ${fullValues.ADMIN_PASSWORD ? `ADMIN_PASSWORD=${fullValues.ADMIN_PASSWORD}` : 'A
         }
       });
 
-      // Write the updated content
-      fs.writeFileSync(envPath, updatedLines.join('\n'));
+      contentToWrite = updatedLines.join('\n');
     }
+
+    // Phase 5.3 D-15, D-16: decide before anything is written; the proposed values are the posted ones over the current file.
+    const afterValues = { ...(envExists ? beforeValues : dotenv.parse(contentToWrite)), ...envValueStrings(fullValues) };
+    const gate = await ragGate.guardEnvWrite({ before: beforeValues, after: afterValues, ragGate: req.body.ragGate, repoRoot: REPO_ROOT, makeClient: app.locals.ragGateMakeClient, route: 'config' });
+    if (!gate.ok) return res.status(gate.status).json(gate.body);
+
+    fs.writeFileSync(envPath, contentToWrite);
 
     res.json({
       success: true,
-      message: '.env.local updated successfully!'
+      message: '.env.local updated successfully!',
+      ...(gate.ragGate ? { ragGate: gate.ragGate } : {})
     });
   } catch (error) {
     console.error('Error updating configuration:', error);
     res.status(500).json({ error: error.message });
   }
 });
+
+// The string each posted value is written as, so the gate hashes what lands in the file.
+function envValueStrings(values) {
+  const out = {};
+  for (const [name, value] of Object.entries(values)) {
+    if (typeof value === 'boolean') out[name] = value ? 'true' : 'false';
+    else if (value === null || value === undefined) out[name] = '';
+    else out[name] = String(value);
+  }
+  return out;
+}
 
 // Helper function to validate environment variable names
 function isValidEnvVarName(key) {
@@ -1043,7 +1077,7 @@ app.get('/api/config/rag-prompt', async (req, res) => {
 // API endpoint to update RAG system prompt - PROXY TO MAIN APP
 app.post('/api/config/rag-prompt', async (req, res) => {
   try {
-    const { preContext, postContext } = req.body;
+    const { preContext, postContext, ragGate: ragGateField } = req.body;
 
     console.log('[RAG API] Proxying POST request to main app:', {
       preContextLength: preContext?.length || 0,
@@ -1057,7 +1091,8 @@ app.post('/api/config/rag-prompt', async (req, res) => {
       }),
       body: JSON.stringify({
         preContext,
-        postContext
+        postContext,
+        ...(ragGateField !== undefined ? { ragGate: ragGateField } : {})
       })
     });
 
@@ -1069,7 +1104,8 @@ app.post('/api/config/rag-prompt', async (req, res) => {
       success: data.success,
       fullPrompt: data.assembledPrompt,
       message: data.message,
-      error: data.error
+      error: data.error,
+      ...(data.ragGate ? { ragGate: data.ragGate } : {})
     };
 
     res.json(transformedData);
@@ -1318,7 +1354,7 @@ ragGate.registerRagGateRoutes(
 );
 
 // API endpoint to create a new .env.local with template
-app.post('/api/config/create', (req, res) => {
+app.post('/api/config/create', async (req, res) => {
   try {
     const { template = 'standard' } = req.body;
     const envPath = path.join(REPO_ROOT, '.env.local');
@@ -1346,6 +1382,14 @@ app.post('/api/config/create', (req, res) => {
         break;
     }
 
+    // Phase 5.3 D-15, D-16: overwriting an existing file with force goes through the gate first.
+    let gate = { ok: true, ragGate: null };
+    if (fs.existsSync(envPath)) {
+      const beforeValues = dotenv.parse(fs.readFileSync(envPath, 'utf8'));
+      gate = await ragGate.guardEnvWrite({ before: beforeValues, after: dotenv.parse(templateContent), ragGate: req.body.ragGate, repoRoot: REPO_ROOT, makeClient: app.locals.ragGateMakeClient, route: 'create' });
+      if (!gate.ok) return res.status(gate.status).json(gate.body);
+    }
+
     // Write the file
     fs.writeFileSync(envPath, templateContent);
 
@@ -1355,7 +1399,8 @@ app.post('/api/config/create', (req, res) => {
     res.json({
       success: true,
       message: '.env.local created successfully!',
-      config: config
+      config: config,
+      ...(gate.ragGate ? { ragGate: gate.ragGate } : {})
     });
   } catch (error) {
     console.error('Error creating config file:', error);
@@ -3542,7 +3587,7 @@ app.get('/api/config/languages', (req, res) => {
   }
 });
 
-app.post('/api/config/languages', (req, res) => {
+app.post('/api/config/languages', async (req, res) => {
   const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : null;
   if (
     !body ||
@@ -3562,7 +3607,12 @@ app.post('/api/config/languages', (req, res) => {
     if (!result.ok) {
       return res.status(400).json({ success: false, error: 'Invalid language settings', details: result.errors });
     }
-    languageSettings.writeLanguageVariables(path.join(REPO_ROOT, '.env.local'), result.normalized);
+    const languagesEnvPath = path.join(REPO_ROOT, '.env.local');
+    const beforeValues = fs.existsSync(languagesEnvPath) ? dotenv.parse(fs.readFileSync(languagesEnvPath, 'utf8')) : {};
+    const afterValues = { ...beforeValues, RAG_SUPPORTED_LANGUAGES: result.normalized.languages.join(','), RAG_PRIMARY_LANGUAGE: result.normalized.primary };
+    const gate = await ragGate.guardEnvWrite({ before: beforeValues, after: afterValues, ragGate: body.ragGate, repoRoot: REPO_ROOT, makeClient: app.locals.ragGateMakeClient, route: 'languages' });
+    if (!gate.ok) return res.status(gate.status).json(gate.body);
+    languageSettings.writeLanguageVariables(languagesEnvPath, result.normalized);
     console.log('[RAG Languages] saved', { languages: result.normalized.languages, primary: result.normalized.primary });
     return res.json({
       success: true,
@@ -3570,6 +3620,7 @@ app.post('/api/config/languages', (req, res) => {
       primary: result.normalized.primary,
       warnings: result.warnings,
       verifiedAgainstActiveProfile: result.verifiedAgainstActiveProfile,
+      ...(gate.ragGate ? { ragGate: gate.ragGate } : {}),
     });
   } catch (error) {
     console.error('[RAG Languages] save failed:', { message: error instanceof Error ? error.message : String(error) });
@@ -4036,8 +4087,8 @@ app.post('/api/config/models', async (req, res) => {
       // Set response headers
       res.statusCode = proxyRes.statusCode;
 
-      // Forward response headers
-      Object.keys(proxyRes.headers).forEach(key => {
+      // Forward response headers; the body is re-serialised by res.json, so framing headers stay with this response
+      Object.keys(proxyRes.headers).filter((key) => !['content-length', 'transfer-encoding', 'connection'].includes(key.toLowerCase())).forEach(key => {
         res.setHeader(key, proxyRes.headers[key]);
       });
 

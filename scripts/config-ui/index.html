@@ -74,6 +74,7 @@
     <script src="rag-panels/gates-ui.js"></script>
     <script src="rag-panels/judge-calibration.js"></script>
     <script src="rag-panels/question-sources.js"></script>
+    <script src="rag-panels/monitor.js"></script>
     <script src="rag-panels/rag-ui.js"></script>
     <script src="rag-panels/languages.js"></script>
     <script src="rag-panels/ingest-impact.js"></script>
@@ -1472,7 +1473,8 @@
             color: rgba(255, 255, 255, 0.85);
         }
 
-        [data-theme="dark"] .card-body p {
+        /* Alerts set their own content colour; card body text must not override it */
+        [data-theme="dark"] .card-body p:not(.alert p) {
             color: rgba(255, 255, 255, 0.75);
         }
 
@@ -1720,6 +1722,27 @@
         /* Ensure hidden indicators stay hidden */
         .hidden {
             display: none !important;
+        }
+
+        /* Responsive show utilities paired with .hidden must still win at their breakpoint */
+        @media (min-width: 768px) {
+            .hidden.md\:block {
+                display: block !important;
+            }
+
+            .hidden.md\:table-cell {
+                display: table-cell !important;
+            }
+
+            .hidden.md\:table-header-group {
+                display: table-header-group !important;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .hidden.lg\:table-cell {
+                display: table-cell !important;
+            }
         }
 
         /* Button hover effects */
@@ -10585,6 +10608,17 @@
                                             <div data-judge-cal-alert class="mb-4 empty:mb-0"></div>
                                             <div data-judge-cal-content></div>
                                             <div data-judge-cal-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-monitor" class="card bg-base-200 shadow-md min-w-0 scroll-mt-24" aria-labelledby="rag-monitor-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-monitor-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-monitor-title>Monitoring</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-monitor-description>Once a day, refusals, empty searches, votes, judge scores, knowledge-base failures and latency are compared with the 30 days before. A value outside its usual range raises an alert. Alerts hold counts and ids, never question or answer text.</p>
+                                            <div data-monitor-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-monitor-summary class="mb-4 empty:mb-0"></div>
+                                            <div data-monitor-content></div>
+                                            <div data-monitor-status class="text-sm mt-4" role="status" aria-live="polite"></div>
                                         </div>
                                     </section>
 
