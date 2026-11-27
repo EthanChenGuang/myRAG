@@ -329,3 +329,34 @@ describe('registry unit block (D-32)', () => {
     expect(symbols).toEqual(expect.arrayContaining(['kg', 'ml', '%', 'l']));
   });
 });
+
+describe('tokenizer: quantity companions keep spellings symmetric (D-31, plan 03.3-25)', () => {
+  const SPELLINGS = ['zento is 52.61 kwh', 'zento is 52,61kWh', 'zento is 52,61 KWH', 'zento is 52.61KWH'];
+
+  it('every spelling of one quantity carries the canonical number and the unit on the index side', () => {
+    for (const text of SPELLINGS) {
+      const tokens = lexicalTokens(text, ON);
+      expect(tokens, text).toContain('52.61');
+      expect(tokens, text).toContain('kwh');
+    }
+  });
+
+  it('every spelling carries them on the query side as well', () => {
+    for (const text of SPELLINGS) {
+      const tokens = queryLexicalTokens(text, ON);
+      expect(tokens, text).toContain('52.61');
+      expect(tokens, text).toContain('kwh');
+    }
+  });
+
+  it('a glued document spelling shares more than the quantity token with a spaced query', () => {
+    const doc = new Set(lexicalTokens('zento is 52,61kWh', ON));
+    const shared = queryLexicalTokens('where is zento 52.61 KWH', ON).filter((token) => doc.has(token));
+    expect(shared).toEqual(expect.arrayContaining(['_q_52.61kwh', '52.61', 'kwh', 'zento']));
+  });
+
+  it('adds nothing with the option off', () => {
+    expect(lexicalTokens('zento is 52,61kWh')).not.toContain('kwh');
+    expect(lexicalTokens('zento is 52,61kWh')).not.toContain('52.61');
+  });
+});
