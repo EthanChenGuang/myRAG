@@ -2669,8 +2669,49 @@ class AccessGroupsPanel {
   // Counted delete dialog (D-18, UI-SPEC decision 10)
 
   openDelete(id, opener) {
-    void id;
-    void opener;
+    const row = this.findRow(id);
+    if (!row || this.deleting) return;
+    const ui = accessGroupsUiLib();
+    const titleId = ui.ragUiNextId('rag-access-groups-delete-title');
+    const bodyId = ui.ragUiNextId('rag-access-groups-delete-body');
+    const countsId = ui.ragUiNextId('rag-access-groups-delete-counts');
+    const dialog = this.el('dialog', { className: 'modal', attrs: { 'aria-labelledby': titleId, 'aria-describedby': countsId + ' ' + bodyId, 'data-access-groups-delete-dialog': '' } });
+    const keep = this.btn(this.t('action.keepGroup'), 'btn-sm min-h-8 py-1', { 'data-access-groups-keep': '' });
+    const confirm = this.btn(this.t('action.deleteGroup'), 'btn-error btn-sm min-h-8 py-1', { 'aria-describedby': countsId, 'data-access-groups-confirm-delete': '' });
+    confirm.disabled = true;
+    const counts = this.el('div', { className: 'my-3 min-w-0', id: countsId, attrs: { 'aria-live': 'polite', 'data-access-groups-impact': '' } });
+    const errorHost = this.el('div', { className: 'empty:hidden mt-3' });
+    const box = this.el('div', { className: 'modal-box min-w-0 overscroll-contain' }, [
+      this.el('h3', { className: 'text-base font-semibold mb-2 break-words text-balance', id: titleId, text: this.t('delete.title', { group: row.name }) }),
+      counts,
+      this.el('p', { className: 'text-sm max-w-prose flex items-start gap-2', id: bodyId }, [
+        ui.ragUiIcon(this.doc, 'exclamation-triangle', 'mt-0.5 text-warning'),
+        this.el('span', { className: 'break-words min-w-0', text: this.t('delete.body') }),
+      ]),
+      errorHost,
+      this.el('div', { className: 'modal-action flex-wrap gap-2' }, [keep, confirm]),
+    ]);
+    const backdropButton = this.el('button', { className: 'cursor-default', text: this.t('action.keepGroup'), attrs: { type: 'submit', tabindex: '-1' } });
+    const backdrop = this.el('form', { className: 'modal-backdrop', attrs: { method: 'dialog' } }, [backdropButton]);
+    dialog.appendChild(box);
+    dialog.appendChild(backdrop);
+    const state = { id, row, dialog, keep, confirm, counts, errorHost, backdropButton, opener, impact: null, running: false, countSeq: 0, done: null, followUp: null };
+    this.deleting = state;
+    dialog.addEventListener('cancel', (event) => {
+      if (state.running && typeof event.preventDefault === 'function') event.preventDefault();
+    });
+    backdrop.addEventListener('submit', (event) => {
+      if (state.running && typeof event.preventDefault === 'function') event.preventDefault();
+    });
+    dialog.addEventListener('close', () => this.finishDelete(state));
+    keep.addEventListener('click', () => {
+      if (!state.running) dialog.close('keep');
+    });
+    confirm.addEventListener('click', () => this.confirmDelete(state));
+    this.doc.body.appendChild(dialog);
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    keep.focus();
+    this.countImpact(state);
   }
 
   async countImpact(state) {
