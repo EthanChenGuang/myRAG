@@ -429,3 +429,162 @@ def test_the_loader_has_no_regular_expression_on_fixture_patterns():
     source = Path(REPO_ROOT / "eval/src/rag_eval/templated_fixtures.py")
     assert source.is_file(), "rag_eval.templated_fixtures is missing"
     assert not re.search(r"\bre\.(compile|match|search|fullmatch|findall|finditer|sub|split)\b|^import re$", source.read_text(encoding="utf-8"), re.MULTILINE)
+
+
+# --- Golden items (Task 3) ---------------------------------------------------------------------------------------------------
+
+GOLDEN = INGEST / "golden-ingest.jsonl"
+SPLIT_MANIFEST = REPO_ROOT / "eval/fixtures/split-manifest.json"
+CATEGORY = "templated_collection"
+TAG_MINIMUMS = {"feature:attribute_named": 8, "feature:variant": 6, "feature:quantity": 6, "feature:boilerplate": 6}
+ID_KINDS = {"feature:attribute_named": "attribute", "feature:variant": "variant", "feature:quantity": "quantity", "feature:boilerplate": "boilerplate"}
+MIN_DEV_PER_TAG = 10
+
+
+def _golden_items() -> list:
+    from rag_eval.golden_io import load_golden
+
+    return [item for item in load_golden(GOLDEN) if item.category == CATEGORY]
+
+
+def _feature(item) -> str:
+    features = [tag for tag in item.tags if tag in TAG_MINIMUMS]
+    assert len(features) == 1, f"{item.id}: one feature tag expected, got {item.tags}"
+    return features[0]
+
+
+def _markdowns() -> dict[str, str]:
+    texts = {}
+    for spec in _templated().values():
+        result = ParseResult.model_validate_json(_read(INGEST / _entry(spec.id)["recorded"]["parse_result"]))
+        texts[f"{spec.id}.pdf"] = result.markdown
+    for name, text in _earlier_texts().items():
+        texts[name] = text
+    return texts
+
+
+def _attribute_values() -> list[str]:
+    values = []
+    for spec in _templated().values():
+        for value in _facts(spec.id)["attributes"].values():
+            values += value if isinstance(value, list) else [value]
+    return values
+
+
+def test_each_language_has_the_templated_items_of_every_feature():
+    items = _golden_items()
+    for language in LANGUAGES:
+        own = [item for item in items if item.language == language]
+        for tag, minimum in TAG_MINIMUMS.items():
+            found = len([item for item in own if _feature(item) == tag])
+            assert found >= minimum, f"{tag} in {language}: {found} items"
+    assert len(items) >= 78
+
+
+def test_templated_items_are_approved_answerable_synthetic_and_named_by_kind():
+    from rag_sidecar.contracts.golden import GoldenItem
+
+    for item in _golden_items():
+        GoldenItem.model_validate(item.model_dump(mode="json"))
+        tag = _feature(item)
+        assert re.fullmatch(rf"ingest-tpl-{ID_KINDS[tag]}-{item.language}-\d{{2}}", item.id), item.id
+        assert item.review_status == "approved" and item.provenance == "synthetic_fixture" and item.answerable, item.id
+        assert item.evidence_language is None and len(item.gold_evidence) == 1, item.id
+        span = item.gold_evidence[0]
+        assert span.document in {f"{spec_id}.pdf" for spec_id in TEMPLATED_IDS}, item.id
+        assert _spec(span.document.removesuffix(".pdf")).language == item.language, item.id
+
+
+def test_every_quote_is_verbatim_in_one_chunk_of_its_recording():
+    from rag_eval.matching import chunk_matches_span
+
+    for item in _golden_items():
+        span = item.gold_evidence[0]
+        chunks = json.loads(_read(INGEST / _entry(span.document.removesuffix(".pdf"))["recorded"]["parse_result"]))["chunks"]
+        assert any(chunk_matches_span(span.document, chunk["text"], span) for chunk in chunks), f"{item.id}: {span.quote!r}"
+
+
+def test_attribute_named_items_name_one_member_and_quote_its_own_sentence():
+    texts = _markdowns()
+    for item in _golden_items():
+        if _feature(item) != "feature:attribute_named":
+            continue
+        span = item.gold_evidence[0]
+        spec_id = span.document.removesuffix(".pdf")
+        facts = _facts(spec_id)
+        assert facts["kind"] == "family", item.id
+        assert facts["attributes"]["beta_label"] in item.question, item.id
+        named = [other for other in _templated() if _facts(other)["attributes"]["beta_label"] in item.question]
+        assert named == [spec_id], item.id
+        assert span.quote in facts["member_sentences"].values(), item.id
+        holders = [name for name, text in texts.items() if span.quote in text]
+        assert holders == [span.document], f"{item.id}: the quote is also in {[name for name in holders if name != span.document]}"
+
+
+def test_variant_items_name_one_designation_and_quote_that_variant():
+    for item in _golden_items():
+        if _feature(item) != "feature:variant":
+            continue
+        span = item.gold_evidence[0]
+        facts = _facts(span.document.removesuffix(".pdf"))
+        assert facts["kind"] == "variants", item.id
+        named = [designation for designation in facts["designations"] if designation in item.question]
+        assert len(named) == 1, item.id
+        assert span.quote in facts["variant_sentences"][named[0]], item.id
+
+
+def _reading(number: str) -> float:
+    """The value of a number with no single-separator-three-digit ambiguity: the apostrophe groups, the last of . and , is decimal."""
+    plain = number.replace("'", "")
+    marks = [char for char in plain if char in ".,"]
+    if not marks:
+        return float(plain)
+    decimal = marks[-1]
+    whole, _, fraction = plain.rpartition(decimal)
+    return float(whole.replace(".", "").replace(",", "") + "." + fraction)
+
+
+def test_quantity_items_respell_the_quantity_and_name_no_attribute_value():
+    values = _attribute_values()
+    for item in _golden_items():
+        if _feature(item) != "feature:quantity":
+            continue
+        span = item.gold_evidence[0]
+        quantity = _facts(span.document.removesuffix(".pdf"))["quantity"]
+        assert span.quote == quantity["sentence"], item.id
+        assert quantity["spelling"] not in item.question, item.id
+        asked = [match for match in NUMBER_UNIT.finditer(item.question) if match.group(2).lower() == quantity["unit"]]
+        assert len(asked) == 1, item.id
+        spelling = asked[0].group(0)
+        assert _number_style(spelling) != _number_style(quantity["spelling"]), item.id
+        assert _reading(asked[0].group(1)) == float(quantity["canonical"]), item.id
+        assert not _one_separator_three_digits(spelling), item.id
+        assert not any(value in item.question for value in values), item.id
+
+
+def test_boilerplate_items_share_words_with_a_page_line_and_quote_a_body_sentence():
+    for item in _golden_items():
+        if _feature(item) != "feature:boilerplate":
+            continue
+        span = item.gold_evidence[0]
+        spec = _spec(span.document.removesuffix(".pdf"))
+        lines = _facts(spec.id)["lines"]
+        page_words = set(_tokens(re.sub(r"\d+", "", lines["top"][0] + " " + lines["bottom"][0]).casefold()))
+        asked = set(_tokens(item.question.casefold()))
+        assert asked & page_words, item.id
+        assert asked & set(_tokens(span.quote.casefold())) - page_words, item.id
+        paragraphs = [block.text for block in spec.blocks if isinstance(block, specs.Paragraph)]
+        assert span.quote in paragraphs, item.id
+
+
+def test_templated_items_take_the_rule_split_and_each_feature_has_ten_dev_items():
+    from rag_eval.split import assign_split, load_manifest
+
+    manifest = load_manifest(SPLIT_MANIFEST)
+    dev: dict[str, int] = {tag: 0 for tag in TAG_MINIMUMS}
+    for item in _golden_items():
+        assert item.split == assign_split(item.id) == manifest.get(item.id), item.id
+        if item.split == "dev":
+            dev[_feature(item)] += 1
+    for tag, count in dev.items():
+        assert count >= MIN_DEV_PER_TAG, f"{tag}: {count} dev items"
