@@ -14,7 +14,14 @@ export type SupportedProvider =
   | 'notion'
   | 'dropbox'
   | 'box'
-  | 'confluence';
+  | 'confluence'
+  | 'sharepoint-online'
+  | 'one-drive';
+
+function integrationIdFromEnv(configured: string | undefined, providerId: string): string {
+  const trimmed = (configured || '').trim();
+  return trimmed || providerId;
+}
 
 /**
  * Provider display configuration
@@ -64,6 +71,20 @@ export const PROVIDER_CONFIG: Record<SupportedProvider, {
     description: 'Sync Confluence pages and spaces',
     fileModel: 'pages',
     integrationId: 'confluence',
+  },
+  'sharepoint-online': {
+    displayName: 'SharePoint Online',
+    icon: '/icons/connectors/default.svg',
+    description: 'Sync documents from SharePoint Online sites and libraries',
+    fileModel: 'files',
+    integrationId: integrationIdFromEnv(typeof process !== 'undefined' ? process.env.NANGO_SHAREPOINT_INTEGRATION_KEY : undefined, 'sharepoint-online'),
+  },
+  'one-drive': {
+    displayName: 'OneDrive for Business',
+    icon: '/icons/connectors/onedrive.svg',
+    description: 'Sync documents from OneDrive for Business',
+    fileModel: 'files',
+    integrationId: integrationIdFromEnv(typeof process !== 'undefined' ? process.env.NANGO_ONEDRIVE_INTEGRATION_KEY : undefined, 'one-drive'),
   },
 };
 
@@ -154,6 +175,8 @@ export interface NangoFileRecord {
   web_url?: string;
   /** Dropbox: the shared folder that holds the file (files/list_folder sharing_info.parent_shared_folder_id). */
   parent_shared_folder_id?: string;
+  /** SharePoint Online / OneDrive for Business: the drive that holds the item (Graph item ids are looked up per drive). */
+  drive_id?: string;
 }
 
 /**

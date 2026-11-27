@@ -22,9 +22,11 @@ const START = `/v1.0/drives/${DRIVE}/root/delta`;
 const read = (feed: GraphDeltaFeed, extra: Partial<GraphDeltaReadInput> = {}) =>
     feed.read({ connectionId: 'nango-conn-a', cursor: null, deadline: Date.now() + 60_000, signal: new AbortController().signal, ...extra });
 
-let graph: FakeGraph;
+let graph: FakeGraph | undefined;
 afterEach(async () => {
-    await graph?.close();
+    const running = graph;
+    graph = undefined;
+    await running?.close();
 });
 
 describe('provider registration (D-24, D-40)', () => {
@@ -315,6 +317,7 @@ describe('delta cursor store (rag_source_delta_tokens)', () => {
         const fixture = await createEmptyFixtureDatabase({ deploymentMode: 'single-tenant' });
         db = fixture.db;
         admin = createPgliteAdmin(db);
+        await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING', [fixture.fixtureUserId, 'fixture-user@example.invalid']);
         await db.query("INSERT INTO public.nango_connections (id, user_id, connection_id, provider, status) VALUES ($1, $2, 'nango-conn-a', 'sharepoint-online', 'connected')", [
             CONNECTION_ROW,
             fixture.fixtureUserId,
@@ -355,7 +358,7 @@ describe('delta cursor store (rag_source_delta_tokens)', () => {
         await commitDeltaCursor(client, {
             connectionRowId: CONNECTION_ROW,
             driveId: DRIVE,
-            page: { changes: [], nextCursor: `${START}?token=page-0009`, complete: false, fullListing: false, resynced: false },
+            page: { changes: [], nextCursor: `${START}?token=page-0009`, complete: false, fullListing: false },
         });
         expect(await rows()).toEqual([{ feed: 'graph_delta', feed_key: DRIVE, delta_link: `${START}?token=delta-0002`, next_link: `${START}?token=page-0009` }]);
         await expect(readDeltaCursor(client, { connectionRowId: CONNECTION_ROW, driveId: DRIVE })).resolves.toEqual({
