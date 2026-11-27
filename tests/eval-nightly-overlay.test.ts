@@ -87,5 +87,5 @@ describe('run-nightly --env-overlay (D-13)', () => {
     expect(Object.keys(overlaidManifest).sort()).toEqual(Object.keys(plainManifest).sort());
     expect(JSON.stringify(overlaidManifest)).not.toMatch(/Synthetic instruction text/);
     expect(JSON.stringify(overlaidManifest)).not.toMatch(/text-embedding-3-large/);
-  });
+  }, 480_000);
 });

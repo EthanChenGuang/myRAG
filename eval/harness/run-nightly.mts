@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { LiveGenerationKeyMissingError, runEval, type EvalGenerator } from './run-eval.mts';
+import { loadEnvOverlay, OverlayError, writeOverlayReport, type EnvOverlay } from './env-overlay.mts';
 import { injectionGoldenLines, planSecNightly, secZeroFailures, type InjectionReportLike, type SecNightlyLeg } from './nightly-sec.mts';
 import type { DeploymentMode } from './pglite-supabase.mts';
 
@@ -140,9 +141,32 @@ async function main(): Promise<number> {
       groundedness: { type: 'boolean', default: false },
       'sec-matrix': { type: 'boolean', default: false },
       'sec-leg': { type: 'string' },
+      'env-overlay': { type: 'string' },
     },
     strict: true,
   });
+
+  // D-13: the live layer of the Config UI setting check answers under the proposed settings (validated as in run-smoke.mts).
+  const envOverlayFlag = values['env-overlay']?.trim();
+  if (envOverlayFlag !== undefined && envOverlayFlag === '') {
+    console.error('[Eval Harness] --env-overlay must not be empty');
+    return 2;
+  }
+  if (envOverlayFlag !== undefined && (values['sec-matrix'] || values['sec-leg'] !== undefined)) {
+    console.error('[Eval Harness] --env-overlay cannot be combined with --sec-matrix or --sec-leg');
+    return 2;
+  }
+  let envOverlay: EnvOverlay | undefined;
+  if (envOverlayFlag !== undefined) {
+    try {
+      envOverlay = loadEnvOverlay(path.resolve(envOverlayFlag));
+    } catch (error) {
+      if (!(error instanceof OverlayError)) throw error;
+      console.error(error.message);
+      if (error.names.length > 0) console.error(`[Eval Harness] not allowed in --env-overlay: ${error.names.join(', ')}`);
+      return 2;
+    }
+  }
 
   const generator = values.generator;
   if (generator !== 'stub' && generator !== 'live') {
@@ -206,6 +230,13 @@ async function main(): Promise<number> {
     return 2;
   }
 
+  if (envOverlay) {
+    const reportPath = writeOverlayReport(path.resolve(values.out as string), envOverlay);
+    const skipped = envOverlay.notEvaluated.map((entry) => `${entry.name} (${entry.reason})`);
+    console.log(`[Eval Harness] env overlay: ${envOverlay.evaluated.length} applied, ${skipped.length} not evaluated; ${reportPath}`);
+    if (skipped.length > 0) console.log(`[Eval Harness] not evaluated by the fixture layer: ${skipped.join(', ')}`);
+  }
+
   let result;
   try {
     result = await runEval({
@@ -221,6 +252,7 @@ async function main(): Promise<number> {
       // D-24: the judge tier compares Faithfulness per citation strategy; groundedness is scored against the fake sidecar.
       ...(values.citations ? { citations: true } : {}),
       ...(values.groundedness ? { groundedness: true } : {}),
+      ...(envOverlay && Object.keys(envOverlay.env).length > 0 ? { envOverlay: envOverlay.env } : {}),
     });
   } catch (error) {
     if (error instanceof LiveGenerationKeyMissingError) {
