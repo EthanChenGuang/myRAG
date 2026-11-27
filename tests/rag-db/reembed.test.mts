@@ -1283,6 +1283,9 @@ describe('scripts/rag/reprocess-documents.js', () => {
   before(async () => {
     const { fixtureProcessEnv, startFakeEdge } = await import('../../eval/harness/fake-edge.mts');
     fixture = await createTwoTenantDatabase();
+    // The fixture corpus holds three Phase 4.2 version notes with a superseded version 1 (04.2-37). This suite needs a database
+    // without versions, so it keeps one row per lineage: the superseded rows go, and the reset below can set version 1 everywhere.
+    await fixture.db.query('DELETE FROM documents WHERE is_current = false');
     edge = await startFakeEdge({ db: fixture.db });
     childEnv = fixtureProcessEnv(edge.url);
   });
