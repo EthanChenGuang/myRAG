@@ -138,6 +138,10 @@ export function createFakeQdrantClient(): FakeQdrantClient {
       const col = get(name);
       for (const point of points) col.points.set(point.id, structuredClone(point));
     },
+    async getCollections() {
+      record('getCollections', null, {});
+      return { collections: [...collections.keys()].sort().map((name) => ({ name })) } as never;
+    },
     async getCollection(name) {
       record('getCollection', name, {});
       const col = get(name);
