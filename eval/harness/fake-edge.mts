@@ -35,11 +35,11 @@ export interface FakeEdge {
 const RPC_ARGUMENTS: Record<string, { vector: string; allowed: string[] }> = {
   match_document_chunks: {
     vector: 'query_embedding',
-    allowed: ['query_embedding', 'match_count', 'similarity_threshold'],
+    allowed: ['query_embedding', 'match_count', 'similarity_threshold', 'p_access_keys', 'p_access_all'],
   },
   match_documents_by_workspace: {
     vector: 'p_query_embedding',
-    allowed: ['p_query_embedding', 'p_match_count', 'p_min_similarity', 'p_org_id', 'p_user_id'],
+    allowed: ['p_query_embedding', 'p_match_count', 'p_min_similarity', 'p_org_id', 'p_user_id', 'p_access_keys', 'p_access_all'],
   },
 };
 
