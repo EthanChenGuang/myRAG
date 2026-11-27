@@ -245,7 +245,7 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
       return collector ? collector.finishMetadata() : {};
     },
     checksInput(retrievalResult?: unknown) {
-      return collector ? buildAnswerChecksInput({ collector, retrievalResult, outputGuard: guard.checks() }) : null;
+      return collector ? buildAnswerChecksInput({ collector, retrievalResult, outputGuard: guard.checks(), question: input.question }) : null;
     },
     refusedByModel() {
       return collector?.refusedByModel() ?? false;
