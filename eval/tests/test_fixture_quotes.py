@@ -16,7 +16,8 @@ NUMBER_RE = re.compile(r"\d+")
 
 @pytest.fixture(scope="module")
 def items():
-    return load_golden(GOLDEN_PATH)
+    # Plan 06.2-22 items (tag phase62) quote eval/fixtures/q62-corpus; test_golden_phase62.py checks their spans.
+    return [item for item in load_golden(GOLDEN_PATH) if "phase62" not in item.tags]
 
 
 @pytest.fixture(scope="module")
