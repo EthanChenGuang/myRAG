@@ -1,7 +1,7 @@
--- 0932: the Phase 3.2 and Phase 4.2 retrieval legs take the access filter, and rag_access_readiness() reports whether every retrieval
+-- 0933: the Phase 3.2 and Phase 4.2 retrieval legs take the access filter, and rag_access_readiness() reports whether every retrieval
 -- function can filter (Phase 4.3 plan 11; D-10, D-11, D-30, A-03, A-11, SEC-12).
--- 0930 and 0931 belong to plans 04.3-03, 04.3-10 and 04.3-12, so this plan's redefinitions live in their own file; 0932 is now the last
--- definition of the functions it redefines. Each is the newest body by name plus p_access_keys text[] and p_access_all boolean, appended
+-- 0930 (plans 04.3-03, 04.3-10), 0931 (04.3-12) and 0932 (rag_bm25_search_chunks, merge train 35) belong to other plans, so this plan's
+-- redefinitions live in their own file; 0933 is now the last definition of the functions it redefines. Each is the newest body by name plus p_access_keys text[] and p_access_all boolean, appended
 -- with defaults NULL and false, every earlier parameter keeping its name, position and default, with the guard of 0930: no keys while
 -- public.rag_access_enforced() (0922) is true raises access_scope_required (42501), an empty key array or one holding NULL raises
 -- access_keys_empty (22023). With keys and p_access_all not true, the row and its document must overlap the keys before ORDER BY and LIMIT:
@@ -46,7 +46,7 @@ BEGIN
        SELECT 1 FROM pg_catalog.pg_attribute a
        WHERE a.attrelid = 'public.rag_table_rows'::regclass AND a.attname = 'access_groups' AND NOT a.attisdropped
      ) THEN
-    RAISE EXCEPTION '0932: apply 0810, 0852, 0853 and the 0920 block through 0930 first (re-run 0921 if a derived store came later)' USING ERRCODE = '55000';
+    RAISE EXCEPTION '0933: apply 0810, 0852, 0853 and the 0920 block through 0930 first (re-run 0921 if a derived store came later)' USING ERRCODE = '55000';
   END IF;
 END
 $seam_legs_precheck$;
