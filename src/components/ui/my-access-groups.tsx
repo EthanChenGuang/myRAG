@@ -19,13 +19,15 @@ export interface MyAccessGroupsInput {
   /** The last answer for this workspace said the switch is on. */
   knownEnabled: boolean;
   singleTenant: boolean;
+  /** A Reload groups press is in flight: the unavailable line stays, its button disabled. */
+  retrying?: boolean;
 }
 
 export type MyAccessGroupsViewModel =
   | { kind: 'hidden' }
   | { kind: 'groups'; title: string; chips: AccessGroupOption[]; help: string }
   | { kind: 'text'; title: string; text: string }
-  | { kind: 'unavailable'; title: string; text: string; reload: string };
+  | { kind: 'unavailable'; title: string; text: string; reload: string; busy: boolean };
 
 const SERVER_FAILURE = /^access_groups_mine_5\d\d$/;
 
@@ -44,13 +46,15 @@ function failureShown(error: string | null, knownEnabled: boolean): boolean {
 /** The member's own groups (D-29, UI-SPEC 6.12): names only, never another group, a member or a count. */
 export function buildMyAccessGroupsView(input: MyAccessGroupsInput, language: string): MyAccessGroupsViewModel {
   const title = accessGroupText('mine.title', language);
-  if (input.status === 'error') {
-    if (!failureShown(input.error, input.knownEnabled)) return { kind: 'hidden' };
+  const retrying = input.status === 'loading' && input.retrying === true;
+  if (input.status === 'error' || retrying) {
+    if (!retrying && !failureShown(input.error, input.knownEnabled)) return { kind: 'hidden' };
     return {
       kind: 'unavailable',
       title,
       text: accessGroupText('mine.unavailable', language),
       reload: accessGroupText('action.reloadGroups', language),
+      busy: retrying,
     };
   }
   if (input.status !== 'ready' || !input.mine.enabled || input.mine.personal) return { kind: 'hidden' };
@@ -86,7 +90,7 @@ export function MyAccessGroupsView({ view, onReload, variant = 'card' }: MyAcces
       {title}
       {view.kind === 'groups' && (
         <>
-          <ul className="flex flex-wrap gap-1.5">
+          <ul aria-label={view.title} className="flex flex-wrap gap-1.5">
             {view.chips.map((group) => (
               <li
                 key={group.id}
@@ -104,7 +108,7 @@ export function MyAccessGroupsView({ view, onReload, variant = 'card' }: MyAcces
       {view.kind === 'unavailable' && (
         <div className="flex flex-col items-start gap-2">
           <p className="text-sm text-gray-600 dark:text-gray-400">{view.text}</p>
-          <Button type="button" variant="outline" size="sm" onClick={onReload}>
+          <Button type="button" variant="outline" size="sm" onClick={onReload} disabled={view.busy} aria-busy={view.busy}>
             {view.reload}
           </Button>
         </div>
@@ -128,6 +132,7 @@ export function MyAccessGroups({ organizationId, singleTenant, variant }: MyAcce
   );
   const workspaceKey = organizationId ?? 'personal';
   const [enabledSeen, setEnabledSeen] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     void load(organizationId);
@@ -140,12 +145,21 @@ export function MyAccessGroups({ organizationId, singleTenant, variant }: MyAcce
     if (answeredEnabled) setEnabledSeen(workspaceKey);
   }, [answeredEnabled, workspaceKey]);
 
+  useEffect(() => {
+    if (status !== 'loading') setRetrying(false);
+  }, [status]);
+
   const view = current
     ? buildMyAccessGroupsView(
-        { mine, status, error, knownEnabled: enabledSeen === workspaceKey, singleTenant },
+        { mine, status, error, knownEnabled: enabledSeen === workspaceKey, singleTenant, retrying },
         language,
       )
     : ({ kind: 'hidden' } as const);
 
-  return <MyAccessGroupsView view={view} onReload={() => void load(organizationId)} variant={variant} />;
+  const reload = () => {
+    setRetrying(true);
+    void load(organizationId);
+  };
+
+  return <MyAccessGroupsView view={view} onReload={reload} variant={variant} />;
 }

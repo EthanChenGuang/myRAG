@@ -83,7 +83,21 @@ describe('buildMyAccessGroupsView', () => {
       title: 'Your access groups',
       text: 'Your access groups could not be loaded. Select Reload groups.',
       reload: 'Reload groups',
+      busy: false,
     });
+  });
+
+  it('keeps the unavailable line with a busy button while Reload groups runs', () => {
+    const view = buildMyAccessGroupsView(input({ mine: ACCESS_GROUPS_OFF, status: 'loading', error: null, retrying: true }), 'en');
+    expect(view).toMatchObject({ kind: 'unavailable', busy: true });
+    const html = renderToStaticMarkup(createElement(MyAccessGroupsView, { view, onReload: () => {} }));
+    expect(html).toMatch(/<button[^>]*disabled/);
+    expect(buildMyAccessGroupsView(input({ mine: ACCESS_GROUPS_OFF, status: 'loading', error: null }), 'en').kind).toBe('hidden');
+  });
+
+  it('names the chip list with the title', () => {
+    const html = renderToStaticMarkup(createElement(MyAccessGroupsView, { view: buildMyAccessGroupsView(input(), 'en'), onReload: () => {} }));
+    expect(html).toContain('<ul aria-label="Your access groups"');
   });
 
   it('gives mine.unavailable on a network failure only when the switch was seen on', () => {
