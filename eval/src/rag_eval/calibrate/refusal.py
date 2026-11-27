@@ -625,7 +625,14 @@ class CrossComparison(BaseModel):
 
 
 FLOOR_PATH = REPO_ROOT / "eval" / "config" / "fixture-score-calibration.json"
+INGEST_FLOOR_PATH = REPO_ROOT / "eval" / "config" / "fixture-score-calibration.ingest.json"
+FLOOR_PATHS: dict[str, Path] = {"prechunked": FLOOR_PATH, "ingest": INGEST_FLOOR_PATH}
 IMAGE_FLOOR = 0.25
+
+
+def _floor_path_for(mode: str) -> Path:
+    """The committed floor file of one fixture mode; the prechunked default follows FLOOR_PATH."""
+    return FLOOR_PATH if mode == "prechunked" else FLOOR_PATHS[mode]
 
 
 class SimilarityFloorFit(BaseModel):
@@ -1296,9 +1303,10 @@ def run_refusal_calibration(
         result.thresholds_written = True
         result.thresholds_path = repo_relative(thresholds_file)
         if source == "fixture":
-            floor_file = Path(floor_path) if floor_path else FLOOR_PATH
+            mode: Literal["prechunked", "ingest"] = "ingest" if fixture_mode == "ingest" else "prechunked"
+            floor_file = Path(floor_path) if floor_path else _floor_path_for(mode)
             floor_record = FixtureScoreCalibration(
-                fixture_mode="ingest" if fixture_mode == "ingest" else "prechunked",
+                fixture_mode=mode,
                 status=floor_fit.status,
                 score_calibration={"context_threshold": floor_fit.context_threshold}
                 if floor_fit.context_threshold is not None
