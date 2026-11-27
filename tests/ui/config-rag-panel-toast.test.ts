@@ -138,6 +138,18 @@ describe('showToast aria-hidden option', () => {
   });
 });
 
+describe('showToast timing', () => {
+  it('a second toast is not hidden by the first toast’s timer', () => {
+    const { toast, timers, show } = runShowToast();
+    show('First.', 'success', { ariaHidden: true });
+    show('Second.', 'success', { ariaHidden: true });
+    for (const timer of timers.filter((t) => !t.cleared).slice(0, -1)) timer.fn();
+    expect(toast.classList.contains('hidden')).toBe(false);
+    timers[timers.length - 1]!.fn();
+    expect(toast.classList.contains('hidden')).toBe(true);
+  });
+});
+
 describe('panel wiring', () => {
   it('index.html loads panel-status.js right before rag-fetch.js, ahead of every panel', () => {
     const scripts = [...indexHtml.matchAll(/<script src="rag-panels\/([\w-]+)\.js"><\/script>/g)].map((m) => m[1]);
