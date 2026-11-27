@@ -36,6 +36,7 @@ const IDS = {
   restrictedIdChunk: '00000000-0000-4000-8000-00000000b8e3',
   restrictedInvoice: '00000000-0000-4000-8000-00000000b8d4',
   openInvoice: '00000000-0000-4000-8000-00000000b8d5',
+  restrictedVoiceChunk: '00000000-0000-4000-8000-00000000b8e4',
   restrictedParent: '00000000-0000-4000-8000-00000000b801',
   openParent: '00000000-0000-4000-8000-00000000b802',
 } as const;
@@ -44,6 +45,9 @@ const RESTRICTED_CODE = 'QX7731ZK';
 const ID_TEXT = `Catalogue entry ${RESTRICTED_CODE} names the ${MARKER_WORD} part of a neutral synthetic record.`;
 const ID_QUERY = `Catalogue entry ${RESTRICTED_CODE} names the part of a neutral synthetic record.`;
 const SUPPLIER = 'Zephyrquill Supplies';
+/** A restricted chunk the voice keyword fallback finds by its metadata name (a word of the question), not by its vector. */
+const VOICE_TEXT = `Badge note: ${MARKER_WORD} badge for the zephyrquill restricted marker record.`;
+const VOICE_METADATA = JSON.stringify({ name: 'zephyrquill restricted marker badge', image_context: `${MARKER_WORD} badge` });
 const GROUP_KEY = `g:${IDS.groupA}`;
 
 const BASE_ENV: Record<string, string> = {
@@ -189,6 +193,11 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
         `INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata${orgColumn})
          VALUES ($1, $2, $3, $4::vector, 0, '{}'::jsonb${orgValue(5)})`,
         withOrg([IDS.restrictedIdChunk, IDS.restrictedIdDoc, ID_TEXT, vec(ID_TEXT)]),
+      );
+      await db.query(
+        `INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata${orgColumn})
+         VALUES ($1, $2, $3, $4::vector, 1, $5::jsonb${orgValue(6)})`,
+        withOrg([IDS.restrictedVoiceChunk, IDS.restrictedDoc, VOICE_TEXT, vec('unrelated filler words only'), VOICE_METADATA]),
       );
       for (const invoice of [
         { id: IDS.restrictedInvoice, number: 'ZQ-RESTRICTED-1', groups: [GROUP_KEY], name: `${MARKER_WORD}-invoice.pdf` },
@@ -432,6 +441,102 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
           });
         }
       }
+    });
+
+    describe('voice, references, assembly and overview reads, labels and the fake edge (Task 3)', () => {
+      for (const pipeline of ['legacy', 'v2'] as const) {
+        test(`${pipeline}: the voice profile (keyword fallback included) returns no marker to the outsider and the marker to member-a`, async () => {
+          await withPipeline(pipeline, async () => {
+            const outsider = await retrieve(outsiderScope(), { profile: 'voice' });
+            assert.notEqual(outsider.result.status, 'error', `voice errored: ${outsider.result.reason}`);
+            assertNoLeak(outsider.result, `outsider ${pipeline} voice`);
+            if (pipeline === 'legacy') {
+              const member = await retrieve(memberScope(), { profile: 'voice' });
+              assert.ok(leakText(member.result).includes(IDS.restrictedVoiceChunk), 'the keyword fallback found the restricted badge for member-a');
+            }
+            const member = await retrieve(memberScope(), { profile: 'voice' });
+            assertHasMarker(member.result, `member-a ${pipeline} voice`);
+          });
+        });
+
+        test(`${pipeline}: a reference to the restricted file name or id resolves for the outsider exactly as an unknown one`, async () => {
+          await withPipeline(pipeline, async () => {
+            const refsOf = (mentions: string[], ids: string[]) => ({
+              documentRefs: { mentions, documentParts: ids.map((id) => ({ id, name: 'referenced part' })) },
+            });
+            const shape = (result: import('@/lib/rag').RetrievalResult) => ({
+              used: result.usedDocuments.map((doc) => doc.id).sort(),
+              explicit: result.usedDocuments.filter((doc) => doc.explicitly_referenced).length,
+              context: result.context.split('referenced part').length,
+            });
+            const restricted = await retrieve(outsiderScope(), refsOf(['quillmarrow-restricted'], [IDS.restrictedDoc]));
+            assertNoLeak(restricted.result, `outsider ${pipeline} refs`);
+            const unknown = await retrieve(outsiderScope(), refsOf(['quillmarrow-unknown'], ['00000000-0000-4000-8000-00000000b8ff']));
+            assert.deepEqual(shape(restricted.result), shape(unknown.result), 'a restricted reference differs from an unknown one');
+            const member = await retrieve(memberScope(), refsOf(['quillmarrow-restricted'], []));
+            assert.ok(
+              member.result.usedDocuments.some((doc) => doc.id === IDS.restrictedDoc && doc.explicitly_referenced),
+              `member-a lost the referenced restricted document (${pipeline})`,
+            );
+          });
+        });
+      }
+
+      test('the assembly re-read and the overview read return nothing restricted for forged ids', async () => {
+        const { fetchAssemblyRows } = await import('@/lib/rag/context/fetch-rows');
+        const { fetchOverviewDocuments } = await import('@/lib/rag/context/overview');
+        const forged = [
+          { chunk_id: IDS.restrictedChunk, document_id: IDS.restrictedDoc, content: '', similarity: 1, metadata: null },
+          { chunk_id: IDS.openChunk, document_id: IDS.openDoc, content: '', similarity: 1, metadata: null },
+        ];
+        const read = async (scope: TenantScope) => {
+          const access = accessModule.scopeAccessFilter(scope);
+          const signal = new AbortController().signal;
+          const rows = await fetchAssemblyRows(forged as never, { adminClient: recording, signal, access } as never);
+          const overview = await fetchOverviewDocuments(forged, { admin: recording, signal, access } as never);
+          return { documents: [...rows.documents.keys()].sort(), chunks: [...rows.chunkMetadata.keys()].sort(), overview: [...overview.keys()].sort() };
+        };
+        assert.deepEqual(await read(outsiderScope()), { documents: [IDS.openDoc], chunks: [IDS.openChunk], overview: [IDS.openDoc] });
+        const everything = {
+          documents: [IDS.restrictedDoc, IDS.openDoc].sort(),
+          chunks: [IDS.restrictedChunk, IDS.openChunk].sort(),
+          overview: [IDS.restrictedDoc, IDS.openDoc].sort(),
+        };
+        for (const scope of [memberScope(), adminScope(), offScope()]) assert.deepEqual(await read(scope), everything);
+      });
+
+      for (const pipeline of ['legacy', 'v2'] as const) {
+        test(`${pipeline}: accessLabels maps each used document to its labels, server-side only, and is absent while off`, async () => {
+          await withPipeline(pipeline, async () => {
+            const { result } = await retrieve(memberScope());
+            const labels = result.accessLabels;
+            assert.ok(labels instanceof Map, 'accessLabels is set when the mode is not off');
+            assert.deepEqual(labels.get(IDS.restrictedDoc), [GROUP_KEY]);
+            assert.deepEqual(labels.get(IDS.openDoc), ['all']);
+            assert.ok(!Object.keys(result).includes('accessLabels'), 'accessLabels is not enumerable');
+            assert.ok(!JSON.stringify(result).includes('accessLabels'), 'accessLabels is not serialised');
+            assert.ok(!JSON.stringify({ ...result }).includes(GROUP_KEY), 'a spread copy carries no label');
+            const off = await retrieve(offScope());
+            assert.equal(off.result.accessLabels, undefined);
+          });
+        });
+      }
+
+      test('the fake edge accepts access_groups with the overlaps operator and still rejects other operators and columns', async () => {
+        const outsiderKeys = ['all', `u:${IDS.outsider}`];
+        const docs = await recording.from('documents').select('id, access_groups').overlaps('access_groups', outsiderKeys).in('id', [IDS.restrictedDoc, IDS.openDoc]);
+        assert.equal(docs.error, null);
+        assert.deepEqual((docs.data ?? []).map((row) => row.id), [IDS.openDoc]);
+        const chunks = await recording.from('document_chunks').select('id').overlaps('access_groups', [GROUP_KEY]).in('id', [IDS.restrictedChunk, IDS.openChunk]);
+        assert.equal(chunks.error, null);
+        assert.deepEqual((chunks.data ?? []).map((row) => row.id), [IDS.restrictedChunk]);
+        const contains = await recording.from('documents').select('id').contains('access_groups', ['all']);
+        assert.ok(contains.error, 'the contains operator is rejected');
+        const bogus = await recording.from('documents').select('id').overlaps('access_groups', ['all); DROP TABLE documents; --']);
+        assert.ok(bogus.error, 'a malformed key is rejected');
+        const unknownColumn = await recording.from('documents').select('id, secret_column');
+        assert.ok(unknownColumn.error, 'an unknown column is rejected');
+      });
     });
   });
 }
