@@ -527,7 +527,7 @@ export async function seedRunLexicalStats(fixture: {
   const { loadRagConfig } = await import('@/lib/rag/config');
   const { getRagDeps } = await import('@/lib/rag/deps');
   const scoring = loadRagConfig(getRagDeps().ragEnv()).v2.lexicalScoring;
-  if (scoring.mode !== 'bm25' || scoring) return null;
+  if (scoring.mode !== 'bm25') return null;
   const { fixtureTenantKeys, seedFixtureLexicalStats } = await import('./lexical-stats.mts');
   const tenants = await seedFixtureLexicalStats(fixture.db, await fixtureTenantKeys(fixture.db));
   for (const tenant of fixture.tableSplitTenants ?? []) tenants.push(...(await seedFixtureLexicalStats(tenant.db, [tenant.tenantKey])));

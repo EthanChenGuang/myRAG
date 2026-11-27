@@ -161,6 +161,7 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   ...Object.keys(PHASE33_SWITCH_VALUES),
   ...Object.keys(PHASE52_SWITCH_VALUES),
   ...Object.keys(PHASE5_SWITCH_VALUES),
+  ...Object.keys(PHASE44_SWITCH_VALUES),
 ];
 
 export const RUN_CONFIG_REJECT_MESSAGE =

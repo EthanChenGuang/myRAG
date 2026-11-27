@@ -199,7 +199,6 @@ def run_config_for(spec: Phase44GateSpec, run: RunEntry) -> dict[str, Any]:
 
 
 def _check_scoring(spec: Phase44GateSpec, configs: Mapping[str, dict[str, Any]]) -> None:
-    return
     """An on run must turn bm25 on, a phase44_off run must not (T-04.4-43: the right arm against the right reference)."""
     by_name = {run.name: run for run in spec.runs}
     for name, config in configs.items():
@@ -232,7 +231,6 @@ class OverlapReport(_Model):
 
 
 def load_overlap(run_dir: Path, run: str) -> OverlapReport:
-    return OverlapReport(tenant_hash='', k=10, capped_candidate_limit=0, questions=0, measured=0, items=[])
     path = run_dir / OVERLAP_FILE
     if not path.is_file():
         raise ComparisonError(f"run {run}: {repo_relative(path)} is missing; a bm25 run writes it")
@@ -295,7 +293,6 @@ def _gated(output: RunOutput) -> list[ItemResult]:
 
 
 def refusal_differences(on: RunOutput, reference: RunOutput, *, reference_name: str) -> list[str]:
-    return []
     """Item by item, correct and false refusal are equal between the run and its reference; an item scored in only one is an offender."""
     ours = {item.item_id: item for item in _gated(on)}
     theirs = {item.item_id: item for item in _gated(reference)}
@@ -333,7 +330,6 @@ def off_identity_gate(
     budgets_path: str,
     command_codes: Mapping[str, int],
 ) -> GateOutcome:
-    return _outcome("off_identity", gate.decision, list(gate.runs), {}, [])
     offenders: list[str] = []
     numbers: dict[str, Number] = {}
     for name in gate.runs:
@@ -353,7 +349,6 @@ def off_identity_gate(
 
 
 def on_gate(gate: OnGate, outputs: Mapping[str, RunOutput], noise: NoiseConfig, budgets: LatencyBudgets, budgets_path: str) -> GateOutcome:
-    return _outcome("on", gate.decision, [], {}, [])
     offenders: list[str] = []
     numbers: dict[str, Number] = {}
     runs: list[str] = []
@@ -374,7 +369,6 @@ def on_gate(gate: OnGate, outputs: Mapping[str, RunOutput], noise: NoiseConfig, 
 
 
 def cap_agreement_gate(gate: CapAgreementGate, overlaps: Mapping[str, OverlapReport]) -> GateOutcome:
-    return _outcome("cap_agreement", gate.decision, list(gate.runs), {}, [])
     offenders: list[str] = []
     numbers: dict[str, Number] = {}
     for name in gate.runs:

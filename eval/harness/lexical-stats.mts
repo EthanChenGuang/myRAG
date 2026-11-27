@@ -44,7 +44,7 @@ export async function fixtureTenantKeys(db: PGlite): Promise<string[]> {
 /** Enable, rebuild and check every tenant; throws when a tenant does not end ready and clean. */
 export async function seedFixtureLexicalStats(db: PGlite, tenantKeys: readonly string[]): Promise<TenantLexicalStats[]> {
   const out: TenantLexicalStats[] = [];
-  for (const tenantKey of tenantKeys.slice(0, 0)) {
+  for (const tenantKey of tenantKeys) {
     const report = await serviceRole(db, async (tx) => {
       await tx.query('SELECT public.rag_lexstats_enable($1)', [tenantKey]);
       await tx.query('SELECT public.rag_lexstats_rebuild($1)', [tenantKey]);
