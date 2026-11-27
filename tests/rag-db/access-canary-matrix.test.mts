@@ -52,8 +52,6 @@ const BASE_ENV: Record<string, string> = {
 };
 const BALANCED = { maxResults: 25, fallbackToLowerThreshold: true, ragMode: 'balanced' as const };
 const STRICT = { maxResults: 25, fallbackToLowerThreshold: false, ragMode: 'strict' as const };
-/** The Phase 3.3 attribute resolver (1008) runs after the 0920 block; rag_access_readiness names it until a later file filters it (SEAMS). */
-const PENDING_1008 = new Set(['rag_attribute_filter_values', 'rag_attribute_documents']);
 const LEGACY_PROFILE = 'openai-3-small-1536';
 const REUPLOAD_MARKER = 'quorvelreupload';
 const PATH_ENV = {
@@ -61,6 +59,10 @@ const PATH_ENV = {
   identifier: { RAG_IDENTIFIER_INDEX: 'true', RAG_IDENTIFIER_FILTER: 'true' },
   dup_cluster: { RAG_DUP_CLUSTERS: 'true', RAG_RESULT_DIVERSITY: 'collapse' },
 } as const;
+const ATTRIBUTE_ENV = { RAG_PIPELINE: 'v2', RAG_DOC_ATTRIBUTES: 'true', RAG_ATTRIBUTE_FILTER: 'hard' } as const;
+const ATTRIBUTE_KEY = 'canary_code';
+const OPEN_ATTRIBUTE = 'quorvelopenattr';
+const attributeValue = (language: AccessLanguage): string => `quorvelattr${language}`;
 
 function vec(text: string): string {
   return `[${embedText(text).join(',')}]`;
@@ -78,39 +80,6 @@ function stable(value: unknown): unknown {
     return out;
   }
   return value;
-}
-
-type RpcRequestLike = PromiseLike<{ data: unknown; error: unknown }> & { abortSignal(signal: AbortSignal): RpcRequestLike };
-
-/**
- * The real readiness answer without the PENDING 1008 objects (and only those): any other object that cannot filter still keeps the switch
- * from turning on, so a new gap fails this suite.
- */
-function withoutPendingReadiness(client: SupabaseClient): SupabaseClient {
-  const filtered = (request: RpcRequestLike): RpcRequestLike => {
-    const pending = Promise.resolve(request).then((response) => {
-      const rows = Array.isArray(response.data) ? response.data : [response.data];
-      const row = rows[0] as { ready?: boolean; reasons?: string[]; objects?: string[] } | undefined;
-      if (!row || response.error || !Array.isArray(row.objects) || !Array.isArray(row.reasons)) return response;
-      const keep = row.objects.map((name) => !PENDING_1008.has(name));
-      const objects = row.objects.filter((_, index) => keep[index]);
-      const reasons = row.reasons.filter((_, index) => keep[index]);
-      return { ...response, data: [{ ready: objects.length === 0, reasons, objects }] };
-    });
-    return { abortSignal: (signal) => filtered(request.abortSignal(signal)), then: (a, b) => pending.then(a, b) };
-  };
-  return new Proxy(client, {
-    get(target, prop, receiver) {
-      if (prop === 'rpc') {
-        return (fn: string, args?: Record<string, unknown>, opts?: Parameters<SupabaseClient['rpc']>[2]) => {
-          const request = target.rpc(fn, args, opts) as unknown as RpcRequestLike;
-          return fn === 'rag_access_readiness' ? filtered(request) : request;
-        };
-      }
-      const value = Reflect.get(target, prop, receiver);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
 }
 
 let sharedEdge: FakeEdge | null = null;
@@ -240,7 +209,7 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
       languageModule = await import('@/lib/rag/lang/settings');
       const depsModule = await import('@/lib/rag/deps');
       const real = createClient(edge.url, processEnv.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false, autoRefreshToken: false } });
-      client = withoutPendingReadiness(real);
+      client = real;
       (await import('@/lib/rag/embeddings/registry')).resetEmbeddingProvidersForTests();
       (await import('@/lib/rag/embeddings/active-profile')).resetActiveProfileForTests();
       depsModule.resetRagDepsForTests();
@@ -263,7 +232,7 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
       await fixture?.close();
     });
 
-    test('the seed: groups, members and labels were written through the SQL functions, and only the 1008 objects are pending', async () => {
+    test('the seed: groups, members and labels were written through the SQL functions, and rag_access_readiness is ready', async () => {
       const groups = await db.query<{ key: string }>('SELECT key FROM rag_access_groups WHERE tenant_key = $1 ORDER BY key', [seed.tenantKey]);
       assert.deepEqual(groups.rows.map((row) => row.key), ['group-a', 'group-b']);
       const audit = await db.query<{ action: string }>('SELECT DISTINCT action FROM rag_access_audit WHERE tenant_key = $1 ORDER BY action', [seed.tenantKey]);
@@ -278,8 +247,8 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
         assert.ok(labels.rows.length >= 5);
         for (const row of labels.rows) assert.deepEqual(row.g, [seed.groupAKey], `${language} label`);
       }
-      const readiness = await db.query<{ objects: string[] }>('SELECT objects FROM public.rag_access_readiness()');
-      assert.deepEqual([...new Set(readiness.rows[0]!.objects)].sort(), [...PENDING_1008].sort(), 'a new object cannot filter');
+      const readiness = await db.query<{ ready: boolean; reasons: string[]; objects: string[] }>('SELECT ready, reasons, objects FROM public.rag_access_readiness()');
+      assert.deepEqual(readiness.rows[0], { ready: true, reasons: [], objects: [] }, 'an object cannot filter');
       assert.ok(restrictedMarkers(seed).length > 40);
     });
 
@@ -471,6 +440,88 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
           await setAccessSwitch(true);
         }
       });
+    });
+
+    describe('attribute resolver (1008 redefined by 1010)', () => {
+      const attributes = () => import('@/lib/rag/retrieval/attributes');
+      const lexiconValues = async (who: Identity): Promise<string[]> =>
+        (await (await attributes()).attributeLexiconFor(await scopeFor(who))).values.map((item) => item.value).sort();
+      const stageCounts = (result: RetrievalResult): Record<string, number> =>
+        (result.stages.find((stage) => stage.name === 'attribute_resolve')?.counts ?? {}) as Record<string, number>;
+
+      before(async () => {
+        await db.query(
+          `INSERT INTO public.rag_attribute_definitions (tenant_key, key, type, filterable, soft) VALUES ($1, $2, 'code', true, false)
+           ON CONFLICT (tenant_key, key) DO NOTHING`,
+          [seed.tenantKey, ATTRIBUTE_KEY],
+        );
+        for (const language of ACCESS_LANGUAGES) {
+          await db.query('UPDATE public.documents SET attributes = jsonb_build_object($2::text, $3::text) WHERE id = $1', [
+            seed.languages[language].ids.doc,
+            ATTRIBUTE_KEY,
+            attributeValue(language),
+          ]);
+        }
+        await db.query('UPDATE public.documents SET attributes = jsonb_build_object($2::text, $3::text) WHERE id = $1', [
+          ACCESS_IDS.controlDoc,
+          ATTRIBUTE_KEY,
+          OPEN_ATTRIBUTE,
+        ]);
+      });
+
+      test('value lexicon: the outsider reads only the open value, member-a and the admin also the restricted ones, with one shared cache', async () => {
+        await withEnv(ATTRIBUTE_ENV, async () => {
+          (await attributes()).resetAttributeLexiconForTests();
+          const restricted = ACCESS_LANGUAGES.map(attributeValue);
+          const all = [OPEN_ATTRIBUTE, ...restricted].sort();
+          assert.deepEqual(await lexiconValues('memberA'), all);
+          assert.deepEqual(await lexiconValues('outsider'), [OPEN_ATTRIBUTE], 'the cached member-a lexicon reached the outsider');
+          assert.deepEqual(await lexiconValues('memberB'), [OPEN_ATTRIBUTE]);
+          assert.deepEqual(await lexiconValues('admin'), all);
+          count('v2 attribute lexicon');
+        });
+      });
+
+      for (const language of ACCESS_LANGUAGES) {
+        test(`${language} explicit filter: the restricted value resolves to no document for the outsider and to its document for member-a`, async () => {
+          await withEnv(ATTRIBUTE_ENV, async () => {
+            const mod = await attributes();
+            mod.resetAttributeLexiconForTests();
+            const { ids } = seed.languages[language];
+            const explicit = { [ATTRIBUTE_KEY]: [attributeValue(language)] };
+            const outsider = await mod.resolveAttributeFilter(await scopeFor('outsider'), CONTROL_TEXT, explicit);
+            assert.deepEqual([outsider.explicitIds, outsider.explicitCappedIds, outsider.softIds], [[], null, []]);
+            const member = await mod.resolveAttributeFilter(await scopeFor('memberA'), CONTROL_TEXT, explicit);
+            assert.deepEqual(member.explicitIds, [ids.doc]);
+
+            const strict = await retrieve(await scopeFor('outsider'), {
+              query: childQuery(language),
+              options: STRICT,
+              retrievalFilters: { attributes: explicit },
+            } as Partial<import('@/lib/rag').RunRetrievalInput>);
+            assertNoLeak(strict, `${language} attribute explicit`);
+            assert.equal(strict.status, 'empty');
+            assert.equal(stageCounts(strict).explicit_ids, 0);
+            count('v2 attribute explicit');
+          });
+        });
+
+        test(`${language} automatic match: a query naming the restricted value matches nothing for the outsider; member-a gets the chunk`, async () => {
+          await withEnv(ATTRIBUTE_ENV, async () => {
+            (await attributes()).resetAttributeLexiconForTests();
+            const { ids } = seed.languages[language];
+            const query = `${childQuery(language)} ${attributeValue(language)}`;
+            const outsider = await retrieve(await scopeFor('outsider'), { query });
+            assert.notEqual(outsider.status, 'error', `attribute automatic errored: ${outsider.reason}`);
+            assertNoLeak(outsider, `${language} attribute automatic`);
+            assert.deepEqual([stageCounts(outsider).matched_keys, stageCounts(outsider).hard_ids], [0, 0]);
+            const member = await retrieve(await scopeFor('memberA'), { query });
+            assert.deepEqual([stageCounts(member).matched_keys, stageCounts(member).hard_ids], [1, 1]);
+            assert.ok(hasChunk(member, ids.chunk), `member-a lost the ${language} restricted chunk under the attribute filter`);
+            count('v2 attribute automatic');
+          });
+        });
+      }
     });
 
     describe('variants and negative controls (Task 3)', () => {

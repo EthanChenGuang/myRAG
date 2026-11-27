@@ -16,7 +16,8 @@ import {
   type AttributeOptions,
 } from '@/lib/rag/retrieval/attributes';
 import { buildMatcher, type TermEntry } from '@/lib/rag/terminology/matcher';
-import { mintScope, scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
+import { mintAccessScope } from '@/lib/rag/tenant/access-brand';
+import { mintScope, scopeKey, withAccess, type TenantScope } from '@/lib/rag/tenant/scope';
 
 const ORG_A = '00000000-0000-4000-8000-000000180001';
 const ORG_B = '00000000-0000-4000-8000-000000180002';
@@ -448,5 +449,58 @@ describe('errors', () => {
       expect(Object.keys(call.args).filter((name) => /tenant|user|org/i.test(name))).toEqual(['p_tenant_key']);
       expect(call.args.p_tenant_key).toBe(scopeKey(SCOPE_A));
     }
+  });
+});
+
+describe('access filter (quick task attribute-access, migration 1010)', () => {
+  const GROUP = 'g:00000000-0000-4000-8000-000000181001';
+  const OUTSIDER = withAccess(SCOPE_A, mintAccessScope('keys', ['all', 'u:00000000-0000-4000-8000-000000181002']));
+  const MEMBER = withAccess(SCOPE_A, mintAccessScope('keys', ['all', GROUP]));
+  const ADMIN = withAccess(SCOPE_A, mintAccessScope('admin_all', []));
+  const OFF = withAccess(SCOPE_A, mintAccessScope('off', []));
+
+  test('both rpcs carry the scope access filter the way accessRpcArgs builds it; off sends nothing new', async () => {
+    const cases: Array<[TenantScope, Record<string, unknown>]> = [
+      [OUTSIDER, { p_access_keys: ['all', 'u:00000000-0000-4000-8000-000000181002'], p_access_all: false }],
+      [MEMBER, { p_access_keys: ['all', GROUP], p_access_all: false }],
+      [ADMIN, { p_access_keys: ['all'], p_access_all: true }],
+      [OFF, {}],
+      [SCOPE_A, {}],
+    ];
+    for (const [scope, access] of cases) {
+      resetAttributeLexiconForTests();
+      const { client, calls } = standard();
+      await resolveAttributeFilter(scope, 'zeta-17', { beta_list: ['vex'] }, options(client));
+      expect(calls.map((call) => call.fn).sort()).toEqual(['rag_attribute_documents', 'rag_attribute_documents', 'rag_attribute_filter_values']);
+      for (const call of calls) {
+        const sent = Object.fromEntries(Object.entries(call.args).filter(([name]) => name.startsWith('p_access')));
+        expect(sent).toEqual(access);
+      }
+    }
+  });
+
+  test('options.access overrides the scope filter', async () => {
+    const { client, calls } = standard();
+    await resolveAttributeFilter(SCOPE_A, 'zeta-17', null, options(client, { access: { mode: 'keys', keys: ['all', GROUP], setHash: 'c'.repeat(64) } }));
+    for (const call of calls) expect(call.args.p_access_keys).toEqual(['all', GROUP]);
+  });
+
+  test('the lexicon cache is keyed by access: another key set of the same tenant loads its own lexicon', async () => {
+    const { client, calls } = fakeClient({
+      rag_attribute_filter_values: (args) => ({
+        data: Array.isArray(args.p_access_keys) && (args.p_access_keys as string[]).includes(GROUP) ? LEXICON_A : LEXICON_A.slice(0, 1),
+        error: null,
+      }),
+    });
+    const member = await attributeLexiconFor(MEMBER, options(client));
+    const outsider = await attributeLexiconFor(OUTSIDER, options(client));
+    expect(member.values.length).toBe(LEXICON_A.length);
+    expect(outsider.values.map((item) => item.value)).toEqual(['zeta-17']);
+    await attributeLexiconFor(MEMBER, options(client));
+    await attributeLexiconFor(OUTSIDER, options(client));
+    expect(calls.length).toBe(2);
+    expect(attributeLexiconSizeForTests()).toBe(2);
+    invalidateAttributeLexicon(scopeKey(SCOPE_A));
+    expect(attributeLexiconSizeForTests()).toBe(0);
   });
 });
