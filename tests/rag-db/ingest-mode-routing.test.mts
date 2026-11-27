@@ -319,7 +319,7 @@ describe('the re-recorded ingest baseline (T-03.1-104)', () => {
       .filter((item) => (item.tags ?? []).includes('phase42'))
       .map((item) => item.id);
     // Plan 05.2-29 added the partial_answer, stale_version and off_topic_context items and 12 link-injection
-    // injection_evasive items (tag link_injection) to golden.jsonl.
+    // injection_evasive items (tag link_injection) to golden.jsonl; CURRENT (the train-30 record) predates them.
     const phase52Rows = fs
       .readFileSync(path.join(ROOT, 'eval/fixtures/golden.jsonl'), 'utf8')
       .split('\n')
@@ -337,11 +337,12 @@ describe('the re-recorded ingest baseline (T-03.1-104)', () => {
     assert.equal(phase6Ids.length, 38);
     assert.equal(cachePairIds.length, 27);
     assert.equal(injectionIds.length, 18 + linkIds.length);
+    const preLinkInjectionIds = injectionIds.filter((id) => !linkIds.includes(id));
     assert.equal(tableSplitIds.length, 15);
     assert.equal(termIds.length, 18);
     assert.deepEqual(
       added,
-      [...parseIds, ...injectionIds, ...tableSplitIds, ...phase6Ids, ...cachePairIds, ...termIds, ...phase42Ids, ...phase52Ids].sort(),
+      [...parseIds, ...preLinkInjectionIds, ...tableSplitIds, ...phase6Ids, ...cachePairIds, ...termIds, ...phase42Ids].sort(),
     );
     assert.notEqual(current.corpus_sha256, previous.corpus_sha256, 'the parse fixtures are part of the ingest corpus hash');
   });
