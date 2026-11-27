@@ -1012,6 +1012,10 @@ P52_CORPUS_FILES_05_2_28 = {
 PHASE53_CORPUS_FILES = {
     f"{language}/{name}.{language}.md" for language in ("en", "it", "zh") for name in ("access-rules", "instrument-catalog")
 }
+# Plan 05.2.1-12: calc-rules and long-reference per language, added after every record these history tests compare.
+PHASE521_CORPUS_FILES = frozenset(
+    f"{language}/{name}.{language}.md" for language in ("en", "it", "zh") for name in ("calc-rules", "long-reference")
+)
 
 
 def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_path):
@@ -1041,8 +1045,9 @@ def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_p
     without_terms = tmp_path / "corpus"
     shutil.copytree(corpus, without_terms)
     # Without the term files, the Phase 4.2 files (04.2-37), the 05.2-28 Phase 5.2 documents (train 30) and the 05.3-15
-    # documents (train 31) the corpus is the one 04.1.1-10 started from.
-    for relpath in TERM_CORPUS_FILES | PHASE42_CORPUS_FILES | P52_CORPUS_FILES_05_2_28 | PHASE53_CORPUS_FILES:
+    # documents (train 31) and the 05.2.1-12 documents the corpus is the one 04.1.1-10 started from.
+    later = PHASE42_CORPUS_FILES | P52_CORPUS_FILES_05_2_28 | PHASE53_CORPUS_FILES | PHASE521_CORPUS_FILES
+    for relpath in TERM_CORPUS_FILES | later:
         (without_terms / relpath).unlink()
     assert corpus_sha256(without_terms) == PRE_TERMS_CORPUS_SHA256
     assert current.corpus_sha256 != previous.corpus_sha256 and current.golden_sha256 != previous.golden_sha256
@@ -1121,6 +1126,8 @@ def test_the_04_2_37_baselines_add_only_phase42_items_and_move_no_old_item(tmp_p
         (without_phase42 / relpath).unlink()
     # The 05.3-15 documents joined the corpus after the train-30 record.
     for relpath in PHASE53_CORPUS_FILES:
+        (without_phase42 / relpath).unlink()
+    for relpath in PHASE521_CORPUS_FILES:
         (without_phase42 / relpath).unlink()
     assert corpus_sha256(without_phase42) == PRE_PHASE42_CORPUS_SHA256
     assert current.corpus_sha256 != previous.corpus_sha256 and current.golden_sha256 != previous.golden_sha256
