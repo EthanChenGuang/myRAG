@@ -16,6 +16,7 @@ import {
   promptParts,
   splitForStreaming,
   type ContextBlock,
+  type FakeCitationGeneratorOptions,
   type FakeLanguageModelFactory,
 } from './fake-citation-generator.mts';
 import { hanChars, latinTokens } from './fake-groundedness.mts';
@@ -315,6 +316,8 @@ export interface FakeAnswerModelsOptions {
   /** The golden items of the run; a fake finds an item's structure by its question. */
   items: readonly GoldenItem[];
   seed?: string;
+  /** Options of the fake citation generator that answers every other id (the answers-on smoke passes its refusal options). */
+  citation?: FakeCitationGeneratorOptions;
 }
 
 /** Returns the factory the harness installs with setEvalLanguageModelFactory; non-Phase-5.2 ids get the fake citation generator. */
@@ -325,7 +328,7 @@ export function installFakeAnswerModels(options: FakeAnswerModelsOptions): FakeL
     const key = item.question.trim();
     if (!byQuestion.has(key)) byQuestion.set(key, item);
   }
-  const citation = installFakeCitationGenerator(seed);
+  const citation = installFakeCitationGenerator(seed, options.citation);
   const known = new Set<string>(FAKE_ANSWER_MODEL_IDS);
 
   const script = (modelId: FakeAnswerModelId, callOptions: LanguageModelV3CallOptions): Scripted => {
