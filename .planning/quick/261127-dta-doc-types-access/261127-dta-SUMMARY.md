@@ -13,7 +13,7 @@ documents outside the caller's access groups. Metadata only, but a leak once acc
 
 ## Changes
 - `supabase/migrations/0986_tenant_doc_types_access.sql` (new). Number checked against every origin branch (0982–0985 and 1010 taken;
-  0986 the next free number after 0981), reserved and pushed first (commit 90ab7c4 "claim migration 0986").
+  0986 the next free number after 0981), reserved and pushed first (commit 29f7d86a7).
   - Drops every overload of `rag_tenant_doc_types` by catalog lookup (the 0981 signature `(text)`), then creates exactly one:
     `(p_tenant_key text, p_access_keys text[] DEFAULT NULL, p_access_all boolean DEFAULT false)`.
   - Guard as 0933/1010, right after `rag_assert_tenant_key`: no keys while `rag_access_enforced()` → `access_scope_required` (42501);
