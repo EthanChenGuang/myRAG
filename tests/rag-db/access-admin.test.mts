@@ -342,3 +342,233 @@ async function assertGrants(db: PGlite, names: string[]): Promise<void> {
     assert.deepEqual(row, { sig: row.sig, anon: false, auth: false, svc: true, pub: false, path: true });
   }
 }
+
+interface Listed {
+  id: string;
+  key: string;
+  name: string;
+  source: string;
+  member_count: number;
+  document_count: number;
+  cursor: string;
+}
+
+interface Person {
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  already_member?: boolean;
+}
+
+interface Mine {
+  is_admin: boolean;
+  own_groups: { id: string; name: string }[];
+  assignable_groups: { id: string; name: string }[];
+}
+
+for (const mode of ['single-tenant', 'multi-tenant'] as const) {
+  const multi = mode === 'multi-tenant';
+
+  describe(`access group lists, members, candidates and my groups (${mode})`, () => {
+    let fx: Fixture;
+    let db: PGlite;
+    const groups: Record<string, string> = {};
+    const BULK = Array.from({ length: 22 }, (_, n) => id('9245', n + 1));
+
+    const call = <T extends Row>(sql: string, params: unknown[]): Promise<T[]> => service(db, async () => (await db.query<T>(sql, params)).rows);
+
+    const list = async (cursor: string | null, limit: number | null, tenantKey = fx.tenantKey): Promise<Listed[]> => {
+      await assertFunction(db, 'rag_access_groups_list');
+      return call<Listed & Row>(
+        `SELECT id::text AS id, key, name, source, member_count::int AS member_count, document_count::int AS document_count, cursor
+         FROM public.rag_access_groups_list($1, $2, $3)`,
+        [tenantKey, cursor, limit],
+      );
+    };
+
+    const members = async (groupId: string, tenantKey = fx.tenantKey): Promise<Person[]> => {
+      await assertFunction(db, 'rag_access_group_members_list');
+      return call<Person & Row>(
+        'SELECT user_id::text AS user_id, display_name, email FROM public.rag_access_group_members_list($1, $2)',
+        [tenantKey, groupId],
+      );
+    };
+
+    const candidates = async (groupId: string, query: string, limit: number | null = null, tenantKey = fx.tenantKey): Promise<Person[]> => {
+      await assertFunction(db, 'rag_access_member_candidates');
+      return call<Person & Row>(
+        'SELECT user_id::text AS user_id, display_name, email, already_member FROM public.rag_access_member_candidates($1, $2, $3, $4)',
+        [tenantKey, groupId, query, limit],
+      );
+    };
+
+    const mine = async (userId: string, tenantKey = fx.tenantKey): Promise<Mine> => {
+      await assertFunction(db, 'rag_access_my_groups');
+      const rows = await call<Mine & Row>('SELECT is_admin, own_groups, assignable_groups FROM public.rag_access_my_groups($1, $2)', [tenantKey, userId]);
+      assert.equal(rows.length, 1, 'one row');
+      return rows[0]!;
+    };
+
+    before(async () => {
+      fx = await build(mode);
+      db = fx.db;
+      await db.query('ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS raw_user_meta_data jsonb');
+      await db.query(`UPDATE auth.users SET raw_user_meta_data = '{"full_name": "Alpha Person"}'::jsonb WHERE id = $1`, [MEMBER_A]);
+      for (const [n, user] of BULK.entries()) {
+        await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2)', [user, `bulk-person-${n}@example.invalid`]);
+        if (multi) await db.query("INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'member')", [ORG, user]);
+      }
+      for (const [key, name] of [['group-c', 'Group gamma'], ['group-a', 'Group alpha'], ['group-b', 'Group beta']] as const) {
+        const row = await call<{ id: string }>('SELECT id::text AS id FROM public.rag_access_group_create($1, $2, $3, $4)', [fx.tenantKey, key, name, ADMIN]);
+        groups[key] = row[0]!.id;
+      }
+      await call('SELECT * FROM public.rag_access_member_add($1, $2, $3, $4)', [fx.tenantKey, groups['group-a'], MEMBER_A, ADMIN]);
+      await call('SELECT * FROM public.rag_access_member_add($1, $2, $3, $4)', [fx.tenantKey, groups['group-a'], MEMBER_B, ADMIN]);
+      await call('SELECT * FROM public.rag_access_member_add($1, $2, $3, $4)', [fx.tenantKey, groups['group-b'], MEMBER_B, ADMIN]);
+      await insertDoc(db, multi, { id: DOC.oneV1, text: 'An older neutral synthetic version.', groups: [`g:${groups['group-a']}`] });
+      await insertDoc(db, multi, { id: DOC.oneV2, text: 'A newer neutral synthetic version.', groups: [`g:${groups['group-a']}`], lineage: DOC.oneV1, version: 2 });
+      await supersede(db, DOC.oneV1, DOC.oneV2);
+      await insertDoc(db, multi, { id: DOC.two, text: 'A neutral synthetic record for two groups.', groups: [`g:${groups['group-a']}`, `g:${groups['group-b']}`].sort() });
+    });
+
+    after(async () => {
+      await db?.close();
+    });
+
+    test('rename keeps the key and every label', async () => {
+      await assertFunction(db, 'rag_access_group_rename');
+      const renamed = await call<Row>('SELECT id::text AS id, key, name FROM public.rag_access_group_rename($1, $2, $3, $4)', [
+        fx.tenantKey,
+        groups['group-a'],
+        ' Group alpha renamed ',
+        ADMIN,
+      ]);
+      assert.deepEqual(renamed, [{ id: groups['group-a'], key: 'group-a', name: 'Group alpha renamed' }]);
+      const label = await db.query<{ g: string[] }>('SELECT access_groups AS g FROM documents WHERE id = $1', [DOC.oneV2]);
+      assert.deepEqual(label.rows[0]!.g, [`g:${groups['group-a']}`], 'label unchanged');
+      await rejects(
+        () => call('SELECT * FROM public.rag_access_group_rename($1, $2, $3, $4)', [fx.tenantKey, id('9249', 9), 'Name', ADMIN]),
+        /^not_found/,
+        'unknown group',
+      );
+      await rejects(
+        () => call('SELECT * FROM public.rag_access_group_rename($1, $2, $3, $4)', [fx.tenantKey, groups['group-a'], '', ADMIN]),
+        /^invalid_name/,
+        'blank name',
+      );
+      if (multi) {
+        await rejects(
+          () => call('SELECT * FROM public.rag_access_group_rename($1, $2, $3, $4)', [fx.tenantKey, fx.otherGroup, 'Name', ADMIN]),
+          /^not_found/,
+          'group of another organization',
+        );
+      }
+      const audit = await db.query<Row>("SELECT group_id::text AS group_id FROM rag_access_audit WHERE action = 'group_rename'");
+      assert.deepEqual(audit.rows, [{ group_id: groups['group-a'] }], 'one group_rename row');
+    });
+
+    test('the list pages by name with member and current-document counts', async () => {
+      const all = await list(null, null);
+      assert.deepEqual(
+        all.map((g) => [g.key, g.member_count, g.document_count]),
+        [
+          ['group-a', 2, 2],
+          ['group-b', 1, 1],
+          ['group-c', 0, 0],
+        ],
+        'ordered by name; superseded versions do not count',
+      );
+      const first = await list(null, 2);
+      assert.deepEqual(first.map((g) => g.key), ['group-a', 'group-b']);
+      const second = await list(first[1]!.cursor, 2);
+      assert.deepEqual(second.map((g) => g.key), ['group-c']);
+      await rejects(() => list('not-a-cursor', 2), /^invalid_cursor/, 'bad cursor');
+      if (multi) {
+        const other = await list(null, null, `o:${OTHER_ORG}`);
+        assert.deepEqual(other.map((g) => g.id), [fx.otherGroup], 'another organization lists only its own group');
+        assert.deepEqual(await list(null, null, `u:${MEMBER_A}`), [], 'a personal tenant has no groups');
+      }
+    });
+
+    test('members list names and addresses of the group inside the tenant', async () => {
+      const rows = await members(groups['group-a']!);
+      assert.deepEqual(
+        rows.map((r) => [r.user_id, r.display_name, r.email]),
+        [
+          [MEMBER_A, 'Alpha Person', 'member-alpha@example.invalid'],
+          [MEMBER_B, 'member-beta@example.invalid', 'member-beta@example.invalid'],
+        ],
+      );
+      if (multi) await rejects(() => members(fx.otherGroup!), /^not_found/, 'group of another organization');
+    });
+
+    test('candidates need two characters, stay inside the tenant, are capped at 20 and flag members', async () => {
+      assert.deepEqual(await candidates(groups['group-a']!, ' a '), [], 'one character');
+      const alpha = await candidates(groups['group-a']!, 'alpha');
+      const ids = alpha.map((r) => r.user_id).sort();
+      if (multi) {
+        assert.deepEqual(ids, [MEMBER_A], 'only members of the organization');
+      } else {
+        assert.deepEqual(ids, [MEMBER_A, OUTSIDER, OTHER_USER].sort(), 'every confirmed user of the deployment');
+      }
+      assert.equal(alpha.find((r) => r.user_id === MEMBER_A)?.already_member, true, 'already in the group');
+      const beta = await candidates(groups['group-c']!, 'BETA');
+      assert.deepEqual(beta.map((r) => [r.user_id, r.already_member]), [[MEMBER_B, false]], 'case-insensitive, not in group-c');
+      const bulk = await candidates(groups['group-a']!, 'bulk-person', 100);
+      assert.equal(bulk.length, 20, 'capped at 20');
+      assert.deepEqual(await candidates(groups['group-a']!, '%%'), [], 'wildcards are escaped');
+      assert.deepEqual(await candidates(groups['group-a']!, '__'), [], 'underscores are escaped');
+      if (multi) {
+        await rejects(() => candidates(fx.otherGroup!, 'alpha'), /^not_found/, 'group of another organization');
+        const theirs = await candidates(fx.otherGroup!, 'alpha', null, `o:${OTHER_ORG}`);
+        assert.deepEqual(theirs.map((r) => r.user_id).sort(), [OUTSIDER, OTHER_USER].sort(), 'the other organization sees its own people');
+      }
+    });
+
+    test('remove writes member_remove; a non-member answers not_found', async () => {
+      await assertFunction(db, 'rag_access_member_remove');
+      await call('SELECT * FROM public.rag_access_member_remove($1, $2, $3, $4)', [fx.tenantKey, groups['group-a'], MEMBER_B, ADMIN]);
+      assert.deepEqual((await members(groups['group-a']!)).map((r) => r.user_id), [MEMBER_A]);
+      await rejects(
+        () => call('SELECT * FROM public.rag_access_member_remove($1, $2, $3, $4)', [fx.tenantKey, groups['group-a'], MEMBER_B, ADMIN]),
+        /^not_found/,
+        'not a member',
+      );
+      const audit = await db.query<Row>("SELECT group_id::text AS group_id, before_groups FROM rag_access_audit WHERE action = 'member_remove'");
+      assert.deepEqual(audit.rows, [{ group_id: groups['group-a'], before_groups: [`u:${MEMBER_B}`] }]);
+    });
+
+    test('my groups: own and assignable groups only, every group for an admin, nothing for an outsider', async () => {
+      const member = await mine(MEMBER_A);
+      assert.equal(member.is_admin, false);
+      assert.deepEqual(member.own_groups, [{ id: groups['group-a'], name: 'Group alpha renamed' }]);
+      assert.deepEqual(member.assignable_groups, [{ id: groups['group-a'], name: 'Group alpha renamed' }]);
+      const admin = await mine(ADMIN);
+      assert.equal(admin.is_admin, true);
+      assert.deepEqual(admin.own_groups, []);
+      assert.deepEqual(admin.assignable_groups.map((g) => g.id), [groups['group-a'], groups['group-b'], groups['group-c']]);
+      const outsider = await mine(OUTSIDER);
+      assert.deepEqual(outsider, { is_admin: false, own_groups: [], assignable_groups: [] }, 'nothing about any group');
+      if (multi) {
+        const there = await mine(OUTSIDER, `o:${OTHER_ORG}`);
+        assert.deepEqual(there.own_groups, [{ id: fx.otherGroup, name: 'Other group' }], 'own groups of the other organization');
+      }
+    });
+
+    test('the task 2 functions are service_role only with an empty search_path', async () => {
+      await assertGrants(db, [
+        'rag_access_group_rename',
+        'rag_access_groups_list',
+        'rag_access_group_members_list',
+        'rag_access_member_remove',
+        'rag_access_member_candidates',
+        'rag_access_my_groups',
+      ]);
+      const definers = await db.query<{ proname: string }>(
+        "SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname LIKE 'rag_access_%' AND p.prosecdef AND p.proname = ANY($1::text[]) ORDER BY 1",
+        [['rag_access_group_members_list', 'rag_access_member_candidates', 'rag_access_my_groups', 'rag_access_groups_list', 'rag_access_group_rename', 'rag_access_member_remove']],
+      );
+      assert.deepEqual(definers.rows.map((r) => r.proname), ['rag_access_group_members_list', 'rag_access_member_candidates'], 'only the auth.users readers are DEFINER');
+    });
+  });
+}
