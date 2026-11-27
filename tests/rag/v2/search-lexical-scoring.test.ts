@@ -216,7 +216,7 @@ describe('v2 startup lexical scoring line', () => {
     const lines = warn.mock.calls.map((call) => String(call[0])).filter((line) => line.includes('RAG_LEXICAL_SCORING=bm25'));
     expect(lines).toEqual(['[RAG Config] RAG_LEXICAL_SCORING=bm25: tenants with ready lexical statistics: 3; any other tenant is served by ts_rank_cd until npm run rag:lexstats rebuilds it']);
     expect(tables).toEqual(['rag_lexical_stats_state']);
-    expect(lines.join('')).not.toMatch(/[su]:/);
+    expect(lines.join('')).not.toMatch(/\b[su]:[0-9a-z-]/);
   });
 
   it('bm25 with an unreadable count says unknown', async () => {

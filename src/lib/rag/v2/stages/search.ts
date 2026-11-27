@@ -1,6 +1,14 @@
 import type { RpcClient } from '../../backend/supabase-rpc';
 import { backendForRequest, getRetrievalBackend } from '../../backend/registry';
-import type { BackendLegs, RankedHit, RetrievalFilters, VersionScope } from '../../backend/types';
+import type {
+  BackendLegs,
+  LexicalScoringOutcome,
+  LexicalScoringRequest,
+  RankedHit,
+  RetrievalBackend,
+  RetrievalFilters,
+  VersionScope,
+} from '../../backend/types';
 import type { AssemblyDocumentRow, TableRowAttachment } from '../../context/assemble';
 import { fetchAssemblyRows } from '../../context/fetch-rows';
 import type { RagConfig, StageName } from '../../config';
@@ -259,8 +267,34 @@ export const LEXICAL_SCORING_BM25 = 'lexical_scoring_bm25';
 export const LEXICAL_STATS_UNAVAILABLE = 'lexical_stats_unavailable';
 export const LEXICAL_BM25_FAILED = 'lexical_bm25_failed';
 
-export function lexicalScoringArg(_config: RagConfig): Record<string, never> {
-  return {};
+/** D-28: the request field every backend.search call of a request carries while bm25 is the effective mode; empty for ts_rank_cd. */
+export function lexicalScoringArg(config: RagConfig): { lexicalScoring?: LexicalScoringRequest } {
+  const scoring = config.v2.lexicalScoring;
+  return scoring.mode === 'bm25' ? { lexicalScoring: { mode: 'bm25', k1: scoring.k1, b: scoring.b } } : {};
+}
+
+/**
+ * The backend as seen by every leg of one request under bm25: each search request gains lexicalScoring (k1 and b from server config
+ * only) and the outcome each call reports is collected. searchTranslations and every other member are the backend's own (D-21).
+ */
+function withLexicalScoring(backend: RetrievalBackend, scoring: LexicalScoringRequest, outcomes: LexicalScoringOutcome[]): RetrievalBackend {
+  const wrapped = Object.create(backend) as RetrievalBackend;
+  Object.defineProperty(wrapped, 'search', {
+    value: async (req: Parameters<RetrievalBackend['search']>[0]) => {
+      const legs = await backend.search({ ...req, lexicalScoring: scoring });
+      if (legs.meta?.lexicalScoring) outcomes.push(legs.meta.lexicalScoring);
+      return legs;
+    },
+  });
+  return wrapped;
+}
+
+/** D-40: one code per request, the worst outcome of its calls; none when no call had a lexical leg to serve. */
+function lexicalScoringCode(outcomes: readonly LexicalScoringOutcome[]): string | undefined {
+  if (outcomes.includes('bm25_failed')) return LEXICAL_BM25_FAILED;
+  if (outcomes.includes('stats_unavailable')) return LEXICAL_STATS_UNAVAILABLE;
+  if (outcomes.includes('bm25')) return LEXICAL_SCORING_BM25;
+  return undefined;
 }
 
 function joinDetail(parts: readonly (string | undefined)[]): string | undefined {
@@ -503,6 +537,9 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const softVariantIndex = standaloneVariantIndex(variants);
   const fallbackFilters = attributes?.fallbackFilters ?? null;
   const attributeActive = attributes !== null && (attributes.softIds.length > 0 || fallbackFilters !== null);
+  const scoring = lexicalScoringArg(config).lexicalScoring;
+  const scoringOutcomes: LexicalScoringOutcome[] = [];
+  const scoringCode = (): string | undefined => (scoring ? lexicalScoringCode(scoringOutcomes) : undefined);
   type SoftOutcome = { legs: BackendLegs | null; failed: boolean };
 
   // D-31: with found identifiers every leg is first filtered to chunks carrying one; an empty filtered search reruns once without it.
@@ -512,7 +549,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       historyScope || identifiersNorm
         ? backendForRequest({ ...(historyScope ? { versionScope: historyScope } : {}), ...identifierArg })
         : { backend: getRetrievalBackend() };
-    const backend = route.backend;
+    const backend = scoring ? withLexicalScoring(route.backend, scoring, scoringOutcomes) : route.backend;
     const versionCodes = [
       versions.ignored ? VERSIONS_IGNORED : undefined,
       historyScope ? SUPERSEDED_DENSE_UNAVAILABLE : undefined,
@@ -823,6 +860,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           searched.lexicalDetail,
           ...attributeCodes(searched),
           ...versionCodes,
+          scoringCode(),
         ])!,
         counts: searchCounts(searched),
         candidatesOut: searched.denseTotal + searched.lexicalTotal,
@@ -838,12 +876,12 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
             candidatesOut: (value) => value.denseTotal + value.lexicalTotal,
             counts: searchCounts,
             ...(ctx.searchDelegate ? { failureDetail: delegateFailureDetail } : {}),
-            ...(bindings || translations || hasVersionCodes || dictionaryDetailOn || attributeActive
+            ...(bindings || translations || hasVersionCodes || dictionaryDetailOn || attributeActive || scoring
               ? {
                   // D-19, D-30: a dropped binding or translation leg degrades the stage; the original legs and the answer continue.
                   // D-12: a backend that cannot serve the version scope is replaced by pgvector and degrades the stage too.
                   status: (value) => (extraFailed(value) || versionDegraded ? 'degraded' : 'ok'),
-                  detail: (value) => joinDetail([extraDetail(value), ...versionCodes]),
+                  detail: (value) => joinDetail([extraDetail(value), ...versionCodes, scoringCode()]),
                 }
               : {}),
           },
