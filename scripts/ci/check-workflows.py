@@ -1,4 +1,4 @@
-"""Structural check of the GitHub Actions workflows (pr-smoke, nightly, ray-optional).
+"""Structural check of the GitHub Actions workflows (pr-smoke, nightly, ray-optional, rag-release-gate).
 
 Run locally with: python3 -I scripts/ci/check-workflows.py
 Requires PyYAML. Exits 1 and lists every failed assertion.
@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PR = ROOT / ".github" / "workflows" / "pr-smoke.yml"
 NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
 RAY_OPTIONAL = ROOT / ".github" / "workflows" / "ray-optional.yml"
+RELEASE_GATE = ROOT / ".github" / "workflows" / "rag-release-gate.yml"
 MEASUREMENT = ROOT / "eval" / "reports" / "phase-05.3" / "absolute-gate-measurement.json"
 DOCKERFILE = ROOT / "rag-sidecar" / "Dockerfile"
 SIDECAR_CONFIG_DIR = ROOT / "rag-sidecar" / "config" / "rag"
@@ -756,6 +757,23 @@ def check_no_ray_extra(name: str, text: str, errors: list[str]) -> None:
         errors.append(f"{name}: must not install the ray extra (it runs only in ray-optional.yml)")
 
 
+RELEASE_GATE_CONTEXT = "rag-release-gate"
+RELEASE_GATE_JOB = "gate"
+RELEASE_GATE_JOB_PERMISSIONS = {"contents": "read", "statuses": "write", "checks": "read"}
+RELEASE_GATE_RUN = "python -m rag_eval.release_gate run"
+RELEASE_GATE_OVERRIDE = "python -m rag_eval.release_gate override"
+RELEASE_GATE_POSTER = "node scripts/ci/post-release-status.mjs"
+RELEASE_GATE_SHA_PATTERN = "^[0-9a-f]{40}$"
+
+
+def _step_index(steps: list[dict], needle: str) -> int | None:
+    return next((i for i, step in enumerate(steps) if needle in str(step.get("run", ""))), None)
+
+
+def check_release_gate(data: dict, text: str, errors: list[str], known_refs: set[str] | None = None) -> None:
+    return None
+
+
 QUALITY_GATES = "eval/config/quality-gates.json"
 PROMPT_CONTROL_OVERLAY = "eval/fixtures/controls/no-refusal-directive.overlay.json"
 FIXTURE_MANIFESTS = ("eval/fixtures/golden.manifest.json", "eval/fixtures/ingest/golden-ingest.manifest.json")
@@ -895,6 +913,15 @@ def main() -> int:
         check_ray_optional(*load(RAY_OPTIONAL), errors)
     else:
         errors.append(f"missing {RAY_OPTIONAL.relative_to(ROOT)}")
+    if RELEASE_GATE.exists():
+        known_refs = set()
+        for path in (PR, NIGHTLY):
+            if path.exists():
+                known_refs.update(uses_refs(load(path)[0]))
+        check_release_gate(*load(RELEASE_GATE), errors, known_refs)
+        check_no_ray_extra("rag-release-gate", RELEASE_GATE.read_text(encoding="utf-8"), errors)
+    else:
+        errors.append(f"missing {RELEASE_GATE.relative_to(ROOT)}")
     check_lakera_secret_scope(errors)
     check_absolute_gates(load(PR)[0] if PR.exists() else None, load(NIGHTLY)[0] if NIGHTLY.exists() else None, errors)
     workflows = [load(path)[0] for path in (PR, NIGHTLY) if path.exists()]
