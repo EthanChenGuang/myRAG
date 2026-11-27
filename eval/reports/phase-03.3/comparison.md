@@ -200,7 +200,7 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 | language_category:zh:injection_evasive | 1.0000 | 1.0000 | 6 |
 | overall | 1.0000 | 1.0000 | 30 |
 
-Recall@5 0.8969, Recall@10 0.9118, MRR 0.7761, correct refusal 0.9828, false refusal 0.0344, invalid citation rate 0.0000, citation coverage 0.8590.
+Recall@5 0.8969, Recall@10 0.9118, MRR 0.8262, correct refusal 0.9828, false refusal 0.0344, invalid citation rate 0.0000, citation coverage 0.8590.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -324,7 +324,7 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 | language_category:zh:injection_evasive | 1.0000 | 1.0000 | 6 |
 | overall | 1.0000 | 1.0000 | 30 |
 
-Recall@5 0.8282, Recall@10 0.8499, MRR 0.7275, correct refusal 0.9828, false refusal 0.0344, invalid citation rate 0.0000, citation coverage 0.8590.
+Recall@5 0.8454, Recall@10 0.8809, MRR 0.7406, correct refusal 0.9828, false refusal 0.0344, invalid citation rate 0.0000, citation coverage 0.8590.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -634,7 +634,7 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 | language_category:zh:injection_evasive | 1.0000 | 1.0000 | 6 |
 | overall | 1.0000 | 1.0000 | 30 |
 
-Recall@5 0.8419, Recall@10 0.8740, MRR 0.7584, correct refusal 0.9828, false refusal 0.0309, invalid citation rate 0.0000, citation coverage 0.8593.
+Recall@5 0.8454, Recall@10 0.8740, MRR 0.7642, correct refusal 0.9828, false refusal 0.0309, invalid citation rate 0.0000, citation coverage 0.8593.
 
 | Check | Result | Detail |
 |---|---|---|

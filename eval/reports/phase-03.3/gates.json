@@ -37,9 +37,9 @@
       "passed": true,
       "reason": null,
       "measures": {
-        "share": 0.0026333113890717576,
+        "share": 0.0026166593981683385,
         "control_share": 0.25041625041625043,
-        "chunks": 237.0,
+        "chunks": 238.0,
         "control_chunks": 174.0
       },
       "offenders": [],
@@ -80,22 +80,14 @@
       "requirements": [
         "TPL-01"
       ],
-      "passed": false,
+      "passed": true,
       "reason": null,
       "measures": {
         "dev_items": 13.0,
         "defined": 13.0,
-        "variant_correct": 0.46153846153846156
+        "variant_correct": 1.0
       },
-      "offenders": [
-        "ingest-tpl-variant-en-04",
-        "ingest-tpl-variant-it-04",
-        "ingest-tpl-variant-it-05",
-        "ingest-tpl-variant-it-06",
-        "ingest-tpl-variant-zh-01",
-        "ingest-tpl-variant-zh-02",
-        "ingest-tpl-variant-zh-03"
-      ],
+      "offenders": [],
       "alignment": [],
       "detail": []
     },
@@ -108,18 +100,14 @@
       "requirements": [
         "TPL-07"
       ],
-      "passed": false,
+      "passed": true,
       "reason": null,
       "measures": {
         "dev_items": 16.0,
         "defined": 16.0,
-        "quantity_matched": 0.8125
+        "quantity_matched": 1.0
       },
-      "offenders": [
-        "ingest-tpl-quantity-en-02",
-        "ingest-tpl-quantity-it-02",
-        "ingest-tpl-quantity-zh-02"
-      ],
+      "offenders": [],
       "alignment": [],
       "detail": []
     },
@@ -510,9 +498,9 @@
       "run": "tpl-only-section-rules-ingest",
       "reference": "tpl-v2-off-ingest",
       "measures": {
-        "named_document_recall": 1.0,
-        "wrong_document_at_1": 0.3888888888888889,
-        "variant_accuracy": 0.6153846153846154,
+        "named_document_recall": 0.7222222222222222,
+        "wrong_document_at_1": 0.6111111111111112,
+        "variant_accuracy": 0.6923076923076923,
         "quantity_match_rate": 0.125,
         "attribute_filter_fallback_rate": null,
         "delta:category:ambiguous:recall_at_5": 0.0,
@@ -584,24 +572,24 @@
         "delta:category:table_split:recall_at_5": 0.0,
         "delta:category:table_split:recall_at_10": 0.0,
         "delta:category:table_split:mrr": 0.0,
-        "delta:category:templated_collection:recall_at_5": 0.0,
-        "delta:category:templated_collection:recall_at_10": -0.10344827586206895,
-        "delta:category:templated_collection:mrr": 0.0011494252873562871,
+        "delta:category:templated_collection:recall_at_5": 0.08620689655172409,
+        "delta:category:templated_collection:recall_at_10": 0.051724137931034475,
+        "delta:category:templated_collection:mrr": 0.0666871921182266,
         "delta:category:typo:recall_at_5": 0.0,
         "delta:category:typo:recall_at_10": 0.0,
         "delta:category:typo:mrr": 0.0,
-        "delta:language:en:recall_at_5": -0.009009009009009028,
-        "delta:language:en:recall_at_10": 0.0,
-        "delta:language:en:mrr": -0.002466752466752542,
-        "delta:language:it:recall_at_5": 0.0,
-        "delta:language:it:recall_at_10": -0.021739130434782705,
-        "delta:language:it:mrr": -0.006974637681159468,
-        "delta:language:zh:recall_at_5": 0.011363636363636354,
-        "delta:language:zh:recall_at_10": -0.045454545454545525,
-        "delta:language:zh:mrr": 0.00547889610389618,
-        "delta:overall:recall_at_5": 0.0,
-        "delta:overall:recall_at_10": -0.020618556701030966,
-        "delta:overall:mrr": -0.0014891179839633395
+        "delta:language:en:recall_at_5": 0.0,
+        "delta:language:en:recall_at_10": 0.009009009009009028,
+        "delta:language:en:mrr": 0.0012870012870012104,
+        "delta:language:it:recall_at_5": 0.03260869565217395,
+        "delta:language:it:recall_at_10": 0.021739130434782594,
+        "delta:language:it:mrr": 0.011050724637681197,
+        "delta:language:zh:recall_at_5": 0.022727272727272707,
+        "delta:language:zh:recall_at_10": 0.0,
+        "delta:language:zh:mrr": 0.025094696969696906,
+        "delta:overall:recall_at_5": 0.01718213058419238,
+        "delta:overall:recall_at_10": 0.010309278350515427,
+        "delta:overall:mrr": 0.011573392243495295
       },
       "detail": [],
       "alignment": []
@@ -1493,7 +1481,7 @@
         "named_document_recall": 0.8333333333333334,
         "wrong_document_at_1": 0.5555555555555556,
         "variant_accuracy": 0.6153846153846154,
-        "quantity_match_rate": 0.8125,
+        "quantity_match_rate": 1.0,
         "attribute_filter_fallback_rate": null,
         "delta:category:ambiguous:recall_at_5": 0.0,
         "delta:category:ambiguous:recall_at_10": 0.0,
@@ -1564,24 +1552,24 @@
         "delta:category:table_split:recall_at_5": 0.0,
         "delta:category:table_split:recall_at_10": 0.0,
         "delta:category:table_split:mrr": 0.0,
-        "delta:category:templated_collection:recall_at_5": 0.06896551724137934,
+        "delta:category:templated_collection:recall_at_5": 0.08620689655172409,
         "delta:category:templated_collection:recall_at_10": 0.01724137931034475,
-        "delta:category:templated_collection:mrr": 0.14741379310344827,
+        "delta:category:templated_collection:mrr": 0.17672413793103448,
         "delta:category:typo:recall_at_5": 0.0,
         "delta:category:typo:recall_at_10": 0.0,
         "delta:category:typo:mrr": 0.0,
         "delta:language:en:recall_at_5": 0.009009009009008917,
         "delta:language:en:recall_at_10": 0.0,
-        "delta:language:en:mrr": 0.030480480480480354,
-        "delta:language:it:recall_at_5": 0.010869565217391242,
+        "delta:language:en:mrr": 0.034984984984984924,
+        "delta:language:it:recall_at_5": 0.021739130434782594,
         "delta:language:it:recall_at_10": 0.010869565217391242,
-        "delta:language:it:mrr": 0.02264492753623193,
+        "delta:language:it:mrr": 0.030253623188405854,
         "delta:language:zh:recall_at_5": 0.022727272727272707,
         "delta:language:zh:recall_at_10": 0.0,
-        "delta:language:zh:mrr": 0.035037878787878673,
-        "delta:overall:recall_at_5": 0.013745704467353903,
+        "delta:language:zh:mrr": 0.040719696969696906,
+        "delta:overall:recall_at_5": 0.01718213058419238,
         "delta:overall:recall_at_10": 0.0034364261168384758,
-        "delta:overall:mrr": 0.02938144329896919
+        "delta:overall:mrr": 0.03522336769759449
       },
       "detail": [],
       "alignment": []
@@ -1784,8 +1772,6 @@
     }
   ],
   "failures": [
-    "variant: failed (ingest-tpl-variant-en-04, ingest-tpl-variant-it-04, ingest-tpl-variant-it-05, ingest-tpl-variant-it-06, ingest-tpl-variant-zh-01, ingest-tpl-variant-zh-02, ingest-tpl-variant-zh-03)",
-    "quantity: failed (ingest-tpl-quantity-en-02, ingest-tpl-quantity-it-02, ingest-tpl-quantity-zh-02)",
     "no_other_slice_drop: failed (tpl-recommended-ingest)"
   ]
 }
