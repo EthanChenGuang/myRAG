@@ -9,7 +9,7 @@ import { rpcRows, type RpcClient } from '../../backend/supabase-rpc';
 import { getLanguageSettings } from '../../lang/settings';
 import { loadIngestConfig, type IngestEnvInput } from '../config';
 import { getIngestDeps } from '../deps';
-import { expectedFingerprintFor, getSettingsClassification, ingestionKeysOf, needsRechunkDryRun, switchesOf, type RebuildMechanism } from '../fingerprint';
+import { expectedFingerprintFor, getSettingsClassification, ingestionKeysOf, rechunkDryRunKeys, switchesOf, type RebuildMechanism } from '../fingerprint';
 import { loadProcessingProfiles } from '../profiles/load';
 import { queueConfigFromProcessEnv } from '../queue-config';
 import { isTenantKey } from '../writer';
@@ -139,7 +139,7 @@ export interface ImpactCounts {
   affected: Map<RebuildMechanism, Map<ImpactDocType, number>>;
   withoutFingerprint: number;
   totalCurrent: number;
-  /** Proposed keys whose effect stored parts cannot show (RAG_SECTION_RULES=on): the count comes from the `rag:rechunk` dry run. */
+  /** Proposed keys whose effect stored parts cannot show (RAG_SECTION_RULES=on, a non-empty RAG_SECTION_OUTLINES): the count comes from the `rag:rechunk` dry run. */
   needsRechunkDryRun: string[];
 }
 
@@ -181,7 +181,7 @@ export function countImpact(groups: readonly FingerprintGroup[], proposed: Recor
       counts.set(docType, (counts.get(docType) ?? 0) + group.documents);
     }
   }
-  return { ingestionKeys, mechanisms, affected, withoutFingerprint, totalCurrent, needsRechunkDryRun: needsRechunkDryRun(proposed) ? ['RAG_SECTION_RULES'] : [] };
+  return { ingestionKeys, mechanisms, affected, withoutFingerprint, totalCurrent, needsRechunkDryRun: rechunkDryRunKeys(proposed) };
 }
 
 /** The FingerprintImpact answer (UI-SPEC 8.1): every mechanism of the proposal with every doc type, zero included; aggregates only. */

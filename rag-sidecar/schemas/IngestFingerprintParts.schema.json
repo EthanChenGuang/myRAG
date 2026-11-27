@@ -45,11 +45,36 @@
         "boilerplate": {
           "$ref": "#/$defs/ChunkPrepBoilerplatePart"
         },
+        "section_outline": {
+          "$ref": "#/$defs/ChunkPrepSectionOutlinePart"
+        },
         "section_rules": {
           "$ref": "#/$defs/ChunkPrepSectionRulesPart"
         }
       },
       "title": "ChunkPrepPart",
+      "type": "object"
+    },
+    "ChunkPrepSectionOutlinePart": {
+      "additionalProperties": false,
+      "description": "Section outline a document was cut by while `RAG_SECTION_OUTLINES` names an outline file.",
+      "properties": {
+        "outline_id": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Outline Id",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "outline_id",
+        "version"
+      ],
+      "title": "ChunkPrepSectionOutlinePart",
       "type": "object"
     },
     "ChunkPrepSectionRulesPart": {

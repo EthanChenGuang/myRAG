@@ -100,6 +100,27 @@ def test_fingerprint_chunk_prep_holds_strings_and_integers_only():
     _rejects(IngestFingerprintParts, {**_fingerprint_parts(), "chunk_prep": {"boilerplate": {**boilerplate, "rule_fingerprint": "abc"}}})
 
 
+def test_fingerprint_chunk_prep_section_outline():
+    outline = {"outline_id": "neutral-sheet", "version": 1}
+    boilerplate = {"mode": "both", "cleaner_version": 1, "rules_version": 2, "rule_fingerprint": HEX64}
+    section_rules = {"rule_set_id": RULE_SET_ID, "version": 3}
+    for chunk_prep in (
+        {"section_outline": outline},
+        {"boilerplate": boilerplate, "section_rules": section_rules, "section_outline": outline},
+    ):
+        parts = {**_fingerprint_parts(), "chunk_prep": chunk_prep}
+        assert IngestFingerprintParts.model_validate(parts).model_dump(mode="json")["chunk_prep"] == chunk_prep
+    for bad in (
+        {**outline, "version": 1.5},
+        {**outline, "outline_id": "Neutral-sheet"},
+        {**outline, "outline_id": "neutral sheet"},
+        {**outline, "outline_id": ""},
+    ):
+        _rejects(IngestFingerprintParts, {**_fingerprint_parts(), "chunk_prep": {"section_outline": bad}})
+    _rejects(IngestFingerprintParts, {**_fingerprint_parts(), "chunk_prep": {}})
+    assert "chunk_prep" not in IngestFingerprintParts.model_validate(_fingerprint_parts()).model_dump(mode="json")
+
+
 def test_manifest_row_without_attributes_dumps_as_today():
     dumped = BackfillManifestEntry.model_validate({"source_key": "kb/doc-1", "path": "/data/doc-1.pdf"}).model_dump(mode="json")
     assert dumped == {"source_key": "kb/doc-1", "path": "/data/doc-1.pdf", "url": None, "doc_type": None}

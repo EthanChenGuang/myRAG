@@ -21,6 +21,7 @@ PartText = Annotated[str, Field(min_length=1, max_length=128)]
 Version = Annotated[StrictInt, Field(ge=1)]
 Count = Annotated[StrictInt, Field(ge=0)]
 LanguageCodeKey = Annotated[str, Field(pattern=r"^[a-z]{2,3}$")]
+OutlineId = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")]
 
 FingerprintPartName = Literal[
     "parser_used",
@@ -130,6 +131,13 @@ class ChunkPrepSectionRulesPart(_Contract):
     version: Version
 
 
+class ChunkPrepSectionOutlinePart(_Contract):
+    """Section outline a document was cut by while `RAG_SECTION_OUTLINES` names an outline file."""
+
+    outline_id: OutlineId
+    version: Version
+
+
 class ChunkPrepPart(_Contract):
     """Optional fingerprint part of the shared chunk preparation; present only when a writer sets it (D-13, F-22)."""
 
@@ -139,11 +147,14 @@ class ChunkPrepPart(_Contract):
     section_rules: ChunkPrepSectionRulesPart | None = Field(
         default=None, exclude_if=_omit_unset, json_schema_extra=omit_none_schema
     )
+    section_outline: ChunkPrepSectionOutlinePart | None = Field(
+        default=None, exclude_if=_omit_unset, json_schema_extra=omit_none_schema
+    )
 
     @model_validator(mode="after")
     def _names_a_sub_part(self) -> ChunkPrepPart:
-        if self.boilerplate is None and self.section_rules is None:
-            raise ValueError("chunk_prep needs boilerplate or section_rules")
+        if self.boilerplate is None and self.section_rules is None and self.section_outline is None:
+            raise ValueError("chunk_prep needs boilerplate, section_rules or section_outline")
         return self
 
 

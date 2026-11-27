@@ -18,7 +18,7 @@ import { boilerplateConfig } from './prepare/boilerplate-config';
 import { loadProcessingProfiles } from './profiles/load';
 import { EMBEDDING_TEXT_VERSION } from './text/embedding-text';
 import { ROW_SERIALIZATION_VERSION_SUFFIX, effectiveEmbeddingTextVersion } from './text/table-rows';
-import { requireIdentity, type ChunkPrepSnapshot, type StageContext } from './types';
+import { requireIdentity, type ChunkPrepSnapshot, type IngestState, type StageContext } from './types';
 
 /** The chunks of document_chunks are always the legacy chunker's; other chunking profiles are rebuilt from parse.md (Phase 4 D-21). */
 export const FINGERPRINT_CHUNKING_PROFILE_ID = 'legacy';
@@ -126,11 +126,10 @@ function parserVersionOf(ctx: StageContext): string {
 
 type ChunkPrepPart = NonNullable<IngestFingerprintParts['chunk_prep']>;
 
-/** The optional chunk_prep part (D-13): only for a document prepared while a Phase 3.3 switch was on; absent otherwise. */
-function chunkPrepPartOf(snapshot: ChunkPrepSnapshot | undefined): ChunkPrepPart | null {
-  if (!snapshot) return null;
+/** The optional chunk_prep part (D-13): only for a document prepared while a Phase 3.3 switch was on or cut by a section outline; absent otherwise. */
+function chunkPrepPartOf(snapshot: ChunkPrepSnapshot | undefined, sectionOutline: IngestState['sectionOutline']): ChunkPrepPart | null {
   const part: ChunkPrepPart = {};
-  if (snapshot.boilerplate) {
+  if (snapshot?.boilerplate) {
     part.boilerplate = {
       mode: snapshot.boilerplate.mode,
       cleaner_version: snapshot.boilerplate.cleanerVersion,
@@ -138,8 +137,9 @@ function chunkPrepPartOf(snapshot: ChunkPrepSnapshot | undefined): ChunkPrepPart
       rule_fingerprint: snapshot.fingerprint,
     };
   }
-  if (snapshot.sectionRules) part.section_rules = { rule_set_id: snapshot.sectionRules.ruleSetId, version: snapshot.sectionRules.ruleSetVersion };
-  return part.boilerplate || part.section_rules ? part : null;
+  if (snapshot?.sectionRules) part.section_rules = { rule_set_id: snapshot.sectionRules.ruleSetId, version: snapshot.sectionRules.ruleSetVersion };
+  if (sectionOutline) part.section_outline = { outline_id: sectionOutline.outlineId, version: sectionOutline.version };
+  return part.boilerplate || part.section_rules || part.section_outline ? part : null;
 }
 
 /** D-10: the parts of the version this run publishes, from the run's own state and configuration (no read). */
@@ -163,7 +163,7 @@ export function collectFingerprintParts(ctx: StageContext): IngestFingerprintPar
     embedding_profile_version: EMBEDDING_PROFILE_VERSION,
     language_pack_versions: languagePackVersions(used, settings, switches.language_aware_ingest),
     switches,
-    ...withChunkPrep(chunkPrepPartOf(ctx.state.chunkPrep)),
+    ...withChunkPrep(chunkPrepPartOf(ctx.state.chunkPrep, ctx.state.sectionOutline)),
   });
 }
 
@@ -176,12 +176,15 @@ const UNKNOWN_RULE_FINGERPRINT = '0'.repeat(64);
 /**
  * D-13: the chunk_prep part under a proposed RAG_PAGE_BOILERPLATE or RAG_SECTION_RULES. A proposed cleaning mode adds or replaces the
  * boilerplate sub-part (the stored mode again keeps it as stored), off removes it; RAG_SECTION_RULES=off removes the section_rules sub-part,
- * while `on` cannot be computed from stored parts and leaves it as stored (the re-chunk dry run answers that). Neither left: no part.
+ * while `on` cannot be computed from stored parts and leaves it as stored (the re-chunk dry run answers that). A stored section_outline
+ * sub-part is kept through every proposal except an empty RAG_SECTION_OUTLINES, which removes it; the proposed value is never read as a
+ * path. Nothing left: no part.
  */
 function chunkPrepFor(stored: IngestFingerprintParts, proposed: Record<string, string | undefined>): ChunkPrepPart | null {
   const current = stored.chunk_prep ?? null;
   let boilerplate = current?.boilerplate;
   let sectionRules = current?.section_rules;
+  let sectionOutline = current?.section_outline;
   if (has(proposed, 'RAG_PAGE_BOILERPLATE')) {
     const value = (proposed.RAG_PAGE_BOILERPLATE ?? '').trim().toLowerCase();
     const mode = PAGE_BOILERPLATE_MODES.find((entry) => entry === value);
@@ -196,15 +199,25 @@ function chunkPrepFor(stored: IngestFingerprintParts, proposed: Record<string, s
     }
   }
   if (has(proposed, 'RAG_SECTION_RULES') && (proposed.RAG_SECTION_RULES ?? '').trim().toLowerCase() !== 'on') sectionRules = undefined;
+  if (has(proposed, 'RAG_SECTION_OUTLINES') && (proposed.RAG_SECTION_OUTLINES ?? '').trim() === '') sectionOutline = undefined;
   const part: ChunkPrepPart = {};
   if (boilerplate) part.boilerplate = boilerplate;
   if (sectionRules) part.section_rules = sectionRules;
-  return part.boilerplate || part.section_rules ? part : null;
+  if (sectionOutline) part.section_outline = sectionOutline;
+  return part.boilerplate || part.section_rules || part.section_outline ? part : null;
 }
 
-/** True when a proposal's effect on stored parts cannot be computed and needs the re-chunk dry run (RAG_SECTION_RULES=on). */
+/** Proposed names whose effect stored parts cannot show, in a fixed order: RAG_SECTION_RULES=on and a non-empty RAG_SECTION_OUTLINES. */
+export function rechunkDryRunKeys(proposed: Record<string, string | undefined>): string[] {
+  const keys: string[] = [];
+  if (has(proposed, 'RAG_SECTION_RULES') && (proposed.RAG_SECTION_RULES ?? '').trim().toLowerCase() === 'on') keys.push('RAG_SECTION_RULES');
+  if (has(proposed, 'RAG_SECTION_OUTLINES') && (proposed.RAG_SECTION_OUTLINES ?? '').trim() !== '') keys.push('RAG_SECTION_OUTLINES');
+  return keys;
+}
+
+/** True when a proposal's effect on stored parts cannot be computed and needs the re-chunk dry run. */
 export function needsRechunkDryRun(proposed: Record<string, string | undefined>): boolean {
-  return has(proposed, 'RAG_SECTION_RULES') && (proposed.RAG_SECTION_RULES ?? '').trim().toLowerCase() === 'on';
+  return rechunkDryRunKeys(proposed).length > 0;
 }
 
 const SWITCH_VARIABLES = ['RAG_LANGUAGE_AWARE_INGEST', 'RAG_TABLE_HEADER_REPEAT', 'RAG_TABLE_ROW_SERIALIZATION', 'RAG_CAPTION_LANGUAGE'] as const;

@@ -24,6 +24,9 @@ import type { DocumentFields, IngestWriter } from '@/lib/rag/ingest/writer';
 import { resetLanguageSettingsForTests } from '@/lib/rag/lang/settings';
 import { LEXICAL_VERSION } from '@/lib/rag/lexical/chunk-text';
 import { mintScope } from '@/lib/rag/tenant/scope';
+import { resetSectionOutlinesForTests } from '@/lib/rag/ingest/outline';
+import { chunkStage } from '@/lib/rag/ingest/stages/chunk';
+import { DOCUMENT, OUTLINE, outlineFile, writeOutlineFile } from './ingest/section-outline-fixture';
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const DOC = '33333333-3333-4333-8333-333333333333';
@@ -439,5 +442,110 @@ describe('chunk_prep part (Phase 3.3 D-13)', () => {
     expect(counts.mechanisms).toEqual(['rechunk']);
     expect(counts.affected.get('rechunk')?.get('general')).toBe(4);
     expect(countImpact(groups, { RAG_SECTION_RULES: 'on' }).needsRechunkDryRun).toEqual(['RAG_SECTION_RULES']);
+  });
+});
+
+describe('chunk_prep.section_outline (RAG_SECTION_OUTLINES)', () => {
+  const RULE_SET = '44444444-4444-4444-8444-444444444444';
+  const BOILERPLATE = { mode: 'both' as const, cleaner_version: 1, rules_version: 1, rule_fingerprint: 'e'.repeat(64) };
+  const OUTLINE_PART = { outline_id: 'neutral-sheet', version: 1 };
+
+  beforeEach(() => {
+    resetSectionOutlinesForTests();
+  });
+
+  test('a run without an outline keeps today’s parts and fingerprint', () => {
+    const parts = collectFingerprintParts(contextFor({}, []));
+    expect('chunk_prep' in parts).toBe(false);
+  });
+
+  test('the run’s outline fills the sub-part, and the fingerprint follows its id and version', () => {
+    const today = buildIngestFingerprint(collectFingerprintParts(contextFor({}, [])));
+    const fingerprintOf = (outlineId: string, version: number) => {
+      const ctx = contextFor({}, []);
+      ctx.state.sectionOutline = { outlineId, version };
+      return collectFingerprintParts(ctx);
+    };
+    const v1 = fingerprintOf('neutral-sheet', 1);
+    expect(v1.chunk_prep).toEqual({ section_outline: OUTLINE_PART });
+    const hashes = [today, buildIngestFingerprint(v1), buildIngestFingerprint(fingerprintOf('neutral-sheet', 2)), buildIngestFingerprint(fingerprintOf('other-sheet', 1))];
+    expect(new Set(hashes).size).toBe(4);
+  });
+
+  test('a boilerplate snapshot and an outline give both sub-parts', () => {
+    const ctx = contextFor({}, []);
+    ctx.state.chunkPrep = {
+      fingerprint: 'e'.repeat(64),
+      boilerplate: { mode: 'both', cleanerVersion: 1, rulesVersion: 1, ruleIds: [], removedLineKeys: [] },
+      warnings: [],
+      truncated: false,
+    };
+    ctx.state.sectionOutline = { outlineId: 'neutral-sheet', version: 1 };
+    expect(collectFingerprintParts(ctx).chunk_prep).toEqual({ boilerplate: BOILERPLATE, section_outline: OUTLINE_PART });
+  });
+
+  test('expectedFingerprintFor keeps the stored sub-part through other proposals and drops it for an empty RAG_SECTION_OUTLINES', () => {
+    const plain = baseParts();
+    const outlined = baseParts({ chunk_prep: { section_outline: OUTLINE_PART } });
+    expect(expectedFingerprintFor(outlined, { RAG_TABLE_HEADER_REPEAT: 'always' }).parts.chunk_prep).toEqual({ section_outline: OUTLINE_PART });
+    expect(expectedFingerprintFor(outlined, { RAG_PAGE_BOILERPLATE: 'off' }).parts).toEqual(outlined);
+    expect(expectedFingerprintFor(outlined, { RAG_SECTION_RULES: 'off' }).parts).toEqual(outlined);
+    expect(expectedFingerprintFor(outlined, { RAG_SECTION_OUTLINES: '' }).parts).toEqual(plain);
+    expect(expectedFingerprintFor(outlined, { RAG_SECTION_OUTLINES: '  ' }).fingerprint).toBe(buildIngestFingerprint(plain));
+    expect(expectedFingerprintFor(outlined, { RAG_SECTION_OUTLINES: '/srv/other.json' }).parts).toEqual(outlined);
+    const both = baseParts({ chunk_prep: { boilerplate: BOILERPLATE, section_outline: OUTLINE_PART } });
+    expect(expectedFingerprintFor(both, { RAG_SECTION_OUTLINES: '' }).parts.chunk_prep).toEqual({ boilerplate: BOILERPLATE });
+    const rules = baseParts({ chunk_prep: { section_rules: { rule_set_id: RULE_SET, version: 1 }, section_outline: OUTLINE_PART } });
+    expect(expectedFingerprintFor(rules, { RAG_SECTION_RULES: 'off' }).parts.chunk_prep).toEqual({ section_outline: OUTLINE_PART });
+  });
+
+  test('rechunkDryRunKeys names the proposals stored parts cannot show', async () => {
+    const { rechunkDryRunKeys, needsRechunkDryRun } = await import('@/lib/rag/ingest/fingerprint');
+    const { countImpact } = await import('@/lib/rag/ingest/fingerprint/impact');
+    expect(rechunkDryRunKeys({ RAG_SECTION_OUTLINES: '/srv/outlines.json', RAG_SECTION_RULES: 'on' })).toEqual(['RAG_SECTION_RULES', 'RAG_SECTION_OUTLINES']);
+    expect(rechunkDryRunKeys({ RAG_SECTION_RULES: 'on' })).toEqual(['RAG_SECTION_RULES']);
+    expect(rechunkDryRunKeys({ RAG_SECTION_OUTLINES: 'outlines.json' })).toEqual(['RAG_SECTION_OUTLINES']);
+    expect(rechunkDryRunKeys({ RAG_SECTION_OUTLINES: '', RAG_SECTION_RULES: 'off' })).toEqual([]);
+    expect(needsRechunkDryRun({ RAG_SECTION_RULES: 'on' })).toBe(true);
+    expect(needsRechunkDryRun({ RAG_SECTION_RULES: 'off' })).toBe(false);
+    expect(needsRechunkDryRun({ RAG_SECTION_OUTLINES: '' })).toBe(false);
+    const parts = baseParts();
+    const groups = [{ docType: 'general', fingerprint: buildIngestFingerprint(parts), parts, documents: 2 }];
+    expect(countImpact(groups, { RAG_SECTION_RULES: 'on' }).needsRechunkDryRun).toEqual(['RAG_SECTION_RULES']);
+    expect(countImpact(groups, { RAG_SECTION_OUTLINES: 'outlines.json' }).needsRechunkDryRun).toEqual(['RAG_SECTION_OUTLINES']);
+  });
+
+  test('countImpact with an empty RAG_SECTION_OUTLINES counts only outlined groups under rechunk', async () => {
+    const { countImpact } = await import('@/lib/rag/ingest/fingerprint/impact');
+    const plain = baseParts();
+    const outlined = baseParts({ chunk_prep: { section_outline: OUTLINE_PART } });
+    const groups = [
+      { docType: 'general', fingerprint: buildIngestFingerprint(outlined), parts: outlined, documents: 3 },
+      { docType: 'contract_legal', fingerprint: buildIngestFingerprint(plain), parts: plain, documents: 5 },
+    ];
+    const counts = countImpact(groups, { RAG_SECTION_OUTLINES: '' });
+    expect(counts.mechanisms).toEqual(['rechunk']);
+    expect(counts.affected.get('rechunk')?.get('general')).toBe(3);
+    expect(counts.affected.get('rechunk')?.get('contract_legal')).toBe(0);
+    expect(counts.needsRechunkDryRun).toEqual([]);
+  });
+
+  test('end to end: the chunk stage under an outline file, then the fingerprint parts of the same run', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const runWith = async (env: Record<string, string>) => {
+      const ctx = contextFor(env, []);
+      ctx.work.parseText = DOCUMENT;
+      expect(await chunkStage.run(ctx)).toEqual({ kind: 'next' });
+      return collectFingerprintParts(ctx);
+    };
+    const v1 = await runWith({ RAG_SECTION_OUTLINES: writeOutlineFile(outlineFile()) });
+    expect(v1.chunk_prep?.section_outline).toEqual(OUTLINE_PART);
+    const v2 = await runWith({ RAG_SECTION_OUTLINES: writeOutlineFile(outlineFile([{ ...OUTLINE, version: 2 }])) });
+    expect(v2.chunk_prep?.section_outline).toEqual({ outline_id: 'neutral-sheet', version: 2 });
+    expect(buildIngestFingerprint(v2)).not.toBe(buildIngestFingerprint(v1));
+    const off = await runWith({});
+    expect('chunk_prep' in off).toBe(false);
+    expect(buildIngestFingerprint(off)).toBe(buildIngestFingerprint(collectFingerprintParts(contextFor({}, []))));
+    vi.restoreAllMocks();
   });
 });
