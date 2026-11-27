@@ -287,7 +287,7 @@ def test_the_calculation_block_instruction_carries_both_tags_in_every_language()
 def test_the_calculation_instruction_asks_for_tool_steps_citations_and_fact_precedence():
     en = _pack("en")["texts"]["instructions"]["calculation"]
     for phrase in ("calculate tool", "mentally", "each item", "before the total", "cite", "fact tool"):
-        assert phrase in en, phrase
+        assert phrase in en.lower(), phrase
     for code in ("zh", "it"):
         assert "calculate" in _pack(code)["texts"]["instructions"]["calculation"], code
 

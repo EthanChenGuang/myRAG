@@ -82,8 +82,8 @@ describe('fixedText (D-08)', () => {
     const keys = Object.entries(raw().packs[0].texts).flatMap(([group, texts]) =>
       Object.keys(texts as Record<string, string>).map((name) => `${group}.${name}`),
     );
-    expect(keys).toHaveLength(39);
-    const params = { value: 'V', version: 'N', date: 'D', sentinel: 'S', not_covered: 'C', general_knowledge: 'G', from_documents: 'FD', from_web: 'FW' };
+    expect(keys).toHaveLength(42);
+    const params = { value: 'V', version: 'N', date: 'D', sentinel: 'S', not_covered: 'C', general_knowledge: 'G', from_documents: 'FD', from_web: 'FW', open: 'O', close: 'C' };
     for (const pack of getLanguageRegistry().packs) {
       for (const key of keys) {
         const text = fixedText(key as TextKey, pack.code, params);
@@ -134,7 +134,7 @@ describe('FIXED_TEXTS client subset (D-12)', () => {
 
   it('every value equals fixedText for the same key and language', () => {
     const keys = TEXT_KEYS.filter((key) => !key.startsWith('instructions.'));
-    expect(keys).toHaveLength(26);
+    expect(keys).toHaveLength(28);
     for (const [code, entry] of Object.entries(FIXED_TEXTS)) {
       for (const key of keys) {
         const [group, name] = key.split('.') as ['notices' | 'labels', string];

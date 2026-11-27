@@ -461,6 +461,38 @@
       ]
     },
     {
+      "name": "no_labels_condensed_question",
+      "base": "zh",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "labels",
+          "condensed_question"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.labels.condensed_question"
+      ]
+    },
+    {
+      "name": "no_labels_earlier_draft",
+      "base": "it",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "labels",
+          "earlier_draft"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.labels.earlier_draft"
+      ]
+    },
+    {
       "name": "no_instructions_citation",
       "base": "it",
       "change": {
@@ -660,6 +692,22 @@
       },
       "missing": [
         "texts.instructions.calculation"
+      ]
+    },
+    {
+      "name": "no_instructions_calculation_block",
+      "base": "en",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "instructions",
+          "calculation_block"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.instructions.calculation_block"
       ]
     },
     {
