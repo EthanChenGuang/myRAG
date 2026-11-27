@@ -35,6 +35,7 @@ key-decisions:
   - "The 5000 ms p95 HHEM budget holds only with about 4 vCPU; on 2 vCPU a 3k premise takes about 7.8 s (report-only, groundedness runs in after(), inside the 20000 ms timeout)"
   - "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK stays false: no Vectara key, retention terms not recorded"
   - "CLAUDE_WEB_SEARCH_ELIGIBLE stays false until the gap-closure plan for webSearch turns on the direct Claude path lands (A1 holds)"
+  - "Citations (chunk-alias) cost -0.017 DeepEval Faithfulness on the fixture set with a live generator; this goes to Phase 7 for a real-set rerun, with no slice beyond 0.05"
   - "groundedness-thresholds.json keeps the 0.5 defaults: no real labelled pair set exists under eval/golden/private/"
 
 patterns-established: []
@@ -48,12 +49,12 @@ status: partial
 
 # Phase 5 Plan 26: Live verification summary
 
-**On real streams the direct Claude path and chunk-alias both cite correctly, and A1 holds. The HHEM image builds and scores offline. It would not start until a config-copy fix (now on this branch). The 3000-token premise cap is confirmed. The live-generator nightly gives identical retrieval with and without citations and 0 invalid citations. Vectara, Langfuse, the live `rag_answer_records` check and the Claude-strategy nightly leg are operator-pending.**
+**On real streams the direct Claude path and chunk-alias both cite correctly, and A1 holds. The HHEM image builds and scores offline. It would not start until a config-copy fix (now on this branch). The 3000-token premise cap is confirmed. The live-generator nightly gives identical retrieval with and without citations, 0 invalid citations and a small Faithfulness drop (−0.017) with chunk-alias citations. Vectara, Langfuse, the live `rag_answer_records` check and the Claude-strategy nightly leg are operator-pending.**
 
 ## Performance
 
 - Task 1 ran in earlier sessions on 2026-11-26 (results in `05-26-TASK1-RESULTS.md`).
-- Tasks 3 and 4 ran in this session on 2026-11-27, 01:50–03:30Z, which resumed from an interrupted executor.
+- Tasks 3 and 4 ran in this session on 2026-11-27, 01:50–05:00Z, which resumed from an interrupted executor.
 - Tasks: 4 checkpoints. 1 and 3 are complete. 2 is operator-pending. 4 is partial (step 2 done on the fixture golden set; steps 1 and 3 are operator-pending).
 
 ## Task commits
@@ -107,10 +108,22 @@ Environment: cloud container, 4 vCPU, 15 GB RAM, dockerd started locally. Docker
 
 | Leg | Strategy | Items | Generation p50 / p95 ms | invalid_citation_rate | citation_coverage | cited_gold_hit | Faithfulness |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| off | none | 210 answered | 2099 / 3702 | — | — | — | FAITH_OFF |
-| citations | chunk-alias | 208 | 2266 / 3889 | 0.000 (n=292) | 0.981 | 0.898 | FAITH_CA |
+| off | none | 210 answered | 2099 / 3702 | — | — | — | 0.973 (DeepEval, n=206 paired) |
+| citations | chunk-alias | 208 | 2266 / 3889 | 0.000 (n=292) | 0.981 | 0.898 | 0.957 (DeepEval, n=206 paired) |
 
-JUDGE_NOTE
+Judge tier: `rag_eval.judge.run` (judge `openai/gpt-5-mini` via OpenRouter, embeddings via OpenRouter), then `rag_eval.runner score --judge`.
+The judge ran about 1 h 15 min per leg at concurrency 4.
+
+| Library | Paired n | off | chunk-alias | Paired difference (95% bootstrap CI) | Items worse by >0.2 |
+| --- | ---: | ---: | ---: | --- | ---: |
+| DeepEval faithfulness | 206 | 0.973 | 0.957 | −0.017 (−0.034 … −0.001) | 14 |
+| Ragas faithfulness | 21 | 0.924 | 0.908 | −0.016 (−0.098 … +0.062) | 3 |
+
+- **DeepEval by language.** en −0.033 (n=61), zh −0.007 (n=59), it −0.013 (n=69).
+- **Answer relevance and context recall.** These are equal within 0.02 across the legs. DeepEval: answer relevance 0.871 vs 0.875, context recall 0.870 vs 0.874.
+- **Report-only `by_strategy` Faithfulness** (mean over both libraries): chunk-alias 0.955 (n=208). The two uncited answers of the citations leg score 0.65.
+- **Verdict.** Citations cost a small Faithfulness drop on this run. It is under 0.02 overall and largest for en. The CI just excludes zero, but this is one run, one judge and the fixture set, so it is not a ship decision. It goes to Phase 7 (ADM-02) for a rerun on the real golden set before citations become a default. No slice drops by more than 0.05.
+- **Judge finding (new).** Ragas faithfulness failed with `IncompleteOutputException` on about 200 items per leg, and DeepEval on 2 items per leg with `LengthFinishReasonError`. The judge output is cut off by its token limit. The likely cause is `gpt-5-mini` reasoning tokens under Ragas's output cap. Ragas Faithfulness therefore covers only 21 to 39 items. This needs a gap-closure item: raise the judge's max output tokens, or set reasoning effort to minimal, in `rag_eval/judge/ragas_judge.py`, then recalibrate the judge. No code change was made here, because judge config changes alter the judge fingerprint.
 
 **Claude-strategy leg (`RAG_CLAUDE_CITATIONS=true`).** Operator-pending. The standing instruction for this run allows OpenRouter, Cohere and Voyage only. An Anthropic key variable exists in the session from Task 1, and it was deliberately not used.
 
@@ -176,5 +189,5 @@ JUDGE_NOTE
 
 ## Next phase readiness
 
-- One gap-closure plan is needed: webSearch turns on the direct Claude path (A1).
+- Two gap-closure items are needed: (1) webSearch turns on the direct Claude path (A1); (2) judge output truncation (Ragas `IncompleteOutputException` on about 200 of 210 items with `gpt-5-mini`).
 - Phase 7 needs the HHEM host sizing note (about 4 vCPU for the 5 s budget at the 3000-token cap).
