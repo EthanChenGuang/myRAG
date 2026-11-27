@@ -230,10 +230,14 @@ app.post('/api/config', async (req, res) => {
     // Filter out invalid environment variable names and template placeholders
     const fullValues = filterValidEnvVars(rawFullValues);
 
-    // The UI never receives secret values, so an empty secret means "unchanged"
-    for (const [name, value] of Object.entries(fullValues)) {
-      if (security.isSecretConfigEntry(name, '') && (value === '' || value === null || value === undefined)) {
-        delete fullValues[name];
+    // The UI never receives secret values: an empty or masked secret field means "unchanged" (D-14)
+    {
+      const savedEnvPath = path.join(REPO_ROOT, '.env.local');
+      const savedValues = fs.existsSync(savedEnvPath) ? dotenv.parse(fs.readFileSync(savedEnvPath, 'utf8')) : {};
+      const merged = security.mergeSecretUpdate(savedValues, fullValues);
+      for (const name of Object.keys(fullValues)) {
+        if (Object.prototype.hasOwnProperty.call(merged, name)) fullValues[name] = merged[name];
+        else delete fullValues[name];
       }
     }
     for (const name of cleared) fullValues[name] = '';

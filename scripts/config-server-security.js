@@ -67,25 +67,56 @@ function isSecretConfigEntry(name, value) {
   return isSecretName(name) || hasUrlCredentials(value);
 }
 
-/** Splits an env map into values safe to show and the names of secrets that are set. Secret values never leave the server. */
-function maskConfig(config) {
-  const visible = {};
-  const secretsSet = [];
-  for (const [name, value] of Object.entries(config)) {
-    if (isSecretConfigEntry(name, value)) {
-      if (value !== '') secretsSet.push(name);
-    } else {
-      visible[name] = value;
-    }
-  }
-  return { config: visible, secretsSet, secretHints: {} };
-}
+/** A secret of at least this many characters may show its last four characters; a shorter one shows only that it is set. */
+const SECRET_LAST4_MIN_LENGTH = 20;
 
 /** The text a masked secret field may carry; it never replaces a stored value. */
 const SECRET_MASK_PLACEHOLDER = '********';
 
+function secretHint(value) {
+  const text = value === undefined || value === null ? '' : String(value);
+  if (text === '') return { state: 'unset' };
+  if (text.length >= SECRET_LAST4_MIN_LENGTH) return { state: 'set', last4: text.slice(-4) };
+  return { state: 'set' };
+}
+
+/**
+ * Splits an env map into values safe to show, the names of secrets that are set, and per secret only its state and, for
+ * values of at least 20 characters, its last four characters. Secret values never leave the server.
+ */
+function maskConfig(config) {
+  const visible = {};
+  const secretsSet = [];
+  const secretHints = {};
+  for (const [name, value] of Object.entries(config)) {
+    if (isSecretConfigEntry(name, value)) {
+      if (value !== '') secretsSet.push(name);
+      secretHints[name] = secretHint(value);
+    } else {
+      visible[name] = value;
+    }
+  }
+  return { config: visible, secretsSet, secretHints };
+}
+
+/**
+ * The values a save may write: a secret changes only when a new value was typed. An empty, null or masked-placeholder
+ * secret field keeps the stored value (or writes nothing when none is stored); every other field passes through.
+ */
 function mergeSecretUpdate(current, submitted) {
-  return { ...submitted };
+  const stored = current || {};
+  const merged = {};
+  for (const [name, value] of Object.entries(submitted || {})) {
+    if (isSecretConfigEntry(name, '')) {
+      const untouched = value === undefined || value === null || value === '' || value === SECRET_MASK_PLACEHOLDER;
+      if (untouched) {
+        if (Object.prototype.hasOwnProperty.call(stored, name)) merged[name] = stored[name];
+        continue;
+      }
+    }
+    merged[name] = value;
+  }
+  return merged;
 }
 
 function startsWith(bytes, signature, offset = 0) {
