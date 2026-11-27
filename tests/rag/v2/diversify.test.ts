@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FusedHit } from '@/lib/rag/fusion/rrf';
-import { diversify, type DiversifyOptions } from '@/lib/rag/v2/diversify';
+import { diversify, topkRedundancy, type DiversifyOptions } from '@/lib/rag/v2/diversify';
 import { hit } from '../fusion/helpers';
 
 interface RowSpec {
@@ -205,5 +205,23 @@ describe('diversify (D-21, D-48)', () => {
     const out = diversify(input, options());
     expect(ids(out.hits)).toEqual(['s1']);
     expect(out.counts.collapsed).toBe(1);
+  });
+
+  it('counts top-k redundancy per cluster and value signature', () => {
+    const header = (file: string) => `Document: ${file}. Chunk 2 of 6. Content: `;
+    const other = (index: number) => ({ content: `zorvik plenth ${'x'.repeat(index)}` });
+    const differing = [
+      { dupClusterId: 'V', content: `${header('rules-v1.en.md')}Spectators stand at least 15 metres behind the pads.` },
+      { dupClusterId: 'V', content: `${header('rules-v2.en.md')}Spectators stand at least 20 metres behind the pads.` },
+      ...[1, 2].map(other),
+    ];
+    expect(topkRedundancy(differing)).toBe(0.25);
+    const identical = [
+      { dupClusterId: 'V', content: `${header('copy-one.md')}Spectators stand at least 15 metres behind the pads.` },
+      { dupClusterId: 'V', content: `${header('copy-two-7.md')}Spectators stand at least 15 metres behind the pads.` },
+      ...[1, 2].map(other),
+    ];
+    expect(topkRedundancy(identical)).toBe(0.5);
+    expect(topkRedundancy([{ content: 'zorvik' }])).toBeNull();
   });
 });

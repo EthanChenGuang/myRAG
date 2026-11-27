@@ -1301,3 +1301,13 @@ def test_without_statuses_nothing_is_excluded_for_lifecycle():
     rows = [_answerable_row(f"en-a-{i:03d}") for i in range(3)]
     exclusions = aggregate(rows)["population_exclusions"]
     assert exclusions == {"coverage_only": 0, "stale_count": 0, "retired_count": 0, "stale_share": 0.0}
+
+
+def test_topk_redundancy_reads_the_app_trace_value_when_present():
+    """04.2-32: the app computes the measure per (cluster id, value signature); the scorer uses that one value."""
+    item = _item("en-a-001", [(DOC, "gold sentence")])
+    clustered = _with_clusters(_trace("en-a-001", _filler(8)), ["c1", "c1"] + [None] * 6)
+    (cluster_only,) = score_items([clustered], [item])
+    assert cluster_only.topk_redundancy == 0.25
+    (from_app,) = score_items([clustered.model_copy(update={"topk_redundancy": 0.125})], [item])
+    assert from_app.topk_redundancy == 0.125
