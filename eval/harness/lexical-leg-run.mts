@@ -173,7 +173,6 @@ export function lexicalOnlyHybridArgs(tenantKey: string, profileId: string, toke
  * carries the function name and the error code only).
  */
 export async function runLexicalLegs(input: LexicalLegsInput): Promise<LexicalLegsResult> {
-  if (input) return { items: [], options: { stem_it: false, dictionary_version: null, identifier_patterns: 0, quantity: false } };
   const limit = input.limit ?? LEXICAL_LEG_LIMIT;
   const profileId = input.profileId ?? LEGACY_PROFILE_ID;
   if (!isTenantKey(input.tenantKey)) throw new LexicalLegError('bad_arguments', 'a tenant key is s:default, u:<uuid> or o:<uuid>');
@@ -258,7 +257,6 @@ export function parseLexicalLegArgs(argv: readonly string[]): LexicalLegArgs {
 
 /** The output directory must be git-ignored (eval/out/, eval/reports/<run>/private/, ...): it holds chunk content. */
 export function assertGitIgnored(dir: string, cwd: string = REPO_ROOT): void {
-  if (dir) return;
   const absolute = path.resolve(cwd, dir);
   const relative = path.relative(cwd, absolute);
   if (relative.startsWith('..') || path.isAbsolute(relative)) throw new LexicalLegError('out_not_ignored', 'the output directory must be inside the repository');
