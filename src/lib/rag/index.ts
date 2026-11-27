@@ -709,3 +709,7 @@ export { checkVectorSyncAccess } from './sync/auth';
 export type { VectorSyncAccessResult } from './sync/auth';
 export { runVectorSyncSlice } from './sync/slice';
 export type { RunVectorSyncSliceOptions, VectorSyncMode } from './sync/slice';
+export type { RpcClient } from './backend/supabase-rpc';
+export { buildVectorSyncStores, defaultStoreFactories, isVectorSyncTarget, readEnabledTargets, readVectorSyncStatus, VECTOR_SYNC_TARGETS } from './sync/targets';
+export type { VectorStoreFactories, VectorSyncTargetStatus } from './sync/targets';
+export type { VectorStore, VectorSyncTarget } from './sync/stores/types';
