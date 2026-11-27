@@ -32,6 +32,7 @@ Only G5 and G6 of `04.3-VERIFICATION.md` / `04.3-SECURITY.md` (origin/verify/04.
   - Missing viewer, refused scope, failed lookup or malformed tenant key: no text (fail closed, `[Review] chunk text refused` with a reason only).
 - Expert callers pass the expert: the chunks route (`getReviewItemChunks`), review search (`searchForReviewItem`) and label evidence (`validateAndSaveLabel → checkEvidence`, which now gets `expertId`).
 - The item's stored `access_sets` no longer decides chunk text, so a stale set after a relabel and a NULL set written before enforcement both stop serving restricted text. The tests cover both cases, in both modes, plus the member still being served and the off path being unchanged.
+- 5.1.1 G7 / T-0511-89 (orchestrator follow-up): `checkEvidence` (label save) already reads through `fetchServableChunks` with the expert as viewer (c0749443), so the same live, fail-closed check applies; a span on a chunk the expert may no longer read is refused as `chunk_not_servable` and nothing is written. Test added in `tests/rag-db/review-chunks-live-access.test.mts` (fails on the pre-fix code, passes in both modes; the group member can still cite it).
 - **No migration.** The live check makes recomputing `access_sets` unnecessary for chunk text, so no SQL changed and no migration number was claimed.
 
 ## Gates run
@@ -42,7 +43,7 @@ All pass:
 - `npx vitest run tests/rag/access tests/rag/generation tests/rag/trace tests/rag/cache`: 65 files, 941 tests.
 - Every vitest file importing a changed module (G5): 99 files, 1337 passed, 3 skipped (pre-existing skips).
 - Review and feedback-loop vitest (G6: `tests/rag/feedback-loop`, `tests/rag/judge`, `tests/rag/access`, `tests/api/feedback-loop-export-*`, `tests/api/review-label-search`, `tests/api/golden-evidence-routes`, `tests/ui/review-labelling-panel`): 42 files, 590 tests.
-- `node --import tsx --test tests/rag-db/access-*.test.mts tests/rag-db/review-items-access-sets.test.mts tests/rag-db/review-chunks-live-access.test.mts` (each file runs single- and multi-tenant): 529/529 (70 suites), up from 523 on the train with the 6 new tests.
+- `node --import tsx --test tests/rag-db/access-*.test.mts tests/rag-db/review-items-access-sets.test.mts tests/rag-db/review-chunks-live-access.test.mts` (each file runs single- and multi-tenant): 529/529 (70 suites), up from 523 on the train with the 6 new tests; after the G7 follow-up the live-access file has 8/8.
 
 ## Deviations
 - `tests/rag-db/review-chunks-live-access.test.mts` wraps the PGlite REST client: `rpc(...).abortSignal()`, and a correct `SETOF uuid` read for `rag_chunks_visible` (the shared helper returns only the first row of a set-returning function). The shared helper is unchanged.

@@ -15,6 +15,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'placeholder-service-role-key';
 process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'http://127.0.0.1:9';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= 'placeholder-anon-key';
 const { getReviewItemChunks } = await import('@/lib/rag/feedback-loop/review-access');
+const { LabelRequestSchema, validateAndSaveLabel } = await import('@/lib/rag/feedback-loop/labels');
 const depsModule = await import('@/lib/rag/deps');
 const startupModule = await import('@/lib/rag/tenant/access-startup');
 const configModule = await import('@/lib/rag/config');
@@ -181,6 +182,35 @@ for (const mode of MODES) {
       await setSwitch(true, admin);
       assert.deepEqual(await servedText(OUTSIDER, itemId), [], 'the outsider gets no text for the NULL-set item');
       assert.deepEqual(await servedText(MEMBER, itemId), [MARKER]);
+    });
+
+    // 5.1.1 G7 / T-0511-89: the label evidence check goes through the same live check, not the item's write-time access_sets
+    async function labelWith(userId: string, itemId: string, documentId: string, chunkId: string) {
+      const request = LabelRequestSchema.parse({
+        status: 'labelled',
+        label: {
+          answerable: true,
+          category: 'general',
+          language: 'en',
+          expected_answer: 'A neutral synthetic answer.',
+          evidence: [{ chunk_id: chunkId, document_id: documentId, document_name: 'fixture.txt', section: '', quote: 'marker 6604' }],
+          triage: ['training'],
+        },
+      });
+      return validateAndSaveLabel(ssr(userId), admin, itemId, request, userId);
+    }
+
+    test('a document restricted after its item was written can no longer be cited through checkEvidence by an outside expert', async () => {
+      await setSwitch(true, admin);
+      const { documentId, chunkId } = await createDocument(['all']);
+      const itemId = await enqueue(documentId, chunkId);
+      await relabel(documentId, chunkId, [`g:${groupA}`]);
+      const refused = await labelWith(OUTSIDER, itemId, documentId, chunkId);
+      assert.equal(refused.ok, false);
+      assert.deepEqual(refused, { ok: false, reason: 'invalid_evidence', span: 0, detail: 'chunk_not_servable' });
+      assert.equal((await rows(db, 'SELECT label FROM rag_review_items WHERE id = $1', [itemId]))[0]?.label, null, 'nothing was written');
+      const accepted = await labelWith(MEMBER, itemId, documentId, chunkId);
+      assert.equal(accepted.ok, true, 'the group member can still cite it');
     });
 
     test('while access is off the NULL-set item serves its text to every expert, as today', async () => {
