@@ -474,5 +474,113 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
         'access_all returns every tenant id and no other',
       );
     });
+
+    test('rag_access_set_enforced writes the single flag, reads it back and audits only a change', async () => {
+      await assertFunction(db, 'rag_access_set_enforced');
+      const count = async (): Promise<number> =>
+        (await db.query<{ n: number }>("SELECT count(*)::int AS n FROM rag_access_audit WHERE action = 'enforcement_set'")).rows[0]!.n;
+      const set = async (value: boolean): Promise<boolean> =>
+        (await service(db, () => db.query<{ v: boolean }>('SELECT public.rag_access_set_enforced($1) AS v', [value]))).rows[0]!.v;
+      const read = async (): Promise<boolean> =>
+        (await service(db, () => db.query<{ v: boolean }>('SELECT public.rag_access_enforced() AS v'))).rows[0]!.v;
+      const start = await count();
+      try {
+        assert.equal(await set(true), true);
+        assert.equal(await read(), true);
+        assert.equal(await count(), start + 1);
+        const audit = await db.query<Row>(
+          "SELECT tenant_key, actor, actor_kind, reason FROM rag_access_audit WHERE action = 'enforcement_set' ORDER BY created_at DESC, id DESC LIMIT 1",
+        );
+        assert.deepEqual(audit.rows[0], { tenant_key: 'deployment', actor: null, actor_kind: 'system', reason: 'enforced_on' });
+        assert.equal(await set(true), true);
+        assert.equal(await count(), start + 1, 'the same value writes no audit row');
+        assert.equal(await set(false), false);
+        assert.equal(await read(), false);
+        assert.equal(await count(), start + 2, 'switching back writes one');
+        await db.query('DELETE FROM rag_access_group_settings');
+        assert.equal(await read(), false, 'a missing row reads false');
+        assert.equal(await set(false), false, 'the row is recreated');
+        assert.equal((await db.query<{ n: number }>('SELECT count(*)::int AS n FROM rag_access_group_settings')).rows[0]!.n, 1);
+        await rejects(() => service(db, () => db.query('SELECT public.rag_access_set_enforced(NULL)')), /^enforced_required/, 'null');
+        await rejects(
+          () => db.query("INSERT INTO rag_access_audit (tenant_key, action, actor_kind) VALUES ('deployment', 'document_set', 'system')"),
+          /rag_access_audit_tenant_key_check/,
+          'deployment is only for the enforcement flag',
+        );
+      } finally {
+        await db.query('UPDATE rag_access_group_settings SET enforced = false');
+      }
+    });
+
+    test('rag_security_event_record stores ids and the request id only', async () => {
+      await assertFunction(db, 'rag_security_event_record');
+      const record = (tenantKey: string, event: string, requestId: string | null = 'req-1') =>
+        service(db, () =>
+          db.query<{ id: string }>('SELECT public.rag_security_event_record($1, $2, $3, $4::uuid[], $5::uuid[], $6)::text AS id', [
+            tenantKey,
+            OUTSIDER,
+            event,
+            [CHUNK.restricted],
+            [DOC.restricted],
+            requestId,
+          ]),
+        );
+      const created = (await record(fx.tenantKey, 'citation_access_violation')).rows[0]!.id;
+      const row = (
+        await db.query<Row>(
+          'SELECT tenant_key, user_id::text, event, chunk_ids::text[], document_ids::text[], request_id FROM rag_access_security_events WHERE id = $1',
+          [created],
+        )
+      ).rows[0];
+      assert.deepEqual(row, {
+        tenant_key: fx.tenantKey,
+        user_id: OUTSIDER,
+        event: 'citation_access_violation',
+        chunk_ids: [CHUNK.restricted],
+        document_ids: [DOC.restricted],
+        request_id: 'req-1',
+      });
+      const nullIds = await service(db, () =>
+        db.query<{ id: string }>("SELECT public.rag_security_event_record($1, NULL, 'citation_access_violation', NULL, NULL, NULL)::text AS id", [fx.tenantKey]),
+      );
+      const stored = await db.query<Row>('SELECT chunk_ids::text[], document_ids::text[] FROM rag_access_security_events WHERE id = $1', [nullIds.rows[0]!.id]);
+      assert.deepEqual(stored.rows[0], { chunk_ids: [], document_ids: [] });
+      await rejects(() => record(fx.tenantKey, 'something_else'), /rag_access_security_events_event_check/, 'event outside the CHECK');
+      await rejects(() => record(multi ? 's:default' : `o:${ORG}`, 'citation_access_violation'), /tenant key/, 'tenant key of the other mode');
+    });
+
+    test('every 0922 function is executable by service_role only', async () => {
+      const rows = await db.query<{ sig: string; anon: boolean; auth: boolean; svc: boolean; pub: boolean }>(
+        `SELECT p.oid::regprocedure::text AS sig,
+                has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+                has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth,
+                has_function_privilege('service_role', p.oid, 'EXECUTE') AS svc,
+                EXISTS (SELECT 1 FROM aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) a WHERE a.grantee = 0) AS pub
+         FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public' AND p.proname = ANY($1::text[])`,
+        [
+          [
+            'rag_access_enforced',
+            'rag_resolve_access_scope',
+            'rag_access_group_by_key',
+            'rag_access_user_in_tenant',
+            'rag_set_document_access_groups',
+            'rag_chunks_visible',
+            'rag_documents_visible',
+            'rag_access_set_enforced',
+            'rag_security_event_record',
+          ],
+        ],
+      );
+      assert.equal(rows.rows.length, 9, 'nine functions');
+      for (const row of rows.rows) {
+        assert.deepEqual({ sig: row.sig, anon: row.anon, auth: row.auth, svc: row.svc, pub: row.pub }, { sig: row.sig, anon: false, auth: false, svc: true, pub: false });
+      }
+      await rejects(
+        () => asRole(db, 'authenticated', MEMBER_A, () => db.query('SELECT * FROM public.rag_resolve_access_scope($1, $2)', [fx.tenantKey, MEMBER_A])),
+        /permission denied/,
+        'authenticated call',
+      );
+    });
   });
 }
