@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { jsonSchema, stepCountIs, streamText, tool, type StreamTextTransform, type TextStreamPart, type ToolSet, type UIMessageChunk } from 'ai';
+import { createAnswerCollector } from '@/lib/rag/generation/answer-collector';
+import { applyAnswerPipelineToText, buildAnswerTransforms } from '@/lib/rag/generation/answer-transforms';
 import { CALC_BLOCK_CLOSE, CALC_BLOCK_OPEN } from '@/lib/rag/calc/block-tag';
 import {
+  calcBlockTransform,
   createCalcBlockExtractor,
   extractCalcBlocks,
   type CalcBlockEvent,
   type CalcBlockOptions,
 } from '@/lib/rag/generation/calc-block';
+import { streamModelFromPieces, type StreamModelOptions } from '../../helpers/stream-model';
 
 const REQUEST = {
   operands: [
@@ -148,5 +153,140 @@ describe('whole-text twin agrees with every split', () => {
     expect(run(FIXTURES.zh!, { stripMarkers: true }).visibleText).toBe('第一个数值是 3，第二个数值是 4。\n\n合计为 7。');
     expect(run(FIXTURES.it!).visibleText).toBe('Il primo valore è 3 [S1, S2] e il secondo è 4.\nIl totale è 7 <calc non è un tag.');
     for (const text of Object.values(FIXTURES)) expect(run(text).traces).toHaveLength(1);
+  });
+});
+
+describe('calcBlockTransform on the real streamText', () => {
+  type Part = TextStreamPart<ToolSet>;
+  const lookup = tool({
+    description: 'Look something up',
+    inputSchema: jsonSchema<{ query: string }>({ type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }),
+    execute: async () => ({ results: [] }),
+  });
+
+  /** A transform in the guard slot that records every part it sees. */
+  function spy(seen: Part[]): StreamTextTransform<ToolSet> {
+    return () =>
+      new TransformStream<Part, Part>({
+        transform(part, controller) {
+          seen.push(part);
+          controller.enqueue(part);
+        },
+      });
+  }
+
+  async function stream(
+    pieces: string[],
+    calcBlock: Parameters<typeof buildAnswerTransforms>[0]['calcBlock'],
+    options: StreamModelOptions = {},
+  ) {
+    const seen: Part[] = [];
+    const collector = createAnswerCollector({
+      turn: { config: { anyNonDefault: true, citationPerSentence: false, claimCheck: false }, answerLanguage: 'en' },
+      channel: 'web',
+    });
+    const chain = buildAnswerTransforms({ citationTransforms: [], calcBlock, guard: spy(seen), noticeCollector: collector.transforms() });
+    const result = streamText({
+      model: streamModelFromPieces(pieces, 'stop', options),
+      prompt: 'question',
+      tools: { lookup },
+      stopWhen: stepCountIs(4),
+      experimental_transform: chain,
+      onError: () => {},
+    });
+    let responseText: string | null = null;
+    const chunks: UIMessageChunk[] = [];
+    const reader = result
+      .toUIMessageStream({
+        onFinish: ({ responseMessage }) => {
+          responseText = responseMessage.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
+        },
+      })
+      .getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    const text = chunks
+      .filter((chunk): chunk is Extract<UIMessageChunk, { type: 'text-delta' }> => chunk.type === 'text-delta')
+      .map((chunk) => chunk.delta)
+      .join('');
+    const seenText = seen.map((part) => (part.type === 'text-delta' ? part.text : '')).join('');
+    return { text, responseText: responseText as string | null, seen, seenText, collector };
+  }
+
+  const answer = `Value 3 [S1] plus 4 [S2].\n\nTotal is 7.\n\n${BLOCK}`;
+  const pieces = answer.match(/[\s\S]{1,5}/g)!;
+
+  it('removes the block from the UI stream, the response message and every later transform', async () => {
+    const events: CalcBlockEvent[] = [];
+    const out = await stream(pieces, { onTrace: (event) => events.push(event) });
+    expect(out.text).toBe('Value 3 [S1] plus 4 [S2].\n\nTotal is 7.');
+    expect(out.responseText).toBe(out.text);
+    expect(out.collector.finalText()).toBe(out.text);
+    for (const tag of [CALC_BLOCK_OPEN, CALC_BLOCK_CLOSE]) {
+      expect(out.seenText).not.toContain(tag);
+      expect(out.collector.finalText()).not.toContain(tag);
+    }
+    expect(events).toEqual([{ origin: 'trailing_block', request: REQUEST, anchor_offset: 'Value 3 [S1] plus 4 [S2].\n\nTotal is 7.'.length }]);
+  });
+
+  it('exposes the raw text with markers while the visible text is stripped', async () => {
+    const transform = calcBlockTransform({ stripMarkers: true });
+    const out = await stream(pieces, transform);
+    expect(out.text).toBe('Value 3 plus 4.\n\nTotal is 7.');
+    expect(transform.rawText()).toBe('Value 3 [S1] plus 4 [S2].\n\nTotal is 7.');
+    expect(transform.visibleText()).toBe(out.text);
+  });
+
+  it('passes tool parts through and never holds finish-step', async () => {
+    const out = await stream(['Total is 7.', `\n\n${CALC_BLOCK_OPEN}`, JSON.stringify(REQUEST), CALC_BLOCK_CLOSE], {}, {
+      before: [{ pieces: ['Looking it up.'], toolCall: { toolName: 'lookup', input: { query: 'q' } } }],
+    });
+    expect(out.text).toBe('Looking it up.Total is 7.');
+    const types = out.seen.map((part) => part.type);
+    expect(types).toContain('tool-call');
+    expect(types).toContain('tool-result');
+    const firstFinish = types.indexOf('finish-step');
+    const lastDeltaBefore = types.lastIndexOf('text-delta', firstFinish);
+    expect(types.indexOf('tool-call')).toBeLessThan(firstFinish);
+    expect(lastDeltaBefore).toBeLessThan(firstFinish);
+    expect(types.filter((type) => type === 'finish-step')).toHaveLength(2);
+  });
+
+  it('records an unterminated block at text end', async () => {
+    const events: CalcBlockEvent[] = [];
+    const out = await stream(['Total is 7.', CALC_BLOCK_OPEN, '{"operands":'], { onTrace: (event) => events.push(event) });
+    expect(out.text).toBe('Total is 7.');
+    expect(events).toEqual([{ invalid: 'unterminated', anchor_offset: 11 }]);
+  });
+
+  it('leaves the builder output unchanged without the calcBlock input', () => {
+    const citation: StreamTextTransform<ToolSet> = () => new TransformStream();
+    const citations = [citation];
+    expect(buildAnswerTransforms({ citationTransforms: citations })).toBe(citations);
+    expect(buildAnswerTransforms({ citationTransforms: citations, calcBlock: null })).toBe(citations);
+    const chain = buildAnswerTransforms({ citationTransforms: citations, calcBlock: { stripMarkers: false } });
+    expect(chain).toHaveLength(2);
+    expect(chain[0]).toBe(citation);
+  });
+});
+
+describe('whole-text pipeline with the calcBlock input', () => {
+  it('applies the extractor after the sentinel and reports the raw text and events', () => {
+    const answer = `Value 3 [S1].\n\n${BLOCK}`;
+    const plain = applyAnswerPipelineToText(answer, { language: 'en', channel: 'web', notices: false });
+    expect(plain.text).toBe(answer);
+    expect(plain.calcBlock).toBeUndefined();
+    const out = applyAnswerPipelineToText(answer, {
+      language: 'en',
+      channel: 'web',
+      notices: false,
+      calcBlock: { stripMarkers: true },
+    });
+    expect(out.text).toBe('Value 3.');
+    expect(out.calcBlock?.rawText).toBe('Value 3 [S1].');
+    expect(out.calcBlock?.traces).toHaveLength(1);
   });
 });

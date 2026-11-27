@@ -306,3 +306,16 @@ export function extractCalcBlocks(text: string, options: CalcBlockOptions = {}):
     invalid: events.filter((event): event is CalcBlockInvalid => 'invalid' in event),
   };
 }
+
+export type CalcBlockTransform = StreamTextTransform<ToolSet> & {
+  rawText(): string;
+  visibleText(): string;
+};
+
+/** RED stub. */
+export function calcBlockTransform(_options: CalcBlockOptions = {}): CalcBlockTransform {
+  const transform = (() => new TransformStream<TextStreamPart<ToolSet>, TextStreamPart<ToolSet>>()) as unknown as CalcBlockTransform;
+  transform.rawText = () => '';
+  transform.visibleText = () => '';
+  return transform;
+}
