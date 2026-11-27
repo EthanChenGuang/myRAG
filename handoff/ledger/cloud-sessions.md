@@ -722,3 +722,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   Parallelism stays high (plan upgraded to Ultra).
 - 22:20Z The user approved 06.2-22 to continue in its own session.
 - 22:20Z 07-37 STOPPED again on its precondition, correctly, and the session is archived. It needs 06.3-02 and 06.3-07, which come with train 40, and 06.3-15, which is running; or else a 06.3-VERIFICATION. Re-dispatch it on a base that has train 40, 06.3-15, 07-28 and 07-34 once those exist.
+- 22:22Z GSD verification backlog. Phases fully done but unverified: 3.2, 3.2.1, 4.1, 4.1.1, 4.2, 5.1.1. Mostly done: 5.3 (50/52), 4.4, 3.3, 3.1.1, 5.2. Launched verifiers for 3.2, 3.2.1, 4.1, 4.1.1, 4.2, 5.1.1 and 5.3 (Opus, read-only, branch verify/<P>). 4.3 and 6.2 are already running. Still to do: 4.4, 3.3, 3.1.1, 5.2, 5.2.1.
