@@ -778,3 +778,7 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - G2 live -> owner.
   - Archived.
 - RULE: keep RAG_DOC_ACCESS_GROUPS off everywhere until the 4.3 and 5.1.1 fixes have merged and secure-phase reports SECURED.
+- 22:43Z 04.4-15 CHECKPOINT human-action at T2. exec/04.4-15 ad6d4f7d. T1 readiness passed. Steps are in 04.4-15-CHECKPOINT.md.
+  - The eval DB already has 0900-0904 plus the 0932 body. Re-applying 0904 must always be followed by 0932.
+  - T2-T5 need the owner's credentials (eval DB, JWT, golden set, eval deploy env). Owner HOLD.
+  - Archived.
