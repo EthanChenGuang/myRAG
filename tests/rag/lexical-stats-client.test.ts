@@ -42,6 +42,11 @@ describe('lexstatsReady', () => {
     expect(calls).toEqual([{ fn: 'rag_lexstats_status', args: { p_tenant_key: KEY_A } }]);
   });
 
+  it('also reads the one-row answer keyed by the function name', async () => {
+    const { client } = statusClient(() => ({ data: [{ rag_lexstats_status: { state: 'ready', chunk_count: 2 } }], error: null }));
+    await expect(lexstatsReady(client, KEY_A, 1_000)).resolves.toBe(true);
+  });
+
   it('reads building, a null state or zero chunks as not ready', async () => {
     for (const data of [{ state: 'building', chunk_count: 3 }, { state: null, chunk_count: 0 }, { state: 'ready', chunk_count: 0 }, null, []]) {
       resetLexstatsCacheForTests();

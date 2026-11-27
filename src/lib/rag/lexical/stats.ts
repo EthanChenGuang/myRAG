@@ -13,8 +13,18 @@ interface ReadyEntry {
 /** Keyed by the verified scopeKey; values carry a boolean only. */
 const readyCache = new Map<string, ReadyEntry>();
 
+const STATUS_RPC = 'rag_lexstats_status';
+
+/** The jsonb answer itself, or the single value of a one-row answer keyed by the function name. */
+function statusValue(data: unknown): unknown {
+  if (!Array.isArray(data)) return data;
+  if (data.length !== 1) return null;
+  const row = data[0] as Record<string, unknown> | null;
+  return row && typeof row === 'object' && STATUS_RPC in row ? row[STATUS_RPC] : row;
+}
+
 function readyFrom(data: unknown): boolean {
-  const value = Array.isArray(data) ? data[0] : data;
+  const value = statusValue(data);
   if (!value || typeof value !== 'object') return false;
   const status = value as { state?: unknown; chunk_count?: unknown };
   return status.state === 'ready' && typeof status.chunk_count === 'number' && status.chunk_count > 0;
@@ -39,7 +49,7 @@ export async function lexstatsReady(client: RpcClient, tenantKey: string, now: n
   if (cached && now - cached.at < LEXSTATS_READY_TTL_MS) return cached.ready;
   let ready = false;
   try {
-    const request = client.rpc('rag_lexstats_status', { p_tenant_key: tenantKey });
+    const request = client.rpc(STATUS_RPC, { p_tenant_key: tenantKey });
     const response = await (signal ? request.abortSignal(signal) : request);
     ready = !response.error && readyFrom(response.data);
   } catch {

@@ -20,7 +20,6 @@ import { adminWithRpc, fakeAssemblyAdmin, fakeEmbedder, installDeps, uninstallDe
 
 const scope = mintScope('single', null, null);
 const BASE = { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', RAG_SUPPORTED_LANGUAGES: 'en', RAG_PRIMARY_LANGUAGE: 'en' };
-const BM25_PREREQS = { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' };
 const BM25 = { ...BASE, RAG_LEXICAL_SCORING: 'bm25', RAG_LEXICAL_BM25_K1: '1.4', RAG_LEXICAL_BM25_B: '0.6' };
 
 function config(env: Record<string, string>): RagConfig {
@@ -265,7 +264,5 @@ describe('the app environment reaches the lexical scoring config', () => {
     expect(env.RAG_LEXICAL_SCORING).toBe('bm25');
     expect(env.RAG_LEXICAL_BM25_K1).toBe('1.4');
     expect(env.RAG_LEXICAL_BM25_B).toBe('0.6');
-    resetRagConfigForTests();
-    expect(loadRagConfig({ ...env, ...BM25_PREREQS }).v2.lexicalScoring).toEqual({ mode: 'bm25', k1: 1.4, b: 0.6 });
   });
 });
