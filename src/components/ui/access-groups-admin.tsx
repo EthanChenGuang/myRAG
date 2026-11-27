@@ -648,6 +648,7 @@ export function AccessGroupsAdmin({ organizationId, language, fetcher }: AccessG
       setStatus(null);
       return outcome;
     }
+    if (!write && outcome.type === 'unavailable') return outcome;
     setStatus(failureMessage(outcome, language));
     return outcome;
   };
@@ -764,7 +765,7 @@ export function AccessGroupsAdmin({ organizationId, language, fetcher }: AccessG
   const findingsId = 'access-groups-new-findings';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 [contain:inline-size]">
       <p role="status" aria-live="polite" className={cn('text-sm', status ? STATUS_CLASS[status.tone] : 'sr-only')}>
         {status && (status.tone === 'error'
           ? <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
@@ -775,7 +776,7 @@ export function AccessGroupsAdmin({ organizationId, language, fetcher }: AccessG
       <section className={CARD_CLASS} aria-labelledby="access-groups-title">
         <div className="flex flex-wrap items-center gap-3 mb-2">
           <Users className="h-5 w-5 text-[#FF6417] dark:text-[#FF8A4D]" aria-hidden="true" />
-          <h4 id="access-groups-title" className="text-lg font-semibold text-gray-900 dark:text-white flex-1 min-w-0">
+          <h4 id="access-groups-title" className="text-lg font-semibold text-gray-900 dark:text-white flex-1 basis-32 min-w-0 break-words">
             {text('groups.title')}
           </h4>
           {!formOpen && (
@@ -853,7 +854,7 @@ export function AccessGroupsAdmin({ organizationId, language, fetcher }: AccessG
         {loadState === 'unavailable' && (
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-red-800 dark:text-red-200">
             <AlertTriangle className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
-            <span className="flex-1 min-w-0">
+            <span className="basis-full sm:basis-0 sm:flex-1 min-w-0">
               {text('groups.unavailable', { reload: text('action.reloadGroups') })}
             </span>
             <Button type="button" variant="outline" size="sm" onClick={() => void loadGroups()}>
@@ -885,7 +886,7 @@ export function AccessGroupsAdmin({ organizationId, language, fetcher }: AccessG
               return (
                 <li key={row.id} className={ROW_CLASS}>
                   <div className="flex flex-wrap items-start gap-2">
-                    <div className="flex-1 min-w-0">
+                    <div className="basis-full sm:basis-0 sm:flex-1 min-w-0">
                       {editing ? (
                         <div
                           className="flex flex-wrap items-center gap-2"
@@ -931,8 +932,8 @@ export function AccessGroupsAdmin({ organizationId, language, fetcher }: AccessG
                       )}
                       <p className={cn('text-xs flex flex-wrap gap-x-3 gap-y-1 mt-1', MUTED_CLASS)}>
                         <span className="font-mono break-all" translate="no">{row.key}</span>
-                        <span className="tabular-nums">{row.membersLine}</span>
-                        <span className="tabular-nums">{row.documentsLine}</span>
+                        <span className="tabular-nums whitespace-nowrap">{row.membersLine}</span>
+                        <span className="tabular-nums whitespace-nowrap">{row.documentsLine}</span>
                         {row.fromConnector && <span>{row.fromConnector}</span>}
                       </p>
                     </div>
@@ -1189,7 +1190,7 @@ function MembersRegion({
       <div className="space-y-2">
         <label htmlFor={searchId} className="sr-only">{text('members.search')}</label>
         <div className="relative">
-          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" aria-hidden="true" />
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 z-10 pointer-events-none text-gray-600 dark:text-gray-400" aria-hidden="true" />
           <Input
             id={searchId}
             ref={searchRef}
@@ -1633,7 +1634,7 @@ function ConnectorMappingCard({
     <section className={CARD_CLASS} aria-labelledby="access-mapping-title" aria-busy={busy ? true : undefined}>
       <div className="flex flex-wrap items-center gap-3 mb-2">
         <Lock className="h-5 w-5 text-[#FF6417] dark:text-[#FF8A4D]" aria-hidden="true" />
-        <h4 id="access-mapping-title" className="text-lg font-semibold text-gray-900 dark:text-white flex-1 min-w-0">
+        <h4 id="access-mapping-title" className="text-lg font-semibold text-gray-900 dark:text-white flex-1 basis-32 min-w-0 break-words">
           {text('mapping.title')}
         </h4>
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void load()}>

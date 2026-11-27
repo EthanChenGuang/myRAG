@@ -368,7 +368,7 @@ export function WorkspaceSettingsModal({
                       "data-[state=inactive]:hover:bg-[#FFE0D0] data-[state=inactive]:dark:hover:bg-[#2A2A2A]"
                     )}
                   >
-                    <Settings className="h-4 w-4" />
+                    <Settings className="h-4 w-4 flex-shrink-0" />
                     {t('general')}
                   </TabsTrigger>
                   <TabsTrigger
@@ -381,7 +381,7 @@ export function WorkspaceSettingsModal({
                       "data-[state=inactive]:hover:bg-[#FFE0D0] data-[state=inactive]:dark:hover:bg-[#2A2A2A]"
                     )}
                   >
-                    <Brain className="h-4 w-4" />
+                    <Brain className="h-4 w-4 flex-shrink-0" />
                     {t('aiBehavior')}
                   </TabsTrigger>
                   {showAccessTab && (
@@ -395,7 +395,7 @@ export function WorkspaceSettingsModal({
                         "data-[state=inactive]:hover:bg-[#FFE0D0] data-[state=inactive]:dark:hover:bg-[#2A2A2A]"
                       )}
                     >
-                      <Users className="h-4 w-4" aria-hidden="true" />
+                      <Users className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
                       {accessGroupText('tab.access', language)}
                     </TabsTrigger>
                   )}
