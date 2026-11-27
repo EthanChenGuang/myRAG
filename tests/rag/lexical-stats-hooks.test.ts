@@ -86,6 +86,13 @@ describe('afterLexicalWrite', () => {
     ]);
   });
 
+  it('also reads the one-row scalar answer keyed by the function name', async () => {
+    const { db, calls } = recordingDb({ rag_lexstats_enable: () => ({ data: [{ rag_lexstats_enable: 'building' }], error: null }) });
+    await afterLexicalWrite({ db: () => db, config: configOf('bm25') }, KEY_A);
+    expect(fns(calls)).toEqual(['rag_lexstats_enable', 'rag_lexstats_rebuild', 'rag_lexstats_compact']);
+    expect(lexicalLines()).toEqual([]);
+  });
+
   it('a ready tenant: no rebuild, one compaction', async () => {
     const { db, calls } = recordingDb(enableAnswer('ready'));
     await afterLexicalWrite({ db: () => db, config: configOf('bm25') }, KEY_A);
