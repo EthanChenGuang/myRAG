@@ -1,0 +1,5 @@
+- exec/04.2-32 @ e4f44712 (Phase 4.2 closed; gates pass) — train 37
+- exec/07-40 07-24 07-21 06.2-34 06.2-07 05.2.1-14 04.4-14 06.2-05 06.2-03 04.3-21 04.3-13 07-19 03.3-23 (completed 12:1x, sessions archived)
+- notes: 05.2.1-14 one vitest fails (legacy-post-filter-sentinel); 04.4-14 fixture gate (b) duplicate_flood fails; 03.3-23 3 fixture gates fail (v2 ingest refusal); 06.2-34 edited pglite-supabase.mts + test_fixture_pii.py outside plan
+- pending relaunch: 06.3-14 after 07-37; 07-37 after Phase 6.3 lands + 06.3-VERIFICATION
+- exec/06.2-37 04.3-31 04.3-22 05.2.1-15 (12:3x)

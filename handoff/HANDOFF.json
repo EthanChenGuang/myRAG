@@ -1,0 +1,28 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-11-27T12:53:40Z",
+  "role": "myRAG orchestrator (dispatch only; executors do code)",
+  "status": "paused",
+  "reason": "account credit running out; resume from another account",
+  "trunk": "main (protected: requires pr-smoke). claude/ecstatic-hamilton-86gtwv is stale, not trunk.",
+  "prod": {"vercel_live": "main fbb6bc3c (dpl_Hbiz3zegLpPCMfRxk7itepDydL4m, READY) — owner later redeployed with prod-only OPENROUTER key (dpl_82pTJDNn..)", "supabase_last_applied": "train35_0410_r18_delta (t30-t35 applied)"},
+  "open_pr": {"number": 131, "branch": "ci/merge-train-36", "head": "7f8d4b4f", "plans": 18, "state": "CI re-running after docs commit (prior pr-smoke red only from cancelled runs; f1ffdd4d was 26/26 green)", "next": "subscribe_pr_activity #131; merge (merge method) only when all checks green; then tell owner desk to apply ops/owner-actions:sql/train36-live.sql"},
+  "running_sessions": {
+    "07-41": "session_01SEn5g8cFWaDKPFt2nsu9SJ", "07-20": "session_01SEn5g8B8AbqZXYLSEukHX6", "06.2-09": "session_01SEn5g92cUQHzwJGPgVT9dP",
+    "06.2-08": "session_01SEn5g8ygNLcg2UnJHWQfn6", "06.2-06": "session_01SEn5g63Ja2oV5eaozGJWAN", "05.2.1-18": "session_01SEn5g5kqsBsyTECbVv3oKF",
+    "04.3-23": "session_01SEn5g8XDuVC1KkC5zcY2Nk", "03.3-25": "session_01SEn5g9VkshdPu2QCJAVJzn", "quick-openrouter": "session_01SEn5g5MUwB2Cztmd7FfJey",
+    "04.3-09": "session_01SEn5g5HR7Wu7kFEBh25kYD", "04.3-24": "session_01SEn5g7BsHLTEgcccr4RiUJ", "04.3-33": "session_01SEn5g5E3CdJzc34gPD3eFV",
+    "05.2.1-19": "session_01SEn5g813CWs9UyC5uQb1Lw", "07-42": "session_01SEn5g9PDE9AuGF5aQnm3yE", "05.2.1-12": "session_01SEn5g58U6WjjYHEEiS72mZ",
+    "owner_desk": "session_01SEn5g5PDMhvNTGBsAshVpc"
+  },
+  "sessions_note": "All were told at pause time to /gsd-pause-work, commit WIP and push exec/<plan> (no force). On resume: for each plan, check origin/exec/<plan> for SUMMARY (done) or .continue-here.md/HANDOFF.json (relaunch an executor on exec/<plan> telling it to /gsd-resume-work). Sessions on the old account may not be reachable.",
+  "train37_candidates": "handoff/ledger/train37-candidates.md",
+  "waiting": ["06.3-14 after 07-37", "07-37 after Phase 6.3 lands + 06.3-VERIFICATION"],
+  "human_actions_pending": "handoff/ledger/owner-queue.md (owner desk keeps its own copy on ops/owner-actions)",
+  "decisions": [
+    "OpenRouter replaces OpenAI/DeepInfra where possible (owner cannot pay them); RAG_BGE_M3_VIA route + cosine verify before any bge-m3 backfill; 03.1-54 Task 3.1 DEFERRED",
+    "fsgaeysipkukqoocgzbx is the eval project (read-only for executors unless a plan says otherwise)",
+    "owner confirmed items 11-14/14b/16 and decisions-on-behalf (2026-11-27)"
+  ],
+  "next_action": "Read handoff/continue-here.md, then check PR #131 CI and the exec/* branches of the sessions above."
+}
