@@ -403,7 +403,7 @@ describe('New group form (D-01, UI-SPEC 6.3, 9.5, 9.6)', () => {
     button(page.groupsPanel(), 'New group').click();
     const create = button(page.groupsPanel(), 'Create group');
     expect(create.disabled).toBe(true);
-    expect(create.getAttribute('aria-describedby')).toBe('rag-access-groups-findings');
+    expect(create.getAttribute('aria-describedby')).toContain('rag-access-groups-findings');
     expect(page.doc.getElementById('rag-access-groups-findings')!.textContent).toContain('Enter a name.');
     expect(page.doc.activeElement!.id).toBe('rag-access-groups-name');
     expect(button(page.groupsPanel(), 'New group').getAttribute('aria-expanded')).toBe('true');
@@ -900,5 +900,42 @@ describe('Counted delete dialog (D-18, UI-SPEC decision 10)', () => {
     expect(title.textContent).toContain(XSS_PAYLOAD);
     expect(page.row(ID_A).querySelector('[data-access-groups-name]')!.className).toContain('break-words');
     expect(injectedElements(page.doc)).toEqual([]);
+  });
+});
+
+describe('design pass: layout classes, locales and the findings line (UI-SPEC 9, 10)', () => {
+  it('hides the count columns below 768px and shows them under the key; the table scrolls inside its region', async () => {
+    const page = loadPage();
+    await page.init();
+    const heads = page.root.querySelector('[data-access-groups-table]')!.querySelectorAll('thead th');
+    expect(heads.map((h) => h.className.includes('hidden md:table-cell'))).toEqual([false, true, true, false]);
+    const line = page.row(ID_A).querySelector('th')!.querySelector('.md\\:hidden')!;
+    expect(line.textContent).toBe('Members: 4Documents: 12');
+    expect(page.root.querySelector('[data-access-groups-table]')!.className).toContain('overflow-x-auto');
+    for (const b of page.row(ID_A).querySelectorAll('button')) expect(b.className).toContain('whitespace-normal');
+  });
+
+  it('a key error is shown once: at the field, not again in the findings line', async () => {
+    const page = loadPage();
+    await page.init();
+    button(page.groupsPanel(), 'New group').click();
+    type(page.doc.getElementById('rag-access-groups-name')!, 'group-x');
+    type(page.doc.getElementById('rag-access-groups-key')!, 'all');
+    expect(page.doc.getElementById('rag-access-groups-findings')!.textContent).toBe('');
+    expect(page.doc.getElementById('rag-access-groups-key-error')!.textContent).toContain('reserved');
+  });
+
+  it.each([
+    ['zh-CN', '访问组：2', '新建访问组', '管理成员'],
+    ['it-IT', 'Gruppi: 2', 'Nuovo gruppo', 'Gestisci membri'],
+  ])('renders %s', async (locale, tabLabel, newGroup, manage) => {
+    const page = loadPage({ locale });
+    await page.init();
+    expect(page.root.querySelector('[role="tab"]')!.textContent).toBe(tabLabel);
+    expect(button(page.groupsPanel(), newGroup)).toBeTruthy();
+    expect(button(page.row(ID_A), manage)).toBeTruthy();
+    button(page.row(ID_A), manage).click();
+    await flush();
+    expect(page.groupsPanel().textContent).not.toContain('Type at least 2 characters.');
   });
 });

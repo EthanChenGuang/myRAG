@@ -2099,7 +2099,7 @@ class AccessGroupsPanel {
     const name = this.el('input', {
       className: 'input input-bordered input-sm w-full',
       id: 'rag-access-groups-name',
-      attrs: { type: 'text', autocomplete: 'off', maxlength: '200', 'aria-describedby': 'rag-access-groups-name-error' },
+      attrs: { type: 'text', name: 'access-group-name', autocomplete: 'off', maxlength: '200', 'aria-describedby': 'rag-access-groups-name-error' },
     });
     name.value = this.form.name;
     const key = this.el('input', {
@@ -2107,6 +2107,7 @@ class AccessGroupsPanel {
       id: 'rag-access-groups-key',
       attrs: {
         type: 'text',
+        name: 'access-group-key',
         autocomplete: 'off',
         spellcheck: 'false',
         translate: 'no',
@@ -2119,7 +2120,7 @@ class AccessGroupsPanel {
     const keyHelp = this.el('p', { className: 'text-xs text-base-content/70 mt-1 max-w-prose', id: 'rag-access-groups-key-help', text: this.t('form.keyHelp') });
     const keyError = this.el('p', { className: 'text-xs text-error mt-1 empty:hidden break-words', id: 'rag-access-groups-key-error' });
     const findings = this.el('p', { className: 'text-xs text-base-content/70 lg:col-span-2 break-words empty:hidden', id: 'rag-access-groups-findings' });
-    const create = this.btn(this.t('action.createGroup'), 'btn-primary btn-sm min-h-8 py-1', { 'aria-describedby': 'rag-access-groups-findings', 'data-access-groups-create': '' }, () =>
+    const create = this.btn(this.t('action.createGroup'), 'btn-primary btn-sm min-h-8 py-1', { 'aria-describedby': 'rag-access-groups-findings rag-access-groups-key-error', 'data-access-groups-create': '' }, () =>
       this.createGroup(),
     );
     const close = this.btn(this.t('action.closeForm'), 'btn-ghost btn-sm min-h-8 py-1', { 'data-access-groups-close-form': '' }, () => this.closeForm(true));
@@ -2163,11 +2164,14 @@ class AccessGroupsPanel {
     const h = this.formHosts;
     if (!h) return;
     const { findings, valid } = accessGroupsFormFindings(this.form.name, this.form.key);
-    h.findings.textContent = findings.map((f) => this.t(f.key)).join(' ');
-    h.create.disabled = !valid || this.form.busy;
     const error = this.form.error;
     const keyFinding = findings.find((f) => f.field === 'key');
     const keyInvalid = Boolean((error && error.field === 'key') || (this.form.key && keyFinding));
+    h.findings.textContent = findings
+      .filter((f) => !(f.field === 'key' && keyInvalid))
+      .map((f) => this.t(f.key))
+      .join(' ');
+    h.create.disabled = !valid || this.form.busy;
     h.keyError.textContent = error && error.field === 'key' ? error.message : this.form.key && keyFinding ? this.t(keyFinding.key) : '';
     h.nameError.textContent = error && error.field === 'name' ? error.message : '';
     for (const [input, invalid] of [
@@ -2255,7 +2259,7 @@ class AccessGroupsPanel {
     const input = this.el('input', {
       className: 'input input-bordered input-sm w-full',
       id: 'rag-access-groups-rename-input',
-      attrs: { type: 'text', autocomplete: 'off', maxlength: '200', 'aria-describedby': 'rag-access-groups-rename-findings' },
+      attrs: { type: 'text', name: 'access-group-name', autocomplete: 'off', maxlength: '200', 'aria-describedby': 'rag-access-groups-rename-findings' },
     });
     input.value = state.value;
     const findings = this.el('p', { className: 'text-xs text-base-content/70 break-words empty:hidden', id: 'rag-access-groups-rename-findings' });
@@ -2362,10 +2366,13 @@ class AccessGroupsPanel {
     const search = this.el('input', {
       className: 'input input-bordered input-sm w-full max-w-md',
       id: id + '-search',
-      attrs: { type: 'search', autocomplete: 'off', spellcheck: 'false', maxlength: '200', 'aria-describedby': id + '-search-status', 'data-access-groups-member-search': '' },
+      attrs: { type: 'search', name: 'access-group-member-search', autocomplete: 'off', spellcheck: 'false', maxlength: '200', 'aria-describedby': id + '-search-status', 'data-access-groups-member-search': '' },
     });
     const searchStatus = this.el('p', { className: 'text-xs text-base-content/70 mt-1 break-words min-h-4', id: id + '-search-status', attrs: { 'aria-live': 'polite' } });
-    const results = this.el('ul', { className: 'mt-2 max-h-72 overflow-y-auto divide-y divide-base-200 empty:hidden', attrs: { 'aria-label': this.t('members.results'), 'data-access-groups-results': '' } });
+    const results = this.el('ul', {
+      className: 'mt-2 max-h-72 overflow-y-auto divide-y divide-base-200 rounded empty:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+      attrs: { tabindex: '0', 'aria-label': this.t('members.results'), 'data-access-groups-results': '' },
+    });
     const table = this.el('div', { className: 'mt-4 min-w-0', attrs: { 'data-access-groups-members': '' } });
     const close = this.btn(this.t('action.closeMembers'), 'btn-ghost btn-sm min-h-8 py-1', { 'data-access-groups-close-members': '' }, () => this.closeMembers({ render: true, focus: true }));
     search.addEventListener('input', () => this.onSearchInput(accessGroupsText(search.value)));
