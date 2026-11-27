@@ -767,3 +767,26 @@ export type {
   ProfileStateCounts,
 } from './backend/index-compat';
 export type { VectorStore, VectorSyncTarget } from './sync/stores/types';
+export { getCentroidSnapshot, invalidateCentroidCache, refreshCentroidSnapshot, SCOPE_CENTROID_CACHE_TTL_MS } from './scope/centroids';
+export type { CentroidSnapshot, ScopeCentroid, ScopeGroupKind } from './scope/centroids';
+export { rebuildScopeCentroids, ScopeRebuildError } from './scope/build';
+export type { ScopeRebuildCounts, ScopeRebuildOptions, ScopeRebuildResult } from './scope/build';
+export {
+  addScopeExample,
+  deleteScopeExample,
+  listScopeExamples,
+  scopeGateStatus,
+  startScopeRebuild,
+  SCOPE_EXAMPLE_LIMIT,
+  SCOPE_EXAMPLE_MAX_CHARS,
+} from './scope/admin';
+export type {
+  AddScopeExampleCode,
+  AddScopeExampleResult,
+  DeleteScopeExampleResult,
+  ListScopeExamplesResult,
+  ScopeExample,
+  ScopeGateStatus,
+  ScopeGateStatusResult,
+  StartScopeRebuildResult,
+} from './scope/admin';
