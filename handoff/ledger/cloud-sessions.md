@@ -913,3 +913,6 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - G7 is already fixed by 1010 (t39).
   - Archived.
 - 23:54Z PR #136 attempt 2: ts-db 3/10 cancelled again; already commented on the PR. Wait for the timeout fix to reach main, then merge main into fix/composer-comet.
+- 00:00Z quick-53-gate-monitor DONE exec/quick-53-gate-monitor 47b10449 -> train 41. Covers gap 1 (monitor env), gap 2 (weekly sample), gap 15 (release-gate split, ancestor check, run-bound statuses), gap 3 (per-check enforce: false_answer_rate gates prechunked) and W-1. Archived.
+  - OWNER: H-3 GitHub Environment with reviewers; H-2 repo vars/secrets; H-10 false-refusal ceiling. Re-run the gate before promoting.
+- 00:00Z 06.2-42 route B recorded (613a8c60): bge-m3 verdict false, voyage verdict false (reference only). Route A told to run now that the OpenRouter key is saved.
