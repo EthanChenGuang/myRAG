@@ -7,7 +7,7 @@ from ragas.llms.base import InstructorBaseRagasLLM
 from ragas.metrics.collections import AnswerRelevancy, ContextRecall, Faithfulness
 from rag_sidecar.contracts.judge import JudgeConfig
 
-from rag_eval.judge.config import JudgeCase, JudgeFatalError, raise_if_fatal
+from rag_eval.judge.config import JUDGE_MAX_OUTPUT_TOKENS, JudgeCase, JudgeFatalError, raise_if_fatal
 
 Outcome = tuple[float | None, str | None]
 
@@ -86,12 +86,20 @@ def build_ragas_live(config: JudgeConfig, openrouter_key: str, openai_key: str) 
         provider="openai",
         client=AsyncOpenAI(api_key=openrouter_key, base_url=config.base_url),
         temperature=config.temperature,
+        max_tokens=JUDGE_MAX_OUTPUT_TOKENS,
     )
-    sent = llm._map_provider_params().get("temperature")  # type: ignore[attr-defined]
+    params = llm._map_provider_params()  # type: ignore[attr-defined]
+    sent = params.get("temperature")
     if sent != config.temperature:
         raise JudgeFatalError(
             f"the Ragas wrapper would send temperature {sent!r} instead of {config.temperature!r} "
             f"for {config.judge_model!r}; pin another non-Claude judge"
+        )
+    limit = params.get("max_tokens", params.get("max_completion_tokens"))
+    if limit != JUDGE_MAX_OUTPUT_TOKENS:
+        raise JudgeFatalError(
+            f"the Ragas wrapper would send an output limit of {limit!r} instead of {JUDGE_MAX_OUTPUT_TOKENS} "
+            f"for {config.judge_model!r}"
         )
     embeddings = embedding_factory(
         "openai",

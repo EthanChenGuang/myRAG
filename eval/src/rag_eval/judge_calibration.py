@@ -37,6 +37,7 @@ from rag_eval.config_files import finalize_config, write_config_atomically
 from rag_eval.draft import writer
 from rag_eval.judge.config import (
     DEFAULT_CONFIG_PATH,
+    JUDGE_MAX_OUTPUT_TOKENS,
     JudgeCase,
     JudgeFamilyError,
     JudgeFatalError,
@@ -144,8 +145,9 @@ def judge_fingerprint(
     *,
     versions: Mapping[str, str | None] | None = None,
     rubrics: Mapping[str, str | None] | None = None,
+    max_output_tokens: int = JUDGE_MAX_OUTPUT_TOKENS,
 ) -> str:
-    """sha256 of the role, model id, temperature, library versions and rubric text; a missing rubric leaves the version."""
+    """sha256 of the role, model id, temperature, output limit, library versions and rubric text; a missing rubric leaves the version."""
     libraries = ROLE_LIBRARIES.get(role, ("deepeval",))
     resolved_versions = dict(versions) if versions is not None else _installed_versions(libraries)
     resolved_rubrics = dict(rubrics) if rubrics is not None else installed_rubrics(libraries)
@@ -154,6 +156,7 @@ def judge_fingerprint(
         "judge_model": config.judge_model,
         "judge_family": config.judge_family,
         "temperature": config.temperature,
+        "max_output_tokens": max_output_tokens,
         "libraries": {library: resolved_versions.get(library) for library in sorted(resolved_versions)},
         "rubrics": {
             key: None if text is None else hashlib.sha256(text.encode("utf-8")).hexdigest()
