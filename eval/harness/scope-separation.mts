@@ -71,8 +71,9 @@ export interface GroupingResult {
 export interface ScopeSeparationReport {
   version: 1;
   measurement: 'q62-scope-separation';
-  embedder: 'fixture-ngram';
+  embedder: string;
   embedding_profile: string;
+  embedding_run?: { calls: number; texts: number };
   scoring: string;
   threshold_rule: string;
   counts: { answerable: number; out_of_domain: number; near_miss: number; cross_lingual: number; dev_answerable: number };
@@ -168,10 +169,41 @@ function readGolden(goldenPath: string): GoldenRow[] {
     .map((line) => JSON.parse(line) as GoldenRow);
 }
 
+export interface EmbeddingProfileRow {
+  id: string;
+  provider: string;
+  model: string;
+  dims: number;
+  storage: string;
+}
+
+export interface SeparationEmbedder {
+  name: string;
+  embedDocuments(texts: string[]): Promise<number[][]>;
+  embedQueries(texts: string[]): Promise<number[][]>;
+}
+
+export type SeparationEmbedderFactory = (profile: EmbeddingProfileRow) => SeparationEmbedder | Promise<SeparationEmbedder>;
+
+export const SCOPE_SEPARATION_REAL_DIR = '';
+
+export function reportTextLeaks(_text: string): string[] {
+  return [];
+}
+
+export function requiredEmbeddingKey(_profile: Pick<EmbeddingProfileRow, 'provider'>, _env: Record<string, string | undefined>): string {
+  return '';
+}
+
+export async function runScopeSeparationCli(_argv: string[], _deps: Record<string, unknown> = {}): Promise<number> {
+  return 1;
+}
+
 export interface ScopeSeparationOptions {
   corpusDir?: string;
   goldenPath?: string;
   translationPath?: string;
+  embedding?: { profile: string; create: SeparationEmbedderFactory };
 }
 
 export async function runScopeSeparation(options: ScopeSeparationOptions = {}): Promise<ScopeSeparationReport> {
