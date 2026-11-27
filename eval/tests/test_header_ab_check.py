@@ -265,3 +265,23 @@ def test_missing_run_directory_exits_2(tmp_path, capsys):
     code = _main("--header-on", str(on), "--header-off", str(tmp_path / "absent"), "--out", str(tmp_path / "out"))
     assert code == 2
     assert "absent" in capsys.readouterr().err
+
+
+def test_the_header_off_run_config_differs_from_recommended_only_in_the_header():
+    repo = Path(__file__).resolve().parents[2]
+    runs = repo / "eval" / "config" / "runs"
+    recommended = json.loads((runs / "tpl-recommended.json").read_text(encoding="utf-8"))["env"]
+    no_header = json.loads((runs / "tpl-recommended-no-header.json").read_text(encoding="utf-8"))["env"]
+    assert recommended["RAG_ATTRIBUTE_HEADER"] == "true"
+    assert no_header == {**recommended, "RAG_ATTRIBUTE_HEADER": "false"}
+
+
+def test_the_rehearsal_spec_runs_both_arms_in_ingest_mode():
+    from rag_eval.phase_compare import SwitchComparisonSpec
+
+    repo = Path(__file__).resolve().parents[2]
+    spec = SwitchComparisonSpec.model_validate_json((repo / "eval" / "config" / "tpl09-header-ab-comparison.json").read_text(encoding="utf-8"))
+    by_name = {run.name: run for run in spec.runs}
+    assert set(by_name) == {"tpl-recommended-ingest", "tpl-recommended-no-header-ingest"}
+    assert by_name["tpl-recommended-no-header-ingest"].base == "eval/config/runs/tpl-recommended-no-header.json"
+    assert all(run.fixture_mode == "ingest" and run.switches == {"RAG_CITATIONS": "true"} for run in spec.runs)
