@@ -36,6 +36,9 @@ import {
   ScopeFilterError,
   readFeedbackLoopConfig,
   resolveEmbedScope,
+  bodyNamesAccessGroups,
+  embedAccessGroup,
+  resolveAccessScope,
   runRetrieval,
   scopeKey,
   type LogContext,
@@ -273,6 +276,8 @@ export async function POST(request: NextRequest) {
 
     // The workspace check reads the raw body because schema parsing strips unknown keys
     const body = await request.json();
+    // D-06: groups never come from the body; a claim is ignored and logged once per request
+    if (bodyNamesAccessGroups(body)) console.warn('[RAG Access] body_group_claim_ignored', { route: 'embed' });
     console.log('EMBED API: Request body:', { messagesCount: body?.messages?.length, model: body?.model });
 
     // Only the v2 pipeline reads this field; under legacy the body is handled exactly as before
@@ -317,6 +322,14 @@ export async function POST(request: NextRequest) {
       console.error('[Document Search] Embed knowledge base unavailable:', { status: embedScope.status, reason: embedScope.reason });
       return knowledgeBaseUnavailableResponse(request);
     }
+    // D-07: visitors get keys all unless RAG_EMBED_ACCESS_GROUP names an existing group of the embed tenant. A refusal keeps the scope
+    // unresolved, so retrieval fails closed with status error and the unavailable response below applies (D-10).
+    const embedAccess = await resolveAccessScope({
+      scope: embedScope.scope,
+      identity: { kind: 'embed', groupKey: embedAccessGroup() },
+      signal: request.signal,
+    });
+    const ragScope = embedAccess.ok ? embedAccess.scope : embedScope.scope;
 
     const streamHeaders = (): Record<string, string> => ({
       'Content-Type': 'text/plain; charset=utf-8',
@@ -386,7 +399,7 @@ export async function POST(request: NextRequest) {
         : undefined;
       const collector = createTraceCollector({ profile: 'embed', tenantKey: scopeKey(embedScope.scope) });
       const result = await runRetrieval({
-        scope: embedScope.scope,
+        scope: ragScope,
         query: queryText,
         profile: 'embed',
         channel: 'embed',

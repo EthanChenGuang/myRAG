@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { env } from '@/lib/env';
-import { resolveVoiceScope } from '@/lib/rag';
+import { bodyNamesAccessGroups, resolveVoiceScope } from '@/lib/rag';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { generateTitle, generateSmartTitle } from '@/lib/title-generator';
 import type { DBMessage } from '@/types/chat';
@@ -45,6 +45,9 @@ export async function POST(req: NextRequest) {
         } catch {
             return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
         }
+
+        // D-06: this route saves the conversation and retrieves nothing; a body group claim is ignored and logged once per request
+        if (bodyNamesAccessGroups(body)) console.warn('[RAG Access] body_group_claim_ignored', { route: 'voice_chat' });
 
         // Identity comes from the verified token only; body userId and organizationId are ignored.
         const userId = scope.actorUserId;
