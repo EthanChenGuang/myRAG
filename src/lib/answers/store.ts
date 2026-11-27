@@ -12,7 +12,7 @@ import {
 
 export type AnswerGroundednessValue = AnswerRecord['groundedness'];
 export type AnswerFeedbackValue = NonNullable<AnswerRecord['feedback']>;
-export type ReviewReason = 'feedback_negative' | 'groundedness_flagged' | 'claim_unsupported';
+export type ReviewReason = 'feedback_negative' | 'groundedness_flagged' | 'claim_unsupported' | 'calc_mismatch' | 'calc_unverified';
 export type AnswerTextsSource = NonNullable<AnswerRecord['textsSource']>;
 
 export interface AnswerRecordRow {
@@ -69,7 +69,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MAX_ATTACH_IDS = 500;
 const MAX_CHAT_RECORDS = 500;
 const CHECKS_COLUMNS = ',checks,texts_source';
-const REVIEW_REASONS: readonly ReviewReason[] = ['feedback_negative', 'groundedness_flagged', 'claim_unsupported'];
+export const REVIEW_REASONS: readonly ReviewReason[] = ['feedback_negative', 'groundedness_flagged', 'claim_unsupported', 'calc_mismatch', 'calc_unverified'];
 const APPEND_ATTEMPTS = 5;
 
 const InsertSchema = z.object({
