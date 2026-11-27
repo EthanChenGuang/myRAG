@@ -946,9 +946,12 @@ export async function POST(req: NextRequest) {
         let builtRules = '';
         const decorateSystemPrompt = (prompt: string): string => {
           if (!answerTurn || result.context.length === 0) return citationSession ? citationSession.decorateSystemPrompt(prompt) : prompt;
-          const decorated = citationSession ? citationSession.decorateSystemPrompt(prompt) : prompt;
-          const composed = answerTurn.composeSystemPrompt(decorated, answerRuleOptions);
-          builtRules = composed.startsWith(decorated) ? composed.slice(decorated.length) : '';
+          const composed = answerTurn.composeSystemPrompt(citationSession ? citationSession.decorateSystemPrompt(prompt) : prompt, answerRuleOptions);
+          // D-86: the rule block measured on its own; when it is not the composed suffix it stays counted in the system part
+          if (budgetPlan) {
+            const rules = answerTurn.rulesBlock(answerRuleOptions);
+            builtRules = rules && composed.endsWith(rules) ? rules : '';
+          }
           return composed;
         };
         const calcTool = calcOffer?.mode === 'tool' ? buildCalculateTool({ aliases: calcOffer.aliases, holder: calcHolder }) : undefined;
