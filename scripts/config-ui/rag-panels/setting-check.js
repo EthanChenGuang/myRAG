@@ -577,6 +577,10 @@ function settingCheckSaveBody(button, ctx) {
   return checkId ? { check_id: checkId } : { skipped: true };
 }
 
+function settingCheckCreateGuard() {
+  return { beforeSave: async () => ({}), required: async () => ({}), saved() {}, saveFailed: async () => ({}), isOpen: () => false };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SETTING_CHECK_LABELS,
@@ -586,5 +590,6 @@ if (typeof module !== 'undefined' && module.exports) {
     settingCheckDialogView,
     settingCheckReason,
     settingCheckSaveBody,
+    settingCheckCreateGuard,
   };
 }
