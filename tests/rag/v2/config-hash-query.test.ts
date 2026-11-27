@@ -123,6 +123,23 @@ describe('queryLayerHashComponent', () => {
     );
     resetRagConfigForTests();
   });
+
+  it('shared.subq-filters joins the prompt versions only while RAG_QUERY_SUBQ_FILTERS is effective (train 38)', () => {
+    resetRagConfigForTests();
+    const layer = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true' }).queryLayer;
+    const params = effectiveQueryParams('chat');
+    const unset = queryLayerHashComponent(layer, params);
+    const off = queryLayerHashComponent(layer, params, { subqFilters: false });
+    const on = queryLayerHashComponent(layer, params, { subqFilters: true });
+    expect(SWITCH_GATED_PROMPT_IDS.has('shared.subq-filters')).toBe(true);
+    expect(off).toEqual(unset);
+    expect('shared.subq-filters' in off.prompts).toBe(false);
+    expect(on.prompts['shared.subq-filters']).toBeGreaterThan(0);
+    const input = (queryLayer: RetrievalConfigHashQueryLayer) => ({ ...literalHashInput(), queryLayer });
+    expect(computeRetrievalConfigHash(input(off))).toBe(computeRetrievalConfigHash(input(unset)));
+    expect(computeRetrievalConfigHash(input(on))).not.toBe(computeRetrievalConfigHash(input(off)));
+    resetRagConfigForTests();
+  });
 });
 
 describe('cache inputs on the retrieval contract', () => {

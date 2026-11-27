@@ -75,7 +75,9 @@ function precomputedVectors(entry: { text: string; embedding: QueryEmbedding } |
 // Static imports: a cold dynamic import here stalled the first request after a transform timeout until the embed stage timed out.
 function queryLayerHashFor(input: RunRetrievalInput, config: ReturnType<typeof loadRagConfig>, profile: Profile): RetrievalConfigHashQueryLayer {
   const overrides = queryLayerOverrides(profile, input.stageOverrides);
-  return queryLayerHashComponent(effectiveQueryLayerConfig(config.queryLayer, overrides), effectiveQueryParams(profile, overrides?.queryParams));
+  return queryLayerHashComponent(effectiveQueryLayerConfig(config.queryLayer, overrides), effectiveQueryParams(profile, overrides?.queryParams), {
+    subqFilters: config.queryAdditions.effective.subqFilters,
+  });
 }
 
 export async function runV2Pipeline(
