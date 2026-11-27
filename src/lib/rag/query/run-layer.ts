@@ -14,6 +14,7 @@ import { getKbLanguageShares, translationTargets, type KbLanguageShares } from '
 import type { GlossaryHashStage } from '../v2/config-hash';
 import { glossarySourceSurfaces, loadTenantGlossary, type TenantGlossary } from './glossary';
 import type { TranslateSkip } from './llamaindex/translate';
+import { buildHistoryFallbackVariant, previousUserTurn } from './history-fallback';
 import { buildQueryPlan, planToVariants, type SkippedTransform } from './plan';
 import { effectiveQueryParams } from './query-params';
 import { needsRewrite, type GateResult, type Lang } from './rewrite-gate';
@@ -712,6 +713,17 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     }
   }
   const standalone = condensed ?? input.query;
+  // D-22, D-23: a follow-up whose condense was skipped is also searched with the previous standalone query in front of it.
+  const historyFallback = config.queryAdditions.effective.historyFallback
+    ? buildHistoryFallbackVariant({
+        gate,
+        skipped,
+        previousStandalone: input.previousStandaloneQuery ?? null,
+        previousUserText: previousUserTurn(history),
+        followUp: input.query,
+        limits,
+      })
+    : null;
 
   // D-05/D-27: the parallel group on the standalone query, under one deadline (chat and embed only; voice and eval have none).
   const cacheSpec = spec('semantic_cache', 'skip');
@@ -888,6 +900,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     gate,
     framework: transformer.framework,
     condensed,
+    historyFallback,
     skipped,
     dateRange: normalized ? rangeContract(normalized) : null,
     translated,
