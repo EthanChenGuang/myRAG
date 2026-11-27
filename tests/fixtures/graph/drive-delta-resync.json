@@ -1,0 +1,15 @@
+{
+  "description": "Hand-written synthetic Microsoft Graph drive delta recording (D-25): a stored token the service can no longer serve (410 Gone, resyncChangesApplyDifferences). Neutral ids only; the Location header is deliberately absent.",
+  "responses": {
+    "/v1.0/drives/drive-a/root/delta?token=expired-0001": {
+      "status": 410,
+      "body": {
+        "error": {
+          "code": "resyncRequired",
+          "innererror": { "code": "resyncChangesApplyDifferences" },
+          "message": "Resync required. Replace any local items with the server's version (including deletes) if you're sure that the service was up to date with your local changes when you last sync'd. Upload any local changes that the server doesn't know about."
+        }
+      }
+    }
+  }
+}
