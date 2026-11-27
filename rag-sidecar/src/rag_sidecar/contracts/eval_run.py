@@ -14,6 +14,7 @@ from rag_sidecar.contracts.calc import CalcCheck, CalcOrigin, DecimalString
 from rag_sidecar.contracts.prompt_budget import PromptBudgetTrace
 from rag_sidecar.contracts.answers import AnswerGroundedness, CitationRecord, CitationStrategy
 from rag_sidecar.contracts.ingest import DocType
+from rag_sidecar.contracts.language_monitor import TraceLanguages
 from rag_sidecar.contracts.omit import omit_default_schema, omit_none_schema
 from rag_sidecar.contracts.query import QueryFramework, QueryParamsOverride, QueryPlan, QueryTransformToggles
 from rag_sidecar.contracts.query_additions import AnswerStructure, ModelRoute, SpeculativeTrace
@@ -422,6 +423,8 @@ class RagTrace(_Contract):
     speculative: SpeculativeTrace | None = _optional_field()
     answer_structure: AnswerStructure | None = _optional_field()
     searches_counted: int | None = _optional_field(ge=0)
+    # Phase 7 LANG-10; absent on traces recorded before it.
+    languages: TraceLanguages | None = _optional_field()
 
     @model_validator(mode="after")
     def _phase52_rules(self) -> "RagTrace":

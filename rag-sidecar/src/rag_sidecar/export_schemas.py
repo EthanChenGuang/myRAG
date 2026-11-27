@@ -215,6 +215,14 @@ from rag_sidecar.contracts.monitor import (
 )
 from rag_sidecar.contracts.judge_calibration import JudgeCalibration, JudgeCalibrationCell, JudgeSeedCase
 from rag_sidecar.contracts.release import DefaultsDecision, RegressionPlan, VendorDataFlow
+from rag_sidecar.contracts.language_monitor import (
+    LanguageConfidenceCalibration,
+    LanguageDropAlert,
+    LanguageQualityCell,
+    TraceLanguages,
+)
+from rag_sidecar.contracts.rollout import RolloutPromoteResult, RolloutRecord
+from rag_sidecar.contracts.red_team import RedTeamCorpusItem, RedTeamReport
 from rag_sidecar.contracts.release_gate import ReleaseGateConfig, ReleaseGatePart, ReleaseGateResult
 from rag_sidecar.contracts.config_change import (
     ConfigChangeRecord,
@@ -502,6 +510,13 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (DefaultsDecision, "serialization"),
     (RegressionPlan, "serialization"),
     (VendorDataFlow, "validation"),
+    (LanguageConfidenceCalibration, "validation"),
+    (LanguageQualityCell, "serialization"),
+    (LanguageDropAlert, "serialization"),
+    (RolloutRecord, "serialization"),
+    (RolloutPromoteResult, "serialization"),
+    (RedTeamCorpusItem, "validation"),
+    (RedTeamReport, "serialization"),
 ]
 
 

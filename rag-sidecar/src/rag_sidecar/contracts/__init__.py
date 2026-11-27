@@ -297,6 +297,14 @@ from rag_sidecar.contracts.release import (
     VendorDataFlow,
     VendorEntry,
 )
+from rag_sidecar.contracts.language_monitor import (
+    LanguageConfidenceCalibration,
+    LanguageDropAlert,
+    LanguageQualityCell,
+    TraceLanguages,
+)
+from rag_sidecar.contracts.rollout import RolloutPromoteResult, RolloutRecord
+from rag_sidecar.contracts.red_team import RedTeamCorpusItem, RedTeamReport
 from rag_sidecar.contracts.release_gate import (
     ReleaseGateConfig,
     ReleaseGatePart,
@@ -817,6 +825,14 @@ __all__ = [
     "TestSplitUse",
     "VendorDataFlow",
     "VendorEntry",
+    "LanguageConfidenceCalibration",
+    "LanguageDropAlert",
+    "LanguageQualityCell",
+    "TraceLanguages",
+    "RolloutPromoteResult",
+    "RolloutRecord",
+    "RedTeamCorpusItem",
+    "RedTeamReport",
     "ReleaseGateConfig",
     "ReleaseGatePart",
     "ReleaseGateResult",

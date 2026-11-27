@@ -2092,6 +2092,63 @@
       "title": "TraceKeptChunk",
       "type": "object"
     },
+    "TraceLanguages": {
+      "additionalProperties": false,
+      "description": "LANG-10 trace block: the query language and its confidence, the kept chunks' languages and the answer language.",
+      "properties": {
+        "answer_language": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Answer Language"
+        },
+        "chunk_languages": {
+          "items": {
+            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+            "type": "string"
+          },
+          "title": "Chunk Languages",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "query_language": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Language"
+        },
+        "query_language_confidence": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Language Confidence"
+        }
+      },
+      "title": "TraceLanguages",
+      "type": "object"
+    },
     "TraceQueryContext": {
       "additionalProperties": false,
       "properties": {
@@ -2679,6 +2736,9 @@
       },
       "title": "Kept",
       "type": "array"
+    },
+    "languages": {
+      "$ref": "#/$defs/TraceLanguages"
     },
     "mixed_versions": {
       "title": "Mixed Versions",
