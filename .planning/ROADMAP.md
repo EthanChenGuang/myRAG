@@ -27,7 +27,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3.2.1: BGE-M3 Open-Source Fallback Embedding** (INSERTED) - BGE-M3 profile hosted and in the sidecar, catalog entry, activation gate and comparison (split from 3.2, needs 3.1.1)
 - [ ] **Phase 3.3: Templated-Collection Ingestion** (INSERTED) - Tenant section rule sets with variant splitting, page boilerplate cleaning on the stored parse output, tenant-defined document attributes (import, header template, identifier feed, hard filter or soft boost) and quantity tokens, each behind a switch that is off by default
 - [ ] **Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal** - Filtered hybrid search on pgvector, switchable rerankers, edge-ordered context and refusal from calibrated rerank scores
-- [ ] **Phase 04.1: Hybrid retrieval and rerank on by default, proven by eval** (INSERTED) - v2 with hybrid search, `RAG_RERANKER=auto` and threshold refusal become the defaults after a pre-registered eval gate passes; `RAG_PIPELINE=legacy` restores today exactly
+- [ ] **Phase 04.1: Hybrid retrieval and rerank on by default, proven by eval** (INSERTED) - Closed: not flipped (owner decision 2026-11-26, 04.1 D-29). v2 with hybrid search, `RAG_RERANKER=auto` and threshold refusal were tested as the defaults against a pre-registered eval gate, which failed twice; `RAG_PIPELINE=legacy` stays the shipped default and v2 stays opt-in. Open: follow-up plan 04.1-18 and the owner's live checks (corrected by plan-41-fixes)
 - [ ] **Phase 04.1.1: Domain terminology dictionary: expert-maintained synonyms, query expansion, index-time synonyms, log mining** (INSERTED) - Versioned, audited shared and per-tenant dictionary, down-weighted query-time expansion, CSV import/export, mined candidates for expert review; index-time synonyms recorded as not built
 - [ ] **Phase 4.2: Retrieval Tuning Additions** (INSERTED) - Rerank pool floor 25 and nDCG, tenant tokenizer dictionary and eval-gated Italian stemming, version-aware retrieval, structured table lookup, near-duplicate clusters and result diversity, TTFT tracing and CI gate
 - [ ] **Phase 4.3: Document Access Groups** (INSERTED) - Access groups inside a tenant enforced before ranking on every leg and backend, in the cache, logs and citations, synced from connectors, with same-tenant canaries
@@ -402,6 +402,8 @@ Plans:
 
 ### Phase 4.1: Hybrid retrieval and rerank on by default, proven by eval (INSERTED)
 
+**Status (2026-11-27, corrected by plan-41-fixes)**: closed, not flipped. The gate failed in 04.1-07 and in the 04.1-17 re-run; the owner closed 04.1-09 as not flipped on 2026-11-26 (04.1-CONTEXT D-29). The shipped default is `RAG_PIPELINE=legacy`; the goal and success criteria below describe the tested candidate, and criteria 1, 4 and 5 are not met (`04.1-VERIFICATION.md`, verdict `human_needed`; override signature pending with the owner). A later flip first re-runs 04.1-17 on the baselines in force with the gate unchanged. Follow-up: 04.1-18 (ingest-mode over-refusal, ingest similarity calibration, gate re-run). Owner's live checks: `04.1-LIVE-CHECKLIST.md`.
+
 **Goal**: An install that has chosen its supported languages and sets nothing else gets hybrid retrieval and reranking, refuses no-answer questions at least as reliably as today without refusing more answerable ones, and can return to today's behaviour exactly with `RAG_PIPELINE=legacy`, with all of this shown on the eval before the defaults change; until the languages are chosen, or while the database lacks the Phase 4 functions, the install keeps serving the legacy pipeline
 **Depends on:** Phase 4 (automated close, plan 04-42; 04-43 live checks not required); Phase 3.2 (LANG-01): complete before plan 04.1-09 flips the defaults, and its LANG-01 implementation on trunk before plan 04.1-13 (plans 04.1-01 to 04.1-08 do not wait for it). Runs before Phase 4.2.
 **Requirements**: DFLT-01, DFLT-02, DFLT-03, DFLT-04, DFLT-05, DFLT-06, DFLT-07
@@ -415,31 +417,33 @@ Plans:
   7. With `RAG_PIPELINE=legacy`, both legacy smoke tiers show zero paired differences against the legacy baselines in CI, and the legacy characterization snapshots are byte-identical to before the phase.
   8. The new switch and value are in every config location and the eval pin, the templates leave `RAG_PIPELINE` empty so the default stays implicit, `check-config` passes, and AGENTS.md and the deployment guide state the defaults, the vendor data flow under `auto`, the upgrade steps and the switch back.
 **Live verification**: When the real golden dev split reaches the live calibration minimums (20 answerable, 10 no-answer), re-run the gate's slice and refusal criteria on it and record the result next to the 04.1 decision; on a staging Supabase project without migration 0407, deploy with `RAG_PIPELINE` unset and confirm the legacy fallback, then apply the migrations and confirm v2; measure voice p95 end to end with a Cohere key; on a fresh install skip the language picker and confirm legacy answers with the startup log and the banner, then choose the languages and confirm v2.
-**Plans**: 17 plans in 10 waves (gap closure 2026-11-25: 04.1-14 to 04.1-17) — see `phases/04.1-hybrid-retrieval-and-rerank-on-by-default-proven-by-eval/04.1-PLAN-INDEX.md`
+**Plans**: 18 plans in 11 waves (gap closure 2026-11-25: 04.1-14 to 04.1-17; follow-up 2026-11-27: 04.1-18) — see `phases/04.1-hybrid-retrieval-and-rerank-on-by-default-proven-by-eval/04.1-PLAN-INDEX.md`
 
 Plans:
-- [ ] 04.1-01-PLAN.md — Legacy-rule refusal floor behind RAG_REFUSAL_FLOOR, shared keep predicate, legacy byte-identical (wave 1)
-- [ ] 04.1-02-PLAN.md — Mirror RAG_REFUSAL_FLOOR and the auto value in every config location and the eval pin, defaults unchanged (wave 1)
-- [ ] 04.1-06-PLAN.md — Run configs with placeholder-only key overlay, defaults gate tool, pre-registered criteria with the tool-derived floor (wave 1)
-- [ ] 04.1-03-PLAN.md — RAG_RERANKER=auto: Cohere with key, local fallback otherwise, never degraded, hashes as resolved provider (wave 2)
-- [ ] 04.1-04-PLAN.md — Implicit-default resolver: a missing Phase 4 function (retrieval, ingest dual write) or unchosen languages serve legacy, explicit v2 unchanged (wave 3)
-- [ ] 04.1-05-PLAN.md — Pin legacy characterization; characterize the new defaults with AGENTS §14 assertions (wave 3)
-- [ ] 04.1-08-PLAN.md — Capped live Cohere and Voyage quality and latency on the fixture, report-only (wave 3)
-- [ ] 04.1-07-PLAN.md — Run the gate on both fixture modes with and without cells, record the retrieval-defaults decision (wave 4)
-- [ ] 04.1-13-PLAN.md — Connect the Phase 3.2 language reader to the resolver, prove the three language cases, characterize unset languages (wave 4; needs the Phase 3.2 LANG-01 implementation on trunk)
-- [ ] 04.1-14-PLAN.md — Gap closure: legacy_rule judges the legacy pool with the legacy keep floors; CONTEXT D-28 (wave 5)
-- [ ] 04.1-16-PLAN.md — Gap closure: deterministic ingest mode, selective-filter ids mapped to ingested documents (wave 5)
-- [ ] 04.1-15-PLAN.md — Gap closure: degrade and max_results on the v2 eval path, CI negative controls effective under v2 (wave 6)
-- [ ] 04.1-17-PLAN.md — Gap closure: re-run the unchanged pre-registered gate and rebuild the decision record (wave 7)
-- [ ] 04.1-09-PLAN.md — Flip the defaults in every location once the decision says flip and is current; templates keep the pipeline implicit (wave 8; needs 04.1-17 status flip and Phase 3.2 complete)
-- [ ] 04.1-10-PLAN.md — Legacy baselines, re-recorded default baselines, legacy all-zero CI tiers (wave 9)
-- [ ] 04.1-11-PLAN.md — AGENTS.md and deployment guide: defaults, auto data flow, upgrade steps, switch back (wave 9)
-- [ ] 04.1-12-PLAN.md — Implicit defaults on every entry point, two tenants, un-migrated database, unchosen languages, CI-equivalent run (wave 10)
+- [x] 04.1-01-PLAN.md — Legacy-rule refusal floor behind RAG_REFUSAL_FLOOR, shared keep predicate, legacy byte-identical (wave 1)
+- [x] 04.1-02-PLAN.md — Mirror RAG_REFUSAL_FLOOR and the auto value in every config location and the eval pin, defaults unchanged (wave 1)
+- [x] 04.1-06-PLAN.md — Run configs with placeholder-only key overlay, defaults gate tool, pre-registered criteria with the tool-derived floor (wave 1)
+- [x] 04.1-03-PLAN.md — RAG_RERANKER=auto: Cohere with key, local fallback otherwise, never degraded, hashes as resolved provider (wave 2)
+- [x] 04.1-04-PLAN.md — Implicit-default resolver: a missing Phase 4 function (retrieval, ingest dual write) or unchosen languages serve legacy, explicit v2 unchanged (wave 3)
+- [x] 04.1-05-PLAN.md — Pin legacy characterization; characterize the new defaults with AGENTS §14 assertions (wave 3)
+- [x] 04.1-08-PLAN.md — Capped live Cohere and Voyage quality and latency on the fixture, report-only (wave 3)
+- [x] 04.1-07-PLAN.md — Run the gate on both fixture modes with and without cells, record the retrieval-defaults decision (wave 4)
+- [x] 04.1-13-PLAN.md — Connect the Phase 3.2 language reader to the resolver, prove the three language cases, characterize unset languages (wave 4; needs the Phase 3.2 LANG-01 implementation on trunk)
+- [x] 04.1-14-PLAN.md — Gap closure: legacy_rule judges the legacy pool with the legacy keep floors; CONTEXT D-28 (wave 5)
+- [x] 04.1-16-PLAN.md — Gap closure: deterministic ingest mode, selective-filter ids mapped to ingested documents (wave 5)
+- [x] 04.1-15-PLAN.md — Gap closure: degrade and max_results on the v2 eval path, CI negative controls effective under v2 (wave 6)
+- [x] 04.1-17-PLAN.md — Gap closure: re-run the unchanged pre-registered gate and rebuild the decision record (wave 7)
+- [x] 04.1-09-PLAN.md — Flip the defaults in every location once the decision says flip and is current; templates keep the pipeline implicit (wave 8; needs 04.1-17 status flip and Phase 3.2 complete) — closed: not flipped, nothing edited (corrected by plan-41-fixes)
+- [x] 04.1-10-PLAN.md — Legacy baselines, re-recorded default baselines, legacy all-zero CI tiers (wave 9)
+- [x] 04.1-11-PLAN.md — AGENTS.md and deployment guide: defaults, auto data flow, upgrade steps, switch back (wave 9)
+- [x] 04.1-12-PLAN.md — Implicit defaults on every entry point, two tenants, un-migrated database, unchosen languages, CI-equivalent run (wave 10)
+- [ ] 04.1-18-PLAN.md — Follow-up to verification gap G-02: `legacy_rule` evidence text in ingest mode, ingest calibration of the `similarity` fixture floor, unchanged gate re-run and decision rebuilt (wave 11; drafted 2026-11-27, not plan-checked)
 
 **Cross-phase notes for the roadmap**:
 - Phase 4 D-28's last sentence ("the shipped defaults stay off until the Phase 7 regression") is superseded for `RAG_PIPELINE`, `RAG_LEXICAL_SEARCH`, `RAG_RERANKER`, `RAG_REFUSAL_THRESHOLD` and `RAG_REFUSAL_FLOOR` by the product owner's decision of 2026-11-24; Phase 4 itself still closes with the defaults off (04-42 unchanged).
 - Phase 7 keeps external backends, the embedding-profile and reranker-model decision on the real locked test split, and the release-defaults check; its incumbent is the 04.1 decision record (see REQUIREMENTS-ADDITIONS.md).
 - Phases 5, 5.1, 5.1.1, 6, 6.1 and 7 run after the flip: their route-fixture tests that assert legacy output must pass `env: { RAG_PIPELINE: 'legacy' }`, and their "against Phase 4" comparisons use the post-flip baselines.
+- 2026-11-27 (corrected by plan-41-fixes): there was no flip, so the three notes around this one that speak of "after the flip", "post-flip baselines" and "its incumbent is the 04.1 decision record" apply only if a later flip happens (04.1 D-29). Until then the incumbent for Phase 7 is the shipped legacy default, and plan 07-30 adopts the 04.1 decision's `defaults` map only when its `status` is `flip`.
 - Phase 3.2 (LANG-01) owns the supported-languages reader, its startup log, the Config UI banner and the `languages_not_configured` error. Phase 4.1 consumes them through one resolver; the flip (04.1-09) stops and reports unless Phase 3.2 is complete on trunk.
 - Phase 4.2 (RNK-07) adds refusal thresholds per RAG mode. Phase 4.1 keeps the single-threshold behaviour, adds no mode key and records `refusal_basis: "single_threshold"`, so with the per-mode targets unset the Phase 4.2 result equals the 4.1 result.
 - Phase 7 plan 07-30 must accept the empty template value of `RAG_PIPELINE` (the 4.1 decision lists it in `implicit_in_templates`).
@@ -890,7 +894,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 3.2.1. BGE-M3 Open-Source Fallback Embedding (INSERTED) | 0/5 | Planned (needs 3.1.1) | - |
 | 3.3. Templated-Collection Ingestion (INSERTED) | 0/26 | Planned (plan-check PASS) | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 46/47 | In Progress (04-43 live calibration) | - |
-| 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 8/17 | Gate not passed (04.1-07); gap closure 04.1-14 to 04.1-17 planned 2026-11-25 | - |
+| 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 17/18 | Closed: not flipped (owner 2026-11-26, D-29); legacy stays the default; follow-up 04.1-18 drafted; live checks open (corrected by plan-41-fixes) | - |
 | 4.1.1. Domain Terminology Dictionary (INSERTED) | 0/18 | Planned (plan-check PASS, revised 2026-11-25) | - |
 | 4.2. Retrieval Tuning Additions (INSERTED) | 0/39 | Planned (plan-check PASS) | - |
 | 4.3. Document Access Groups (INSERTED) | 0/38 | Planned (plan-check PASS) | - |

@@ -127,10 +127,12 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 
 ### Retrieval Defaults (DFLT)
 
+*Status 2026-11-27 (corrected by plan-41-fixes): Phase 4.1 closed not flipped (04.1-CONTEXT D-29). DFLT-04 is met; DFLT-02, 03, 05 and 06 are partly met; DFLT-01 and DFLT-07 are not met. The traceability table has the reason for each.*
+
 - [ ] **DFLT-01**: With the supported languages configured (LANG-01) and no retrieval variable set, every entry point runs the v2 pipeline with hybrid search, `RAG_RERANKER=auto`, threshold refusal on and the eval-chosen fallback floor; the `.env.local` templates leave `RAG_PIPELINE` empty so the default stays implicit; and `RAG_PIPELINE=legacy` restores the previous behaviour exactly (zero paired differences against the legacy baselines, legacy characterization unchanged)
 - [ ] **DFLT-02**: `RAG_RERANKER=auto` reranks with Cohere when `COHERE_API_KEY` is set and with an eval-chosen local fallback (local BM25 or fused order) otherwise; a missing key under `auto` never marks a request degraded, and Voyage is used only when named
 - [ ] **DFLT-03**: While no calibrated rerank cell applies, v2 refuses with the legacy relevance rule (`RAG_REFUSAL_FLOOR=legacy_rule`) or the similarity floor, whichever the pre-registered rule picks; strict mode's "information not available" stays correct and false refusals do not rise beyond the noise band
-- [ ] **DFLT-04**: When `RAG_PIPELINE` is unset, one resolver decides which pipeline serves: if the database lacks a Phase 4 function (`hybrid_search_chunks` on retrieval, `rag_list_chunking_profiles` on the ingest dual write) the process serves the legacy pipeline with one error log, and if the supported languages are not configured it serves legacy with Phase 3.2's startup log and Config UI banner (LANG-01); an explicit `RAG_PIPELINE=v2` keeps failing loudly in both cases (`backend_error`, `languages_not_configured`)
+- [x] **DFLT-04**: When `RAG_PIPELINE` is unset, one resolver decides which pipeline serves: if the database lacks a Phase 4 function (`hybrid_search_chunks` on retrieval, `rag_list_chunking_profiles` on the ingest dual write) the process serves the legacy pipeline with one error log, and if the supported languages are not configured it serves legacy with Phase 3.2's startup log and Config UI banner (LANG-01); an explicit `RAG_PIPELINE=v2` keeps failing loudly in both cases (`backend_error`, `languages_not_configured`)
 - [ ] **DFLT-05**: The new defaults are adopted only after a gate pre-registered in `eval/config/defaults-gate.json` passes on both fixture modes against the baselines in force (slices within the noise band; ingest overall Recall@10 at least the floor the gate tool derives from the ingest baseline in force when the criteria are committed, recorded with the baseline's sha256; refusal rates; categories with n of at least 8; latency budgets), with and without fixture cells; refusal is judged on the single-threshold behaviour (RNK-07 adds per-mode thresholds, and with its targets unset the result is the same); the decision is recorded with its numbers and is re-run on the real golden dev split once it reaches the live minimums
 - [ ] **DFLT-06**: The new switch and value are mirrored in every config location and the eval pin; CI keeps two legacy smoke tiers with zero paired differences next to the default tiers; AGENTS.md and the deployment guide state the defaults, the vendor data flow under `auto`, the upgrade steps and the switch back
 - [ ] **DFLT-07**: Real Cohere and Voyage rerankers are measured once on the fixture dev split within a 600-request cap (quality against the local paths, p95 latency for 75 candidates against the chat and voice budgets), report-only, and the decision record takes an entry point off hosted rerank when it fails
@@ -473,13 +475,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EMB-08 | Phase 3.1.1 | Pending |
 | EMB-09 | Phase 3.1.1 | Pending |
 | EMB-10 | Phase 3.1.1 | Pending |
-| DFLT-01 | Phase 4.1 | Pending |
-| DFLT-02 | Phase 4.1 | Pending |
-| DFLT-03 | Phase 4.1 | Pending |
-| DFLT-04 | Phase 4.1 | Pending |
-| DFLT-05 | Phase 4.1 | Pending |
-| DFLT-06 | Phase 4.1 | Pending |
-| DFLT-07 | Phase 4.1 | Pending |
+| DFLT-01 | Phase 4.1 | Not met (not flipped, 04.1 D-29; the legacy-exact half holds) |
+| DFLT-02 | Phase 4.1 | Partial (`auto` built and tested; the no-key fallback is a code default, not eval-chosen; follow-up 04.1-18) |
+| DFLT-03 | Phase 4.1 | Partial (both floors built; neither passed the gate; follow-up 04.1-18) |
+| DFLT-04 | Phase 4.1 | Complete (dormant while the default is legacy; live staging check open) |
+| DFLT-05 | Phase 4.1 | Partial (gate applied and failed, nothing adopted; real-golden re-run open) |
+| DFLT-06 | Phase 4.1 | Partial (switch mirrored, legacy CI tiers, docs of the shipped state; no post-flip default tiers) |
+| DFLT-07 | Phase 4.1 | Not met (live passes not run; owner checklist) |
 | TERM-01 | Phase 4.1.1 | Pending |
 | TERM-02 | Phase 4.1.1 | Pending |
 | TERM-03 | Phase 4.1.1 | Pending |
@@ -645,4 +647,6 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-11-22*
+- 2026-11-27 (corrected by plan-41-fixes): DFLT-01..DFLT-07 statuses set from `04.1-VERIFICATION.md` after Phase 4.1 closed not flipped (04.1-CONTEXT D-29): DFLT-04 complete; DFLT-02, 03, 05, 06 partial; DFLT-01, 07 not met. ADM-02's "starting from the Phase 4.1 retrieval defaults" means the 04.1 decision's `defaults` only when its `status` is `flip`; today the incumbent is the shipped legacy default.
+
 *Last updated: 2026-11-26 — added LEX-01..LEX-08 (inserted Phase 4.4, true BM25 lexical scoring); added TPL-01..TPL-09 (inserted Phase 3.3, templated collections); 2026-11-25 — amended EVAL-24 (round 4 Q10); added RNK-08, RET-15, RET-16, EVAL-32 and EVAL-33 (round 4 Q8, Q9); added DATA-23..25, RET-14 and EVAL-31 (round 4 Q7, inserted Phase 6.3); added EVAL-27..30 (round 4 Q6); added GEN-16, GEN-17 and EVAL-26 (round 4 Q5) and the domain-neutrality rule, removed example-specific wording; added the round-4 Q4 no-answer and evaluation-layer requirements (RNK-07, QRY-14, GEN-15, EVAL-22..25, OBS-03; inserted Phase 5.3); ported and reconciled the Q4–Q7 gap requirements (LAT-04..07, SEC-06..11, XLG-04..07, EMB-11, GEN-08..12, LANG-01..11) and added the Q8 multi-part question requirements (DATA-18, RET-11, QRY-09..11, GEN-13) and the Q9 split-table requirements (CHK-06, CHK-07, RET-12, EVAL-18) and the Q10 version-conflict requirements (DATA-19, DATA-20, GEN-14, EVAL-19); applied the paused recall-layer planning (Phases 3.1.1, 4.1, 4.1.1, 5.1.1, 6.1). Earlier: 2026-11-24 — added EMB-06..EMB-10 (Phase 3.1.1), DFLT (Phase 4.1), TERM (Phase 4.1.1), FBK (Phase 5.1.1) and FT (Phase 6.1); amended QRY-01..03, CHK-04, ADM-02, EVAL-14, EVAL-16, EVAL-17 and two Out of Scope rows. Previous: 2026-11-23 — added OBS, LAT, CHK, SEC, XLG and CACHE requirements (chunking, latency, prompt-injection and cross-language additions); RQ-01..04 promoted from v2*
