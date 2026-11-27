@@ -81,6 +81,7 @@
     <script src="rag-panels/languages.js"></script>
     <script src="rag-panels/ingest-impact.js"></script>
     <script src="rag-panels/upload-approvals.js"></script>
+    <script src="rag-panels/access-groups.js"></script>
     <script src="rag-panels/scope-tags.js"></script>
     <script src="rag-panels/versions-dates.js"></script>
     <script src="rag-panels/translation-targets.js"></script>
@@ -9128,7 +9129,7 @@
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
                                 <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG Administration</h2>
-                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, tags, versions and translation, the embedding and chunking profiles, identifier patterns, check settings before they apply, and follow monitoring alerts, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
+                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, access groups, tags, versions and translation, the embedding and chunking profiles, identifier patterns, check settings before they apply, and follow monitoring alerts, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
 
                                 <div class="grid gap-6">
                                     <section id="rag-administration-languages" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-languages-title">
@@ -9820,6 +9821,17 @@
                                         </div>
                                     </section>
                                     <!-- rag-security-events:end -->
+                                    <!-- rag-access-groups:start -->
+                                    <section id="rag-administration-access" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-access-groups-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-access-groups-title" class="text-lg font-semibold mb-2 text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-access-groups-title>Access groups</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-access-groups-description>Limit documents to groups of members. A restricted document is found, quoted and cited only for members of its groups and for admins. Groups, Documents and Connector mapping follow the workspace chosen under Document Processing.</p>
+                                            <div data-access-groups-alert class="flex flex-col gap-2 mb-4 empty:mb-0"></div>
+                                            <div data-access-groups-content></div>
+                                            <div data-access-groups-status class="text-sm mt-4" role="status" aria-live="polite" tabindex="-1"></div>
+                                        </div>
+                                    </section>
+                                    <!-- rag-access-groups:end -->
 
                                     <!-- rag-scope-tags:start -->
                                     <section id="rag-administration-scopes" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-scope-tags-title">
@@ -11255,6 +11267,7 @@
                     this.hasChanges = false;
                     this.savedConfig = { ...this.config };
                     if (typeof window.gatesUiMountBanner === 'function') window.gatesUiMountBanner(this.savedConfig);
+                    document.dispatchEvent(new CustomEvent('rag:config-saved', { detail: { config: { ...this.savedConfig } } }));
 
                     // Update indicators to show success
                     if (desktopIndicator) {
