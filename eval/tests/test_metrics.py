@@ -1156,7 +1156,8 @@ def test_the_04_2_37_baselines_add_only_phase42_items_and_move_no_old_item(tmp_p
 def test_the_train_31_baselines_add_only_phase53_items_and_move_only_refusal_rates(name):
     """Train 31: both baselines re-recorded on top of train 30 with the 05.3-15 items and its answers-on smoke harness.
     The added items are exactly the phase53_fixture items; an earlier item keeps its retrieval metrics, and only its
-    refusal rates may move (answers-on scoring reads refusals from the answer, 05.3-15)."""
+    refusal rates may move (answers-on scoring reads refusals from the answer, 05.3-15). Train 33 re-recorded them once more
+    with the 48 Phase 5.2 items of plan 05.2-29, which are the only other additions."""
     from pathlib import Path
 
     from rag_sidecar.contracts.baseline import Baseline
@@ -1175,8 +1176,13 @@ def test_the_train_31_baselines_add_only_phase53_items_and_move_only_refusal_rat
         )
     }
     phase53 = {item_id for item_id, item in golden.items() if "phase53_fixture" in item.tags}
-    assert len(phase53) == 25
-    assert set(current.items) - set(previous.items) == phase53
+    phase52 = {
+        item_id
+        for item_id, item in golden.items()
+        if item.category in ("partial_answer", "stale_version", "off_topic_context") or "link_injection" in item.tags
+    }
+    assert len(phase53) == 25 and len(phase52) == 48
+    assert set(current.items) - set(previous.items) == phase53 | phase52
     assert set(previous.items) <= set(current.items)
     for item_id, metrics in previous.items.items():
         for metric, values in metrics.items():
