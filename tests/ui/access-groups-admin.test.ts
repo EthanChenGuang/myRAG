@@ -294,3 +294,89 @@ describe('the tab code', () => {
     expect(source).toContain('variant="destructive"');
   });
 });
+
+import {
+  NOT_MAPPED,
+  buildMappingRows,
+  buildRuleRows,
+  isValidRuleDomain,
+  mappingSaveIntent,
+  providerName,
+  readMappingRows,
+  readSharingRules,
+  ruleToggleIntent,
+  showPersonalNote,
+} from '@/components/ui/access-groups-admin';
+
+const MAP_ID = '00000000-0000-4000-8000-0000000000m1';
+
+describe('connector mapping rows', () => {
+  const raw = [
+    { id: MAP_ID, provider: 'dropbox', kind: 'team', externalPrincipalId: 'dbgid:AAA', groupId: GROUP_A, documents: 2 },
+    { id: null, provider: 'google-drive', kind: 'group', externalPrincipalId: INJECTED, groupId: null, documents: 9 },
+    { id: null, provider: 'notion', kind: 'mystery', externalPrincipalId: '  ws-1  ', groupId: null, documents: 0 },
+    { provider: 'notion' },
+  ];
+
+  it('reads rows, puts unmapped ones first and keeps ids exactly as given', () => {
+    const rows = readMappingRows(raw);
+    expect(rows).toHaveLength(3);
+    const view = buildMappingRows(rows, 'en');
+    expect(view.map((r) => r.notMapped)).toEqual([true, true, false]);
+    expect(view[0]).toMatchObject({ providerName: 'Google Drive', principal: INJECTED, kindLabel: 'Group', saved: NOT_MAPPED, documents: 9 });
+    expect(view[1]).toMatchObject({ principal: '  ws-1  ', kindLabel: null, kindCode: 'mystery' });
+    expect(view[2]).toMatchObject({ id: MAP_ID, providerName: 'Dropbox', kindLabel: 'Team', saved: GROUP_A });
+    expect(providerName('unknown-source')).toBe('unknown-source');
+  });
+
+  it('turns a select change into create, update, remove or nothing', () => {
+    const [unmapped, , mapped] = buildMappingRows(readMappingRows(raw), 'en');
+    expect(mappingSaveIntent(unmapped, NOT_MAPPED)).toEqual({ type: 'none' });
+    expect(mappingSaveIntent(unmapped, GROUP_A)).toEqual({
+      type: 'create',
+      body: { provider: 'google-drive', kind: 'group', externalPrincipalId: INJECTED, groupId: GROUP_A },
+    });
+    expect(mappingSaveIntent(mapped, GROUP_A)).toEqual({ type: 'none' });
+    expect(mappingSaveIntent(mapped, 'other-group')).toEqual({ type: 'update', id: MAP_ID, groupId: 'other-group' });
+    expect(mappingSaveIntent(mapped, NOT_MAPPED)).toEqual({ type: 'remove', id: MAP_ID });
+  });
+
+  it('shows the personal note whenever mapping does not change visibility (multi-tenant)', () => {
+    expect(showPersonalNote(false)).toBe(true);
+    expect(showPersonalNote(true)).toBe(false);
+  });
+});
+
+describe('sharing rules', () => {
+  const rules = readSharingRules([
+    { id: 'r1', provider: 'google-drive', kind: 'domain', domain: 'example.org', enabled: false, documents: 14 },
+    { id: 'r2', provider: 'google-drive', kind: 'anyone', domain: null, enabled: true, documents: 3 },
+    { id: 'r3', provider: 'notion', kind: 'public', domain: null, enabled: false, documents: 1 },
+    { id: 'r4', provider: 'notion', kind: 'odd', domain: null, enabled: false, documents: 0 },
+    { provider: 'x' },
+  ]);
+
+  it('reads rules and words each with the visible state', () => {
+    const view = buildRuleRows(rules, 'en');
+    expect(view).toHaveLength(4);
+    expect(view[0]).toMatchObject({ sharedWith: 'Everyone at example.org', stateWord: 'Off', enabled: false, documents: 14, providerName: 'Google Drive' });
+    expect(view[0].toggleAria).toBe('Count as Everyone: Everyone at example.org, Google Drive');
+    expect(view[1]).toMatchObject({ sharedWith: 'Anyone with the link', stateWord: 'On' });
+    expect(view[2].sharedWith).toBe('Published to the web');
+    expect(view[3]).toMatchObject({ sharedWith: 'odd', kindCode: 'odd' });
+  });
+
+  it('asks before turning a rule on and turns it off at once', () => {
+    expect(ruleToggleIntent({ enabled: false }, true)).toBe('confirm');
+    expect(ruleToggleIntent({ enabled: true }, false)).toBe('disable');
+    expect(ruleToggleIntent({ enabled: true }, true)).toBe('none');
+  });
+
+  it('accepts a host name with a dot only', () => {
+    expect(isValidRuleDomain('example.org')).toBe(true);
+    expect(isValidRuleDomain('sub.example.org')).toBe(true);
+    for (const bad of ['', 'example', 'https://example.org', 'example.org/path', 'example.org:80', '*.example.org', 'exa mple.org', '.example.org']) {
+      expect(isValidRuleDomain(bad)).toBe(false);
+    }
+  });
+});

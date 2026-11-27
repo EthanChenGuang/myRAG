@@ -416,6 +416,42 @@ export function deriveDeleteDialog(state: DeleteDialogState, group: string, lang
   };
 }
 
+// --- Connector mapping and sharing rules -----------------------------------------------------------------------------
+
+export const NOT_MAPPED = '__not_mapped__';
+
+export interface MappingRow { id: string | null; provider: string; kind: string; externalPrincipalId: string; groupId: string | null; documents: number }
+export interface MappingRowView {
+  rowKey: string;
+  id: string | null;
+  provider: string;
+  providerName: string;
+  principal: string;
+  kindLabel: string | null;
+  kindCode: string | null;
+  notMapped: boolean;
+  documents: number;
+  saved: string;
+}
+export type MappingIntent =
+  | { type: 'none' }
+  | { type: 'create'; body: { provider: string; kind: string; externalPrincipalId: string; groupId: string } }
+  | { type: 'update'; id: string; groupId: string }
+  | { type: 'remove'; id: string };
+
+export interface SharingRule { id: string; provider: string; kind: string; domain: string | null; enabled: boolean; documents: number }
+export interface SharingRuleView { id: string; providerName: string; sharedWith: string; kindCode: string | null; documents: number; enabled: boolean; stateWord: string; toggleAria: string }
+
+export function providerName(provider: string): string { return provider; }
+export function readMappingRows(_value: unknown): MappingRow[] { return []; }
+export function buildMappingRows(_rows: readonly MappingRow[], _language: string): MappingRowView[] { return []; }
+export function mappingSaveIntent(_row: MappingRowView, _selected: string): MappingIntent { return { type: 'none' }; }
+export function readSharingRules(_value: unknown): SharingRule[] { return []; }
+export function buildRuleRows(_rules: readonly SharingRule[], _language: string): SharingRuleView[] { return []; }
+export function ruleToggleIntent(_rule: { enabled: boolean }, _next: boolean): 'confirm' | 'disable' | 'none' { return 'none'; }
+export function isValidRuleDomain(_value: string): boolean { return true; }
+export function showPersonalNote(_visibilityApplies: boolean): boolean { return false; }
+
 // --- Status region ----------------------------------------------------------------------------------------------------
 
 export interface StatusMessage {
