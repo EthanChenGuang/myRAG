@@ -296,6 +296,71 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       assert.equal((await principalRows(DOC.second)).length, 1);
     });
 
+    const match = async (addresses: Array<string | null>, tenantKey = fx.tenantKey): Promise<Array<{ idx: number; user_id: string }>> => {
+      await assertFunction(db, 'rag_connector_match_members');
+      return (
+        await service(db, () =>
+          db.query<{ idx: number; user_id: string }>('SELECT * FROM public.rag_connector_match_members($1, $2::text[]) ORDER BY idx', [
+            tenantKey,
+            addresses,
+          ]),
+        )
+      ).rows;
+    };
+
+    test('member matching returns positions and ids of confirmed tenant members only', async () => {
+      const rows = await match([ADDRESS.memberA, 'unknown@example.org', ADDRESS.unconfirmed, null, ` ${ADDRESS.memberB.toUpperCase()} `, ADDRESS.outsider]);
+      const expected = [
+        { idx: 1, user_id: MEMBER_A },
+        { idx: 5, user_id: MEMBER_B },
+      ];
+      if (!multi) expected.push({ idx: 6, user_id: OUTSIDER });
+      assert.deepEqual(rows, expected, multi ? 'a user of another organization does not match' : 'every confirmed user is a single-tenant member');
+      for (const row of rows) assert.deepEqual(Object.keys(row).sort(), ['idx', 'user_id'], 'no address is returned');
+      assert.deepEqual(await match([]), []);
+      if (multi) {
+        assert.deepEqual(await match([ADDRESS.owner, ADDRESS.memberA], `u:${OWNER}`), [{ idx: 1, user_id: OWNER }], 'a personal tenant has its owner only');
+      }
+    });
+
+    test('member matching is service-role only and SECURITY DEFINER with an empty search path', async () => {
+      await assertFunction(db, 'rag_connector_match_members');
+      const info = await db.query<{ secdef: boolean; config: string[] | null }>(
+        "SELECT p.prosecdef AS secdef, p.proconfig AS config FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'rag_connector_match_members'",
+      );
+      assert.equal(info.rows[0]?.secdef, true);
+      assert.ok(info.rows[0]?.config?.includes('search_path=""'), 'search_path is empty');
+      for (const role of ['anon', 'authenticated'] as const) {
+        await rejects(
+          () => asRole(db, role, MEMBER_A, () => db.query("SELECT * FROM public.rag_connector_match_members($1, ARRAY['x@example.org'])", [fx.tenantKey])),
+          /permission denied/,
+          `${role} cannot match addresses`,
+        );
+      }
+    });
+
+    test('domain and link sharing count as everyone only under an enabled rule of that provider', async () => {
+      const domain = [{ kind: 'domain', id: ' Example.org ' }];
+      assert.equal((await apply(DOC.second, domain)).fail_closed, true, 'no rule');
+      await db.query(
+        "INSERT INTO rag_connector_sharing_rules (tenant_key, provider, kind, domain, enabled) VALUES ($1, 'google-drive', 'domain', 'example.org', false), ($1, 'dropbox', 'anyone', NULL, true)",
+        [fx.tenantKey],
+      );
+      assert.deepEqual(await apply(DOC.second, domain), { keys: [`u:${OWNER}`], fail_closed: true, reason: 'unmapped_source' }, 'disabled rule');
+      assert.equal((await apply(DOC.second, [{ kind: 'anyone' }])).fail_closed, true, 'a rule of another provider does not count');
+      await db.query("UPDATE rag_connector_sharing_rules SET enabled = true WHERE tenant_key = $1 AND provider = 'google-drive'", [fx.tenantKey]);
+      assert.deepEqual(await apply(DOC.second, [...domain, { kind: 'group', id: 'source-group-1@example.org' }, { kind: 'user', member_id: MEMBER_B }]), {
+        keys: ['all'],
+        fail_closed: false,
+        reason: 'source_mapped',
+      });
+      assert.deepEqual(await labels(DOC.second), [['all']], 'all alone');
+      assert.equal((await apply(DOC.second, [{ kind: 'domain', id: 'other.example.org' }])).fail_closed, true, 'another domain');
+      assert.equal((await apply(DOC.second, [{ kind: 'public' }])).fail_closed, true, 'no published rule');
+      assert.deepEqual((await apply(DOC.second, [{ kind: 'anyone' }], 'ok', { provider: 'dropbox' })).keys, ['all'], 'enabled link rule');
+      await db.query('DELETE FROM rag_connector_sharing_rules WHERE tenant_key = $1', [fx.tenantKey]);
+    });
+
     if (multi) {
       test('a personal-tenant document with a group principal falls back to the owner (A-10)', async () => {
         const applied = await apply(DOC.personal, [{ kind: 'group', id: 'source-group-1@example.org' }], 'ok', { tenantKey: `u:${OWNER}` });
