@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "phase": "04.1",
+  "status": "not_flipped",
+  "reasons": [
+    "synthetic: the gate failed"
+  ],
+  "defaults": {
+    "RAG_PIPELINE": "v2",
+    "RAG_LEXICAL_SEARCH": "true",
+    "RAG_RERANKER": "auto",
+    "RAG_REFUSAL_THRESHOLD": "true",
+    "RAG_REFUSAL_FLOOR": "legacy_rule"
+  }
+}

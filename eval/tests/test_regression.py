@@ -24,7 +24,10 @@ from rag_eval.regression import (
 
 SAMPLES = build_samples()
 EVAL_DIR = Path(__file__).resolve().parents[1]
-INCUMBENT_FILE = EVAL_DIR / "decisions" / "04.1-retrieval-defaults.json"
+COMMITTED_DECISION = EVAL_DIR / "decisions" / "04.1-retrieval-defaults.json"
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "regression"
+INCUMBENT_FILE = FIXTURES / "incumbent-flip.json"
+NOT_FLIPPED_FILE = FIXTURES / "incumbent-not-flipped.json"
 CLOCK = "2026-11-27T12:00:00Z"
 ANSWERABLE = 60
 UNANSWERABLE = 12
@@ -212,6 +215,35 @@ def test_plan_stage_a_refuses_the_test_split_and_stage_b_the_dev_split(world, ca
     assert _main(["plan", "--stage", "b", "--split", "dev", "--fixtures", "--out", out]) == 2
     assert _main(["plan", "--stage", "b", "--split", "test", "--fixtures", "--out", out]) == 2
     assert "stage-a-decision" in capsys.readouterr().err
+    assert not out.exists()
+
+
+def test_a_not_flipped_decision_is_not_the_incumbent():
+    incumbent = regression.load_incumbent(NOT_FLIPPED_FILE)
+    assert {name: incumbent.env[name] for name in regression.DFLT_VARIABLES} == {
+        name: regression.SHIPPED_DEFAULTS[name] for name in regression.DFLT_VARIABLES
+    }
+    assert incumbent.env["RAG_PIPELINE"] == "legacy" and incumbent.env["RAG_RERANKER"] == "none"
+
+
+def test_a_flip_decision_supplies_the_dflt_values():
+    incumbent = regression.load_incumbent(INCUMBENT_FILE)
+    assert incumbent.env["RAG_PIPELINE"] == "v2" and incumbent.env["RAG_RERANKER"] == "auto"
+    assert incumbent.env["RAG_REFUSAL_FLOOR"] == "legacy_rule"
+
+
+def test_the_committed_decision_follows_its_status():
+    record = json.loads(COMMITTED_DECISION.read_text())
+    incumbent = regression.load_incumbent(COMMITTED_DECISION)
+    expected = record["defaults"]["RAG_PIPELINE"] if record["status"] == "flip" else regression.SHIPPED_DEFAULTS["RAG_PIPELINE"]
+    assert incumbent.env["RAG_PIPELINE"] == expected
+
+
+def test_a_decision_without_a_status_stops_before_any_plan(world):
+    bad = world["dir"] / "no-status.json"
+    bad.write_text(json.dumps({"defaults": json.loads(INCUMBENT_FILE.read_text())["defaults"]}))
+    out = world["dir"] / "p.json"
+    assert _main(["plan", "--stage", "a", "--split", "dev", "--fixtures", "--out", out, "--incumbent", bad]) == 2
     assert not out.exists()
 
 
