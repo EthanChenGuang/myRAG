@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Loader2, MoreHorizontal, Pencil, Plus, Search, Trash2, Users } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Info, Loader2, Lock, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Trash2, Users } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Dialog,
   DialogContent,
@@ -19,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { accessGroupText, type AccessGroupLabelKey } from '@/components/ui/access-group-labels';
+import { PROVIDER_CONFIG, type SupportedProvider } from '@/lib/nango/types';
 import { cn } from '@/lib/utils';
 
 export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'viewer';
@@ -432,6 +436,7 @@ export interface MappingRowView {
   notMapped: boolean;
   documents: number;
   saved: string;
+  kind: string;
 }
 export type MappingIntent =
   | { type: 'none' }
@@ -442,15 +447,133 @@ export type MappingIntent =
 export interface SharingRule { id: string; provider: string; kind: string; domain: string | null; enabled: boolean; documents: number }
 export interface SharingRuleView { id: string; providerName: string; sharedWith: string; kindCode: string | null; documents: number; enabled: boolean; stateWord: string; toggleAria: string }
 
-export function providerName(provider: string): string { return provider; }
-export function readMappingRows(_value: unknown): MappingRow[] { return []; }
-export function buildMappingRows(_rows: readonly MappingRow[], _language: string): MappingRowView[] { return []; }
-export function mappingSaveIntent(_row: MappingRowView, _selected: string): MappingIntent { return { type: 'none' }; }
-export function readSharingRules(_value: unknown): SharingRule[] { return []; }
-export function buildRuleRows(_rules: readonly SharingRule[], _language: string): SharingRuleView[] { return []; }
-export function ruleToggleIntent(_rule: { enabled: boolean }, _next: boolean): 'confirm' | 'disable' | 'none' { return 'none'; }
-export function isValidRuleDomain(_value: string): boolean { return true; }
-export function showPersonalNote(_visibilityApplies: boolean): boolean { return false; }
+const MAPPING_KIND_LABELS: Record<string, AccessGroupLabelKey> = {
+  group: 'mapping.kind.group',
+  team: 'mapping.kind.team',
+  workspace: 'mapping.kind.workspace',
+};
+
+export const MAPPING_PROVIDERS = ['google-drive', 'dropbox', 'notion'] as const;
+
+/** The source's product name as the connectors show it; an unknown provider is shown exactly as given. */
+export function providerName(provider: string): string {
+  return Object.prototype.hasOwnProperty.call(PROVIDER_CONFIG, provider)
+    ? PROVIDER_CONFIG[provider as SupportedProvider].displayName
+    : provider;
+}
+
+function documentsCount(value: unknown): number {
+  return count(value) ?? 0;
+}
+
+export function readMappingRows(value: unknown): MappingRow[] {
+  if (!Array.isArray(value)) return [];
+  const rows: MappingRow[] = [];
+  for (const item of value) {
+    const row = asRecord(item);
+    if (typeof row.provider !== 'string' || typeof row.kind !== 'string' || typeof row.externalPrincipalId !== 'string') continue;
+    rows.push({
+      id: typeof row.id === 'string' ? row.id : null,
+      provider: row.provider,
+      kind: row.kind,
+      externalPrincipalId: row.externalPrincipalId,
+      groupId: typeof row.groupId === 'string' ? row.groupId : null,
+      documents: documentsCount(row.documents),
+    });
+  }
+  return rows;
+}
+
+/** Unmapped rows first (UI-SPEC 6.5), each id exactly as the source gives it; no name is invented. */
+export function buildMappingRows(rows: readonly MappingRow[], language: string): MappingRowView[] {
+  const views = rows.map((row, index) => {
+    const kindKey = MAPPING_KIND_LABELS[row.kind];
+    return {
+      rowKey: row.id ?? `seen-${index}-${row.provider}-${row.kind}-${row.externalPrincipalId}`,
+      id: row.id,
+      provider: row.provider,
+      providerName: providerName(row.provider),
+      principal: row.externalPrincipalId,
+      kindLabel: kindKey ? accessGroupText(kindKey, language) : null,
+      kindCode: kindKey ? null : row.kind,
+      notMapped: row.id === null || row.groupId === null,
+      documents: row.documents,
+      saved: row.id !== null && row.groupId ? row.groupId : NOT_MAPPED,
+      kind: row.kind,
+    };
+  });
+  return views
+    .map((view, index) => ({ view, index }))
+    .sort((a, b) => Number(b.view.notMapped) - Number(a.view.notMapped) || a.index - b.index)
+    .map(({ view }) => view);
+}
+
+export function mappingSaveIntent(row: MappingRowView, selected: string): MappingIntent {
+  if (selected === row.saved) return { type: 'none' };
+  if (row.id === null) {
+    if (selected === NOT_MAPPED) return { type: 'none' };
+    return { type: 'create', body: { provider: row.provider, kind: row.kind, externalPrincipalId: row.principal, groupId: selected } };
+  }
+  return selected === NOT_MAPPED ? { type: 'remove', id: row.id } : { type: 'update', id: row.id, groupId: selected };
+}
+
+export function readSharingRules(value: unknown): SharingRule[] {
+  if (!Array.isArray(value)) return [];
+  const rules: SharingRule[] = [];
+  for (const item of value) {
+    const row = asRecord(item);
+    if (typeof row.id !== 'string' || typeof row.provider !== 'string' || typeof row.kind !== 'string') continue;
+    rules.push({
+      id: row.id,
+      provider: row.provider,
+      kind: row.kind,
+      domain: typeof row.domain === 'string' ? row.domain : null,
+      enabled: row.enabled === true,
+      documents: documentsCount(row.documents),
+    });
+  }
+  return rules;
+}
+
+function ruleWords(rule: SharingRule, language: string): { text: string; code: string | null } {
+  if (rule.kind === 'domain' && rule.domain) return { text: accessGroupText('rules.kind.domain', language, { domain: rule.domain }), code: null };
+  if (rule.kind === 'anyone') return { text: accessGroupText('rules.kind.anyone', language), code: null };
+  if (rule.kind === 'public') return { text: accessGroupText('rules.kind.public', language), code: null };
+  return { text: rule.kind, code: rule.kind };
+}
+
+export function buildRuleRows(rules: readonly SharingRule[], language: string): SharingRuleView[] {
+  return rules.map((rule) => {
+    const words = ruleWords(rule, language);
+    const source = providerName(rule.provider);
+    return {
+      id: rule.id,
+      providerName: source,
+      sharedWith: words.text,
+      kindCode: words.code,
+      documents: rule.documents,
+      enabled: rule.enabled,
+      stateWord: accessGroupText(rule.enabled ? 'value.on' : 'value.off', language),
+      toggleAria: accessGroupText('rules.toggleAria', language, { rule: words.text, source }),
+    };
+  });
+}
+
+/** Turning a rule on widens access, so it is confirmed first; turning it off narrows and acts at once (decision 11). */
+export function ruleToggleIntent(rule: { enabled: boolean }, next: boolean): 'confirm' | 'disable' | 'none' {
+  if (next === rule.enabled) return 'none';
+  return next ? 'confirm' : 'disable';
+}
+
+const RULE_DOMAIN_PATTERN = /^(?=.{3,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+
+export function isValidRuleDomain(value: string): boolean {
+  return RULE_DOMAIN_PATTERN.test(value.trim()) && value.trim() === value;
+}
+
+export function showPersonalNote(visibilityApplies: boolean): boolean {
+  return visibilityApplies !== true;
+}
 
 // --- Status region ----------------------------------------------------------------------------------------------------
 
@@ -884,6 +1007,15 @@ export function AccessGroupsAdmin({ organizationId, language, fetcher }: AccessG
         <p className={cn('text-sm mt-4', MUTED_CLASS)}>{text('access.documentsHint')}</p>
       </section>
 
+      <ConnectorMappingCard
+        organizationId={organizationId}
+        language={language}
+        fetcher={fetcher}
+        groups={groups}
+        onFailure={applyFailure}
+        onStatus={setStatus}
+      />
+
       {deleting && (
         <DeleteGroupDialog
           group={deleting}
@@ -1298,5 +1430,608 @@ function DeleteGroupDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+const DEFAULT_KIND_BY_PROVIDER: Record<(typeof MAPPING_PROVIDERS)[number], string> = {
+  'google-drive': 'group',
+  dropbox: 'team',
+  notion: 'workspace',
+};
+
+const TABLE_REGION_CLASS = 'overflow-x-auto rounded-lg border border-[#FFE0D0] dark:border-[#3A3A3A] bg-white dark:bg-[#2A2A2A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2';
+
+function ConnectorMappingCard({
+  organizationId,
+  language,
+  fetcher,
+  groups,
+  onFailure,
+  onStatus,
+}: SubViewProps & { groups: readonly AdminGroup[]; onStatus: (message: StatusMessage | null) => void }) {
+  const text = (key: AccessGroupLabelKey, vars?: Record<string, string | number>) => accessGroupText(key, language, vars);
+  const orgQuery = `organizationId=${encodeURIComponent(organizationId)}`;
+  const [loadState, setLoadState] = useState<LoadState>('loading');
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [visibilityApplies, setVisibilityApplies] = useState(true);
+  const [rows, setRows] = useState<MappingRow[]>([]);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [rules, setRules] = useState<SharingRule[]>([]);
+  const [selected, setSelected] = useState<Record<string, string>>({});
+  const [acting, setActing] = useState<string | null>(null);
+  const [confirmRule, setConfirmRule] = useState<SharingRuleView | null>(null);
+  const [mappingForm, setMappingForm] = useState<{ provider: string; principal: string; groupId: string; error: AccessGroupLabelKey | null } | null>(null);
+  const [ruleForm, setRuleForm] = useState<{ provider: string; domain: string; error: AccessGroupLabelKey | null } | null>(null);
+  const keepRuleOffRef = useRef<HTMLButtonElement>(null);
+
+  const load = async (offset: number | null = null) => {
+    setLoadState('loading');
+    const [mapResult, ruleResult] = await Promise.all([
+      accessAdminRequest(`/connector-map?${orgQuery}${offset ? `&offset=${offset}` : ''}`, { fetcher }),
+      offset ? Promise.resolve(null) : accessAdminRequest(`/sharing-rules?${orgQuery}`, { fetcher }),
+    ]);
+    if (mapResult.kind !== 'ok') {
+      const outcome = onFailure(mapResult, false);
+      if (outcome.type !== 'notAdmin') setLoadState('unavailable');
+      return;
+    }
+    if (ruleResult && ruleResult.kind !== 'ok') {
+      const outcome = onFailure(ruleResult, false);
+      if (outcome.type !== 'notAdmin') setLoadState('unavailable');
+      return;
+    }
+    const page = readMappingRows(mapResult.body.rows);
+    setRows((current) => (offset ? [...current, ...page] : page));
+    setNextOffset(typeof mapResult.body.nextOffset === 'number' ? mapResult.body.nextOffset : null);
+    setVisibilityApplies(mapResult.body.visibilityApplies === true);
+    if (ruleResult) setRules(readSharingRules(ruleResult.body.rules));
+    if (!offset) setSelected({});
+    setLoadState('ready');
+    setHasLoaded(true);
+  };
+
+  useEffect(() => {
+    setHasLoaded(false);
+    void load();
+  }, [organizationId]);
+
+  const groupName = (id: string) => groups.find((group) => group.id === id)?.name ?? id;
+
+  const writeFailed = (result: Exclude<AdminResult, { kind: 'ok' }>, onCode?: (code: string) => boolean) => {
+    const outcome = failureOutcome(result, true);
+    if (outcome.type === 'code') {
+      if (onCode?.(outcome.code)) return;
+      if (outcome.code === 'unknown_group') {
+        onStatus({ tone: 'error', text: text('error.groupGone') });
+        void load();
+        return;
+      }
+      if (outcome.code === 'mapping_exists' || outcome.code === 'rule_exists') {
+        onStatus({ tone: 'error', text: text('error.changed') });
+        void load();
+        return;
+      }
+    }
+    onFailure(result, true);
+    if (outcome.type === 'changed' || outcome.type === 'outcomeUnknown') void load();
+  };
+
+  const saveMapping = async (row: MappingRowView, choice: string) => {
+    const intent = mappingSaveIntent(row, choice);
+    if (intent.type === 'none') return;
+    setActing(row.rowKey);
+    const result = intent.type === 'create'
+      ? await accessAdminRequest('/connector-map', { method: 'POST', body: { organizationId, ...intent.body }, fetcher })
+      : intent.type === 'update'
+        ? await accessAdminRequest(`/connector-map/${encodeURIComponent(intent.id)}`, { method: 'PUT', body: { organizationId, groupId: intent.groupId }, fetcher })
+        : await accessAdminRequest(`/connector-map/${encodeURIComponent(intent.id)}?${orgQuery}`, { method: 'DELETE', fetcher });
+    setActing(null);
+    if (result.kind !== 'ok') {
+      writeFailed(result);
+      return;
+    }
+    onStatus({
+      tone: 'success',
+      text: intent.type === 'remove'
+        ? text('mapping.removed', { principal: row.principal })
+        : text('mapping.saved', { principal: row.principal, group: groupName(choice) }),
+    });
+    void load();
+  };
+
+  const createMapping = async () => {
+    if (!mappingForm) return;
+    const principal = mappingForm.principal.trim();
+    if (!mappingForm.provider || !principal || !mappingForm.groupId) return;
+    setActing('new-mapping');
+    const kind = DEFAULT_KIND_BY_PROVIDER[mappingForm.provider as (typeof MAPPING_PROVIDERS)[number]] ?? 'group';
+    const result = await accessAdminRequest('/connector-map', {
+      method: 'POST',
+      body: { organizationId, provider: mappingForm.provider, kind, externalPrincipalId: principal, groupId: mappingForm.groupId },
+      fetcher,
+    });
+    setActing(null);
+    if (result.kind !== 'ok') {
+      writeFailed(result, (code) => {
+        if (code !== 'mapping_exists') return false;
+        setMappingForm((form) => (form ? { ...form, error: 'error.mappingExists' } : form));
+        onStatus({ tone: 'error', text: text('error.mappingExists') });
+        return true;
+      });
+      return;
+    }
+    onStatus({ tone: 'success', text: text('mapping.saved', { principal, group: groupName(mappingForm.groupId) }) });
+    setMappingForm(null);
+    void load();
+  };
+
+  const setRule = async (rule: SharingRuleView, enabled: boolean) => {
+    setActing(rule.id);
+    const result = await accessAdminRequest(`/sharing-rules/${encodeURIComponent(rule.id)}`, {
+      method: 'PUT',
+      body: { organizationId, enabled },
+      fetcher,
+    });
+    setActing(null);
+    setConfirmRule(null);
+    if (result.kind !== 'ok') {
+      writeFailed(result);
+      return;
+    }
+    onStatus({
+      tone: 'success',
+      text: text(enabled ? 'rules.turnedOn' : 'rules.turnedOff', { rule: rule.sharedWith, source: rule.providerName }),
+    });
+    void load();
+  };
+
+  const toggleRule = (rule: SharingRuleView, next: boolean) => {
+    const intent = ruleToggleIntent(rule, next);
+    if (intent === 'confirm') setConfirmRule(rule);
+    else if (intent === 'disable') void setRule(rule, false);
+  };
+
+  const createRule = async () => {
+    if (!ruleForm) return;
+    const domain = ruleForm.domain.trim().toLowerCase();
+    if (!isValidRuleDomain(domain)) {
+      setRuleForm({ ...ruleForm, error: 'rules.badDomain' });
+      return;
+    }
+    setActing('new-rule');
+    const result = await accessAdminRequest('/sharing-rules', {
+      method: 'POST',
+      body: { organizationId, provider: ruleForm.provider, kind: 'domain', domain },
+      fetcher,
+    });
+    setActing(null);
+    if (result.kind !== 'ok') {
+      writeFailed(result, (code) => {
+        if (code !== 'bad_domain') return false;
+        setRuleForm((form) => (form ? { ...form, error: 'rules.badDomain' } : form));
+        return true;
+      });
+      return;
+    }
+    onStatus({
+      tone: 'success',
+      text: text('rules.turnedOff', { rule: text('rules.kind.domain', { domain }), source: providerName(ruleForm.provider) }),
+    });
+    setRuleForm(null);
+    void load();
+  };
+
+  const mappingRows = buildMappingRows(rows, language);
+  const ruleRows = buildRuleRows(rules, language);
+  const busy = loadState === 'loading';
+  const dim = hasLoaded && (busy || loadState === 'unavailable');
+  const groupOptions = groups.map((group) => ({ id: group.id, name: group.name }));
+  const mappingFormReady = mappingForm !== null && mappingForm.provider !== '' && mappingForm.principal.trim() !== '' && mappingForm.groupId !== '';
+  const domainInvalid = ruleForm !== null && ruleForm.domain.length > 0 && !isValidRuleDomain(ruleForm.domain.trim().toLowerCase());
+
+  return (
+    <section className={CARD_CLASS} aria-labelledby="access-mapping-title" aria-busy={busy ? true : undefined}>
+      <div className="flex flex-wrap items-center gap-3 mb-2">
+        <Lock className="h-5 w-5 text-[#FF6417] dark:text-[#FF8A4D]" aria-hidden="true" />
+        <h4 id="access-mapping-title" className="text-lg font-semibold text-gray-900 dark:text-white flex-1 min-w-0">
+          {text('mapping.title')}
+        </h4>
+        <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void load()}>
+          <RefreshCw className={cn('h-4 w-4 mr-1', busy && 'animate-spin motion-reduce:animate-none')} aria-hidden="true" />
+          {text('action.refreshMapping')}
+        </Button>
+      </div>
+      <p className={cn('text-sm max-w-prose mb-4', MUTED_CLASS)}>{text('mapping.description')}</p>
+      {hasLoaded && showPersonalNote(visibilityApplies) && (
+        <p className="mb-4 flex items-start gap-2 p-3 rounded-lg text-sm bg-[#FFE0D0]/40 dark:bg-[#2A2A2A] text-gray-900 dark:text-white">
+          <Info className="h-4 w-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <span className="max-w-prose">{text('mapping.personalNote')}</span>
+        </p>
+      )}
+
+      {loadState === 'unavailable' && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-red-800 dark:text-red-200">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+          <span className="flex-1 min-w-0">{text('mapping.unavailable', { reload: text('action.refreshMapping') })}</span>
+        </div>
+      )}
+
+      {busy && !hasLoaded ? (
+        <div className={cn('flex items-center justify-center gap-2 py-8 text-sm', MUTED_CLASS)}>
+          <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+          <span>{text('mapping.loading')}</span>
+        </div>
+      ) : hasLoaded ? (
+        <div className={cn('space-y-6', dim && 'opacity-60')}>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <h5 className="text-sm font-semibold text-gray-900 dark:text-white flex-1 min-w-0">{text('mapping.groups.title')}</h5>
+              {!mappingForm && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMappingForm({ provider: MAPPING_PROVIDERS[0], principal: '', groupId: '', error: null })}
+                >
+                  <Plus className="h-4 w-4 mr-1" aria-hidden="true" />
+                  {text('action.newMapping')}
+                </Button>
+              )}
+            </div>
+
+            {mappingForm && (
+              <div
+                className={cn(ROW_CLASS, 'grid gap-4 sm:grid-cols-3')}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.stopPropagation();
+                    setMappingForm(null);
+                  }
+                }}
+              >
+                <div className="space-y-1">
+                  <label htmlFor="access-mapping-source" className="text-sm text-gray-900 dark:text-white">{text('mapping.col.source')}</label>
+                  <Select value={mappingForm.provider} onValueChange={(value) => setMappingForm({ ...mappingForm, provider: value, error: null })}>
+                    <SelectTrigger id="access-mapping-source"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {MAPPING_PROVIDERS.map((provider) => (
+                        <SelectItem key={provider} value={provider}>{providerName(provider)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="access-mapping-principal" className="text-sm text-gray-900 dark:text-white">{text('mapping.form.principal')}</label>
+                  <Input
+                    id="access-mapping-principal"
+                    value={mappingForm.principal}
+                    maxLength={512}
+                    className="font-mono"
+                    autoComplete="off"
+                    spellCheck={false}
+                    translate="no"
+                    aria-invalid={mappingForm.error ? true : undefined}
+                    aria-describedby="access-mapping-principal-help"
+                    onChange={(event) => setMappingForm({ ...mappingForm, principal: event.target.value, error: null })}
+                    onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }}
+                  />
+                  <p id="access-mapping-principal-help" className={cn('text-xs', mappingForm.error ? 'text-red-700 dark:text-red-300' : MUTED_CLASS)}>
+                    {mappingForm.error ? text(mappingForm.error) : text('mapping.form.principalHelp')}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="access-mapping-group" className="text-sm text-gray-900 dark:text-white">{text('mapping.col.accessGroup')}</label>
+                  <Select value={mappingForm.groupId || undefined} onValueChange={(value) => setMappingForm({ ...mappingForm, groupId: value, error: null })}>
+                    <SelectTrigger id="access-mapping-group" disabled={groupOptions.length === 0}>
+                      <SelectValue placeholder={text('mapping.notMapped')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {groupOptions.map((group) => (
+                        <SelectItem key={group.id} value={group.id} className="break-words">{group.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {groupOptions.length === 0 && <p className={cn('text-xs', MUTED_CLASS)}>{text('field.noGroups')}</p>}
+                </div>
+                <div className="flex flex-wrap gap-2 sm:col-span-3">
+                  <Button type="button" size="sm" className={MODAL_PRIMARY_CLASS} disabled={!mappingFormReady || acting !== null} onClick={() => void createMapping()}>
+                    {acting === 'new-mapping' && <Loader2 className="h-4 w-4 mr-1 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                    {acting === 'new-mapping' ? text('save.running') : text('action.createMapping')}
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" disabled={acting === 'new-mapping'} onClick={() => setMappingForm(null)}>
+                    {text('action.closeForm')}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {mappingRows.length === 0 ? (
+              <div className="py-8 text-center">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">{text('mapping.empty.title')}</p>
+                <p className={cn('text-sm max-w-prose mx-auto mt-1', MUTED_CLASS)}>{text('mapping.empty.body')}</p>
+              </div>
+            ) : (
+              <MappingRowsTable
+                rows={mappingRows}
+                groups={groupOptions}
+                selected={selected}
+                acting={acting}
+                language={language}
+                onSelect={(rowKey, value) => setSelected((current) => ({ ...current, [rowKey]: value }))}
+                onSave={(row, value) => void saveMapping(row, value)}
+              />
+            )}
+            {nextOffset !== null && (
+              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void load(nextOffset)}>
+                {text('action.loadMoreGroups')}
+              </Button>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <h5 className="text-sm font-semibold text-gray-900 dark:text-white flex-1 min-w-0">{text('rules.title')}</h5>
+              {!ruleForm && (
+                <Button type="button" variant="outline" size="sm" onClick={() => setRuleForm({ provider: MAPPING_PROVIDERS[0], domain: '', error: null })}>
+                  <Plus className="h-4 w-4 mr-1" aria-hidden="true" />
+                  {text('action.addDomain')}
+                </Button>
+              )}
+            </div>
+            <p className={cn('text-sm max-w-prose', MUTED_CLASS)}>{text('rules.description')}</p>
+
+            {ruleForm && (
+              <div
+                className={cn(ROW_CLASS, 'grid gap-4 sm:grid-cols-2')}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.stopPropagation();
+                    setRuleForm(null);
+                  }
+                }}
+              >
+                <div className="space-y-1">
+                  <label htmlFor="access-rule-source" className="text-sm text-gray-900 dark:text-white">{text('mapping.col.source')}</label>
+                  <Select value={ruleForm.provider} onValueChange={(value) => setRuleForm({ ...ruleForm, provider: value })}>
+                    <SelectTrigger id="access-rule-source"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {MAPPING_PROVIDERS.map((provider) => (
+                        <SelectItem key={provider} value={provider}>{providerName(provider)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="access-rule-domain" className="text-sm text-gray-900 dark:text-white">{text('rules.form.domain')}</label>
+                  <Input
+                    id="access-rule-domain"
+                    value={ruleForm.domain}
+                    maxLength={253}
+                    className="font-mono"
+                    autoComplete="off"
+                    spellCheck={false}
+                    translate="no"
+                    aria-invalid={domainInvalid || ruleForm.error ? true : undefined}
+                    aria-describedby={domainInvalid || ruleForm.error ? 'access-rule-domain-error' : undefined}
+                    onChange={(event) => setRuleForm({ ...ruleForm, domain: event.target.value, error: null })}
+                    onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }}
+                  />
+                  {(domainInvalid || ruleForm.error) && (
+                    <p id="access-rule-domain-error" className="text-xs text-red-700 dark:text-red-300">{text('rules.badDomain')}</p>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2 sm:col-span-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className={MODAL_PRIMARY_CLASS}
+                    disabled={ruleForm.domain.trim() === '' || domainInvalid || acting !== null}
+                    aria-describedby={domainInvalid ? 'access-rule-domain-error' : undefined}
+                    onClick={() => void createRule()}
+                  >
+                    {acting === 'new-rule' && <Loader2 className="h-4 w-4 mr-1 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                    {acting === 'new-rule' ? text('save.running') : text('action.createRule')}
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" disabled={acting === 'new-rule'} onClick={() => setRuleForm(null)}>
+                    {text('action.closeForm')}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {ruleRows.length === 0 ? (
+              <p className={cn('text-sm', MUTED_CLASS)}>{text('rules.empty')}</p>
+            ) : (
+              <RulesTable rules={ruleRows} acting={acting} language={language} onToggle={toggleRule} />
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {confirmRule && (
+        <Dialog open onOpenChange={(open) => { if (!open && acting !== confirmRule.id) setConfirmRule(null); }}>
+          <DialogContent
+            className="max-w-md"
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              keepRuleOffRef.current?.focus();
+            }}
+            onEscapeKeyDown={(event) => { if (acting === confirmRule.id) event.preventDefault(); }}
+            onInteractOutside={(event) => { if (acting === confirmRule.id) event.preventDefault(); }}
+          >
+            <DialogHeader>
+              <DialogTitle className="break-words">{text('rules.confirm.title')}</DialogTitle>
+              <DialogDescription className="break-words">
+                {text('rules.confirm.body', { source: confirmRule.providerName, rule: confirmRule.sharedWith, count: confirmRule.documents })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button ref={keepRuleOffRef} type="button" variant="outline" disabled={acting === confirmRule.id} onClick={() => setConfirmRule(null)}>
+                {text('action.keepRuleOff')}
+              </Button>
+              <Button type="button" className={MODAL_PRIMARY_CLASS} disabled={acting === confirmRule.id} onClick={() => void setRule(confirmRule, true)}>
+                {acting === confirmRule.id && <Loader2 className="h-4 w-4 mr-1 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                {acting === confirmRule.id ? text('save.running') : text('action.turnRuleOn')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </section>
+  );
+}
+
+export function MappingRowsTable({
+  rows,
+  groups,
+  selected,
+  acting,
+  language,
+  onSelect,
+  onSave,
+}: {
+  rows: readonly MappingRowView[];
+  groups: readonly { id: string; name: string }[];
+  selected: Record<string, string>;
+  acting: string | null;
+  language: string;
+  onSelect: (rowKey: string, value: string) => void;
+  onSave: (row: MappingRowView, value: string) => void;
+}) {
+  const text = (key: AccessGroupLabelKey, vars?: Record<string, string | number>) => accessGroupText(key, language, vars);
+  return (
+    <div className={TABLE_REGION_CLASS} tabIndex={0} role="region" aria-label={text('mapping.groups.title')}>
+      <Table>
+        <TableCaption className="sr-only">{text('mapping.groups.title')}</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead scope="col">{text('mapping.col.source')}</TableHead>
+            <TableHead scope="col">{text('mapping.col.principal')}</TableHead>
+            <TableHead scope="col" className="text-right">{text('col.documents')}</TableHead>
+            <TableHead scope="col">{text('mapping.col.accessGroup')}</TableHead>
+            <TableHead scope="col">{text('col.actions')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => {
+            const choice = selected[row.rowKey] ?? row.saved;
+            const changed = mappingSaveIntent(row, choice).type !== 'none';
+            const busy = acting === row.rowKey;
+            const known = choice === NOT_MAPPED || groups.some((group) => group.id === choice);
+            return (
+              <TableRow key={row.rowKey}>
+                <TableCell className="text-sm">{row.providerName}</TableCell>
+                <TableCell className="text-sm min-w-[12rem]">
+                  <code className="font-mono text-xs break-all whitespace-pre-wrap" translate="no">{row.principal}</code>
+                  <span className={cn('block text-xs', MUTED_CLASS)}>
+                    {row.kindLabel ?? <code className="font-mono" translate="no">{row.kindCode}</code>}
+                  </span>
+                  {row.notMapped && (
+                    <span className="mt-1 inline-flex items-center gap-1 rounded border border-amber-600/50 px-1 text-xs text-amber-700 dark:text-amber-300">
+                      <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                      {text('mapping.notMapped')}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="text-sm text-right tabular-nums">{new Intl.NumberFormat(language).format(row.documents)}</TableCell>
+                <TableCell className="min-w-[10rem]">
+                  <Select value={choice} onValueChange={(value) => onSelect(row.rowKey, value)} disabled={busy}>
+                    <SelectTrigger className="h-8 text-sm" aria-label={`${text('mapping.col.accessGroup')}: ${row.principal}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NOT_MAPPED}>{text('mapping.notMapped')}</SelectItem>
+                      {!known && <SelectItem value={choice}><span className="font-mono text-xs">{choice}</span></SelectItem>}
+                      {groups.map((group) => (
+                        <SelectItem key={group.id} value={group.id} className="break-words">{group.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!changed || acting !== null}
+                      aria-label={text('action.saveMappingAria', { principal: row.principal })}
+                      onClick={() => onSave(row, choice)}
+                    >
+                      {busy && <Loader2 className="h-4 w-4 mr-1 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                      {busy ? text('save.running') : text('action.saveMapping')}
+                    </Button>
+                    {row.id !== null && row.saved !== NOT_MAPPED && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={acting !== null}
+                        aria-label={text('action.removeMappingAria', { principal: row.principal })}
+                        onClick={() => onSave(row, NOT_MAPPED)}
+                      >
+                        {text('action.removeMapping')}
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+export function RulesTable({
+  rules,
+  acting,
+  language,
+  onToggle,
+}: {
+  rules: readonly SharingRuleView[];
+  acting: string | null;
+  language: string;
+  onToggle: (rule: SharingRuleView, next: boolean) => void;
+}) {
+  const text = (key: AccessGroupLabelKey, vars?: Record<string, string | number>) => accessGroupText(key, language, vars);
+  return (
+    <div className={TABLE_REGION_CLASS} tabIndex={0} role="region" aria-label={text('rules.title')}>
+      <Table>
+        <TableCaption className="sr-only">{text('rules.title')}</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead scope="col">{text('mapping.col.source')}</TableHead>
+            <TableHead scope="col">{text('rules.col.sharedWith')}</TableHead>
+            <TableHead scope="col" className="text-right">{text('col.documents')}</TableHead>
+            <TableHead scope="col">{text('rules.col.counts')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rules.map((rule) => (
+            <TableRow key={rule.id}>
+              <TableCell className="text-sm">{rule.providerName}</TableCell>
+              <TableCell className="text-sm break-all">
+                {rule.kindCode ? <code className="font-mono text-xs" translate="no">{rule.sharedWith}</code> : rule.sharedWith}
+              </TableCell>
+              <TableCell className="text-sm text-right tabular-nums">{new Intl.NumberFormat(language).format(rule.documents)}</TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={rule.enabled}
+                    disabled={acting !== null}
+                    aria-label={rule.toggleAria}
+                    className="data-[state=checked]:bg-[#FF6417] dark:data-[state=checked]:bg-[#FF8A4D]"
+                    onCheckedChange={(next) => onToggle(rule, next)}
+                  />
+                  <span className="text-sm">{rule.stateWord}</span>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

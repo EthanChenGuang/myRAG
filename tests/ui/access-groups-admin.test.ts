@@ -380,3 +380,51 @@ describe('sharing rules', () => {
     }
   });
 });
+
+import { MappingRowsTable, RulesTable } from '@/components/ui/access-groups-admin';
+import { TextSizeProvider } from '@/components/providers/text-size-provider';
+import { FontProvider } from '@/components/providers/font-provider';
+import type { ReactElement } from 'react';
+
+const inTextSize = (element: ReactElement) => renderToStaticMarkup(createElement(TextSizeProvider, null, createElement(FontProvider, null, element)));
+
+describe('mapping card render', () => {
+  it('renders source ids, group names and rule words as text with break-all and the On or Off word', () => {
+    const rows = buildMappingRows(readMappingRows([
+      { id: null, provider: 'google-drive', kind: 'group', externalPrincipalId: INJECTED, groupId: null, documents: 9 },
+      { id: MAP_ID, provider: 'dropbox', kind: 'team', externalPrincipalId: 'javascript:alert(1)', groupId: GROUP_A, documents: 2 },
+    ]), 'en');
+    const html = inTextSize(createElement(MappingRowsTable, {
+      rows,
+      groups: [{ id: GROUP_A, name: INJECTED }],
+      selected: {},
+      acting: null,
+      language: 'en',
+      onSelect: () => undefined,
+      onSave: () => undefined,
+    }));
+    expect(html).not.toContain('<img');
+    expect(html).not.toContain('href=');
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(html).toContain('break-all');
+    expect(html).toContain('Not mapped');
+    expect(html).toContain('Remove mapping');
+
+    const rules = buildRuleRows(readSharingRules([
+      { id: 'r1', provider: 'google-drive', kind: 'domain', domain: 'example.org', enabled: false, documents: 14 },
+      { id: 'r2', provider: 'notion', kind: 'public', domain: null, enabled: true, documents: 1 },
+    ]), 'en');
+    const rulesHtml = inTextSize(createElement(RulesTable, { rules, acting: null, language: 'en', onToggle: () => undefined }));
+    expect(rulesHtml).toContain('role="switch"');
+    expect(rulesHtml).toContain('>Off<');
+    expect(rulesHtml).toContain('>On<');
+    expect(rulesHtml).toContain('aria-label="Count as Everyone: Everyone at example.org, Google Drive"');
+  });
+
+  it('the card renders the personal note from the label and confirms before turning a rule on', () => {
+    const source = readFileSync('src/components/ui/access-groups-admin.tsx', 'utf8');
+    expect(source).toContain("text('mapping.personalNote')");
+    expect(source).toContain("text('action.keepRuleOff')");
+    expect(source).toContain('keepRuleOffRef.current?.focus()');
+  });
+});
