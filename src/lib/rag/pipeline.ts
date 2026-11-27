@@ -73,7 +73,7 @@ import {
 import { securitySpanAttributes } from './security/security-events';
 import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
 import { hybridRerank } from './rerank/local-hybrid';
-import { AccessScopeMissingError, scopeAccessFilter, type ScopeAccessFilter } from './tenant/access';
+import { AccessScopeMissingError, accessScopeTiming, scopeAccessFilter, type ScopeAccessFilter } from './tenant/access';
 import { assertTenantScope, scopeKey, type TenantScope } from './tenant/scope';
 import { createTraceCollector, sanitizeStageCounts, type TraceCollector } from './trace/collector';
 import { finishTrace, type FinishTraceOptions } from './trace/finish';
@@ -492,7 +492,12 @@ export function degradedReason(records: StageRecord[]): string {
 const MEDIA_MATCH_COUNT = 10;
 const MEDIA_SIMILARITY_THRESHOLD = 0.3;
 
-async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollector, scope: NonNullable<RunRetrievalInput['scope']>): Promise<RetrievalResult> {
+async function runMediaPipeline(
+  input: RunRetrievalInput,
+  collector: TraceCollector,
+  scope: NonNullable<RunRetrievalInput['scope']>,
+  access: ScopeAccessFilter,
+): Promise<RetrievalResult> {
   const deps = getRagDeps();
   const { signal, profile } = input;
   const config = loadRagConfig(deps.ragEnv());
@@ -524,6 +529,7 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
             searchByEmbedding(scope, current, MEDIA_MATCH_COUNT, scaleThreshold(searchThresholdsFor(current.profile), MEDIA_SIMILARITY_THRESHOLD), {
               client: adminClient as unknown as RpcClient,
               signal: stageSignal,
+              access,
             }),
           );
         },
@@ -656,6 +662,7 @@ async function runOverviewPipeline(
   input: RunRetrievalInput,
   collector: TraceCollector,
   scope: NonNullable<RunRetrievalInput['scope']>,
+  access: ScopeAccessFilter,
 ): Promise<RetrievalResult> {
   const deps = getRagDeps();
   const { signal, profile } = input;
@@ -689,6 +696,7 @@ async function runOverviewPipeline(
             searchByEmbedding(scope, current, OVERVIEW_MATCH_COUNT, scaleThreshold(searchThresholdsFor(current.profile), OVERVIEW_SIMILARITY_THRESHOLD), {
               client: adminClient as unknown as RpcClient,
               signal: stageSignal,
+              access,
             }),
           );
         },
@@ -833,9 +841,29 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
       return missing;
     }
   }
-  const result = await dispatchRetrieval(input, collector, access);
+  if (input.scope !== null && access !== undefined && access.mode !== 'off') recordAccessScope(collector, input.scope);
+  const result = await dispatchRetrieval(input, collector, access ?? OFF_ACCESS);
   if (ownsTrace) finishTrace(collector, result, traceOptions(input));
   return result;
+}
+
+/** A request without a tenant never reaches a leg (no_tenant); its filter is off, so no argument is sent. */
+const OFF_ACCESS: ScopeAccessFilter = Object.freeze({ mode: 'off' });
+
+/**
+ * D-08: the resolution time of the request's access scope, recorded directly on the trace (never through runStage or the optional
+ * stage list, so no configuration can disable or skip it). A scope minted without a timed resolution records zero, marked untimed.
+ */
+function recordAccessScope(collector: TraceCollector, scope: NonNullable<RunRetrievalInput['scope']>): void {
+  const endedAt = collector.now();
+  const elapsed = accessScopeTiming(scope);
+  collector.record({
+    name: 'access_scope',
+    status: 'ok',
+    startedAt: endedAt - Math.max(0, elapsed ?? 0),
+    endedAt,
+    ...(elapsed === null ? { detail: 'untimed' } : {}),
+  });
 }
 
 /** D-09: the retrieval error reason while the switch is on and the scope carries no access scope. */
@@ -847,8 +875,8 @@ function traceOptions(input: RunRetrievalInput): FinishTraceOptions {
 
 const V2_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval', 'voice'];
 
-function runLegacyPipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
-  return input.profile === 'voice' ? runVoicePipeline(input, collector) : runPipeline(input, collector);
+function runLegacyPipeline(input: RunRetrievalInput, collector: TraceCollector, access: ScopeAccessFilter): Promise<RetrievalResult> {
+  return input.profile === 'voice' ? runVoicePipeline(input, collector, access) : runPipeline(input, collector, access);
 }
 
 /** D-07: the fallback is a trace record with its reason only, never query text, tenant id or an error body. */
@@ -908,20 +936,20 @@ function hasEvalBindingOverride(options: RetrievalOptions | undefined): boolean 
 async function dispatchRetrieval(
   input: RunRetrievalInput,
   collector: TraceCollector,
-  access: ScopeAccessFilter | undefined,
+  access: ScopeAccessFilter,
 ): Promise<RetrievalResult> {
   const evalBindingOverride = input.profile === 'eval' && hasEvalBindingOverride(input.options);
   const eligible = !input.options?.generalOverview && V2_PROFILES.includes(input.profile);
   if (evalBindingOverride && (!eligible || !loadRagConfig(getRagDeps().ragEnv()).v2.domainEmbeddings.enabled)) {
     return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
   }
-  if (!eligible) return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
+  if (!eligible) return withLogOutcome(await runLegacyPipeline(input, collector, access), 'legacy');
 
   const effective = resolveEffectivePipeline();
   if (evalBindingOverride && effective.pipeline === 'legacy') return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
   if (effective.pipeline === 'legacy') {
     if (effective.fallback !== 'none') recordPipelineFallback(collector, effective.fallback);
-    return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
+    return withLogOutcome(await runLegacyPipeline(input, collector, access), 'legacy');
   }
 
   const { runV2Pipeline } = await import('./v2/pipeline');
@@ -936,13 +964,13 @@ async function dispatchRetrieval(
       return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
     }
     recordPipelineFallback(collector, V2_UNAVAILABLE);
-    return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
+    return withLogOutcome(await runLegacyPipeline(input, collector, access), 'legacy');
   }
   attempt.commit();
   return withLogOutcome({ ...result, stages: collector.stages() }, 'v2');
 }
 
-async function runPipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
+async function runPipeline(input: RunRetrievalInput, collector: TraceCollector, access: ScopeAccessFilter): Promise<RetrievalResult> {
   const deps = getRagDeps();
   const scope = input.scope;
 
@@ -950,8 +978,8 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
     return failure(collector, 'empty', 'no_tenant', null);
   }
 
-  if (input.profile === 'media') return runMediaPipeline(input, collector, scope);
-  if (input.options?.generalOverview) return runOverviewPipeline(input, collector, scope);
+  if (input.profile === 'media') return runMediaPipeline(input, collector, scope, access);
+  if (input.options?.generalOverview) return runOverviewPipeline(input, collector, scope, access);
 
   const { signal, profile } = input;
   const config = loadRagConfig(deps.ragEnv());
@@ -1000,6 +1028,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
               scope,
               client: requireAdminSearchClient(deps),
               signal: stageSignal,
+              access,
               profileRequireActive: evalProfileId ? false : undefined,
             });
           return evalProfileId ? runSearch(embedding) : withStaleProfileRetry(input.query, embedding, stageSignal, runSearch);
@@ -1176,7 +1205,7 @@ function toVoiceChunk(row: RawChunk, scope: NonNullable<RunRetrievalInput['scope
   return scope.kind === 'single' ? { ...row } : { ...row, id: row.chunk_id };
 }
 
-async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
+async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollector, access: ScopeAccessFilter): Promise<RetrievalResult> {
   const deps = getRagDeps();
   const scope = input.scope;
   if (scope === null) return failure(collector, 'empty', 'no_tenant', null);
@@ -1215,6 +1244,7 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
             return searchByEmbedding(scope, current, primary.matchCount, primary.threshold, {
               client: requireAdmin() as unknown as RpcClient,
               signal: stageSignal,
+              access,
             });
           });
           return rows.map((row) => toVoiceChunk(row, scope));
