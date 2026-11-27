@@ -12,7 +12,7 @@
 
 ## Current state
 - Prod: main fbb6bc3c live (641 plans). Supabase: trains 30–35 applied.
-- PR #131 (train 36, 18 plans + Phase 5/5.1/6 VERIFICATION) re-running CI on 7f8d4b4f. Merge when green, then owner desk applies sql/train36-live.sql (ops/owner-actions).
+- PR #131 (train 36) MERGED into main at 274d0456 (all 26 checks green). Next: owner desk applies sql/train36-live.sql; then ask the owner before deploying main.
 - 15 executor sessions plus the owner desk were told to pause and push WIP (list in HANDOFF.json).
 - Train 37 candidates: ledger/train37-candidates.md.
 

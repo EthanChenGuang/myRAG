@@ -11,9 +11,10 @@ git fetch origin ops/orchestrator-briefs ops/owner-actions
 - briefs/train-builder-brief.md
 你自己的台账放在 scratchpad。从 handoff/ledger 复制过去，以后每次更新也推回 ops/orchestrator-briefs 的 handoff/ 目录。
 
-第二步：处理 PR #131（第 36 批，ci/merge-train-36，head 7f8d4b4f）
-- 订阅这个 PR，检查 CI。全部通过（含 pr-smoke）才合并，用 merge 方式。
-- 合并后通知 owner 操作台：执行 ops/owner-actions 上的 sql/train36-live.sql，由我在场确认。
+第二步：第 36 批已合并
+- PR #131 已于 2026-11-27 13:08 UTC 合并进 main（合并提交 274d0456），26 项 CI 全绿，含 pr-smoke。
+- 待办 1：通知 owner 操作台，执行 ops/owner-actions 上的 sql/train36-live.sql，由我在场确认。
+- 待办 2：数据库 SQL 执行完之后，问我要不要部署 main。没有我的明确同意不部署。
 
 第三步：恢复执行者
 - 上一个账号的会话这里看不到，所有成果都在 GitHub 的 exec/* 分支上。
