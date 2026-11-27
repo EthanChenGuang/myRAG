@@ -95,10 +95,16 @@ def _context_k(trace: RagTrace) -> int:
 
 
 def _topk_redundancy(trace: RagTrace) -> float | None:
-    """D-22: the largest share of kept chunks in one duplicate cluster; a chunk without a cluster id is its own cluster."""
+    """D-22: the largest share of kept chunks in one duplicate cluster; a chunk without a cluster id is its own cluster.
+
+    The app writes the measure per (cluster id, value signature) on the trace (04.2-32); that value is used when present,
+    so the scorer and the retrieval log agree. Traces without it fall back to cluster ids only.
+    """
     k = _context_k(trace)
     if k == 0:
         return None
+    if trace.topk_redundancy is not None:
+        return trace.topk_redundancy
     sizes: dict[str, int] = {}
     largest = 1
     for chunk in trace.kept:

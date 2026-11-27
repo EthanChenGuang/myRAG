@@ -167,12 +167,17 @@ export function diversify(hits: FusedHit[], options: DiversifyOptions): Diversif
 }
 
 /**
- * D-22: the largest share of the kept chunks that sits in one duplicate cluster; a chunk without a cluster counts alone.
+ * D-22: the largest share of the kept chunks that sits in one duplicate cluster with one value signature (the same
+ * signature collapse uses, so members with conflicting values are not redundant); a chunk without a cluster counts alone.
  * Null when no kept chunk carries a cluster id.
  */
-export function topkRedundancy(kept: ReadonlyArray<{ dupClusterId?: string }>): number | null {
+export function topkRedundancy(kept: ReadonlyArray<{ dupClusterId?: string; content?: string }>): number | null {
   if (kept.length === 0 || !kept.some((chunk) => chunk.dupClusterId)) return null;
   const sizes = new Map<string, number>();
-  for (const chunk of kept) if (chunk.dupClusterId) sizes.set(chunk.dupClusterId, (sizes.get(chunk.dupClusterId) ?? 0) + 1);
+  for (const chunk of kept) {
+    if (!chunk.dupClusterId) continue;
+    const key = `${chunk.dupClusterId}\u0001${valueSignature(chunk.content ?? '')}`;
+    sizes.set(key, (sizes.get(key) ?? 0) + 1);
+  }
   return Math.max(1, ...sizes.values()) / kept.length;
 }
