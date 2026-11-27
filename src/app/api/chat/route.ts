@@ -16,6 +16,16 @@ import {
   CLAUDE_FIRST_TOKEN_TIMEOUT_MS,
   buildHistoryWindow,
   createCitationSession,
+  buildAliasMap,
+  buildCalculateTool,
+  CALCULATE_TOOL_NAME,
+  createCalcTraceHolder,
+  createCitationLabeler,
+  isServerCalculateTool,
+  mayOfferCalc,
+  modelBlocksTools,
+  shouldOfferCalcTool,
+  turnCanUseTools,
   createEnhancedRAGPrompt,
   answerLanguageOptions,
   appendAnswerLanguage,
@@ -66,6 +76,8 @@ import {
   type RetrievalResult,
   type TenantScope,
   type TraceCollector,
+  type CitationLabeler,
+  type ClaudeTurnFacts,
 } from '@/lib/rag';
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
@@ -102,6 +114,11 @@ interface StepToolCall {
 
 // Tool results that are evidence the answer may rely on; anything else (MCP) skips groundedness
 const ANSWER_EVIDENCE_TOOLS = new Set(['webSearch', 'useDocument']);
+
+// Phase 5.2.1 D-65: RAG_CALC_TOOL, read from the one answer-config reader once plan 05.2.1-02 adds the field; false before
+function calcToolSwitchOn(config: object): boolean {
+  return (config as { readonly calcTool?: unknown }).calcTool === true;
+}
 
 interface StepToolResult {
   type: string;
@@ -1995,6 +2012,14 @@ IMPORTANT:
       env.NEXT_PUBLIC_REASONING_ENABLED === 'true' &&
       reasoningSettings?.enabled !== false &&
       Boolean(reasoningSettings?.enabled || reasoningSettings?.effort || reasoningSettings?.maxOutputTokens);
+    // The session reads these facts when it picks the strategy after retrieval; `calculation` is set there (05.2.1 D-71)
+    const citationFacts: ClaudeTurnFacts = {
+      mcp: useMcpForRequest || lastAssistantHasToolCall(rawMessages),
+      multiStep: isHandlingMultiStep,
+      webSearch: webSearchEnabled,
+      reasoning: reasoningRequested,
+      attachments: hasAttachedImage,
+    };
     const citationSession = createCitationSession({
       capabilities: citationCapabilities,
       ragMode,
@@ -2002,14 +2027,16 @@ IMPORTANT:
       language: registryAnswerLanguage ?? userLanguage,
       ...(registryAnswerLanguage ? { textsSource: answerTurn.textsSource } : {}),
       config: generationConfig,
-      facts: {
-        mcp: useMcpForRequest || lastAssistantHasToolCall(rawMessages),
-        multiStep: isHandlingMultiStep,
-        webSearch: webSearchEnabled,
-        reasoning: reasoningRequested,
-        attachments: hasAttachedImage,
-      },
+      facts: citationFacts,
     });
+    // Phase 5.2.1 D-65, D-66: a turn that may get the calculation labels its blocks, so chunk operands can name an alias
+    const calcQuestion = getLastUserText(rawMessages);
+    const calcMayBeOffered =
+      calcToolSwitchOn(answerTurn.config) && ragMode !== 'bypass' && mayOfferCalc(calcQuestion, answerTurn.answerLanguage);
+    const retrievalLabeler: CitationLabeler | undefined =
+      citationSession.labeler ?? (calcMayBeOffered ? createCitationLabeler() : undefined);
+    const calcHolder = createCalcTraceHolder();
+    let calcOffer: { mode: 'tool' | 'trailing_block'; aliases: ReadonlySet<string>; stripMarkers: boolean } | null = null;
 
     // Only web-chat answers of a signed-in user outside ghost chats get an answerId and a record
     let answerUserId: string | null = null;
@@ -2255,7 +2282,7 @@ Context:
           signal: req.signal,
           trace: collector,
           ...(retrievalFilters ? { retrievalFilters } : {}),
-          ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
+          ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
           ...queryLayerInputs,
           ...(cacheContext ? { cacheContext } : {}),
         });
@@ -2286,7 +2313,7 @@ Context:
           options: { generalOverview: true },
           signal: req.signal,
           trace: collector,
-          ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
+          ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
           ...queryLayerInputs,
           ...(cacheContext ? { cacheContext } : {}),
         });
@@ -2574,7 +2601,38 @@ Context:
       return createUIMessageStreamResponse({ stream: timeFirstText(stream) });
     }
 
-    citationSession.attach(retrievalFailed || effectiveDisableRAG || smallTalkTurn ? null : retrievalResult);
+    const knowledgeContextAttached = !(retrievalFailed || effectiveDisableRAG || smallTalkTurn);
+    // Phase 5.2.1 D-70, D-72: offered on a knowledge turn whose question or blocks carry the signal; the mode follows the tool rule
+    let calcMode: 'tool' | 'trailing_block' | null = null;
+    if (calcMayBeOffered && knowledgeContextAttached && context.length > 0) {
+      const decision = shouldOfferCalcTool({
+        question: calcQuestion,
+        blockTexts: (retrievalResult?.blocks ?? []).filter((block) => !block.isImage).map((block) => block.text),
+        language: answerTurn.answerLanguage,
+      });
+      if (decision.offer) {
+        calcMode = turnCanUseTools({ provider: AI_PROVIDER, modelId: model }) ? 'tool' : 'trailing_block';
+        citationFacts.calculation = true;
+        console.log('[Calc]', { offered: true, mode: calcMode, reason: decision.reason });
+      }
+    }
+
+    citationSession.attach(knowledgeContextAttached ? retrievalResult : null);
+
+    if (calcMode) {
+      let aliases: ReadonlySet<string> = new Set<string>();
+      if (citationSession.strategy) {
+        aliases = citationSession.aliases();
+      } else {
+        try {
+          aliases = buildAliasMap(retrievalResult?.blocks, retrievalResult?.usedDocuments).aliases;
+        } catch {
+          console.warn('[Calc]', { offered: true, aliases: 'unavailable' });
+        }
+      }
+      // No strategy renders citations on this turn, so the block markers the calculation needs are removed from the visible text
+      calcOffer = { mode: calcMode, aliases, stripMarkers: citationSession.strategy === null };
+    }
 
     const resolvedSystemPrompt = await resolveRagSystemPrompt();
     let ragSystemPrompt = resolvedSystemPrompt.ragSystemPrompt;
@@ -2631,6 +2689,7 @@ Context:
       const answerRuleOptions = {
         mode: ragMode,
         webSearchOffered: SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY),
+        ...(calcOffer ? { calculation: { mode: calcOffer.mode } } : {}),
       };
       const historyNotEvidence = ragMode !== 'bypass' && historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE);
       systemPrompt = appendHistoryNotEvidence(
@@ -3599,6 +3658,15 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         }
       }
 
+      // Phase 5.2.1 D-65: our calculate tool, never over a tool of the same name (T-05.2.1-28)
+      if (calcOffer?.mode === 'tool') {
+        if (Object.prototype.hasOwnProperty.call(allTools, CALCULATE_TOOL_NAME)) {
+          console.log('[Calc]', { origin: 'tool', offered: false, reason: 'name_collision' });
+        } else {
+          allTools[CALCULATE_TOOL_NAME] = buildCalculateTool({ aliases: calcOffer.aliases, holder: calcHolder });
+        }
+      }
+
       const toolResultGuard = readSecurityConfig().toolResultGuard;
       const flaggedToolResults = new Set<string>();
       if (toolResultGuard !== 'off') {
@@ -3802,9 +3870,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       }
 
       // Special handling for Claude Sonnet 4
-      const isClaudeSonnet4 = safeModelId.includes('claude-sonnet-4') ||
-        safeModelId.includes('claude-4-sonnet') ||
-        safeModelId.includes('anthropic/claude-sonnet-4');
+      const isClaudeSonnet4 = modelBlocksTools(safeModelId);
 
       const resultToolsReachModel = SUPPORTS_TOOLS && !isClaudeSonnet4 && Object.keys(allTools).some((toolName) => toolName !== 'useDocument');
       if (toolResultGuard !== 'off' && resultToolsReachModel) {
@@ -3952,6 +4018,12 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           webSearchOffered: SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY),
           aliases: () => citationSession.aliases(),
           guard: outputGuardSources,
+          // Phase 5.2.1 D-72: the trailing block in block mode; in tool mode only the marker stripping, when it is needed
+          ...(calcOffer?.mode === 'trailing_block'
+            ? { calcBlock: { onTrace: calcHolder.recordBlock, stripMarkers: calcOffer.stripMarkers } }
+            : calcOffer?.stripMarkers
+              ? { calcBlock: { stripMarkers: true } }
+              : {}),
         });
         return citationTransforms.length > 0 ? { experimental_transform: citationTransforms } : {};
       };
