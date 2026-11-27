@@ -10,10 +10,11 @@
 -- only (as 0409, 0410).
 -- Unused content functions (no caller in src/): match_document_chunks_by_org, get_documents_by_type_slug, get_documents_by_type_slug_workspace
 -- (0425 bodies, SECURITY DEFINER), match_documents_by_organization and the multi-tenant match_document_chunks (0306 bodies, SECURITY
--- INVOKER) keep their signature, security mode, search_path and grants, and gain one guard at the top: while enforcement is on they raise
--- access_scope_required, so none of them returns unfiltered content. The two SQL-language functions become plpgsql with the same query, so
--- the guard can raise. The INVOKER ones read rag_access_enforced() only when the calling role may execute it (service_role, and the client
--- roles once 0923 grants it); with enforcement off every caller gets what it got before.
+-- INVOKER) keep their signature, body and security mode and gain one guard at the top: while enforcement is on they raise
+-- access_scope_required, so none of them returns unfiltered content; while it is off a server caller gets what it got before. The two
+-- SQL-language functions become plpgsql with the same query, so the guard can raise. The 0306 ones also get an empty search_path with
+-- schema-qualified names; all five are executable by service_role only (the two INVOKER ones were client-callable; with no caller they are
+-- not kept open as a path around the access filter).
 -- Operator rule: after re-running any file below 0920 that defines one of these functions (0306, 0409, 0425 or the setup file), re-run the
 -- whole ordered sequence through the 0930 block. Idempotent; not folded into the setup file.
 
@@ -148,7 +149,8 @@ REVOKE ALL ON FUNCTION public.match_documents_by_workspace(public.vector, intege
 GRANT EXECUTE ON FUNCTION public.match_documents_by_workspace(public.vector, integer, double precision, uuid, uuid, text[], boolean)
   TO service_role;
 
--- Unused multi-tenant content functions: newest bodies (0425, 0306) unchanged apart from the guard at the top.
+-- Unused multi-tenant content functions: newest bodies (0425, 0306) with the guard at the top; the 0306 ones also get an empty search_path
+-- and schema-qualified names. All are executable by service_role only.
 
 CREATE OR REPLACE FUNCTION public.match_document_chunks_by_org(p_org_id uuid, p_query_embedding public.vector, p_match_count integer DEFAULT 8, p_min_similarity double precision DEFAULT 0.2)
  RETURNS TABLE(document_id uuid, chunk_id uuid, content text, similarity double precision)
@@ -247,7 +249,7 @@ END;
 $function$;
 
 CREATE OR REPLACE FUNCTION public.match_documents_by_organization(
-  query_embedding vector(1536),
+  query_embedding public.vector(1536),
   match_threshold float,
   match_count int,
   org_id uuid
@@ -261,12 +263,11 @@ RETURNS TABLE (
   similarity float
 )
 LANGUAGE plpgsql
+SET search_path = ''
 AS $$
 BEGIN
-  IF pg_catalog.has_function_privilege('public.rag_access_enforced()', 'EXECUTE') THEN
-    IF public.rag_access_enforced() THEN
-      RAISE EXCEPTION 'access_scope_required' USING ERRCODE = '42501';
-    END IF;
+  IF public.rag_access_enforced() THEN
+    RAISE EXCEPTION 'access_scope_required' USING ERRCODE = '42501';
   END IF;
   RETURN QUERY
   SELECT
@@ -275,18 +276,18 @@ BEGIN
     dc.chunk_index,
     dc.content,
     dc.metadata,
-    1 - (dc.embedding <=> query_embedding) as similarity
-  FROM document_chunks dc
+    1 - (dc.embedding OPERATOR(public.<=>) query_embedding) as similarity
+  FROM public.document_chunks dc
   WHERE dc.organization_id = org_id
-    AND 1 - (dc.embedding <=> query_embedding) > match_threshold
+    AND 1 - (dc.embedding OPERATOR(public.<=>) query_embedding) > match_threshold
     AND dc.is_current AND dc.status = 'ready'
-  ORDER BY dc.embedding <=> query_embedding
+  ORDER BY dc.embedding OPERATOR(public.<=>) query_embedding
   LIMIT match_count;
 END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.match_document_chunks(
-  query_embedding vector(1536),
+  query_embedding public.vector(1536),
   match_count integer,
   similarity_threshold double precision
 )
@@ -298,23 +299,21 @@ RETURNS TABLE (
   metadata jsonb
 )
 LANGUAGE plpgsql
-SET search_path = 'pg_catalog', 'public'
+SET search_path = ''
 AS $$
 DECLARE
   current_user_id UUID;
   current_org_id UUID;
 BEGIN
-  IF pg_catalog.has_function_privilege('public.rag_access_enforced()', 'EXECUTE') THEN
-    IF public.rag_access_enforced() THEN
-      RAISE EXCEPTION 'access_scope_required' USING ERRCODE = '42501';
-    END IF;
+  IF public.rag_access_enforced() THEN
+    RAISE EXCEPTION 'access_scope_required' USING ERRCODE = '42501';
   END IF;
   -- Get current user ID
   current_user_id := auth.uid();
   
   -- Get user's current organization if in multi-tenant mode
   SELECT current_organization_id INTO current_org_id
-  FROM user_preferences
+  FROM public.user_preferences
   WHERE user_id = current_user_id;
   
   -- Return chunks based on organization context
@@ -323,12 +322,12 @@ BEGIN
     dc.id as chunk_id,
     dc.document_id,
     dc.content,
-    1 - (dc.embedding <=> query_embedding) as similarity,
+    1 - (dc.embedding OPERATOR(public.<=>) query_embedding) as similarity,
     dc.metadata
-  FROM document_chunks dc
-  INNER JOIN documents d ON dc.document_id = d.id
+  FROM public.document_chunks dc
+  INNER JOIN public.documents d ON dc.document_id = d.id
   WHERE dc.embedding IS NOT NULL 
-    AND 1 - (dc.embedding <=> query_embedding) > similarity_threshold
+    AND 1 - (dc.embedding OPERATOR(public.<=>) query_embedding) > similarity_threshold
     AND dc.is_current AND dc.status = 'ready'
     AND (
       -- Personal workspace: match null org_id docs
@@ -344,6 +343,17 @@ BEGIN
   LIMIT match_count;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.match_documents_by_organization(public.vector, double precision, integer, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.match_documents_by_organization(public.vector, double precision, integer, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.match_document_chunks(public.vector, integer, double precision) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.match_document_chunks(public.vector, integer, double precision) TO service_role;
+REVOKE ALL ON FUNCTION public.match_document_chunks_by_org(uuid, public.vector, integer, double precision) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.match_document_chunks_by_org(uuid, public.vector, integer, double precision) TO service_role;
+REVOKE ALL ON FUNCTION public.get_documents_by_type_slug(uuid, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_documents_by_type_slug(uuid, text, text) TO service_role;
+REVOKE ALL ON FUNCTION public.get_documents_by_type_slug_workspace(uuid, uuid, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_documents_by_type_slug_workspace(uuid, uuid, text, text) TO service_role;
 
 NOTIFY pgrst, 'reload schema';
 

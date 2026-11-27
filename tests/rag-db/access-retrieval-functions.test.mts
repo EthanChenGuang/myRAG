@@ -487,20 +487,16 @@ for (const mode of MODES) {
       }
     });
 
-    test('a client role that may execute an unused INVOKER function still gets an answer while enforcement is off', async () => {
+    test('the unused legacy content functions have an empty search_path and are executable by service_role only', async () => {
       for (const call of UNUSED()) {
-        const meta = await rows<{ definer: boolean; anon: boolean }>(
+        const meta = await rows<{ config: string[] | null; anon: boolean; authn: boolean; service: boolean }>(
           db,
-          "SELECT p.prosecdef AS definer, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = $1",
+          `SELECT p.proconfig AS config, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+                  has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authn, has_function_privilege('service_role', p.oid, 'EXECUTE') AS service
+           FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = $1`,
           [call.name],
         );
-        if (meta[0]?.definer !== false || meta[0]?.anon !== true) continue;
-        await db.exec('SET ROLE anon');
-        try {
-          assert.equal(await failureOf(() => db.query(call.sql, call.params)), 'accepted', `${call.name} as anon`);
-        } finally {
-          await db.exec('RESET ROLE');
-        }
+        assert.deepEqual(meta[0], { config: ['search_path=""'], anon: false, authn: false, service: true }, call.name);
       }
     });
   });
