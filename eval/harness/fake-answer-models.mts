@@ -21,9 +21,7 @@ import {
 } from './fake-citation-generator.mts';
 import { hanChars, latinTokens } from './fake-groundedness.mts';
 import { createFakeCalcModel, fakeCalcToolCapability, isFakeCalcModel } from './fake-calc-models.mts';
-import { setModelContextLengthOverrides } from '../../src/lib/rag/context/model-window.ts';
 import {
-  FAKE_MODEL_CONTEXT_LENGTHS,
   createSmallWindowModel,
   fakeSmallWindowOutputLimit,
   isFakeSmallWindowModel,
@@ -346,7 +344,7 @@ export interface FakeAnswerModelsOptions {
 
 /**
  * Returns the factory the harness installs with setEvalLanguageModelFactory; non-Phase-5.2 ids get the fake citation generator.
- * It also registers the fake windows in the model-window override map, so the prompt budget sees the small-window fake's window.
+ * The fake windows are registered separately (installFakeModelWindows), once the app environment is loaded.
  */
 export function installFakeAnswerModels(options: FakeAnswerModelsOptions): FakeAnswerModelFactory {
   const seed = options.seed ?? DEFAULT_FAKE_CITATION_SEED;
@@ -357,7 +355,6 @@ export function installFakeAnswerModels(options: FakeAnswerModelsOptions): FakeA
   }
   const citation = installFakeCitationGenerator(seed, options.citation);
   const known = new Set<string>(FAKE_ANSWER_MODEL_IDS);
-  setModelContextLengthOverrides(FAKE_MODEL_CONTEXT_LENGTHS);
 
   const script = (modelId: FakeAnswerModelId, callOptions: LanguageModelV3CallOptions): Scripted => {
     if (modelId === FAKE_JUDGE_MODEL) {

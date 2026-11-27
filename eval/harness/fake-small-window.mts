@@ -24,6 +24,17 @@ export const FAKE_MODEL_CONTEXT_LENGTHS: Readonly<Record<string, number>> = Obje
   [FAKE_SMALL_WINDOW_MODEL]: FAKE_SMALL_WINDOW_TOKENS,
 });
 
+/**
+ * Registers the fake windows in the model-window override map, so the prompt budget sees the small-window fake's window and the
+ * fixture family. Imported lazily: the model-window module reads the app environment, which the harness loads first. Returns
+ * the function that clears the map.
+ */
+export async function installFakeModelWindows(): Promise<() => void> {
+  const windows = await import('../../src/lib/rag/context/model-window.ts');
+  windows.setModelContextLengthOverrides(FAKE_MODEL_CONTEXT_LENGTHS);
+  return () => windows.setModelContextLengthOverrides(null);
+}
+
 export type SmallWindowOutcome = 'ok' | typeof FAKE_WINDOW_EXCEEDED | typeof FAKE_QUESTION_NOT_LAST;
 
 export interface SmallWindowRequest {

@@ -91,6 +91,7 @@ async function loadRoute(questions: string[]): Promise<Harness> {
   const fake = await import('../../eval/harness/fake-small-window.mts');
   fake.resetSmallWindowRequests();
   const factory = models.installFakeAnswerModels({ items: questions.map(item) });
+  await fake.installFakeModelWindows();
   const prompts: LanguageModelV3CallOptions['prompt'][] = [];
   const recording = Object.assign(
     (id: string) => {
@@ -158,6 +159,7 @@ describe('recording small-window fake (05.2.1-20 Task 1, D-88)', () => {
     const fake = await import('../../eval/harness/fake-small-window.mts');
     fake.resetSmallWindowRequests();
     const factory = models.installFakeAnswerModels({ items: [item(QUESTION)] });
+    await fake.installFakeModelWindows();
     return { factory, fake, models };
   }
 

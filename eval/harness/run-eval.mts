@@ -27,6 +27,7 @@ import {
   type FakeLanguageModelFactory,
 } from './fake-citation-generator.mts';
 import { installFakeAnswerModels, isFakeGeneratorModel } from './fake-answer-models.mts';
+import { installFakeModelWindows } from './fake-small-window.mts';
 import { startFakeGroundedness, type FakeGroundedness } from './fake-groundedness.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, RunConfigError, type RunConfig } from './run-config.mts';
 import { CACHE_PAIRS_APP_ENV, CACHE_PAIRS_FILE, cachePairOptions, cachePairSpecs, cachePairsRun, runCachePairs } from './cache-pairs.mts';
@@ -821,6 +822,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const restoreConsole = redirectConsole(logPath);
   let inProcess: InProcessEval | undefined;
   let answerModule: typeof import('../../src/lib/rag-eval/answer.ts') | undefined;
+  let clearFakeModelWindows: (() => void) | undefined;
   let fakeGroundedness: FakeGroundedness | undefined;
   let edgeErrors = 0;
   let cachePairsPath: string | undefined;
@@ -909,6 +911,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           answerModule.setEvalLanguageModelFactory((modelId) => provider(modelId) as unknown as LanguageModel);
         }
       }
+      // Phase 5.2.1 D-88: the fake generators' windows (the small-window fake) for the prompt budget, read in this process only
+      if (includeAnswer && generator === 'fake') clearFakeModelWindows = await installFakeModelWindows();
       if (groundedness) {
         // The eval route posts to this fake instead of RAG_SIDECAR_URL; the real client keeps the secret header and the contract.
         const fake = await startFakeGroundedness();
@@ -1047,6 +1051,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     restoreConsole();
     answerModule?.setEvalLanguageModelFactory(null);
     answerModule?.setEvalGroundednessRequest(null);
+    clearFakeModelWindows?.();
     await fakeGroundedness?.close();
     if (inProcess && !retainInProcess) await inProcess.close();
   }
