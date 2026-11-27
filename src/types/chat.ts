@@ -9,6 +9,7 @@ import {
   isToolUIPart,
 } from 'ai';
 import { pickAnswerMetadata, pickRefusalMetadata, type AnswerMessageMetadata, type RefusalMessageMetadata } from '@/lib/chat/answer-metadata';
+import type { SourceProvenance } from '@/components/providers/sources-provider';
 
 type AppDataTypes = {
   'content-part': ContentPart;
@@ -123,7 +124,7 @@ export interface ContentPart {
     text?: string;
     created_at?: string;
     uploadedAt?: string;
-  }>;
+  } & SourceProvenance>;
   usedDocuments?: Array<{
     id: string;
     name: string;
@@ -134,7 +135,7 @@ export interface ContentPart {
     matched_chunk?: string;
     uploadedAt?: string;
     explicitly_referenced?: boolean;
-  }>;
+  } & SourceProvenance>;
   source_images?: SourceImageData[];
   [key: string]: unknown;
 }
