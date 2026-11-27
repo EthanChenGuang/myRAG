@@ -825,7 +825,16 @@ export async function POST(request: NextRequest) {
             });
           }
           const logOutcome = logContext ? pendingTrace?.result.logOutcome : undefined;
-          if (logOutcome) logOutcome.answerLanguage = detectLanguage(event.text ?? '');
+          // D-16: a sentinel refusal is logged and cached like the server-side refusal, as in the chat route
+          const refusedByModel = answerTurn.refusedByModel();
+          if (logOutcome) {
+            if (refusedByModel) {
+              logOutcome.value = 'refused_no_context';
+              logOutcome.answerLanguage = answerTurn.answerLanguage;
+            } else {
+              logOutcome.answerLanguage = detectLanguage(event.text ?? '');
+            }
+          }
           finishPendingTrace();
           if (cacheStore && event.finishReason !== 'error') {
             // A-3: embed is check-only unless RAG_SEMANTIC_CACHE_EMBED_STORE is on; the store applies that rule after the response
@@ -838,9 +847,9 @@ export async function POST(request: NextRequest) {
                 sourceImages: cacheStore.result.sourceImages.length > 0,
                 retrievalStatus: cacheStore.result.status,
                 answerText: event.text ?? '',
-                isRefusal: false,
+                isRefusal: refusedByModel,
               },
-              sources: cacheSourcesFromResult(cacheStore.result),
+              sources: refusedByModel ? [] : cacheSourcesFromResult(cacheStore.result),
             });
           }
         },
