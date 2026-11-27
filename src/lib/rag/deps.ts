@@ -233,6 +233,11 @@ export function resetRagDepsForTests(): void {
   overrides = {};
   defaultQueryLlm = null;
 }
+/** Phase 5.2.1 D-83: RAG_CONTEXT_TOKEN_BUDGET as the pipeline reads it, the document target of the prompt budget. */
+export function currentContextTokenBudget(): number {
+  return loadRagConfig(getRagDeps().ragEnv()).v2.tokenBudget;
+}
+
 /** D-42: the effective lexical version of the configuration this process loads, the value the search stage uses. */
 export function currentLexicalVersion(): number {
   return effectiveLexicalVersion(loadRagConfig(getRagDeps().ragEnv()));

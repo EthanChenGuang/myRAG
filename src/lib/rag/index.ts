@@ -14,7 +14,7 @@ export { queryTurnInputs, ragTurnMetadataFromPlan } from './query/turn-metadata'
 export type { QueryTurnInputs, RagTurnMetadata } from './query/turn-metadata';
 export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
-export { currentAttributeFilterMode, currentLexicalVersion } from './deps';
+export { currentAttributeFilterMode, currentContextTokenBudget, currentLexicalVersion } from './deps';
 export { createTraceCollector } from './trace/collector';
 export type { TraceCollector, StageEntry } from './trace/collector';
 export { isTraceId } from './trace/collector';
@@ -914,3 +914,16 @@ export type {
   ProfileStateCounts,
 } from './backend/index-compat';
 export type { VectorStore, VectorSyncTarget } from './sync/stores/types';
+// Phase 5.2.1 plan 21: the prompt budget on the chat route
+export {
+  assertQuestionLast,
+  finalizePromptBudget,
+  planPromptBudget,
+  PromptOrderError,
+  type BudgetMessage,
+  type FinalizeResult,
+  type PromptBudgetPlan,
+} from './context/prompt-budget';
+export type { PromptBudgetTrace } from '@/lib/rag-eval/contracts.generated';
+export { modelContextLength, modelFamily } from './context/model-window';
+export { fixedText } from './lang/texts';

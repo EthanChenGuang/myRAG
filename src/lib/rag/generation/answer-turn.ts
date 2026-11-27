@@ -45,6 +45,8 @@ export interface AnswerTurn {
   outputCapDecision(): OutputCapDecision | null;
   /** D-04: appends the answer-rule block to the final system prompt; returns the prompt itself when no part applies. */
   composeSystemPrompt(prompt: string, options: ComposeSystemPromptOptions): string;
+  /** Phase 5.2.1 D-80: the answer-rule block alone (composed against an empty prompt), for the prompt budget; logs nothing. */
+  rulesBlock(options: ComposeSystemPromptOptions): string;
   /** The part ids of the first composition that added a part; empty before one or while no part applies. */
   composedParts(): readonly AnswerRuleId[];
   /**
@@ -228,6 +230,22 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
     },
     outputCapDecision() {
       return capDecision;
+    },
+    rulesBlock(options: ComposeSystemPromptOptions): string {
+      return composeAnswerRules(
+        {
+          prompt: '',
+          mode: options.mode,
+          language: answerLanguage,
+          config: input.config,
+          channel: input.channel,
+          webSearchOffered: options.webSearchOffered,
+          capApplies: capDecision?.concise ?? false,
+          contextTagging: options.contextTagging ?? readSecurityConfig().contextTagging,
+          ...(options.calculation ? { calculation: options.calculation } : {}),
+        },
+        { log: false },
+      );
     },
     composeSystemPrompt(prompt: string, options: ComposeSystemPromptOptions): string {
       const rulesInput = {
