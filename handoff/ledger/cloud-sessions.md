@@ -882,3 +882,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - A is waiting on the owner's OpenRouter key: the form was rejected, and the owner asked for the link (openrouter.ai/settings/keys).
 - 23:38Z OWNER chose (b) for 4.2 W-1 (no post-hoc metric change; re-register, then re-run) -> quick-42-w1-reregister. The pre-registration commit is pushed before the re-run commit.
 - 23:39Z Train 38 builder pushed 859c2a95: corpus re-pins, the 0930 re-apply rule in tests, a version-scope question fix, and timeouts (vitest hook 180/test 120, eval-corpus 240 s, ts-db 25->40 min). PR #135 CI is re-running. fix/ci-timeouts was told to stay compatible and focus on rebalancing the shards.
+- 23:42Z OpenRouter key saved (openrouter.ai, myRAG env); route A added to the 06.2-42 route-B session. PR #135 ts-checks red: the check-workflows cap on ts-db (25) vs the new 40. The train-38 builder was told to raise the lint cap with a reason and update its test.
