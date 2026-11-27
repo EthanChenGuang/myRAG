@@ -25,3 +25,15 @@ test('existing classifications are unchanged', () => {
   assert.equal(isSecretConfigEntry('RAG_VOICE_TOKEN_TTL_SECONDS', '3600'), false);
   assert.equal(isSecretConfigEntry('RAG_SEMANTIC_CACHE_MAX_DISTANCE', '0.05'), false);
 });
+
+test('Nango integration ids are shown, while other Nango keys and secrets stay masked (06.3-02, D-42)', () => {
+  assert.equal(isSecretConfigEntry('NANGO_SHAREPOINT_INTEGRATION_KEY', 'sharepoint-online'), false);
+  assert.equal(isSecretConfigEntry('NANGO_ONEDRIVE_INTEGRATION_KEY', 'one-drive'), false);
+  assert.equal(isSecretConfigEntry('NANGO_SECRET_KEY', 'placeholder'), true);
+  assert.equal(isSecretConfigEntry('NANGO_WEBHOOK_SECRET', 'placeholder'), true);
+  assert.equal(isSecretConfigEntry('OPENAI_INTEGRATION_KEY', 'placeholder'), true);
+  assert.equal(isSecretConfigEntry('NANGO_SHAREPOINT_INTEGRATION_KEY', 'https://user:placeholder@example.test'), true);
+  const { config, secretsSet } = maskConfig({ NANGO_SHAREPOINT_INTEGRATION_KEY: 'sharepoint-online', NANGO_SECRET_KEY: 'placeholder' });
+  assert.equal(config.NANGO_SHAREPOINT_INTEGRATION_KEY, 'sharepoint-online');
+  assert.deepEqual(secretsSet, ['NANGO_SECRET_KEY']);
+});
