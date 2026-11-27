@@ -1,7 +1,21 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Loader2, Plus, Users } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, MoreHorizontal, Pencil, Plus, Search, Trash2, Users } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { accessGroupText, type AccessGroupLabelKey } from '@/components/ui/access-group-labels';
@@ -248,10 +262,39 @@ export const MEMBER_SEARCH_MAX = 20;
 export interface GroupMember { userId: string; displayName: string | null; email: string | null; addedAt: string | null }
 export interface MemberCandidate { userId: string; displayName: string | null; email: string | null; already: boolean }
 
-export function readMembers(_value: unknown): GroupMember[] { return []; }
-export function readCandidates(_value: unknown): MemberCandidate[] { return []; }
-export function memberLabel(_member: { userId: string; displayName: string | null; email: string | null }): { text: string; mono: boolean } {
-  return { text: '', mono: false };
+function optionalText(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+export function readMembers(value: unknown): GroupMember[] {
+  if (!Array.isArray(value)) return [];
+  const members: GroupMember[] = [];
+  for (const item of value) {
+    const row = asRecord(item);
+    if (typeof row.userId !== 'string' || members.some((m) => m.userId === row.userId)) continue;
+    members.push({ userId: row.userId, displayName: optionalText(row.displayName), email: optionalText(row.email), addedAt: optionalText(row.addedAt) });
+  }
+  return members;
+}
+
+export function readCandidates(value: unknown): MemberCandidate[] {
+  if (!Array.isArray(value)) return [];
+  const candidates: MemberCandidate[] = [];
+  for (const item of value) {
+    const row = asRecord(item);
+    if (typeof row.userId !== 'string' || candidates.some((c) => c.userId === row.userId)) continue;
+    candidates.push({ userId: row.userId, displayName: optionalText(row.displayName), email: optionalText(row.email), already: row.already === true });
+  }
+  return candidates;
+}
+
+/** Name, else e-mail, else the bare id in font-mono (UI-SPEC UI Considerations: partial). */
+export function memberLabel(member: { userId: string; displayName: string | null; email: string | null }): { text: string; mono: boolean } {
+  const name = member.displayName?.trim();
+  if (name) return { text: name, mono: false };
+  const email = member.email?.trim();
+  if (email) return { text: email, mono: false };
+  return { text: member.userId, mono: true };
 }
 
 export interface MemberSearchState { query: string; searching: boolean; results: MemberCandidate[]; resultsFor: string | null; failed: boolean }
@@ -262,15 +305,64 @@ export type MemberSearchAction =
   | { type: 'failed'; query: string }
   | { type: 'reset' };
 export const MEMBER_SEARCH_INITIAL: MemberSearchState = { query: '', searching: false, results: [], resultsFor: null, failed: false };
-export function shouldSearchMembers(_query: string): boolean { return false; }
-export function memberSearchReducer(state: MemberSearchState, _action: MemberSearchAction): MemberSearchState { return state; }
+
+export function shouldSearchMembers(query: string): boolean {
+  return query.trim().length >= MEMBER_SEARCH_MIN;
+}
+
+export function memberSearchReducer(state: MemberSearchState, action: MemberSearchAction): MemberSearchState {
+  switch (action.type) {
+    case 'query':
+      return shouldSearchMembers(action.value)
+        ? { ...state, query: action.value }
+        : { ...MEMBER_SEARCH_INITIAL, query: action.value };
+    case 'start':
+      return action.query === state.query ? { ...state, searching: true, failed: false } : state;
+    case 'results':
+      if (action.query !== state.query) return state;
+      return { ...state, searching: false, failed: false, results: action.candidates.slice(0, MEMBER_SEARCH_MAX), resultsFor: action.query };
+    case 'failed':
+      return action.query === state.query ? { ...state, searching: false, failed: true } : state;
+    case 'reset':
+      return MEMBER_SEARCH_INITIAL;
+  }
+}
+
 export interface MemberSearchView { message: string | null; spinner: boolean; results: MemberCandidate[] }
-export function deriveMemberSearch(_state: MemberSearchState, _language: string): MemberSearchView {
-  return { message: null, spinner: false, results: [] };
+
+export function deriveMemberSearch(state: MemberSearchState, language: string): MemberSearchView {
+  if (!shouldSearchMembers(state.query)) {
+    return { message: state.query.length > 0 ? accessGroupText('members.searchHint', language) : null, spinner: false, results: [] };
+  }
+  if (state.searching) return { message: accessGroupText('members.searching', language), spinner: true, results: state.results };
+  if (state.failed) {
+    return {
+      message: accessGroupText('groups.unavailable', language, { reload: accessGroupText('action.reloadGroups', language) }),
+      spinner: false,
+      results: state.results,
+    };
+  }
+  if (state.resultsFor !== null && state.results.length === 0) {
+    return { message: accessGroupText('members.noMatch', language, { query: state.resultsFor.trim() }), spinner: false, results: [] };
+  }
+  return { message: null, spinner: false, results: state.results };
 }
 
 export interface GroupImpact { onlyCount: number; sharedCount: number; memberCount: number; mappingCount: number }
-export function readImpact(_value: unknown): GroupImpact | null { return null; }
+
+function count(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+export function readImpact(value: unknown): GroupImpact | null {
+  const row = asRecord(value);
+  const onlyCount = count(row.onlyCount);
+  const sharedCount = count(row.sharedCount);
+  const memberCount = count(row.memberCount);
+  if (onlyCount === null || sharedCount === null || memberCount === null) return null;
+  return { onlyCount, sharedCount, memberCount, mappingCount: count(row.mappingCount) ?? 0 };
+}
+
 export type DeletePhase = 'counting' | 'counted' | 'unavailable' | 'deleting';
 export interface DeleteDialogState { phase: DeletePhase; impact: GroupImpact | null }
 export type DeleteDialogAction =
@@ -280,10 +372,48 @@ export type DeleteDialogAction =
   | { type: 'delete' }
   | { type: 'deleteFailed' };
 export const DELETE_DIALOG_INITIAL: DeleteDialogState = { phase: 'counting', impact: null };
-export function deleteDialogReducer(state: DeleteDialogState, _action: DeleteDialogAction): DeleteDialogState { return state; }
+
+/** D-18: the group can be deleted only with the count on screen; a stale count goes back to counting. */
+export function deleteDialogReducer(state: DeleteDialogState, action: DeleteDialogAction): DeleteDialogState {
+  switch (action.type) {
+    case 'count':
+      return DELETE_DIALOG_INITIAL;
+    case 'counted':
+      return { phase: 'counted', impact: action.impact };
+    case 'countFailed':
+      return { phase: 'unavailable', impact: null };
+    case 'delete':
+      return state.phase === 'counted' && state.impact ? { ...state, phase: 'deleting' } : state;
+    case 'deleteFailed':
+      return state.impact ? { ...state, phase: 'counted' } : DELETE_DIALOG_INITIAL;
+  }
+}
+
 export interface DeleteDialogView { title: string; message: string | null; lines: string[]; canDelete: boolean; countAgain: boolean; busy: boolean }
-export function deriveDeleteDialog(_state: DeleteDialogState, _group: string, _language: string): DeleteDialogView {
-  return { title: '', message: null, lines: [], canDelete: true, countAgain: false, busy: false };
+
+export function deriveDeleteDialog(state: DeleteDialogState, group: string, language: string): DeleteDialogView {
+  const title = accessGroupText('delete.title', language, { group });
+  const impact = state.impact;
+  const lines = impact && (state.phase === 'counted' || state.phase === 'deleting')
+    ? [
+        accessGroupText('delete.docsClosed', language, { count: impact.onlyCount }),
+        accessGroupText('delete.docsOther', language, { count: impact.sharedCount }),
+        accessGroupText('delete.members', language, { count: impact.memberCount }),
+        ...(impact.mappingCount > 0 ? [accessGroupText('delete.mappings', language, { count: impact.mappingCount })] : []),
+      ]
+    : [];
+  return {
+    title,
+    message: state.phase === 'counting'
+      ? accessGroupText('delete.counting', language)
+      : state.phase === 'unavailable'
+        ? accessGroupText('delete.countUnavailable', language)
+        : null,
+    lines,
+    canDelete: state.phase === 'counted' && impact !== null,
+    countAgain: state.phase === 'unavailable',
+    busy: state.phase === 'deleting',
+  };
 }
 
 // --- Status region ----------------------------------------------------------------------------------------------------
@@ -343,6 +473,9 @@ export function AccessGroupsAdmin({ organizationId, language, fetcher }: AccessG
   const newGroupButtonRef = useRef<HTMLButtonElement>(null);
   const focusAfterCreate = useRef<string | null>(null);
   const loadSeq = useRef(0);
+  const [membersOf, setMembersOf] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; value: string; running: boolean } | null>(null);
+  const [deleting, setDeleting] = useState<AdminGroup | null>(null);
 
   const orgQuery = `organizationId=${encodeURIComponent(organizationId)}`;
   const request = (path: string, options: { method?: string; body?: unknown } = {}) =>
@@ -401,6 +534,27 @@ export function AccessGroupsAdmin({ organizationId, language, fetcher }: AccessG
   }, [groups]);
 
   const formView = deriveCreateForm(form);
+
+  const renameGroup = async (id: string, value: string) => {
+    const name = value.trim();
+    if (!name) return;
+    setRenaming({ id, value, running: true });
+    const result = await request(`/${encodeURIComponent(id)}`, { method: 'PATCH', body: { organizationId, name } });
+    if (result.kind === 'ok') {
+      const updated = asRecord(result.body.group);
+      setRenaming(null);
+      setStatus({ tone: 'success', text: text('rename.done', { group: typeof updated.name === 'string' ? updated.name : name }) });
+      void loadGroups();
+      return;
+    }
+    const outcome = applyFailure(result, true);
+    if (outcome.type === 'changed' || outcome.type === 'outcomeUnknown') {
+      setRenaming(null);
+      void loadGroups();
+      return;
+    }
+    setRenaming({ id, value, running: false });
+  };
 
   const closeForm = () => {
     setFormOpen(false);
@@ -564,30 +718,122 @@ export function AccessGroupsAdmin({ organizationId, language, fetcher }: AccessG
             className={cn('space-y-2', (busy || loadState === 'unavailable') && hasLoaded && 'opacity-60')}
             aria-busy={busy ? true : undefined}
           >
-            {rows.map((row) => (
-              <li key={row.id} className={ROW_CLASS}>
-                <div className="flex flex-wrap items-start gap-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white break-words">{row.name}</p>
-                    <p className={cn('text-xs flex flex-wrap gap-x-3 gap-y-1 mt-1', MUTED_CLASS)}>
-                      <span className="font-mono break-all" translate="no">{row.key}</span>
-                      <span className="tabular-nums">{row.membersLine}</span>
-                      <span className="tabular-nums">{row.documentsLine}</span>
-                      {row.fromConnector && <span>{row.fromConnector}</span>}
-                    </p>
+            {rows.map((row) => {
+              const group = groups.find((g) => g.id === row.id);
+              const editing = renaming?.id === row.id ? renaming : null;
+              const renameError = editing && editing.value.trim().length === 0;
+              const regionId = `access-group-members-${row.id}`;
+              return (
+                <li key={row.id} className={ROW_CLASS}>
+                  <div className="flex flex-wrap items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      {editing ? (
+                        <div
+                          className="flex flex-wrap items-center gap-2"
+                          onKeyDown={(event) => {
+                            if (event.key === 'Escape') {
+                              event.stopPropagation();
+                              setRenaming(null);
+                            }
+                          }}
+                        >
+                          <label htmlFor={`access-group-rename-${row.id}`} className="sr-only">{text('form.name')}</label>
+                          <Input
+                            id={`access-group-rename-${row.id}`}
+                            value={editing.value}
+                            maxLength={200}
+                            autoFocus
+                            className="h-9 flex-1 min-w-[10rem]"
+                            aria-invalid={renameError ? true : undefined}
+                            aria-describedby={renameError ? `access-group-rename-help-${row.id}` : undefined}
+                            disabled={editing.running}
+                            onChange={(event) => setRenaming({ ...editing, value: event.target.value })}
+                            onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }}
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            className={MODAL_PRIMARY_CLASS}
+                            disabled={editing.running || renameError === true}
+                            onClick={() => void renameGroup(row.id, editing.value)}
+                          >
+                            {editing.running && <Loader2 className="h-4 w-4 mr-1 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                            {editing.running ? text('save.running') : text('action.saveName')}
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" disabled={editing.running} onClick={() => setRenaming(null)}>
+                            {text('action.cancelEditing')}
+                          </Button>
+                          {renameError && (
+                            <p id={`access-group-rename-help-${row.id}`} className="w-full text-xs text-red-700 dark:text-red-300">{text('form.needName')}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white break-words">{row.name}</p>
+                      )}
+                      <p className={cn('text-xs flex flex-wrap gap-x-3 gap-y-1 mt-1', MUTED_CLASS)}>
+                        <span className="font-mono break-all" translate="no">{row.key}</span>
+                        <span className="tabular-nums">{row.membersLine}</span>
+                        <span className="tabular-nums">{row.documentsLine}</span>
+                        {row.fromConnector && <span>{row.fromConnector}</span>}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        id={`access-group-manage-${row.id}`}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        aria-expanded={membersOf === row.id}
+                        aria-controls={membersOf === row.id ? regionId : undefined}
+                        aria-label={membersOf === row.id
+                          ? text('action.closeMembers')
+                          : text('action.manageMembersAria', { group: row.name })}
+                        onClick={() => setMembersOf((current) => (current === row.id ? null : row.id))}
+                      >
+                        {membersOf === row.id ? text('action.closeMembers') : text('action.manageMembers')}
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                            <span className="sr-only">{text('group.actionsAria', { group: row.name })}</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => setRenaming({ id: row.id, value: row.name, running: false })}>
+                            <Pencil className="h-4 w-4 mr-2" aria-hidden="true" />
+                            {text('action.renameGroup')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onSelect={() => { if (group) setDeleting(group); }}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" aria-hidden="true" />
+                            {text('action.deleteGroup')}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
-                  <Button
-                    id={`access-group-manage-${row.id}`}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    aria-label={text('action.manageMembersAria', { group: row.name })}
-                  >
-                    {text('action.manageMembers')}
-                  </Button>
-                </div>
-              </li>
-            ))}
+                  {membersOf === row.id && group && (
+                    <MembersRegion
+                      id={regionId}
+                      group={group}
+                      organizationId={organizationId}
+                      language={language}
+                      fetcher={fetcher}
+                      onFailure={applyFailure}
+                      onStatus={setStatus}
+                      onChanged={() => void loadGroups()}
+                      onClose={() => {
+                        setMembersOf(null);
+                        document.getElementById(`access-group-manage-${row.id}`)?.focus();
+                      }}
+                    />
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
 
@@ -601,6 +847,420 @@ export function AccessGroupsAdmin({ organizationId, language, fetcher }: AccessG
 
         <p className={cn('text-sm mt-4', MUTED_CLASS)}>{text('access.documentsHint')}</p>
       </section>
+
+      {deleting && (
+        <DeleteGroupDialog
+          group={deleting}
+          organizationId={organizationId}
+          language={language}
+          fetcher={fetcher}
+          onFailure={applyFailure}
+          onDone={(message) => {
+            setDeleting(null);
+            setMembersOf((current) => (current === deleting.id ? null : current));
+            if (message) setStatus(message);
+            void loadGroups();
+          }}
+          onCancel={() => setDeleting(null)}
+        />
+      )}
     </div>
+  );
+}
+
+interface SubViewProps {
+  organizationId: string;
+  language: string;
+  fetcher?: AdminFetch;
+  onFailure: (result: Exclude<AdminResult, { kind: 'ok' }>, write: boolean) => FailureOutcome;
+}
+
+const MEMBER_CODE_MESSAGES: Record<string, AccessGroupLabelKey> = {
+  member_exists: 'error.memberExists',
+  not_a_workspace_member: 'error.notWorkspaceMember',
+};
+
+function MemberName({ member }: { member: { userId: string; displayName: string | null; email: string | null } }) {
+  const label = memberLabel(member);
+  return label.mono
+    ? <span className="font-mono text-xs break-all" translate="no">{label.text}</span>
+    : <span className="break-words">{label.text}</span>;
+}
+
+function MembersRegion({
+  id,
+  group,
+  organizationId,
+  language,
+  fetcher,
+  onFailure,
+  onStatus,
+  onChanged,
+  onClose,
+}: SubViewProps & {
+  id: string;
+  group: AdminGroup;
+  onStatus: (message: StatusMessage | null) => void;
+  onChanged: () => void;
+  onClose: () => void;
+}) {
+  const text = (key: AccessGroupLabelKey, vars?: Record<string, string | number>) => accessGroupText(key, language, vars);
+  const [members, setMembers] = useState<GroupMember[]>([]);
+  const [membersState, setMembersState] = useState<LoadState>('loading');
+  const [search, setSearch] = useState<MemberSearchState>(MEMBER_SEARCH_INITIAL);
+  const [acting, setActing] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const orgQuery = `organizationId=${encodeURIComponent(organizationId)}`;
+  const groupPath = `/${encodeURIComponent(group.id)}`;
+
+  const loadMembers = async () => {
+    setMembersState('loading');
+    const result = await accessAdminRequest(`${groupPath}/members?${orgQuery}`, { fetcher });
+    if (result.kind !== 'ok') {
+      const outcome = onFailure(result, false);
+      setMembersState(outcome.type === 'notAdmin' ? 'loading' : 'unavailable');
+      return;
+    }
+    setMembers(readMembers(result.body.members));
+    setMembersState('ready');
+  };
+
+  const runSearch = async (query: string) => {
+    setSearch((state) => memberSearchReducer(state, { type: 'start', query }));
+    const params = `${orgQuery}&groupId=${encodeURIComponent(group.id)}&q=${encodeURIComponent(query.trim())}`;
+    const result = await accessAdminRequest(`/members/candidates?${params}`, { fetcher });
+    if (result.kind !== 'ok') {
+      const outcome = failureOutcome(result, false);
+      if (outcome.type === 'notAdmin') onFailure(result, false);
+      setSearch((state) => memberSearchReducer(state, { type: 'failed', query }));
+      return;
+    }
+    setSearch((state) => memberSearchReducer(state, { type: 'results', query, candidates: readCandidates(result.body.candidates) }));
+  };
+
+  useEffect(() => {
+    searchRef.current?.focus();
+    void loadMembers();
+  }, [group.id]);
+
+  useEffect(() => {
+    if (!shouldSearchMembers(search.query)) return;
+    const query = search.query;
+    const timer = setTimeout(() => void runSearch(query), MEMBER_SEARCH_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [search.query]);
+
+  const refreshAfterChange = () => {
+    void loadMembers();
+    if (shouldSearchMembers(search.query)) void runSearch(search.query);
+    onChanged();
+  };
+
+  const addMember = async (candidate: MemberCandidate) => {
+    const name = memberLabel(candidate).text;
+    setActing(candidate.userId);
+    const result = await accessAdminRequest(`${groupPath}/members`, {
+      method: 'POST',
+      body: { organizationId, userId: candidate.userId },
+      fetcher,
+    });
+    setActing(null);
+    if (result.kind === 'ok') {
+      onStatus({ tone: 'success', text: text('member.added', { name, group: group.name }) });
+      refreshAfterChange();
+      return;
+    }
+    const outcome = failureOutcome(result, true);
+    if (outcome.type === 'code' && MEMBER_CODE_MESSAGES[outcome.code]) {
+      onStatus({ tone: 'error', text: text(MEMBER_CODE_MESSAGES[outcome.code]) });
+      refreshAfterChange();
+      return;
+    }
+    onFailure(result, true);
+    if (outcome.type === 'changed' || outcome.type === 'outcomeUnknown') refreshAfterChange();
+  };
+
+  const removeMember = async (member: GroupMember) => {
+    const name = memberLabel(member).text;
+    setActing(member.userId);
+    const result = await accessAdminRequest(`${groupPath}/members/${encodeURIComponent(member.userId)}?${orgQuery}`, {
+      method: 'DELETE',
+      fetcher,
+    });
+    setActing(null);
+    if (result.kind === 'ok') {
+      onStatus({ tone: 'success', text: text('member.removed', { name, group: group.name }) });
+      refreshAfterChange();
+      return;
+    }
+    const outcome = onFailure(result, true);
+    if (outcome.type === 'changed' || outcome.type === 'outcomeUnknown') refreshAfterChange();
+  };
+
+  const view = deriveMemberSearch(search, language);
+  const searchId = `${id}-search`;
+  const titleId = `${id}-title`;
+
+  return (
+    <div
+      id={id}
+      role="region"
+      aria-labelledby={titleId}
+      className="mt-3 pt-3 border-t border-[#FFE0D0] dark:border-[#3A3A3A] space-y-4"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <h5 id={titleId} className="text-sm font-semibold text-gray-900 dark:text-white break-words">
+        {text('members.title', { group: group.name })}
+      </h5>
+
+      <div className="space-y-2">
+        <label htmlFor={searchId} className="sr-only">{text('members.search')}</label>
+        <div className="relative">
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" aria-hidden="true" />
+          <Input
+            id={searchId}
+            ref={searchRef}
+            type="search"
+            value={search.query}
+            maxLength={200}
+            placeholder={text('members.search')}
+            className="pl-9"
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => setSearch((state) => memberSearchReducer(state, { type: 'query', value: event.target.value }))}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                if (shouldSearchMembers(search.query)) void runSearch(search.query);
+              }
+            }}
+          />
+        </div>
+        {view.message && (
+          <p className={cn('flex items-center gap-2 text-xs break-words', MUTED_CLASS)}>
+            {view.spinner && <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+            <span className="min-w-0">{view.message}</span>
+          </p>
+        )}
+        {view.results.length > 0 && (
+          <ul className="max-h-72 overflow-y-auto space-y-1" aria-busy={view.spinner ? true : undefined}>
+            {view.results.map((candidate) => (
+              <li key={candidate.userId} className="flex flex-wrap items-center justify-between gap-2 py-1 text-sm text-gray-900 dark:text-white">
+                <span className="min-w-0 flex-1">
+                  <MemberName member={candidate} />
+                </span>
+                {candidate.already ? (
+                  <span className={cn('text-xs', MUTED_CLASS)}>{text('members.already')}</span>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={acting !== null}
+                    aria-label={text('action.addMemberAria', { name: memberLabel(candidate).text })}
+                    onClick={() => void addMember(candidate)}
+                  >
+                    {acting === candidate.userId && <Loader2 className="h-4 w-4 mr-1 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                    {acting === candidate.userId ? text('save.running') : text('action.addMember')}
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {membersState === 'loading' && members.length === 0 ? (
+        <p className={cn('flex items-center gap-2 text-sm', MUTED_CLASS)}>
+          <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+          <span>{text('groups.loading')}</span>
+        </p>
+      ) : membersState === 'ready' && members.length === 0 ? (
+        <p className={cn('text-sm', MUTED_CLASS)}>{text('members.empty')}</p>
+      ) : (
+        <ul
+          className={cn('max-h-72 overflow-y-auto space-y-2', membersState !== 'ready' && 'opacity-60')}
+          aria-busy={membersState === 'loading' ? true : undefined}
+        >
+          {members.map((member) => (
+            <li key={member.userId} className={cn(ROW_CLASS, 'flex flex-wrap items-center gap-2 text-sm text-gray-900 dark:text-white')}>
+              <span className="min-w-0 flex-1">
+                <MemberName member={member} />
+                {member.addedAt && (
+                  <time dateTime={member.addedAt} className={cn('block text-xs', MUTED_CLASS)}>
+                    {formatAddedAt(member.addedAt, language)}
+                  </time>
+                )}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={acting !== null}
+                aria-label={text('action.removeMemberAria', { name: memberLabel(member).text })}
+                onClick={() => void removeMember(member)}
+              >
+                {acting === member.userId && <Loader2 className="h-4 w-4 mr-1 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                {acting === member.userId ? text('save.running') : text('action.removeMember')}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {membersState === 'unavailable' && (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-red-800 dark:text-red-200">
+          <span className="flex-1 min-w-0">{text('groups.unavailable', { reload: text('action.reloadGroups') })}</span>
+          <Button type="button" size="sm" variant="outline" onClick={() => void loadMembers()}>{text('action.reloadGroups')}</Button>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <p className={cn('text-xs flex-1 min-w-0', MUTED_CLASS)}>{text('groups.adminNote')}</p>
+        <Button type="button" size="sm" variant="outline" onClick={onClose}>{text('action.closeMembers')}</Button>
+      </div>
+    </div>
+  );
+}
+
+export function formatAddedAt(value: string, language: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  try {
+    return new Intl.DateTimeFormat(language, { dateStyle: 'medium' }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(date);
+  }
+}
+
+function DeleteGroupDialog({
+  group,
+  organizationId,
+  language,
+  fetcher,
+  onFailure,
+  onDone,
+  onCancel,
+}: SubViewProps & {
+  group: AdminGroup;
+  onDone: (message: StatusMessage | null) => void;
+  onCancel: () => void;
+}) {
+  const text = (key: AccessGroupLabelKey, vars?: Record<string, string | number>) => accessGroupText(key, language, vars);
+  const [state, setState] = useState<DeleteDialogState>(DELETE_DIALOG_INITIAL);
+  const keepRef = useRef<HTMLButtonElement>(null);
+  const orgQuery = `organizationId=${encodeURIComponent(organizationId)}`;
+  const groupPath = `/${encodeURIComponent(group.id)}`;
+
+  const countImpact = async () => {
+    setState((current) => deleteDialogReducer(current, { type: 'count' }));
+    const result = await accessAdminRequest(`${groupPath}/impact?${orgQuery}`, { fetcher });
+    if (result.kind !== 'ok') {
+      const outcome = failureOutcome(result, false);
+      if (outcome.type === 'notAdmin' || outcome.type === 'changed') {
+        onFailure(result, false);
+        onDone(null);
+        return;
+      }
+      setState((current) => deleteDialogReducer(current, { type: 'countFailed' }));
+      return;
+    }
+    const impact = readImpact(result.body.impact);
+    setState((current) => deleteDialogReducer(current, impact ? { type: 'counted', impact } : { type: 'countFailed' }));
+  };
+
+  useEffect(() => {
+    void countImpact();
+  }, [group.id]);
+
+  const confirmDelete = async () => {
+    if (state.phase !== 'counted' || !state.impact) return;
+    const expectedCount = state.impact.onlyCount;
+    setState((current) => deleteDialogReducer(current, { type: 'delete' }));
+    const result = await accessAdminRequest(groupPath, { method: 'DELETE', body: { organizationId, expectedCount }, fetcher });
+    if (result.kind === 'ok') {
+      const fellBack = typeof result.body.fellBack === 'number' ? result.body.fellBack : expectedCount;
+      onDone({ tone: 'success', text: text('delete.done', { group: group.name, count: fellBack }) });
+      return;
+    }
+    const outcome = failureOutcome(result, true);
+    if (outcome.type === 'code' && outcome.code === 'count_required') {
+      void countImpact();
+      return;
+    }
+    onFailure(result, true);
+    if (outcome.type === 'notAdmin' || outcome.type === 'changed' || outcome.type === 'outcomeUnknown') {
+      onDone(null);
+      return;
+    }
+    setState((current) => deleteDialogReducer(current, { type: 'deleteFailed' }));
+  };
+
+  const view = deriveDeleteDialog(state, group.name, language);
+  const bodyId = `access-group-delete-body-${group.id}`;
+  const reasonId = `access-group-delete-reason-${group.id}`;
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open && !view.busy) onCancel(); }}>
+      <DialogContent
+        className="max-w-md"
+        aria-describedby={bodyId}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          keepRef.current?.focus();
+        }}
+        onEscapeKeyDown={(event) => {
+          if (view.busy) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (view.busy) event.preventDefault();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle className="break-words">{view.title}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          {view.message && (
+            <p id={reasonId} className={cn('flex items-center gap-2', state.phase === 'unavailable' ? 'text-red-800 dark:text-red-200' : 'text-muted-foreground')}>
+              {state.phase === 'counting' && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+              <span>{view.message}</span>
+            </p>
+          )}
+          {view.lines.length > 0 && (
+            <ul className="space-y-1 tabular-nums">
+              {view.lines.map((line) => <li key={line}>{line}</li>)}
+            </ul>
+          )}
+          <DialogDescription id={bodyId} className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <span>{text('delete.body')}</span>
+          </DialogDescription>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button ref={keepRef} type="button" variant="outline" disabled={view.busy} onClick={onCancel}>
+            {text('action.keepGroup')}
+          </Button>
+          {view.countAgain && (
+            <Button type="button" variant="outline" onClick={() => void countImpact()}>
+              {text('action.countAgain')}
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={!view.canDelete}
+            aria-describedby={!view.canDelete && view.message ? reasonId : undefined}
+            onClick={() => void confirmDelete()}
+          >
+            {view.busy && <Loader2 className="h-4 w-4 mr-1 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+            {view.busy ? text('delete.running') : text('action.deleteGroup')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
