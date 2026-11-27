@@ -120,12 +120,20 @@ describe('embedding model catalog (EMB-06, D-01)', () => {
     }
   });
 
+  it('lists both serving modes for bge-m3, with the sidecar route POST /v1/embed (03.2.1-02)', () => {
+    const bge = catalogEntry('bge-m3', 'BAAI/bge-m3');
+    expect(bge).toBeDefined();
+    expect([...bge!.servingModes]).toEqual(['hosted', 'sidecar']);
+    expect(bge!.sidecarPath).toBe('/v1/embed');
+    expect(bge!.hostedEndpoint).not.toBeNull();
+  });
+
   it('pairs servingModes with hostedEndpoint and sidecarPath', () => {
     for (const item of EMBEDDING_MODEL_CATALOG) {
       expect(item.servingModes.length).toBeGreaterThan(0);
       expect(item.hostedEndpoint !== null).toBe(item.servingModes.includes('hosted'));
       expect(item.sidecarPath !== null).toBe(item.servingModes.includes('sidecar'));
-      expect([...item.servingModes]).toEqual(['hosted']);
+      expect([...item.servingModes]).toEqual(item.provider === 'bge-m3' ? ['hosted', 'sidecar'] : ['hosted']);
     }
     expect(entry('openai', 'text-embedding-3-small').hostedEndpoint).toEqual({ host: 'api.openai.com', apiKeyEnv: 'OPENAI_API_KEY', baseUrlEnv: null });
     expect(entry('voyage', 'voyage-law-2').hostedEndpoint).toEqual({ host: 'api.voyageai.com', apiKeyEnv: 'VOYAGE_API_KEY', baseUrlEnv: 'VOYAGE_BASE_URL' });
