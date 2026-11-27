@@ -88,6 +88,28 @@ MONITOR_JOB = "monitor"
 JUDGE_CALIBRATION_SKIP_NOTICE = "::notice::judge keys or generator model not configured, skipping judge calibration"
 WEEKLY_LIFECYCLE = ("rag_eval.drift", "rag_eval.golden_set stale-scan", "rag_eval.golden_set re-review")
 MONITOR_SKIP_NOTICE = "::notice::supabase service-role secrets not configured, skipping monitor"
+# Gap 1 (05.3-VERIFICATION): the settings the scheduled daily monitor reads, each from a repository secret or variable.
+MONITOR_STEP_ENV = {
+    "RAG_MONITOR": "vars",
+    "RAG_RETRIEVAL_LOG": "vars",
+    "LANGFUSE_ENABLED": "vars",
+    "LANGFUSE_BASE_URL": "vars",
+    "LANGFUSE_PUBLIC_KEY": "secrets",
+    "LANGFUSE_SECRET_KEY": "secrets",
+}
+WEEKLY_SAMPLE_JOB = "weekly-sample"
+WEEKLY_SAMPLE_RUN = "npm run rag:monitor -- sample"
+WEEKLY_SAMPLE_SKIP_NOTICE = "::notice::supabase service-role secrets not configured, skipping the weekly sample"
+# Gap 2: the weekly representative sample (EVAL-27) and the cluster refit EVAL-28 drift reads.
+WEEKLY_SAMPLE_STEP_ENV = {
+    "NEXT_PUBLIC_SUPABASE_URL": "secrets",
+    "SUPABASE_SERVICE_ROLE_KEY": "secrets",
+    "RAG_REPRESENTATIVE_SAMPLE": "vars",
+    "RAG_RETRIEVAL_LOG": "vars",
+    "RAG_DOMAIN_EXPERT_REVIEW": "vars",
+    "OPENAI_API_KEY": "secrets",
+    "OPENROUTER_API_KEY": "secrets",
+}
 SEC_SMOKE_STEP = "npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec"
 SEC_NIGHTLY_STEP = "run-nightly.mts --sec-matrix --generator live"
 P52_SMOKE_STEP = "npm run test-rag -- --phase52 --out eval/out/smoke-p52"
@@ -1006,6 +1028,10 @@ def check_monitor_job(data: dict, errors: list[str]) -> None:
         if str(step.get("uses", "")).startswith("actions/upload-artifact@"):
             errors.append(f"{name} must not upload an artifact")
     _check_no_leaks(name, steps, errors, private=False)
+
+
+def check_weekly_sample_job(data: dict, errors: list[str]) -> None:
+    """Gap 2: the weekly representative sample runs on the weekly schedule, gated like the monitor job, report-only."""
 
 
 JUDGE_CALIBRATION_FLAG = "HAS_JUDGE_KEYS"

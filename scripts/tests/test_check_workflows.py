@@ -872,6 +872,12 @@ def monitor_fixture() -> dict:
                         "env": {
                             "NEXT_PUBLIC_SUPABASE_URL": "${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}",
                             "SUPABASE_SERVICE_ROLE_KEY": "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}",
+                            "RAG_MONITOR": "${{ vars.RAG_MONITOR }}",
+                            "RAG_RETRIEVAL_LOG": "${{ vars.RAG_RETRIEVAL_LOG }}",
+                            "LANGFUSE_ENABLED": "${{ vars.LANGFUSE_ENABLED }}",
+                            "LANGFUSE_BASE_URL": "${{ vars.LANGFUSE_BASE_URL }}",
+                            "LANGFUSE_PUBLIC_KEY": "${{ secrets.LANGFUSE_PUBLIC_KEY }}",
+                            "LANGFUSE_SECRET_KEY": "${{ secrets.LANGFUSE_SECRET_KEY }}",
                         },
                         "run": "npm run rag:monitor",
                     },
@@ -935,6 +941,130 @@ class MonitorJobTest(unittest.TestCase):
 
     def test_an_upload_artifact_step_is_reported(self):
         data = monitor_fixture()
+        self.steps(data).append({"uses": "actions/upload-artifact@" + "b" * 40, "if": MONITOR_GATE, "with": {"path": "out"}})
+        self.assertTrue(any("upload" in e for e in self.errors_for(data)))
+
+    def test_the_retrieval_log_and_langfuse_settings_reach_the_monitor_step(self):
+        """Gap 1 (05.3-VERIFICATION): without RAG_RETRIEVAL_LOG the scheduled run returns log_off and evaluates nothing."""
+        for name in check_workflows.MONITOR_STEP_ENV:
+            data = monitor_fixture()
+            del self.steps(data)[3]["env"][name]
+            self.assertTrue(any(f"{name} through step env" in e for e in self.errors_for(data)), name)
+
+    def test_a_hard_coded_monitor_setting_is_reported(self):
+        for name, source in check_workflows.MONITOR_STEP_ENV.items():
+            data = monitor_fixture()
+            self.steps(data)[3]["env"][name] = "masked_query"
+            self.assertTrue(any(f"${{{{ {source}.{name} }}}}" in e for e in self.errors_for(data)), name)
+
+    def test_secrets_and_vars_are_not_swapped(self):
+        data = monitor_fixture()
+        self.steps(data)[3]["env"]["LANGFUSE_SECRET_KEY"] = "${{ vars.LANGFUSE_SECRET_KEY }}"
+        self.assertTrue(any("${{ secrets.LANGFUSE_SECRET_KEY }}" in e for e in self.errors_for(data)))
+
+
+SAMPLE_JOB = "weekly-sample"
+
+
+def weekly_sample_fixture() -> dict:
+    sample_env = {name: f"${{{{ {source}.{name} }}}}" for name, source in check_workflows.WEEKLY_SAMPLE_STEP_ENV.items()}
+    return {
+        "on": {"schedule": [{"cron": "0 3 * * *"}, {"cron": WEEKLY_CRON}], "workflow_dispatch": None},
+        "jobs": {
+            SAMPLE_JOB: {
+                "if": f"github.event.schedule == '{WEEKLY_CRON}' || github.event_name == 'workflow_dispatch'",
+                "runs-on": "ubuntu-latest",
+                "env": {
+                    "HAS_MONITOR_SECRETS": "${{ secrets.NEXT_PUBLIC_SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}"
+                },
+                "steps": [
+                    {
+                        "name": "Skip notice",
+                        "if": "env.HAS_MONITOR_SECRETS != 'true'",
+                        "run": f'echo "{check_workflows.WEEKLY_SAMPLE_SKIP_NOTICE}"',
+                    },
+                    {"uses": "actions/checkout@" + "a" * 40, "if": MONITOR_GATE},
+                    {"name": "Install Node dependencies", "if": MONITOR_GATE, "run": "npm ci --ignore-scripts"},
+                    {
+                        "name": "Weekly representative sample",
+                        "if": MONITOR_GATE,
+                        "continue-on-error": True,
+                        "env": sample_env,
+                        "run": "npm run rag:monitor -- sample",
+                    },
+                ],
+            },
+            "weekly-report": {
+                "needs": [SAMPLE_JOB],
+                "if": f"always() && (github.event.schedule == '{WEEKLY_CRON}' || github.event_name == 'workflow_dispatch')",
+                "runs-on": "ubuntu-latest",
+                "steps": [{"run": "true"}],
+            },
+        },
+    }
+
+
+class WeeklySampleJobTest(unittest.TestCase):
+    """Gap 2 (05.3-VERIFICATION): the weekly representative sample and cluster refit run on a schedule, report-only."""
+
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_weekly_sample_job(data, errors)
+        return errors
+
+    def steps(self, data: dict) -> list[dict]:
+        return data["jobs"][SAMPLE_JOB]["steps"]
+
+    def test_the_fixture_is_valid(self):
+        self.assertEqual(self.errors_for(weekly_sample_fixture()), [])
+
+    def test_repository_nightly_has_a_valid_weekly_sample_job(self):
+        self.assertEqual(self.errors_for(check_workflows.load(check_workflows.NIGHTLY)[0]), [])
+
+    def test_missing_job_is_reported(self):
+        data = weekly_sample_fixture()
+        del data["jobs"][SAMPLE_JOB]
+        self.assertTrue(any(f"'{SAMPLE_JOB}' missing" in e for e in self.errors_for(data)))
+
+    def test_it_runs_on_the_weekly_schedule_only(self):
+        data = weekly_sample_fixture()
+        data["jobs"][SAMPLE_JOB]["if"] = f"github.event.schedule != '{WEEKLY_CRON}'"
+        self.assertTrue(any("weekly schedule" in e for e in self.errors_for(data)))
+
+    def test_the_sample_must_run(self):
+        data = weekly_sample_fixture()
+        self.steps(data)[3]["run"] = "npm run rag:monitor"
+        self.assertTrue(any("rag:monitor -- sample" in e for e in self.errors_for(data)))
+
+    def test_the_sample_is_report_only(self):
+        data = weekly_sample_fixture()
+        del self.steps(data)[3]["continue-on-error"]
+        self.assertTrue(any("continue-on-error: true" in e for e in self.errors_for(data)))
+
+    def test_the_sample_settings_reach_the_step_from_secrets_and_vars(self):
+        for name, source in check_workflows.WEEKLY_SAMPLE_STEP_ENV.items():
+            data = weekly_sample_fixture()
+            del self.steps(data)[3]["env"][name]
+            self.assertTrue(any(f"{name} through step env" in e for e in self.errors_for(data)), name)
+            data = weekly_sample_fixture()
+            self.steps(data)[3]["env"][name] = "true"
+            self.assertTrue(any(f"${{{{ {source}.{name} }}}}" in e for e in self.errors_for(data)), name)
+
+    def test_an_ungated_step_is_reported(self):
+        data = weekly_sample_fixture()
+        del self.steps(data)[3]["if"]
+        self.assertTrue(any("HAS_MONITOR_SECRETS == 'true'" in e for e in self.errors_for(data)))
+
+    def test_the_weekly_report_waits_for_the_sample(self):
+        data = weekly_sample_fixture()
+        del data["jobs"]["weekly-report"]["needs"]
+        self.assertTrue(any("needs" in e for e in self.errors_for(data)))
+        data = weekly_sample_fixture()
+        data["jobs"]["weekly-report"]["if"] = f"github.event.schedule == '{WEEKLY_CRON}' || github.event_name == 'workflow_dispatch'"
+        self.assertTrue(any("always()" in e for e in self.errors_for(data)))
+
+    def test_an_upload_artifact_step_is_reported(self):
+        data = weekly_sample_fixture()
         self.steps(data).append({"uses": "actions/upload-artifact@" + "b" * 40, "if": MONITOR_GATE, "with": {"path": "out"}})
         self.assertTrue(any("upload" in e for e in self.errors_for(data)))
 
