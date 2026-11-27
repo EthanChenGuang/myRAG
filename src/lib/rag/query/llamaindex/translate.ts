@@ -9,7 +9,8 @@ export type TranslateSkipReason = PostCheckSkipReason | 'invalid_output' | 'unav
 /** Names the target and the reason only; never query or output text. */
 export type TranslateSkip = { kind: 'translate'; target: Lang; reason: TranslateSkipReason };
 export type TranslatedVariant = { kind: 'translated'; language: Lang; text: string };
-export type NativeTranslateResult = { variants: TranslatedVariant[]; skipped: TranslateSkip[] };
+/** `sourceLanguage` (D-17): the first source language a valid output reported; absent when none did. */
+export type NativeTranslateResult = { variants: TranslatedVariant[]; skipped: TranslateSkip[]; sourceLanguage?: Lang };
 
 export interface NativeTranslateInput {
   query: string;
@@ -89,6 +90,7 @@ export function finishTranslate(input: TranslateRequestInput, outcomes: readonly
   const limits = input.limits ?? DEFAULT_POST_CHECK_LIMITS;
   const variants: TranslatedVariant[] = [];
   const skipped: TranslateSkip[] = [];
+  let sourceLanguage: Lang | null = null;
   for (const outcome of outcomes) {
     const { target } = outcome;
     const skip = (reason: TranslateSkipReason) => skipped.push({ kind: 'translate', target, reason });
@@ -101,11 +103,12 @@ export function finishTranslate(input: TranslateRequestInput, outcomes: readonly
       skip('invalid_output');
       continue;
     }
+    sourceLanguage ??= parsed.data.source_language ?? null;
     const checked = checkVariant({ kind: 'translate', text: parsed.data.text, input: input.query, protectedTokens: input.protectedTokens }, limits);
     if (!checked.ok) skip(checked.skip.reason);
     else variants.push({ kind: 'translated', language: target, text: checked.text });
   }
-  return { variants, skipped };
+  return { variants, skipped, ...(sourceLanguage ? { sourceLanguage } : {}) };
 }
 
 /**

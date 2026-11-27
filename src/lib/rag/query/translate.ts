@@ -81,6 +81,8 @@ export interface QueryLayerTranslateContext extends TranslateContext {
   transformer?: Pick<QueryTransformer, 'translate'>;
   /** Receives every discarded or failed target (reason only, never text). */
   onSkip?: (skip: TranslateSkip) => void;
+  /** D-17: receives the source language the translate output reported, when it reported one. */
+  onSourceLanguage?: (language: Lang) => void;
 }
 
 const POST_CHECK_REASONS: ReadonlySet<string> = new Set<PostCheckSkipReason>(['protected_token_lost', 'length', 'empty', 'cap']);
@@ -118,6 +120,7 @@ export const queryLayerTranslator: Translator = Object.freeze({
       ...(ctx.limits ? { limits: ctx.limits } : {}),
     });
     for (const skip of result.skipped) ctx.onSkip?.(skip);
+    if (result.sourceLanguage) ctx.onSourceLanguage?.(result.sourceLanguage);
     if (result.variants.length === 0 && result.skipped.some((skip) => !POST_CHECK_REASONS.has(skip.reason))) {
       throw new TranslateCallFailed();
     }
