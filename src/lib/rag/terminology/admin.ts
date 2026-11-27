@@ -18,6 +18,7 @@ export type TerminologyAdminFailure =
   | 'limit'
   | 'invalid'
   | 'not_pending'
+  | 'schema_outdated'
   | 'unavailable';
 
 export interface TerminologyAdminFailed {
@@ -149,6 +150,14 @@ const SQL_REASONS = new Map<string, TerminologyAdminFailure>([
 ]);
 
 export const UNAVAILABLE: TerminologyAdminFailed = { ok: false, reason: 'unavailable' };
+/** W-6: the function signature the call named is missing (PGRST202, 42883) or matches two overloads (PGRST203); a migration is missing. */
+const SCHEMA_OUTDATED_CODES: ReadonlySet<string> = new Set(['PGRST202', 'PGRST203', '42883']);
+const AMBIGUOUS_CODE = 'PGRST203';
+
+interface RpcOptions {
+  /** W-5: the arguments to send once more when PostgREST finds two overloads for these names (0472 re-run on top of 0980). */
+  resendOnAmbiguous?: Record<string, unknown>;
+}
 
 /** D-35: the enabled registry codes, read only through the Phase 3.2 settings module; empty while the languages are not chosen. */
 export function terminologyEnabledLanguages(): string[] {
@@ -181,7 +190,7 @@ function failureOf(error: { message?: unknown; details?: unknown }): Terminology
 }
 
 /** One RPC on the service-role client. Logs carry the function name and the error code only, never dictionary text. */
-export async function callTerminologyRpc(rpc: string, args: Record<string, unknown>, signal: AbortSignal): Promise<Call> {
+export async function callTerminologyRpc(rpc: string, args: Record<string, unknown>, signal: AbortSignal, options: RpcOptions = {}): Promise<Call> {
   const db = client() as unknown as RpcClient | null;
   if (!db) return UNAVAILABLE;
   try {
@@ -189,6 +198,12 @@ export async function callTerminologyRpc(rpc: string, args: Record<string, unkno
     const response = await db.rpc(rpc, args).abortSignal(signal);
     signal.throwIfAborted();
     if (response.error) {
+      const code = typeof response.error.code === 'string' ? response.error.code : null;
+      if (code === AMBIGUOUS_CODE && options.resendOnAmbiguous) return callTerminologyRpc(rpc, options.resendOnAmbiguous, signal);
+      if (code !== null && SCHEMA_OUTDATED_CODES.has(code)) {
+        console.error('[RAG Admin] terminology schema outdated', { rpc, code, signature: `${rpc}(${Object.keys(args).join(', ')})` });
+        return { ok: false, reason: 'schema_outdated' };
+      }
       const failure = failureOf(response.error);
       if (failure.reason === 'unavailable') console.error('[RAG Admin] terminology call failed', { rpc, code: response.error.code ?? null });
       return failure;
@@ -273,6 +288,31 @@ const listArgs = (actor: string, layerKey: string, limit: number, offset: number
 
 const filterOf = (value: string | null | undefined): string | null => (typeof value === 'string' && value.trim() !== '' ? value.trim() : null);
 
+export interface ListPageFilters {
+  kind?: string | null;
+  sourceLanguage?: string | null;
+  targetLanguage?: string | null;
+}
+
+/**
+ * W-1, W-5: one rag_term_list_entries page that works on every schema. Without a Glossary filter it names the five 0472 arguments, which
+ * match 0472 alone and 0980 alone (its filters default to NULL); when both signatures exist (0472 re-run after 0980) PostgREST answers
+ * PGRST203 and the page is asked again with all eight. A filter needs 0980, so it always names all eight.
+ */
+export function listEntriesPage(
+  actor: string,
+  layerKey: string,
+  page: { limit: number; offset: number; search: string | null },
+  filters: ListPageFilters,
+  signal: AbortSignal,
+): Promise<Call> {
+  const base = listArgs(actor, layerKey, page.limit, page.offset, page.search);
+  const glossary = { p_kind: filterOf(filters.kind), p_source_language: filterOf(filters.sourceLanguage), p_target_language: filterOf(filters.targetLanguage) };
+  const all = { ...base, ...glossary };
+  if (Object.values(glossary).some((value) => value !== null)) return callTerminologyRpc('rag_term_list_entries', all, signal);
+  return callTerminologyRpc('rag_term_list_entries', base, signal, { resendOnAmbiguous: all });
+}
+
 /** The version row of a layer (version 0 and no hash before the first write). Call only after the SQL checked the actor for the layer. */
 async function layerState(layerKey: string, signal: AbortSignal): Promise<{ ok: true; state: TerminologyLayerVersion } | TerminologyAdminFailed> {
   const db = client();
@@ -306,7 +346,7 @@ export interface LoadedLayer {
  * the version the layer row holds; a write in between answers version_conflict so the caller retries on a consistent snapshot.
  */
 export async function loadLayer(actor: string, layerKey: string, signal: AbortSignal): Promise<{ ok: true; layer: LoadedLayer } | TerminologyAdminFailed> {
-  const first = await callTerminologyRpc('rag_term_list_entries', listArgs(actor, layerKey, PAGE, 0, null), signal);
+  const first = await listEntriesPage(actor, layerKey, { limit: PAGE, offset: 0, search: null }, {}, signal);
   if (!first.ok) return first;
   const state = await layerState(layerKey, signal);
   if (!state.ok) return state;
@@ -317,7 +357,7 @@ export async function loadLayer(actor: string, layerKey: string, signal: AbortSi
   for (let offset = PAGE; offset < total; offset += PAGE) offsets.push(offset);
   for (let index = 0; index < offsets.length; index += PARALLEL_PAGES) {
     const batch = await Promise.all(
-      offsets.slice(index, index + PARALLEL_PAGES).map((offset) => callTerminologyRpc('rag_term_list_entries', listArgs(actor, layerKey, PAGE, offset, null), signal)),
+      offsets.slice(index, index + PARALLEL_PAGES).map((offset) => listEntriesPage(actor, layerKey, { limit: PAGE, offset, search: null }, {}, signal)),
     );
     for (const page of batch) {
       if (!page.ok) return page;
@@ -495,14 +535,11 @@ export async function listEntries(
   const offset = clampOffset(input.offset);
   const search = filterOf(input.search);
   // 06.2 D-15: the Glossary view filters by kind, source language (the entry language) and target language in SQL, before the page is cut.
-  const page = await callTerminologyRpc(
-    'rag_term_list_entries',
-    {
-      ...listArgs(input.actorUserId, input.layerKey, limit, offset, search),
-      p_kind: filterOf(input.kind),
-      p_source_language: filterOf(input.sourceLanguage),
-      p_target_language: filterOf(input.targetLanguage),
-    },
+  const page = await listEntriesPage(
+    input.actorUserId,
+    input.layerKey,
+    { limit, offset, search },
+    { kind: input.kind, sourceLanguage: input.sourceLanguage, targetLanguage: input.targetLanguage },
     input.signal,
   );
   if (!page.ok) return page;
@@ -584,7 +621,7 @@ export async function getVersions(input: {
   signal: AbortSignal;
 }): Promise<TerminologyVersionsResult> {
   const versionOf = async (layerKey: string) => {
-    const check = await callTerminologyRpc('rag_term_list_entries', listArgs(input.actorUserId, layerKey, 1, 0, null), input.signal);
+    const check = await listEntriesPage(input.actorUserId, layerKey, { limit: 1, offset: 0, search: null }, {}, input.signal);
     if (!check.ok) return check;
     return layerState(layerKey, input.signal);
   };
