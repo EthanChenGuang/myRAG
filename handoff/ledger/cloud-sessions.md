@@ -590,3 +590,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 15:11Z 06.2-16 DONE (0be703a0) and archived -> goes into train 38 (send it to the train-38 builder).
   FOLLOW-UP to queue after train 38: src/lib/rag/deps.ts ragEnv() does not pass RAG_DECOMPOSED_ANSWER, RAG_TRANSLATION_GLOSSARY, RAG_LANGID_SIDECAR, RAG_SPECULATIVE_RETRIEVAL, RAG_QUERY_HISTORY_FALLBACK or RAG_SCOPE_GATE, so none of these switches can be turned on from the app environment. Wire them in once their plans have landed.
   Also pre-existing: config-hash-query "lists every prompt file" (shared.subq-filters.v1.json has no prompt-version registry entry, from 06.2-11).
+- 15:12Z PR #134 (train 37) MERGED -> main 00afa6d9, 26/26 green on b3c73ff4. train37-live.sql still valid (no supabase/ diff after it was generated). Owner desk told to apply it with the owner. Deploy waits for the SQL and the user's consent. Train-38 builder told to merge main and open the PR.
