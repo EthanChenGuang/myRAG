@@ -150,7 +150,7 @@ describe('queued path keeps the label', () => {
       bounds: { min_tier: null, max_tier: null },
       routingConfig: loadRoutingConfig(),
       isBackfill: true,
-    } as Parameters<typeof buildJobSettings>[0];
+    } as unknown as Parameters<typeof buildJobSettings>[0];
     expect(buildJobSettings({ ...common, accessKeys: [`g:${GROUP_A}`] }).access_keys).toEqual([`g:${GROUP_A}`]);
     expect('access_keys' in buildJobSettings(common)).toBe(false);
   });
