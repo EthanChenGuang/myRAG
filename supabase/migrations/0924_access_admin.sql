@@ -241,6 +241,87 @@ $fn$;
 REVOKE ALL ON FUNCTION public.rag_access_group_delete(text, uuid, bigint, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_access_group_delete(text, uuid, bigint, uuid) TO service_role;
 
+CREATE OR REPLACE FUNCTION public.rag_access_group_rename(p_tenant_key text, p_group_id uuid, p_name text, p_actor uuid)
+RETURNS TABLE (id uuid, key text, name text, source text, created_at timestamptz)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_name text := pg_catalog.btrim(p_name);
+  v_old text;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_actor IS NULL THEN
+    RAISE EXCEPTION 'actor_required' USING ERRCODE = '22023';
+  END IF;
+  SELECT g.name INTO v_old FROM public.rag_access_groups g WHERE g.id = p_group_id AND g.tenant_key = p_tenant_key FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not_found' USING ERRCODE = '22023';
+  END IF;
+  IF v_name IS NULL OR pg_catalog.char_length(v_name) NOT BETWEEN 1 AND 200 THEN
+    RAISE EXCEPTION 'invalid_name' USING ERRCODE = '22023';
+  END IF;
+  IF v_old IS DISTINCT FROM v_name THEN
+    UPDATE public.rag_access_groups g SET name = v_name WHERE g.id = p_group_id AND g.tenant_key = p_tenant_key;
+    INSERT INTO public.rag_access_audit (tenant_key, action, actor, actor_kind, group_id)
+    VALUES (p_tenant_key, 'group_rename', p_actor, 'admin', p_group_id);
+  END IF;
+  RETURN QUERY SELECT g.id, g.key, g.name, g.source, g.created_at FROM public.rag_access_groups g WHERE g.id = p_group_id;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_access_group_rename(text, uuid, text, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_access_group_rename(text, uuid, text, uuid) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_access_groups_list(p_tenant_key text, p_cursor text, p_limit integer)
+RETURNS TABLE (
+  id uuid, key text, name text, source text, created_at timestamptz, member_count bigint, document_count bigint, cursor text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_limit integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 50);
+  v_decoded text;
+  v_after_id uuid;
+  v_after_name text;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_cursor IS NOT NULL THEN
+    BEGIN
+      v_decoded := pg_catalog.convert_from(pg_catalog.decode(p_cursor, 'base64'), 'UTF8');
+      v_after_id := pg_catalog.split_part(v_decoded, ':', 1)::uuid;
+      v_after_name := pg_catalog.substr(v_decoded, 38);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'invalid_cursor' USING ERRCODE = '22023';
+    END;
+    IF pg_catalog.substr(v_decoded, 37, 1) <> ':' THEN
+      RAISE EXCEPTION 'invalid_cursor' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+  RETURN QUERY
+  SELECT g.id, g.key, g.name, g.source, g.created_at,
+    (SELECT pg_catalog.count(*) FROM public.rag_access_group_members m WHERE m.group_id = g.id),
+    (SELECT pg_catalog.count(*) FROM public.documents d
+     WHERE d.tenant_key = p_tenant_key AND d.is_current AND d.access_groups @> ARRAY['g:' || g.id::text]),
+    pg_catalog.translate(pg_catalog.encode(pg_catalog.convert_to(g.id::text || ':' || g.name, 'UTF8'), 'base64'), E'\n', '')
+  FROM public.rag_access_groups g
+  WHERE g.tenant_key = p_tenant_key
+    AND (v_after_id IS NULL OR (g.name COLLATE "C", g.id) > (v_after_name COLLATE "C", v_after_id))
+  ORDER BY g.name COLLATE "C", g.id
+  LIMIT v_limit;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_access_groups_list(text, text, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_access_groups_list(text, text, integer) TO service_role;
+
 -- Members.
 
 CREATE OR REPLACE FUNCTION public.rag_access_member_add(p_tenant_key text, p_group_id uuid, p_user_id uuid, p_actor uuid)
@@ -279,6 +360,178 @@ $fn$;
 
 REVOKE ALL ON FUNCTION public.rag_access_member_add(text, uuid, uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_access_member_add(text, uuid, uuid, uuid) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_access_member_remove(p_tenant_key text, p_group_id uuid, p_user_id uuid, p_actor uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_count integer;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_actor IS NULL THEN
+    RAISE EXCEPTION 'actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_group_id IS NULL OR NOT public.rag_access_group_in_tenant(p_tenant_key, p_group_id) THEN
+    RAISE EXCEPTION 'not_found' USING ERRCODE = '22023';
+  END IF;
+  DELETE FROM public.rag_access_group_members m WHERE m.group_id = p_group_id AND m.user_id = p_user_id;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  IF v_count = 0 THEN
+    RAISE EXCEPTION 'not_found' USING ERRCODE = '22023';
+  END IF;
+  INSERT INTO public.rag_access_audit (tenant_key, action, actor, actor_kind, group_id, before_groups)
+  VALUES (p_tenant_key, 'member_remove', p_actor, 'admin', p_group_id, ARRAY['u:' || p_user_id::text]);
+  RETURN true;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_access_member_remove(text, uuid, uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_access_member_remove(text, uuid, uuid, uuid) TO service_role;
+
+-- Display name: full_name, then name, from the user metadata when that column exists, else the e-mail (the fixture shim has only id and email).
+
+CREATE OR REPLACE FUNCTION public.rag_access_group_members_list(p_tenant_key text, p_group_id uuid)
+RETURNS TABLE (user_id uuid, display_name text, email text, added_at timestamptz, source text)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_group_id IS NULL OR NOT public.rag_access_group_in_tenant(p_tenant_key, p_group_id) THEN
+    RAISE EXCEPTION 'not_found' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
+  SELECT p.user_id, p.display_name, p.email, p.added_at, p.source
+  FROM (
+    SELECT m.user_id,
+      COALESCE(
+        NULLIF(pg_catalog.btrim(pg_catalog.to_jsonb(u) -> 'raw_user_meta_data' ->> 'full_name'), ''),
+        NULLIF(pg_catalog.btrim(pg_catalog.to_jsonb(u) -> 'raw_user_meta_data' ->> 'name'), ''),
+        u.email::text,
+        m.user_id::text
+      ) AS display_name,
+      u.email::text AS email, m.added_at, m.source
+    FROM public.rag_access_group_members m
+    JOIN auth.users u ON u.id = m.user_id
+    WHERE m.group_id = p_group_id
+      AND public.rag_access_user_in_tenant(p_tenant_key, m.user_id)
+  ) p
+  ORDER BY pg_catalog.lower(p.display_name) COLLATE "C", p.user_id;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_access_group_members_list(text, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_access_group_members_list(text, uuid) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_access_member_candidates(p_tenant_key text, p_group_id uuid, p_query text, p_limit integer)
+RETURNS TABLE (user_id uuid, display_name text, email text, already_member boolean)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_prefix text := pg_catalog.left(p_tenant_key, 2);
+  v_query text := pg_catalog.btrim(COALESCE(p_query, ''));
+  v_limit integer := LEAST(GREATEST(COALESCE(p_limit, 20), 1), 20);
+  v_pattern text;
+  v_org uuid;
+  v_ids uuid[];
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_group_id IS NULL OR NOT public.rag_access_group_in_tenant(p_tenant_key, p_group_id) THEN
+    RAISE EXCEPTION 'not_found' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.char_length(v_query) < 2 THEN
+    RETURN;
+  END IF;
+  v_pattern := public.rag_access_like_pattern(pg_catalog.left(v_query, 200));
+
+  IF v_prefix = 'o:' THEN
+    v_org := pg_catalog.substr(p_tenant_key, 3)::uuid;
+    SELECT COALESCE(pg_catalog.array_agg(x.id), '{}'::uuid[]) INTO v_ids
+    FROM (
+      SELECT m.user_id AS id FROM public.organization_members m WHERE m.organization_id = v_org
+      UNION
+      SELECT o.owner_id FROM public.organizations o WHERE o.id = v_org AND o.owner_id IS NOT NULL
+    ) x;
+  ELSIF v_prefix <> 's:' THEN
+    RETURN;
+  END IF;
+
+  RETURN QUERY
+  SELECT p.id, p.display_name, p.email, EXISTS (
+    SELECT 1 FROM public.rag_access_group_members gm WHERE gm.group_id = p_group_id AND gm.user_id = p.id
+  )
+  FROM (
+    SELECT u.id,
+      COALESCE(
+        NULLIF(pg_catalog.btrim(pg_catalog.to_jsonb(u) -> 'raw_user_meta_data' ->> 'full_name'), ''),
+        NULLIF(pg_catalog.btrim(pg_catalog.to_jsonb(u) -> 'raw_user_meta_data' ->> 'name'), ''),
+        u.email::text,
+        u.id::text
+      ) AS display_name,
+      u.email::text AS email
+    FROM auth.users u
+    WHERE CASE
+      WHEN v_prefix = 'o:' THEN u.id = ANY (v_ids)
+      ELSE (NOT (pg_catalog.to_jsonb(u) ? 'confirmed_at') OR (pg_catalog.to_jsonb(u) ->> 'confirmed_at') IS NOT NULL)
+        AND (pg_catalog.to_jsonb(u) ->> 'deleted_at') IS NULL
+    END
+  ) p
+  WHERE p.display_name ILIKE v_pattern ESCAPE '\' OR COALESCE(p.email, '') ILIKE v_pattern ESCAPE '\'
+  ORDER BY pg_catalog.lower(p.display_name) COLLATE "C", p.id
+  LIMIT v_limit;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_access_member_candidates(text, uuid, text, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_access_member_candidates(text, uuid, text, integer) TO service_role;
+
+-- The caller's own groups (D-16, D-29).
+
+CREATE OR REPLACE FUNCTION public.rag_access_my_groups(p_tenant_key text, p_user_id uuid)
+RETURNS TABLE (is_admin boolean, own_groups jsonb, assignable_groups jsonb)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_admin boolean;
+  v_groups uuid[];
+  v_own jsonb;
+  v_assignable jsonb;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  SELECT r.is_admin, r.group_ids INTO v_admin, v_groups FROM public.rag_resolve_access_scope(p_tenant_key, p_user_id) r;
+  v_admin := COALESCE(v_admin, false);
+  SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('id', g.id, 'name', g.name) ORDER BY g.name COLLATE "C", g.id), '[]'::jsonb)
+    INTO v_own
+  FROM public.rag_access_groups g
+  WHERE g.tenant_key = p_tenant_key AND g.id = ANY (COALESCE(v_groups, '{}'::uuid[]));
+  IF v_admin THEN
+    SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('id', g.id, 'name', g.name) ORDER BY g.name COLLATE "C", g.id), '[]'::jsonb)
+      INTO v_assignable
+    FROM public.rag_access_groups g
+    WHERE g.tenant_key = p_tenant_key;
+  ELSE
+    v_assignable := v_own;
+  END IF;
+  RETURN QUERY SELECT v_admin, v_own, v_assignable;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_access_my_groups(text, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_access_my_groups(text, uuid) TO service_role;
 
 NOTIFY pgrst, 'reload schema';
 
