@@ -16,6 +16,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const MIGRATION = 'supabase/migrations/0980_term_translation_target.sql';
 const OLD_LIST = 'public.rag_term_list_entries(uuid, text, integer, integer, text)';
 const NEW_LIST = 'public.rag_term_list_entries(uuid, text, integer, integer, text, text, text, text)';
+const bare = (signature: string): string => signature.replace(/^public\./, '').replace(/\s+/g, '');
 
 const ADMIN_A = '00000000-0000-4000-8000-00000000a0a1';
 const ADMIN_B = '00000000-0000-4000-8000-00000000b0b1';
@@ -114,7 +115,7 @@ async function signatures(db: PGlite): Promise<string[]> {
   const result = await db.query<{ sig: string }>(
     "SELECT p.oid::regprocedure::text AS sig FROM pg_catalog.pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname = 'rag_term_list_entries' ORDER BY 1",
   );
-  return result.rows.map((row) => row.sig);
+  return result.rows.map((row) => bare(row.sig));
 }
 
 for (const mode of ['single-tenant', 'multi-tenant'] as const) {
@@ -134,9 +135,9 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       requireMigration();
       await applyMigrationFiles(db, [MIGRATION]);
       await applyMigrationFiles(db, ['supabase/migrations/0471_terminology_schema.sql', 'supabase/migrations/0472_terminology_writers.sql']);
-      assert.ok((await signatures(db)).includes(OLD_LIST), 're-running 0472 brings the old signature back');
+      assert.ok((await signatures(db)).includes(bare(OLD_LIST)), 're-running 0472 brings the old signature back');
       await applyMigrationFiles(db, [MIGRATION, MIGRATION]);
-      assert.deepEqual(await signatures(db), [NEW_LIST]);
+      assert.deepEqual(await signatures(db), [bare(NEW_LIST)]);
       const columns = await db.query<{ n: number }>(
         "SELECT count(*)::int AS n FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'rag_term_entries' AND column_name = 'target_language'",
       );
