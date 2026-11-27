@@ -940,6 +940,58 @@ PROMOTE_RUN = 'node scripts/ci/promote-production.mjs --sha "$PROMOTE_SHA"'
 
 def check_promote_production(data: dict, text: str, errors: list[str], known_refs: set[str] | None = None) -> None:
     """D-35, O-5: manual promotion of a staged production build, only after a passed rag-release-gate."""
+    name = "promote-production"
+    check_common(name, data, text, errors)
+    trig = triggers(data)
+    if set(trig) != {"workflow_dispatch"}:
+        errors.append(f"{name}: must trigger on workflow_dispatch only, got {sorted(map(str, trig))}")
+    inputs = ((trig.get("workflow_dispatch") or {}).get("inputs") or {}) if isinstance(trig.get("workflow_dispatch"), dict) else {}
+    if not (inputs.get("sha") or {}).get("required"):
+        errors.append(f"{name}: workflow_dispatch needs a required 'sha' input")
+    extra = sorted(set(inputs) - {"sha"})
+    if extra:
+        errors.append(f"{name}: unexpected workflow_dispatch inputs {extra}")
+    concurrency = data.get("concurrency") or {}
+    if not isinstance(concurrency, dict) or concurrency.get("cancel-in-progress") is not False or not concurrency.get("group"):
+        errors.append(f"{name}: concurrency must be grouped with cancel-in-progress false")
+    if known_refs is not None:
+        for ref in uses_refs(data):
+            if ref not in known_refs:
+                errors.append(f"{name}: uses '{ref}' is not a pinned action already used by pr-smoke or nightly")
+    jobs = data.get("jobs") or {}
+    if len(jobs) != 1:
+        errors.append(f"{name}: exactly one job expected, got {sorted(jobs)}")
+    promote_steps = []
+    for jname, job in jobs.items():
+        job = job or {}
+        if job.get("permissions") != PROMOTE_JOB_PERMISSIONS:
+            errors.append(f"{name}: job '{jname}' permissions must be exactly {PROMOTE_JOB_PERMISSIONS}, got {job.get('permissions')!r}")
+        for step in all_steps(job):
+            run = str(step.get("run", ""))
+            if "${{" in run:
+                errors.append(f"{name}: inputs, secrets and contexts reach run scripts only through env, found '${{{{' in a run step")
+            if "secrets." in run or "inputs." in run:
+                errors.append(f"{name}: inputs and secrets must be passed through step env, not interpolated into run")
+            if re.search(r"\becho\b.*\b(KEY|TOKEN|BEARER)\b", run):
+                errors.append(f"{name}: a step appears to echo a secret")
+            if str(step.get("uses", "")).startswith("actions/checkout@") and "ref" in (step.get("with") or {}):
+                errors.append(f"{name}: checkout must not check out the promoted sha; the script runs from the default branch")
+            if PROMOTE_RUN in run:
+                promote_steps.append(step)
+    if len(promote_steps) != 1:
+        errors.append(f"{name}: no step runs '{PROMOTE_RUN}' (exactly one expected)")
+        return
+    env = promote_steps[0].get("env") or {}
+    expected = {
+        "PROMOTE_SHA": "${{inputs.sha}}",
+        "GH_TOKEN": "${{github.token}}",
+        "VERCEL_TOKEN": "${{secrets.VERCEL_TOKEN}}",
+        "VERCEL_PROJECT_ID": "${{secrets.VERCEL_PROJECT_ID}}",
+        "VERCEL_TEAM_ID": "${{secrets.VERCEL_TEAM_ID}}",
+    }
+    for key, value in expected.items():
+        if str(env.get(key, "")).replace(" ", "") != value:
+            errors.append(f"{name}: the promote step must receive {key} through step env as {value}")
 
 
 QUALITY_GATES = "eval/config/quality-gates.json"
@@ -1090,6 +1142,15 @@ def main() -> int:
         check_no_ray_extra("rag-release-gate", RELEASE_GATE.read_text(encoding="utf-8"), errors)
     else:
         errors.append(f"missing {RELEASE_GATE.relative_to(ROOT)}")
+    if PROMOTE.exists():
+        promote_refs = set()
+        for path in (PR, NIGHTLY):
+            if path.exists():
+                promote_refs.update(uses_refs(load(path)[0]))
+        check_promote_production(*load(PROMOTE), errors, promote_refs)
+        check_no_ray_extra("promote-production", PROMOTE.read_text(encoding="utf-8"), errors)
+    else:
+        errors.append(f"missing {PROMOTE.relative_to(ROOT)}")
     check_lakera_secret_scope(errors)
     check_absolute_gates(load(PR)[0] if PR.exists() else None, load(NIGHTLY)[0] if NIGHTLY.exists() else None, errors)
     workflows = [load(path)[0] for path in (PR, NIGHTLY) if path.exists()]
