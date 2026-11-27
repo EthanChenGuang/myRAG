@@ -75,10 +75,12 @@ describe('v2 context stage with documentTokenBudget (D-83)', () => {
   });
 
   it('packs to the smaller of the option and the profile budget, keeping the highest-ranked blocks', async () => {
-    const budget = blockTokens('k1') + blockTokens('k2') + 5;
+    // three blocks by the per-block estimate; the rendered framing and labels leave room for two
+    const budget = blockTokens('k1') + blockTokens('k2') + blockTokens('k3') + 5;
     const { out, assemble } = await run({ documentTokenBudget: budget }, true);
     const keptIds = out.assembly!.kept.map((row) => row.chunk_id);
     expect(keptIds).toEqual(['k1', 'k2']);
+    expect(countContextTokens(out.assembly!.context)).toBeLessThanOrEqual(budget);
     expect(assemble?.counts?.budget_tokens).toBe(budget);
     expect(out.packing).toEqual({ documentBudget: budget, droppedDocuments: 3, keptParents: 2 });
 
@@ -90,6 +92,17 @@ describe('v2 context stage with documentTokenBudget (D-83)', () => {
       expect(out.assembly!.context).not.toContain(`${dropped} neutral`);
     }
   });
+
+  for (const labelled of [false, true]) {
+    it(`keeps the rendered context within the budget, the truncated first block included (${labelled ? 'labelled' : 'plain'})`, async () => {
+      for (const budget of [blockTokens('k1') * 2, blockTokens('k1') + 2, Math.floor(blockTokens('k1') / 2), 40]) {
+        const { out } = await run({ documentTokenBudget: budget }, labelled);
+        expect(countContextTokens(out.assembly!.context)).toBeLessThanOrEqual(budget);
+        expect(out.assembly!.kept.length).toBeGreaterThan(0);
+        expect(out.packing?.documentBudget).toBe(budget);
+      }
+    });
+  }
 
   it('keeps the profile budget when the option is larger', async () => {
     const plain = await run(undefined);

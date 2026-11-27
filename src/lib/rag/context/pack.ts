@@ -130,3 +130,16 @@ export function packFiltered<C extends LegacyPackCandidate>(
     summary: { documentBudget: packed.documentBudget, droppedDocuments: packed.droppedDocuments, keptParents: packed.keptParents },
   };
 }
+
+/** D-83: packs the legacy assembly to the budget and builds it. */
+export function packAndBuild<C extends LegacyPackCandidate, O extends { context: string }>(
+  state: FilteredCandidates<C>,
+  candidates: C[],
+  documents: ReadonlyMap<string, AssemblyDocumentRow>,
+  budget: number,
+  options: { isGPTModel: boolean; imageExtensions: string[] },
+  build: (packed: PackedFiltered<C>) => O,
+): { output: O; summary: PackingSummary } {
+  const packed = packFiltered(state, candidates, documents, budget, options);
+  return { output: build(packed), summary: packed.summary };
+}
