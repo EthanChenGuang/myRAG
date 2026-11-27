@@ -1,6 +1,6 @@
 /**
- * Civil-date arithmetic for `date_diff` with integers only (D-67, RESEARCH 5.2.1 Pattern A).
- * `Date` is not used: `Date.UTC` returns a floating-point number.
+ * Civil-date arithmetic for `date_diff` with integers only (D-67, RESEARCH Pattern A).
+ * The built-in date object is not used: its UTC helper returns a floating-point number.
  */
 import { CalcError, fromBigInt, type Rational } from './rational';
 
