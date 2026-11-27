@@ -24,6 +24,9 @@ BGE_M3_MAX_MODEL_TOKENS = 8192
 BGE_M3_DIMS = 1024
 # Padded tokens per forward pass; one 8192-token input still runs alone.
 BATCH_TOKEN_BUDGET = 16_384
+REVISION_FILE = "REVISION"
+BGE_M3_FILES: tuple[str, ...] = ()
+BGE_M3_SHA256: dict[str, str] = {}
 
 
 class EmbedInputTooLong(ValueError):
@@ -162,7 +165,7 @@ class LazyBgeM3Embedder:
         return self._resolve().embed(texts)
 
 
-def load_from_baked_dir(path: Path, revision: str = BGE_M3_REVISION, *, allow_download: bool = False) -> BgeM3Embedder:
+def load_from_baked_dir(path: Path, revision: str = BGE_M3_REVISION, *, allow_download: bool = False, **_kw: Any) -> BgeM3Embedder:
     if allow_download:
         raise EmbedderUnavailable("download_refused")
     if not Path(path).is_dir():

@@ -1783,13 +1783,15 @@ requires-dist = [
     { name = "redisvl", marker = "extra == 'cache'", specifier = "==0.32.0" },
     { name = "tiktoken", marker = "extra == 'chunking'", specifier = "==0.14.0" },
     { name = "tiktoken", marker = "extra == 'docling'", specifier = "==0.14.0" },
+    { name = "torch", marker = "extra == 'bge-m3'", specifier = "==2.15.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torch", marker = "extra == 'docling'", specifier = "==2.15.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torch", marker = "extra == 'hhem'", specifier = "==2.15.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", marker = "extra == 'docling'", specifier = "==0.29.2", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "transformers", marker = "extra == 'bge-m3'", specifier = "==5.23.0" },
     { name = "transformers", marker = "extra == 'hhem'", specifier = "==5.23.0" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
-provides-extras = ["chunking", "preflight", "hidden-text", "docling", "ray", "hhem", "cache"]
+provides-extras = ["chunking", "preflight", "hidden-text", "docling", "ray", "hhem", "bge-m3", "cache"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = "==9.2.0" }]
