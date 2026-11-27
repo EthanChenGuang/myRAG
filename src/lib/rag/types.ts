@@ -326,6 +326,8 @@ export interface RunRetrievalInput {
   previousStandaloneQuery?: string | null;
   /** Phase 6.2 D-17, D-22: the previous turn's resolved query language code. */
   previousTurnLanguage?: string | null;
+  /** Phase 6.2 D-16: set only by the eval route's voice entry; lets the harness-installed fixture floor apply to that voice call. */
+  evalEntry?: true;
 }
 
 export type LogOutcomeValue = 'answered' | 'refused_no_context' | 'kb_unavailable' | 'degraded_answer' | 'unknown';

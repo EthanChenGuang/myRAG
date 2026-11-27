@@ -715,6 +715,7 @@ export async function POST(req: NextRequest) {
           },
       signal: req.signal,
       trace: collector,
+      ...(voiceEntry ? { evalEntry: true as const } : {}),
       ...(stageOverrides ? { stageOverrides } : {}),
       ...(retrievalFilters ? { retrievalFilters } : {}),
       ...(citationSession?.labeler ? { citationLabeler: citationSession.labeler } : {}),
