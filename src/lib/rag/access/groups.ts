@@ -120,7 +120,7 @@ function parseGroup(rpc: string, row: Row): AccessGroup {
   };
 }
 
-function single<T>(rpc: string, rows: Row[], parse: (row: Row) => T): T {
+function single<T>(rpc: string, rows: Row[], parse: (_row: Row) => T): T {
   const row = rows[0];
   if (!row) throw badResponse(rpc);
   return parse(row);

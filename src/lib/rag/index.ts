@@ -69,8 +69,27 @@ export type {
   AccessMemberCandidate,
   MyAccessGroups,
 } from './access/groups';
-export { documentAccessCounts, documentAudiences, listAccessDocuments, setDocumentsAccess, setUploadAccess } from './access/documents';
+export {
+  ACCESS_DOCUMENTS_MAX_IDS,
+  ACCESS_DOCUMENTS_PAGE_SIZE,
+  documentAccessCounts,
+  documentAudiences,
+  listAccessDocuments,
+  setDocumentsAccess,
+  setUploadAccess,
+} from './access/documents';
+export type {
+  AccessAudienceKind,
+  AccessDocumentCounts,
+  AccessDocumentFilter,
+  AccessDocumentPage,
+  DocumentAudience,
+  DocumentsAccessInput,
+  SetDocumentsAccessResult,
+  UploadAccessOutcome,
+} from './access/documents';
 export { accessStatus, runAccessDrift, syncAccessStatus } from './access/status';
+export type { AccessDriftRow, AccessEmbedGroupStatus, AccessStatus, AccessStatusDeps } from './access/status';
 export {
   applyConnectorAccess,
   connectorFailClosedCounts,
@@ -80,6 +99,26 @@ export {
   matchConnectorMembers,
   setConnectorMap,
   setSharingRule,
+  CONNECTOR_MAX_ADDRESSES,
+  CONNECTOR_MAX_PRINCIPALS,
+  CONNECTOR_PROVIDERS,
+} from './access/connector';
+export type {
+  ApplyConnectorAccessInput,
+  ConnectorAccessReason,
+  ConnectorAccessResult,
+  ConnectorFailClosedCount,
+  ConnectorMapKind,
+  ConnectorMapOutcome,
+  ConnectorMapPage,
+  ConnectorMapRow,
+  ConnectorPrincipal,
+  ConnectorProvider,
+  SetConnectorMapInput,
+  SetSharingRuleInput,
+  SharingRuleKind,
+  SharingRuleOutcome,
+  SharingRuleRow,
 } from './access/connector';
 export type {
   AccessIdentity,

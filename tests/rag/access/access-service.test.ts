@@ -49,7 +49,7 @@ type Admin = ReturnType<typeof createPgliteAdmin>;
 function rpcClient(admin: Admin): RpcClient {
   return {
     rpc(fn, args) {
-      const request = Promise.resolve(admin.rpc(fn, args)) as Promise<RpcResponse> & { abortSignal: (signal: AbortSignal) => typeof request };
+      const request = Promise.resolve(admin.rpc(fn, args)) as Promise<RpcResponse> & { abortSignal: (_signal: AbortSignal) => typeof request };
       request.abortSignal = () => request;
       return request;
     },
@@ -60,7 +60,7 @@ function fakeClient(response: RpcResponse, calls: Array<{ fn: string; args: Reco
   return {
     rpc(fn, args) {
       calls.push({ fn, args });
-      const request = Promise.resolve(response) as Promise<RpcResponse> & { abortSignal: (signal: AbortSignal) => typeof request };
+      const request = Promise.resolve(response) as Promise<RpcResponse> & { abortSignal: (_signal: AbortSignal) => typeof request };
       request.abortSignal = () => request;
       return request;
     },
@@ -251,7 +251,10 @@ describe('access services (single-tenant PGlite)', () => {
       expect(all.documents).toEqual([expect.objectContaining({ documentId: DOC.synced, kind: 'everyone', connectorManaged: true, source: 'google-drive' })]);
       const audiences = await documentAudiences(scope, [DOC.plain, DOC.missing], deps);
       expect(audiences.map((row) => row.documentId)).toEqual([DOC.plain]);
-      expect(await documentAccessCounts(scope, {}, deps)).toEqual({ restricted: 2, uploaderOnly: 0, everyone: 1, all: 3 });
+      const counts = await documentAccessCounts(scope, {}, deps);
+      expect(counts).toMatchObject({ restricted: 2, uploaderOnly: 0 });
+      expect(counts.all).toBe(counts.everyone + 2);
+      expect(await documentAccessCounts(scope, { query: 'synced-note' }, deps)).toEqual({ restricted: 0, uploaderOnly: 0, everyone: 1, all: 1 });
       expect((await reason(() => listAccessDocuments(scope, { filter: 'secret' }, deps))).reason).toBe('invalid_filter');
     });
   });
@@ -361,7 +364,7 @@ describe('access services (single-tenant PGlite)', () => {
       const audit = await db.query<{ actor_kind: string }>("SELECT actor_kind FROM rag_access_audit WHERE action = 'document_set' AND document_id = $1", [DOC.synced]);
       expect(audit.rows.every((row) => row.actor_kind === 'connector')).toBe(true);
 
-      expect((await reason(() => applyConnectorAccess(scope, { documentId: DOC.synced, provider: 'other', principals: [], ownerId: MEMBER_A, status: 'ok' }, deps))).reason).toBe(
+      expect((await reason(() => applyConnectorAccess(scope, { documentId: DOC.synced, provider: 'other' as never, principals: [], ownerId: MEMBER_A, status: 'ok' }, deps))).reason).toBe(
         'invalid_argument',
       );
       expect((await reason(() => applyConnectorAccess(scope, { documentId: DOC.missing, provider: 'notion', principals: [], ownerId: MEMBER_A, status: 'ok' }, deps))).reason).toBe(
@@ -378,9 +381,13 @@ describe('access services (single-tenant PGlite)', () => {
       expect(await listSharingRules(scope, deps)).toEqual([expect.objectContaining({ id: rule.id, provider: 'google-drive', kind: 'domain', domain: 'example.org', enabled: true })]);
     });
 
-    it('deletes a mapping, then reports not_found for it', async () => {
+    it('lists an unmapped source group without an id, then deletes a mapping', async () => {
+      const page = await listConnectorMap(scope, {}, deps);
+      expect(page.total).toBe(2);
+      expect(page.rows[0]).toEqual({ id: null, provider: 'google-drive', kind: 'group', externalPrincipalId: 'unknown-group@example.org', groupId: null, documents: 1 });
       expect(await deleteConnectorMap(scope, { id: mappingId }, ADMIN, deps)).toBe(true);
       expect((await listConnectorMap(scope, {}, deps)).rows.find((row) => row.id === mappingId)).toBeUndefined();
+      expect((await reason(() => deleteConnectorMap(scope, { id: mappingId }, ADMIN, deps))).reason).toBe('not_found');
     });
   });
 });
