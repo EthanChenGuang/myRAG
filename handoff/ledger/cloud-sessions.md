@@ -734,3 +734,10 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   Waiting on predecessors: 05.2.1-25, 06.3-24/25, 07-32/33/50.
 - 22:29Z 06.2-36 DONE (4c28c5e7). Added the 6.2 canary rows to the two-tenant matrix (352/0); deps.ts now reads RAG_SCOPE_GATE and RAG_WHATSAPP_HISTORY; full vitest 16070/0. Archived -> train 41. Told quick-deps-switches to match that form and to add RAG_MODEL_ROUTING.
 - 22:31Z 06.3-15 DONE (99b684d9; migrations 0726/0727, purge is irreversible, D-11 option a) and archived -> train 40. Launched 06.3-19 and 06.3-20 on exec/06.3-15. 07-37 waits for train 40, whose base would hold 06.3-07, 06.3-15, 07-28 and 07-34; building that base myself hit 23 conflict files. Told the t40 builder to add 06.3-15, quick-composer-comet and quick-it-refusal-locale.
+- 22:33Z VERIFY 6.2: IN_PROGRESS (would FAIL as a phase close: LAT-06/07 not built, SC2/SC4 missing). Built work is PASS_WITH_GAPS; 588/588 PGlite pass. Report on verify/06.2 (92b047c3), session archived. Gaps routed:
+  - G1 (unowned switch reads) -> quick-deps-switches, extended with a generic test and the routing vars.
+  - G3 (release blocker: the Auto model entry is unresolved) -> quick-hide-auto-model.
+  - G5 hash and G7 flaky bench -> quick-62-hash-bench.
+  - R-4 SECURITY (the scope centroids ignore access groups, giving a 1-bit oracle) -> quick-scope-access.
+  - G11, R-3, R-1, G4 plan fixes -> plan-62-fixes (Fable).
+  - R-1 decision on the owner's behalf: keep the D-34 grouping, but the scope gate must not ship on fixture evidence. 06.2-26 needs a real-embedder separation run first.
