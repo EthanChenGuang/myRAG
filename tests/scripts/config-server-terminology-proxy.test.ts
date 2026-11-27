@@ -62,6 +62,26 @@ afterAll(async () => {
   delete process.env.MYRAG_APP_URL;
 });
 
+describe('/api/rag proxy path', () => {
+  it('forwards a nested path with its slashes (Express 5 gives the wildcard as an array)', async () => {
+    seen = [];
+    reply = (_req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true }));
+    };
+    const res = await call('GET', '/api/rag/admin/terminology/versions?organization_id=c0000000-0000-4000-8000-000000000001');
+    expect(res.status).toBe(200);
+    expect(seen[0]!.url).toBe('/api/rag/admin/terminology/versions?organization_id=c0000000-0000-4000-8000-000000000001');
+  });
+
+  it('still refuses a path that climbs out of /api/rag', async () => {
+    seen = [];
+    const res = await call('GET', '/api/rag/admin/%2e%2e/%2e%2e/config');
+    expect(res.status).toBe(400);
+    expect(seen).toHaveLength(0);
+  });
+});
+
 describe('terminology export through the /api/rag proxy', () => {
   it('passes the CSV attachment through with its type, file name, nosniff and no-store', async () => {
     seen = [];
