@@ -21,8 +21,10 @@ export function canaryText(marker: string, extra = ''): string {
   return `# Canary note\n\n${CANARY_SENTENCE} ${marker}.${extra ? ` ${extra}` : ''}\n`;
 }
 
+/** The nonce leads and every label ends in z (no label holds a z), so no marker is a substring of another. */
 export function markerFor(env: CanaryEnv, label: string): string {
-  return `${label}mark${env.nonce}`;
+  if (label.includes('z')) throw new Error('[Canary] marker labels must not contain z');
+  return `${env.nonce}${label}z`;
 }
 
 /**
