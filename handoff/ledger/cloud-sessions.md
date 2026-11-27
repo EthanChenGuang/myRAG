@@ -643,3 +643,9 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 21:22Z quick-rag-panel-toast DONE (6f0009fb) and archived -> train 39/40. tests/ui 2084 pass; the design pipeline passes.
 - 21:27Z quick-sidebar-default DONE (e8ec5e2f) and archived -> train 39. PR #135 red on 6 jobs so far (ts-db 2/4/5/6, ts-vitest 1/3); the train-38 builder will fix them in one push after the run ends.
 - 21:32Z Owner decision: HIDE the sidebar footer button when its text or URL is unset (default empty). Launched quick-sidebar-hide on exec/quick-sidebar-default. Train 39 takes the hide branch only if it is done in time, otherwise both go to train 40.
+- 21:37Z STATUS AUDIT: 828 plans in total.
+  - 702 in main, deployed to prod.
+  - 28 in train 38 (PR #135, red, being fixed) and 6 in train 39.
+  - 14 DONE but in no train: 04.2-33, 04.3-52, 05.2.1-16, 05.3-48, 06.2-27, 06.3-01/02/03/06/07/10/27, 07-28, 07-34. Sent to the train-39 builder; it may spill to train 40.
+  - 78 not done: 1 running (03.3-25), 6 READY waiting for train 39, about 50 blocked by dependencies (06.3 ~20, 07 ~18, 06.2 ~9), 21 auto=false or HOLD.
+- 04.3-52 DONE (b8f250a1; 40 route access canaries) and archived. Launched quick-it-refusal-locale: Italian strict refusals come back localized as Spanish. Operator: re-run the access-on smoke after train 39.
