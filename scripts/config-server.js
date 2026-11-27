@@ -137,6 +137,10 @@ app.use(security.securityMiddleware);
 
 // Serve static files from the config-ui directory
 app.use(express.static(configUiDir));
+// The terminology import route accepts bodies up to 1.5 MB (its own cap); every other path keeps the default limit.
+const TERMINOLOGY_IMPORT_PROXY_PATH = '/api/rag/admin/terminology/import';
+const TERMINOLOGY_EXPORT_PROXY_PATH = '/api/rag/admin/terminology/export';
+app.use(TERMINOLOGY_IMPORT_PROXY_PATH, express.json({ limit: '1.5mb' }));
 app.use(express.json());
 
 // Also serve static files from the public directory
@@ -4182,7 +4186,8 @@ function isAllowedRagProxyPathname(pathname) {
 }
 
 function buildRagProxyTargetPath(pathParam, queryString) {
-  const raw = String(pathParam ?? '').replace(/^\/+/, '');
+  // Express 5 passes a named wildcard as an array of decoded segments.
+  const raw = (Array.isArray(pathParam) ? pathParam.map((p) => encodeURIComponent(String(p))).join('/') : String(pathParam ?? '')).replace(/^\/+/, '');
   const parts = raw ? raw.split('/').filter(Boolean) : [];
   for (const part of parts) {
     let decoded;
@@ -4240,6 +4245,17 @@ app.all('/api/rag/*path', async (req, res) => {
     }
     const response = await fetch(mainAppUrl, init);
     const text = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    if (logPath === TERMINOLOGY_EXPORT_PROXY_PATH && response.ok && /^text\/csv\b/i.test(contentType)) {
+      const disposition = response.headers.get('content-disposition') || '';
+      res.set({
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': /^attachment; filename="[\w.-]{1,128}"$/.test(disposition) ? disposition : 'attachment; filename="terminology.csv"',
+        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control': 'no-store',
+      });
+      return res.status(response.status).send(text);
+    }
     let body;
     try {
       body = text ? JSON.parse(text) : {};
