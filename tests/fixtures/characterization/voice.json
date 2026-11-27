@@ -50,6 +50,25 @@
         "image_url": null
       },
       {
+        "chunk_id": "d5dfbdf8-3882-4a9e-b3c3-95fb4a1f459a",
+        "document_id": "358422d6-1f9d-4658-81b8-f8e8e3d4fea1",
+        "content": "Document: dup-passage-12.it.md. Chunk 3 of 4. Content: ## Campane trenniche\n\nLe campane trenniche del vintermarco suonano in sequenze di vosco. Un custode sturlana le accorda a orecchio.\n[Metadata:   ]",
+        "similarity": 0.13340683777908025,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.1667585472238503,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.13340683777908025,
+        "image_url": null
+      },
+      {
         "chunk_id": "b233f9c4-5391-403d-989d-160410041b49",
         "document_id": "657f9ab6-5eb2-4e6d-95e3-de55641a7532",
         "content": "Document: dup-passage-27.it.md. Chunk 3 of 4. Content: ## Campane trenniche\n\nLe campane trenniche del vintermarco suonano in sequenze di vosco. Un custode sturlana le accorda a orecchio.\n[Metadata:   ]",
@@ -91,25 +110,6 @@
         "chunk_id": "53106af1-9772-4ab4-b215-fff4d0d4c276",
         "document_id": "4b45ad86-c334-4667-9a9d-a987a0a93953",
         "content": "Document: dup-passage-15.it.md. Chunk 3 of 4. Content: ## Campane trenniche\n\nLe campane trenniche del vintermarco suonano in sequenze di vosco. Un custode sturlana le accorda a orecchio.\n[Metadata:   ]",
-        "similarity": 0.13340683777908025,
-        "metadata": {
-          "scoreBreakdown": {
-            "semantic": 0.1667585472238503,
-            "bm25": 0,
-            "keyword": 0,
-            "weights": {
-              "semantic": 0.8,
-              "keyword": 0.2
-            }
-          }
-        },
-        "rerankScore": 0.13340683777908025,
-        "image_url": null
-      },
-      {
-        "chunk_id": "147d9958-c264-40f1-a555-b036a67dcc4e",
-        "document_id": "0fcab9b7-ad65-410c-bdf0-c256af5998c2",
-        "content": "Document: dup-passage-30.it.md. Chunk 3 of 4. Content: ## Campane trenniche\n\nLe campane trenniche del vintermarco suonano in sequenze di vosco. Un custode sturlana le accorda a orecchio.\n[Metadata:   ]",
         "similarity": 0.13340683777908025,
         "metadata": {
           "scoreBreakdown": {
@@ -11252,25 +11252,6 @@
         "image_url": null
       },
       {
-        "chunk_id": "728b0ea8-a897-4c0c-a0c6-25fb147e1f98",
-        "document_id": "4b45ad86-c334-4667-9a9d-a987a0a93953",
-        "content": "Document: dup-passage-15.it.md. Chunk 4 of 4. Content: dup-it-15\n[Metadata:   ]",
-        "similarity": 0.18791884183883667,
-        "metadata": {
-          "scoreBreakdown": {
-            "semantic": 0.23489855229854584,
-            "bm25": 0,
-            "keyword": 0,
-            "weights": {
-              "semantic": 0.8,
-              "keyword": 0.2
-            }
-          }
-        },
-        "rerankScore": 0.18791884183883667,
-        "image_url": null
-      },
-      {
         "chunk_id": "3c81c5cf-8217-4461-8fb3-ac893bf6854a",
         "document_id": "12363e20-37f1-42d5-89ce-0df81de3c186",
         "content": "Document: dup-passage-10.it.md. Chunk 4 of 4. Content: dup-it-10\n[Metadata:   ]",
@@ -11290,9 +11271,28 @@
         "image_url": null
       },
       {
-        "chunk_id": "667e258b-899c-4b64-a0db-c1a7065d3d41",
-        "document_id": "8df9551f-dbcd-49e0-98fa-e19044c18e74",
-        "content": "Document: dup-passage-10.en.md. Chunk 4 of 4. Content: dup-en-10\n[Metadata:   ]",
+        "chunk_id": "728b0ea8-a897-4c0c-a0c6-25fb147e1f98",
+        "document_id": "4b45ad86-c334-4667-9a9d-a987a0a93953",
+        "content": "Document: dup-passage-15.it.md. Chunk 4 of 4. Content: dup-it-15\n[Metadata:   ]",
+        "similarity": 0.18791884183883667,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.23489855229854584,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.18791884183883667,
+        "image_url": null
+      },
+      {
+        "chunk_id": "31b1645b-31cd-4e45-9c2f-903113a4bbd0",
+        "document_id": "033e6497-8643-4693-b539-76f1c68cc6f9",
+        "content": "Document: dup-passage-15.en.md. Chunk 4 of 4. Content: dup-en-15\n[Metadata:   ]",
         "similarity": 0.15438321828842164,
         "metadata": {
           "scoreBreakdown": {
@@ -11309,9 +11309,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "31b1645b-31cd-4e45-9c2f-903113a4bbd0",
-        "document_id": "033e6497-8643-4693-b539-76f1c68cc6f9",
-        "content": "Document: dup-passage-15.en.md. Chunk 4 of 4. Content: dup-en-15\n[Metadata:   ]",
+        "chunk_id": "667e258b-899c-4b64-a0db-c1a7065d3d41",
+        "document_id": "8df9551f-dbcd-49e0-98fa-e19044c18e74",
+        "content": "Document: dup-passage-10.en.md. Chunk 4 of 4. Content: dup-en-10\n[Metadata:   ]",
         "similarity": 0.15438321828842164,
         "metadata": {
           "scoreBreakdown": {
@@ -12052,9 +12052,9 @@
     "query": "In what sequences do the thrennic bells of the vintermark ring, and what do the hemlark orchards yield?",
     "results": [
       {
-        "chunk_id": "c9811434-614a-4d2d-b38a-2f74fff25117",
-        "document_id": "8c0abb27-5e1f-44a0-bb20-6a53060361e2",
-        "content": "Document: dup-passage-29.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.\n[Metadata:   ]",
+        "chunk_id": "8f2f8262-953c-472e-b13b-c12f4e4bfdd0",
+        "document_id": "df269b0c-39ad-4664-b90f-a1d612fa714a",
+        "content": "Document: dup-passage-05.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.\n[Metadata:   ]",
         "similarity": 0.504138072564761,
         "metadata": {
           "scoreBreakdown": {
@@ -12071,9 +12071,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "0fe52c80-31af-4b81-af88-2b6c2ce2eb47",
-        "document_id": "a7021a0d-fa30-43e4-af93-d30570272342",
-        "content": "Document: dup-passage-08.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.\n[Metadata:   ]",
+        "chunk_id": "87d40bde-4c94-46c8-88d6-d44db6bfb16c",
+        "document_id": "3f265111-1954-4946-876a-2e01fc22f410",
+        "content": "Document: dup-passage-11.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.\n[Metadata:   ]",
         "similarity": 0.504138072564761,
         "metadata": {
           "scoreBreakdown": {
@@ -12090,9 +12090,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "15ec4c93-4a61-4212-bba0-853dd6ec2054",
-        "document_id": "461ad3d6-2ef0-4d00-a775-a7dda5a5511f",
-        "content": "Document: dup-passage-20.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.\n[Metadata:   ]",
+        "chunk_id": "59a864af-34d2-4a00-930c-84636d920f7e",
+        "document_id": "fb7f6426-541e-4cd7-b77d-00107a37fb85",
+        "content": "Document: dup-passage-23.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.\n[Metadata:   ]",
         "similarity": 0.504138072564761,
         "metadata": {
           "scoreBreakdown": {
@@ -12128,9 +12128,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "59a864af-34d2-4a00-930c-84636d920f7e",
-        "document_id": "fb7f6426-541e-4cd7-b77d-00107a37fb85",
-        "content": "Document: dup-passage-23.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.\n[Metadata:   ]",
+        "chunk_id": "15ec4c93-4a61-4212-bba0-853dd6ec2054",
+        "document_id": "461ad3d6-2ef0-4d00-a775-a7dda5a5511f",
+        "content": "Document: dup-passage-20.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.\n[Metadata:   ]",
         "similarity": 0.504138072564761,
         "metadata": {
           "scoreBreakdown": {
@@ -12863,9 +12863,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "f0ae6ff0-a563-4cbc-bae1-8b898cc492af",
-        "document_id": "8e09505a-e98f-4a6d-8a45-b3f6e7ee5c5d",
-        "content": "Document: dup-passage-28.zh.md. Chunk 1 of 4. Content: ## 澜溪潮汐\n\n澜溪潮汐逢鹭鸥鸣叫便涨溢。 琥珀戍卒誊抄诸般浪脊。\n[Metadata:   ]",
+        "chunk_id": "007325e6-c14a-4370-abfe-ee6dc450d181",
+        "document_id": "6bc59215-1fb8-411e-a38f-feadab4787c0",
+        "content": "Document: dup-passage-22.zh.md. Chunk 1 of 4. Content: ## 澜溪潮汐\n\n澜溪潮汐逢鹭鸥鸣叫便涨溢。 琥珀戍卒誊抄诸般浪脊。\n[Metadata:   ]",
         "similarity": 0.26689557231717437,
         "metadata": {
           "scoreBreakdown": {
@@ -12964,9 +12964,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "f8e9f465-8973-4268-bf1c-f3999aa0b5ed",
-        "document_id": "a3687d7d-cdf3-4dab-9b0c-0ee0d73612e7",
-        "content": "Document: dup-passage-13.zh.md. Chunk 2 of 4. Content: ## 霁霞旌旗\n\n霁霞旌旗褪为蔷薇绯红。 琥珀戍卒黄昏卷敛旌旗。\n[Metadata:   ]",
+        "chunk_id": "f1278bdd-ad24-491c-a725-71d533277d7f",
+        "document_id": "aca2d1f1-6287-47c1-9180-0749441ec8c4",
+        "content": "Document: dup-passage-18.zh.md. Chunk 2 of 4. Content: ## 霁霞旌旗\n\n霁霞旌旗褪为蔷薇绯红。 琉璃戍卒黄昏卷敛旌旗。\n[Metadata:   ]",
         "similarity": 0.4009809733021847,
         "metadata": {
           "scoreBreakdown": {
@@ -13008,9 +13008,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "dd2f45a8-71f4-4f0e-af64-a24dc5d7b2b2",
-        "document_id": "c96dd300-8a1a-424b-bae3-ecd0223233af",
-        "content": "Document: dup-passage-02.zh.md. Chunk 3 of 4. Content: ## 磬钹铙鸣\n\n磬钹铙鸣循鼙鼓韵拍奏鸣。 翡翠戍卒凭耳校音。\n[Metadata:   ]",
+        "chunk_id": "d4068f9a-bf40-47da-81a1-3359bb9a1c5f",
+        "document_id": "39537a98-7c3c-465a-ad16-b44e8e74b2f8",
+        "content": "Document: dup-passage-06.zh.md. Chunk 3 of 4. Content: ## 磬钹铙鸣\n\n磬钹铙鸣循鼙鼓韵拍奏鸣。 琉璃戍卒凭耳校音。\n[Metadata:   ]",
         "similarity": 0.42752068206791255,
         "metadata": {
           "scoreBreakdown": {
@@ -13027,9 +13027,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "d4068f9a-bf40-47da-81a1-3359bb9a1c5f",
-        "document_id": "39537a98-7c3c-465a-ad16-b44e8e74b2f8",
-        "content": "Document: dup-passage-06.zh.md. Chunk 3 of 4. Content: ## 磬钹铙鸣\n\n磬钹铙鸣循鼙鼓韵拍奏鸣。 琉璃戍卒凭耳校音。\n[Metadata:   ]",
+        "chunk_id": "dbb2b4e9-808d-4cde-9232-e48ec5840ac5",
+        "document_id": "86589b31-4738-4e38-8fda-1a2578ea1a11",
+        "content": "Document: dup-passage-03.zh.md. Chunk 3 of 4. Content: ## 磬钹铙鸣\n\n磬钹铙鸣循鼙鼓韵拍奏鸣。 琉璃戍卒凭耳校音。\n[Metadata:   ]",
         "similarity": 0.42752068206791255,
         "metadata": {
           "scoreBreakdown": {
@@ -13065,9 +13065,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "ef6bc332-06a4-44b0-bb7f-2522a4ed979d",
-        "document_id": "72be4aa6-82ea-46af-9a18-b82b71721ebf",
-        "content": "Document: dup-passage-15.zh.md. Chunk 3 of 4. Content: ## 磬钹铙鸣\n\n磬钹铙鸣循鼙鼓韵拍奏鸣。 琉璃戍卒凭耳校音。\n[Metadata:   ]",
+        "chunk_id": "ee76275e-303a-4358-9e5a-9ecd2ffcb22b",
+        "document_id": "84a5f284-4b86-437c-b646-fd8a78ef70f2",
+        "content": "Document: dup-passage-17.zh.md. Chunk 3 of 4. Content: ## 磬钹铙鸣\n\n磬钹铙鸣循鼙鼓韵拍奏鸣。 翡翠戍卒凭耳校音。\n[Metadata:   ]",
         "similarity": 0.42752068206791255,
         "metadata": {
           "scoreBreakdown": {
@@ -13743,28 +13743,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "633edce1-a9f5-4f65-87e1-1b280e232b7b",
-        "document_id": "f5dc9ee9-537f-4058-8833-1b89375e007b",
-        "content": "Document: dup-passage-03.it.md. Chunk 1 of 4. Content: ## Maree quorrine\n\nLe maree quorrine del vintermarco salgono trascorsi zorvici plinti. Un custode sturlana annota ciascuna cresta zelbica.\n[Metadata:   ]",
-        "similarity": 0.4000005722045472,
-        "metadata": {
-          "scoreBreakdown": {
-            "semantic": 0.500000715255684,
-            "bm25": 0,
-            "keyword": 0,
-            "weights": {
-              "semantic": 0.8,
-              "keyword": 0.2
-            }
-          }
-        },
-        "rerankScore": 0.4000005722045472,
-        "image_url": null
-      },
-      {
-        "chunk_id": "e3fe3bc4-32e0-4bb5-88ea-9a2f9c30e665",
-        "document_id": "657f9ab6-5eb2-4e6d-95e3-de55641a7532",
-        "content": "Document: dup-passage-27.it.md. Chunk 1 of 4. Content: ## Maree quorrine\n\nLe maree quorrine del vintermarco salgono trascorsi zorvici plinti. Un custode sturlana annota ciascuna cresta zelbica.\n[Metadata:   ]",
+        "chunk_id": "89222e75-781f-4710-9fab-8b4c22a6df48",
+        "document_id": "0fcab9b7-ad65-410c-bdf0-c256af5998c2",
+        "content": "Document: dup-passage-30.it.md. Chunk 1 of 4. Content: ## Maree quorrine\n\nLe maree quorrine del vintermarco salgono trascorsi zorvici plinti. Un custode sturlana annota ciascuna cresta zelbica.\n[Metadata:   ]",
         "similarity": 0.4000005722045472,
         "metadata": {
           "scoreBreakdown": {
@@ -13784,6 +13765,25 @@
         "chunk_id": "fe99e531-9cab-4c1d-a1d2-888abbbc88ff",
         "document_id": "e6570454-d17d-4c3b-9457-ffb4eae92093",
         "content": "Document: dup-passage-09.it.md. Chunk 1 of 4. Content: ## Maree quorrine\n\nLe maree quorrine del vintermarco salgono trascorsi zorvici plinti. Un custode sturlana annota ciascuna cresta zelbica.\n[Metadata:   ]",
+        "similarity": 0.4000005722045472,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.500000715255684,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.4000005722045472,
+        "image_url": null
+      },
+      {
+        "chunk_id": "6ad29c03-2da4-4f5a-869f-ae0bf3a8020d",
+        "document_id": "0fadc825-204f-4cdb-9d45-19e7013a9482",
+        "content": "Document: dup-passage-18.it.md. Chunk 1 of 4. Content: ## Maree quorrine\n\nLe maree quorrine del vintermarco salgono trascorsi zorvici plinti. Un custode sturlana annota ciascuna cresta zelbica.\n[Metadata:   ]",
         "similarity": 0.4000005722045472,
         "metadata": {
           "scoreBreakdown": {
@@ -13825,9 +13825,9 @@
     "query": "In che tinta sbiadiscono gli stendardi ostrelli del vintermarco e cosa recano i traghetti emlarchi?",
     "results": [
       {
-        "chunk_id": "cfc4838f-c507-47f0-bf0e-d56faac079af",
-        "document_id": "6e6246a0-c372-4192-b00c-82c6f64da30d",
-        "content": "Document: dup-passage-24.it.md. Chunk 2 of 4. Content: ## Stendardi ostrelli\n\nGli stendardi ostrelli del vintermarco sbiadiscono in ambra grulina. Un custode sturlana li ripone al tramonto.\n[Metadata:   ]",
+        "chunk_id": "ccd7c1f9-8d81-432a-91f9-97e28ce747c1",
+        "document_id": "f5dc9ee9-537f-4058-8833-1b89375e007b",
+        "content": "Document: dup-passage-03.it.md. Chunk 2 of 4. Content: ## Stendardi ostrelli\n\nGli stendardi ostrelli del vintermarco sbiadiscono in ambra grulina. Un custode sturlana li ripone al tramonto.\n[Metadata:   ]",
         "similarity": 0.4568198543387252,
         "metadata": {
           "scoreBreakdown": {
@@ -13844,9 +13844,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "d61efb78-782f-4454-b068-6d9793c20ca1",
-        "document_id": "358422d6-1f9d-4658-81b8-f8e8e3d4fea1",
-        "content": "Document: dup-passage-12.it.md. Chunk 2 of 4. Content: ## Stendardi ostrelli\n\nGli stendardi ostrelli del vintermarco sbiadiscono in ambra grulina. Un custode sturlana li ripone al tramonto.\n[Metadata:   ]",
+        "chunk_id": "14ad7dd7-63f5-4c8e-8ff8-128fcb741dcb",
+        "document_id": "02bd0679-fff6-4c83-8b92-8740fbdeec07",
+        "content": "Document: dup-passage-21.it.md. Chunk 2 of 4. Content: ## Stendardi ostrelli\n\nGli stendardi ostrelli del vintermarco sbiadiscono in ambra grulina. Un custode sturlana li ripone al tramonto.\n[Metadata:   ]",
         "similarity": 0.4568198543387252,
         "metadata": {
           "scoreBreakdown": {
@@ -13882,9 +13882,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "ccd7c1f9-8d81-432a-91f9-97e28ce747c1",
-        "document_id": "f5dc9ee9-537f-4058-8833-1b89375e007b",
-        "content": "Document: dup-passage-03.it.md. Chunk 2 of 4. Content: ## Stendardi ostrelli\n\nGli stendardi ostrelli del vintermarco sbiadiscono in ambra grulina. Un custode sturlana li ripone al tramonto.\n[Metadata:   ]",
+        "chunk_id": "7058f22d-f858-4a08-9261-517ec40edb35",
+        "document_id": "e6570454-d17d-4c3b-9457-ffb4eae92093",
+        "content": "Document: dup-passage-09.it.md. Chunk 2 of 4. Content: ## Stendardi ostrelli\n\nGli stendardi ostrelli del vintermarco sbiadiscono in ambra grulina. Un custode sturlana li ripone al tramonto.\n[Metadata:   ]",
         "similarity": 0.4568198543387252,
         "metadata": {
           "scoreBreakdown": {
@@ -13901,9 +13901,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "dcd8f862-db77-4b0b-87bb-bc7530ff53d4",
-        "document_id": "4ab6af85-099e-4f94-a75e-22cb2299608e",
-        "content": "Document: dup-passage-06.it.md. Chunk 2 of 4. Content: ## Stendardi ostrelli\n\nGli stendardi ostrelli del vintermarco sbiadiscono in ambra grulina. Un custode sturlana li ripone al tramonto.\n[Metadata:   ]",
+        "chunk_id": "cfc4838f-c507-47f0-bf0e-d56faac079af",
+        "document_id": "6e6246a0-c372-4192-b00c-82c6f64da30d",
+        "content": "Document: dup-passage-24.it.md. Chunk 2 of 4. Content: ## Stendardi ostrelli\n\nGli stendardi ostrelli del vintermarco sbiadiscono in ambra grulina. Un custode sturlana li ripone al tramonto.\n[Metadata:   ]",
         "similarity": 0.4568198543387252,
         "metadata": {
           "scoreBreakdown": {
@@ -13926,47 +13926,9 @@
     "query": "In che sequenze suonano le campane trenniche del vintermarco e cosa recano i frutteti emlarchi?",
     "results": [
       {
-        "chunk_id": "d5dfbdf8-3882-4a9e-b3c3-95fb4a1f459a",
-        "document_id": "358422d6-1f9d-4658-81b8-f8e8e3d4fea1",
-        "content": "Document: dup-passage-12.it.md. Chunk 3 of 4. Content: ## Campane trenniche\n\nLe campane trenniche del vintermarco suonano in sequenze di vosco. Un custode sturlana le accorda a orecchio.\n[Metadata:   ]",
-        "similarity": 0.5215356681900419,
-        "metadata": {
-          "scoreBreakdown": {
-            "semantic": 0.6519195852375524,
-            "bm25": 0,
-            "keyword": 0,
-            "weights": {
-              "semantic": 0.8,
-              "keyword": 0.2
-            }
-          }
-        },
-        "rerankScore": 0.5215356681900419,
-        "image_url": null
-      },
-      {
-        "chunk_id": "147d9958-c264-40f1-a555-b036a67dcc4e",
-        "document_id": "0fcab9b7-ad65-410c-bdf0-c256af5998c2",
-        "content": "Document: dup-passage-30.it.md. Chunk 3 of 4. Content: ## Campane trenniche\n\nLe campane trenniche del vintermarco suonano in sequenze di vosco. Un custode sturlana le accorda a orecchio.\n[Metadata:   ]",
-        "similarity": 0.5215356681900419,
-        "metadata": {
-          "scoreBreakdown": {
-            "semantic": 0.6519195852375524,
-            "bm25": 0,
-            "keyword": 0,
-            "weights": {
-              "semantic": 0.8,
-              "keyword": 0.2
-            }
-          }
-        },
-        "rerankScore": 0.5215356681900419,
-        "image_url": null
-      },
-      {
-        "chunk_id": "18ea527f-e674-443b-8733-056d57229d6b",
-        "document_id": "02bd0679-fff6-4c83-8b92-8740fbdeec07",
-        "content": "Document: dup-passage-21.it.md. Chunk 3 of 4. Content: ## Campane trenniche\n\nLe campane trenniche del vintermarco suonano in sequenze di vosco. Un custode sturlana le accorda a orecchio.\n[Metadata:   ]",
+        "chunk_id": "c03a6259-9023-4ef8-982c-f01c8bc26775",
+        "document_id": "6e6246a0-c372-4192-b00c-82c6f64da30d",
+        "content": "Document: dup-passage-24.it.md. Chunk 3 of 4. Content: ## Campane trenniche\n\nLe campane trenniche del vintermarco suonano in sequenze di vosco. Un custode sturlana le accorda a orecchio.\n[Metadata:   ]",
         "similarity": 0.5215356681900419,
         "metadata": {
           "scoreBreakdown": {
@@ -14002,9 +13964,47 @@
         "image_url": null
       },
       {
+        "chunk_id": "8d27019d-30e2-44a1-b36c-5f42eeccfa0d",
+        "document_id": "4ab6af85-099e-4f94-a75e-22cb2299608e",
+        "content": "Document: dup-passage-06.it.md. Chunk 3 of 4. Content: ## Campane trenniche\n\nLe campane trenniche del vintermarco suonano in sequenze di vosco. Un custode sturlana le accorda a orecchio.\n[Metadata:   ]",
+        "similarity": 0.5215356681900419,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.6519195852375524,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.5215356681900419,
+        "image_url": null
+      },
+      {
         "chunk_id": "8ba12306-e6a4-4df3-8b0e-f3d4fcda471e",
         "document_id": "f5dc9ee9-537f-4058-8833-1b89375e007b",
         "content": "Document: dup-passage-03.it.md. Chunk 3 of 4. Content: ## Campane trenniche\n\nLe campane trenniche del vintermarco suonano in sequenze di vosco. Un custode sturlana le accorda a orecchio.\n[Metadata:   ]",
+        "similarity": 0.5215356681900419,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.6519195852375524,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.5215356681900419,
+        "image_url": null
+      },
+      {
+        "chunk_id": "147d9958-c264-40f1-a555-b036a67dcc4e",
+        "document_id": "0fcab9b7-ad65-410c-bdf0-c256af5998c2",
+        "content": "Document: dup-passage-30.it.md. Chunk 3 of 4. Content: ## Campane trenniche\n\nLe campane trenniche del vintermarco suonano in sequenze di vosco. Un custode sturlana le accorda a orecchio.\n[Metadata:   ]",
         "similarity": 0.5215356681900419,
         "metadata": {
           "scoreBreakdown": {
@@ -14505,9 +14505,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "a02d2035-bc1c-4086-8953-6fb1b5b2ac29",
-        "document_id": "0ead7a7d-52d8-4b37-ae2a-806d90184b54",
-        "content": "Document: coded-list-b.it.md. Chunk 3 of 4. Content: ## KZ-41-72-LT\n\nLa voce KZ-41-72-LT segna la torre wendella.\n[Metadata:   ]",
+        "chunk_id": "556d3508-6a99-477c-ab30-d1d68775f27d",
+        "document_id": "dc1c1aa3-8a91-45d2-b0e9-448388801574",
+        "content": "Document: coded-list-a.it.md. Chunk 3 of 4. Content: ## KZ-41-72-LS\n\nLa voce KZ-41-72-LS segna la guglia dorrica.\n[Metadata:   ]",
         "similarity": 0.3277281761169527,
         "metadata": {
           "scoreBreakdown": {
@@ -14524,9 +14524,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "556d3508-6a99-477c-ab30-d1d68775f27d",
-        "document_id": "dc1c1aa3-8a91-45d2-b0e9-448388801574",
-        "content": "Document: coded-list-a.it.md. Chunk 3 of 4. Content: ## KZ-41-72-LS\n\nLa voce KZ-41-72-LS segna la guglia dorrica.\n[Metadata:   ]",
+        "chunk_id": "a02d2035-bc1c-4086-8953-6fb1b5b2ac29",
+        "document_id": "0ead7a7d-52d8-4b37-ae2a-806d90184b54",
+        "content": "Document: coded-list-b.it.md. Chunk 3 of 4. Content: ## KZ-41-72-LT\n\nLa voce KZ-41-72-LT segna la torre wendella.\n[Metadata:   ]",
         "similarity": 0.3277281761169527,
         "metadata": {
           "scoreBreakdown": {
@@ -16242,9 +16242,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "ff3c3a78-8506-45df-aae3-8e60880b275e",
-        "document_id": "7daffdc0-aef5-4f19-9cd0-a713e1dc991b",
-        "content": "Document: dup-passage-29.zh.md. Chunk 4 of 4. Content: dup-zh-29\n[Metadata:   ]",
+        "chunk_id": "04bbe3bb-06bf-4f4a-a3fd-2636a3be95cb",
+        "document_id": "7d4dcf68-9d47-4962-8988-49ced1dd8897",
+        "content": "Document: dup-passage-20.zh.md. Chunk 4 of 4. Content: dup-zh-20\n[Metadata:   ]",
         "similarity": 0.1743127242140341,
         "metadata": {
           "scoreBreakdown": {
@@ -17355,9 +17355,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "d5dfbdf8-3882-4a9e-b3c3-95fb4a1f459a",
-        "document_id": "358422d6-1f9d-4658-81b8-f8e8e3d4fea1",
-        "content": "Document: dup-passage-12.it.md. Chunk 3 of 4. Content: ## Campane trenniche\n\nLe campane trenniche del vintermarco suonano in sequenze di vosco. Un custode sturlana le accorda a orecchio.\n[Metadata:   ]",
+        "chunk_id": "8ba12306-e6a4-4df3-8b0e-f3d4fcda471e",
+        "document_id": "f5dc9ee9-537f-4058-8833-1b89375e007b",
+        "content": "Document: dup-passage-03.it.md. Chunk 3 of 4. Content: ## Campane trenniche\n\nLe campane trenniche del vintermarco suonano in sequenze di vosco. Un custode sturlana le accorda a orecchio.\n[Metadata:   ]",
         "similarity": 0.13864465220507202,
         "metadata": {
           "scoreBreakdown": {
@@ -17868,9 +17868,9 @@
     "query": "what does the logo look like",
     "results": [
       {
-        "chunk_id": "c9811434-614a-4d2d-b38a-2f74fff25117",
-        "document_id": "8c0abb27-5e1f-44a0-bb20-6a53060361e2",
-        "content": "Document: dup-passage-29.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.\n[Metadata:   ]",
+        "chunk_id": "8f2f8262-953c-472e-b13b-c12f4e4bfdd0",
+        "document_id": "df269b0c-39ad-4664-b90f-a1d612fa714a",
+        "content": "Document: dup-passage-05.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.\n[Metadata:   ]",
         "similarity": 0.17324238218140345,
         "metadata": {
           "scoreBreakdown": {
@@ -17887,28 +17887,9 @@
         "image_url": null
       },
       {
-        "chunk_id": "0fe52c80-31af-4b81-af88-2b6c2ce2eb47",
-        "document_id": "a7021a0d-fa30-43e4-af93-d30570272342",
-        "content": "Document: dup-passage-08.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.\n[Metadata:   ]",
-        "similarity": 0.17324238218140345,
-        "metadata": {
-          "scoreBreakdown": {
-            "semantic": 0.2165529777267543,
-            "bm25": 0,
-            "keyword": 0,
-            "weights": {
-              "semantic": 0.8,
-              "keyword": 0.2
-            }
-          }
-        },
-        "rerankScore": 0.17324238218140345,
-        "image_url": null
-      },
-      {
-        "chunk_id": "15ec4c93-4a61-4212-bba0-853dd6ec2054",
-        "document_id": "461ad3d6-2ef0-4d00-a775-a7dda5a5511f",
-        "content": "Document: dup-passage-20.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.\n[Metadata:   ]",
+        "chunk_id": "87d40bde-4c94-46c8-88d6-d44db6bfb16c",
+        "document_id": "3f265111-1954-4946-876a-2e01fc22f410",
+        "content": "Document: dup-passage-11.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.\n[Metadata:   ]",
         "similarity": 0.17324238218140345,
         "metadata": {
           "scoreBreakdown": {
@@ -17961,21 +17942,15 @@
         },
         "rerankScore": 0.17324238218140345,
         "image_url": null
-      }
-    ],
-    "source_images": []
-  },
-  {
-    "query": "who created this",
-    "results": [
+      },
       {
-        "chunk_id": "ff365b48-bcda-43ab-a1c1-dfe66d99c59c",
-        "document_id": "a3687d7d-cdf3-4dab-9b0c-0ee0d73612e7",
-        "content": "Document: dup-passage-13.zh.md. Chunk 3 of 4. Content: ## 磬钹铙鸣\n\n磬钹铙鸣循鼙鼓韵拍奏鸣。 琥珀戍卒凭耳校音。\n[Metadata:   ]",
-        "similarity": 0.19133361577987673,
+        "chunk_id": "15ec4c93-4a61-4212-bba0-853dd6ec2054",
+        "document_id": "461ad3d6-2ef0-4d00-a775-a7dda5a5511f",
+        "content": "Document: dup-passage-20.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.\n[Metadata:   ]",
+        "similarity": 0.17324238218140345,
         "metadata": {
           "scoreBreakdown": {
-            "semantic": 0.2391670197248459,
+            "semantic": 0.2165529777267543,
             "bm25": 0,
             "keyword": 0,
             "weights": {
@@ -17984,13 +17959,19 @@
             }
           }
         },
-        "rerankScore": 0.19133361577987673,
+        "rerankScore": 0.17324238218140345,
         "image_url": null
-      },
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "who created this",
+    "results": [
       {
-        "chunk_id": "e224e3f7-fdcb-4203-9509-c0322788f7a5",
-        "document_id": "1f343cc0-7ae7-4670-b8c0-6d379577c315",
-        "content": "Document: dup-passage-07.zh.md. Chunk 3 of 4. Content: ## 磬钹铙鸣\n\n磬钹铙鸣循鼙鼓韵拍奏鸣。 琥珀戍卒凭耳校音。\n[Metadata:   ]",
+        "chunk_id": "5693be5d-b2e9-49f2-b85b-71e32a890b28",
+        "document_id": "02ed58df-4952-4172-9435-2098dfb92ce2",
+        "content": "Document: dup-passage-19.zh.md. Chunk 3 of 4. Content: ## 磬钹铙鸣\n\n磬钹铙鸣循鼙鼓韵拍奏鸣。 琥珀戍卒凭耳校音。\n[Metadata:   ]",
         "similarity": 0.19133361577987673,
         "metadata": {
           "scoreBreakdown": {
@@ -18045,9 +18026,28 @@
         "image_url": null
       },
       {
-        "chunk_id": "5693be5d-b2e9-49f2-b85b-71e32a890b28",
-        "document_id": "02ed58df-4952-4172-9435-2098dfb92ce2",
-        "content": "Document: dup-passage-19.zh.md. Chunk 3 of 4. Content: ## 磬钹铙鸣\n\n磬钹铙鸣循鼙鼓韵拍奏鸣。 琥珀戍卒凭耳校音。\n[Metadata:   ]",
+        "chunk_id": "e224e3f7-fdcb-4203-9509-c0322788f7a5",
+        "document_id": "1f343cc0-7ae7-4670-b8c0-6d379577c315",
+        "content": "Document: dup-passage-07.zh.md. Chunk 3 of 4. Content: ## 磬钹铙鸣\n\n磬钹铙鸣循鼙鼓韵拍奏鸣。 琥珀戍卒凭耳校音。\n[Metadata:   ]",
+        "similarity": 0.19133361577987673,
+        "metadata": {
+          "scoreBreakdown": {
+            "semantic": 0.2391670197248459,
+            "bm25": 0,
+            "keyword": 0,
+            "weights": {
+              "semantic": 0.8,
+              "keyword": 0.2
+            }
+          }
+        },
+        "rerankScore": 0.19133361577987673,
+        "image_url": null
+      },
+      {
+        "chunk_id": "b957693c-f96a-44c3-a0b0-26b8f44459d2",
+        "document_id": "77941d1e-d74a-4edc-9297-1980c01c9ca2",
+        "content": "Document: dup-passage-25.zh.md. Chunk 3 of 4. Content: ## 磬钹铙鸣\n\n磬钹铙鸣循鼙鼓韵拍奏鸣。 琥珀戍卒凭耳校音。\n[Metadata:   ]",
         "similarity": 0.19133361577987673,
         "metadata": {
           "scoreBreakdown": {

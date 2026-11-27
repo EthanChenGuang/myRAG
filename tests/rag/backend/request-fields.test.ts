@@ -157,7 +157,7 @@ describe('pgvector request fields (D-12, D-31, D-45)', () => {
 
   it('the pgvector backend declares both capabilities', () => {
     const { backend } = backendWith();
-    expect(backend.capabilities).toEqual({ versionScope: true, identifierFilter: true });
+    expect(backend.capabilities).toEqual({ versionScope: true, identifierFilter: true, accessFilter: true });
   });
 });
 
@@ -208,7 +208,7 @@ describe('backendForRequest (research pitfall 13)', () => {
     const routed = backendForRequest(request({ identifiersNorm: ['x1'] }));
     expect(routed.backend.id).toBe('pgvector');
     expect(routed.backend).not.toBe(external);
-    expect(routed.backend.capabilities).toEqual({ versionScope: true, identifierFilter: true });
+    expect(routed.backend.capabilities).toEqual({ versionScope: true, identifierFilter: true, accessFilter: true });
     expect(routed.reason).toBe('backend_field_unsupported');
     const scoped = backendForRequest(request({ versionScope: { from: '2024-01-01' } }));
     expect(scoped).toEqual({ backend: external });
