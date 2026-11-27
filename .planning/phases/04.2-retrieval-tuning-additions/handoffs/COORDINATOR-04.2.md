@@ -43,7 +43,7 @@ Written by plan 04.2-32 on 2026-11-27, at the phase close. One list of every ups
 ## Update 2026-11-27 (quick `261127-q42-phase42-verify-fixes`, `04.2-VERIFICATION.md` W-2 to W-6)
 
 - W-2 fixed: the images route and the Nango orphan hard delete now recompute the tenant's dirty duplicate clusters after the delete.
-- W-3 fixed: `eval/config/phase42-gates.json` labels `versions` as `ROADMAP-4.2-SC3` and `table` as `ROADMAP-4.2-SC5`; the report was re-rendered with `--reuse`, numbers unchanged.
+- W-3 fixed: `eval/config/phase42-gates.json` labels `versions` as `ROADMAP-4.2-SC3` and `table` as `ROADMAP-4.2-SC5`; the same two labels were swapped by hand in `eval/reports/phase-04.2/README.md` and `gates.json`, numbers unchanged. A `--reuse` re-render was not committed: harness runs are not in git, and a fresh fixture run on `ci/merge-train-39` gives different numbers (diversity and identifier FAIL on the later `category:scanned` slice), so re-rendering would have changed values.
 - W-4: items (a) and `04.2-12-golden-rule.md` marked done.
 - W-5: owners assigned to (j), `04.2-06-eval-tuning-overrides.md`, `04.2-02-settings-classification.md` and `04.2-21-embed-sources.md`.
 - W-6: REQUIREMENTS.md LANG-07 notes the `loadEffectiveDictionary` and layer-version implementation.
