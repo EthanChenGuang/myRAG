@@ -344,8 +344,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.match_documents_by_organization(public.vector, double precision, integer, uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.match_documents_by_organization(public.vector, double precision, integer, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.match_documents_by_organization(public.vector, float, int, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.match_documents_by_organization(public.vector, float, int, uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.match_document_chunks(public.vector, integer, double precision) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.match_document_chunks(public.vector, integer, double precision) TO service_role;
 REVOKE ALL ON FUNCTION public.match_document_chunks_by_org(uuid, public.vector, integer, double precision) FROM PUBLIC, anon, authenticated;
