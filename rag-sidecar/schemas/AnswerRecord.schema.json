@@ -663,7 +663,6 @@
           "title": "Page"
         },
         "quote": {
-          "minLength": 1,
           "title": "Quote",
           "type": "string"
         },
@@ -698,6 +697,15 @@
         "versionLabel": {
           "maxLength": 40,
           "title": "Versionlabel",
+          "type": "string"
+        },
+        "withdrawn": {
+          "title": "Withdrawn",
+          "type": "boolean"
+        },
+        "withdrawnAt": {
+          "minLength": 1,
+          "title": "Withdrawnat",
           "type": "string"
         }
       },
@@ -1063,7 +1071,8 @@
       "additionalProperties": {
         "enum": [
           "current",
-          "unavailable"
+          "unavailable",
+          "withdrawn"
         ],
         "type": "string"
       },

@@ -114,7 +114,9 @@ function pickCitationFields(source: Record<string, unknown>): Omit<StreamAnswerM
   const picked: Omit<StreamAnswerMetadata, 'ragTraceId'> = {};
   const answerId = AnswerIdSchema.safeParse(source.answerId);
   if (answerId.success) picked.answerId = answerId.data;
-  const citations = validEntries(source.citations, CitationRecordSchema);
+  const citations = validEntries(source.citations, CitationRecordSchema)?.filter(
+    (entry) => entry.quote.length > 0 || entry.withdrawn === true,
+  );
   if (citations) picked.citations = citations;
   const strategy = StrategySchema.safeParse(source.citationStrategy);
   if (strategy.success) picked.citationStrategy = strategy.data;

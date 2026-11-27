@@ -582,7 +582,6 @@
           "title": "Page"
         },
         "quote": {
-          "minLength": 1,
           "title": "Quote",
           "type": "string"
         },
@@ -617,6 +616,15 @@
         "versionLabel": {
           "maxLength": 40,
           "title": "Versionlabel",
+          "type": "string"
+        },
+        "withdrawn": {
+          "title": "Withdrawn",
+          "type": "boolean"
+        },
+        "withdrawnAt": {
+          "minLength": 1,
+          "title": "Withdrawnat",
           "type": "string"
         }
       },
@@ -2965,6 +2973,11 @@
       },
       "title": "Stage Status",
       "type": "object"
+    },
+    "stale_index_drop": {
+      "minimum": 0,
+      "title": "Stale Index Drop",
+      "type": "integer"
     },
     "topk_redundancy": {
       "maximum": 1,
