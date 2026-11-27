@@ -159,7 +159,7 @@ def write_arm(root: Path, name: str, items: list[dict], traces: list[dict] | Non
     return directory
 
 
-def tests_json(root: Path, failed: set[str] = frozenset()) -> Path:
+def vitest_json(root: Path, failed: set[str] = frozenset()) -> Path:
     path = root / "vitest.json"
     results = [
         {"name": f"/checkout/{name}", "status": "failed" if name in failed else "passed", "assertionResults": [{"status": "passed"}]}
@@ -228,7 +228,7 @@ def run_tool(tmp_path: Path, runs: list[Path], *extra: str, tests: Path | None =
     out = tmp_path / "report"
     decision = tmp_path / "decision.json"
     argv = ["query-additions", "--runs", *map(str, runs), "--out", str(out), "--decision", str(decision)]
-    argv += ["--tests", str(tests if tests is not None else tests_json(tmp_path))]
+    argv += ["--tests", str(tests if tests is not None else vitest_json(tmp_path))]
     argv += ["--recorded-at", "2026-11-27T00:00:00Z", *extra]
     return compare_main(argv), out, decision
 
@@ -382,7 +382,7 @@ def test_the_record_carries_the_report_hash_and_every_d31_letter(tmp_path):
 
 def test_missing_evidence_fails_its_letters(tmp_path):
     runs = [path for path in arms(tmp_path / "runs") if not path.name.startswith("q62-whatsapp")]
-    tests = tests_json(tmp_path, failed={"tests/rag/lang/detect-cases.test.ts"})
+    tests = vitest_json(tmp_path, failed={"tests/rag/lang/detect-cases.test.ts"})
     _, _, decision = run_tool(tmp_path, runs, tests=tests)
     checks = {check.letter: check for check in record(decision).d31_checklist}
     assert checks["d"].passed is False and "detect-cases.test.ts" in checks["d"].evidence
