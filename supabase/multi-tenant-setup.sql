@@ -1820,10 +1820,9 @@ CREATE POLICY "Users can view chats" ON chats
     OR
     -- Organizational chats
     (user_id = auth.uid() AND organization_id IS NOT NULL AND is_org_member(organization_id, auth.uid()))
-    OR
-    -- Shared chats
-    (shared = true)
   );
+-- Shared chats are read only by the service-role share page and route (by share_id), never through client RLS (NF-1).
+DROP POLICY IF EXISTS "Allow public access to shared chats" ON chats;
 
 DROP POLICY IF EXISTS "Users can create chats" ON chats;
 CREATE POLICY "Users can create chats" ON chats
