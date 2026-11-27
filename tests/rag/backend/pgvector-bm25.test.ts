@@ -92,6 +92,7 @@ function baseRequest(over: Partial<BackendSearchRequest> = {}): BackendSearchReq
     denseVector: [0.1, 0.2, 0.3],
     lexicalTokens: ['w1', 'w2'],
     lexicalLanguages: null,
+    access: { mode: 'off' },
     filters: { currentOnly: true },
     denseLimit: 5,
     lexicalLimit: 7,
