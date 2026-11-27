@@ -6,10 +6,11 @@ torch and transformers come from the optional bge-m3 extra and are imported only
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import logging
 import math
 import threading
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -25,8 +26,17 @@ BGE_M3_DIMS = 1024
 # Padded tokens per forward pass; one 8192-token input still runs alone.
 BATCH_TOKEN_BUDGET = 16_384
 REVISION_FILE = "REVISION"
-BGE_M3_FILES: tuple[str, ...] = ()
-BGE_M3_SHA256: dict[str, str] = {}
+# The files the image bakes at the pinned revision; sentencepiece is not needed because tokenizer.json is present.
+# Hashes: LFS sha256 from the Hugging Face API for the large files, sha256 of the downloaded bytes (checked against the
+# git blob ids of the revision) for the small ones.
+BGE_M3_SHA256: dict[str, str] = {
+    "config.json": "26159e7ad065073448460117eb24b7a4572f6f4e78eadff65dc0a11c052449fa",
+    "tokenizer_config.json": "a62b2b6784f990259fddef5f16388693a8043be4f69179e6a5257eeb3f9abac4",
+    "special_tokens_map.json": "8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835",
+    "tokenizer.json": "21106b6d7dab2952c1d496fb21d5dc9db75c28ed361a05f5020bbba27810dd08",
+    "pytorch_model.bin": "b5e0ce3470abf5ef3831aa1bd5553b486803e83251590ab7ff35a117cf6aad38",
+}
+BGE_M3_FILES: tuple[str, ...] = tuple(BGE_M3_SHA256)
 
 
 class EmbedInputTooLong(ValueError):
@@ -165,12 +175,56 @@ class LazyBgeM3Embedder:
         return self._resolve().embed(texts)
 
 
-def load_from_baked_dir(path: Path, revision: str = BGE_M3_REVISION, *, allow_download: bool = False, **_kw: Any) -> BgeM3Embedder:
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def check_baked_dir(path: Path, revision: str, expected_sha256: Mapping[str, str]) -> None:
+    """Raises EmbedderUnavailable unless `path` holds exactly the pinned revision's files with their pinned hashes."""
+    if revision != BGE_M3_REVISION:
+        raise EmbedderUnavailable("revision_mismatch")
+    if not path.is_dir():
+        raise EmbedderUnavailable("model_dir_missing")
+    marker = path / REVISION_FILE
+    recorded = marker.read_text(encoding="utf-8").strip() if marker.is_file() else ""
+    if recorded != BGE_M3_REVISION:
+        raise EmbedderUnavailable("revision_mismatch")
+    for name, expected in expected_sha256.items():
+        file = path / name
+        if not file.is_file():
+            raise EmbedderUnavailable("file_missing")
+        if file_sha256(file) != expected:
+            raise EmbedderUnavailable("file_hash_mismatch")
+
+
+def load_from_baked_dir(
+    path: Path,
+    revision: str = BGE_M3_REVISION,
+    *,
+    allow_download: bool = False,
+    expected_sha256: Mapping[str, str] | None = None,
+    auto_tokenizer: Any = None,
+    auto_model: Any = None,
+) -> BgeM3Embedder:
+    """Loads BGE-M3 from the directory baked at image build, on CPU in eval mode. Never downloads: the weights are a
+    pickle file, so only the pinned, hash-checked files are ever loaded."""
     if allow_download:
         raise EmbedderUnavailable("download_refused")
-    if not Path(path).is_dir():
-        raise EmbedderUnavailable("model_dir_missing")
-    raise EmbedderUnavailable("not_implemented")
+    directory = Path(path)
+    check_baked_dir(directory, revision, expected_sha256 if expected_sha256 is not None else BGE_M3_SHA256)
+    if auto_tokenizer is None or auto_model is None:
+        from transformers import AutoModel, AutoTokenizer
+
+        auto_tokenizer = auto_tokenizer or AutoTokenizer
+        auto_model = auto_model or AutoModel
+    tokenizer = auto_tokenizer.from_pretrained(str(directory), local_files_only=True)
+    model = auto_model.from_pretrained(str(directory), local_files_only=True)
+    model.eval()
+    return BgeM3Embedder(model, tokenizer, revision=BGE_M3_REVISION, return_tensors="pt")
 
 
 def resolve_embedder(settings: SidecarSettings) -> Embedder | None:
