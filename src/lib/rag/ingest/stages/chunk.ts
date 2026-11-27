@@ -1,6 +1,7 @@
 import { TENANT_LINE_DEFAULT_DEADLINE_MS } from '../../patterns/tenant-line-pattern';
 import { scopeKey } from '../../tenant/scope';
-import { ChunkerUnavailableError, chunkDocument, type ChunkerConfig } from '../chunkers';
+import { ChunkerUnavailableError, chunkDocument, type ChunkDocumentOptions, type ChunkerConfig } from '../chunkers';
+import { sectionOutlineInputFor } from '../outline';
 import {
   applyPrepareOutcome,
   loadPageLines,
@@ -89,16 +90,21 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
     chunker = prepared.chunker;
   }
 
+  const options: ChunkDocumentOptions = { languageAwareIngest: ctx.config?.languageAwareIngest, tableHeaderRepeat: ctx.config?.tableHeaderRepeat };
+  const sectionOutline = sectionOutlineInputFor(ctx.config?.sectionOutlinesPath, identity.tenantKey);
+  if (sectionOutline !== null) options.sectionOutline = sectionOutline;
   let result;
   try {
     result = chunkDocument(chunker, {
       markdown: ctx.work.parseText ?? '',
       chunks: ctx.work.parseChunks ?? null,
-    }, { languageAwareIngest: ctx.config?.languageAwareIngest, tableHeaderRepeat: ctx.config?.tableHeaderRepeat });
+    }, options);
   } catch (error) {
     if (error instanceof ChunkerUnavailableError) return { kind: 'fail', reason: 'chunker_unavailable' };
     throw error;
   }
+  if (result.sectionOutline) ctx.state.sectionOutline = { outlineId: result.sectionOutline.outline_id, version: result.sectionOutline.version };
+  else delete ctx.state.sectionOutline;
 
   const { chunks: drafts, warnings } = result;
   for (const warning of warnings) {

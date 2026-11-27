@@ -4,6 +4,7 @@ import { chunkLexicalText } from '../lexical/chunk-text';
 import { lexicalStampMetadata, type IngestLexical } from './lexical-options';
 import { withEffectiveHeader, type ChunkerConfig } from './chunkers';
 import { chunkParentChild } from './chunkers/parent-child';
+import { sectionOutlineStamp, type SectionOutlineInput, type SectionOutlineReport } from './outline';
 import { contentHash } from './hash';
 import { effectiveTableHeader } from './routing/effective-settings';
 import { buildEmbeddingText, EMBEDDING_TEXT_VERSION } from './text/embedding-text';
@@ -30,6 +31,8 @@ export interface ProfileDocument {
   tableHeaderRepeat?: 'profile' | 'always';
   /** The document's lexical options and stamps (plan 04.2-19); absent: default options and LEXICAL_VERSION. */
   lexical?: IngestLexical;
+  /** RAG_SECTION_OUTLINES: the loaded outlines and the document's tenant key; absent or null is today's cut. */
+  sectionOutline?: SectionOutlineInput | null;
 }
 
 export interface BuiltProfileChunks {
@@ -39,6 +42,8 @@ export interface BuiltProfileChunks {
   children: ProfileChildWrite[];
   embeddingTexts: string[];
   warnings: string[];
+  /** Set only when a section outline cut the Markdown. */
+  sectionOutline?: SectionOutlineReport;
 }
 
 /** The live non-legacy profiles (building, ready or active) grouped by the doc type they belong to. Retired profiles and `legacy` are left out. */
@@ -65,7 +70,9 @@ export function buildProfileChunks(document: ProfileDocument, parseMarkdown: str
     withEffectiveHeader(document.chunker, document.tableHeaderRepeat),
     blockSplitterForIngest(document.languageAwareIngest),
     { carryTableHeader: effectiveTableHeader(document.tableHeaderRepeat, document.chunker).carryTableHeader },
+    document.sectionOutline ?? null,
   );
+  const outlineStamp = cut.sectionOutline ? { section_outline: sectionOutlineStamp(cut.sectionOutline) } : null;
   const parents: ProfileParentWrite[] = cut.parents.map((parent) => ({
     parent_index: parent.parent_index,
     section_path: parent.section_path,
@@ -100,10 +107,13 @@ export function buildProfileChunks(document: ProfileDocument, parseMarkdown: str
         chunk_position: index + 1,
         total_chunks: cut.children.length,
         ...stamps,
+        ...outlineStamp,
       },
     };
   });
-  return { parents, children, embeddingTexts, warnings: cut.warnings };
+  const built: BuiltProfileChunks = { parents, children, embeddingTexts, warnings: cut.warnings };
+  if (cut.sectionOutline) built.sectionOutline = cut.sectionOutline;
+  return built;
 }
 
 /**

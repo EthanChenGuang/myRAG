@@ -45,6 +45,7 @@ export interface IngestEnvInput {
   RAG_EFFECTIVE_DATE_LLM_EXTRACT?: string;
   RAG_DOMAIN_EMBEDDINGS?: string;
   RAG_SECTION_RULES?: string;
+  RAG_SECTION_OUTLINES?: string;
   RAG_PAGE_BOILERPLATE?: string;
   RAG_DOC_ATTRIBUTES?: string;
   RAG_ATTRIBUTE_HEADER?: string;
@@ -88,6 +89,8 @@ export interface IngestConfig {
   pageBoilerplate: PageBoilerplateMode;
   docAttributes: boolean;
   attributeHeader: boolean;
+  /** RAG_SECTION_OUTLINES: path of the outline file, read by the unified chunk stage and by rag:rechunk; empty is off. */
+  sectionOutlinesPath: string;
   warnings: string[];
 }
 
@@ -124,6 +127,7 @@ const ENV_NAMES = [
   'RAG_EFFECTIVE_DATE_LLM_EXTRACT',
   'RAG_DOMAIN_EMBEDDINGS',
   'RAG_SECTION_RULES',
+  'RAG_SECTION_OUTLINES',
   'RAG_PAGE_BOILERPLATE',
   'RAG_DOC_ATTRIBUTES',
   'RAG_ATTRIBUTE_HEADER',
@@ -301,6 +305,7 @@ export function loadIngestConfig(env: IngestEnvInput): IngestConfig {
     effectiveDateLlmExtract: parseFlag('RAG_EFFECTIVE_DATE_LLM_EXTRACT', env.RAG_EFFECTIVE_DATE_LLM_EXTRACT, warnings),
     domainEmbeddings: parseDomainEmbeddings(env.RAG_DOMAIN_EMBEDDINGS, embeddingProfiles, warnings),
     ...parseTemplatedCollection(env, pipeline, warnings),
+    sectionOutlinesPath: (env.RAG_SECTION_OUTLINES ?? '').trim(),
     warnings,
   };
   memo.set(snapshot, config);

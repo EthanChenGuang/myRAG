@@ -53,6 +53,7 @@ const DEFAULTS: IngestConfig = {
   pageBoilerplate: 'off',
   docAttributes: false,
   attributeHeader: false,
+  sectionOutlinesPath: '',
   warnings: [],
 };
 

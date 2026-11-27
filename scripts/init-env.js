@@ -718,6 +718,8 @@ RAG_EFFECTIVE_DATE_LLM_EXTRACT=false
 # Templated collections (Phase 3.3)
 # Split documents at the headings of the workspace's section rule set (needs the unified ingest pipeline): off | on
 RAG_SECTION_RULES=off
+# Path to a JSON outline file whose numbered section markers become headings before chunking; empty is off
+RAG_SECTION_OUTLINES=
 # Remove repeated page lines before chunking (needs the unified ingest pipeline): off | detect | rules | both
 RAG_PAGE_BOILERPLATE=off
 # Store schema-checked attributes with documents and chunks (needs the unified ingest pipeline): true | false

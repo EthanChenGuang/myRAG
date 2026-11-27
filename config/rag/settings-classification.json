@@ -713,6 +713,11 @@
       "side": "query"
     },
     {
+      "name": "RAG_SECTION_OUTLINES",
+      "side": "ingestion",
+      "mechanism": "rechunk"
+    },
+    {
       "name": "RAG_SECTION_RULES",
       "side": "ingestion",
       "mechanism": "rechunk"

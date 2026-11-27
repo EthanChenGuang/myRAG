@@ -1355,6 +1355,11 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_SECTION_OUTLINES",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_PAGE_BOILERPLATE",
       "status": "managed",
       "knownGaps": []

@@ -11,6 +11,7 @@ import { currentIngestConfig } from '../current-config';
 import { getIngestDeps } from '../deps';
 import { resolveEmbeddingTargets, type EmbeddingTarget } from '../embedding-targets';
 import { ObjectStoreError } from '../object-store';
+import { sectionOutlineInputFor } from '../outline';
 import { PREPARE_FAILED, applyPrepareOutcome, loadPageLines, needsPageLines, prepareChunkInput, type ReviewCode, type SectionRulesReport } from '../prepare';
 import { buildProfileChunks, writeProfileChunks, type BuiltProfileChunks, type ChunkingProfileRow } from '../profile-chunks';
 import { getProcessingProfile, profileFor, type DocType, type ProcessingProfile } from '../profiles/load';
@@ -439,8 +440,16 @@ async function prepare(doc: RechunkDocument, profile: ChunkingProfileRow, signal
   let built: BuiltProfileChunks;
   try {
     const templateHeader = templateHeaderFor(processing.embedding_text_template, doc.templateRow);
+    const config = currentIngestConfig();
     built = buildProfileChunks(
-      { filename: doc.filename, chunker: cleaned.chunker, templateHeader, languageAwareIngest: currentIngestConfig().languageAwareIngest, tableHeaderRepeat: currentIngestConfig().tableHeaderRepeat },
+      {
+        filename: doc.filename,
+        chunker: cleaned.chunker,
+        templateHeader,
+        languageAwareIngest: config.languageAwareIngest,
+        tableHeaderRepeat: config.tableHeaderRepeat,
+        sectionOutline: sectionOutlineInputFor(config.sectionOutlinesPath, doc.tenantKey),
+      },
       cleaned.markdown,
       profile,
     );

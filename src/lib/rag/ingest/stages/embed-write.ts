@@ -3,6 +3,7 @@ import { EmbeddingProfileMismatch } from '../../embeddings/mrl';
 import { ProfileUnavailableError, type EmbeddingProfile } from '../../embeddings/active-profile';
 import { canonicalModelId, getEmbeddingProviderFor } from '../../embeddings/registry';
 import { resolveEmbeddingTargets, type EmbeddingTarget } from '../embedding-targets';
+import { sectionOutlineInputFor } from '../outline';
 import { buildProfileChunks, liveProfilesByDocType, writeProfileChunks } from '../profile-chunks';
 import { buildEmbeddingText, EMBEDDING_TEXT_VERSION, templateHeaderFor } from '../text/embedding-text';
 import { effectiveEmbeddingTextVersion } from '../text/table-rows';
@@ -188,6 +189,7 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
     throw new IngestStageError('embed', 'chunking_profiles_unavailable');
   }
   const profiles = liveProfilesByDocType(rows).get(identity.docType) ?? [];
+  const sectionOutline = profiles.length > 0 ? sectionOutlineInputFor(ctx.config?.sectionOutlinesPath, identity.tenantKey) : null;
 
   for (const profile of profiles) {
     ctx.signal.throwIfAborted();
@@ -199,6 +201,7 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
         languageAwareIngest: ctx.config?.languageAwareIngest,
         tableHeaderRepeat: ctx.config?.tableHeaderRepeat,
         lexical: await ingestLexical(ctx),
+        sectionOutline,
       },
       ctx.work.parseText ?? '',
       profile,

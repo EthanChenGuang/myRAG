@@ -162,6 +162,8 @@ export interface IngestState {
   embedProgress?: EmbedProgress;
   /** D-51: the Phase 3.2 span facts (codes, counts and one hash, never text); absent while every switch that produces one is off. */
   traceFacts?: IngestTraceFacts;
+  /** RAG_SECTION_OUTLINES: the outline that cut this version's chunks; absent when none applied. */
+  sectionOutline?: { outlineId: string; version: number };
 }
 
 /**

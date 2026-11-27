@@ -6,6 +6,7 @@ import { loadIngestConfig } from './config';
 import { getIngestDeps } from './deps';
 import { getJobForDocument } from './ledger';
 import { ObjectStoreError } from './object-store';
+import { OUTLINE_ID_PATTERN } from './outline/schema';
 import { getProcessingProfile, profileFor, type DocType, type ProcessingProfile } from './profiles/load';
 import { INGEST_STAGES, REGISTERED_STAGES, nextStageAfter, rehydrateFromStore, runIngestStages } from './runner';
 import { createIngestTrace, finishIngestTrace } from './trace';
@@ -306,6 +307,10 @@ export function ingestStateFromRecord(raw: Record<string, unknown>): IngestState
   if (hiddenText) state.hiddenText = hiddenText;
   const chunkPrep = chunkPrepOf(raw.chunkPrep);
   if (chunkPrep) state.chunkPrep = chunkPrep;
+  const outline = objectOf<{ outlineId?: unknown; version?: unknown }>(raw.sectionOutline);
+  if (outline && typeof outline.outlineId === 'string' && OUTLINE_ID_PATTERN.test(outline.outlineId) && isPositiveInt(outline.version)) {
+    state.sectionOutline = { outlineId: outline.outlineId, version: outline.version };
+  }
   if (typeof raw.uploaderId === 'string' && UUID.test(raw.uploaderId)) state.uploaderId = raw.uploaderId.toLowerCase();
   const embedProgress = embedProgressOf(raw.embedProgress);
   if (embedProgress) state.embedProgress = embedProgress;

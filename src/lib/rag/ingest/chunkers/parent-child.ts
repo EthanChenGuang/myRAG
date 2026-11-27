@@ -1,4 +1,5 @@
 import { legacyBlockSplitter, type BlockSplitter } from '@/lib/rag/lang/sentences';
+import { outlineMarkdown, type SectionOutlineInput, type SectionOutlineReport } from '../outline';
 import { countTokens } from '../text/tokens';
 import type { ChunkDraft } from '../types';
 import { CHUNKERS, ChunkerUnavailableError, type ChunkerConfig } from './index';
@@ -34,6 +35,8 @@ export interface ParentChildResult {
   parents: ParentDraft[];
   children: ChildDraft[];
   warnings: string[];
+  /** RAG_SECTION_OUTLINES: set only when an outline cut the Markdown. */
+  sectionOutline?: SectionOutlineReport;
 }
 
 function parentCap(profile: ParentChildProfile): number {
@@ -68,6 +71,7 @@ function childrenOf(parent: ParentDraft, options: MarkdownChunkOptions, warnings
  * most childTokens, measured on the embedding text, that never split a table row and repeat a table header when a table is cut. Children carry
  * the section path of their parent. The chunker kind comes from the processing profile data (a ChunkerConfig); no document type is compared here.
  * `sentences` picks the sentence splitter of each over-long block for parents and children alike (D-15); absent, the legacy shared set.
+ * A section outline that applies normalizes the Markdown first, so structure parents are whole outline sections.
  */
 export function chunkParentChild(
   markdown: string,
@@ -75,7 +79,12 @@ export function chunkParentChild(
   chunker: ChunkerConfig,
   sentences: BlockSplitter = legacyBlockSplitter,
   tables: ParentChildTableOptions = {},
+  sectionOutline: SectionOutlineInput | null = null,
 ): ParentChildResult {
+  const outlined = outlineMarkdown(markdown, chunker.kind, sectionOutline);
+  markdown = outlined.markdown;
+  const withOutline = (result: ParentChildResult): ParentChildResult =>
+    outlined.report === null ? result : { ...result, sectionOutline: outlined.report };
   const carry: TableHeaderCarry | null = tables.carryTableHeader === true ? carryTableHeaders(markdown) : null;
   if (carry !== null) markdown = carry.markdown;
   const mark = <T extends ChunkDraft>(drafts: T[]): T[] => (carry === null ? drafts : markCarriedChunks(drafts, carry));
@@ -100,7 +109,7 @@ export function chunkParentChild(
     }, sentences);
     for (const warning of result.warnings) warnings.add(warning);
     const children = result.captionOnly === true ? [] : mark(result.chunks.map((draft): ChildDraft => ({ ...draft, section_path: [...draft.section_path], parent_index: null })));
-    return { parents: [], children, warnings: [...warnings] };
+    return withOutline({ parents: [], children, warnings: [...warnings] });
   }
 
   const cap = parentCap(profile);
@@ -130,5 +139,5 @@ export function chunkParentChild(
       children.push({ ...draft, section_path: [...parent.section_path], parent_index: parent.parent_index });
     }
   }
-  return { parents, children: mark(children), warnings: [...warnings] };
+  return withOutline({ parents, children: mark(children), warnings: [...warnings] });
 }

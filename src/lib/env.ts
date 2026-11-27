@@ -347,6 +347,7 @@ class EnvironmentConfig {
       RAG_EFFECTIVE_DATES: process.env.RAG_EFFECTIVE_DATES || 'false',
       RAG_EFFECTIVE_DATE_LLM_EXTRACT: process.env.RAG_EFFECTIVE_DATE_LLM_EXTRACT || 'false',
       RAG_SECTION_RULES: process.env.RAG_SECTION_RULES || 'off',
+      RAG_SECTION_OUTLINES: process.env.RAG_SECTION_OUTLINES || '',
       RAG_PAGE_BOILERPLATE: process.env.RAG_PAGE_BOILERPLATE || 'off',
       RAG_DOC_ATTRIBUTES: process.env.RAG_DOC_ATTRIBUTES || 'false',
       RAG_ATTRIBUTE_HEADER: process.env.RAG_ATTRIBUTE_HEADER || 'false',

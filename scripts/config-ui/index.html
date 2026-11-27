@@ -10109,6 +10109,17 @@
                                                             <code class="font-mono text-xs break-all" translate="no">RAG_ATTRIBUTE_HEADER</code>
                                                         </div>
                                                     </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_SECTION_OUTLINES">
+                                                            <span class="label-text" data-rag-i18n="RAG_SECTION_OUTLINES.label">Section outline file</span>
+                                                        </label>
+                                                        <input type="text" id="RAG_SECTION_OUTLINES" name="RAG_SECTION_OUTLINES" autocomplete="off" spellcheck="false" translate="no" aria-describedby="rag-section-outlines-help"
+                                                            class="input input-bordered input-sm w-full">
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-section-outlines-help"><span data-rag-i18n="RAG_SECTION_OUTLINES.help">Path to a JSON outline file. Numbered section markers it lists become headings before a document is split into chunks, in the unified ingest pipeline and in rag:rechunk. Empty turns it off. A file that cannot be read or is not valid is ignored.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_SECTION_OUTLINES</code>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                                 <div data-rag-settings-group="security">
                                                     <div class="form-control mb-4">
