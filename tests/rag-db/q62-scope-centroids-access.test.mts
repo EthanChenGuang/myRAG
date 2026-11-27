@@ -172,14 +172,28 @@ for (const mode of ['single-tenant', 'multi-tenant'] as DeploymentMode[]) {
       assert.equal(await centroidCount(db, tenant), 0);
     });
 
-    test('applying every migration again keeps enforced centroids and the restricted exclusion', async () => {
-      await setEnforced(db, true);
+    test('applying the migrations while enforced clears centroids built earlier; a rebuild excludes the restricted document', async () => {
       await seedOpen();
       await seedRestricted();
+      await rebuildAndList(db, tenant);
+      await db.exec('ALTER TABLE public.rag_access_group_settings DISABLE TRIGGER USER');
+      try {
+        await setEnforced(db, true);
+      } finally {
+        await db.exec('ALTER TABLE public.rag_access_group_settings ENABLE TRIGGER USER');
+      }
+      assert.ok((await centroidCount(db, tenant)) > 0, 'precondition: stale centroids built while access was off');
+      await applyMigrations(db, mode);
+      assert.equal(await centroidCount(db, tenant), 0);
+      const rows = await rebuildAndList(db, tenant);
+      assert.equal(rows.find((row) => row.group_key === 'tenant/en')?.member_count, 2);
+    });
+
+    test('applying the migrations while not enforced keeps the centroids', async () => {
+      await seedOpen();
       const built = await rebuildAndList(db, tenant);
       await applyMigrations(db, mode);
       assert.equal(await centroidCount(db, tenant), built.length);
-      assert.deepEqual(await rebuildAndList(db, tenant), built);
     });
 
     test('changing a document access label clears the tenant centroids', async () => {

@@ -207,6 +207,16 @@ CREATE TRIGGER rag_scope_centroids_access_settings_delete
   REFERENCING OLD TABLE AS old_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.rag_scope_centroids_on_access_settings_change();
 
+-- Rows built before this file may include restricted documents: while access is enforced at apply time they are cleared (missing rows
+-- mean unsure until the next rebuild).
+DO $clear$
+BEGIN
+  IF public.rag_access_enforced() THEN
+    PERFORM public.rag_scope_centroids_invalidate(ARRAY(SELECT DISTINCT c.tenant_key FROM public.rag_scope_centroids c));
+  END IF;
+END
+$clear$;
+
 REVOKE ALL ON FUNCTION public.rag_scope_centroids_rebuild(text, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_documents_update() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_chunks_update() FROM PUBLIC, anon, authenticated;
