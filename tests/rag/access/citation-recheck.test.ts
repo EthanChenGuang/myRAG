@@ -206,7 +206,7 @@ describe('chat route citation recheck (D-26)', () => {
   beforeAll(async () => {
     fixture = await startRouteFixture({ deploymentMode: 'single-tenant' });
     const models = JSON.parse(env.NEXT_PUBLIC_OPENROUTER_MODELS) as Array<{ id: string }>;
-    const id = models.map((entry) => entry.id).find((candidate) => !/gpt-4|o1|chatgpt/.test(candidate) && !candidate.includes('claude'));
+    const id = models.map((entry) => entry.id).find((candidate) => !/gpt-4|o1|chatgpt/.test(candidate) && !candidate.includes('claude') && candidate !== 'auto');
     if (!id) throw new Error('no non-GPT fixture model configured');
     model = id;
   });
