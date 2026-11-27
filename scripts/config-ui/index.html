@@ -8110,12 +8110,56 @@
                                             </div>
                                             <div id="rag-answer-rules-events-actions" class="min-w-0"></div>
                                         </section>
-                                        <section aria-labelledby="rag-answer-rules-group-calc" data-answer-rules-group="calc" hidden>
+                                        <section aria-labelledby="rag-answer-rules-group-calc" data-answer-rules-group="calc">
                                             <h4 id="rag-answer-rules-group-calc" class="text-base font-semibold mt-6 mb-2 text-balance" data-rag-i18n="group.calc">Calculations</h4>
+                                            <div class="form-control mb-2">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_CALC_TOOL" name="RAG_CALC_TOOL" class="checkbox checkbox-primary" aria-describedby="RAG_CALC_TOOL-help">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_CALC_TOOL">Offer the calculation tool for questions with numbers or dates</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span id="RAG_CALC_TOOL-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_CALC_TOOL.help">The model passes the values and the rule; fixed code does the arithmetic. Models without tool support return the same steps in a block that is removed from the answer.</span> <code translate="no">RAG_CALC_TOOL</code></span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control mb-2">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_CALC_CHECK" name="RAG_CALC_CHECK" class="checkbox checkbox-primary" aria-describedby="RAG_CALC_CHECK-help">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_CALC_CHECK">Recompute every calculated number before the answer ends</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span id="RAG_CALC_CHECK-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_CALC_CHECK.help">A different result adds a correction under the answer. A value that cannot be found in its source marks the answer “Calculation not verified”.</span> <code translate="no">RAG_CALC_CHECK</code></span>
+                                                </label>
+                                            </div>
+                                            <p id="rag-answer-rules-calc-limits" class="text-xs text-base-content/70 mt-1 max-w-prose break-words tabular-nums" data-answer-rules-readonly="calc.limits" aria-live="polite"></p>
                                             <div id="rag-answer-rules-calc" class="min-w-0"></div>
                                         </section>
-                                        <section aria-labelledby="rag-answer-rules-group-budget" data-answer-rules-group="budget" hidden>
+                                        <section aria-labelledby="rag-answer-rules-group-budget" data-answer-rules-group="budget">
                                             <h4 id="rag-answer-rules-group-budget" class="text-base font-semibold mt-6 mb-2 text-balance" data-rag-i18n="group.budget">Prompt size</h4>
+                                            <div class="form-control mb-2">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_PROMPT_BUDGET" name="RAG_PROMPT_BUDGET" class="checkbox checkbox-primary" aria-describedby="RAG_PROMPT_BUDGET-help">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_PROMPT_BUDGET">Fit every request into the model’s context window</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span id="RAG_PROMPT_BUDGET-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_PROMPT_BUDGET.help">Older conversation turns are dropped first, then the lowest-ranked documents. The question is always kept and always last.</span> <code translate="no">RAG_PROMPT_BUDGET</code></span>
+                                                </label>
+                                            </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div class="form-control min-w-0">
+                                                    <label class="label" for="RAG_CONTEXT_OVERFLOW">
+                                                        <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_CONTEXT_OVERFLOW">If the documents do not fit</span>
+                                                    </label>
+                                                    <select id="RAG_CONTEXT_OVERFLOW" name="RAG_CONTEXT_OVERFLOW" class="select select-bordered w-full" aria-describedby="RAG_CONTEXT_OVERFLOW-help">
+                                                        <option value="truncate" data-rag-i18n="overflow.truncate">Keep the highest-ranked documents</option>
+                                                        <option value="refine" data-rag-i18n="overflow.refine">Answer over several calls</option>
+                                                    </select>
+                                                    <label class="label">
+                                                        <span id="RAG_CONTEXT_OVERFLOW-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_CONTEXT_OVERFLOW.help">Read only while the prompt budget is on. Several calls apply to the web chat only.</span> <code translate="no">RAG_CONTEXT_OVERFLOW</code></span>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <p id="rag-answer-rules-budget-unknown" class="text-xs text-base-content/70 mt-1 max-w-prose break-words tabular-nums" data-answer-rules-readonly="budget.unknownModels" aria-live="polite"></p>
+                                            <p id="rag-answer-rules-budget-estimate" class="text-xs text-base-content/70 mt-1 max-w-prose break-words" data-answer-rules-readonly="budget.estimate" aria-live="polite"></p>
                                             <div id="rag-answer-rules-budget" class="min-w-0"></div>
                                         </section>
                                         <script>

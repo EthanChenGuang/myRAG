@@ -92,6 +92,14 @@ const PHASE52_SWITCH_VALUES: Readonly<Record<string, readonly string[] | null>> 
 };
 const MAX_OUTPUT_TOKENS_RE = /^(off|auto|[1-9]\d*)$/;
 
+/** The four Phase 5.2.1 switches (D-88): calculation tool and check, prompt budget and the overflow strategy. */
+const PHASE521_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
+  RAG_CALC_TOOL: BOOLEAN_VALUES,
+  RAG_CALC_CHECK: BOOLEAN_VALUES,
+  RAG_PROMPT_BUDGET: BOOLEAN_VALUES,
+  RAG_CONTEXT_OVERFLOW: ['truncate', 'refine'],
+};
+
 /** The Phase 5 switch a Phase 5.2 run config sets: RAG_CITATIONS=true asks the eval run for citations (D-54). */
 const PHASE5_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
   RAG_CITATIONS: BOOLEAN_VALUES,
@@ -147,6 +155,7 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   ...Object.keys(PHASE6_SWITCH_VALUES),
   ...Object.keys(PHASE33_SWITCH_VALUES),
   ...Object.keys(PHASE52_SWITCH_VALUES),
+  ...Object.keys(PHASE521_SWITCH_VALUES),
   ...Object.keys(PHASE5_SWITCH_VALUES),
 ];
 
@@ -205,10 +214,11 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
     ...PHASE6_SWITCH_VALUES,
     ...PHASE33_SWITCH_VALUES,
     ...PHASE52_SWITCH_VALUES,
+    ...PHASE521_SWITCH_VALUES,
     ...PHASE5_SWITCH_VALUES,
   })) {
     if (!allowed) continue;
-    // A malformed SEC, Phase 6, Phase 3.3 or Phase 5.2 value would silently fall back to off in the app; the run config fails instead (the value is never echoed).
+    // A malformed SEC, Phase 6, Phase 3.3, Phase 5.2 or Phase 5.2.1 value would silently fall back to off in the app; the run config fails instead (the value is never echoed).
     if (env[name] !== undefined && !allowed.includes(env[name])) {
       throw new RunConfigError(`[Eval Harness] run-config ${source} ${name} must be one of ${allowed.join(', ')}`);
     }

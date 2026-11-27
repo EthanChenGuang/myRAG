@@ -572,6 +572,14 @@ RAG_UPLOADER_ALERT_THRESHOLD=0
 RAG_UPLOADER_ALERT_WINDOW_HOURS=24
 # Hold uploads of an alerted uploader: off | manual | auto
 RAG_UPLOADER_HOLD=off
+# Calculator tool for arithmetic over document numbers
+RAG_CALC_TOOL=false
+# Recompute arithmetic written in answers and mark results that do not match
+RAG_CALC_CHECK=false
+# Fit the prompt to the model's context window before sending it
+RAG_PROMPT_BUDGET=false
+# When documents do not fit the window: truncate | refine (refine needs RAG_PROMPT_BUDGET)
+RAG_CONTEXT_OVERFLOW=truncate
 
 # -----------------------------
 # QUERY LAYER
