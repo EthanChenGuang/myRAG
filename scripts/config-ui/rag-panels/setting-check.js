@@ -1242,10 +1242,626 @@ function settingCheckCreateGuard(deps) {
   return { beforeSave, required, saved, saveFailed, isOpen: () => run !== null };
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// The Setting checks panel (UI-SPEC 6.4, 6.12): mode summary, Last check (read-only), Evaluation runs and Settings. Deployment-wide.
+// Names, codes, ids and times only: never a setting value, an override reason or a refusal cell key.
+
+const SETTING_CHECKS_TABS = ['last', 'runs', 'settings'];
+const SETTING_CHECKS_LATEST_API = '/api/config/rag-gate/check/latest';
+const SETTING_CHECKS_RUNS_API = '/api/rag/admin/eval-run-requests';
+const SETTING_CHECKS_PAGE_SIZE = 20;
+const SETTING_CHECKS_DRAIN_COMMAND = 'python -m rag_eval.tenant_nightly --drain';
+const SETTING_CHECKS_RUN_REASONS = ['backfill_completed', 'reembed_completed', 'manual'];
+const SETTING_CHECKS_SAVED_AS = ['pass', 'override', 'warn', 'skipped', 'not_saved'];
+
+function settingChecksHas(obj, key) {
+  return Boolean(obj) && Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function settingChecksGateValue(value) {
+  const raw = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+  return raw === 'warn' || raw === 'enforce' ? raw : 'off';
+}
+
+function settingChecksTrue(value) {
+  return String(value === undefined || value === null ? '' : value).trim().toLowerCase() === 'true';
+}
+
+/** A date and time for a check or a request ("25 Nov 2026, 14:02"), or null. */
+function settingChecksDateTime(value, locale) {
+  if (typeof value !== 'string' || value === '') return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const lang = settingCheckGates().gatesUiLocale(locale);
+  return { iso: value, text: new Intl.DateTimeFormat(lang, { dateStyle: 'medium', timeStyle: 'short' }).format(parsed) };
+}
+
+/** The label of a check name for the failed-checks list; an unknown name stays a code. */
+function settingChecksCheckMessage(name, locale) {
+  const g = settingCheckGates();
+  const key = 'check.' + String(name);
+  if (typeof name === 'string' && key !== 'check.noise_band' && g.gatesUiTemplateFrom(g.GATES_UI_LABELS, key, locale) !== null) return g.gatesUiMessage(key, locale);
+  return { key: 'check.unknown', segments: [{ code: String(name) }], text: String(name) };
+}
+
+/**
+ * Pure (UI-SPEC 6.4): one row per evaluation run request. ctx: { multiTenant, workspaceName(key) -> name or null }. pending and running
+ * as such; done as the run's own result (pass, fail, anything else No result); skipped with its reason; failed as No result.
+ */
+function settingChecksRunsRows(requests, locale, ctx) {
+  const c = ctx || {};
+  const list = Array.isArray(requests) ? requests : [];
+  const nameOf = typeof c.workspaceName === 'function' ? c.workspaceName : () => null;
+  const out = [];
+  for (const raw of list) {
+    if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || raw.id === '') continue;
+    const key = typeof raw.tenant_key === 'string' ? raw.tenant_key : '';
+    const reasonCode = typeof raw.reason === 'string' ? raw.reason : '';
+    let verdict;
+    if (raw.status === 'pending') verdict = { value: 'pending', reason: null };
+    else if (raw.status === 'running') verdict = { value: 'running', reason: null };
+    else if (raw.status === 'done') verdict = { value: raw.result === 'pass' ? 'pass' : raw.result === 'fail' ? 'fail' : 'error', reason: null };
+    else if (raw.status === 'skipped') verdict = { value: 'skipped', reason: typeof raw.skip_reason === 'string' && raw.skip_reason ? raw.skip_reason : null };
+    else verdict = { value: 'error', reason: null };
+    const failedNames = verdict.value === 'fail' ? settingCheckList(raw.checks).filter((n) => typeof n === 'string') : [];
+    const name = c.multiTenant ? nameOf(key) : null;
+    out.push({
+      id: raw.id,
+      workspace: c.multiTenant ? { name: typeof name === 'string' && name ? name : null, key } : null,
+      reason: { label: SETTING_CHECKS_RUN_REASONS.includes(reasonCode) ? settingCheckLabel('runs.reason.' + reasonCode, locale) : null, code: reasonCode },
+      requested: settingChecksDateTime(raw.requested_at, locale),
+      verdict,
+      failedMessages: failedNames.map((n) => settingChecksCheckMessage(n, locale)),
+      failed: failedNames.map((n) => settingChecksCheckMessage(n, locale).text),
+    });
+  }
+  return out;
+}
+
+/** The combination notes of UI-SPEC 6.12 for the gate group, read from the page's own inputs and the saved mode. */
+function settingChecksSettingsWarnings(values) {
+  const v = values || {};
+  const gate = settingChecksGateValue(v.gate);
+  const out = [];
+  if (settingChecksTrue(v.live) && gate === 'off') out.push('warn.liveNeedsGate');
+  if (gate === 'enforce' && settingChecksGateValue(v.savedGate) === 'off') out.push('warn.enforceFirst');
+  return out;
+}
+
+/** The config server answer as { ok, status, body } (same-origin credentials); never throws. */
+async function settingChecksConfigFetch(url, init) {
+  const response = await window.fetch(url, { ...(init || {}), credentials: 'same-origin', headers: { Accept: 'application/json' } });
+  let body = null;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
+  }
+  return { ok: response.ok, status: response.status, body };
+}
+
+class SettingChecksPanel {
+  constructor(root, deps) {
+    const d = deps || {};
+    const g = settingCheckGates();
+    this.root = root;
+    this.locale = g.gatesUiLocale(d.locale);
+    this.fetcher = d.fetcher || null;
+    this.configFetcher = d.configFetcher || settingChecksConfigFetch;
+    this.appUrl = d.appUrl || null;
+    this.configSource = typeof d.config === 'function' ? d.config : null;
+    this.mounted = false;
+    this.current = 'last';
+    this.views = {};
+    this.last = { loading: false, data: false, seq: 0 };
+    this.runs = { requests: [], next: null, loading: false, data: false, seq: 0, updatedAt: null };
+    this.hosts = {
+      title: root.querySelector('[data-setting-checks-title]'),
+      description: root.querySelector('[data-setting-checks-description]'),
+      alert: root.querySelector('[data-setting-checks-alert]'),
+      content: root.querySelector('[data-setting-checks-content]'),
+      status: root.querySelector('[data-setting-checks-status]'),
+    };
+  }
+
+  t(key, vars) {
+    return settingCheckLabel(key, this.locale, vars);
+  }
+
+  m(key, vars) {
+    return settingCheckMessage(key, this.locale, vars);
+  }
+
+  el(tag, opts, children) {
+    return settingCheckEl(tag, opts, children);
+  }
+
+  config() {
+    if (this.configSource) return this.configSource() || {};
+    if (typeof window !== 'undefined' && window.configManager && window.configManager.savedConfig) return window.configManager.savedConfig;
+    return {};
+  }
+
+  savedMode() {
+    return settingChecksGateValue(this.config().RAG_CONFIG_GATE);
+  }
+
+  multiTenant() {
+    const c = this.config();
+    return (c.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE || c.MYRAG_DEPLOYMENT_MODE) === 'multi-tenant';
+  }
+
+  setStatus(message, isError) {
+    settingCheckGates().gatesUiStatus(this.hosts.status, message, isError);
+  }
+
+  async mount() {
+    if (!this.mounted) {
+      this.mounted = true;
+      this.root.setAttribute('lang', this.locale);
+      if (this.hosts.title) this.hosts.title.textContent = this.t('panel.title');
+      if (this.hosts.description) this.hosts.description.textContent = this.t('panel.description');
+      if (this.hosts.status) this.hosts.status.setAttribute('tabindex', '-1');
+      this.buildChrome();
+      this.mountSettings();
+    }
+    return this.refresh();
+  }
+
+  buildChrome() {
+    const content = this.hosts.content;
+    if (!content) return;
+    const g = settingCheckGates();
+    this.summaryEl = this.el('div', { className: 'mb-4', attrs: { 'data-setting-checks-summary': '' } });
+    const tabs = g.gatesUiSubTabs({
+      label: this.t('panel.tabsLabel'),
+      idPrefix: 'rag-setting-checks',
+      tabs: SETTING_CHECKS_TABS.map((id) => ({ id, label: this.t('tab.' + id) })),
+      selected: this.current,
+      onSelect: (id) => {
+        this.current = id;
+        this.setStatus('');
+        this.refresh();
+      },
+    });
+    this.tabs = tabs;
+    // DaisyUI tabs are a grid, so the shared flex-wrap does not apply; as flex they wrap at 360px instead of scrolling the page sideways.
+    tabs.root.classList.add('flex');
+    tabs.tabs.forEach((tab, i) => {
+      tab.setAttribute('data-setting-checks-tab', SETTING_CHECKS_TABS[i]);
+      tab.classList.add('h-auto', 'min-h-8', 'whitespace-nowrap');
+    });
+    tabs.panels.forEach((panel, i) => {
+      panel.setAttribute('data-setting-checks-view', SETTING_CHECKS_TABS[i]);
+      this.views[SETTING_CHECKS_TABS[i]] = panel;
+    });
+    content.replaceChildren(this.summaryEl, tabs.root, ...tabs.panels);
+    this.buildLastView();
+    this.buildRunsView();
+  }
+
+  async selectTab(id) {
+    if (!this.tabs || !SETTING_CHECKS_TABS.includes(id)) return;
+    if (id === this.current) return this.refresh();
+    this.tabs.select(id);
+    await Promise.resolve();
+  }
+
+  /** Keeps the selected sub-view: Last check (nothing with the mode off), Evaluation runs, or Settings (no request). */
+  async refresh() {
+    this.renderSummary();
+    if (this.current === 'last') return this.loadLast();
+    if (this.current === 'runs') return this.loadRuns(false);
+    this.renderSettingsWarnings();
+  }
+
+  // -------------------------------------------------------------------------------------------------------------------------------------
+  // Summary (UI-SPEC 6.4)
+
+  renderSummary() {
+    if (!this.summaryEl) return;
+    const g = settingCheckGates();
+    const saved = this.savedMode();
+    const live = settingChecksTrue(this.config().RAG_CONFIG_GATE_LIVE);
+    const row = (key, label, value, strong) =>
+      this.el('div', { className: 'min-w-0', attrs: { 'data-setting-checks-summary-row': key } }, [
+        this.el('dt', { className: 'text-xs text-base-content/70', text: label }),
+        this.el('dd', { className: 'text-sm break-words' + (strong ? ' font-semibold' : ''), text: value }),
+      ]);
+    const dl = this.el('dl', { className: 'grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 max-w-3xl' }, [
+      row('mode', this.t('summary.mode'), this.t('mode.' + saved), true),
+      row('live', this.t('summary.live'), g.gatesUiLabel(live ? 'value.on' : 'value.off', this.locale), false),
+    ]);
+    const nodes = [dl];
+    const input = typeof document !== 'undefined' ? document.getElementById('RAG_CONFIG_GATE') : null;
+    if (input && settingChecksGateValue(input.value) !== saved) nodes.push(this.el('p', { className: 'text-xs text-base-content/70 mt-2', text: this.t('mode.pending') }));
+    this.summaryEl.replaceChildren(...nodes);
+  }
+
+  // -------------------------------------------------------------------------------------------------------------------------------------
+  // Last check (UI-SPEC 6.4): the newest check the config server holds, drawn as the dialog draws it, read-only.
+
+  buildLastView() {
+    const g = settingCheckGates();
+    const v = this.views.last;
+    this.lastAlert = this.el('div', { className: 'mb-4 empty:mb-0' });
+    this.lastChecked = this.el('p', { className: 'text-xs text-base-content/70' });
+    this.lastRefresh = this.el('button', { className: 'btn btn-outline btn-sm', attrs: { type: 'button' }, on: { click: () => this.loadLast({ force: true }) } }, [
+      g.gatesUiIcon('bi-arrow-clockwise'),
+      this.t('action.refreshLast'),
+    ]);
+    this.lastToolbar = this.el('div', { className: 'flex flex-wrap items-center justify-between gap-2 mb-4' }, [this.lastChecked, this.lastRefresh]);
+    this.lastBody = this.el('div', { className: 'flex flex-col gap-4 min-w-0' });
+    v.replaceChildren(this.lastAlert, this.lastToolbar, this.lastBody);
+  }
+
+  setLastBusy(busy) {
+    const g = settingCheckGates();
+    this.last.loading = busy;
+    g.gatesUiSetBusy(this.lastBody, busy && this.last.data);
+    this.lastRefresh.disabled = busy;
+    this.lastRefresh.replaceChildren(busy ? g.gatesUiSpinner() : g.gatesUiIcon('bi-arrow-clockwise'), this.t('action.refreshLast'));
+    if (busy && !this.last.data) {
+      this.lastBody.replaceChildren(g.gatesUiLoadingBlock(this.t('last.loading')));
+      this.setStatus(this.t('last.loading'));
+    }
+  }
+
+  async loadLast(opts) {
+    if (!this.lastBody) return;
+    const g = settingCheckGates();
+    if (this.savedMode() === 'off') {
+      this.last.data = false;
+      this.lastAlert.replaceChildren();
+      this.lastToolbar.hidden = true;
+      this.lastBody.replaceChildren(g.gatesUiEmptyBlock(this.t('off.title'), this.t('off.body')));
+      return;
+    }
+    if (this.last.loading && !(opts && opts.force)) return;
+    this.lastToolbar.hidden = false;
+    const seq = (this.last.seq += 1);
+    this.setLastBusy(true);
+    const result = await g.gatesUiFetch(SETTING_CHECKS_LATEST_API, { method: 'GET' }, { fetcher: this.configFetcher });
+    this.setLastBusy(false);
+    if (seq !== this.last.seq) return;
+    if (!result.ok && result.status === 404) {
+      this.last.data = false;
+      this.lastAlert.replaceChildren();
+      this.lastChecked.replaceChildren();
+      this.lastBody.replaceChildren(g.gatesUiEmptyBlock(this.t('last.empty.title'), this.t('last.empty.body')));
+      this.setStatus(this.t('last.empty.title'));
+      return;
+    }
+    if (!result.ok || !result.body || typeof result.body !== 'object') {
+      const mapped = g.gatesUiMapError(result.ok ? { ok: false, status: 500 } : result, this.locale, { view: this.t('tab.last'), appUrl: this.appUrl });
+      this.lastAlert.replaceChildren(g.gatesUiErrorAlert(mapped, this.locale, () => this.loadLast({ force: true })));
+      if (this.last.data) g.gatesUiSetBusy(this.lastBody, true);
+      else this.lastBody.replaceChildren();
+      this.setStatus(mapped, true);
+      return;
+    }
+    this.lastAlert.replaceChildren();
+    this.last.data = true;
+    this.renderLast(result.body);
+  }
+
+  renderLast(check) {
+    const g = settingCheckGates();
+    const locale = this.locale;
+    const at = settingChecksDateTime(check.finished_at || check.started_at, locale);
+    this.lastChecked.replaceChildren();
+    if (at) g.gatesUiAppendMessage(this.lastChecked, this.m('last.checkedAt', { time: { time: at } }));
+    const view = settingCheckDialogView({ mode: check.mode, phase: 'result', check, locale, labelFor: settingCheckPageLabel });
+    const heading = (textValue) => this.el('h4', { className: 'text-sm font-semibold', text: textValue });
+    const nodes = [];
+
+    if (view.changed.rows.length > 0) {
+      const list = this.el('dl', { className: 'grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 mt-1 text-sm max-w-3xl' });
+      for (const row of view.changed.rows) {
+        const env = this.el('code', { className: 'font-mono text-xs break-all', text: row.env, attrs: { translate: 'no' } });
+        if (row.label === row.env) list.appendChild(this.el('dt', { className: 'min-w-0 sm:col-span-2' }, [env]));
+        else {
+          list.appendChild(this.el('dt', { className: 'min-w-0 break-words', text: row.label }));
+          list.appendChild(this.el('dd', { className: 'min-w-0' }, [env]));
+        }
+      }
+      const block = [heading(view.changed.heading), list];
+      if (view.changed.more) block.push(this.el('p', { className: 'text-xs text-base-content/70 mt-1', text: view.changed.more }));
+      nodes.push(this.el('div', { className: 'min-w-0' }, block));
+    }
+
+    const result = [heading(this.t('result.heading'))];
+    if (check.status !== 'done') {
+      result.push(this.el('div', { className: 'mt-1' }, [g.gatesUiVerdict(check.status === 'running' ? 'running' : 'pending', locale)]));
+    } else {
+      if (settingCheckOutcome(check) === 'error') {
+        const reason = typeof check.error_reason === 'string' && check.error_reason ? check.error_reason : null;
+        result.push(this.el('div', { className: 'mt-1' }, [g.gatesUiVerdict('error', locale, reason)]));
+      }
+      const list = this.el('ul', { className: 'flex flex-col gap-2 mt-1' });
+      for (const layer of view.layers) {
+        list.appendChild(
+          this.el('li', { className: 'flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm', attrs: { 'data-setting-checks-layer': layer.layer } }, [
+            this.el('span', { className: 'min-w-0 break-words', text: layer.label }),
+            g.gatesUiVerdict(layer.result, locale, layer.reason),
+          ]),
+        );
+      }
+      result.push(list);
+    }
+    nodes.push(this.el('div', { className: 'min-w-0' }, result));
+
+    if (check.status === 'done') {
+      if (view.evidence.visible.length > 0) {
+        nodes.push(this.el('div', { className: 'min-w-0' }, [heading(this.t('failed.heading')), this.el('div', { className: 'mt-1' }, [settingCheckEvidenceTableEl(view.evidence.visible, locale)])]));
+      }
+      if (view.evidence.hidden.length > 0) {
+        nodes.push(
+          this.el('details', { className: 'min-w-0' }, [
+            this.el('summary', {
+              className: 'text-sm cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+              text: g.gatesUiLabel('checks.showAll', locale, { count: g.gatesUiNumber(view.evidence.hidden.length, locale) }),
+            }),
+            settingCheckEvidenceTableEl(view.evidence.hidden, locale),
+          ]),
+        );
+      }
+      if (view.notCovered) nodes.push(settingCheckMessageEl('p', 'text-xs text-base-content/70 break-words', view.notCovered));
+      if (view.untested) {
+        nodes.push(
+          settingCheckNoticeEl(
+            view.untested.heading,
+            view.untested.body,
+            view.untested.items.map((item) => {
+              const env = this.el('code', { className: 'font-mono text-xs break-all', text: item.env, attrs: { translate: 'no' } });
+              const li = this.el('li', { className: 'break-words' }, item.label === item.env ? [env, ': '] : [item.label + ' ', env, ': ']);
+              g.gatesUiAppendMessage(li, item.reason);
+              return li;
+            }),
+          ),
+        );
+      }
+      if (view.uncal) {
+        const items = view.uncal.items.map((item) => settingCheckMessageEl('li', 'break-words', item));
+        if (view.uncal.more) items.push(this.el('li', { text: view.uncal.more }));
+        nodes.push(settingCheckNoticeEl(view.uncal.heading, view.uncal.body, items));
+      }
+    }
+
+    const savedAs = typeof check.saved_as === 'string' && check.saved_as ? check.saved_as : null;
+    if (savedAs) {
+      const how = SETTING_CHECKS_SAVED_AS.includes(savedAs) ? this.t('how.' + savedAs) : { code: savedAs };
+      nodes.push(settingCheckMessageEl('p', 'text-sm', this.m('last.savedAs', { how })));
+    }
+    this.lastBody.classList.remove('opacity-60');
+    this.lastBody.replaceChildren(...nodes);
+    this.setStatus(at ? this.m('last.checkedAt', { time: { time: at } }) : this.t('result.heading'));
+  }
+
+  // -------------------------------------------------------------------------------------------------------------------------------------
+  // Evaluation runs (UI-SPEC 6.4): the D-19 requests, newest first, 20 at a time. Starts no run.
+
+  buildRunsView() {
+    const g = settingCheckGates();
+    const v = this.views.runs;
+    this.runsAlert = this.el('div', { className: 'mb-4 empty:mb-0' });
+    this.runsUpdated = this.el('p', { className: 'text-xs text-base-content/70' });
+    this.runsRefresh = this.el('button', { className: 'btn btn-outline btn-sm', attrs: { type: 'button' }, on: { click: () => this.loadRuns(false, { force: true }) } }, [
+      g.gatesUiIcon('bi-arrow-clockwise'),
+      this.t('action.refreshRuns'),
+    ]);
+    this.runsToolbar = this.el('div', { className: 'flex flex-wrap items-center justify-between gap-2 mb-4' }, [this.runsUpdated, this.runsRefresh]);
+    this.runsBody = this.el('div', { className: 'flex flex-col gap-4 min-w-0' });
+    this.moreRuns = this.el('button', { className: 'btn btn-outline btn-sm self-start', text: this.t('action.moreRuns'), attrs: { type: 'button' }, on: { click: () => this.loadRuns(true) } });
+    this.drainHint = settingCheckMessageEl('p', 'text-xs text-base-content/70 mt-4 max-w-prose', this.m('runs.drainHint', { command: { code: SETTING_CHECKS_DRAIN_COMMAND } }));
+    v.replaceChildren(this.runsAlert, this.runsToolbar, this.runsBody, this.drainHint);
+  }
+
+  setRunsBusy(busy) {
+    const g = settingCheckGates();
+    this.runs.loading = busy;
+    g.gatesUiSetBusy(this.runsBody, busy && this.runs.data);
+    this.runsRefresh.disabled = busy;
+    this.runsRefresh.replaceChildren(busy ? g.gatesUiSpinner() : g.gatesUiIcon('bi-arrow-clockwise'), this.t('action.refreshRuns'));
+    if (busy && !this.runs.data) {
+      this.runsBody.replaceChildren(g.gatesUiLoadingBlock(this.t('runs.loading')));
+      this.setStatus(this.t('runs.loading'));
+    }
+  }
+
+  runsQuery(append) {
+    const params = new URLSearchParams();
+    params.set('limit', String(SETTING_CHECKS_PAGE_SIZE));
+    if (append && this.runs.next) params.set('cursor', this.runs.next);
+    return '?' + params.toString();
+  }
+
+  /** The first page (append false) or the next one. */
+  async loadRuns(append, opts) {
+    if (!this.runsBody) return;
+    const g = settingCheckGates();
+    if (this.runs.loading && !(opts && opts.force)) return;
+    const seq = (this.runs.seq += 1);
+    if (append) {
+      this.moreRuns.disabled = true;
+      this.moreRuns.replaceChildren(g.gatesUiSpinner(), this.t('action.moreRuns'));
+    } else this.setRunsBusy(true);
+    const result = await g.gatesUiFetch(SETTING_CHECKS_RUNS_API + this.runsQuery(append), { method: 'GET' }, { fetcher: this.fetcher || undefined });
+    if (append) {
+      this.moreRuns.disabled = false;
+      this.moreRuns.replaceChildren(this.t('action.moreRuns'));
+    } else this.setRunsBusy(false);
+    if (seq !== this.runs.seq) return;
+    if (!result.ok || !result.body || typeof result.body !== 'object') {
+      const mapped = g.gatesUiMapError(result.ok ? { ok: false, status: 500 } : result, this.locale, { view: this.t('tab.runs'), appUrl: this.appUrl });
+      this.runsAlert.replaceChildren(g.gatesUiErrorAlert(mapped, this.locale, () => this.loadRuns(false, { force: true })));
+      if (mapped.kind === 'signIn') {
+        this.runs.data = false;
+        this.runsToolbar.hidden = true;
+        this.runsBody.replaceChildren();
+      } else if (this.runs.data) g.gatesUiSetBusy(this.runsBody, true);
+      else this.runsBody.replaceChildren();
+      this.setStatus(mapped, true);
+      return;
+    }
+    const requests = (Array.isArray(result.body.requests) ? result.body.requests : []).filter((r) => r && typeof r === 'object' && typeof r.id === 'string');
+    this.runs.requests = append ? this.runs.requests.concat(requests.filter((r) => !this.runs.requests.some((x) => x.id === r.id))) : requests;
+    this.runs.next = typeof result.body.next_cursor === 'string' && result.body.next_cursor !== '' ? result.body.next_cursor : null;
+    this.runs.data = true;
+    this.runs.updatedAt = new Date();
+    this.runsAlert.replaceChildren();
+    this.runsToolbar.hidden = false;
+    this.renderRuns();
+    const time = g.gatesUiDate(this.runs.updatedAt.toISOString(), this.locale, 'time');
+    this.setStatus(g.gatesUiMessage('updatedAt', this.locale, { time: time ? { time } : '—' }));
+  }
+
+  workspaceName(tenantKey) {
+    if (typeof tenantKey !== 'string' || typeof document === 'undefined') return null;
+    const id = tenantKey.replace(/^[uo]:/, '');
+    const selector = document.getElementById('workspace-selector');
+    if (!selector) return null;
+    const option = Array.from(selector.querySelectorAll('option')).find((o) => o.getAttribute('value') === id);
+    const name = option ? String(option.textContent || '').replace(/^[^\p{L}\p{N}]+/u, '').trim() : '';
+    return name || null;
+  }
+
+  renderRuns() {
+    const g = settingCheckGates();
+    const locale = this.locale;
+    this.runsUpdated.replaceChildren();
+    const time = this.runs.updatedAt ? g.gatesUiDate(this.runs.updatedAt.toISOString(), locale, 'time') : null;
+    if (time) g.gatesUiAppendMessage(this.runsUpdated, g.gatesUiMessage('updatedAt', locale, { time: { time } }));
+    this.runsBody.classList.remove('opacity-60');
+    if (this.runs.requests.length === 0) {
+      this.runsBody.replaceChildren(g.gatesUiEmptyBlock(this.t('runs.empty.title'), this.t('runs.empty.body')));
+      return;
+    }
+    const multi = this.multiTenant();
+    const rows = settingChecksRunsRows(this.runs.requests, locale, { multiTenant: multi, workspaceName: (key) => this.workspaceName(key) });
+    const th = (key) => this.el('th', { className: 'text-xs font-semibold', text: key.startsWith('col.') ? g.gatesUiLabel(key, locale) : this.t(key), attrs: { scope: 'col' } });
+    const headCells = [];
+    if (multi) headCells.push(th('runs.col.workspace'));
+    headCells.push(th('runs.col.reason'), th('runs.col.requested'), th('col.result'));
+    const body = this.el('tbody');
+    for (const row of rows) {
+      const cells = [];
+      const first = (children, cls) => this.el('th', { className: 'font-normal text-sm align-top ' + (cls || ''), attrs: { scope: 'row' } }, children);
+      if (row.workspace) {
+        const ws = row.workspace.name
+          ? this.el('span', { className: 'break-words', text: row.workspace.name, attrs: { 'data-setting-checks-workspace': '' } })
+          : this.el('span', { className: 'font-mono text-xs break-all', text: row.workspace.key, attrs: { translate: 'no', 'data-setting-checks-workspace': '' } });
+        cells.push(first([ws], 'min-w-32'));
+      }
+      const reason = row.reason.label ? row.reason.label : this.el('code', { className: 'font-mono text-xs break-all', text: row.reason.code, attrs: { translate: 'no' } });
+      cells.push(row.workspace ? this.el('td', { className: 'text-sm align-top break-words' }, [reason]) : first([reason], 'break-words'));
+      cells.push(
+        this.el('td', { className: 'text-sm align-top tabular-nums' }, [row.requested ? this.el('time', { text: row.requested.text, attrs: { datetime: row.requested.iso } }) : '—']),
+      );
+      const result = this.el('td', { className: 'align-top min-w-40' }, [g.gatesUiVerdict(row.verdict.value, locale, row.verdict.reason)]);
+      if (row.failedMessages.length > 0) {
+        result.appendChild(
+          this.el('details', { className: 'mt-1' }, [
+            this.el('summary', {
+              className: 'text-xs cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+              text: this.t('runs.showFailed', { count: g.gatesUiNumber(row.failedMessages.length, locale) }),
+            }),
+            this.el('ul', { className: 'text-xs flex flex-col gap-1 mt-1 list-disc pl-5' }, row.failedMessages.map((msg) => settingCheckMessageEl('li', 'break-words', msg))),
+          ]),
+        );
+      }
+      cells.push(result);
+      body.appendChild(this.el('tr', { attrs: { 'data-setting-checks-run': row.id } }, cells));
+    }
+    const caption = this.t('runs.caption');
+    const table = this.el(
+      'div',
+      { className: 'overflow-x-auto rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', attrs: { tabindex: '0', role: 'region', 'aria-label': caption } },
+      [this.el('table', { className: 'table table-sm' }, [this.el('caption', { className: 'sr-only', text: caption }), this.el('thead', null, [this.el('tr', null, headCells)]), body])],
+    );
+    const nodes = [table];
+    if (this.runs.next) nodes.push(this.moreRuns);
+    this.runsBody.replaceChildren(...nodes);
+  }
+
+  // -------------------------------------------------------------------------------------------------------------------------------------
+  // Settings (UI-SPEC 6.12): the gate group of #rag-phase053-settings, moved here once, with its combination notes.
+
+  mountSettings() {
+    const view = this.views.settings;
+    if (!view || typeof document === 'undefined') return;
+    this.settingsWarnings = this.el('div', { className: 'flex flex-col gap-2 mb-4 empty:mb-0' });
+    view.replaceChildren(this.settingsWarnings);
+    const block = document.getElementById('rag-phase053-settings');
+    const group = (block && block.querySelector('[data-rag-settings-group="gate"]')) || document.querySelector('[data-rag-settings-group="gate"]');
+    if (group) {
+      view.appendChild(group);
+      const g = settingCheckGates();
+      for (const el of group.querySelectorAll('[data-rag-i18n]')) {
+        const key = el.getAttribute('data-rag-i18n');
+        if (settingChecksHas(SETTING_CHECK_LABELS.en, key) || settingChecksHas(g.GATES_UI_LABELS.en, key)) el.textContent = this.t(key);
+      }
+    }
+    for (const id of ['RAG_CONFIG_GATE', 'RAG_CONFIG_GATE_LIVE']) {
+      const input = document.getElementById(id);
+      if (input)
+        input.addEventListener('change', () => {
+          this.renderSettingsWarnings();
+          this.renderSummary();
+        });
+    }
+    this.renderSettingsWarnings();
+  }
+
+  renderSettingsWarnings() {
+    if (!this.settingsWarnings || typeof document === 'undefined') return;
+    const g = settingCheckGates();
+    const gate = document.getElementById('RAG_CONFIG_GATE');
+    const live = document.getElementById('RAG_CONFIG_GATE_LIVE');
+    const keys = settingChecksSettingsWarnings({ gate: gate ? gate.value : 'off', live: live ? live.value : 'false', savedGate: this.savedMode() });
+    this.settingsWarnings.replaceChildren(
+      ...keys.map((key) => (key === 'warn.enforceFirst' ? g.gatesUiAlert('info', 'bi-info-circle', this.m(key), []) : g.gatesUiAlert('warning', 'bi-exclamation-triangle', this.m(key), []))),
+    );
+  }
+}
+
+let SETTING_CHECKS_PANEL_INSTANCE = null;
+
+/** Idempotent: the first call mounts, later calls refresh the selected sub-view and keep its state. */
+function initSettingChecksPanel() {
+  if (typeof document === 'undefined' || !document || typeof document.getElementById !== 'function') return;
+  const root = document.getElementById('rag-administration-setting-checks');
+  if (!root) return;
+  if (!SETTING_CHECKS_PANEL_INSTANCE || SETTING_CHECKS_PANEL_INSTANCE.root !== root) {
+    SETTING_CHECKS_PANEL_INSTANCE = new SettingChecksPanel(root);
+    if (typeof window !== 'undefined') window.settingChecksPanel = SETTING_CHECKS_PANEL_INSTANCE;
+    SETTING_CHECKS_PANEL_INSTANCE.mount();
+    return;
+  }
+  SETTING_CHECKS_PANEL_INSTANCE.refresh();
+}
+
+function bindSettingChecksPanel() {
+  document.querySelectorAll('[data-tab="rag-administration"]').forEach((link) => {
+    if (link.getAttribute('data-setting-checks-bound')) return;
+    link.setAttribute('data-setting-checks-bound', '1');
+    link.addEventListener('click', () => initSettingChecksPanel());
+  });
+}
+
 if (typeof window !== 'undefined') {
   window.SETTING_CHECK_LABELS = SETTING_CHECK_LABELS;
   window.settingCheckLabel = settingCheckLabel;
   window.ragSettingCheck = settingCheckCreateGuard({});
+  window.initSettingChecksPanel = initSettingChecksPanel;
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    bindSettingChecksPanel();
+    document.addEventListener('DOMContentLoaded', () => {
+      bindSettingChecksPanel();
+      const tab = document.getElementById('rag-administration');
+      if (tab && tab.classList.contains('active')) initSettingChecksPanel();
+    });
+  }
 }
 
 if (typeof module !== 'undefined' && module.exports) {
@@ -1258,5 +1874,9 @@ if (typeof module !== 'undefined' && module.exports) {
     settingCheckReason,
     settingCheckSaveBody,
     settingCheckCreateGuard,
+    settingChecksRunsRows,
+    settingChecksSettingsWarnings,
+    SettingChecksPanel,
+    initSettingChecksPanel,
   };
 }
