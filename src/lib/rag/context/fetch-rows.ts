@@ -104,7 +104,7 @@ export async function fetchAssemblyRows(
   }
 
   if (tenantKey !== undefined && readAnswerConfig().versionLabels) {
-    const versionPairs = await fetchVersionPairs(adminClient, [...documents.keys()], { tenantKey, signal });
+    const versionPairs = await fetchVersionPairs(adminClient, documentIds.filter((id) => documents.has(id)), { tenantKey, signal });
     return { documents, chunkMetadata, versionPairs };
   }
   return { documents, chunkMetadata };

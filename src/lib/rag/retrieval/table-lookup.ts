@@ -2,7 +2,7 @@ import { versionAndIdentifierArgs } from '../backend/pgvector';
 import { RetrievalBackendError, rpcRows, type RpcClient } from '../backend/supabase-rpc';
 import type { VersionScope } from '../backend/types';
 import { queryLexicalTokens } from '../lexical/tokenize';
-import { accessRpcArgs, scopeAccessFilter, type ScopeAccessFilter } from '../tenant/access';
+import { accessRpcArgs, type ScopeAccessFilter } from '../tenant/access-filter';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import type { TableLookupParams } from '@/lib/rag-eval/contracts.generated';
 
@@ -94,6 +94,9 @@ export async function tableLookup(
   if (values.length === 0) return [];
   const { client, signal } = options;
   signal.throwIfAborted();
+  // Loaded lazily (as in the pgvector backend): tenant/access reads the RAG config through deps, which importing this module must not load.
+  const access = options.access ?? (await import('../tenant/access')).scopeAccessFilter(scope);
+  signal.throwIfAborted();
   const response = await client
     .rpc(RPC_NAME, {
       p_tenant_key: scopeKey(scope).toLowerCase(),
@@ -101,7 +104,7 @@ export async function tableLookup(
       p_min_cells: clamp(params.min_cells, MAX_MIN_CELLS),
       p_limit: clamp(params.limit, MAX_LOOKUP_LIMIT),
       ...versionAndIdentifierArgs(options.versionScope, options.identifiersNorm),
-      ...accessRpcArgs(options.access ?? scopeAccessFilter(scope)),
+      ...accessRpcArgs(access),
     })
     .abortSignal(signal);
   signal.throwIfAborted();
