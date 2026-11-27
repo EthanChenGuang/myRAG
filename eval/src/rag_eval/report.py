@@ -29,6 +29,7 @@ from rag_sidecar.contracts.report import (
 
 from rag_eval.metrics import (
     POPULATION_EXCLUSIONS,
+    answer_rule_metrics,
     aggregate,
     citation_metrics,
     citation_run,
@@ -41,6 +42,7 @@ from rag_eval.metrics import (
     slices_by,
     strategy_key,
     table_split_report,
+    uncited_sentence_rate,
 )
 from rag_eval.native_review import MIN_GATED_ITEMS, REVIEWED_LANGUAGES, counts_in_gated_slices, review_backlog
 from rag_eval.paths import REPO_ROOT
@@ -268,11 +270,13 @@ def compute_strategy_slices(
         if faithfulness is not None:
             values = [faithfulness[t.item_id] for t in members if t.item_id is not None and t.item_id in faithfulness]
             faith = MetricValue(value=math.fsum(values) / len(values) if values else None, n=len(values))
+        uncited = uncited_sentence_rate(members)
         slices[key] = StrategySlice(
             items=len(members),
             generation_latency=_latency_stat(_generation_values(members)),
             faithfulness=faith,
             **metrics,
+            **({"uncited_sentence_rate": uncited} if uncited is not None else {}),
         )
     return slices
 
@@ -641,6 +645,9 @@ def build_report(
         answer_fields["groundedness_labels"] = groundedness_label_counts(traces, golden)
         answer_fields["groundedness_latency"] = compute_groundedness_latency(traces)
         answer_fields["injection"] = build_injection_report(golden, traces)
+        answer_rules = answer_rule_metrics(traces, golden, rag_mode=manifest.rag_mode)
+        if answer_rules is not None:
+            answer_fields["answer_rules"] = answer_rules
         if budgets is None and any(trace.query_plan is not None for trace in traces):
             budgets = load_latency_budgets()
         answer_fields["query_layer"] = build_query_layer_report(traces, results, budgets)
@@ -915,7 +922,11 @@ def _strategy_section(report: EvalReport) -> list[str]:
         "| Strategy | Items | Invalid citation rate | Citation coverage | Cited gold hit | Dropped markers | "
         "Generation p50 (ms) | Generation p95 (ms) | Faithfulness |"
     )
-    lines = ["## By citation strategy (report-only)", "", STRATEGY_NOTE, "", header, "|" + "|".join(["---"] * 9) + "|"]
+    uncited = any(row.uncited_sentence_rate is not None for row in report.by_strategy.values())
+    columns = 9 + (1 if uncited else 0)
+    if uncited:
+        header += " Uncited sentence rate |"
+    lines = ["## By citation strategy (report-only)", "", STRATEGY_NOTE, "", header, "|" + "|".join(["---"] * columns) + "|"]
     judged = any(row.faithfulness is not None for row in report.by_strategy.values())
     for name, row in report.by_strategy.items():
         latency = row.generation_latency
@@ -930,6 +941,8 @@ def _strategy_section(report: EvalReport) -> list[str]:
             _ms(latency.p95_ms if latency else None),
             faith,
         ]
+        if uncited:
+            cells.append(_optional_cell(row.uncited_sentence_rate))
         lines.append("| " + " | ".join([name, *cells]) + " |")
     lines.append("")
     if not judged:
@@ -1005,10 +1018,49 @@ def _injection_section(report: EvalReport) -> list[str]:
         success = block.attack_success_rate.get(key)
         lines.append(f"| {key} | {_optional_cell(exposure)} | {_optional_cell(success)} |")
     lines.append("")
+    if block.allowlisted_link_kept_rate:
+        lines.extend(["| Slice | allowlisted_link_kept_rate |", "|---|---|"])
+        lines.extend(f"| {key} | {_cell(value)} |" for key, value in block.allowlisted_link_kept_rate.items())
+        lines.append("")
     if block.false_positive_rate:
         lines.extend(["| Detector:language | False-positive rate |", "|---|---|"])
         lines.extend(f"| {key} | {_cell(value)} |" for key, value in block.false_positive_rate.items())
         lines.append("")
+    return lines
+
+
+ANSWER_RULES_NOTE = (
+    "D-21, D-54: read from each trace's sentence records and answer, never re-split here. uncited_sentence_rate is "
+    "factual sentences without a valid citation over factual sentences (report-only). unsupported_addition_rate and "
+    "covered_part_answered score partial_answer items, current_value_rate (the requested version's value and label) and "
+    "mixed_versions_rate (both values, a failure) stale_version items, adjacent_repurpose_rate off_topic_context items. "
+    "The smoke gate holds the three failure rates at 0 and covered_part_answered at 1 under the rule-following fake and "
+    "proves each violating fake is detected (D-54, D-62 b)."
+)
+ANSWER_RULE_FIELDS = (
+    "uncited_sentence_rate",
+    "unsupported_addition_rate",
+    "covered_part_answered",
+    "current_value_rate",
+    "mixed_versions_rate",
+    "adjacent_repurpose_rate",
+    "truncation_rate",
+)
+
+
+def _answer_rules_section(report: EvalReport) -> list[str]:
+    block = report.answer_rules
+    if block is None:
+        return []
+    lines = ["## Answer rules (Phase 5.2)", "", ANSWER_RULES_NOTE, "", "| Metric | Slice | Value |", "|---|---|---|"]
+    for name in ANSWER_RULE_FIELDS:
+        metric = getattr(block, name)
+        if metric is None:
+            continue
+        lines.append(f"| {name} | overall | {_optional_cell(metric.overall)} |")
+        lines.extend(f"| {name} | language:{key} | {_optional_cell(value)} |" for key, value in metric.by_language.items())
+        lines.extend(f"| {name} | category:{key} | {_optional_cell(value)} |" for key, value in metric.by_category.items())
+    lines.append("")
     return lines
 
 
@@ -1377,6 +1429,7 @@ def _render_markdown(
     lines.extend(_strategy_section(report))
     lines.extend(_groundedness_section(report, budgets))
     lines.extend(_injection_section(report))
+    lines.extend(_answer_rules_section(report))
     lines.extend(_table_split_section(report))
     lines.extend(_duplicate_flood_section(report))
     lines.extend(_identifier_section(report))

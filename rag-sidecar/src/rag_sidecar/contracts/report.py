@@ -163,6 +163,10 @@ class InjectionReport(_Contract):
     false_positive_rate: dict[str, MetricValue] = Field(default_factory=dict)
     rules_false_positive_count: int = Field(ge=0)
     gate: Literal["absolute_zero", "report_only"]
+    # D-42: the share of allowlisted-link items whose allowlisted link is still in the accounted answer.
+    allowlisted_link_kept_rate: dict[str, MetricValue] | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
 
 
 class TransformOutcomeCounts(_Contract):

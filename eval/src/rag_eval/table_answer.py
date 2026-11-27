@@ -91,6 +91,11 @@ def _present(value: str, answer: str, numbers: list[Decimal]) -> bool:
     return _text_present(value, answer)
 
 
+def value_present(value: str, text: str) -> bool:
+    """A golden value in a text: a lone number compared as a decimal, any other value as a folded whole-word literal."""
+    return _present(value, text, extract_numbers(text))
+
+
 def score_table_answer(answer: str, table_answer: TableAnswer) -> TableAnswerVerdict:
     """correct: the gold value and no distractor; ambiguous: both; wrong: otherwise, including an empty answer."""
     if not answer or not answer.strip():

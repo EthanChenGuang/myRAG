@@ -247,7 +247,7 @@ jobs:
       - name: Regenerate schemas and Zod
         run: npm run gen:schemas
       - name: Committed output must equal regenerated output
-        run: git diff --exit-code -- rag-sidecar/schemas src/lib/rag-eval/contracts.generated.ts tests/fixtures/contracts/samples.json
+        run: git diff --exit-code -- rag-sidecar/schemas src/lib/rag-eval/contracts.generated.ts src/lib/rag/lang/texts.generated.ts tests/fixtures/contracts/samples.json
 
   python:
     runs-on: ubuntu-latest
@@ -326,6 +326,36 @@ jobs:
             eval/out/smoke-sec
             eval/out/frameworks
             eval/out/cache-pairs
+          if-no-files-found: warn
+
+  eval-smoke-p52:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - run: npm ci --ignore-scripts
+      - run: uv sync --directory rag-sidecar --locked
+      - run: uv sync --directory eval --locked --all-extras
+      - name: Fill the tiktoken encoding cache (tests never download it)
+        run: python3 scripts/ci/fill-tiktoken-cache.py
+      - name: Phase 5.2 answer-rule, detection and output-guard gates (all-off paired zero, rules-on zero, violations detected, no planted link left)
+        run: npm run test-rag -- --phase52 --out eval/out/smoke-p52
+      - name: Upload Phase 5.2 smoke output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: eval-smoke-p52
+          path: eval/out/smoke-p52
           if-no-files-found: warn
 
   gate-negative-control:

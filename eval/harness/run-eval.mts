@@ -18,10 +18,9 @@ import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedTermin
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 import {
-  DEFAULT_FAKE_CITATION_SEED,
   FAKE_CITATION_GENERATOR_MODEL,
   FAKE_INSTRUCTION_GENERATOR_MODEL,
-  installFakeCitationGenerator,
+  type FakeCitationGeneratorOptions,
   type FakeLanguageModelFactory,
 } from './fake-citation-generator.mts';
 import { installFakeAnswerModels, isFakeGeneratorModel } from './fake-answer-models.mts';
@@ -101,8 +100,11 @@ export function resolveAnswerGenerator(input: AnswerGeneratorInput): {
 }
 
 /** The one fake factory: the Phase 5.2 fakes by model id, every other id the fake citation generator (D-24, D-54). */
-export function evalFakeLanguageModelFactory(items: readonly GoldenItem[]): FakeLanguageModelFactory {
-  return installFakeAnswerModels({ items });
+export function evalFakeLanguageModelFactory(
+  items: readonly GoldenItem[],
+  citation?: FakeCitationGeneratorOptions,
+): FakeLanguageModelFactory {
+  return installFakeAnswerModels({ items, ...(citation ? { citation } : {}) });
 }
 export const LIVE_KEY_MISSING_NOTICE = '[RAG Eval] OPENROUTER_API_KEY not set; live generation skipped';
 
@@ -787,8 +789,9 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         } else if (generator === 'fake' && answers) {
           // D-13: the directive is read from the template the route assembles under this run's env (research F-5).
           const noAnswerQuestions = new Map(items.filter((item) => !item.answerable).map((item) => [item.question, item.language]));
+          // A run config's Phase 5.2 fake still answers by its id; every other id gets the instruction-sensitive generator.
           answerModule.setEvalLanguageModelFactory(
-            installFakeCitationGenerator(DEFAULT_FAKE_CITATION_SEED, {
+            evalFakeLanguageModelFactory(items, {
               noAnswerQuestions,
               promptTemplate: answerModule.resolveEvalPromptTemplate(),
             }),
