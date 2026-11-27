@@ -26,6 +26,7 @@ docling = [
 ]
 ray = ["ray[data]==2.60.1"]
 hhem = ["torch==2.15.0", "transformers==5.23.0"]
+bge-m3 = ["torch==2.15.0", "transformers==5.23.0"]
 cache = ["redisvl==0.32.0", "redis==8.1.0"]
 
 [dependency-groups]

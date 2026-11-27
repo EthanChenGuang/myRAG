@@ -1,8 +1,8 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { createBgeM3Provider, BGE_M3_APP_INPUT_TOKEN_LIMIT } from '@/lib/rag/embeddings/bge-m3';
-import type { BgeM3Config } from '@/lib/rag/embeddings/bge-m3';
+import { createBgeM3Provider, BGE_M3_APP_INPUT_TOKEN_LIMIT, BGE_M3_SIDECAR_REVISION, EmbeddingSidecarUnavailableError } from '@/lib/rag/embeddings/bge-m3';
+import type { BgeM3Config, BgeM3SidecarConfig } from '@/lib/rag/embeddings/bge-m3';
 import { catalogEntry } from '@/lib/rag/embeddings/catalog';
 import { EmbeddingProfileMismatch } from '@/lib/rag/embeddings/mrl';
 import { estimateCostUsd, priceFor } from '@/lib/rag/embeddings/prices';
@@ -15,6 +15,7 @@ import {
 } from '@/lib/rag/embeddings/registry';
 import { BGE_M3_MODEL_ID, EmbeddingInputError, canonicalModelId } from '@/lib/rag/embeddings/types';
 import { countTokens } from '@/lib/rag/ingest/text/tokens';
+import { FAKE_BGE_M3_REVISION, fakeEmbedVector, startFakeSidecar, type FakeSidecar } from '../helpers/fake-sidecar';
 
 const KEY = 'test-deepinfra-key-placeholder-0123';
 const PREFIX = '/v1/openai';
@@ -281,5 +282,171 @@ describe('BGE-M3 in the registry, catalog and prices', () => {
   it('prices the hosted model at 0.01 USD per million tokens, as an estimate', () => {
     expect(priceFor('bge-m3')).toEqual({ provider: 'bge-m3', model: 'BAAI/bge-m3', usdPerMillionTokens: 0.01, tokensAreEstimates: true });
     expect(estimateCostUsd('bge-m3', 2_000_000)).toEqual({ usd: 0.02, estimated: true });
+  });
+});
+
+describe('BGE-M3 served by the sidecar (EMB-11, D-26)', () => {
+  let sidecar: FakeSidecar;
+
+  beforeAll(async () => {
+    sidecar = await startFakeSidecar();
+  });
+
+  afterAll(async () => {
+    await sidecar.close();
+  });
+
+  afterEach(() => {
+    sidecar.calls.length = 0;
+    sidecar.embedRequests.length = 0;
+    delete process.env.RAG_BGE_M3_SERVING;
+  });
+
+  function sidecarProvider(overrides: Partial<BgeM3SidecarConfig> = {}) {
+    return createBgeM3Provider({
+      config: () => ({ apiKey: KEY, baseUrl, timeoutMs: 5000 }),
+      serving: () => 'sidecar',
+      sidecar: () => ({ url: sidecar.url, secret: sidecar.secret, timeoutMs: 2000, ...overrides }),
+    });
+  }
+
+  async function expectSidecarUnavailable(promise: Promise<unknown>, reason?: string): Promise<void> {
+    const error = await rejection(promise);
+    expect(error).toBeInstanceOf(EmbeddingSidecarUnavailableError);
+    expect((error as EmbeddingSidecarUnavailableError).code).toBe('embedding_sidecar_unavailable');
+    if (reason) expect((error as EmbeddingSidecarUnavailableError).reason).toBe(reason);
+    expect(String((error as Error).message)).not.toContain(sidecar.secret);
+    expect(calls, 'sidecar mode never falls back to the hosted API').toHaveLength(0);
+  }
+
+  it('pins the same revision the sidecar bakes', () => {
+    expect(BGE_M3_SIDECAR_REVISION).toBe(FAKE_BGE_M3_REVISION);
+  });
+
+  it('posts the inputs to POST /v1/embed with the shared secret, normalizes, and records the sidecar as the host', async () => {
+    const out = await sidecarProvider().embedDocuments(['alpha passage', 'beta passage'], opts());
+    expect(sidecar.calls.map((call) => [call.method, call.path, call.secretOk])).toEqual([['POST', '/v1/embed', true]]);
+    expect(sidecar.embedRequests).toEqual([{ model: 'BAAI/bge-m3', inputs: ['alpha passage', 'beta passage'] }]);
+    expect(out.host).toBe('sidecar');
+    expect(out.model).toBe('BAAI/bge-m3');
+    expect(out.vectors).toHaveLength(2);
+    for (const vector of out.vectors) {
+      expect(vector).toHaveLength(1024);
+      expect(Math.abs(norm(vector) - 1)).toBeLessThan(1e-6);
+    }
+    expect(out.vectors[1][5]).toBeCloseTo(unit(fakeEmbedVector('beta passage'))[5], 9);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('sends queries alone and in a batch the same way', async () => {
+    await sidecarProvider().embedQuery('gamma question', opts());
+    await sidecarProvider().embedQueries!(['gamma question', 'delta question'], opts());
+    expect(sidecar.embedRequests.map((request) => request.inputs)).toEqual([['gamma question'], ['gamma question', 'delta question']]);
+  });
+
+  it('splits more than 32 inputs into requests of at most 32 and keeps the order', async () => {
+    const texts = Array.from({ length: 70 }, (_, index) => `short text ${index}`);
+    const out = await sidecarProvider().embedDocuments(texts, opts());
+    expect(sidecar.embedRequests.map((request) => request.inputs.length)).toEqual([32, 32, 6]);
+    expect(out.vectors[65][3]).toBeCloseTo(unit(fakeEmbedVector(texts[65]))[3], 9);
+  });
+
+  it('fails with the typed error and no hosted call when the sidecar answers an error', async () => {
+    sidecar.enqueueEmbed({ status: 503, error: 'model_unavailable' });
+    await expectSidecarUnavailable(sidecarProvider().embedDocuments(['dense text'], opts()), 'http_503');
+  });
+
+  it('fails with the typed error and no hosted call when the sidecar is slower than the timeout', async () => {
+    sidecar.enqueueEmbed({ delayMs: 400 });
+    await expectSidecarUnavailable(sidecarProvider({ timeoutMs: 100 }).embedDocuments(['dense text'], opts()), 'timeout');
+  });
+
+  it('fails with the typed error and no hosted call when the sidecar is unreachable', async () => {
+    const closed = http.createServer();
+    await new Promise<void>((resolve) => closed.listen(0, '127.0.0.1', resolve));
+    const port = (closed.address() as AddressInfo).port;
+    await new Promise<void>((resolve) => closed.close(() => resolve()));
+    await expectSidecarUnavailable(sidecarProvider({ url: `http://127.0.0.1:${port}` }).embedDocuments(['dense text'], opts()), 'unreachable');
+  });
+
+  it('fails with the typed error and no request at all when the sidecar is not configured', async () => {
+    await expectSidecarUnavailable(sidecarProvider({ url: '' }).embedDocuments(['dense text'], opts()), 'not_configured');
+    await expectSidecarUnavailable(sidecarProvider({ secret: '' }).embedDocuments(['dense text'], opts()), 'not_configured');
+    expect(sidecar.calls).toHaveLength(0);
+  });
+
+  it('fails with the typed error when the sidecar answers a malformed body or another revision', async () => {
+    sidecar.enqueueEmbed({ body: { model: 'BAAI/bge-m3', revision: FAKE_BGE_M3_REVISION, dims: 1024, vectors: [] } });
+    await expectSidecarUnavailable(sidecarProvider().embedDocuments(['dense text'], opts()), 'malformed');
+    sidecar.enqueueEmbed({ body: { model: 'BAAI/bge-m3', revision: 'f'.repeat(40), dims: 1024, vectors: [fakeEmbedVector('x')] } });
+    await expectSidecarUnavailable(sidecarProvider().embedDocuments(['dense text'], opts()), 'revision_mismatch');
+  });
+
+  it('checks the returned model and dimension', async () => {
+    sidecar.enqueueEmbed({ body: { model: 'BAAI/bge-large-en-v1.5', revision: FAKE_BGE_M3_REVISION, dims: 1024, vectors: [fakeEmbedVector('x')] } });
+    const model = await rejection(sidecarProvider().embedDocuments(['dense text'], opts()));
+    expect(model).toBeInstanceOf(EmbeddingProfileMismatch);
+    expect((model as EmbeddingProfileMismatch).kind).toBe('model');
+    sidecar.enqueueEmbed({ body: { model: 'BAAI/bge-m3', revision: FAKE_BGE_M3_REVISION, dims: 1024, vectors: [fakeEmbedVector('x', 768)] } });
+    const dims = await rejection(sidecarProvider().embedDocuments(['dense text'], opts()));
+    expect(dims).toBeInstanceOf(EmbeddingProfileMismatch);
+    expect((dims as EmbeddingProfileMismatch).kind).toBe('dims');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('maps the sidecar refusal of an over-long input to embedding_input_too_long, never truncating', async () => {
+    sidecar.enqueueEmbed({ status: 422, error: 'embed_input_too_long: limit 8192 tokens' });
+    const error = await rejection(sidecarProvider().embedDocuments(['dense text'], opts()));
+    expect(error).toBeInstanceOf(EmbeddingInputError);
+    expect((error as EmbeddingInputError).code).toBe('embedding_input_too_long');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('applies the same input checks as the hosted mode before any request', async () => {
+    const tooLong = 'word' + ' word'.repeat(BGE_M3_APP_INPUT_TOKEN_LIMIT);
+    const long = await rejection(sidecarProvider().embedDocuments([tooLong], opts()));
+    expect((long as EmbeddingInputError).code).toBe('embedding_input_too_long');
+    const overChars = await rejection(sidecarProvider().embedDocuments(['x'.repeat(20_001)], opts()));
+    expect((overChars as EmbeddingInputError).code).toBe('embedding_input_too_long');
+    const empty = await rejection(sidecarProvider().embedDocuments([''], opts()));
+    expect((empty as EmbeddingInputError).code).toBe('embedding_input_empty');
+    expect(sidecar.calls).toHaveLength(0);
+  });
+
+  it('passes a caller abort through unchanged', async () => {
+    const controller = new AbortController();
+    sidecar.enqueueEmbed({ delayMs: 300 });
+    const pending = sidecarProvider().embedDocuments(['dense text'], { dims: 1024, signal: controller.signal });
+    setTimeout(() => controller.abort(), 20);
+    const error = await rejection(pending);
+    expect(error).not.toBeInstanceOf(EmbeddingSidecarUnavailableError);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('reads the serving mode from RAG_BGE_M3_SERVING through the RAG config', async () => {
+    const provider = createBgeM3Provider({
+      config: () => ({ apiKey: KEY, baseUrl, timeoutMs: 5000 }),
+      sidecar: () => ({ url: sidecar.url, secret: sidecar.secret, timeoutMs: 2000 }),
+    });
+    process.env.RAG_BGE_M3_SERVING = 'sidecar';
+    const served = await provider.embedDocuments(['epsilon text'], opts());
+    expect(served.host).toBe('sidecar');
+    expect(calls).toHaveLength(0);
+    process.env.RAG_BGE_M3_SERVING = 'hosted';
+    const hosted = await provider.embedDocuments(['epsilon text'], opts());
+    expect(hosted.host).toBe('deepinfra');
+    expect(sidecar.embedRequests).toHaveLength(1);
+  });
+
+  it('in hosted mode sends nothing to the sidecar', async () => {
+    const provider = createBgeM3Provider({
+      config: () => ({ apiKey: KEY, baseUrl, timeoutMs: 5000 }),
+      serving: () => 'hosted',
+      sidecar: () => ({ url: sidecar.url, secret: sidecar.secret, timeoutMs: 2000 }),
+    });
+    const out = await provider.embedDocuments(['zeta text'], opts());
+    expect(out.host).toBe('deepinfra');
+    expect(calls).toHaveLength(1);
+    expect(sidecar.calls).toHaveLength(0);
   });
 });
