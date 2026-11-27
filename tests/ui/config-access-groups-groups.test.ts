@@ -723,7 +723,7 @@ describe('Members region and member search (D-01, D-04, UI-SPEC decision 21)', (
         },
       },
     });
-    const rows = page.root.querySelector('[data-access-groups-members]')!.querySelectorAll('tbody tr');
+    const rows = page.root.querySelectorAll('[data-access-groups-member]');
     expect(rows[0]!.querySelector('th')!.textContent).toBe('a@example.org');
     const code = rows[1]!.querySelector('th code')!;
     expect(code.textContent).toBe(USER_3);

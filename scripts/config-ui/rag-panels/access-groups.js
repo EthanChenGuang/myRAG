@@ -2231,7 +2231,12 @@ class AccessGroupsPanel {
   // Rename (D-01: the key never changes)
 
   startRename(id) {
-    void id;
+    const row = this.findRow(id);
+    if (!row) return;
+    this.renaming = { id, value: row.name, busy: false };
+    this.renderGroups();
+    const input = this.doc.getElementById('rag-access-groups-rename-input');
+    if (input) input.focus();
   }
 
   cancelRename(focusBack) {
@@ -2324,7 +2329,19 @@ class AccessGroupsPanel {
   // Members region (D-01, D-04, UI-SPEC decision 21)
 
   toggleMembers(id) {
-    void id;
+    if (this.members && this.members.groupId === id) {
+      this.closeMembers({ render: true, focus: true });
+      return;
+    }
+    const row = this.findRow(id);
+    if (!row) return;
+    this.closeMembers({ render: false });
+    this.members = { groupId: id, rows: null, failure: null, query: '', results: null, searchState: 'hint', searchError: null, searchedQuery: '', searchSeq: 0, loadSeq: 0, timer: null };
+    this.membersRegion = this.buildMembersRegion(row);
+    this.renderGroups();
+    this.renderSearch();
+    if (this.memberHosts && this.memberHosts.search) this.memberHosts.search.focus();
+    this.loadMembers();
   }
 
   closeMembers(options) {
