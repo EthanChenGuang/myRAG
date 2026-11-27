@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixedText } from '@/lib/rag/lang/texts';
-import { JID, SESSION_ID, USER_ID, chatRouteSseBody, fakeSupabaseAdmin, messageWebhook, type AdminCall } from '../helpers/whatsapp-handler-harness';
+import { resetLanguageSettingsForTests } from '@/lib/rag/lang/settings';
+import { SESSION_ID, USER_ID, chatRouteSseBody, fakeSupabaseAdmin, messageWebhook, type AdminCall } from '../helpers/whatsapp-handler-harness';
 
 const h = vi.hoisted(() => ({
   calls: [] as Array<{ table: string; op: string; args: unknown[] }>,
@@ -41,12 +42,14 @@ beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
   for (const key of PHASE_52_KEYS) vi.stubEnv(key, '');
+  resetLanguageSettingsForTests();
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
+  resetLanguageSettingsForTests();
 });
 
 function bodyFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
