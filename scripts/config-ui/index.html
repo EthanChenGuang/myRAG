@@ -7028,7 +7028,7 @@
 
                                 <!-- Query layer -->
                                 <div class="card bg-base-200 shadow-md mt-6" id="query-layer-card">
-                                    <div class="card-body">
+                                    <div class="card-body [overflow-wrap:anywhere]">
                                         <h3 class="text-lg font-semibold mb-2 text-balance">Query layer</h3>
                                         <p class="text-base-content/70 mb-4">Rewrites the question before retrieval and caches answers. Off by default; while the master switch is off, the transform switches below have no effect.</p>
 
@@ -7066,6 +7066,15 @@
                                                     <span class="label-text">Condense follow-up questions (<span translate="no">RAG_QUERY_CONDENSE</span>)</span>
                                                 </label>
                                             </div>
+                                            <div class="form-control pl-8">
+                                                <label class="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" id="RAG_QUERY_HISTORY_FALLBACK" name="RAG_QUERY_HISTORY_FALLBACK" class="checkbox checkbox-primary" checked aria-describedby="rag-query-history-fallback-help">
+                                                    <span class="label-text">Keep the previous question when condensing is skipped (<span translate="no">RAG_QUERY_HISTORY_FALLBACK</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-query-history-fallback-help">When a follow-up cannot be condensed in time, retrieval also searches the previous question together with the follow-up. No model call.</span>
+                                                </label>
+                                            </div>
                                             <div class="form-control">
                                                 <label class="flex items-center gap-2 cursor-pointer">
                                                     <input type="checkbox" id="RAG_QUERY_EXPAND" name="RAG_QUERY_EXPAND" class="checkbox checkbox-primary" checked>
@@ -7076,6 +7085,33 @@
                                                 <label class="flex items-center gap-2 cursor-pointer">
                                                     <input type="checkbox" id="RAG_QUERY_DECOMPOSE" name="RAG_QUERY_DECOMPOSE" class="checkbox checkbox-primary" checked>
                                                     <span class="label-text">Decompose compound questions (<span translate="no">RAG_QUERY_DECOMPOSE</span>)</span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control pl-8">
+                                                <label class="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" id="RAG_QUERY_DECOMPOSE_COMPLETENESS" name="RAG_QUERY_DECOMPOSE_COMPLETENESS" class="checkbox checkbox-primary" checked aria-describedby="rag-query-decompose-completeness-help">
+                                                    <span class="label-text">Check that sub-questions cover the whole question (<span translate="no">RAG_QUERY_DECOMPOSE_COMPLETENESS</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-query-decompose-completeness-help">Adds a sub-question for any name, date, code or tag the split left out, or keeps the original question when it cannot.</span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control pl-8">
+                                                <label class="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" id="RAG_QUERY_SUBQ_FILTERS" name="RAG_QUERY_SUBQ_FILTERS" class="checkbox checkbox-primary" aria-describedby="rag-query-subq-filters-help">
+                                                    <span class="label-text">Let each sub-question narrow its own search (<span translate="no">RAG_QUERY_SUBQ_FILTERS</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-query-subq-filters-help">A sub-question may be limited by date range, document version, tag, document type or language. A filter can only narrow what the workspace may search; an empty result is searched again without the filter.</span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control pl-8">
+                                                <label class="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" id="RAG_DECOMPOSED_ANSWER" name="RAG_DECOMPOSED_ANSWER" class="checkbox checkbox-primary" checked aria-describedby="rag-decomposed-answer-help">
+                                                    <span class="label-text">Answer each sub-question in its own part (<span translate="no">RAG_DECOMPOSED_ANSWER</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-decomposed-answer-help">Each part cites its own sources. A part the documents do not cover says so.</span>
                                                 </label>
                                             </div>
                                             <div class="form-control">
@@ -7111,12 +7147,88 @@
                                         </div>
 
                                         <div class="form-control mb-4">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_WHATSAPP_HISTORY" name="RAG_WHATSAPP_HISTORY" class="checkbox checkbox-primary" aria-describedby="rag-whatsapp-history-help">
+                                                <span class="label-text">Send WhatsApp conversation history (<span translate="no">RAG_WHATSAPP_HISTORY</span>)</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0" id="rag-whatsapp-history-help">Sends the last 6 turns of the same sender and session with each WhatsApp message, so follow-up questions keep their context. Off sends only the current message. The reset command clears the history.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
                                             <label class="label" for="RAG_QUERY_TRANSLATE_DISABLED_PROFILES"><span class="label-text">Profiles without translation</span></label>
                                             <input type="text" id="RAG_QUERY_TRANSLATE_DISABLED_PROFILES" name="RAG_QUERY_TRANSLATE_DISABLED_PROFILES" placeholder="profile_id,profile_id…" autocomplete="off" spellcheck="false" translate="no"
                                                 aria-describedby="rag-query-translate-profiles-help" class="input input-bordered w-full">
                                             <label class="label">
                                                 <span class="label-text-alt min-w-0" id="rag-query-translate-profiles-help">Comma-separated embedding profiles that skip the translate transform; empty translates for every profile.</span>
                                             </label>
+                                        </div>
+
+                                        <div class="border border-base-300 rounded-lg p-4 mb-4 space-y-3">
+                                            <h4 class="font-semibold text-sm text-balance">Languages</h4>
+                                            <p class="label-text-alt min-w-0">No effect while the query layer is off.</p>
+                                            <div class="form-control">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_TRANSLATION_GLOSSARY" name="RAG_TRANSLATION_GLOSSARY" class="checkbox checkbox-primary" aria-describedby="rag-translation-glossary-help">
+                                                    <span class="label-text">Enforce the translation glossary (<span translate="no">RAG_TRANSLATION_GLOSSARY</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-translation-glossary-help">Query translation, document translation and query rewriting keep to the glossary’s required translations. With no entries nothing changes.</span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_LANGID_SIDECAR" name="RAG_LANGID_SIDECAR" class="checkbox checkbox-primary" aria-describedby="rag-langid-sidecar-help">
+                                                    <span class="label-text">Use the sidecar language detector for unclear questions (<span translate="no">RAG_LANGID_SIDECAR</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-langid-sidecar-help">Only for short or mixed-script questions the built-in detector is unsure about. Needs the sidecar with its language-detection extra installed. Never used in voice.</span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="border border-base-300 rounded-lg p-4 mb-4 space-y-3">
+                                            <h4 class="font-semibold text-sm text-balance">Speed</h4>
+                                            <p class="label-text-alt min-w-0">No effect while the query layer is off.</p>
+                                            <div class="form-control">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_SPECULATIVE_RETRIEVAL" name="RAG_SPECULATIVE_RETRIEVAL" class="checkbox checkbox-primary" aria-describedby="rag-speculative-retrieval-help">
+                                                    <span class="label-text">Start retrieval while the question is being rewritten (<span translate="no">RAG_SPECULATIVE_RETRIEVAL</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-speculative-retrieval-help">Searches with the original question at the same time as the transforms run. Results are fused the same way; a cache hit cancels the search.</span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control">
+                                                <label class="label" for="RAG_MODEL_ROUTING"><span class="label-text">Model routing for the Auto entry (<span translate="no">RAG_MODEL_ROUTING</span>)</span></label>
+                                                <select id="RAG_MODEL_ROUTING" name="RAG_MODEL_ROUTING" translate="no" autocomplete="off" aria-describedby="rag-model-routing-help" class="select select-bordered w-full max-w-xs">
+                                                    <option value="off" selected>off</option>
+                                                    <option value="auto">auto</option>
+                                                </select>
+                                                <label class="label">
+                                                    <span class="label-text-alt min-w-0" id="rag-model-routing-help"><span translate="no">off</span>: a user who selects Auto gets the quality model. <span translate="no">auto</span>: simple lookups go to the fast model, everything else to the quality model. A model the user selects by name is never replaced.</span>
+                                                </label>
+                                            </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div class="form-control">
+                                                    <label class="label" for="RAG_ROUTING_FAST_MODEL"><span class="label-text">Fast model (<span translate="no">RAG_ROUTING_FAST_MODEL</span>)</span></label>
+                                                    <select id="RAG_ROUTING_FAST_MODEL" name="RAG_ROUTING_FAST_MODEL" translate="no" autocomplete="off" class="select select-bordered w-full">
+                                                        <option value="">Not set</option>
+                                                    </select>
+                                                </div>
+                                                <div class="form-control">
+                                                    <label class="label" for="RAG_ROUTING_QUALITY_MODEL"><span class="label-text">Quality model (<span translate="no">RAG_ROUTING_QUALITY_MODEL</span>)</span></label>
+                                                    <select id="RAG_ROUTING_QUALITY_MODEL" name="RAG_ROUTING_QUALITY_MODEL" translate="no" autocomplete="off" class="select select-bordered w-full">
+                                                        <option value="">Not set</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex flex-wrap items-center gap-x-2 mb-4">
+                                            <span class="label-text-alt text-base-content/70" data-scope-gate-pointer-text>The scope gate switch, its thresholds and out-of-scope examples are under RAG administration, Scope gate.</span>
+                                            <button type="button" class="btn btn-link btn-xs px-0" data-scope-gate-pointer>Open scope gate</button>
                                         </div>
 
                                         <div class="border border-base-300 rounded-lg p-4 space-y-4">
@@ -10629,6 +10741,26 @@
                                             <div data-refusal-alert class="mb-4 empty:mb-0"></div>
                                             <div data-refusal-content></div>
                                             <div data-refusal-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-scope-gate" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-scope-gate-title">
+                                        <div class="card-body [overflow-wrap:anywhere]">
+                                            <h3 id="rag-scope-gate-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-rag-i18n="panel.title">Scope gate</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-scope-gate-description data-rag-i18n="panel.description">Skips retrieval for questions that are clearly outside what this knowledge base covers. What is in scope is learned only from the workspace’s own documents, document types and tags; no topic list is built in.</p>
+                                            <div class="form-control mb-4">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_SCOPE_GATE" name="RAG_SCOPE_GATE" class="checkbox checkbox-primary" aria-describedby="rag-scope-gate-help">
+                                                    <span class="label-text" data-rag-i18n="switch.label">Enable the scope gate (<span translate="no">RAG_SCOPE_GATE</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-scope-gate-help" data-rag-i18n="switch.help">Off sends every question to retrieval, as today. Voice never uses the scope gate.</span>
+                                                </label>
+                                                <div class="pl-8 text-sm" data-scope-gate-note></div>
+                                            </div>
+                                            <div data-scope-gate-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-scope-gate-content></div>
+                                            <div data-scope-gate-status class="text-sm mt-4" role="status" aria-live="polite"></div>
                                         </div>
                                     </section>
 
@@ -18759,6 +18891,7 @@ When messaging:
                     ]);
                     const defaultOpenRouterModels = window.configManager?.config?.NEXT_PUBLIC_OPENROUTER_MODELS || JSON.stringify([
                         { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true },
+                        { id: 'auto', displayName: 'Auto' },
                         { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
                         { id: 'openai/gpt-4.1', displayName: 'GPT-4.1' },
                         { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },
@@ -18803,6 +18936,7 @@ When messaging:
                         ]),
                         openrouterModels: safeJsonParse(defaultOpenRouterModels, [
                             { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true },
+                            { id: 'auto', displayName: 'Auto' },
                             { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
                             { id: 'openai/gpt-4.1', displayName: 'GPT-4.1' },
                             { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },
@@ -18865,6 +18999,7 @@ When messaging:
                     ],
                     openrouterModels: [
                         { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true },
+                        { id: 'auto', displayName: 'Auto' },
                         { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
                         { id: 'openai/gpt-4.1', displayName: 'GPT-4.1' },
                         { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },

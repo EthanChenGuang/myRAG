@@ -1241,3 +1241,126 @@ test('the default run fails and names --write-rag-affecting when the generated l
     cleanup(root);
   }
 });
+
+const PHASE_62_DEFAULTS = {
+  RAG_QUERY_DECOMPOSE_COMPLETENESS: 'true',
+  RAG_QUERY_SUBQ_FILTERS: 'false',
+  RAG_DECOMPOSED_ANSWER: 'true',
+  RAG_TRANSLATION_GLOSSARY: 'false',
+  RAG_LANGID_SIDECAR: 'false',
+  RAG_MODEL_ROUTING: 'off',
+  RAG_ROUTING_FAST_MODEL: 'anthropic/claude-haiku-5.5',
+  RAG_ROUTING_QUALITY_MODEL: 'anthropic/claude-sonnet-5.5',
+  RAG_SPECULATIVE_RETRIEVAL: 'false',
+  RAG_QUERY_HISTORY_FALLBACK: 'true',
+  RAG_WHATSAPP_HISTORY: 'false',
+  RAG_SCOPE_GATE: 'false',
+};
+const PHASE_62_NAMES = Object.keys(PHASE_62_DEFAULTS);
+
+test('the manifest lists the twelve Phase 6.2 names as managed and RAG-affecting (06.2 D-28)', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(REPO, MANIFEST), 'utf8'));
+  const byName = new Map(manifest.vars.map((entry) => [entry.name, entry]));
+  for (const name of PHASE_62_NAMES) {
+    assert.equal(byName.get(name)?.status, 'managed', name);
+    assert.deepEqual(byName.get(name)?.knownGaps, [], name);
+    assert.equal(byName.get(name)?.ragAffecting, true, name);
+  }
+});
+
+test('fails when any Phase 6.2 name is removed from any single location', () => {
+  for (const name of PHASE_62_NAMES) {
+    for (const [relative, location] of [
+      ['scripts/init-env.js', 'init-env'],
+      ['src/lib/env.ts', 'env-ts'],
+      ['scripts/config-server.js', 'config-server'],
+      ['scripts/config-ui/index.html', 'config-ui'],
+    ]) {
+      const root = copyRealTree();
+      try {
+        removeName(root, relative, name);
+        const { code, out } = run(root);
+        assert.equal(code, 1, `${name} removed from ${location}: ${out}`);
+        assert.match(out, new RegExp(`${name} \\[${location}\\] missing from this location`));
+      } finally {
+        cleanup(root);
+      }
+    }
+  }
+});
+
+test('the Phase 6.2 defaults match D-28 and D-35 in init-env, env.ts and all three config-server templates', () => {
+  const init = fs.readFileSync(path.join(REPO, 'scripts/init-env.js'), 'utf8');
+  const envTs = fs.readFileSync(path.join(REPO, 'src/lib/env.ts'), 'utf8');
+  const server = fs.readFileSync(path.join(REPO, 'scripts/config-server.js'), 'utf8');
+  for (const [name, value] of Object.entries(PHASE_62_DEFAULTS)) {
+    assert.match(init, new RegExp(`^${name}=${value.replace(/[.\\/]/g, '\\$&')}$`, 'm'), `init-env ${name}`);
+    assert.ok(envTs.includes(`${name}: process.env.${name} || '${value}',`), `env.ts ${name}`);
+    assert.deepEqual(templatesMissing(server, name), [], `config-server ${name}`);
+    for (const [label, block] of templateBlocks(server)) {
+      assert.ok(block.includes(`'${name}=${value}'`) || block.includes(`getEnvValue('${name}') || '${value}'`), `${label} template default for ${name}`);
+    }
+  }
+});
+
+function replaceIn(root, relative, from, to) {
+  const full = path.join(root, relative);
+  const text = fs.readFileSync(full, 'utf8');
+  assert.ok(text.includes(from), `${relative} holds ${from}`);
+  fs.writeFileSync(full, text.split(from).join(to));
+}
+
+test('fails and names the variable when a routing model id in a tracked location is not in the model lists (06.2 D-19)', () => {
+  const cases = [
+    ['scripts/init-env.js', 'init-env', 'RAG_ROUTING_FAST_MODEL=anthropic/claude-haiku-5.5', 'RAG_ROUTING_FAST_MODEL=vendor/not-listed', 'RAG_ROUTING_FAST_MODEL'],
+    ['src/lib/env.ts', 'env-ts', "RAG_ROUTING_QUALITY_MODEL || 'anthropic/claude-sonnet-5.5'", "RAG_ROUTING_QUALITY_MODEL || 'vendor/not-listed'", 'RAG_ROUTING_QUALITY_MODEL'],
+    ['scripts/config-server.js', 'config-server', "getEnvValue('RAG_ROUTING_FAST_MODEL') || 'anthropic/claude-haiku-5.5'", "getEnvValue('RAG_ROUTING_FAST_MODEL') || 'vendor/not-listed'", 'RAG_ROUTING_FAST_MODEL'],
+  ];
+  for (const [relative, location, from, to, name] of cases) {
+    const root = copyRealTree();
+    try {
+      replaceIn(root, relative, from, to);
+      const { code, out } = run(root);
+      assert.equal(code, 1, `${location}: ${out}`);
+      assert.match(out, new RegExp(`${name} \\[${location}\\] .*vendor/not-listed.* not in the OpenRouter model list`));
+    } finally {
+      cleanup(root);
+    }
+  }
+});
+
+test('fails when a routing model id names the auto entry or is empty in a tracked location', () => {
+  for (const [to, pattern] of [
+    ['RAG_ROUTING_QUALITY_MODEL=auto', /RAG_ROUTING_QUALITY_MODEL \[init-env\] .*must not be auto/],
+    ['RAG_ROUTING_QUALITY_MODEL=', /RAG_ROUTING_QUALITY_MODEL \[init-env\] .*must name a listed model/],
+  ]) {
+    const root = copyRealTree();
+    try {
+      replaceIn(root, 'scripts/init-env.js', 'RAG_ROUTING_QUALITY_MODEL=anthropic/claude-sonnet-5.5', to);
+      const { code, out } = run(root);
+      assert.equal(code, 1, `${to}: ${out}`);
+      assert.match(out, pattern);
+    } finally {
+      cleanup(root);
+    }
+  }
+});
+
+test('fails when .env.local sets a routing model id that is not in the model lists, and passes with a listed one', () => {
+  const root = copyRealTree();
+  try {
+    const managed = JSON.parse(fs.readFileSync(path.join(root, MANIFEST), 'utf8'))
+      .vars.filter((entry) => entry.status === 'managed')
+      .map((entry) => `${entry.name}=`);
+    const base = managed.filter((line) => !line.startsWith('RAG_ROUTING_')).join('\n');
+    write(root, '.env.local', `${base}\nRAG_ROUTING_FAST_MODEL=anthropic/claude-haiku-5.5\nRAG_ROUTING_QUALITY_MODEL=vendor/not-listed\n`);
+    const bad = run(root);
+    assert.equal(bad.code, 1, bad.out);
+    assert.match(bad.out, /RAG_ROUTING_QUALITY_MODEL \[env-local\] .*vendor\/not-listed.* not in the OpenRouter model list/);
+    write(root, '.env.local', `${base}\nRAG_ROUTING_FAST_MODEL=anthropic/claude-haiku-5.5\nRAG_ROUTING_QUALITY_MODEL=anthropic/claude-sonnet-5.5\n`);
+    const good = run(root);
+    assert.doesNotMatch(good.out, /RAG_ROUTING_/);
+  } finally {
+    cleanup(root);
+  }
+});
