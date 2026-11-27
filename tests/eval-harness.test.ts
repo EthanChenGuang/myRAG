@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import type { InProcessEval, RunEvalResult } from '../eval/harness/run-eval.mts';
+import { compactFixtureCorpus, removeCompactCorpus } from './helpers/compact-corpus.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FULL_GOLDEN_PATH = path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl');
@@ -138,9 +139,20 @@ describe('run-smoke absolute-gate flags', () => {
 });
 
 describe('run-smoke answers by default (05.3-15, O-1)', () => {
+  // These runs answer one tracer item; without the 04.2-37 duplicate-passage copies the child builds its fixture database in
+  // a fraction of the time (each run took 42-48 s in CI on the full corpus, against the 60 s test timeout).
+  let corpusDir: string | undefined;
+  beforeAll(() => {
+    corpusDir = compactFixtureCorpus();
+  });
+  afterAll(() => {
+    removeCompactCorpus(corpusDir);
+  });
+
   function smoke(extra: string[]): { status: number | null; stderr: string; generatorModel: string | null; answer: string | null } {
     const out = makeOutDir();
-    const result = spawnSync(process.execPath, ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--golden', GOLDEN_PATH, '--no-gate', '--out', out, ...extra], {
+    const args = ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--golden', GOLDEN_PATH, '--corpus', corpusDir as string, '--no-gate', '--out', out, ...extra];
+    const result = spawnSync(process.execPath, args, {
       cwd: REPO_ROOT,
       encoding: 'utf8',
     });
