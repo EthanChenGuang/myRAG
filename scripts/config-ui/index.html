@@ -18624,29 +18624,29 @@ When messaging:
                     // Get defaults from the config manager if available
                     const defaultProvider = window.configManager?.config?.NEXT_PUBLIC_AI_PROVIDER || 'openrouter';
                     const defaultOpenAIModels = window.configManager?.config?.NEXT_PUBLIC_OPENAI_MODELS || JSON.stringify([
-                        { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
-                        { id: 'gpt-4.1', displayName: 'GPT-4.1' },
-                        { id: 'o3', displayName: 'o3' },
-                        { id: 'o4-mini', displayName: 'o4 Mini' }
+                        { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
+                        { id: 'gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
+                        { id: 'o3', displayName: 'o3', contextLength: 200000 },
+                        { id: 'o4-mini', displayName: 'o4 Mini', contextLength: 200000 }
                     ]);
                     const defaultOpenRouterModels = window.configManager?.config?.NEXT_PUBLIC_OPENROUTER_MODELS || JSON.stringify([
-                        { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true },
-                        { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
-                        { id: 'openai/gpt-4.1', displayName: 'GPT-4.1' },
-                        { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },
+                        { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true, contextLength: 1000000 },
+                        { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
+                        { id: 'openai/gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
+                        { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1', contextLength: 200000 },
                         { id: 'anthropic/claude-opus-5.5', displayName: 'Claude Opus 5.5', anthropicId: 'claude-opus-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                         { id: 'anthropic/claude-sonnet-5.5', displayName: 'Claude Sonnet 5.5', anthropicId: 'claude-sonnet-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                         { id: 'anthropic/claude-haiku-5.5', displayName: 'Claude Haiku 5.5', anthropicId: 'claude-haiku-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
-                        { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite' },
-                        { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
-                        { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true },
+                        { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite', contextLength: 1048576 },
+                        { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', contextLength: 1048576 },
+                        { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true, contextLength: 524288 },
                         { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', displayName: 'Venice: Uncensored', isFree: true, isOpenSource: true, isUncensored: true }
                     ]);
                     const defaultGroqModels = window.configManager?.config?.NEXT_PUBLIC_GROQ_MODELS || JSON.stringify([
-                        { id: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile' },
-                        { id: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B' },
-                        { id: 'groq/compound', displayName: 'Groq Compound' },
-                        { id: 'moonshotai/kimi-k2-instruct-0905', displayName: 'Kimi K2 Instruct' }
+                        { id: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile', contextLength: 131072 },
+                        { id: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B', contextLength: 131072 },
+                        { id: 'groq/compound', displayName: 'Groq Compound', contextLength: 131072 },
+                        { id: 'moonshotai/kimi-k2-instruct-0905', displayName: 'Kimi K2 Instruct', contextLength: 262144 }
                     ]);
 
                     // Safe JSON parsing helper
@@ -18668,29 +18668,29 @@ When messaging:
                     modelConfig = {
                         provider: defaultProvider,
                         openaiModels: safeJsonParse(defaultOpenAIModels, [
-                            { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
-                            { id: 'gpt-4.1', displayName: 'GPT-4.1' },
-                            { id: 'o3', displayName: 'o3' },
-                            { id: 'o4-mini', displayName: 'o4 Mini' }
+                            { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
+                            { id: 'gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
+                            { id: 'o3', displayName: 'o3', contextLength: 200000 },
+                            { id: 'o4-mini', displayName: 'o4 Mini', contextLength: 200000 }
                         ]),
                         openrouterModels: safeJsonParse(defaultOpenRouterModels, [
-                            { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true },
-                            { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
-                            { id: 'openai/gpt-4.1', displayName: 'GPT-4.1' },
-                            { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },
+                            { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true, contextLength: 1000000 },
+                            { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
+                            { id: 'openai/gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
+                            { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1', contextLength: 200000 },
                             { id: 'anthropic/claude-opus-5.5', displayName: 'Claude Opus 5.5', anthropicId: 'claude-opus-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                             { id: 'anthropic/claude-sonnet-5.5', displayName: 'Claude Sonnet 5.5', anthropicId: 'claude-sonnet-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                             { id: 'anthropic/claude-haiku-5.5', displayName: 'Claude Haiku 5.5', anthropicId: 'claude-haiku-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
-                            { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite' },
-                            { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
-                            { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true },
+                            { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite', contextLength: 1048576 },
+                            { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', contextLength: 1048576 },
+                            { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true, contextLength: 524288 },
                             { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', displayName: 'Venice: Uncensored', isFree: true, isOpenSource: true, isUncensored: true }
                         ]),
                         groqModels: safeJsonParse(defaultGroqModels, [
-                            { id: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile' },
-                            { id: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B' },
-                            { id: 'groq/compound', displayName: 'Groq Compound' },
-                            { id: 'moonshotai/kimi-k2-instruct-0905', displayName: 'Kimi K2 Instruct' }
+                            { id: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile', contextLength: 131072 },
+                            { id: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B', contextLength: 131072 },
+                            { id: 'groq/compound', displayName: 'Groq Compound', contextLength: 131072 },
+                            { id: 'moonshotai/kimi-k2-instruct-0905', displayName: 'Kimi K2 Instruct', contextLength: 262144 }
                         ])
                     };
                 } else {
@@ -18730,29 +18730,29 @@ When messaging:
                 modelConfig = {
                     provider: 'openrouter',
                     openaiModels: [
-                        { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
-                        { id: 'gpt-4.1', displayName: 'GPT-4.1' },
-                        { id: 'o3', displayName: 'o3' },
-                        { id: 'o4-mini', displayName: 'o4 Mini' }
+                        { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
+                        { id: 'gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
+                        { id: 'o3', displayName: 'o3', contextLength: 200000 },
+                        { id: 'o4-mini', displayName: 'o4 Mini', contextLength: 200000 }
                     ],
                     openrouterModels: [
-                        { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true },
-                        { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
-                        { id: 'openai/gpt-4.1', displayName: 'GPT-4.1' },
-                        { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },
+                        { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true, contextLength: 1000000 },
+                        { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
+                        { id: 'openai/gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
+                        { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1', contextLength: 200000 },
                         { id: 'anthropic/claude-opus-5.5', displayName: 'Claude Opus 5.5', anthropicId: 'claude-opus-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                         { id: 'anthropic/claude-sonnet-5.5', displayName: 'Claude Sonnet 5.5', anthropicId: 'claude-sonnet-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                         { id: 'anthropic/claude-haiku-5.5', displayName: 'Claude Haiku 5.5', anthropicId: 'claude-haiku-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
-                        { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite' },
-                        { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
-                        { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true },
+                        { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite', contextLength: 1048576 },
+                        { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', contextLength: 1048576 },
+                        { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true, contextLength: 524288 },
                         { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', displayName: 'Venice: Uncensored', isFree: true, isOpenSource: true, isUncensored: true }
                     ],
                     groqModels: [
-                        { id: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile' },
-                        { id: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B' },
-                        { id: 'groq/compound', displayName: 'Groq Compound' },
-                        { id: 'moonshotai/kimi-k2-instruct-0905', displayName: 'Kimi K2 Instruct' }
+                        { id: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile', contextLength: 131072 },
+                        { id: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B', contextLength: 131072 },
+                        { id: 'groq/compound', displayName: 'Groq Compound', contextLength: 131072 },
+                        { id: 'moonshotai/kimi-k2-instruct-0905', displayName: 'Kimi K2 Instruct', contextLength: 262144 }
                     ]
                 };
 
