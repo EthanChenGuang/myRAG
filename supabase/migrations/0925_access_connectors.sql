@@ -269,4 +269,308 @@ $fn$;
 REVOKE ALL ON FUNCTION public.rag_connector_match_members(text, text[]) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_connector_match_members(text, text[]) TO service_role;
 
+-- Administration (D-20, D-28, A-07, UI-SPEC 6.5, 8.1). Rows come from mappings and rules an admin created and from principals a sync has
+-- seen; documents is the number of document lineages whose last apply left that principal unmapped, i.e. that fell back because of it.
+-- A mapping or rule change relabels nothing by itself: it applies at the next sync of each connection.
+
+CREATE OR REPLACE FUNCTION public.rag_connector_map_list(p_tenant_key text, p_offset integer DEFAULT 0)
+RETURNS TABLE (id uuid, provider text, kind text, external_principal_id text, group_id uuid, documents bigint, total bigint)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_offset IS NULL OR p_offset < 0 THEN
+    RAISE EXCEPTION 'invalid_offset' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
+  WITH seen AS (
+    SELECT p.provider, p.kind, p.external_principal_id,
+      pg_catalog.count(DISTINCT COALESCE(d.lineage_id, d.id)) FILTER (WHERE NOT p.mapped) AS fell_back
+    FROM public.rag_connector_document_principals p
+    JOIN public.documents d ON d.id = p.document_id AND d.tenant_key = p_tenant_key
+    WHERE p.tenant_key = p_tenant_key AND p.kind IN ('group', 'team', 'workspace')
+    GROUP BY p.provider, p.kind, p.external_principal_id
+  ),
+  rows_all AS (
+    SELECT m.id, m.provider, m.kind, m.external_principal_id, m.group_id, COALESCE(s.fell_back, 0) AS documents
+    FROM public.rag_connector_group_map m
+    LEFT JOIN seen s ON s.provider = m.provider AND s.external_principal_id = m.external_principal_id
+    WHERE m.tenant_key = p_tenant_key
+    UNION ALL
+    SELECT NULL::uuid, s.provider, s.kind, s.external_principal_id, NULL::uuid, s.fell_back
+    FROM seen s
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.rag_connector_group_map m
+      WHERE m.tenant_key = p_tenant_key AND m.provider = s.provider AND m.external_principal_id = s.external_principal_id
+    )
+  )
+  SELECT r.id, r.provider, r.kind, r.external_principal_id, r.group_id, r.documents, pg_catalog.count(*) OVER () AS total
+  FROM rows_all r
+  ORDER BY (r.id IS NULL) DESC, r.provider COLLATE "C", r.kind COLLATE "C", r.external_principal_id COLLATE "C"
+  OFFSET p_offset
+  LIMIT 50;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_connector_map_list(text, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_connector_map_list(text, integer) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_connector_map_set(
+  p_tenant_key text,
+  p_id uuid,
+  p_provider text,
+  p_kind text,
+  p_external_principal_id text,
+  p_group_id uuid,
+  p_actor uuid
+)
+RETURNS TABLE (id uuid, group_id uuid, outcome text)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_row record;
+  v_pid text;
+  v_id uuid;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_group_id IS NULL THEN
+    RAISE EXCEPTION 'group_required' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_id IS NOT NULL THEN
+    SELECT m.id, m.group_id INTO v_row
+    FROM public.rag_connector_group_map m
+    WHERE m.id = p_id AND m.tenant_key = p_tenant_key
+    FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'mapping_not_found' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.rag_access_groups g WHERE g.id = p_group_id AND g.tenant_key = p_tenant_key) THEN
+    RAISE EXCEPTION 'unknown_group' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_id IS NOT NULL THEN
+    IF v_row.group_id = p_group_id THEN
+      RETURN QUERY SELECT p_id, p_group_id, 'unchanged'::text;
+      RETURN;
+    END IF;
+    UPDATE public.rag_connector_group_map m SET group_id = p_group_id WHERE m.id = p_id AND m.tenant_key = p_tenant_key;
+    INSERT INTO public.rag_access_audit (tenant_key, action, actor, actor_kind, group_id, before_groups, after_groups, reason)
+    VALUES (p_tenant_key, 'connector_map_set', p_actor, 'admin', p_group_id,
+      ARRAY['g:' || v_row.group_id::text], ARRAY['g:' || p_group_id::text], 'changed');
+    RETURN QUERY SELECT p_id, p_group_id, 'changed'::text;
+    RETURN;
+  END IF;
+
+  IF p_provider IS NULL OR p_provider NOT IN ('google-drive', 'dropbox', 'notion') THEN
+    RAISE EXCEPTION 'invalid_provider' USING ERRCODE = '22023';
+  END IF;
+  IF p_kind IS NULL OR p_kind NOT IN ('group', 'team', 'workspace') THEN
+    RAISE EXCEPTION 'invalid_kind' USING ERRCODE = '22023';
+  END IF;
+  v_pid := pg_catalog.btrim(p_external_principal_id);
+  IF v_pid IS NULL OR v_pid = '' OR pg_catalog.char_length(v_pid) > 512 THEN
+    RAISE EXCEPTION 'invalid_principal' USING ERRCODE = '22023';
+  END IF;
+  IF p_provider = 'google-drive' AND p_kind = 'group' THEN
+    v_pid := pg_catalog.lower(v_pid);
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.rag_connector_group_map m
+    WHERE m.tenant_key = p_tenant_key AND m.provider = p_provider AND m.external_principal_id = v_pid
+  ) THEN
+    RAISE EXCEPTION 'mapping_exists' USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO public.rag_connector_group_map (tenant_key, provider, external_principal_id, kind, group_id, created_by)
+  VALUES (p_tenant_key, p_provider, v_pid, p_kind, p_group_id, p_actor)
+  RETURNING public.rag_connector_group_map.id INTO v_id;
+  INSERT INTO public.rag_access_audit (tenant_key, action, actor, actor_kind, group_id, before_groups, after_groups, reason)
+  VALUES (p_tenant_key, 'connector_map_set', p_actor, 'admin', p_group_id, NULL, ARRAY['g:' || p_group_id::text], 'created');
+  RETURN QUERY SELECT v_id, p_group_id, 'created'::text;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_connector_map_set(text, uuid, text, text, text, uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_connector_map_set(text, uuid, text, text, text, uuid, uuid) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_connector_map_delete(p_tenant_key text, p_id uuid, p_actor uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_group uuid;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  DELETE FROM public.rag_connector_group_map m
+  WHERE m.id = p_id AND m.tenant_key = p_tenant_key
+  RETURNING m.group_id INTO v_group;
+  IF v_group IS NULL THEN
+    RAISE EXCEPTION 'mapping_not_found' USING ERRCODE = '22023';
+  END IF;
+  INSERT INTO public.rag_access_audit (tenant_key, action, actor, actor_kind, group_id, before_groups, after_groups, reason)
+  VALUES (p_tenant_key, 'connector_map_delete', p_actor, 'admin', v_group, ARRAY['g:' || v_group::text], NULL, 'removed');
+  RETURN true;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_connector_map_delete(text, uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_connector_map_delete(text, uuid, uuid) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_connector_rules_list(p_tenant_key text)
+RETURNS TABLE (id uuid, provider text, kind text, domain text, enabled boolean, documents bigint)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  RETURN QUERY
+  WITH seen AS (
+    SELECT p.provider, p.kind, p.external_principal_id AS domain_key,
+      pg_catalog.count(DISTINCT COALESCE(d.lineage_id, d.id)) FILTER (WHERE NOT p.mapped) AS fell_back
+    FROM public.rag_connector_document_principals p
+    JOIN public.documents d ON d.id = p.document_id AND d.tenant_key = p_tenant_key
+    WHERE p.tenant_key = p_tenant_key AND p.kind IN ('domain', 'anyone', 'public')
+    GROUP BY p.provider, p.kind, p.external_principal_id
+  ),
+  rows_all AS (
+    SELECT r.id, r.provider, r.kind, r.domain, r.enabled, COALESCE(s.fell_back, 0) AS documents
+    FROM public.rag_connector_sharing_rules r
+    LEFT JOIN seen s ON s.provider = r.provider AND s.kind = r.kind AND s.domain_key = COALESCE(r.domain, '')
+    WHERE r.tenant_key = p_tenant_key
+    UNION ALL
+    SELECT NULL::uuid, s.provider, s.kind, NULLIF(s.domain_key, ''), false, s.fell_back
+    FROM seen s
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.rag_connector_sharing_rules r
+      WHERE r.tenant_key = p_tenant_key AND r.provider = s.provider AND r.kind = s.kind AND COALESCE(r.domain, '') = s.domain_key
+    )
+  )
+  SELECT x.id, x.provider, x.kind, x.domain, x.enabled, x.documents
+  FROM rows_all x
+  ORDER BY x.provider COLLATE "C", x.kind COLLATE "C", COALESCE(x.domain, '') COLLATE "C"
+  LIMIT 1000;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_connector_rules_list(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_connector_rules_list(text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_connector_rule_set(
+  p_tenant_key text,
+  p_id uuid,
+  p_provider text,
+  p_kind text,
+  p_domain text,
+  p_enabled boolean,
+  p_actor uuid
+)
+RETURNS TABLE (id uuid, enabled boolean, outcome text)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_current boolean;
+  v_domain text;
+  v_id uuid;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+
+  IF p_id IS NOT NULL THEN
+    SELECT r.enabled INTO v_current
+    FROM public.rag_connector_sharing_rules r
+    WHERE r.id = p_id AND r.tenant_key = p_tenant_key
+    FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'rule_not_found' USING ERRCODE = '22023';
+    END IF;
+    IF p_enabled IS NULL THEN
+      RAISE EXCEPTION 'enabled_required' USING ERRCODE = '22023';
+    END IF;
+    IF v_current = p_enabled THEN
+      RETURN QUERY SELECT p_id, p_enabled, 'unchanged'::text;
+      RETURN;
+    END IF;
+    UPDATE public.rag_connector_sharing_rules r
+    SET enabled = p_enabled, updated_at = pg_catalog.now(), updated_by = p_actor
+    WHERE r.id = p_id AND r.tenant_key = p_tenant_key;
+    INSERT INTO public.rag_access_audit (tenant_key, action, actor, actor_kind, reason)
+    VALUES (p_tenant_key, 'sharing_rule_set', p_actor, 'admin', CASE WHEN p_enabled THEN 'enabled' ELSE 'disabled' END);
+    RETURN QUERY SELECT p_id, p_enabled, CASE WHEN p_enabled THEN 'enabled' ELSE 'disabled' END;
+    RETURN;
+  END IF;
+
+  IF p_provider IS NULL OR p_provider NOT IN ('google-drive', 'dropbox', 'notion') THEN
+    RAISE EXCEPTION 'invalid_provider' USING ERRCODE = '22023';
+  END IF;
+  IF p_kind IS NULL OR p_kind NOT IN ('domain', 'anyone', 'public') THEN
+    RAISE EXCEPTION 'invalid_kind' USING ERRCODE = '22023';
+  END IF;
+  v_domain := NULLIF(pg_catalog.lower(pg_catalog.btrim(p_domain)), '');
+  IF p_kind = 'domain' THEN
+    IF v_domain IS NULL OR pg_catalog.char_length(v_domain) > 253
+      OR v_domain !~ '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$' THEN
+      RAISE EXCEPTION 'bad_domain' USING ERRCODE = '22023';
+    END IF;
+  ELSIF p_domain IS NOT NULL THEN
+    RAISE EXCEPTION 'bad_domain' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.rag_connector_sharing_rules r
+    WHERE r.tenant_key = p_tenant_key AND r.provider = p_provider AND r.kind = p_kind AND COALESCE(r.domain, '') = COALESCE(v_domain, '')
+  ) THEN
+    RAISE EXCEPTION 'rule_exists' USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO public.rag_connector_sharing_rules (tenant_key, provider, kind, domain, enabled, updated_by)
+  VALUES (p_tenant_key, p_provider, p_kind, v_domain, false, p_actor)
+  RETURNING public.rag_connector_sharing_rules.id INTO v_id;
+  INSERT INTO public.rag_access_audit (tenant_key, action, actor, actor_kind, reason)
+  VALUES (p_tenant_key, 'sharing_rule_set', p_actor, 'admin', 'created');
+  RETURN QUERY SELECT v_id, false, 'created'::text;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_connector_rule_set(text, uuid, text, text, text, boolean, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_connector_rule_set(text, uuid, text, text, text, boolean, uuid) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_connector_fail_closed_counts(p_tenant_key text)
+RETURNS TABLE (connection_id text, documents bigint)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  RETURN QUERY
+  SELECT r.connection_id, pg_catalog.count(DISTINCT s.lineage_id)
+  FROM public.rag_connector_document_access s
+  JOIN public.documents d ON d.tenant_key = p_tenant_key AND COALESCE(d.lineage_id, d.id) = s.lineage_id
+  JOIN public.nango_sync_records r ON r.document_id = d.id
+  WHERE s.tenant_key = p_tenant_key AND s.fail_closed
+  GROUP BY r.connection_id
+  ORDER BY r.connection_id COLLATE "C";
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_connector_fail_closed_counts(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_connector_fail_closed_counts(text) TO service_role;
+
 COMMIT;
