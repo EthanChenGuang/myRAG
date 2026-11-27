@@ -14,14 +14,16 @@ import llamaindexHydeZh from './prompts/llamaindex.hyde.zh.v1.json';
 import llamaindexSubq from './prompts/llamaindex.subq.v1.json';
 import sharedSubqFilters from './prompts/shared.subq-filters.v1.json';
 import sharedSuffix from './prompts/shared.suffix.v1.json';
+import sharedTerminology from './prompts/shared.terminology.v1.json';
 import sharedTranslate from './prompts/shared.translate.v1.json';
 
 /**
  * Prompt files whose version enters the hash in their own switch-gated block instead of this list, so the hash with their switch
  * off keeps its value: shared.glossary (D-14) is in the glossary block (glossaryHashBlock); shared.subq-filters joins `prompts`
- * only while RAG_QUERY_SUBQ_FILTERS is effective (queryLayerHashComponent's subqFilters argument).
+ * only while RAG_QUERY_SUBQ_FILTERS is effective (queryLayerHashComponent's subqFilters argument); shared.terminology joins the
+ * terminology block (terminologyHashBlock) only for a request whose condense or HyDE prompt carried a terminology glossary.
  */
-export const SWITCH_GATED_PROMPT_IDS: ReadonlySet<string> = new Set(['shared.glossary', sharedSubqFilters.id]);
+export const SWITCH_GATED_PROMPT_IDS: ReadonlySet<string> = new Set(['shared.glossary', sharedSubqFilters.id, sharedTerminology.id]);
 
 /** Every query-layer prompt file except SWITCH_GATED_PROMPT_IDS; a test fails when a file in prompts/ is missing here. */
 const PROMPT_FILES: ReadonlyArray<{ id: string; version: number }> = [

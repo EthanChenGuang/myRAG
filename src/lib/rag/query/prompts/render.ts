@@ -4,6 +4,7 @@ import llamaindexCondense from './llamaindex.condense.v1.json';
 import sharedGlossary from './shared.glossary.v1.json';
 import sharedSubqFilters from './shared.subq-filters.v1.json';
 import sharedSuffix from './shared.suffix.v1.json';
+import sharedTerminology from './shared.terminology.v1.json';
 import sharedTranslate from './shared.translate.v1.json';
 
 export const HISTORY_OPEN = '<conversation>';
@@ -15,6 +16,7 @@ export const HISTORY_TURN_MAX_CHARS = 1000;
 const SUFFIX_ID = 'shared.suffix';
 const SUBQ_FILTERS_ID = 'shared.subq-filters';
 const GLOSSARY_ID = 'shared.glossary';
+const TERMINOLOGY_ID = 'shared.terminology';
 const HISTORY_PLACEHOLDER = 'history';
 const PLACEHOLDER = /\{\{([a-z_][a-z0-9_]*)\}\}/gu;
 const DELIMITER = /<\s*\/?\s*conversation\b[^>]*>/giu;
@@ -47,6 +49,7 @@ export const PROMPT_REGISTRY: Readonly<Record<string, unknown>> = Object.freeze(
   'shared.translate': sharedTranslate,
   [SUBQ_FILTERS_ID]: sharedSubqFilters,
   [GLOSSARY_ID]: sharedGlossary,
+  [TERMINOLOGY_ID]: sharedTerminology,
 });
 
 function templatePlaceholders(template: string): Set<string> {
@@ -210,4 +213,19 @@ export function renderGlossaryAddendum(pairs: readonly GlossaryPromptPair[]): st
   if (pairs.length === 0) return '';
   const lines = pairs.map((pair) => escapeGlossaryTags(JSON.stringify({ source: [...pair.sources], translation: pair.target })));
   return renderTemplate(loadPrompt(GLOSSARY_ID), { pairs: lines.join('\n') });
+}
+
+/** One dictionary match as the terminology addendum lists it (QRY-01, QRY-03): the term as written, its canonical form and kind. */
+export type TerminologyGlossaryEntry = { surface: string; canonical: string; kind: string };
+
+export const TERMINOLOGY_GLOSSARY_MAX_ENTRIES = 8;
+export const TERMINOLOGY_GLOSSARY_FIELD_MAX_CHARS = 64;
+export const TERMINOLOGY_GLOSSARY_MAX_CHARS = 1200;
+
+export function terminologyGlossaryEntries(_entries: readonly TerminologyGlossaryEntry[]): TerminologyGlossaryEntry[] {
+  return [];
+}
+
+export function renderTerminologyAddendum(_entries: readonly TerminologyGlossaryEntry[]): string {
+  return '';
 }

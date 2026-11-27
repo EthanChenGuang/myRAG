@@ -215,7 +215,7 @@ export interface RetrievalConfigHashTerminology {
 }
 
 /** The terminology stage as the hash sees it: disabled for the request, or enabled with the version it ended with (null: skipped). */
-export type TerminologyHashStage = { enabled: false } | { enabled: true; version: string | null };
+export type TerminologyHashStage = { enabled: false } | { enabled: true; version: string | null; prompt?: true };
 
 export const TERMINOLOGY_UNAVAILABLE = 'terminology:unavailable';
 
