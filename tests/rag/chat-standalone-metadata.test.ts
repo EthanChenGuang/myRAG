@@ -4,6 +4,7 @@ import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
 import type { RunRetrievalInput, RetrievalResult } from '@/lib/rag/types';
 import { chatRequest, emptyRetrieval, installChatPipeline, readSse } from '../helpers/chat-route-fakes';
 import { systemTextOf } from '../helpers/route-fixture';
+import { fixedText } from '@/lib/rag/lang/texts';
 
 const h = await vi.hoisted(async () => {
   const fakes = await import('../helpers/chat-route-fakes');
@@ -172,7 +173,7 @@ describe('chat route standalone-query metadata (D-22, D-17, P-22)', () => {
       chatRequest({ messages: [{ role: 'user', content: SMALL_TALK }], data: { ragMode: 'strict', settings: { webSearch: false } } }),
     );
     const body = await readSse(response);
-    expect(body).toContain('Information Not Available');
+    expect(body).toContain(JSON.stringify(fixedText('notices.no_information', 'zh')).slice(1, 40));
     expect(ragMetadataOf(body)).toEqual([{ standaloneQuery: STANDALONE, queryLanguage: 'en' }]);
   });
 
