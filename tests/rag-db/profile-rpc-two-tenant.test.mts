@@ -7,7 +7,7 @@ import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from 
 const LEGACY = 'openai-3-small-1536';
 const TEST_PROFILE = 'test-1536';
 const SMALL_PROFILE = 'test-8';
-const RPC_SIGNATURE = 'match_chunks_by_profile(text,text,integer,halfvec,integer,double precision,boolean)';
+const RPC_SIGNATURE = 'match_chunks_by_profile(text,text,integer,halfvec,integer,double precision,boolean,text[],boolean)';
 
 function literal(values: number[]): string {
   return `[${values.join(',')}]`;

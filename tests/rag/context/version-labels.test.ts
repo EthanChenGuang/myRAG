@@ -119,7 +119,7 @@ describe('conditional version columns (D-49, RESEARCH Pitfalls 14 and 15)', () =
     vi.stubEnv('RAG_VERSION_LABELS', 'true');
     const row = { id: DOC_A, filename: 'a.md', version: 2, doc_type: 'general', doc_date: null, effective_from: '2026-03-01', version_label: null };
     const admin = fakeAdmin([row]);
-    const result = await fetchAssemblyRows(CANDIDATES, { adminClient: admin.client, signal: new AbortController().signal });
+    const result = await fetchAssemblyRows(CANDIDATES, { access: { mode: 'off' }, adminClient: admin.client, signal: new AbortController().signal });
     expect(admin.calls.map((call) => call.table)).toEqual(['documents', 'document_chunks']);
     expect(admin.calls[0]!.select).toBe(VERSION_SELECT);
     expect(result.documents.get(DOC_A)).toEqual(row);
@@ -133,7 +133,7 @@ describe('conditional version columns (D-49, RESEARCH Pitfalls 14 and 15)', () =
     const row = { id: DOC_A, filename: 'a.md' };
     for (let run = 0; run < 2; run += 1) {
       const admin = fakeAdmin([row], missing);
-      const result = await fetchAssemblyRows(CANDIDATES, { adminClient: admin.client, signal: new AbortController().signal });
+      const result = await fetchAssemblyRows(CANDIDATES, { access: { mode: 'off' }, adminClient: admin.client, signal: new AbortController().signal });
       expect(admin.calls.map((call) => call.select)).toEqual([VERSION_SELECT, BASE_SELECT, 'id, metadata']);
       expect(result.documents.get(DOC_A)).toEqual(row);
     }
@@ -146,14 +146,14 @@ describe('conditional version columns (D-49, RESEARCH Pitfalls 14 and 15)', () =
   it('still throws on any other read error, and makes no retry with the switch off', async () => {
     vi.stubEnv('RAG_VERSION_LABELS', 'true');
     const admin = fakeAdmin([], () => ({ code: '57014', message: 'canceling statement' }));
-    await expect(fetchAssemblyRows(CANDIDATES, { adminClient: admin.client, signal: new AbortController().signal })).rejects.toThrow(
+    await expect(fetchAssemblyRows(CANDIDATES, { access: { mode: 'off' }, adminClient: admin.client, signal: new AbortController().signal })).rejects.toThrow(
       'documents lookup failed',
     );
     expect(admin.calls).toHaveLength(1);
 
     vi.stubEnv('RAG_VERSION_LABELS', '');
     const off = fakeAdmin([], () => ({ code: '42703', message: 'column documents.x does not exist' }));
-    await expect(fetchAssemblyRows(CANDIDATES, { adminClient: off.client, signal: new AbortController().signal })).rejects.toThrow(
+    await expect(fetchAssemblyRows(CANDIDATES, { access: { mode: 'off' }, adminClient: off.client, signal: new AbortController().signal })).rejects.toThrow(
       'documents lookup failed',
     );
     expect(off.calls).toHaveLength(1);

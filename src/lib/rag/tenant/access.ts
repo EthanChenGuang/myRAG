@@ -15,7 +15,7 @@ export {
   type AccessScopeMode,
 } from './access-brand';
 
-export { accessRpcArgs, sameAccessFilter, type ScopeAccessFilter } from './access-filter';
+export { accessRpcArgs, accessTableFilter, sameAccessFilter, type ScopeAccessFilter } from './access-filter';
 import type { ScopeAccessFilter } from './access-filter';
 
 /** A scope that was never resolved for access while RAG_DOC_ACCESS_GROUPS is on: retrieval fails closed (D-09, D-10). */
@@ -204,18 +204,16 @@ export function accessScopeTiming(scope: TenantScope): number | null {
   return timings.get(access) ?? null;
 }
 
+/** D-07: the embed identity's group key, from RAG_EMBED_ACCESS_GROUP only; empty means visitors see documents labelled all. */
+export function embedAccessGroup(): string {
+  return loadRagConfig(getRagDeps().ragEnv()).embedAccessGroup;
+}
+
 /** D-06: whether a raw request body names groups at the top level (the route ignores the value and logs once). */
 export function bodyNamesAccessGroups(rawBody: unknown): boolean {
   if (typeof rawBody !== 'object' || rawBody === null || Array.isArray(rawBody)) return false;
   const body = rawBody as Record<string, unknown>;
   return ['accessGroups', 'groups'].some((key) => Object.prototype.hasOwnProperty.call(body, key) && body[key] !== undefined);
-}
-
-/** The keys for an `.overlaps('access_groups', keys)` table read; null means no access predicate (off, admin_all). */
-export function accessTableFilter(filter: ScopeAccessFilter): readonly string[] | null {
-  if (filter.mode !== 'keys') return null;
-  if (filter.keys.length === 0) throw new Error('[RAG Access] keys filter without keys');
-  return [...filter.keys];
 }
 
 export type UploadAccessChoice = null | { everyone: true } | { groupIds: readonly string[] };

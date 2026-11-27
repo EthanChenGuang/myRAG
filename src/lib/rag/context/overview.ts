@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { accessTableFilter, withAccessGroups, type ScopeAccessFilter } from '../tenant/access-filter';
 import type { ContextBlock, UsedDocument } from '../types';
 import { NO_CONTEXT_TEXT, type AssemblyDocumentRow } from './assemble';
 import { assemblyDocumentSelect } from './fetch-rows';
@@ -35,19 +36,16 @@ const MATCHED_CHUNK_LENGTH = 150;
 
 export async function fetchOverviewDocuments(
   chunks: OverviewChunk[],
-  options: { admin: SupabaseClient; signal: AbortSignal },
+  options: { admin: SupabaseClient; signal: AbortSignal; access: ScopeAccessFilter },
 ): Promise<Map<string, AssemblyDocumentRow>> {
   const documents = new Map<string, AssemblyDocumentRow>();
   const ids = Array.from(new Set(chunks.map((chunk) => chunk.document_id)));
   if (ids.length === 0) return documents;
 
-  const result = await options.admin
-    .from('documents')
-    .select(assemblyDocumentSelect())
-    .in('id', ids)
-    .eq('is_current', true)
-    .eq('status', 'ready')
-    .abortSignal(options.signal);
+  const result = await withAccessGroups(
+    options.admin.from('documents').select(assemblyDocumentSelect()).in('id', ids).eq('is_current', true).eq('status', 'ready'),
+    accessTableFilter(options.access),
+  ).abortSignal(options.signal);
   options.signal.throwIfAborted();
   if (result.error) throw new Error(`[RAG Overview] documents lookup failed: ${result.error.message}`);
 

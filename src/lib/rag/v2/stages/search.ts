@@ -395,6 +395,7 @@ async function lookupRankedList(
   rows: LookupRow[],
   legsByVariant: BackendLegs[],
   signal: AbortSignal,
+  access: ScopeAccessFilter,
 ): Promise<RankedList | null> {
   if (rows.length === 0) return null;
   const known = legHitsByChunkId(legsByVariant);
@@ -422,7 +423,7 @@ async function lookupRankedList(
         similarity: 1,
         metadata: row.metadata,
       })),
-      { adminClient, signal },
+      { adminClient, signal, access },
     );
     for (let index = 0; index < rows.length; index++) {
       const row = rows[index]!;
@@ -949,6 +950,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           exactIdStage(input.query, scope, {
             client: requireAdminSearchClient(getRagDeps()),
             signal: stageSignal,
+            access,
             limit: pool,
             ...versionScopeArg,
             ...identifierArg,
@@ -961,7 +963,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         },
       );
       if (!exact.skipped && exact.value.rows.length > 0) {
-        exactList = await lookupRankedList('exact_id', params.leg_weights?.exact_id ?? 1, exact.value.rows, searchValue, signal);
+        exactList = await lookupRankedList('exact_id', params.leg_weights?.exact_id ?? 1, exact.value.rows, searchValue, signal, access);
       }
     }
 
@@ -986,6 +988,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
               signal: stageSignal,
               ...versionScopeArg,
               ...identifierArg,
+              access,
             }),
           collector,
           {
@@ -996,7 +999,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         );
         if (!table.skipped && table.value.rows.length > 0) {
           const listed = tableListRows(table.value.rows);
-          tableList = await lookupRankedList(TABLE_LIST_ID, tuning.weight, listed.rows, searchValue, signal);
+          tableList = await lookupRankedList(TABLE_LIST_ID, tuning.weight, listed.rows, searchValue, signal, access);
           if (tableList) tableRows = listed.attachments;
         }
       }
@@ -1128,15 +1131,15 @@ async function runIdentifierResolve(ctx: SearchStagesInput): Promise<ResolvedIde
       const { expressions } = await loadTenantIdentifierPatterns(scope, { signal: stageSignal });
       try {
         const client = requireAdminSearchClient(getRagDeps());
-        const exact = await resolveQueryIdentifiers(scope, input.query, expressions, { client, signal: stageSignal });
-        const lookalikes = exact.missing.length > 0 ? await digitLookalikeMatches(scope, exact.missing, { client, signal: stageSignal }) : new Map<string, string>();
+        const exact = await resolveQueryIdentifiers(scope, input.query, expressions, { client, signal: stageSignal, access: ctx.access });
+        const lookalikes = exact.missing.length > 0 ? await digitLookalikeMatches(scope, exact.missing, { client, signal: stageSignal, access: ctx.access }) : new Map<string, string>();
         const resolved: QueryIdentifiers = {
           asked: exact.asked,
           found: [...new Set([...exact.found, ...lookalikes.values()])],
           missing: exact.missing.filter((norm) => !lookalikes.has(norm)),
         };
         const notFound = resolved.asked.length > 0 && resolved.found.length === 0;
-        const suggestions = notFound ? await identifierSuggestions(scope, resolved.missing, { client, signal: stageSignal }) : [];
+        const suggestions = notFound ? await identifierSuggestions(scope, resolved.missing, { client, signal: stageSignal, access: ctx.access }) : [];
         return { ok: true, resolved, patterns: expressions, suggestions };
       } catch (error) {
         if (stageSignal.aborted) throw error;

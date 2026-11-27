@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { repairOwnerMembership, resolveTenantScope, runRetrieval, type TenantScope } from '@/lib/rag';
+import {
+  bodyNamesAccessGroups,
+  repairOwnerMembership,
+  resolveAccessScope,
+  resolveTenantScope,
+  runRetrieval,
+  type TenantScope,
+} from '@/lib/rag';
 import { requireSessionUser } from '@/lib/session-auth';
 import { createClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
@@ -119,6 +126,11 @@ export async function POST(req: NextRequest) {
       moderation = formData.get('moderation') as string || undefined;
       responseFormat = formData.get('responseFormat') as string || undefined;
 
+      // D-06: groups never come from the form either; a claim is ignored and logged once per request
+      if (formData.has('accessGroups') || formData.has('groups')) {
+        console.warn('[RAG Access] body_group_claim_ignored', { route: 'generate_image' });
+      }
+
       // Debug: Log all FormData keys to see what we're receiving
       console.log('FormData keys received:', Array.from(formData.keys()));
 
@@ -142,6 +154,8 @@ export async function POST(req: NextRequest) {
     } else {
       // Handle regular JSON request
       const jsonData = await req.json();
+      // D-06: groups never come from the body; a claim is ignored and logged once per request
+      if (bodyNamesAccessGroups(jsonData)) console.warn('[RAG Access] body_group_claim_ignored', { route: 'generate_image' });
       prompt = jsonData.prompt;
       aspectRatio = jsonData.aspectRatio || '1:1';
       size = jsonData.size || aspectRatio; // Backward compatibility
@@ -222,6 +236,12 @@ export async function POST(req: NextRequest) {
         );
       }
       ragScope = resolved.scope;
+      // D-05: the access groups of the session user; a refusal keeps the scope unresolved, so retrieval fails closed with status error
+      // and the image is generated without context (D-10)
+      if (ragScope) {
+        const access = await resolveAccessScope({ scope: ragScope, identity: { kind: 'user', userId: auth.user.id }, signal: req.signal });
+        if (access.ok) ragScope = access.scope;
+      }
     }
 
     // If we have source images, upload them to Supabase first to get URLs

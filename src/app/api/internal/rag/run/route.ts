@@ -18,6 +18,8 @@ import {
   type TraceCollector,
   detectLanguage,
   evalScope,
+  bodyNamesAccessGroups,
+  resolveAccessScope,
   cacheSourcesFromResult,
   finishTrace,
   groundednessEligibility,
@@ -559,6 +561,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
+  // D-06: groups never come from the body; a claim is logged once here and then rejected by the strict run contract
+  const rawBody: unknown = await req.clone().json().catch(() => undefined);
+  if (bodyNamesAccessGroups(rawBody)) console.warn('[RAG Access] body_group_claim_ignored', { route: 'eval_run' });
+
   const parsed = await validateRequest(req, RagRunRequestSchema);
   if (!parsed.success) {
     return parsed.response;
@@ -577,7 +583,10 @@ export async function POST(req: NextRequest) {
     console.warn('[RAG Eval] scope refused:', { deploymentMode, hasOrganization: !!organizationId, hasUser: !!userId });
     return NextResponse.json({ error: scoped.error }, { status: scoped.status });
   }
-  const { scope } = scoped;
+  // A-15: the access identity is the user id the eval scope check admitted. A refusal keeps the scope unresolved, so retrieval fails
+  // closed with status error and the run answers its existing retrieval failure (D-10).
+  const resolvedAccess = await resolveAccessScope({ scope: scoped.scope, identity: { kind: 'eval', userId }, signal: req.signal });
+  const scope = resolvedAccess.ok ? resolvedAccess.scope : scoped.scope;
 
   let retrievalFilters: RetrievalFilterInput | undefined;
   if (options?.retrieval_filters) {

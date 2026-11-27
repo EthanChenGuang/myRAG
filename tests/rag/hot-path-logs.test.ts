@@ -41,6 +41,7 @@ afterEach(() => {
 describe('retrieval hot paths do not log user query content', () => {
   test('voice keyword fallback', async () => {
     await voiceKeywordFallback({
+      access: { mode: 'off' },
       query: `tell me about ${SECRET_WORD} pricing`,
       scope: mintScope('single', null, null),
       admin: emptyAdmin,
@@ -52,6 +53,7 @@ describe('retrieval hot paths do not log user query content', () => {
 
   test('document mention resolution', async () => {
     await resolveDocumentRefs({
+      access: { mode: 'off' },
       scope: mintScope('single', null, null),
       mentions: [SECRET_WORD],
       documentParts: [],

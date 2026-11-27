@@ -116,6 +116,7 @@ async function legacyDecision(c: Case): Promise<'answer' | 'refuse'> {
     scope,
     client,
     signal: new AbortController().signal,
+    access: { mode: 'off' },
   });
   const filtered = filterCandidates({
     queryText: c.query,
@@ -346,6 +347,7 @@ describe('legacy search unchanged', () => {
       scope,
       client,
       signal: new AbortController().signal,
+      access: { mode: 'off' },
     });
     return { ids: result.results.map((row) => row.chunk_id), strategy: result.retrievalStrategy, calls };
   }

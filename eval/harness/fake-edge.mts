@@ -35,11 +35,11 @@ export interface FakeEdge {
 const RPC_ARGUMENTS: Record<string, { vector: string; allowed: string[] }> = {
   match_document_chunks: {
     vector: 'query_embedding',
-    allowed: ['query_embedding', 'match_count', 'similarity_threshold'],
+    allowed: ['query_embedding', 'match_count', 'similarity_threshold', 'p_access_keys', 'p_access_all'],
   },
   match_documents_by_workspace: {
     vector: 'p_query_embedding',
-    allowed: ['p_query_embedding', 'p_match_count', 'p_min_similarity', 'p_org_id', 'p_user_id'],
+    allowed: ['p_query_embedding', 'p_match_count', 'p_min_similarity', 'p_org_id', 'p_user_id', 'p_access_keys', 'p_access_all'],
   },
 };
 
@@ -123,8 +123,23 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     // Phase 5.2 D-49, D-50: the version-label reads (fetchAssemblyRows, fetchVersionColumns) while RAG_VERSION_LABELS is on.
     'doc_date',
     'effective_from',
+    'access_groups',
   ],
-  document_chunks: ['id', 'document_id', 'content', 'metadata', 'created_at', 'organization_id', 'chunk_index', 'is_current', 'status', 'tenant_key', 'version', 'doc_type'],
+  document_chunks: [
+    'id',
+    'document_id',
+    'content',
+    'metadata',
+    'created_at',
+    'organization_id',
+    'chunk_index',
+    'is_current',
+    'status',
+    'tenant_key',
+    'version',
+    'doc_type',
+    'access_groups',
+  ],
   organization_members: ['id', 'organization_id', 'user_id', 'role', 'created_at'],
   organizations: ['id', 'name', 'slug', 'owner_id', 'is_personal', 'subscription_tier', 'created_at'],
   // Read by effectiveTierBounds when a job is enqueued (D-13); the ingest mode's --force-tier writes it in the database directly.
@@ -136,7 +151,7 @@ const TABLE_COLUMNS: Record<string, string[]> = {
   rag_supersession_candidates: ['document_id', 'candidate_document_id', 'status'],
 };
 
-type FilterOperator = 'eq' | 'in' | 'is.null';
+type FilterOperator = 'eq' | 'in' | 'is.null' | 'ov';
 
 const TABLE_FILTERS: Record<string, Record<string, FilterOperator[]>> = {
   documents: {
@@ -149,8 +164,18 @@ const TABLE_FILTERS: Record<string, Record<string, FilterOperator[]>> = {
     lineage_id: ['eq'],
     version: ['eq'],
     doc_type: ['eq'],
+    access_groups: ['ov'],
   },
-  document_chunks: { id: ['eq', 'in'], document_id: ['eq', 'in'], is_current: ['eq'], status: ['eq'], tenant_key: ['eq'], version: ['eq'], doc_type: ['eq'] },
+  document_chunks: {
+    id: ['eq', 'in'],
+    document_id: ['eq', 'in'],
+    is_current: ['eq'],
+    status: ['eq'],
+    tenant_key: ['eq'],
+    version: ['eq'],
+    doc_type: ['eq'],
+    access_groups: ['ov'],
+  },
   organization_members: { id: ['eq'], organization_id: ['eq'], user_id: ['eq'] },
   organizations: { id: ['eq'] },
   rag_parse_tier_overrides: { doc_type: ['eq'] },
@@ -183,6 +208,8 @@ const IMAGE_URL_PARAM = 'metadata->>image_url';
 const IMAGE_URL_SQL = `("metadata"->>'image_url')`;
 const OR_TABLE = 'document_chunks';
 const MAX_IN_VALUES = 1000;
+/** Phase 4.3 access keys (the 0921 label shape): all, or a u:/g: prefix and a uuid. */
+const ACCESS_KEY_RE = /^(all|[gu]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 const MAX_OR_CONDITIONS = 50;
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const VECTOR_TEXT_RE = /^\[[-+0-9eE.,\s]*\]$/;
@@ -680,6 +707,13 @@ function createHandlers(
           if (!list.every((item) => UUID_RE.test(item))) throw new Rejection(400, `${column} in-list must contain only uuids`);
           where.push(list.length === 0 ? 'FALSE' : `"${column}" IN (${list.map((item) => bind(item, '::uuid')).join(', ')})`);
         }
+      } else if (raw.startsWith('ov.{') && raw.endsWith('}') && operators.includes('ov')) {
+        // RESEARCH Pitfall 12: the access read is `.overlaps('access_groups', keys)`; only well-formed keys reach the database.
+        const inner = raw.slice(4, -1);
+        const keys = inner === '' ? [] : inner.split(',').map((item) => item.trim().replace(/^"(.*)"$/s, '$1'));
+        if (keys.length === 0 || keys.length > MAX_IN_VALUES) throw new Rejection(400, `${column} overlaps list must hold 1 to ${MAX_IN_VALUES} keys`);
+        if (!keys.every((key) => ACCESS_KEY_RE.test(key))) throw new Rejection(400, `${column} overlaps list must contain only access keys`);
+        where.push(`"${column}" && ${bind(`{${keys.join(',')}}`, '::text[]')}`);
       } else {
         throw new Rejection(400, `unsupported operator on ${column}: ${raw.split('.')[0]}`);
       }

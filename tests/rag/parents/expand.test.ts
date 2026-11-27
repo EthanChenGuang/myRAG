@@ -109,7 +109,7 @@ describe('expandParents', () => {
       parentRow({ id: P, content: 'parent P text' }),
     ]);
 
-    const result = await expandParents({ survivors, scope, admin: client, signal: signal() });
+    const result = await expandParents({ survivors, scope, admin: client, signal: signal(), access: { mode: 'off' } });
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.fn).toBe('rag_fetch_parents');
@@ -128,7 +128,7 @@ describe('expandParents', () => {
     const { client, calls } = capturingClient([]);
     const survivors = [child('c1', 1, null), child('c2', 2, null)];
 
-    const result = await expandParents({ survivors, scope, admin: client, signal: signal() });
+    const result = await expandParents({ survivors, scope, admin: client, signal: signal(), access: { mode: 'off' } });
 
     expect(calls).toHaveLength(0);
     expect(result.entries.map((entry) => entry.chunk_id)).toEqual(['c1', 'c2']);
@@ -138,7 +138,7 @@ describe('expandParents', () => {
 
   it('makes no call and returns nothing for an empty survivor list', async () => {
     const { client, calls } = capturingClient([]);
-    const result = await expandParents({ survivors: [], scope, admin: client, signal: signal() });
+    const result = await expandParents({ survivors: [], scope, admin: client, signal: signal(), access: { mode: 'off' } });
     expect(calls).toHaveLength(0);
     expect(result.entries).toEqual([]);
   });
@@ -147,7 +147,7 @@ describe('expandParents', () => {
     const survivors = [child('c1', 1, P), child('c2', 2, Q)];
     const { client } = capturingClient([parentRow({ id: Q, content: 'parent Q text' })]);
 
-    const result = await expandParents({ survivors, scope, admin: client, signal: signal() });
+    const result = await expandParents({ survivors, scope, admin: client, signal: signal(), access: { mode: 'off' } });
 
     expect(result.entries.map((entry) => [entry.chunk_id, entry.parent?.id])).toEqual([
       ['c1', undefined],
@@ -165,7 +165,7 @@ describe('expandParents', () => {
       parentRow({ id: 'parent-own', content: 'own parent text' }),
     ]);
 
-    const result = await expandParents({ survivors, scope, admin: client, signal: signal() });
+    const result = await expandParents({ survivors, scope, admin: client, signal: signal(), access: { mode: 'off' } });
 
     expect(result.entries.map((entry) => [entry.chunk_id, entry.parent?.content])).toEqual([
       ['c1', undefined],
@@ -184,6 +184,7 @@ describe('expandParents', () => {
       scope,
       admin: client,
       signal: signal(),
+      access: { mode: 'off' },
       eligible: (item) => item.chunk_id !== 'c1',
     });
 
@@ -195,7 +196,7 @@ describe('expandParents', () => {
     const survivors = Array.from({ length: 250 }, (_, index) => child(`c${index}`, index + 1, `parent-${index}`));
     const { client, calls } = capturingClient([]);
 
-    await expandParents({ survivors, scope, admin: client, signal: signal() });
+    await expandParents({ survivors, scope, admin: client, signal: signal(), access: { mode: 'off' } });
 
     const ids = calls[0]?.args.p_parent_ids as string[];
     expect(ids).toHaveLength(200);
@@ -204,7 +205,7 @@ describe('expandParents', () => {
   });
 
   it('rejects when there is no admin client, and uses nothing else', async () => {
-    const error = await expandParents({ survivors: [child('c1', 1, P)], scope, admin: null, signal: signal() }).catch((e: unknown) => e);
+    const error = await expandParents({ survivors: [child('c1', 1, P)], scope, admin: null, signal: signal(), access: { mode: 'off' } }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(RetrievalBackendError);
     expect((error as RetrievalBackendError).rpc).toBe('rag_fetch_parents');
     expect((error as RetrievalBackendError).code).toBe('admin_unavailable');
@@ -212,7 +213,7 @@ describe('expandParents', () => {
 
   it('rejects with the RPC error code', async () => {
     const { client } = capturingClient([], { error: { message: 'boom', code: '42501' } });
-    const error = await expandParents({ survivors: [child('c1', 1, P)], scope, admin: client, signal: signal() }).catch(
+    const error = await expandParents({ survivors: [child('c1', 1, P)], scope, admin: client, signal: signal(), access: { mode: 'off' } }).catch(
       (e: unknown) => e,
     );
     expect(error).toBeInstanceOf(RetrievalBackendError);
@@ -225,7 +226,7 @@ describe('expandParents', () => {
     const reason = new Error('request cancelled');
     const { client } = capturingClient([parentRow({ id: P, content: 'parent P text' })], { delayMs: 50 });
 
-    const pending = expandParents({ survivors: [child('c1', 1, P)], scope, admin: client, signal: controller.signal });
+    const pending = expandParents({ survivors: [child('c1', 1, P)], scope, admin: client, signal: controller.signal, access: { mode: 'off' } });
     setTimeout(() => controller.abort(reason), 5);
 
     await expect(pending).rejects.toBe(reason);
@@ -234,7 +235,7 @@ describe('expandParents', () => {
   it('rejects an unminted scope before any call', async () => {
     const { client, calls } = capturingClient([]);
     const forged = { kind: 'single', userId: null, organizationId: null } as unknown as typeof scope;
-    await expect(expandParents({ survivors: [child('c1', 1, P)], scope: forged, admin: client, signal: signal() })).rejects.toThrow(
+    await expect(expandParents({ survivors: [child('c1', 1, P)], scope: forged, admin: client, signal: signal(), access: { mode: 'off' } })).rejects.toThrow(
       /unminted scope/,
     );
     expect(calls).toHaveLength(0);

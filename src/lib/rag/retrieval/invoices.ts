@@ -1,4 +1,5 @@
 import type { RpcClient } from '../backend/supabase-rpc';
+import { accessRpcArgs, type ScopeAccessFilter } from '../tenant/access-filter';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 
 export interface InvoiceFilters {
@@ -27,6 +28,8 @@ export interface FindInvoicesDeps {
   /** The admin client; unset, the server's admin client is used. */
   db?: () => RpcClient | null;
   signal?: AbortSignal;
+  /** D-11: the request's access filter (scopeAccessFilter of the resolved scope); a restricted invoice is never listed for an outsider. */
+  access: ScopeAccessFilter;
 }
 
 export class InvoiceFilterError extends Error {
@@ -75,7 +78,7 @@ async function adminClient(): Promise<RpcClient | null> {
  * Current, ready invoices of the scope's tenant that match the filters, newest issue date first. The tenant key is the scope's and
  * nothing else; the SQL function repeats the tenant, current and ready predicates. Invalid filters throw InvoiceFilterError before any call.
  */
-export async function findInvoices(scope: TenantScope, filters: InvoiceFilters = {}, deps: FindInvoicesDeps = {}): Promise<InvoiceHit[]> {
+export async function findInvoices(scope: TenantScope, filters: InvoiceFilters, deps: FindInvoicesDeps): Promise<InvoiceHit[]> {
   assertTenantScope(scope);
   const supplier = filters.supplier?.trim() ?? '';
   if (supplier.length > MAX_SUPPLIER_CHARS) throw new InvoiceFilterError('supplier');
@@ -92,6 +95,7 @@ export async function findInvoices(scope: TenantScope, filters: InvoiceFilters =
     p_amount_max: amount('amountRange.max', filters.amountRange?.max),
     p_currency: currency,
     p_limit: limit,
+    ...accessRpcArgs(deps.access),
   };
 
   const signal = deps.signal ?? new AbortController().signal;

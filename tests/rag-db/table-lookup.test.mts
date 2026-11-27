@@ -16,7 +16,7 @@ type Row = Record<string, unknown>;
 const USER_B = '00000000-0000-4000-8000-0000000024b1';
 const MODES: DeploymentMode[] = ['multi-tenant', 'single-tenant'];
 const FN = 'rag_table_lookup';
-const SIGNATURE = 'public.rag_table_lookup(text,text[],integer,integer,jsonb,text[])';
+const SIGNATURE = 'public.rag_table_lookup(text,text[],integer,integer,jsonb,text[],text[],boolean)';
 const LOOKUP = `SELECT row_id::text, document_id::text, table_key, row_index, header, cells, matched_cells, chunk_ids::text[] AS chunk_ids, chunk_id::text, content
   FROM public.${FN}($1, $2::text[], $3, $4, $5::jsonb, $6::text[])`;
 
@@ -292,13 +292,13 @@ for (const mode of MODES) {
       }
     });
 
-    test('re-applying 0861 keeps one function with the same definition and grants', async () => {
+    test('re-applying 0861, then 0933 (its operator rule, Phase 4.3), keeps one function with the same definition and grants', async () => {
       await assertLookupFunction(db);
       const definition = async () =>
         (await db.query<{ def: string; acl: string }>(`SELECT pg_get_functiondef(p.oid) AS def, p.proacl::text AS acl FROM pg_proc p WHERE p.proname = '${FN}'`)).rows;
       const before = await definition();
-      const files = migrationFiles(mode).filter((file) => path.basename(file).startsWith('0861_'));
-      assert.equal(files.length, 1);
+      const files = migrationFiles(mode).filter((file) => path.basename(file).startsWith('0861_') || path.basename(file).startsWith('0933_'));
+      assert.equal(files.length, 2);
       await applyMigrationFiles(db, files);
       assert.deepEqual(await definition(), before);
     });
@@ -513,7 +513,7 @@ describe('the table_lookup stage and the table:0 list through runRetrieval (sing
   });
 
   test('an RPC failure skips the stage and the other lists fuse as without it', async () => {
-    await db.exec('ALTER FUNCTION public.rag_table_lookup(text, text[], integer, integer, jsonb, text[]) RENAME TO rag_table_lookup_hidden');
+    await db.exec('ALTER FUNCTION public.rag_table_lookup(text, text[], integer, integer, jsonb, text[], text[], boolean) RENAME TO rag_table_lookup_hidden');
     try {
       const failed = await run({ RAG_TABLE_LOOKUP: 'true' });
       const off = await run({ RAG_TABLE_LOOKUP: 'false' });
@@ -523,7 +523,7 @@ describe('the table_lookup stage and the table:0 list through runRetrieval (sing
         off.candidates.map((candidate) => [candidate.chunk_id, candidate.fused_score]),
       );
     } finally {
-      await db.exec('ALTER FUNCTION public.rag_table_lookup_hidden(text, text[], integer, integer, jsonb, text[]) RENAME TO rag_table_lookup');
+      await db.exec('ALTER FUNCTION public.rag_table_lookup_hidden(text, text[], integer, integer, jsonb, text[], text[], boolean) RENAME TO rag_table_lookup');
     }
   });
 });

@@ -30,9 +30,11 @@ export type { EvalScopeInput, EvalScopeOutcome } from './tenant/eval';
 export type { TenantScope } from './tenant/scope';
 export {
   ACCESS_ADMIN_HASH,
+  accessGroupsEnabled,
   accessScopeTiming,
   accessTableFilter,
   bodyNamesAccessGroups,
+  embedAccessGroup,
   resolveAccessScope,
   uploadAccessKeys,
 } from './tenant/access';
