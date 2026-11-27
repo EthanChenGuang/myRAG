@@ -2,9 +2,18 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { pickAnswerMetadata } from '@/lib/chat/answer-metadata';
-import { citationDisplayEntries } from '@/lib/citations/display';
+import { citationDisplayEntries, type CitationAlsoIn } from '@/lib/citations/display';
 
-export interface SourceCitation {
+/** D-13, D-21: optional provenance of a document source; absent for web and tool sources and for sources saved before Phase 4.2. */
+export interface SourceProvenance {
+  version?: number;
+  isCurrent?: boolean;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+  alsoIn?: CitationAlsoIn[];
+}
+
+export interface SourceCitation extends SourceProvenance {
   n: number;
   alias: string;
   quote: string;
@@ -14,7 +23,7 @@ export interface SourceCitation {
   messageId?: string;
 }
 
-export interface Source {
+export interface Source extends SourceProvenance {
   title: string;
   url?: string;
   snippet?: string;
@@ -66,6 +75,11 @@ export function citationSourcesFor(
         sectionPath: entry.sectionPath,
         unavailable,
         ...(messageId ? { messageId } : {}),
+        ...(entry.version !== undefined ? { version: entry.version } : {}),
+        ...(entry.isCurrent !== undefined ? { isCurrent: entry.isCurrent } : {}),
+        ...(entry.effectiveFrom !== undefined ? { effectiveFrom: entry.effectiveFrom } : {}),
+        ...(entry.effectiveTo !== undefined ? { effectiveTo: entry.effectiveTo } : {}),
+        ...(entry.alsoIn ? { alsoIn: entry.alsoIn } : {}),
       },
     };
     if (documents && entry.linkDocumentId) source.documentId = entry.linkDocumentId;
@@ -375,6 +389,18 @@ export function debugSources() {
   }
 } 
 
-export function documentSourceFields(_raw: unknown): Partial<Source> {
-  return {};
+/**
+ * The one place a document payload item's version and also-in fields (04.2-21 `sourceDocumentFields`) are copied onto a `Source`.
+ * Each field is copied only when present; the panel validates the values before rendering anything (UI-SPEC A.6).
+ */
+export function documentSourceFields(raw: unknown): SourceProvenance {
+  if (!raw || typeof raw !== 'object') return {};
+  const item = raw as Record<string, unknown>;
+  const fields: SourceProvenance = {};
+  if (item.version !== undefined) fields.version = item.version as number;
+  if (item.isCurrent !== undefined) fields.isCurrent = item.isCurrent as boolean;
+  if (item.effectiveFrom !== undefined) fields.effectiveFrom = item.effectiveFrom as string | null;
+  if (item.effectiveTo !== undefined) fields.effectiveTo = item.effectiveTo as string | null;
+  if (Array.isArray(item.alsoIn) && item.alsoIn.length > 0) fields.alsoIn = item.alsoIn as CitationAlsoIn[];
+  return fields;
 }

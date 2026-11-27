@@ -8,7 +8,8 @@ vi.mock('@/components/theme-provider', () => ({ useTheme: () => ({ theme: 'light
 vi.mock('@/components/providers/language-provider', () => ({ useLanguage: () => ({ language: 'en' }) }));
 vi.mock('framer-motion', async () => {
   const React = await import('react');
-  const strip = ({ initial: _i, animate: _a, exit: _e, ...rest }: Record<string, unknown>) => rest;
+  const strip = (props: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(props).filter(([key]) => !['initial', 'animate', 'exit'].includes(key)));
   return {
     AnimatePresence: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
     motion: {
