@@ -52,6 +52,8 @@ IMPLICIT_CONDITION_PER_LANGUAGE_05_3_15 = 4
 NO_ANSWER_ADDED_BY_PLAN_05_3_15 = {"zh": 4, "en": 5, "it": 4}
 # Plan 05.3-15 documents per language: access-rules and instrument-catalog.
 PHASE53_DOCUMENTS_05_3_15 = 2
+# Plan 05.2.1-12 documents per language: calc-rules and long-reference; test_fixture_calc_overflow.py checks them.
+PHASE521_DOCUMENTS_05_2_1_12 = 2
 PER_LANGUAGE_CATEGORY = {
     "general": 7,
     "multi_turn": 9,
@@ -99,15 +101,19 @@ def test_corpus_has_nineteen_documents_per_language():
     """Thirteen documents plus the sec-topics and sec-attacks pair per language from plan 05.1-09, one
     synthetic-terms document per language from plan 04.1.1-10, the four Phase 5.2 documents per language
     (p52-answers, p52-rules-v1, p52-rules-v2, sec-links) from plan 05.2-28, whose sec-links topic sections plan 05.2-29
-    moved into sec-link-topics, the Phase 4.2 documents of plan 04.2-37, and the access-rules and instrument-catalog
-    pair per language from plan 05.3-15."""
+    moved into sec-link-topics, the Phase 4.2 documents of plan 04.2-37, the access-rules and instrument-catalog
+    pair per language from plan 05.3-15, and the calc-rules and long-reference pair per language from plan 05.2.1-12."""
     documents = load_corpus(CORPUS_DIR)
     counts = collections.Counter(doc.language for doc in documents)
     assert len(documents) == (
-        19 + len(LANGUAGES) + 5 * len(LANGUAGES) + sum(PHASE42_DOCUMENTS_04_2_37.values()) + PHASE53_DOCUMENTS_05_3_15 * len(LANGUAGES)
+        19
+        + len(LANGUAGES)
+        + 5 * len(LANGUAGES)
+        + sum(PHASE42_DOCUMENTS_04_2_37.values())
+        + (PHASE53_DOCUMENTS_05_3_15 + PHASE521_DOCUMENTS_05_2_1_12) * len(LANGUAGES)
     )
     assert (counts["zh"], counts["en"], counts["it"]) == tuple(
-        base + PHASE42_DOCUMENTS_04_2_37[language] + PHASE53_DOCUMENTS_05_3_15
+        base + PHASE42_DOCUMENTS_04_2_37[language] + PHASE53_DOCUMENTS_05_3_15 + PHASE521_DOCUMENTS_05_2_1_12
         for language, base in (("zh", 12), ("en", 13), ("it", 12))
     )
 
