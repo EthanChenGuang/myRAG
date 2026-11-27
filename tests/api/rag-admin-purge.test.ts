@@ -6,6 +6,7 @@ const ADMIN_ID = '00000000-0000-4000-8000-0000000000a1';
 const DOC_ID = '00000000-0000-4000-8000-0000000000d1';
 const AUDIT_ID = '00000000-0000-4000-8000-0000000000e1';
 const LINEAGE_ID = '00000000-0000-4000-8000-0000000000d2';
+const ADMIN_CODES = ['owner_request', 'added_in_error', 'retention_ended', 'legal_or_policy', 'restricted_content', 'other'] as const;
 const REPO_ROOT = path.resolve(__dirname, '../..');
 
 type AdminResult = { ok: true; userId: string } | { ok: false; status: 401 | 403 | 503; reason: string };
@@ -36,7 +37,7 @@ async function load() {
         headers: { 'content-type': 'application/json', 'Cache-Control': 'no-store' },
       }),
   }));
-  vi.doMock('@/lib/rag', () => ({ purgeDocumentAsAdmin, listPurgeRecords, reverifyPurgeAsAdmin }));
+  vi.doMock('@/lib/rag', () => ({ PURGE_ADMIN_REASON_CODES: ADMIN_CODES, purgeDocumentAsAdmin, listPurgeRecords, reverifyPurgeAsAdmin }));
   const purge = await import('@/app/api/rag/admin/documents/[id]/purge/route');
   return { purge };
 }
