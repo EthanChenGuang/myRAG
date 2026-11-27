@@ -112,7 +112,7 @@ describe('Phase 4.1 defaults-gate run configs', () => {
 });
 
 describe('run-config validation', () => {
-  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the eight Phase 4.2 tuning switches, the value-constrained vendor settings, the five Phase 5.1 SEC switches, the 16 Phase 6 names, the three terminology switches, the six Phase 3.3 switches, the fourteen Phase 5.2 answer-rule switches and the Phase 5 citations switch', () => {
+  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the eight Phase 4.2 tuning switches, the value-constrained vendor settings, the five Phase 5.1 SEC switches, the 16 Phase 6 names, the three terminology switches, the six Phase 3.3 switches, the fourteen Phase 5.2 answer-rule switches, the Phase 5 citations switch and the three Phase 4.4 lexical scoring variables', () => {
     assert.deepEqual([...RUN_CONFIG_ENV_ALLOWLIST].sort(), [
       'COHERE_API_KEY',
       'COHERE_BASE_URL',
@@ -137,8 +137,11 @@ describe('run-config validation', () => {
       'RAG_INJECTION_CHECK',
       'RAG_INJECTION_LAKERA',
       'RAG_INJECTION_PROMPT_GUARD',
+      'RAG_LEXICAL_BM25_B',
+      'RAG_LEXICAL_BM25_K1',
       'RAG_LEXICAL_DICTIONARY',
       'RAG_LEXICAL_QUANTITY',
+      'RAG_LEXICAL_SCORING',
       'RAG_LEXICAL_SEARCH',
       'RAG_LEXICAL_STEM_IT',
       'RAG_LEXICAL_TRANSLATION',

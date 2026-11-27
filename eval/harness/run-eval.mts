@@ -14,7 +14,7 @@ import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
 import { ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.mts';
 import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTableSplitTenant, type TableSplitTenant } from './table-split.mts';
-import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
+import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedRunLexicalStats, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 import {
@@ -127,6 +127,8 @@ export interface InProcessEval {
   corpusSha256: string;
   sqlSha256: Record<string, string>;
   fakeQueryLlm?: import('./fake-query-llm.mts').FakeQueryLlm;
+  /** D-36: set when the run's effective lexical scoring is bm25 and the fixture tenants' statistics were rebuilt. */
+  lexicalStats?: import('./pglite-supabase.mts').RunLexicalStatsReport;
   close: () => Promise<void>;
 }
 
@@ -471,6 +473,16 @@ export async function prepareInProcessEval(options: {
     }
   }
 
+  // Plan 04.4-13 (D-36): statistics for a bm25 run, in both fixture modes, after relex and the feature rebuilds.
+  let lexicalStats: import('./pglite-supabase.mts').RunLexicalStatsReport | null = null;
+  try {
+    lexicalStats = await seedRunLexicalStats(fixture);
+  } catch (error) {
+    if (ownsEdge) await startedEdge.close().catch(() => undefined);
+    if (ownsDb) await fixture.db.close().catch(() => undefined);
+    throw error;
+  }
+
   const route = await import('../../src/app/api/internal/rag/run/route.ts');
 
   let translatorModule: typeof import('../../src/lib/rag/query/translate.ts') | null = null;
@@ -517,6 +529,7 @@ export async function prepareInProcessEval(options: {
     corpusSha256: fixture.corpusSha256,
     sqlSha256: fixture.sqlSha256,
     ...(fakeQueryLlm ? { fakeQueryLlm } : {}),
+    ...(lexicalStats ? { lexicalStats } : {}),
     close: async () => {
       restoreQueryLlm?.();
       translatorModule?.resetTranslatorForTests();
@@ -601,6 +614,42 @@ function redirectConsole(logPath: string): () => void {
   return () => {
     for (const method of methods) console[method] = original.get(method)!;
   };
+}
+
+/**
+ * D-36 cap agreement: the run manifest is a schema-validated contract, so the overlap figures of a bm25 run go to a sibling file
+ * (lexical-bm25-overlap.json) in the run's output directory. Measured on the main fixture tenant over the run's non-table_split
+ * questions with the query-side lexical options the search stage would use; ids and numbers only.
+ */
+async function writeLexicalOverlap(session: InProcessEval, deploymentMode: DeploymentMode, items: readonly GoldenItem[], outDir: string): Promise<void> {
+  const stats = session.lexicalStats;
+  if (!stats) return;
+  const { fixtureOverlapAtK, OVERLAP_FILE, OVERLAP_K } = await import('./lexical-stats.mts');
+  const { tenantHash } = await import('./lexical-leg-run.mts');
+  const { loadRagConfig } = await import('../../src/lib/rag/config.ts');
+  const { getRagDeps } = await import('../../src/lib/rag/deps.ts');
+  const { lexicalOptionsOn } = await import('../../src/lib/rag/lexical/options.ts');
+  const { resolveLexicalOptions } = await import('../../src/lib/rag/lexical/resolve-options.ts');
+  const { storeScopeForTenantKey } = await import('../../src/lib/rag/tenant/store-scope.ts');
+  const { queryLanguage } = await import('../../src/lib/rag/query/language.ts');
+  const config = loadRagConfig(getRagDeps().ragEnv());
+  const tenantKey = deploymentMode === 'multi-tenant' ? `u:${session.fixtureUserId}` : 's:default';
+  const scope = storeScopeForTenantKey(tenantKey);
+  const report = await fixtureOverlapAtK(
+    session.fixtureDb,
+    tenantKey,
+    items.map((item) => ({ id: item.id, question: item.question })),
+    OVERLAP_K,
+    {
+      tenantHash: tenantHash(tenantKey),
+      k1: stats.k1,
+      b: stats.b,
+      ...(lexicalOptionsOn(config)
+        ? { lexicalOptionsFor: async (question: string) => (await resolveLexicalOptions(scope, config, { language: queryLanguage(question) })).options }
+        : {}),
+    },
+  );
+  fs.writeFileSync(path.join(outDir, OVERLAP_FILE), `${JSON.stringify(report, null, 2)}\n`);
 }
 
 export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
@@ -914,6 +963,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           .join('; ');
         throw new Error(`[Eval Harness] fake edge recorded ${edgeErrors} unsupported or failed request(s): ${sample}`);
       }
+      if (inProcess.lexicalStats && !cachePairs) await writeLexicalOverlap(inProcess, deploymentMode, routed.main, outDir);
     }
   } finally {
     restoreConsole();

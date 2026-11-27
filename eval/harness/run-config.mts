@@ -46,6 +46,21 @@ const PHASE33_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
 };
 
 /**
+ * The three Phase 4.4 lexical scoring variables (D-36). The mode is enumerated; k1 and b must be decimals inside the bounds the app
+ * accepts (k1 0.5 to 3, b 0 to 1), because the app would warn and fall back to its default on any other value.
+ */
+const PHASE44_SWITCH_VALUES: Readonly<Record<string, readonly string[] | null>> = {
+  RAG_LEXICAL_SCORING: ['ts_rank_cd', 'bm25'],
+  RAG_LEXICAL_BM25_K1: null,
+  RAG_LEXICAL_BM25_B: null,
+};
+const PHASE44_DECIMAL_BOUNDS: Readonly<Record<string, readonly [number, number]>> = {
+  RAG_LEXICAL_BM25_K1: [0.5, 3],
+  RAG_LEXICAL_BM25_B: [0, 1],
+};
+const DECIMAL_RE = /^\d+(\.\d+)?$/;
+
+/**
  * The Phase 6 query-layer and semantic-cache switches (D-38). The enumerated ones must carry a value the app accepts; the others
  * are numbers, a model id or lists the app validates and falls back on. RAG_QUERY_ENHANCEMENT and RAG_CACHE_ENABLED are legacy
  * names and stay out of reach.
@@ -204,11 +219,19 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
     ...PHASE33_SWITCH_VALUES,
     ...PHASE52_SWITCH_VALUES,
     ...PHASE5_SWITCH_VALUES,
+    ...PHASE44_SWITCH_VALUES,
   })) {
     if (!allowed) continue;
     // A malformed SEC, Phase 6, Phase 3.3 or Phase 5.2 value would silently fall back to off in the app; the run config fails instead (the value is never echoed).
     if (env[name] !== undefined && !allowed.includes(env[name])) {
       throw new RunConfigError(`[Eval Harness] run-config ${source} ${name} must be one of ${allowed.join(', ')}`);
+    }
+  }
+
+  for (const [name, [min, max]] of Object.entries(PHASE44_DECIMAL_BOUNDS)) {
+    const raw = env[name];
+    if (raw !== undefined && (!DECIMAL_RE.test(raw) || Number(raw) < min || Number(raw) > max)) {
+      throw new RunConfigError(`[Eval Harness] run-config ${source} ${name} must be a decimal from ${min} to ${max}`);
     }
   }
 
