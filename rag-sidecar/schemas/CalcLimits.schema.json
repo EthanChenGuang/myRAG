@@ -1,0 +1,65 @@
+{
+  "additionalProperties": false,
+  "description": "Evaluator bounds in `config/rag/calc-limits.json` (D-69, Pitfall C3); each at most the schema bound.",
+  "properties": {
+    "max_bits": {
+      "maximum": 65536,
+      "minimum": 64,
+      "title": "Max Bits",
+      "type": "integer"
+    },
+    "max_depth": {
+      "maximum": 30,
+      "minimum": 1,
+      "title": "Max Depth",
+      "type": "integer"
+    },
+    "max_digits": {
+      "maximum": 60,
+      "minimum": 1,
+      "title": "Max Digits",
+      "type": "integer"
+    },
+    "max_list_items": {
+      "maximum": 200,
+      "minimum": 1,
+      "title": "Max List Items",
+      "type": "integer"
+    },
+    "max_operands": {
+      "maximum": 50,
+      "minimum": 1,
+      "title": "Max Operands",
+      "type": "integer"
+    },
+    "max_round_places": {
+      "maximum": 20,
+      "minimum": 0,
+      "title": "Max Round Places",
+      "type": "integer"
+    },
+    "max_steps": {
+      "maximum": 30,
+      "minimum": 1,
+      "title": "Max Steps",
+      "type": "integer"
+    },
+    "version": {
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "max_operands",
+    "max_list_items",
+    "max_steps",
+    "max_depth",
+    "max_digits",
+    "max_round_places",
+    "max_bits"
+  ],
+  "title": "CalcLimits",
+  "type": "object"
+}

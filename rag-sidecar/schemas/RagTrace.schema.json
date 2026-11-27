@@ -305,6 +305,145 @@
       "title": "BlockedRange",
       "type": "object"
     },
+    "CalcCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "origin": {
+          "anyOf": [
+            {
+              "enum": [
+                "tool",
+                "trailing_block"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "operand_not_located",
+                "trace_missing",
+                "trace_invalid",
+                "stated_not_found",
+                "check_error"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "recomputed": {
+          "anyOf": [
+            {
+              "pattern": "^-?[0-9]{1,30}(\\.[0-9]{1,30})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recomputed"
+        },
+        "stated": {
+          "anyOf": [
+            {
+              "pattern": "^-?[0-9]{1,30}(\\.[0-9]{1,30})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stated"
+        },
+        "stated_span": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CalcSpan"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "corrected",
+            "not_verified"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "trace_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trace Hash"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u3040-\\u30FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uAC00-\\uD7AF$\\u00A2-\\u00A5\\u20A0-\\u20CF %/._\\u00B0\\-]{1,32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "CalcCheck",
+      "type": "object"
+    },
+    "CalcSpan": {
+      "additionalProperties": false,
+      "description": "UTF-16 code-unit offsets of the stated number in the answer text.",
+      "properties": {
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "CalcSpan",
+      "type": "object"
+    },
     "CitationAlsoIn": {
       "additionalProperties": false,
       "description": "D-21: a duplicate of the cited chunk in another document, collapsed under this citation.",
@@ -567,6 +706,184 @@
         "rules_version"
       ],
       "title": "OutputGuardSummary",
+      "type": "object"
+    },
+    "PromptBudgetEstimator": {
+      "additionalProperties": false,
+      "properties": {
+        "encoding": {
+          "const": "cl100k_base",
+          "default": "cl100k_base",
+          "title": "Encoding",
+          "type": "string"
+        },
+        "factor": {
+          "minimum": 0.5,
+          "title": "Factor",
+          "type": "number"
+        },
+        "factor_source": {
+          "enum": [
+            "measured",
+            "default"
+          ],
+          "title": "Factor Source",
+          "type": "string"
+        },
+        "family": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Family"
+        }
+      },
+      "required": [
+        "factor",
+        "factor_source"
+      ],
+      "title": "PromptBudgetEstimator",
+      "type": "object"
+    },
+    "PromptBudgetParts": {
+      "additionalProperties": false,
+      "description": "Estimated tokens per prompt part; `reserve` is the answer reserve (the effective output cap).",
+      "properties": {
+        "documents": {
+          "minimum": 0,
+          "title": "Documents",
+          "type": "integer"
+        },
+        "history": {
+          "minimum": 0,
+          "title": "History",
+          "type": "integer"
+        },
+        "question": {
+          "minimum": 0,
+          "title": "Question",
+          "type": "integer"
+        },
+        "reserve": {
+          "minimum": 0,
+          "title": "Reserve",
+          "type": "integer"
+        },
+        "rules": {
+          "minimum": 0,
+          "title": "Rules",
+          "type": "integer"
+        },
+        "system": {
+          "minimum": 0,
+          "title": "System",
+          "type": "integer"
+        },
+        "tools": {
+          "minimum": 0,
+          "title": "Tools",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "system",
+        "rules",
+        "tools",
+        "history",
+        "question",
+        "documents",
+        "reserve"
+      ],
+      "title": "PromptBudgetParts",
+      "type": "object"
+    },
+    "PromptBudgetTrace": {
+      "additionalProperties": false,
+      "properties": {
+        "context_length_unknown": {
+          "title": "Context Length Unknown",
+          "type": "boolean"
+        },
+        "dropped_documents": {
+          "minimum": 0,
+          "title": "Dropped Documents",
+          "type": "integer"
+        },
+        "dropped_history_turns": {
+          "minimum": 0,
+          "title": "Dropped History Turns",
+          "type": "integer"
+        },
+        "estimated_raw_total": {
+          "minimum": 0,
+          "title": "Estimated Raw Total",
+          "type": "integer"
+        },
+        "estimator": {
+          "$ref": "#/$defs/PromptBudgetEstimator"
+        },
+        "near_limit": {
+          "title": "Near Limit",
+          "type": "boolean"
+        },
+        "overflow_mode": {
+          "enum": [
+            "truncate",
+            "refine"
+          ],
+          "title": "Overflow Mode",
+          "type": "string"
+        },
+        "parts": {
+          "$ref": "#/$defs/PromptBudgetParts"
+        },
+        "standalone_kept": {
+          "title": "Standalone Kept",
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "exceeded"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "window": {
+          "minimum": 1,
+          "title": "Window",
+          "type": "integer"
+        },
+        "window_source": {
+          "enum": [
+            "model",
+            "default"
+          ],
+          "title": "Window Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "parts",
+        "estimated_raw_total",
+        "window",
+        "window_source",
+        "context_length_unknown",
+        "estimator",
+        "dropped_documents",
+        "dropped_history_turns",
+        "near_limit",
+        "overflow_mode",
+        "status",
+        "standalone_kept"
+      ],
+      "title": "PromptBudgetTrace",
       "type": "object"
     },
     "QueryPlan": {
@@ -855,6 +1172,55 @@
         "too_broad"
       ],
       "title": "TraceAttributeFilter",
+      "type": "object"
+    },
+    "TraceCalcObserved": {
+      "additionalProperties": false,
+      "description": "D-77: what the answer showed of a calculation, recorded with the check on or off.",
+      "properties": {
+        "origin": {
+          "anyOf": [
+            {
+              "enum": [
+                "tool",
+                "trailing_block"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin"
+        },
+        "stated": {
+          "anyOf": [
+            {
+              "pattern": "^-?[0-9]{1,30}(\\.[0-9]{1,30})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stated"
+        },
+        "steps_listed": {
+          "title": "Steps Listed",
+          "type": "boolean"
+        },
+        "tool_used": {
+          "title": "Tool Used",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "steps_listed",
+        "tool_used"
+      ],
+      "title": "TraceCalcObserved",
       "type": "object"
     },
     "TraceCandidate": {
@@ -1569,6 +1935,27 @@
       "title": "TraceSecurityVersions",
       "type": "object"
     },
+    "TraceUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": {
+          "minimum": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "minimum": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens"
+      ],
+      "title": "TraceUsage",
+      "type": "object"
+    },
     "TraceUsedDocument": {
       "additionalProperties": false,
       "properties": {
@@ -1686,6 +2073,11 @@
       "default": null,
       "title": "Answer"
     },
+    "answer_error": {
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "title": "Answer Error",
+      "type": "string"
+    },
     "answer_language": {
       "maxLength": 16,
       "minLength": 1,
@@ -1711,6 +2103,16 @@
       ],
       "title": "Cache",
       "type": "string"
+    },
+    "calc": {
+      "items": {
+        "$ref": "#/$defs/CalcCheck"
+      },
+      "title": "Calc",
+      "type": "array"
+    },
+    "calc_observed": {
+      "$ref": "#/$defs/TraceCalcObserved"
     },
     "candidates": {
       "items": {
@@ -1839,6 +2241,9 @@
       "minimum": 0,
       "title": "Pre Generation Ms",
       "type": "number"
+    },
+    "prompt_budget": {
+      "$ref": "#/$defs/PromptBudgetTrace"
     },
     "query": {
       "title": "Query",
@@ -1999,6 +2404,9 @@
       "minimum": 0,
       "title": "Ttft Ms",
       "type": "number"
+    },
+    "usage": {
+      "$ref": "#/$defs/TraceUsage"
     },
     "used_documents": {
       "items": {

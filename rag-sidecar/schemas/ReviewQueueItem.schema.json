@@ -59,7 +59,9 @@
           "output_guard",
           "version_conflict",
           "representative",
-          "re_review"
+          "re_review",
+          "calc_mismatch",
+          "calc_unverified"
         ],
         "type": "string"
       },

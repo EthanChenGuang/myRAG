@@ -1324,6 +1324,421 @@
       ],
       "trace_id": "0123456789abcdef0123456789abcdef"
     },
+    "CalcCheck": {
+      "origin": "tool",
+      "reason": null,
+      "recomputed": "22.3",
+      "stated": "22.3",
+      "stated_span": {
+        "end": 14,
+        "start": 10
+      },
+      "status": "verified",
+      "trace_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "unit": "units"
+    },
+    "CalcLimits": {
+      "max_bits": 4096,
+      "max_depth": 30,
+      "max_digits": 30,
+      "max_list_items": 200,
+      "max_operands": 50,
+      "max_round_places": 20,
+      "max_steps": 30,
+      "version": 1
+    },
+    "CalcRequest": {
+      "operands": [
+        {
+          "name": "item_a",
+          "source": {
+            "kind": "question"
+          },
+          "unit": "units",
+          "value": "12.5"
+        },
+        {
+          "name": "item_b",
+          "source": {
+            "alias": "S1",
+            "kind": "chunk"
+          },
+          "unit": "units",
+          "value": "7"
+        },
+        {
+          "name": "items",
+          "source": {
+            "alias": "S2",
+            "kind": "chunk"
+          },
+          "unit": "units",
+          "values": [
+            "3",
+            "8",
+            "5"
+          ]
+        },
+        {
+          "name": "cap",
+          "source": {
+            "alias": "S1",
+            "kind": "chunk"
+          },
+          "unit": "units",
+          "value": "4"
+        },
+        {
+          "name": "share",
+          "source": {
+            "kind": "question"
+          },
+          "unit": "%",
+          "value": "15"
+        },
+        {
+          "name": "start",
+          "source": {
+            "kind": "question"
+          },
+          "value": "2025-01-10"
+        },
+        {
+          "name": "end",
+          "source": {
+            "kind": "question"
+          },
+          "value": "2025-03-01"
+        }
+      ],
+      "result": "s_round",
+      "steps": [
+        {
+          "args": [
+            "item_a",
+            "item_b"
+          ],
+          "id": "s_add",
+          "op": "add"
+        },
+        {
+          "args": [
+            "s_add",
+            "item_b"
+          ],
+          "id": "s_sub",
+          "op": "subtract"
+        },
+        {
+          "args": [
+            "s_sub",
+            "item_a"
+          ],
+          "id": "s_mul",
+          "op": "multiply"
+        },
+        {
+          "args": [
+            "s_mul",
+            "item_b"
+          ],
+          "id": "s_div",
+          "op": "divide",
+          "rounding": {
+            "mode": "half_up",
+            "places": 2
+          }
+        },
+        {
+          "args": [
+            "item_a",
+            "item_b"
+          ],
+          "id": "s_min",
+          "op": "min"
+        },
+        {
+          "args": [
+            "item_a",
+            "item_b"
+          ],
+          "id": "s_max",
+          "op": "max"
+        },
+        {
+          "args": [
+            "items"
+          ],
+          "id": "s_sum",
+          "op": "sum"
+        },
+        {
+          "args": [
+            "items",
+            "cap"
+          ],
+          "id": "s_cap",
+          "label": "capped items",
+          "op": "cap_each"
+        },
+        {
+          "args": [
+            "s_sum",
+            "share"
+          ],
+          "id": "s_pct",
+          "op": "percentage"
+        },
+        {
+          "args": [
+            "s_div"
+          ],
+          "id": "s_round",
+          "op": "round",
+          "rounding": {
+            "mode": "half_even",
+            "places": 1
+          }
+        },
+        {
+          "args": [
+            "start",
+            "end"
+          ],
+          "date_unit": "days",
+          "id": "s_days",
+          "inclusive": true,
+          "op": "date_diff"
+        }
+      ]
+    },
+    "CalcResult": {
+      "reject_reason": null,
+      "status": "ok",
+      "steps": [
+        {
+          "display": "19.5",
+          "display_rounded": false,
+          "exact": "39/2",
+          "id": "s_add",
+          "inputs": [
+            "12.5",
+            "7"
+          ],
+          "op": "add"
+        },
+        {
+          "display": "22.3",
+          "display_rounded": true,
+          "exact": "223/10",
+          "id": "s_round",
+          "inputs": [
+            "22.32"
+          ],
+          "op": "round"
+        }
+      ],
+      "unit": "units",
+      "value": "22.3"
+    },
+    "CalcTrace": {
+      "anchor_offset": null,
+      "origin": "tool",
+      "request": {
+        "operands": [
+          {
+            "name": "item_a",
+            "source": {
+              "kind": "question"
+            },
+            "unit": "units",
+            "value": "12.5"
+          },
+          {
+            "name": "item_b",
+            "source": {
+              "alias": "S1",
+              "kind": "chunk"
+            },
+            "unit": "units",
+            "value": "7"
+          },
+          {
+            "name": "items",
+            "source": {
+              "alias": "S2",
+              "kind": "chunk"
+            },
+            "unit": "units",
+            "values": [
+              "3",
+              "8",
+              "5"
+            ]
+          },
+          {
+            "name": "cap",
+            "source": {
+              "alias": "S1",
+              "kind": "chunk"
+            },
+            "unit": "units",
+            "value": "4"
+          },
+          {
+            "name": "share",
+            "source": {
+              "kind": "question"
+            },
+            "unit": "%",
+            "value": "15"
+          },
+          {
+            "name": "start",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2025-01-10"
+          },
+          {
+            "name": "end",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2025-03-01"
+          }
+        ],
+        "result": "s_round",
+        "steps": [
+          {
+            "args": [
+              "item_a",
+              "item_b"
+            ],
+            "id": "s_add",
+            "op": "add"
+          },
+          {
+            "args": [
+              "s_add",
+              "item_b"
+            ],
+            "id": "s_sub",
+            "op": "subtract"
+          },
+          {
+            "args": [
+              "s_sub",
+              "item_a"
+            ],
+            "id": "s_mul",
+            "op": "multiply"
+          },
+          {
+            "args": [
+              "s_mul",
+              "item_b"
+            ],
+            "id": "s_div",
+            "op": "divide",
+            "rounding": {
+              "mode": "half_up",
+              "places": 2
+            }
+          },
+          {
+            "args": [
+              "item_a",
+              "item_b"
+            ],
+            "id": "s_min",
+            "op": "min"
+          },
+          {
+            "args": [
+              "item_a",
+              "item_b"
+            ],
+            "id": "s_max",
+            "op": "max"
+          },
+          {
+            "args": [
+              "items"
+            ],
+            "id": "s_sum",
+            "op": "sum"
+          },
+          {
+            "args": [
+              "items",
+              "cap"
+            ],
+            "id": "s_cap",
+            "label": "capped items",
+            "op": "cap_each"
+          },
+          {
+            "args": [
+              "s_sum",
+              "share"
+            ],
+            "id": "s_pct",
+            "op": "percentage"
+          },
+          {
+            "args": [
+              "s_div"
+            ],
+            "id": "s_round",
+            "op": "round",
+            "rounding": {
+              "mode": "half_even",
+              "places": 1
+            }
+          },
+          {
+            "args": [
+              "start",
+              "end"
+            ],
+            "date_unit": "days",
+            "id": "s_days",
+            "inclusive": true,
+            "op": "date_diff"
+          }
+        ]
+      },
+      "result": {
+        "reject_reason": null,
+        "status": "ok",
+        "steps": [
+          {
+            "display": "19.5",
+            "display_rounded": false,
+            "exact": "39/2",
+            "id": "s_add",
+            "inputs": [
+              "12.5",
+              "7"
+            ],
+            "op": "add"
+          },
+          {
+            "display": "22.3",
+            "display_rounded": true,
+            "exact": "223/10",
+            "id": "s_round",
+            "inputs": [
+              "22.32"
+            ],
+            "op": "round"
+          }
+        ],
+        "unit": "units",
+        "value": "22.3"
+      }
+    },
     "ChunkTranslation": {
       "content": "A neutral translated sentence."
     },
@@ -5975,6 +6390,35 @@
       "variant": "long"
     },
     "LanguagePack": {
+      "calc_intent_terms": [
+        "总共",
+        "一共",
+        "合计",
+        "总计",
+        "总和",
+        "相加",
+        "加上",
+        "减去",
+        "乘以",
+        "除以",
+        "差额",
+        "相差",
+        "剩余",
+        "剩下",
+        "还剩",
+        "百分之",
+        "百分比",
+        "比例",
+        "平均",
+        "多少",
+        "几个",
+        "每",
+        "每个",
+        "之间",
+        "多出",
+        "少于",
+        "计算"
+      ],
       "code": "zh",
       "effective_date_end_patterns": [
         "有效期\\s*(?:至|到)\\s*(?:19|20)\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日",
@@ -5996,6 +6440,29 @@
       "list_separator": "，",
       "name": "Chinese",
       "native_name": "中文",
+      "number_format": {
+        "decimal_marks": [
+          "."
+        ],
+        "fullwidth_digits": true,
+        "group_separators": [
+          ","
+        ],
+        "magnitude_words": [
+          {
+            "power": 3,
+            "word": "千"
+          },
+          {
+            "power": 4,
+            "word": "万"
+          },
+          {
+            "power": 8,
+            "word": "亿"
+          }
+        ]
+      },
       "ocr_codes": {
         "docling": {
           "rapidocr": "ch"
@@ -6044,7 +6511,8 @@
       "texts": {
         "instructions": {
           "attached_documents": "与本问题相关的参考文档已附在对话中。",
-          "calculation": "当回答需要计算时，不要心算。从问题和所引用的段落中取出操作数和规则，传给 calculate 工具，并在总计之前列出每一项的计算步骤。事实工具返回的数值优先于文档中的数值。",
+          "calculation": "当回答需要计算时，不要心算。从问题和所引用的段落中取出操作数和规则，传给 calculate 工具，并在总计之前列出每一项的计算步骤。注明每个操作数所来自段落的引用。事实工具提供了数值时，使用该数值，而不是文档中的数值。",
+          "calculation_block": "如果没有可用的 calculate 工具，仍要在正文中列出每一项的计算步骤和总计。然后在回答的最末尾、所有正文之后，把你本应传给 calculate 工具的同一份输入（操作数及其来源、规则和每一步）写成一个 JSON 对象，放在 {open} 和 {close} 之间。{close} 之后不要再写任何内容。",
           "citation": "请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
           "citation_per_sentence": "每个陈述事实的句子都要在句末标注支持它的带标签来源的 [S<编号>] 标记，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
           "concise": "先给出答案，再只补充问题所需的支撑细节。保留所有引用。",
@@ -6064,6 +6532,8 @@
           "badge_tooltip_possibly_unreliable": "自动检查发现这条回答的部分内容可能没有文档支持。",
           "badge_tooltip_verified": "自动检查认为这条回答有你的文档支持。",
           "badge_verified": "已核验",
+          "condensed_question": "先前对话（已压缩）",
+          "earlier_draft": "基于先前证据的草稿",
           "effective_from": "自 {date} 起生效",
           "from_documents": "来自文档",
           "from_web": "来自网络",
@@ -6098,6 +6568,35 @@
     "LanguageRegistry": {
       "packs": [
         {
+          "calc_intent_terms": [
+            "总共",
+            "一共",
+            "合计",
+            "总计",
+            "总和",
+            "相加",
+            "加上",
+            "减去",
+            "乘以",
+            "除以",
+            "差额",
+            "相差",
+            "剩余",
+            "剩下",
+            "还剩",
+            "百分之",
+            "百分比",
+            "比例",
+            "平均",
+            "多少",
+            "几个",
+            "每",
+            "每个",
+            "之间",
+            "多出",
+            "少于",
+            "计算"
+          ],
           "code": "zh",
           "effective_date_end_patterns": [
             "有效期\\s*(?:至|到)\\s*(?:19|20)\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日",
@@ -6119,6 +6618,29 @@
           "list_separator": "，",
           "name": "Chinese",
           "native_name": "中文",
+          "number_format": {
+            "decimal_marks": [
+              "."
+            ],
+            "fullwidth_digits": true,
+            "group_separators": [
+              ","
+            ],
+            "magnitude_words": [
+              {
+                "power": 3,
+                "word": "千"
+              },
+              {
+                "power": 4,
+                "word": "万"
+              },
+              {
+                "power": 8,
+                "word": "亿"
+              }
+            ]
+          },
           "ocr_codes": {
             "docling": {
               "rapidocr": "ch"
@@ -6167,7 +6689,8 @@
           "texts": {
             "instructions": {
               "attached_documents": "与本问题相关的参考文档已附在对话中。",
-              "calculation": "当回答需要计算时，不要心算。从问题和所引用的段落中取出操作数和规则，传给 calculate 工具，并在总计之前列出每一项的计算步骤。事实工具返回的数值优先于文档中的数值。",
+              "calculation": "当回答需要计算时，不要心算。从问题和所引用的段落中取出操作数和规则，传给 calculate 工具，并在总计之前列出每一项的计算步骤。注明每个操作数所来自段落的引用。事实工具提供了数值时，使用该数值，而不是文档中的数值。",
+              "calculation_block": "如果没有可用的 calculate 工具，仍要在正文中列出每一项的计算步骤和总计。然后在回答的最末尾、所有正文之后，把你本应传给 calculate 工具的同一份输入（操作数及其来源、规则和每一步）写成一个 JSON 对象，放在 {open} 和 {close} 之间。{close} 之后不要再写任何内容。",
               "citation": "请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
               "citation_per_sentence": "每个陈述事实的句子都要在句末标注支持它的带标签来源的 [S<编号>] 标记，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
               "concise": "先给出答案，再只补充问题所需的支撑细节。保留所有引用。",
@@ -6187,6 +6710,8 @@
               "badge_tooltip_possibly_unreliable": "自动检查发现这条回答的部分内容可能没有文档支持。",
               "badge_tooltip_verified": "自动检查认为这条回答有你的文档支持。",
               "badge_verified": "已核验",
+              "condensed_question": "先前对话（已压缩）",
+              "earlier_draft": "基于先前证据的草稿",
               "effective_from": "自 {date} 起生效",
               "from_documents": "来自文档",
               "from_web": "来自网络",
@@ -6219,6 +6744,36 @@
           ]
         },
         {
+          "calc_intent_terms": [
+            "total",
+            "in total",
+            "sum",
+            "add up",
+            "altogether",
+            "combined",
+            "difference",
+            "minus",
+            "plus",
+            "times",
+            "multiplied by",
+            "divided by",
+            "remainder",
+            "remaining",
+            "left over",
+            "percent",
+            "percentage",
+            "ratio",
+            "average",
+            "how much",
+            "how many",
+            "per",
+            "each",
+            "between",
+            "more than",
+            "less than",
+            "calculate",
+            "compute"
+          ],
           "code": "en",
           "effective_date_end_patterns": [
             "\\b(?:valid|effective|in\\s+(?:force|effect))\\s+(?:until|through)\\b",
@@ -6243,6 +6798,30 @@
           "list_separator": ", ",
           "name": "English",
           "native_name": "English",
+          "number_format": {
+            "decimal_marks": [
+              "."
+            ],
+            "fullwidth_digits": false,
+            "group_separators": [
+              ",",
+              " "
+            ],
+            "magnitude_words": [
+              {
+                "power": 3,
+                "word": "thousand"
+              },
+              {
+                "power": 6,
+                "word": "million"
+              },
+              {
+                "power": 9,
+                "word": "billion"
+              }
+            ]
+          },
           "ocr_codes": {
             "docling": {
               "rapidocr": "en"
@@ -6362,7 +6941,8 @@
           "texts": {
             "instructions": {
               "attached_documents": "The reference documents for this question are attached to the conversation.",
-              "calculation": "When the answer needs a calculation, do not compute it mentally. Take the operands and the rule from the question and the cited passages, pass them to the calculate tool, and list each item’s step before the total. A value returned by a fact tool takes precedence over a value from the documents.",
+              "calculation": "When the answer needs a calculation, do not compute it mentally. Take the operands and the rule from the question and the cited passages, pass them to the calculate tool, and list each item’s step before the total. Cite the passages the operands come from. When a fact tool supplies a value, use it instead of the value from the documents.",
+              "calculation_block": "If the calculate tool is not available, still list each item’s step and the total in the text. Then, at the very end of the answer and after all text, write the same input you would give the calculate tool (the operands with their sources, the rule and each step) as one JSON object between {open} and {close}. Write nothing after {close}.",
               "citation": "Cite the sources you use with [S<number>] markers taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
               "citation_per_sentence": "End every factual sentence with the [S<number>] marker of the labelled source that supports it, taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
               "concise": "Give the answer first, then only the supporting detail the question needs. Keep every citation.",
@@ -6382,6 +6962,8 @@
               "badge_tooltip_possibly_unreliable": "An automatic check found parts of this answer that your documents may not support.",
               "badge_tooltip_verified": "An automatic check found this answer supported by your documents.",
               "badge_verified": "Verified",
+              "condensed_question": "Earlier conversation, condensed",
+              "earlier_draft": "Draft from earlier evidence",
               "effective_from": "Effective from {date}",
               "from_documents": "From the documents",
               "from_web": "From the web",
@@ -6415,6 +6997,37 @@
           ]
         },
         {
+          "calc_intent_terms": [
+            "totale",
+            "in totale",
+            "somma",
+            "sommare",
+            "complessivamente",
+            "differenza",
+            "meno",
+            "più",
+            "per",
+            "moltiplicato",
+            "diviso",
+            "resto",
+            "rimanente",
+            "rimane",
+            "percento",
+            "percentuale",
+            "rapporto",
+            "media",
+            "quanto",
+            "quanta",
+            "quanti",
+            "quante",
+            "ciascuno",
+            "ciascuna",
+            "ogni",
+            "tra",
+            "fra",
+            "calcolare",
+            "calcola"
+          ],
           "code": "it",
           "effective_date_end_patterns": [
             "\\b(?:valid[oa]|in\\s+vigore|efficace)\\s+fino\\s+al\\b",
@@ -6450,6 +7063,38 @@
           "list_separator": ", ",
           "name": "Italian",
           "native_name": "Italiano",
+          "number_format": {
+            "decimal_marks": [
+              ","
+            ],
+            "fullwidth_digits": false,
+            "group_separators": [
+              ".",
+              " "
+            ],
+            "magnitude_words": [
+              {
+                "power": 3,
+                "word": "mila"
+              },
+              {
+                "power": 6,
+                "word": "milione"
+              },
+              {
+                "power": 6,
+                "word": "milioni"
+              },
+              {
+                "power": 9,
+                "word": "miliardo"
+              },
+              {
+                "power": 9,
+                "word": "miliardi"
+              }
+            ]
+          },
           "ocr_codes": {
             "docling": {
               "rapidocr": "it"
@@ -6563,7 +7208,8 @@
           "texts": {
             "instructions": {
               "attached_documents": "I documenti di riferimento per questa domanda sono allegati alla conversazione.",
-              "calculation": "Quando la risposta richiede un calcolo, non farlo a mente. Prendi gli operandi e la regola dalla domanda e dai passaggi citati, passali allo strumento calculate ed elenca il passaggio di ogni voce prima del totale. Un valore restituito da uno strumento di fatti prevale su un valore dei documenti.",
+              "calculation": "Quando la risposta richiede un calcolo, non farlo a mente. Prendi gli operandi e la regola dalla domanda e dai passaggi citati, passali allo strumento calculate ed elenca il passaggio di ogni voce prima del totale. Cita i passaggi da cui provengono gli operandi. Quando uno strumento di fatti fornisce un valore, usa quello invece del valore dei documenti.",
+              "calculation_block": "Se lo strumento calculate non è disponibile, elenca comunque nel testo il passaggio di ogni voce e il totale. Poi, alla fine della risposta e dopo tutto il testo, scrivi lo stesso input che daresti allo strumento calculate (gli operandi con la loro fonte, la regola e ogni passaggio) come un unico oggetto JSON tra {open} e {close}. Non scrivere nulla dopo {close}.",
               "citation": "Cita le fonti che usi con i marcatori [S<numero>] presi solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
               "citation_per_sentence": "Termina ogni frase che afferma un fatto con il marcatore [S<numero>] della fonte etichettata che la supporta, preso solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
               "concise": "Dai prima la risposta, poi solo i dettagli di supporto che servono alla domanda. Mantieni tutte le citazioni.",
@@ -6583,6 +7229,8 @@
               "badge_tooltip_possibly_unreliable": "Un controllo automatico ha trovato parti di questa risposta che i tuoi documenti potrebbero non supportare.",
               "badge_tooltip_verified": "Un controllo automatico ha trovato questa risposta supportata dai tuoi documenti.",
               "badge_verified": "Verificata",
+              "condensed_question": "Conversazione precedente, condensata",
+              "earlier_draft": "Bozza da prove precedenti",
               "effective_from": "In vigore dal {date}",
               "from_documents": "Dai documenti",
               "from_web": "Dal web",
@@ -14499,6 +15147,45 @@
       ],
       "schema_version": 1
     },
+    "PromptBudgetConfig": {
+      "default_window": 8192,
+      "margin_ratio": 0.05,
+      "margin_tokens": 256,
+      "mcp_tool_reserve": 2000,
+      "near_limit_ratio": 0.9,
+      "refine_max_calls": 2,
+      "version": 1,
+      "voice_answer_reserve": 300,
+      "voice_document_budget": 1500,
+      "voice_system_reserve": 800
+    },
+    "PromptBudgetTrace": {
+      "context_length_unknown": true,
+      "dropped_documents": 3,
+      "dropped_history_turns": 4,
+      "estimated_raw_total": 8650,
+      "estimator": {
+        "encoding": "cl100k_base",
+        "factor": 1.25,
+        "factor_source": "default",
+        "family": "family-b"
+      },
+      "near_limit": true,
+      "overflow_mode": "truncate",
+      "parts": {
+        "documents": 7000,
+        "history": 0,
+        "question": 30,
+        "reserve": 800,
+        "rules": 120,
+        "system": 400,
+        "tools": 300
+      },
+      "standalone_kept": true,
+      "status": "exceeded",
+      "window": 8192,
+      "window_source": "default"
+    },
     "QualityCheckResult": {
       "pages": [
         {
@@ -15863,6 +16550,34 @@
       "row": 2,
       "severity": "warning"
     },
+    "TokenizerCalibration": {
+      "default_factor": 1.25,
+      "encoding": "cl100k_base",
+      "families": [
+        {
+          "computed_at": "2026-11-01T00:00:00Z",
+          "factor": 1.08,
+          "family": "family-a",
+          "quantile": 0.95,
+          "run_ids": [
+            "run-0001"
+          ],
+          "samples": 40,
+          "source": "measured"
+        },
+        {
+          "computed_at": null,
+          "factor": 1.25,
+          "family": "family-b",
+          "quantile": 0.95,
+          "run_ids": [],
+          "samples": 0,
+          "source": "default"
+        }
+      ],
+      "version": 1,
+      "written_by": "rag_eval.calibrate tokenizer"
+    },
     "TrainingNegative": {
       "chunk_id": "chunk-0003",
       "confirmed": false,
@@ -16180,6 +16895,72 @@
     }
   },
   "variants": {
+    "AnswerChecks:calc_and_budget": {
+      "model": "AnswerChecks",
+      "value": {
+        "calc": {
+          "origin": "trailing_block",
+          "reason": null,
+          "recomputed": "22.3",
+          "stated": "23",
+          "stated_span": {
+            "end": 12,
+            "start": 10
+          },
+          "status": "corrected",
+          "trace_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "unit": "units"
+        },
+        "calc_items": [
+          {
+            "origin": "trailing_block",
+            "reason": null,
+            "recomputed": "22.3",
+            "stated": "23",
+            "stated_span": {
+              "end": 12,
+              "start": 10
+            },
+            "status": "corrected",
+            "trace_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "unit": "units"
+          },
+          {
+            "origin": null,
+            "reason": "operand_not_located",
+            "recomputed": null,
+            "stated": null,
+            "stated_span": null,
+            "status": "not_verified",
+            "trace_hash": null,
+            "unit": null
+          }
+        ],
+        "claims": null,
+        "finish_reason": null,
+        "output_guard": null,
+        "prompt_budget": {
+          "dropped_documents": 3,
+          "dropped_history_turns": 4,
+          "near_limit": true,
+          "parts": {
+            "documents": 7000,
+            "history": 0,
+            "question": 30,
+            "reserve": 800,
+            "rules": 120,
+            "system": 400,
+            "tools": 300
+          },
+          "status": "exceeded",
+          "window": 8192
+        },
+        "sentences": [],
+        "text_language": null,
+        "truncated": false,
+        "version_conflict": null
+      }
+    },
     "AnswerChecks:empty": {
       "model": "AnswerChecks",
       "value": {
@@ -16497,6 +17278,81 @@
       "value": {
         "document_ids": null,
         "tenant_key": "s:default"
+      }
+    },
+    "CalcCheck:corrected": {
+      "model": "CalcCheck",
+      "value": {
+        "origin": "trailing_block",
+        "reason": null,
+        "recomputed": "22.3",
+        "stated": "23",
+        "stated_span": {
+          "end": 12,
+          "start": 10
+        },
+        "status": "corrected",
+        "trace_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "unit": "units"
+      }
+    },
+    "CalcCheck:not_verified": {
+      "model": "CalcCheck",
+      "value": {
+        "origin": null,
+        "reason": "operand_not_located",
+        "recomputed": null,
+        "stated": null,
+        "stated_span": null,
+        "status": "not_verified",
+        "trace_hash": null,
+        "unit": null
+      }
+    },
+    "CalcRequest:conversion_operand": {
+      "model": "CalcRequest",
+      "value": {
+        "operands": [
+          {
+            "name": "amount",
+            "source": {
+              "kind": "question"
+            },
+            "unit": "units",
+            "value": "40"
+          },
+          {
+            "name": "per_unit",
+            "source": {
+              "alias": "S3",
+              "kind": "chunk"
+            },
+            "unit_from": "units",
+            "unit_to": "parts",
+            "value": "0.5"
+          }
+        ],
+        "result": "converted",
+        "steps": [
+          {
+            "args": [
+              "amount",
+              "per_unit"
+            ],
+            "id": "converted",
+            "op": "multiply"
+          }
+        ]
+      }
+    },
+    "CalcResult:rejected": {
+      "model": "CalcResult",
+      "value": {
+        "reject_reason": "mixed_units",
+        "status": "rejected",
+        "steps": [],
+        "unit": null,
+        "value": null
       }
     },
     "CitationRecord:version_label": {
@@ -18790,6 +19646,53 @@
         "tags": []
       }
     },
+    "GoldenItem:context_overflow": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": true,
+        "attack": null,
+        "category": "context_overflow",
+        "conversation": [],
+        "evidence_language": null,
+        "expected_answer": "The total is 9 units.",
+        "gold_evidence": [
+          {
+            "document": "document-a.md",
+            "quote": "Item A takes 4 units.",
+            "section": "Section 1"
+          },
+          {
+            "document": "document-a.md",
+            "quote": "Item B takes 5 units.",
+            "section": "Section 2"
+          }
+        ],
+        "id": "p521-overflow-001",
+        "language": "en",
+        "overflow": {
+          "kind": "ranked_evidence",
+          "must_keep": [
+            {
+              "document": "document-a.md",
+              "quote": "Item A takes 4 units.",
+              "section": "Section 1"
+            },
+            {
+              "document": "document-a.md",
+              "quote": "Item B takes 5 units.",
+              "section": "Section 2"
+            }
+          ]
+        },
+        "pair_of": null,
+        "provenance": "synthetic_fixture",
+        "question": "What is the total for item A and item B?",
+        "retrieval_filters": null,
+        "review_status": "approved",
+        "split": "dev",
+        "tags": []
+      }
+    },
     "GoldenItem:cross_lingual": {
       "model": "GoldenItem",
       "value": {
@@ -18941,6 +19844,44 @@
         "pair_of": null,
         "provenance": "synthetic_fixture",
         "question": "How much does the synthetic widget cost?",
+        "retrieval_filters": null,
+        "review_status": "approved",
+        "split": "dev",
+        "tags": []
+      }
+    },
+    "GoldenItem:multi_step_calc": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": true,
+        "attack": null,
+        "calc": {
+          "expected_value": "9",
+          "paraphrase_group": "p521-calc-group-a",
+          "tolerance": "0",
+          "unit": "units"
+        },
+        "category": "multi_step_calc",
+        "conversation": [],
+        "evidence_language": null,
+        "expected_answer": "The total is 9 units.",
+        "gold_evidence": [
+          {
+            "document": "document-a.md",
+            "quote": "Item A takes 4 units.",
+            "section": "Section 1"
+          },
+          {
+            "document": "document-a.md",
+            "quote": "Item B takes 5 units.",
+            "section": "Section 2"
+          }
+        ],
+        "id": "p521-calc-001",
+        "language": "en",
+        "pair_of": null,
+        "provenance": "synthetic_fixture",
+        "question": "What is the total for item A and item B?",
         "retrieval_filters": null,
         "review_status": "approved",
         "split": "dev",
@@ -19294,6 +20235,35 @@
       "value": {
         "packs": [
           {
+            "calc_intent_terms": [
+              "总共",
+              "一共",
+              "合计",
+              "总计",
+              "总和",
+              "相加",
+              "加上",
+              "减去",
+              "乘以",
+              "除以",
+              "差额",
+              "相差",
+              "剩余",
+              "剩下",
+              "还剩",
+              "百分之",
+              "百分比",
+              "比例",
+              "平均",
+              "多少",
+              "几个",
+              "每",
+              "每个",
+              "之间",
+              "多出",
+              "少于",
+              "计算"
+            ],
             "code": "zh",
             "effective_date_end_patterns": [
               "有效期\\s*(?:至|到)\\s*(?:19|20)\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日",
@@ -19315,6 +20285,29 @@
             "list_separator": "，",
             "name": "Chinese",
             "native_name": "中文",
+            "number_format": {
+              "decimal_marks": [
+                "."
+              ],
+              "fullwidth_digits": true,
+              "group_separators": [
+                ","
+              ],
+              "magnitude_words": [
+                {
+                  "power": 3,
+                  "word": "千"
+                },
+                {
+                  "power": 4,
+                  "word": "万"
+                },
+                {
+                  "power": 8,
+                  "word": "亿"
+                }
+              ]
+            },
             "ocr_codes": {
               "docling": {
                 "rapidocr": "ch"
@@ -19363,7 +20356,8 @@
             "texts": {
               "instructions": {
                 "attached_documents": "与本问题相关的参考文档已附在对话中。",
-                "calculation": "当回答需要计算时，不要心算。从问题和所引用的段落中取出操作数和规则，传给 calculate 工具，并在总计之前列出每一项的计算步骤。事实工具返回的数值优先于文档中的数值。",
+                "calculation": "当回答需要计算时，不要心算。从问题和所引用的段落中取出操作数和规则，传给 calculate 工具，并在总计之前列出每一项的计算步骤。注明每个操作数所来自段落的引用。事实工具提供了数值时，使用该数值，而不是文档中的数值。",
+                "calculation_block": "如果没有可用的 calculate 工具，仍要在正文中列出每一项的计算步骤和总计。然后在回答的最末尾、所有正文之后，把你本应传给 calculate 工具的同一份输入（操作数及其来源、规则和每一步）写成一个 JSON 对象，放在 {open} 和 {close} 之间。{close} 之后不要再写任何内容。",
                 "citation": "请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
                 "citation_per_sentence": "每个陈述事实的句子都要在句末标注支持它的带标签来源的 [S<编号>] 标记，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
                 "concise": "先给出答案，再只补充问题所需的支撑细节。保留所有引用。",
@@ -19383,6 +20377,8 @@
                 "badge_tooltip_possibly_unreliable": "自动检查发现这条回答的部分内容可能没有文档支持。",
                 "badge_tooltip_verified": "自动检查认为这条回答有你的文档支持。",
                 "badge_verified": "已核验",
+                "condensed_question": "先前对话（已压缩）",
+                "earlier_draft": "基于先前证据的草稿",
                 "effective_from": "自 {date} 起生效",
                 "from_documents": "来自文档",
                 "from_web": "来自网络",
@@ -19415,6 +20411,36 @@
             ]
           },
           {
+            "calc_intent_terms": [
+              "total",
+              "in total",
+              "sum",
+              "add up",
+              "altogether",
+              "combined",
+              "difference",
+              "minus",
+              "plus",
+              "times",
+              "multiplied by",
+              "divided by",
+              "remainder",
+              "remaining",
+              "left over",
+              "percent",
+              "percentage",
+              "ratio",
+              "average",
+              "how much",
+              "how many",
+              "per",
+              "each",
+              "between",
+              "more than",
+              "less than",
+              "calculate",
+              "compute"
+            ],
             "code": "en",
             "effective_date_end_patterns": [
               "\\b(?:valid|effective|in\\s+(?:force|effect))\\s+(?:until|through)\\b",
@@ -19439,6 +20465,30 @@
             "list_separator": ", ",
             "name": "English",
             "native_name": "English",
+            "number_format": {
+              "decimal_marks": [
+                "."
+              ],
+              "fullwidth_digits": false,
+              "group_separators": [
+                ",",
+                " "
+              ],
+              "magnitude_words": [
+                {
+                  "power": 3,
+                  "word": "thousand"
+                },
+                {
+                  "power": 6,
+                  "word": "million"
+                },
+                {
+                  "power": 9,
+                  "word": "billion"
+                }
+              ]
+            },
             "ocr_codes": {
               "docling": {
                 "rapidocr": "en"
@@ -19558,7 +20608,8 @@
             "texts": {
               "instructions": {
                 "attached_documents": "The reference documents for this question are attached to the conversation.",
-                "calculation": "When the answer needs a calculation, do not compute it mentally. Take the operands and the rule from the question and the cited passages, pass them to the calculate tool, and list each item’s step before the total. A value returned by a fact tool takes precedence over a value from the documents.",
+                "calculation": "When the answer needs a calculation, do not compute it mentally. Take the operands and the rule from the question and the cited passages, pass them to the calculate tool, and list each item’s step before the total. Cite the passages the operands come from. When a fact tool supplies a value, use it instead of the value from the documents.",
+                "calculation_block": "If the calculate tool is not available, still list each item’s step and the total in the text. Then, at the very end of the answer and after all text, write the same input you would give the calculate tool (the operands with their sources, the rule and each step) as one JSON object between {open} and {close}. Write nothing after {close}.",
                 "citation": "Cite the sources you use with [S<number>] markers taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
                 "citation_per_sentence": "End every factual sentence with the [S<number>] marker of the labelled source that supports it, taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
                 "concise": "Give the answer first, then only the supporting detail the question needs. Keep every citation.",
@@ -19578,6 +20629,8 @@
                 "badge_tooltip_possibly_unreliable": "An automatic check found parts of this answer that your documents may not support.",
                 "badge_tooltip_verified": "An automatic check found this answer supported by your documents.",
                 "badge_verified": "Verified",
+                "condensed_question": "Earlier conversation, condensed",
+                "earlier_draft": "Draft from earlier evidence",
                 "effective_from": "Effective from {date}",
                 "from_documents": "From the documents",
                 "from_web": "From the web",
@@ -19611,6 +20664,37 @@
             ]
           },
           {
+            "calc_intent_terms": [
+              "totale",
+              "in totale",
+              "somma",
+              "sommare",
+              "complessivamente",
+              "differenza",
+              "meno",
+              "più",
+              "per",
+              "moltiplicato",
+              "diviso",
+              "resto",
+              "rimanente",
+              "rimane",
+              "percento",
+              "percentuale",
+              "rapporto",
+              "media",
+              "quanto",
+              "quanta",
+              "quanti",
+              "quante",
+              "ciascuno",
+              "ciascuna",
+              "ogni",
+              "tra",
+              "fra",
+              "calcolare",
+              "calcola"
+            ],
             "code": "it",
             "effective_date_end_patterns": [
               "\\b(?:valid[oa]|in\\s+vigore|efficace)\\s+fino\\s+al\\b",
@@ -19646,6 +20730,38 @@
             "list_separator": ", ",
             "name": "Italian",
             "native_name": "Italiano",
+            "number_format": {
+              "decimal_marks": [
+                ","
+              ],
+              "fullwidth_digits": false,
+              "group_separators": [
+                ".",
+                " "
+              ],
+              "magnitude_words": [
+                {
+                  "power": 3,
+                  "word": "mila"
+                },
+                {
+                  "power": 6,
+                  "word": "milione"
+                },
+                {
+                  "power": 6,
+                  "word": "milioni"
+                },
+                {
+                  "power": 9,
+                  "word": "miliardo"
+                },
+                {
+                  "power": 9,
+                  "word": "miliardi"
+                }
+              ]
+            },
             "ocr_codes": {
               "docling": {
                 "rapidocr": "it"
@@ -19759,7 +20875,8 @@
             "texts": {
               "instructions": {
                 "attached_documents": "I documenti di riferimento per questa domanda sono allegati alla conversazione.",
-                "calculation": "Quando la risposta richiede un calcolo, non farlo a mente. Prendi gli operandi e la regola dalla domanda e dai passaggi citati, passali allo strumento calculate ed elenca il passaggio di ogni voce prima del totale. Un valore restituito da uno strumento di fatti prevale su un valore dei documenti.",
+                "calculation": "Quando la risposta richiede un calcolo, non farlo a mente. Prendi gli operandi e la regola dalla domanda e dai passaggi citati, passali allo strumento calculate ed elenca il passaggio di ogni voce prima del totale. Cita i passaggi da cui provengono gli operandi. Quando uno strumento di fatti fornisce un valore, usa quello invece del valore dei documenti.",
+                "calculation_block": "Se lo strumento calculate non è disponibile, elenca comunque nel testo il passaggio di ogni voce e il totale. Poi, alla fine della risposta e dopo tutto il testo, scrivi lo stesso input che daresti allo strumento calculate (gli operandi con la loro fonte, la regola e ogni passaggio) come un unico oggetto JSON tra {open} e {close}. Non scrivere nulla dopo {close}.",
                 "citation": "Cita le fonti che usi con i marcatori [S<numero>] presi solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
                 "citation_per_sentence": "Termina ogni frase che afferma un fatto con il marcatore [S<numero>] della fonte etichettata che la supporta, preso solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
                 "concise": "Dai prima la risposta, poi solo i dettagli di supporto che servono alla domanda. Mantieni tutte le citazioni.",
@@ -19779,6 +20896,8 @@
                 "badge_tooltip_possibly_unreliable": "Un controllo automatico ha trovato parti di questa risposta che i tuoi documenti potrebbero non supportare.",
                 "badge_tooltip_verified": "Un controllo automatico ha trovato questa risposta supportata dai tuoi documenti.",
                 "badge_verified": "Verificata",
+                "condensed_question": "Conversazione precedente, condensata",
+                "earlier_draft": "Bozza da prove precedenti",
                 "effective_from": "In vigore dal {date}",
                 "from_documents": "Dai documenti",
                 "from_web": "Dal web",
@@ -20243,6 +21362,190 @@
           "embed": "ok",
           "generation": "ok",
           "search": "ok"
+        },
+        "used_documents": [
+          {
+            "document_id": "doc-001",
+            "image_url": "https://example.invalid/image.png",
+            "name": "handbook.md",
+            "similarity": 0.82
+          }
+        ]
+      }
+    },
+    "RagTrace:calc_and_budget": {
+      "model": "RagTrace",
+      "value": {
+        "answer": "The total is 9 units. [S1]",
+        "answer_error": "context_length_exceeded",
+        "calc": [
+          {
+            "origin": null,
+            "reason": "operand_not_located",
+            "recomputed": null,
+            "stated": null,
+            "stated_span": null,
+            "status": "not_verified",
+            "trace_hash": null,
+            "unit": null
+          }
+        ],
+        "calc_observed": {
+          "origin": "trailing_block",
+          "stated": "9",
+          "steps_listed": true,
+          "tool_used": false
+        },
+        "candidates": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "final_score": 0.85,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": "vector",
+            "rank": 1,
+            "rerank_score": null,
+            "similarity": 0.82
+          },
+          {
+            "chunk_id": "chunk-002",
+            "content": "Office hours are nine to five.",
+            "document_id": "doc-002",
+            "document_name": null,
+            "final_score": null,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": null,
+            "rank": 2,
+            "rerank_score": null,
+            "similarity": 0.41
+          }
+        ],
+        "citation_strategy": "chunk-alias",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "chunk-001"
+            ],
+            "documentId": "doc-001",
+            "documentName": "handbook.md",
+            "documentVersion": null,
+            "n": 1,
+            "page": null,
+            "quote": "Employees receive twenty days of leave per year.",
+            "quoteHash": "8ce0aa222a8339916769a9552a8ffcc2834d2f6aa1101ab636571873bf2c7bb2",
+            "sectionPath": null,
+            "strategy": "chunk-alias"
+          }
+        ],
+        "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "context": "Employees receive twenty days of leave per year.",
+        "context_tokens": null,
+        "effective_config": {
+          "deployment_mode": "single-tenant",
+          "embedding_model": "text-embedding-3-small",
+          "endpoint_version": "1",
+          "generator_model": null,
+          "rag_env": {
+            "RAG_BEHAVIOR_MODE": "strict"
+          },
+          "rag_prompt_sha256": {
+            "RAG_SYSTEM_PROMPT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "security": null
+        },
+        "groundedness": null,
+        "injection": null,
+        "invalid_citations": 0,
+        "item_id": "en-general-001",
+        "kept": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "kept_by": "similarity",
+            "rank": 1,
+            "similarity": 0.82
+          }
+        ],
+        "prompt_budget": {
+          "context_length_unknown": true,
+          "dropped_documents": 0,
+          "dropped_history_turns": 4,
+          "estimated_raw_total": 8650,
+          "estimator": {
+            "encoding": "cl100k_base",
+            "factor": 1.25,
+            "factor_source": "default",
+            "family": "family-b"
+          },
+          "near_limit": false,
+          "overflow_mode": "truncate",
+          "parts": {
+            "documents": 7000,
+            "history": 0,
+            "question": 30,
+            "reserve": 800,
+            "rules": 120,
+            "system": 400,
+            "tools": 300
+          },
+          "standalone_kept": true,
+          "status": "ok",
+          "window": 8192,
+          "window_source": "default"
+        },
+        "query": "How many leave days do employees get?",
+        "query_context": {
+          "is_financial_query": false,
+          "is_temporal_query": false,
+          "required_precision": "medium",
+          "search_strategy": "semantic_only",
+          "suggested_threshold": 0.3
+        },
+        "query_language": null,
+        "query_plan": null,
+        "query_transforms": [
+          {
+            "kind": "rewrite",
+            "reason": null,
+            "status": null,
+            "text": "leave days per year",
+            "transform": null
+          }
+        ],
+        "refusal": null,
+        "refusal_reason": null,
+        "refused": false,
+        "retrieval_config_hash": null,
+        "retrieval_strategy": "standard",
+        "retrieval_versions": null,
+        "schema_version": 1,
+        "stage_counts": {},
+        "stage_latency_ms": {
+          "analyze": 1.5,
+          "embed": 4.0,
+          "generation": 0.0,
+          "search": 7.0
+        },
+        "stage_status": {
+          "analyze": "ok",
+          "embed": "ok",
+          "generation": "ok",
+          "search": "ok"
+        },
+        "usage": {
+          "input_tokens": 5200,
+          "output_tokens": 64
         },
         "used_documents": [
           {

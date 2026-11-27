@@ -4,6 +4,16 @@
       "additionalProperties": false,
       "description": "D-23: per-answer checks; `{}` validates so rows written before this column keep loading.",
       "properties": {
+        "calc": {
+          "$ref": "#/$defs/CalcCheck"
+        },
+        "calc_items": {
+          "items": {
+            "$ref": "#/$defs/CalcCheck"
+          },
+          "title": "Calc Items",
+          "type": "array"
+        },
         "claims": {
           "anyOf": [
             {
@@ -38,6 +48,9 @@
             }
           ],
           "default": null
+        },
+        "prompt_budget": {
+          "$ref": "#/$defs/PromptBudgetSummary"
         },
         "sentences": {
           "items": {
@@ -408,6 +421,145 @@
       "title": "BlockedRange",
       "type": "object"
     },
+    "CalcCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "origin": {
+          "anyOf": [
+            {
+              "enum": [
+                "tool",
+                "trailing_block"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "operand_not_located",
+                "trace_missing",
+                "trace_invalid",
+                "stated_not_found",
+                "check_error"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "recomputed": {
+          "anyOf": [
+            {
+              "pattern": "^-?[0-9]{1,30}(\\.[0-9]{1,30})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recomputed"
+        },
+        "stated": {
+          "anyOf": [
+            {
+              "pattern": "^-?[0-9]{1,30}(\\.[0-9]{1,30})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stated"
+        },
+        "stated_span": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CalcSpan"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "corrected",
+            "not_verified"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "trace_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trace Hash"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u3040-\\u30FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uAC00-\\uD7AF$\\u00A2-\\u00A5\\u20A0-\\u20CF %/._\\u00B0\\-]{1,32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "CalcCheck",
+      "type": "object"
+    },
+    "CalcSpan": {
+      "additionalProperties": false,
+      "description": "UTF-16 code-unit offsets of the stated number in the answer text.",
+      "properties": {
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "CalcSpan",
+      "type": "object"
+    },
     "CitationAlsoIn": {
       "additionalProperties": false,
       "description": "D-21: a duplicate of the cited chunk in another document, collapsed under this citation.",
@@ -702,6 +854,104 @@
         "rules_version"
       ],
       "title": "OutputGuardSummary",
+      "type": "object"
+    },
+    "PromptBudgetParts": {
+      "additionalProperties": false,
+      "description": "Estimated tokens per prompt part; `reserve` is the answer reserve (the effective output cap).",
+      "properties": {
+        "documents": {
+          "minimum": 0,
+          "title": "Documents",
+          "type": "integer"
+        },
+        "history": {
+          "minimum": 0,
+          "title": "History",
+          "type": "integer"
+        },
+        "question": {
+          "minimum": 0,
+          "title": "Question",
+          "type": "integer"
+        },
+        "reserve": {
+          "minimum": 0,
+          "title": "Reserve",
+          "type": "integer"
+        },
+        "rules": {
+          "minimum": 0,
+          "title": "Rules",
+          "type": "integer"
+        },
+        "system": {
+          "minimum": 0,
+          "title": "System",
+          "type": "integer"
+        },
+        "tools": {
+          "minimum": 0,
+          "title": "Tools",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "system",
+        "rules",
+        "tools",
+        "history",
+        "question",
+        "documents",
+        "reserve"
+      ],
+      "title": "PromptBudgetParts",
+      "type": "object"
+    },
+    "PromptBudgetSummary": {
+      "additionalProperties": false,
+      "description": "The part of `PromptBudgetTrace` stored in `rag_answer_records.checks`.",
+      "properties": {
+        "dropped_documents": {
+          "minimum": 0,
+          "title": "Dropped Documents",
+          "type": "integer"
+        },
+        "dropped_history_turns": {
+          "minimum": 0,
+          "title": "Dropped History Turns",
+          "type": "integer"
+        },
+        "near_limit": {
+          "title": "Near Limit",
+          "type": "boolean"
+        },
+        "parts": {
+          "$ref": "#/$defs/PromptBudgetParts"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "exceeded"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "window": {
+          "minimum": 1,
+          "title": "Window",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "parts",
+        "window",
+        "dropped_documents",
+        "dropped_history_turns",
+        "near_limit",
+        "status"
+      ],
+      "title": "PromptBudgetSummary",
       "type": "object"
     },
     "VersionConflict": {

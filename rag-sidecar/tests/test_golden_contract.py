@@ -622,12 +622,13 @@ def test_phase52_categories_and_sets():
     assert "stale_version" not in _golden.UNANSWERABLE_CATEGORIES
 
 
-def test_phase521_categories_are_not_added_here():
+def test_phase521_categories_are_added():
     from typing import get_args
 
     categories = set(get_args(_golden.Category))
     assert {"partial_answer", "stale_version", "off_topic_context"} <= categories
-    assert not {"multi_step_calc", "context_overflow"} & categories
+    assert {"multi_step_calc", "context_overflow"} <= categories
+    assert not {"multi_step_calc", "context_overflow"} & _golden.UNANSWERABLE_CATEGORIES
 
 
 def test_partial_answer_item_validates():

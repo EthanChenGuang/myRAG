@@ -2,7 +2,10 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
+from rag_sidecar.contracts.calc import CalcCheck
 from rag_sidecar.contracts.groundedness import GroundednessScorer, ReasonCode, _Contract
+from rag_sidecar.contracts.omit import omit_default_schema, omit_none_schema
+from rag_sidecar.contracts.prompt_budget import PromptBudgetSummary
 
 SentenceKind = Literal["sentence", "list_item", "table", "heading", "code", "truncated"]
 SentenceSupport = Literal["supported", "unsupported", "not_checked"]
@@ -14,6 +17,14 @@ FinishReason = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")]
 Count = Annotated[int, Field(ge=0)]
 
 _UNIQUE = {"uniqueItems": True}
+
+
+def _is_none(value: object) -> bool:
+    return value is None
+
+
+def _is_empty(value: object) -> bool:
+    return not value
 
 
 def _check_span(start: int, end: int) -> None:
@@ -119,6 +130,14 @@ class AnswerChecks(_Contract):
     finish_reason: FinishReason | None = None
     # D-89: the language detected from the answer text; the question's language stays on the record.
     text_language: str | None = None
+    # Phase 5.2.1 (D-23): the calculation checks and the prompt budget; absent on rows written before it.
+    calc: CalcCheck | None = Field(default=None, exclude_if=_is_none, json_schema_extra=omit_none_schema)
+    calc_items: list[CalcCheck] = Field(
+        default_factory=list, exclude_if=_is_empty, json_schema_extra=omit_default_schema
+    )
+    prompt_budget: PromptBudgetSummary | None = Field(
+        default=None, exclude_if=_is_none, json_schema_extra=omit_none_schema
+    )
 
     @model_validator(mode="after")
     def _unique_indexes(self) -> "AnswerChecks":

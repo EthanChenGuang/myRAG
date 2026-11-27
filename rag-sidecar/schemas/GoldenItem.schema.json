@@ -35,6 +35,47 @@
       "title": "AttackSpec",
       "type": "object"
     },
+    "CalcExpectation": {
+      "additionalProperties": false,
+      "description": "D-77: the value a multi_step_calc answer must state; items of one paraphrase group share it.",
+      "properties": {
+        "expected_value": {
+          "pattern": "^-?[0-9]{1,30}(\\.[0-9]{1,30})?$",
+          "title": "Expected Value",
+          "type": "string"
+        },
+        "paraphrase_group": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$",
+          "title": "Paraphrase Group",
+          "type": "string"
+        },
+        "tolerance": {
+          "default": "0",
+          "pattern": "^[0-9]{1,30}(\\.[0-9]{1,30})?$",
+          "title": "Tolerance",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u3040-\\u30FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uAC00-\\uD7AF$\\u00A2-\\u00A5\\u20A0-\\u20CF %/._\\u00B0\\-]{1,32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "expected_value",
+        "paraphrase_group"
+      ],
+      "title": "CalcExpectation",
+      "type": "object"
+    },
     "ConversationTurn": {
       "additionalProperties": false,
       "properties": {
@@ -231,6 +272,35 @@
         "score_band"
       ],
       "title": "OffTopicSpec",
+      "type": "object"
+    },
+    "OverflowSpec": {
+      "additionalProperties": false,
+      "description": "D-88: evidence a context_overflow answer must keep, named by gold span quote (never by chunk id).",
+      "properties": {
+        "kind": {
+          "enum": [
+            "ranked_evidence",
+            "long_history"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "must_keep": {
+          "items": {
+            "$ref": "#/$defs/GoldSpan"
+          },
+          "maxItems": 6,
+          "minItems": 1,
+          "title": "Must Keep",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "must_keep"
+      ],
+      "title": "OverflowSpec",
       "type": "object"
     },
     "PartialSpec": {
@@ -580,6 +650,9 @@
       ],
       "default": null
     },
+    "calc": {
+      "$ref": "#/$defs/CalcExpectation"
+    },
     "category": {
       "enum": [
         "multi_turn",
@@ -606,7 +679,9 @@
         "implicit_condition",
         "partial_answer",
         "stale_version",
-        "off_topic_context"
+        "off_topic_context",
+        "multi_step_calc",
+        "context_overflow"
       ],
       "title": "Category",
       "type": "string"
@@ -689,6 +764,9 @@
     },
     "off_topic": {
       "$ref": "#/$defs/OffTopicSpec"
+    },
+    "overflow": {
+      "$ref": "#/$defs/OverflowSpec"
     },
     "pair_of": {
       "anyOf": [

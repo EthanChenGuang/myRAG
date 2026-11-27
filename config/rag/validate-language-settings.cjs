@@ -51,6 +51,8 @@ const TEXT_KEYS = Object.freeze([
   'labels.badge_tooltip_verified',
   'labels.badge_tooltip_possibly_unreliable',
   'labels.badge_tooltip_not_checked',
+  'labels.condensed_question',
+  'labels.earlier_draft',
   'instructions.citation',
   'instructions.citation_per_sentence',
   'instructions.grounding_per_sentence',
@@ -64,6 +66,7 @@ const TEXT_KEYS = Object.freeze([
   'instructions.version',
   'instructions.concise',
   'instructions.calculation',
+  'instructions.calculation_block',
 ]);
 
 function hasText(texts, dotted) {
