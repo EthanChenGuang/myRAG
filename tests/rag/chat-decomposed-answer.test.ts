@@ -37,6 +37,7 @@ vi.mock('exa-js', () => ({ default: h.exa.Exa }));
 
 const env = process.env as Record<string, string | undefined>;
 const ENV_NAMES = [
+  'RAG_PIPELINE',
   'RAG_QUERY_LAYER',
   'RAG_DECOMPOSED_ANSWER',
   'RAG_SUPPORTED_LANGUAGES',
@@ -94,14 +95,42 @@ function knowledgeOverlay(options: { subQuestions?: string[]; blocks?: ContextBl
   };
 }
 
+function fullResult(overlay: Record<string, unknown>): RetrievalResult {
+  return {
+    status: 'ok',
+    reason: 'ok',
+    candidates: [],
+    context: '',
+    usedDocuments: [],
+    sourceImages: [],
+    links: [],
+    relevantChunks: [],
+    kept: [],
+    queryTerms: [],
+    refusalCandidate: false,
+    stages: [],
+    traceId: 'trace-stub',
+    queryContext: {
+      isTemporalQuery: false,
+      isFinancialQuery: false,
+      isSpecificDataQuery: false,
+      requiredPrecision: 'low',
+      suggestedThreshold: 0.3,
+      reasoningText: 'stub',
+      financialMetrics: [],
+      searchStrategy: 'semantic_only',
+    },
+    refusal: null,
+    queryLanguage: 'en',
+    ...overlay,
+  } as unknown as RetrievalResult;
+}
+
 async function loadChatRoute() {
   vi.resetModules();
   vi.doMock('@/lib/rag', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@/lib/rag')>();
-    h.runRetrieval.mockImplementation(async (input: Parameters<typeof actual.runRetrieval>[0]) => {
-      const result = await actual.runRetrieval(input);
-      return h.overlay.value ? { ...result, ...h.overlay.value } : result;
-    });
+    h.runRetrieval.mockImplementation(async () => fullResult(h.overlay.value ?? {}));
     h.finishTrace.mockImplementation(() => undefined);
     return { ...actual, runRetrieval: h.runRetrieval, finishTrace: h.finishTrace };
   });
@@ -128,6 +157,9 @@ describe('GEN-13 decomposed answers at the entry points (D-11, D-12)', () => {
   beforeEach(() => {
     saved = Object.fromEntries(ENV_NAMES.map((name) => [name, env[name]]));
     for (const name of ENV_NAMES) delete env[name];
+    env.RAG_PIPELINE = 'v2';
+    env.RAG_SUPPORTED_LANGUAGES = 'en';
+    env.RAG_PRIMARY_LANGUAGE = 'en';
     env.RAG_QUERY_LAYER = 'true';
     h.capture.reset();
     h.retrieval.mockReset();
@@ -246,6 +278,9 @@ describe('GEN-13 in the eval route (D-12)', () => {
   beforeEach(() => {
     saved = Object.fromEntries(ENV_NAMES.map((name) => [name, env[name]]));
     for (const name of ENV_NAMES) delete env[name];
+    env.RAG_PIPELINE = 'v2';
+    env.RAG_SUPPORTED_LANGUAGES = 'en';
+    env.RAG_PRIMARY_LANGUAGE = 'en';
     env.RAG_QUERY_LAYER = 'true';
     env.RAG_EVAL_SECRET = SECRET;
     env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'single-tenant';
@@ -265,43 +300,12 @@ describe('GEN-13 in the eval route (D-12)', () => {
     vi.resetModules();
   });
 
-  function evalResult(overlay: Record<string, unknown>): RetrievalResult {
-    return {
-      status: 'ok',
-      reason: 'ok',
-      candidates: [],
-      context: '',
-      usedDocuments: [],
-      sourceImages: [],
-      links: [],
-      relevantChunks: [],
-      kept: [],
-      queryTerms: [],
-      refusalCandidate: false,
-      stages: [],
-      traceId: 'trace-stub',
-      queryContext: {
-        isTemporalQuery: false,
-        isFinancialQuery: false,
-        isSpecificDataQuery: false,
-        requiredPrecision: 'low',
-        suggestedThreshold: 0.3,
-        reasoningText: 'stub',
-        financialMetrics: [],
-        searchStrategy: 'semantic_only',
-      },
-      refusal: null,
-      queryLanguage: 'en',
-      ...overlay,
-    } as RetrievalResult;
-  }
-
   async function runEval(overlay: Record<string, unknown>, answerText: string) {
     vi.resetModules();
     const systems: string[] = [];
     vi.doMock('@/lib/rag', async (importOriginal) => {
       const actual = await importOriginal<typeof import('@/lib/rag')>();
-      return { ...actual, runRetrieval: async () => evalResult(overlay) };
+      return { ...actual, runRetrieval: async () => fullResult(overlay) };
     });
     await installChatPipeline(h);
     const answer = await import('@/lib/rag-eval/answer');

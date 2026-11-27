@@ -10,6 +10,9 @@ import {
   buildHistoryWindow,
   cacheSourcesFromResult,
   createEnhancedRAGPrompt,
+  answerStructureFor,
+  answerStructureStage,
+  decomposedAnswerFor,
   hashSystemPromptTemplate,
   isCacheHitResult,
   isSemanticCacheActive,
@@ -677,12 +680,21 @@ export async function POST(request: NextRequest) {
       if (composed.startsWith(prompt)) builtRules = composed.slice(prompt.length);
       return composed;
     };
+    // Phase 6.2 D-11, D-12: the per-sub-question block of a decomposed turn; embed renders no citations
+    const decomposedAnswer = !smallTalkTurn && context.length > 0 ? decomposedAnswerFor(retrievalResult, { citationsActive: false }) : undefined;
     const finalSystemPrompt = smallTalkTurn
       ? createEnhancedRAGPrompt(systemPrompt, '', 'bypass')
       : context.length > 0
         ? appendHistoryNotEvidence(
             // Phase 5.2 D-07, D-92: the strict wrapper stays; the answer rules follow the balanced retrieval mode
-            composeWithRules(createEnhancedRAGPrompt(systemPrompt, context, 'strict', answerLanguage)),
+            composeWithRules(
+              createEnhancedRAGPrompt(
+                systemPrompt,
+                context,
+                'strict',
+                decomposedAnswer ? { ...(answerLanguage ?? {}), decomposedAnswer } : answerLanguage,
+              ),
+            ),
             historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE),
           )
         : systemPrompt.replace('{{context}}', context);
@@ -797,6 +809,11 @@ export async function POST(request: NextRequest) {
         // Don't include tools for embed API to keep it simple
         onFinish: (event) => {
           pendingTrace?.collector.setReviewContent({ answer: event.text ?? '' });
+          // Phase 6.2 D-12: report-only structure of a decomposed answer
+          if (pendingTrace && decomposedAnswer && event.finishReason !== 'error') {
+            const structure = answerStructureFor(decomposedAnswer, event.text ?? '', null);
+            pendingTrace.collector.record(answerStructureStage(structure, pendingTrace.collector.now()));
+          }
           const calcRun = calcCheckSink?.result() ?? null;
           if (calcRun && pendingTrace) {
             // D-75, D-61: the calculation check as its own span, status counts and duration only

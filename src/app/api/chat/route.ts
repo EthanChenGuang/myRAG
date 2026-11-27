@@ -30,6 +30,10 @@ import {
   shouldOfferCalcTool,
   turnCanUseTools,
   createEnhancedRAGPrompt,
+  answerStructureFor,
+  answerStructureStage,
+  decomposedAnswerFor,
+  type DecomposedAnswerInput,
   answerLanguageOptions,
   appendAnswerLanguage,
   errorStatusOf,
@@ -2968,6 +2972,7 @@ Context:
     // Replace the {{context}} placeholder with the actual context
     let systemPrompt;
     let claudeSystemText: string | null = null;
+    let decomposedAnswer: DecomposedAnswerInput | undefined;
     // D-80: the composed answer-rule block of this turn, counted as its own part by the post-build check
     let budgetBuiltRules = '';
 
@@ -3003,6 +3008,11 @@ Context:
       console.log('[RAG SYSTEM] Creating enhanced prompt with context length:', context.length);
       console.log('[RAG SYSTEM] Using RAG mode:', ragMode);
       const answerLanguage = answerLanguageOptions(retrievalResult);
+      // Phase 6.2 D-11, D-12: the per-sub-question block of a decomposed turn; undefined leaves the prompt unchanged
+      decomposedAnswer = knowledgeContextAttached
+        ? decomposedAnswerFor(retrievalResult, { citationsActive: citationSession.strategy !== null })
+        : undefined;
+      const enhancedPromptOptions = decomposedAnswer ? { ...(answerLanguage ?? {}), decomposedAnswer } : answerLanguage;
       // Phase 5.2 D-04, D-07: the answer-rule block goes after the citation instruction; it is the prompt itself with every switch off
       const answerRuleOptions = {
         mode: ragMode,
@@ -3012,7 +3022,7 @@ Context:
       const historyNotEvidence = ragMode !== 'bypass' && historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE);
       systemPrompt = appendHistoryNotEvidence(
         answerTurn.composeSystemPrompt(
-          citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage)),
+          citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, enhancedPromptOptions)),
           answerRuleOptions,
         ),
         historyNotEvidence,
@@ -3022,7 +3032,10 @@ Context:
         claudeSystemText = [
           appendHistoryNotEvidence(
             answerTurn.composeSystemPrompt(
-              appendAnswerLanguage(citationSession.claudeSystemPrompt(ragSystemPrompt), answerLanguage),
+              appendAnswerLanguage(
+                citationSession.claudeSystemPrompt(ragSystemPrompt, decomposedAnswer ? { decomposedAnswer } : undefined),
+                answerLanguage,
+              ),
               answerRuleOptions,
             ),
             historyNotEvidence,
@@ -4835,6 +4848,12 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             if (ragLogContext) setRagLogOutcome(null, detectLanguage(directText));
           }
           if (ragLogContext && (isAborted || generationFailed || finishReason === 'error')) setRagLogOutcome(null, null);
+          // Phase 6.2 D-12: report-only structure of a decomposed answer, recorded before the trace is finished
+          if (ragTrace && decomposedAnswer && !isAborted && !generationFailed && finishReason !== 'error') {
+            const answerText = responseMessage.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
+            const structure = answerStructureFor(decomposedAnswer, answerText, citationSession.strategy ? citationSession.aliases() : null);
+            ragTrace.collector.record(answerStructureStage(structure, ragTrace.collector.now()));
+          }
           // D-16: a sentinel refusal is logged like the server-side refusal
           if (answerTurn.refusedByModel()) setRagLogOutcome('refused_no_context', answerTurn.answerLanguage);
           if (ragTrace) {

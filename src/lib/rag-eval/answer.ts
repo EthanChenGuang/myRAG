@@ -10,6 +10,7 @@ import {
   type CalcTraceHolder,
   type OutputCapDecision,
 } from '@/lib/rag';
+import type { DecomposedAnswerInput } from '@/lib/rag/generation/decomposed-answer';
 import type { GroundednessRequest, GroundednessResult } from '@/lib/rag-eval/contracts.generated';
 
 export const EVAL_DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
@@ -105,12 +106,19 @@ export function buildEvalSystemPrompt(input: {
   promptEnv?: EvalPromptEnv;
   /** D-25: the query plan's language and the kept chunks' languages (the trace has a query plan). */
   answerLanguage?: AnswerLanguageOptions;
+  /** Phase 6.2 D-11: the per-sub-question block input of a decomposed turn (buildDecomposedAnswerBlock). */
+  decomposedAnswer?: DecomposedAnswerInput;
 }): string {
-  const { context, ragMode, answerLanguage } = input;
+  const { context, ragMode, answerLanguage, decomposedAnswer } = input;
   const ragSystemPrompt = resolveEvalPromptTemplate(input.promptEnv);
 
   if (context.length > 0) {
-    return createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage);
+    return createEnhancedRAGPrompt(
+      ragSystemPrompt,
+      context,
+      ragMode,
+      decomposedAnswer ? { ...(answerLanguage ?? {}), decomposedAnswer } : answerLanguage,
+    );
   }
   return SystemPromptManager.injectContext(ragSystemPrompt, context);
 }
@@ -167,6 +175,8 @@ export interface EvalAnswerInput {
   /** Applied to the finished system prompt: the citation instruction, then the answer-rule block (D-04, D-07). */
   decorateSystemPrompt?: (prompt: string) => string;
   answerLanguage?: AnswerLanguageOptions;
+  /** Phase 6.2 D-11: set only on a decomposed turn while RAG_DECOMPOSED_ANSWER is effective. */
+  decomposedAnswer?: DecomposedAnswerInput;
   /** D-29: the turn's output-cap decision; the limit is min(model limit, cap) only when the cap applies. */
   outputCap?: OutputCapDecision | null;
   /** Phase 5.2.1 D-65, D-72: the calculation offered on this turn; absent, the call is exactly the one without it (A12). */
@@ -200,8 +210,8 @@ export interface EvalAnswerResult {
 }
 
 export async function generateEvalAnswerDetailed(input: EvalAnswerInput): Promise<EvalAnswerResult> {
-  const { query, conversation, context, ragMode, generatorModel, signal, promptEnv, decorateSystemPrompt, answerLanguage, outputCap, calc } = input;
-  const basePrompt = buildEvalSystemPrompt({ context, ragMode, promptEnv, answerLanguage });
+  const { query, conversation, context, ragMode, generatorModel, signal, promptEnv, decorateSystemPrompt, answerLanguage, decomposedAnswer, outputCap, calc } = input;
+  const basePrompt = buildEvalSystemPrompt({ context, ragMode, promptEnv, answerLanguage, ...(decomposedAnswer ? { decomposedAnswer } : {}) });
   const system = decorateSystemPrompt ? decorateSystemPrompt(basePrompt) : basePrompt;
   const maxOutputTokens = effectiveMaxOutputTokens(maxOutputTokensForModel(generatorModel), outputCap?.applied ? outputCap.cap : null);
   const toolLoop = calc?.mode === 'tool' && calc.tool ? { tool: calc.tool, holder: calc.holder } : null;
