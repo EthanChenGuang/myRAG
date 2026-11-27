@@ -47,6 +47,8 @@ import {
   type RetrievalResult,
   type StageName,
   type StageOverrides,
+  detectMixedVersions,
+  versionConflictTrace,
 } from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest, type RagTrace } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
@@ -738,6 +740,16 @@ export async function POST(req: NextRequest) {
         ...(v2Result ? (attributeFilterTrace(result.stages, currentAttributeFilterMode()) ?? {}) : {}),
         ...(Object.keys(stageCounts).length > 0 ? { stage_counts: stageCounts } : {}),
         ...(injection ? { injection } : {}),
+        ...(result.versionConflict
+          ? {
+              version_conflict: versionConflictTrace(
+                result.versionConflict,
+                answer !== null
+                  ? detectMixedVersions({ answerText: answer, conflict: result.versionConflict, blocks: result.blocks ?? [], question: query })
+                  : undefined,
+              ),
+            }
+          : {}),
         answer,
         citations: citationFields?.citations ?? NO_CITATIONS,
         ...(citationFields

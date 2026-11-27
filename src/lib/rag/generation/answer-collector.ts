@@ -36,6 +36,8 @@ export interface AnswerCollector {
   /** The text the user saw: every text delta after every rewriting transform, as onFinish receives it. */
   finalText(): string;
   lastTextPart(): AnswerTextPart | null;
+  /** The text part of stream text id `id` as the user saw it, with its index; null when the stream had none. */
+  textPartById(id: string): AnswerTextPart | null;
   refusedByModel(): boolean;
   finishReason(): string | null;
   truncated(): boolean;
@@ -193,6 +195,10 @@ export function createAnswerCollector(input: AnswerCollectorInput): AnswerCollec
     },
     finalText: () => parts.map((part) => part.text).join(''),
     lastTextPart,
+    textPartById(id) {
+      const part = byId.get(id);
+      return part ? { index: parts.indexOf(part), text: part.text } : null;
+    },
     refusedByModel: () => state.refused(),
     finishReason: () => finalReason ?? stepReason,
     truncated: () => state.truncated(),

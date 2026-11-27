@@ -3,6 +3,8 @@ import type { AnswerNotice } from '@/lib/rag-eval/contracts.generated';
 import { createNoticeState } from './answer-collector';
 import type { AnswerChannel } from './answer-turn';
 import { applySentinelToText } from './sentinel';
+import type { AnswerConfig } from './answer-config';
+import { outputGuardTransform, type OutputGuardTransformOptions } from '../security/output-guard-stream';
 
 type Transform = StreamTextTransform<ToolSet>;
 
@@ -11,7 +13,7 @@ export interface AnswerTransformParts {
   sentinel?: Transform | null;
   /** Reserved for Phase 5.2.1's calculation-block transform. */
   calcBlock?: Transform | null;
-  /** Filled by plan 05.2-13 (output guard). */
+  /** The output guard (05.2-13); see guardSlot. */
   guard?: Transform | null;
   /** The notice transform and the collector, in that order; always last (RESEARCH Pitfall 22). */
   noticeCollector?: readonly Transform[] | null;
@@ -27,6 +29,11 @@ export function buildAnswerTransforms(parts: AnswerTransformParts): Transform[] 
   if (parts.noticeCollector) rest.push(...parts.noticeCollector);
   if (rest.length === 0) return parts.citationTransforms as Transform[];
   return [...parts.citationTransforms, ...rest];
+}
+
+/** D-36: the guard slot; null with RAG_OUTPUT_GUARD off, so the chain is exactly the one without the guard. */
+export function guardSlot(mode: AnswerConfig['outputGuard'], options: OutputGuardTransformOptions): Transform | null {
+  return mode === 'off' ? null : outputGuardTransform(options);
 }
 
 export interface AnswerTextPipelineOptions {

@@ -1,6 +1,14 @@
 import { createHash } from 'node:crypto';
 import { createAnthropic, type AnthropicProvider } from '@ai-sdk/anthropic';
-import { streamText, type FilePart, type ModelMessage, type StreamTextResult, type TextPart, type ToolSet } from 'ai';
+import {
+  streamText,
+  type FilePart,
+  type ModelMessage,
+  type StreamTextResult,
+  type StreamTextTransform,
+  type TextPart,
+  type ToolSet,
+} from 'ai';
 import { z } from 'zod/v3';
 import { CitationRecordSchema, type CitationRecord } from '@/lib/rag-eval/contracts.generated';
 import { DEFAULT_ANTHROPIC_BASE_URL } from '../config';
@@ -118,7 +126,11 @@ function withCitedQuotes(records: CitationRecord[], quotes: ReadonlyMap<string, 
 }
 
 export function startClaudeCitationStream(
-  input: ClaudeCitationRequestInput & { tools?: ToolSet; onError?: (error: unknown) => void },
+  input: ClaudeCitationRequestInput & {
+    tools?: ToolSet;
+    onError?: (error: unknown) => void;
+    extraTransforms?: Array<StreamTextTransform<ToolSet>>;
+  },
 ): ClaudeCitationStream {
   const { aliasMap } = input;
   const parser = createMarkerParser({ aliases: aliasMap.aliases });
@@ -174,6 +186,7 @@ export function startClaudeCitationStream(
           failed = true;
         },
       }),
+      ...(input.extraTransforms ?? []),
     ],
   }) as unknown as StreamTextResult<ToolSet, never>;
 

@@ -168,6 +168,7 @@ export type { ResolveVoiceScopeInput, VoiceScopeResult } from './tenant/voice';
 export { assembleContext } from './context/assemble';
 export type { AssembleInput, AssembleOutput, AssemblyCandidate, AssemblyDocumentRow } from './context/assemble';
 export { fetchAssemblyRows } from './context/fetch-rows';
+export { detectMixedVersions, versionConflictTrace, type VersionConflict } from './context/version-conflicts';
 export type { AssemblyRows } from './context/fetch-rows';
 export type {
   CitationLabel,
@@ -222,8 +223,9 @@ export {
   type AnswerTurn,
   type TextsSource,
 } from './generation/answer-turn';
-export { guardChannelReply } from './security/channel-reply-guard';
-export type { ChannelReplyGuardInput, ChannelReplyGuardResult } from './security/channel-reply-guard';
+export { guardChannelReply, guardSummaryText } from './security/channel-reply-guard';
+export { formatGuardedLinks, linkUsageInstructions } from './security/link-section';
+export type { ChannelReplyGuardInput, ChannelReplyGuardResult, SummaryGuardInput } from './security/channel-reply-guard';
 export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource } from './lang/answer-language';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';

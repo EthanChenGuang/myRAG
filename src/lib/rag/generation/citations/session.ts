@@ -2,7 +2,8 @@ import type { ModelMessage, StreamTextTransform, ToolSet } from 'ai';
 import { z } from 'zod/v3';
 import { stripCitationMarkers } from '@/lib/citations/marker-grammar';
 import { CitationRecordSchema, type CitationRecord } from '@/lib/rag-eval/contracts.generated';
-import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
+import type { ExtractedURL } from '@/lib/url-extractor';
+import { formatGuardedLinks } from '../../security/link-section';
 import { buildClaudeContextReplacement, docsFromBlocks } from '../../context/wrap';
 import { readSecurityConfig } from '../../security/config';
 import type { CitationLabeler, ContextBlock, UsedDocument } from '../../types';
@@ -58,6 +59,8 @@ export interface ClaudeStartInput {
   outputCap?: number | null;
   onError(error: unknown): void;
   fetch?: typeof fetch;
+  /** Phase 5.2 D-35: transforms after the marker and alias transforms (the output guard); absent adds none. */
+  extraTransforms?: Array<StreamTextTransform<ToolSet>>;
 }
 
 export interface CitationFinishMetadata {
@@ -151,7 +154,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
       });
       return createEnhancedRAGPrompt(basePrompt, context, input.ragMode);
     }
-    const context = [attachedDocumentsText(input.language, input.textsSource), ...sideBlocks.map((block) => block.text), formatURLsForContext(links)]
+    const context = [attachedDocumentsText(input.language, input.textsSource), ...sideBlocks.map((block) => block.text), formatGuardedLinks(links)]
       .filter((part) => part.trim().length > 0)
       .join('\n\n');
     return createEnhancedRAGPrompt(basePrompt, context, input.ragMode);
@@ -258,6 +261,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
         ...(typeof start.outputCap === 'number' ? { outputCap: start.outputCap } : {}),
         abortSignal: start.abortSignal,
         onError: start.onError,
+        ...(start.extraTransforms && start.extraTransforms.length > 0 ? { extraTransforms: start.extraTransforms } : {}),
       });
       return claude;
     },

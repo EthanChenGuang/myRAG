@@ -36,6 +36,8 @@ import { effectiveRetrievalParams } from './retrieval-params';
 import { effectiveTuningParams, tuningHashComponent } from './tuning-params';
 import type { TranslationHashField } from './translation-legs';
 import type { AssembleOutput } from '../context/assemble';
+import { recordAnswerConflict } from '../context/version-conflicts';
+import { scopeKey } from '../tenant/scope';
 import type { QueryPlan, RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 import type { LexicalStamp } from '../lexical/resolve-options';
 import type { SearchIdentifiers } from './stages/search';
@@ -381,7 +383,11 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
       retrievalConfigHash,
       refusal,
       queryLanguage,
+      ...(assembly.versionConflict ? { versionConflict: assembly.versionConflict } : {}),
     };
+    if (assembly.versionConflict && profile !== 'eval' && input.scope) {
+      recordAnswerConflict({ tenantKey: scopeKey(input.scope), conflict: assembly.versionConflict, traceId: collector.traceId });
+    }
   }
 
   // D-25: fire-and-forget; the response never waits on the miss log.
