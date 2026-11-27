@@ -158,3 +158,13 @@ def test_items_without_sub_questions_keep_their_old_fields_and_dump():
     assert set(item_metrics(result)) == set(BASE_METRICS)
     overall = aggregate([result])["overall"].model_dump(mode="json")
     assert not any(key.startswith(("subq_", "all_evidence_")) for key in overall)
+
+
+def test_report_tables_add_sub_question_columns_only_when_measured():
+    from rag_eval.report import _table
+
+    with_subq = aggregate(score_items([_trace("sq-1", _both_in_top5())], [_compound("sq-1")]))
+    header = _table("Category", with_subq["by_category"])[0]
+    assert "All-evidence@10" in header and "Sub-q coverage@5" in header
+    plain = aggregate(score_items([_trace("plain-1", [QUOTES[0]])], [_plain("plain-1")]))
+    assert "All-evidence" not in _table("Category", plain["by_category"])[0]

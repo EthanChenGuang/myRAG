@@ -198,6 +198,27 @@ def _conversational_fields(trace: RagTrace, item: GoldenItem) -> dict[str, objec
     return {"expected_behavior": CONVERSATIONAL, "conversational_ok": conversational_ok(trace)}
 
 
+def _subq_fields(item: GoldenItem, ranked: list, *, refused: bool) -> dict[str, int]:
+    """D-10: per sub-question, the first position of any of its gold spans; refused turns retrieve nothing."""
+    if not item.sub_questions:
+        return {}
+    firsts: list[int | None] = []
+    for sub in item.sub_questions:
+        found = None
+        if not refused:
+            for position, chunk in enumerate(ranked, start=1):
+                name = getattr(chunk, "document_name", None) or ""
+                if any(chunk_matches_span(name, chunk.content, span) for span in sub.gold_spans):
+                    found = position
+                    break
+        firsts.append(found)
+    return {
+        "subq_total": len(firsts),
+        "subq_hit_at_5": sum(1 for rank in firsts if rank is not None and rank <= 5),
+        "subq_hit_at_10": sum(1 for rank in firsts if rank is not None and rank <= 10),
+    }
+
+
 def score_items(
     traces: list[RagTrace],
     golden: list[GoldenItem],
@@ -246,6 +267,7 @@ def score_items(
                 **_context_fields(trace, item),
                 **_identifier_fields(trace, item),
                 **_conversational_fields(trace, item),
+                **_subq_fields(item, ranked, refused=trace.refused),
             )
         )
     return results
@@ -266,6 +288,26 @@ def _k_zero(answerable: list[ItemResult]) -> MetricValue | None:
     if not scored:
         return None
     return MetricValue(value=float(sum(1 for r in scored if r.context_k == 0)), n=len(scored))
+
+
+_SUBQ_HIT_FIELDS = {5: "subq_hit_at_5", 10: "subq_hit_at_10"}
+
+
+def _all_evidence_recall(results: list[ItemResult], k: int) -> MetricValue | None:
+    """Share of sub-question items whose every sub-question has a gold span in the top k; None without such items."""
+    field = _SUBQ_HIT_FIELDS[k]
+    scored = [r for r in results if r.subq_total]
+    return _mean([1.0 if getattr(r, field) == r.subq_total else 0.0 for r in scored]) if scored else None
+
+
+def _subq_coverage(results: list[ItemResult], k: int) -> MetricValue | None:
+    """Share of all sub-questions with at least one gold span in the top k; n counts sub-questions."""
+    field = _SUBQ_HIT_FIELDS[k]
+    scored = [r for r in results if r.subq_total]
+    if not scored:
+        return None
+    total = sum(r.subq_total or 0 for r in scored)
+    return MetricValue(value=sum(getattr(r, field) or 0 for r in scored) / total, n=total)
 
 
 def _slice(results: list[ItemResult]) -> SliceMetrics:
@@ -292,6 +334,10 @@ def _slice(results: list[ItemResult]) -> SliceMetrics:
         identifier_precision=_optional_mean([r.identifier_precise for r in results]),
         near_miss_leakage=_optional_mean([r.near_miss_leak for r in results]),
         conversational_rate=_optional_mean([r.conversational_ok for r in results]),
+        all_evidence_recall_at_5=_all_evidence_recall(answerable, 5),
+        all_evidence_recall_at_10=_all_evidence_recall(answerable, 10),
+        subq_coverage_at_5=_subq_coverage(answerable, 5),
+        subq_coverage_at_10=_subq_coverage(answerable, 10),
     )
 
 

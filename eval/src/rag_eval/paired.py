@@ -15,8 +15,23 @@ from rag_eval.paths import resolve_cli_path
 SEED = 20261123
 RESAMPLES = 10000
 METRICS = ("recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate")
+# D-10: present only on items with sub_questions, so every other item and report keeps its old metric set.
+SUBQ_METRICS = ("all_evidence_recall_at_5", "all_evidence_recall_at_10", "subq_coverage_at_5", "subq_coverage_at_10")
+GATED_METRICS = (*METRICS, *SUBQ_METRICS)
 EXIT_OK = 0
 EXIT_INVALID = 2
+
+
+def _subq_metrics(item: ItemResult) -> dict[str, float | None]:
+    if not item.subq_total:
+        return {}
+    hit5, hit10 = item.subq_hit_at_5 or 0, item.subq_hit_at_10 or 0
+    return {
+        "all_evidence_recall_at_5": 1.0 if hit5 == item.subq_total else 0.0,
+        "all_evidence_recall_at_10": 1.0 if hit10 == item.subq_total else 0.0,
+        "subq_coverage_at_5": hit5 / item.subq_total,
+        "subq_coverage_at_10": hit10 / item.subq_total,
+    }
 
 
 def item_metrics(item: ItemResult) -> dict[str, float | None]:
@@ -27,6 +42,7 @@ def item_metrics(item: ItemResult) -> dict[str, float | None]:
             "mrr": 1 / item.first_hit_rank if item.first_hit_rank else 0.0,
             "correct_refusal_rate": None,
             "false_refusal_rate": 1.0 if item.refused else 0.0,
+            **_subq_metrics(item),
         }
     return {
         "recall_at_5": None,
