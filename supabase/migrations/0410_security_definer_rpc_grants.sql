@@ -1095,6 +1095,11 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_source_recheck(text, uuid[]) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_source_recheck(text, uuid[]) TO service_role;
   END IF;
+  -- Migration 0986: the tenant doc types with the access filter (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_tenant_doc_types(text, text[], boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_tenant_doc_types(text, text[], boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_tenant_doc_types(text, text[], boolean) TO service_role;
+  END IF;
 END
 $service_role_only$;
 

@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { getRagDeps } from '../deps';
 import { rpcRows, type RpcClient } from '../backend/supabase-rpc';
+import { accessRpcArgs, type ScopeAccessFilter } from '../tenant/access-filter';
+import { scopeAccessFilter } from '../tenant/access';
 import { scopeKey, type TenantScope } from '../tenant/scope';
 
 /** One active DATA-18 scope value of a tenant (3.2 D-38): the slug plus the admin-written label and aliases. */
@@ -99,34 +101,45 @@ function docTypesFrom(data: unknown): string[] {
   return values;
 }
 
+/** The doc-type cache key: the tenant key, then the access mode and, for keys, a hash of the sorted key set (one vocabulary per visible set). */
+function docTypesCacheKey(tenantKey: string, access: ScopeAccessFilter): string {
+  if (access.mode !== 'keys') return `${tenantKey}\u0000${access.mode}`;
+  const keys = [...new Set(access.keys)].sort().join('\n');
+  return `${tenantKey}\u0000keys:${createHash('sha256').update(keys, 'utf8').digest('hex')}`;
+}
+
 /**
- * The doc types of the scope's tenant's current, ready documents (0981, D-06): the doc-type vocabulary of sub-question
- * filters. Same rules as loadTenantVocabulary: admin client, scopeKey as the only tenant input, a 60 s cache per tenant key,
- * and null (not cached) on a failure, so the sub-question filters simply run without doc types.
+ * The doc types of the scope's tenant's current, ready documents that the request may see (0981, 0986, D-06): the doc-type
+ * vocabulary of sub-question filters. Same rules as loadTenantVocabulary: admin client, scopeKey as the only tenant input, a 60 s
+ * cache, and null (not cached) on a failure, so the sub-question filters simply run without doc types. The access filter
+ * (options.access, else the scope's) goes to the RPC as accessRpcArgs builds it, and the cache is keyed by tenant key and access
+ * set, so one caller's doc types never serve another key set. Off sends only the tenant key, as before.
  */
 export async function loadTenantDocTypes(
   scope: TenantScope,
-  options: { deps?: TenantVocabularyDeps; signal?: AbortSignal } = {},
+  options: { deps?: TenantVocabularyDeps; signal?: AbortSignal; access?: ScopeAccessFilter } = {},
 ): Promise<string[] | null> {
   const tenantKey = scopeKey(scope);
-  const deps = options.deps ?? defaultDeps();
-  const now = deps.now();
-  const hit = docTypesCache.get(tenantKey);
-  if (hit && now - hit.fetchedAt < TENANT_VOCABULARY_CACHE_TTL_MS) return [...hit.values];
-
   try {
+    const access = options.access ?? scopeAccessFilter(scope);
+    const cacheKey = docTypesCacheKey(tenantKey, access);
+    const deps = options.deps ?? defaultDeps();
+    const now = deps.now();
+    const hit = docTypesCache.get(cacheKey);
+    if (hit && now - hit.fetchedAt < TENANT_VOCABULARY_CACHE_TTL_MS) return [...hit.values];
+
     const client = deps.adminClient();
     if (!client) throw new Error('admin client unavailable');
-    let request = client.rpc(DOC_TYPES_RPC_NAME, { p_tenant_key: tenantKey });
+    let request = client.rpc(DOC_TYPES_RPC_NAME, { p_tenant_key: tenantKey, ...accessRpcArgs(access) });
     if (options.signal) request = request.abortSignal(options.signal);
     const { data, error } = await request;
     if (error) throw new Error(error.code ?? 'rpc_error');
     const values = docTypesFrom(data);
-    if (docTypesCache.size >= CACHE_MAX && !docTypesCache.has(tenantKey)) {
+    if (docTypesCache.size >= CACHE_MAX && !docTypesCache.has(cacheKey)) {
       const oldest = docTypesCache.keys().next().value;
       if (oldest !== undefined) docTypesCache.delete(oldest);
     }
-    docTypesCache.set(tenantKey, { values, fetchedAt: now });
+    docTypesCache.set(cacheKey, { values, fetchedAt: now });
     return [...values];
   } catch (error) {
     const reason = error instanceof Error && /^[A-Za-z0-9_ ]{1,64}$/u.test(error.message) ? error.message : 'error';
@@ -142,6 +155,8 @@ export function resetTenantVocabularyCacheForTests(tenantKey?: string): void {
     docTypesCache.clear();
   } else {
     cache.delete(tenantKey);
-    docTypesCache.delete(tenantKey);
+    for (const key of [...docTypesCache.keys()]) {
+      if (key.startsWith(`${tenantKey}\u0000`)) docTypesCache.delete(key);
+    }
   }
 }

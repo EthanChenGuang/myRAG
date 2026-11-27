@@ -365,6 +365,7 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
       collector,
       stageOverrides,
       scope,
+      ...(ctx.access ? { access: ctx.access } : {}),
       ...(ctx.cache ? { cache: ctx.cache } : {}),
       afterTransforms: terminologyStage,
       ...(ctx.onGlossary ? { onGlossary: ctx.onGlossary } : {}),

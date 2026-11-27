@@ -4,6 +4,7 @@ import type { QueryFramework, QueryLayerConfig, QueryTransformSwitches, RagConfi
 import { getRagDeps } from '../deps';
 import { runStage, stageSpec, StageError, type StageSpec } from '../pipeline';
 import type { TenantScope } from '../tenant/scope';
+import type { ScopeAccessFilter } from '../tenant/access-filter';
 import type { TraceCollector } from '../trace/collector';
 import type { HistoryTurn, Profile, QueryLayerOverrides, QueryVariant, RunRetrievalInput, StageOverrides } from '../types';
 import { normalizeRelativeDates, type NormalizedDates, type RelativeDateRange } from './dates';
@@ -95,6 +96,8 @@ export interface QueryLayerInput {
   stageOverrides?: StageOverrides;
   /** The request's minted scope: the only tenant input for the KB language shares (D-23) and the semantic cache. */
   scope?: TenantScope;
+  /** The request's access filter (D-05); absent reads scopeAccessFilter(scope) where a reader needs it. */
+  access?: ScopeAccessFilter;
   /** Absent: the semantic_cache stage stands down. */
   cache?: SemanticCacheSeam;
   /** D-15 (Phase 4.1.1): run after the parallel group has joined and before semantic_cache, on the standalone query. */
@@ -180,6 +183,8 @@ export async function requiredTermsFor(args: {
  */
 export async function subqFilterContextFor(args: {
   scope: TenantScope | undefined;
+  /** The request's access filter; absent reads scopeAccessFilter(scope), so the doc types are those the caller may see (0986). */
+  access?: ScopeAccessFilter;
   scopeTags: boolean;
   base: SubqFilterContext['base'];
   vocabCap: number;
@@ -188,7 +193,7 @@ export async function subqFilterContextFor(args: {
   const { scope } = args;
   const [vocabulary, docTypes] = await Promise.all([
     args.scopeTags && scope ? loadTenantVocabulary(scope, { signal: args.signal }) : Promise.resolve(null),
-    scope ? loadTenantDocTypes(scope, { signal: args.signal }) : Promise.resolve(null),
+    scope ? loadTenantDocTypes(scope, { signal: args.signal, ...(args.access ? { access: args.access } : {}) }) : Promise.resolve(null),
   ]);
   return {
     base: args.base,
@@ -807,6 +812,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
               subqFiltersOn
                 ? subqFilterContextFor({
                     scope: ctx.scope,
+                    ...(ctx.access ? { access: ctx.access } : {}),
                     scopeTags: config.scopeTags,
                     base: input.retrievalFilters,
                     vocabCap: params.subq_filter_vocab_cap,

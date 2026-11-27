@@ -524,6 +524,68 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
       }
     });
 
+    describe('tenant doc types (0981 redefined by 0986)', () => {
+      const RESTRICTED_DOC_TYPE = 'contract_legal';
+      const OPEN_DOC_TYPE = 'general';
+      const vocabulary = () => import('@/lib/rag/query/tenant-vocabulary');
+      const layer = () => import('@/lib/rag/query/run-layer');
+      const docTypesOf = async (scope: TenantScope): Promise<string[]> => [...((await (await vocabulary()).loadTenantDocTypes(scope)) ?? [])].sort();
+
+      before(async () => {
+        await db.query('UPDATE public.documents SET doc_type = $2 WHERE tenant_key = $1 AND doc_type = $3', [seed.tenantKey, OPEN_DOC_TYPE, RESTRICTED_DOC_TYPE]);
+        for (const language of ACCESS_LANGUAGES) {
+          await db.query('UPDATE public.documents SET doc_type = $2 WHERE id = $1', [seed.languages[language].ids.doc, RESTRICTED_DOC_TYPE]);
+        }
+        await db.query('UPDATE public.documents SET doc_type = $2 WHERE id = $1', [ACCESS_IDS.controlDoc, OPEN_DOC_TYPE]);
+      });
+
+      test('loadTenantDocTypes: the outsider never reads the restricted doc type, member-a and the admin do, with one shared cache', async () => {
+        (await vocabulary()).resetTenantVocabularyCacheForTests();
+        const memberA = await docTypesOf(await scopeFor('memberA'));
+        assert.ok(memberA.includes(RESTRICTED_DOC_TYPE) && memberA.includes(OPEN_DOC_TYPE), `member-a doc types: ${memberA.join(',')}`);
+        const outsider = await docTypesOf(await scopeFor('outsider'));
+        assert.ok(!outsider.includes(RESTRICTED_DOC_TYPE), 'the cached member-a doc types reached the outsider');
+        assert.ok(outsider.includes(OPEN_DOC_TYPE));
+        assert.ok(!(await docTypesOf(await scopeFor('memberB'))).includes(RESTRICTED_DOC_TYPE));
+        assert.ok((await docTypesOf(await scopeFor('admin'))).includes(RESTRICTED_DOC_TYPE));
+        count('v2 tenant doc types');
+      });
+
+      test('sub-question filters: the prompt addendum and narrowFilters of the outsider never carry the restricted doc type', async () => {
+        (await vocabulary()).resetTenantVocabularyCacheForTests();
+        const { subqFilterContextFor } = await layer();
+        const { subqFilterAddendum } = await import('@/lib/rag/query/llamaindex/decompose');
+        const { narrowFilters } = await import('@/lib/rag/query/subq-filters');
+        const contextOf = async (who: Identity) =>
+          subqFilterContextFor({ scope: await scopeFor(who), scopeTags: false, base: undefined, vocabCap: 50, signal: new AbortController().signal });
+        const proposal = { date_range: null, scopes: null, doc_types: [RESTRICTED_DOC_TYPE], languages: null } as never;
+
+        const member = await contextOf('memberA');
+        assert.ok(subqFilterAddendum(member).includes(RESTRICTED_DOC_TYPE));
+        assert.equal(narrowFilters(undefined, proposal, member.vocabulary).status, 'applied');
+
+        const outsider = await contextOf('outsider');
+        assert.ok(!outsider.vocabulary.docTypes.includes(RESTRICTED_DOC_TYPE));
+        assert.ok(!subqFilterAddendum(outsider).includes(RESTRICTED_DOC_TYPE), 'the restricted doc type reached the outsider prompt');
+        assert.equal(narrowFilters(undefined, proposal, outsider.vocabulary).status, 'dropped_unknown_values');
+        count('v2 sub-question doc-type filter');
+      });
+
+      test('with RAG_DOC_ACCESS_GROUPS off every caller reads the 0981 answer, restricted doc type included (D-09)', async () => {
+        await setAccessSwitch(false);
+        try {
+          (await vocabulary()).resetTenantVocabularyCacheForTests();
+          const off = await docTypesOf(baseScope(userOf.outsider));
+          assert.ok(off.includes(RESTRICTED_DOC_TYPE) && off.includes(OPEN_DOC_TYPE));
+          const direct = await db.query<{ doc_type: string }>('SELECT doc_type FROM public.rag_tenant_doc_types($1)', [seed.tenantKey]);
+          assert.deepEqual(off, direct.rows.map((row) => row.doc_type).sort());
+        } finally {
+          (await vocabulary()).resetTenantVocabularyCacheForTests();
+          await setAccessSwitch(true);
+        }
+      });
+    });
+
     describe('variants and negative controls (Task 3)', () => {
       test('member removed from group-a: member-a is refused on the next request, and gets the chunk again once re-added (D-08)', async () => {
         const { ids } = seed.languages.en;
