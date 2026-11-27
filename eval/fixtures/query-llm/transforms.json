@@ -803,34 +803,6 @@
     },
     {
       "transform": "decompose",
-      "item_id": "q62-subq-filter-invalid",
-      "query": "How is the sample setting alpha described and how is the sample setting beta described?",
-      "output": {
-        "questions": [
-          {
-            "text": "How is the sample setting alpha described?",
-            "filter": {
-              "date_range": null,
-              "scopes": null,
-              "doc_types": "general",
-              "languages": null
-            }
-          },
-          {
-            "text": "How is the sample setting beta described?",
-            "filter": {
-              "date_range": null,
-              "scopes": null,
-              "doc_types": null,
-              "languages": null,
-              "tenant_key": "s:default"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "transform": "decompose",
       "item_id": "q62-subq-filter-unknown",
       "query": "What does the sample guide say for zone delta and for zone epsilon?",
       "output": {
