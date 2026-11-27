@@ -105,6 +105,7 @@ test('purge-rpc: rag_purge_* called outside src/lib/rag/ingest/purge.ts is flagg
   assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('rag_purge_old_rows_report', {});\n// db.rpc('rag_purge_lineage')\n" }).filter((v) => v.endsWith(':purge-rpc')), [
     'src/lib/a.ts:purge-rpc',
   ]);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/feedback-loop/purge.ts': "await client.rpc('rag_purge_retrieval_log', args);\n" }), []);
 });
 
 test('retired-module: alias and relative imports fail', () => {

@@ -832,12 +832,71 @@ export type ListPurgeRecordsResult =
   | { ok: true; records: PurgeRecord[]; limit: number; offset: number; hasMore: boolean }
   | { ok: false; reason: PurgeFailure };
 
-export async function listPurgeRecords(_input: { actorUserId: string; limit?: number; offset?: number; signal: AbortSignal }): Promise<ListPurgeRecordsResult> {
-  return { ok: false, reason: 'unavailable' };
+const RECORD_LIMIT_MAX = 100;
+const CHECK_RESULTS = new Set<string>(['verified', 'pending', 'remaining']);
+
+function recordOf(row: Row): PurgeRecord | null {
+  const id = text(row, 'id');
+  const startedAt = timeOf(row, 'started_at');
+  const actorKind = text(row, 'actor_kind');
+  const actorId = text(row, 'actor_id');
+  const workspaceKey = text(row, 'tenant_key');
+  const reasonCode = text(row, 'reason_code');
+  const lineageId = text(row, 'lineage_id');
+  if (id === null || startedAt === null || actorId === null || workspaceKey === null || reasonCode === null || lineageId === null) return null;
+  if (actorKind !== 'admin' && actorKind !== 'source_sync') return null;
+  const verification = objectOf(row.verification);
+  const stored = text(verification, 'result');
+  const column = text(row, 'result');
+  const result: PurgeRecord['result'] =
+    stored !== null && CHECK_RESULTS.has(stored) ? (stored as PurgeCheckResult) : column === 'failed' ? 'remaining' : column === 'verified' || column === 'pending' ? column : 'unchecked';
+  return {
+    id,
+    startedAt,
+    actorKind,
+    actorId,
+    provider: actorKind === 'source_sync' ? text(row, 'connection_provider') : null,
+    workspaceKey,
+    reasonCode,
+    reasonNote: text(row, 'reason_note'),
+    lineageId,
+    versionCount: strings(row, 'version_ids').length,
+    result,
+    removed: { ...countsOf(row.counts), ...countsOf(row.object_counts) },
+    left: countsOf(verification.left),
+    pendingFiles: strings(row, 'pending_object_paths').length,
+    checkedAt: timeOf(row, 'verification_checked_at'),
+  };
+}
+
+/** Purge records of the tenants the admin administers, newest first. Ids, codes and counts only: pending paths and hashes stay here. */
+export async function listPurgeRecords(input: { actorUserId: string; limit?: number; offset?: number; signal: AbortSignal }): Promise<ListPurgeRecordsResult> {
+  if (!UUID.test(input.actorUserId)) return { ok: false, reason: 'invalid_argument' };
+  const limit = Number.isInteger(input.limit) ? Math.min(Math.max(input.limit as number, 1), RECORD_LIMIT_MAX) : 50;
+  const offset = Number.isInteger(input.offset) ? Math.min(Math.max(input.offset as number, 0), 1_000_000) : 0;
+  const listed = await call('rag_purge_audit_list', { p_actor: input.actorUserId.toLowerCase(), p_limit: limit + 1, p_offset: offset }, input.signal);
+  if (!listed.ok) return listed;
+  const records: PurgeRecord[] = [];
+  for (const row of listed.rows.slice(0, limit)) {
+    const record = recordOf(row);
+    if (record === null) return { ok: false, reason: 'unavailable' };
+    records.push(record);
+  }
+  return { ok: true, records, limit, offset, hasMore: listed.rows.length > limit };
 }
 
 export type ReverifyPurgeResult = { ok: true; auditId: string; check: PurgeCheck } | { ok: false; reason: PurgeFailure };
 
-export async function reverifyPurgeAsAdmin(_input: { auditId: string; actorUserId: string; signal: AbortSignal }): Promise<ReverifyPurgeResult> {
-  return { ok: false, reason: 'unavailable' };
+/** Runs the check of one record again (UI "Check again"). Unknown and other-tenant ids answer the same not_found. */
+export async function reverifyPurgeAsAdmin(input: { auditId: string; actorUserId: string; signal: AbortSignal }): Promise<ReverifyPurgeResult> {
+  if (!UUID.test(input.auditId) || !UUID.test(input.actorUserId)) return { ok: false, reason: 'invalid_argument' };
+  const found = await call('rag_purge_audit_get', { p_actor: input.actorUserId.toLowerCase(), p_audit_id: input.auditId.toLowerCase() }, input.signal);
+  if (!found.ok) return found;
+  const row = found.rows[0];
+  const auditId = row ? text(row, 'id') : null;
+  const tenantKey = row ? text(row, 'tenant_key') : null;
+  const lineageId = row ? text(row, 'lineage_id') : null;
+  if (!row || auditId === null || tenantKey === null || lineageId === null) return { ok: false, reason: 'unavailable' };
+  const checked = await verifyPurge({ auditId, tenantKey, lineageId, pending: strings(row, 'pending_object_paths') });
+  return checked.ok ? { ok: true, auditId, check: checked.check } : checked;
 }
