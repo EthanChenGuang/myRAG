@@ -4,10 +4,14 @@
  * supplies never reaches another tenant's text. An id outside the scope is simply absent and evaluates as an unknown source.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import calcRequestJson from '../../../../rag-sidecar/schemas/CalcRequest.schema.json';
 import { getRagDeps } from '../deps';
 import { tenantPredicate, type TenantScope } from '../tenant/scope';
 
 export const MAX_VOICE_CALC_SOURCES = 20;
+
+/** The generated CalcRequest JSON schema, the agent's calculate tool parameters; read once at module load. */
+export const CALC_REQUEST_JSON_SCHEMA: unknown = calcRequestJson;
 
 export interface VoiceCalcSource {
   alias: string;

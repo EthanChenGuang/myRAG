@@ -3,19 +3,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { env } from '@/lib/env';
 import {
+    CALC_REQUEST_JSON_SCHEMA,
     createAnswerTurn,
     createTraceCollector,
     deriveVoiceKeywords,
     finishTrace,
+    labelledUntaggedVoiceContext,
+    labelTaggedVoiceContext,
     readAnswerConfig,
     readFeedbackLoopConfig,
     readSecurityConfig,
     resolveVoiceScope,
     runRetrieval,
     scopeKey,
+    shouldOfferCalcTool,
     untaggedVoiceContext,
+    voiceCalcSources,
     voiceServerCondenses,
     VOICE_SCOPE_HEADER,
+    type AnswerConfig,
     type HistoryTurn,
     type RetrievalResult,
 } from '@/lib/rag';
@@ -44,20 +50,43 @@ function historyBinding(rawToken: string): string {
     return createHash('sha256').update(rawToken, 'utf8').digest('base64url').slice(0, 22);
 }
 
-/**
- * Phase 5.2 D-07: the composed voice block (relevance, partial answer, version, output policy; the spoken phrase in place of the
- * sentinel), or '' when no part applies. It is the composer output for an empty prompt, so it starts with a blank line.
- */
-function voiceAnswerBlock(query: string, history: HistoryTurn[] | undefined, contextTagging: boolean): string {
-    const turn = createAnswerTurn({
-        config: readAnswerConfig(),
+function voiceAnswerTurn(config: AnswerConfig, query: string, history: HistoryTurn[] | undefined) {
+    return createAnswerTurn({
+        config,
         question: query,
         history: history ?? [],
         uiLanguage: null,
         channel: 'voice',
         ragMode: 'strict',
     });
+}
+
+/**
+ * Phase 5.2 D-07: the composed voice block (relevance, partial answer, version, output policy; the spoken phrase in place of the
+ * sentinel), or '' when no part applies. It is the composer output for an empty prompt, so it starts with a blank line.
+ */
+function voiceAnswerBlock(turn: ReturnType<typeof voiceAnswerTurn>, contextTagging: boolean): string {
     return turn.composeSystemPrompt('', { mode: 'strict', webSearchOffered: false, contextTagging });
+}
+
+interface VoiceCalcOffer {
+    offered: true;
+    check: boolean;
+    sources: ReturnType<typeof voiceCalcSources>;
+    tool_schema: unknown;
+}
+
+/** Phase 5.2.1 D-70, D-76: the calculation offer for this turn's results, or null (switch off or no offer signal). */
+function voiceCalcOffer(
+    config: AnswerConfig,
+    query: string,
+    results: ReadonlyArray<{ chunk_id: string; content: string }>,
+    language: string | null,
+): VoiceCalcOffer | null {
+    if (!config.calcTool) return null;
+    const decision = shouldOfferCalcTool({ question: query, blockTexts: results.map((r) => r.content), language });
+    if (!decision.offer) return null;
+    return { offered: true, check: config.calcCheck, sources: voiceCalcSources(results), tool_schema: CALC_REQUEST_JSON_SCHEMA };
 }
 
 function fellBack(result: RetrievalResult): boolean {
@@ -152,9 +181,15 @@ export async function POST(req: NextRequest) {
         const keywords = deriveVoiceKeywords(query);
         const contextTagging = readSecurityConfig().contextTagging;
         const taggedContext = contextTagging && typeof voice.context === 'string' && voice.context.trim() !== '' ? voice.context : null;
+        const answerConfig = readAnswerConfig();
+        const turn = voiceAnswerTurn(answerConfig, query, history);
+        const calc = voiceCalcOffer(answerConfig, query, voice.results, turn.answerLanguage);
         // The block follows the Phase 5.1 reminder; with tagging off it follows the agent's own context format. '' changes nothing.
-        const answerBlock = voiceAnswerBlock(query, history, contextTagging);
-        const context = answerBlock !== '' ? `${taggedContext ?? untaggedVoiceContext(voice.results)}${answerBlock}` : taggedContext;
+        // With the calculation offered each block carries its alias label, the same aliases the agent gives its results (D-76).
+        const answerBlock = voiceAnswerBlock(turn, contextTagging);
+        const tagged = taggedContext !== null && calc ? labelTaggedVoiceContext(taggedContext) : taggedContext;
+        const untagged = () => (calc ? labelledUntaggedVoiceContext(voice.results) : untaggedVoiceContext(voice.results));
+        const context = answerBlock !== '' ? `${tagged ?? untagged()}${answerBlock}` : tagged;
         return NextResponse.json({
             results: voice.results,
             source_images: voice.source_images,
@@ -165,6 +200,7 @@ export async function POST(req: NextRequest) {
                 searchKeywords: keywords.searchKeywords
             } : undefined,
             ...(context !== null ? { context } : {}),
+            ...(calc ? { calc } : {}),
         }, { headers });
 
     } catch (error: unknown) {

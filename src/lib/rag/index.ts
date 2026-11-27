@@ -242,6 +242,7 @@ export {
   labelTaggedVoiceContext,
   labelledUntaggedVoiceContext,
   MAX_VOICE_CALC_SOURCES,
+  CALC_REQUEST_JSON_SCHEMA,
   type VoiceCalcSource,
 } from './calc/voice-sources';
 export { planPromptBudget } from './context/prompt-budget';
