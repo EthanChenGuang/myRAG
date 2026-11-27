@@ -146,11 +146,201 @@ BEGIN
 END
 $$;
 
+-- The tenant, lineage and connector flag of a document an admin may purge. Unknown, other-tenant and non-admin: not_found.
+CREATE OR REPLACE FUNCTION public.rag_purge_admin_target(p_document_id uuid, p_actor uuid)
+RETURNS TABLE (tenant_key text, lineage_id uuid, is_connector boolean)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_keys text[];
+  v_doc record;
+BEGIN
+  IF p_document_id IS NULL OR p_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.admin_users a WHERE a.id = p_actor) THEN
+    RAISE EXCEPTION 'not_found';
+  END IF;
+  v_keys := public.rag_admin_tenant_keys(p_actor);
+  SELECT d.tenant_key, d.lineage_id, d.source INTO v_doc
+    FROM public.documents d
+   WHERE d.id = p_document_id AND d.tenant_key = ANY (v_keys);
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not_found';
+  END IF;
+  RETURN QUERY SELECT v_doc.tenant_key::text, v_doc.lineage_id::uuid, (v_doc.source = 'nango');
+END
+$$;
+
+-- Purge records of the tenants the admin administers, newest first, with the provider of a source-sync row's connection when it
+-- still exists.
+CREATE OR REPLACE FUNCTION public.rag_purge_audit_list(p_actor uuid, p_limit integer, p_offset integer)
+RETURNS TABLE (
+  id uuid,
+  tenant_key text,
+  lineage_id uuid,
+  version_ids uuid[],
+  source text,
+  source_connection_id text,
+  connection_provider text,
+  actor_kind text,
+  actor_id uuid,
+  reason_code text,
+  reason_note text,
+  started_at timestamptz,
+  finished_at timestamptz,
+  counts jsonb,
+  object_counts jsonb,
+  verification jsonb,
+  verification_checked_at timestamptz,
+  pending_object_paths text[],
+  result text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_keys text[];
+BEGIN
+  IF p_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.admin_users a WHERE a.id = p_actor) THEN
+    RAISE EXCEPTION 'not_found';
+  END IF;
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 200 OR p_offset IS NULL OR p_offset < 0 THEN
+    RAISE EXCEPTION 'invalid_argument' USING ERRCODE = '22023';
+  END IF;
+  v_keys := public.rag_admin_tenant_keys(p_actor);
+  RETURN QUERY
+  SELECT a.id, a.tenant_key, a.lineage_id, a.version_ids, a.source, a.source_connection_id,
+         (SELECT c.provider FROM public.nango_connections c WHERE a.actor_kind = 'source_sync' AND c.id = a.actor_id),
+         a.actor_kind, a.actor_id, a.reason_code, a.reason_note, a.started_at, a.finished_at, a.counts, a.object_counts,
+         a.verification, a.verification_checked_at, a.pending_object_paths, a.result
+    FROM public.rag_purge_audit a
+   WHERE a.tenant_key = ANY (v_keys)
+   ORDER BY a.started_at DESC, a.id
+   LIMIT p_limit OFFSET p_offset;
+END
+$$;
+
+-- One purge record of a tenant the admin administers. Unknown and other-tenant ids: not_found.
+CREATE OR REPLACE FUNCTION public.rag_purge_audit_get(p_actor uuid, p_audit_id uuid)
+RETURNS TABLE (
+  id uuid,
+  tenant_key text,
+  lineage_id uuid,
+  version_ids uuid[],
+  source text,
+  source_connection_id text,
+  connection_provider text,
+  actor_kind text,
+  actor_id uuid,
+  reason_code text,
+  reason_note text,
+  started_at timestamptz,
+  finished_at timestamptz,
+  counts jsonb,
+  object_counts jsonb,
+  verification jsonb,
+  verification_checked_at timestamptz,
+  pending_object_paths text[],
+  result text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_keys text[];
+BEGIN
+  IF p_actor IS NULL OR p_audit_id IS NULL OR NOT EXISTS (SELECT 1 FROM public.admin_users a WHERE a.id = p_actor) THEN
+    RAISE EXCEPTION 'not_found';
+  END IF;
+  v_keys := public.rag_admin_tenant_keys(p_actor);
+  RETURN QUERY
+  SELECT a.id, a.tenant_key, a.lineage_id, a.version_ids, a.source, a.source_connection_id,
+         (SELECT c.provider FROM public.nango_connections c WHERE a.actor_kind = 'source_sync' AND c.id = a.actor_id),
+         a.actor_kind, a.actor_id, a.reason_code, a.reason_note, a.started_at, a.finished_at, a.counts, a.object_counts,
+         a.verification, a.verification_checked_at, a.pending_object_paths, a.result
+    FROM public.rag_purge_audit a
+   WHERE a.id = p_audit_id AND a.tenant_key = ANY (v_keys);
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not_found';
+  END IF;
+END
+$$;
+
+-- Records the reconcile job retries: pending object paths, or finished in the last 7 days (re-verification window). Ids only.
+CREATE OR REPLACE FUNCTION public.rag_purge_audit_pending(p_limit integer)
+RETURNS TABLE (
+  id uuid,
+  tenant_key text,
+  lineage_id uuid,
+  version_ids uuid[],
+  pending_object_paths text[],
+  started_at timestamptz,
+  finished_at timestamptz,
+  result text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 1000 THEN
+    RAISE EXCEPTION 'invalid_argument' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
+  SELECT a.id, a.tenant_key, a.lineage_id, a.version_ids, a.pending_object_paths, a.started_at, a.finished_at, a.result
+    FROM public.rag_purge_audit a
+   WHERE pg_catalog.cardinality(a.pending_object_paths) > 0
+      OR a.finished_at > pg_catalog.now() - interval '7 days'
+   ORDER BY a.started_at, a.id
+   LIMIT p_limit;
+END
+$$;
+
+-- True when an admin purged this connector file in the tenant (D-35). Source-sync purges leave no tombstone.
+CREATE OR REPLACE FUNCTION public.rag_purge_tombstone_exists(p_tenant_key text, p_source_connection_id text, p_source_key text)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  PERFORM public.rag_ingest_assert_tenant_key(p_tenant_key);
+  IF p_source_connection_id IS NULL OR btrim(p_source_connection_id) = '' OR p_source_key IS NULL OR p_source_key = '' THEN
+    RAISE EXCEPTION 'invalid_argument' USING ERRCODE = '22023';
+  END IF;
+  RETURN EXISTS (
+    SELECT 1 FROM public.rag_purge_audit a
+     WHERE a.actor_kind = 'admin'
+       AND a.tenant_key = p_tenant_key
+       AND a.source_connection_id = p_source_connection_id
+       AND a.source_key_sha256 = pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(p_source_key, 'UTF8')), 'hex')
+  );
+END
+$$;
+
 REVOKE ALL ON FUNCTION public.rag_purge_audit_guard() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_purge_audit_no_truncate() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_purge_audit_finish(uuid, jsonb, text[], jsonb, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_purge_admin_target(uuid, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_purge_audit_list(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_purge_audit_get(uuid, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_purge_audit_pending(integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_purge_tombstone_exists(text, text, text) FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.rag_purge_audit_finish(uuid, jsonb, text[], jsonb, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_purge_admin_target(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_purge_audit_list(uuid, integer, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_purge_audit_get(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_purge_audit_pending(integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_purge_tombstone_exists(text, text, text) TO service_role;
 
 NOTIFY pgrst, 'reload schema';
 
