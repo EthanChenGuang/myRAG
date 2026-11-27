@@ -226,6 +226,9 @@ export {
   type TextsSource,
 } from './generation/answer-turn';
 export { guardChannelReply, guardSummaryText, guardVoiceTranscript } from './security/channel-reply-guard';
+export { applyAnswerPipelineToText, type AnswerTextPipelineResult } from './generation/answer-transforms';
+export { buildSentenceRecords } from './generation/sentences-record';
+export { attributeSourceChunks } from './security/security-events';
 export { formatGuardedLinks, linkUsageInstructions } from './security/link-section';
 export type { ChannelReplyGuardInput, ChannelReplyGuardResult, SummaryGuardInput, VoiceTranscriptMessage } from './security/channel-reply-guard';
 export { recordOutputGuardEvents } from './security/security-events';

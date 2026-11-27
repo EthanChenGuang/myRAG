@@ -2,7 +2,7 @@ import { generateText, type LanguageModel } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { env } from '@/lib/env';
 import { SystemPromptManager } from '@/lib/system-prompt-manager';
-import { createEnhancedRAGPrompt, type AnswerLanguageOptions } from '@/lib/rag';
+import { createEnhancedRAGPrompt, effectiveMaxOutputTokens, type AnswerLanguageOptions, type OutputCapDecision } from '@/lib/rag';
 import type { GroundednessRequest, GroundednessResult } from '@/lib/rag-eval/contracts.generated';
 
 export const EVAL_DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
@@ -138,7 +138,7 @@ export function buildEvalMessages(query: string, conversation: EvalConversationT
   return [...conversation.map((turn) => ({ role: turn.role, content: turn.content })), { role: 'user', content: query }];
 }
 
-export async function generateEvalAnswer(input: {
+export interface EvalAnswerInput {
   query: string;
   conversation?: EvalConversationTurn[];
   context: string;
@@ -146,20 +146,36 @@ export async function generateEvalAnswer(input: {
   generatorModel: string;
   signal?: AbortSignal;
   promptEnv?: EvalPromptEnv;
-  /** Applied to the finished system prompt, e.g. the citation instruction. */
+  /** Applied to the finished system prompt: the citation instruction, then the answer-rule block (D-04, D-07). */
   decorateSystemPrompt?: (prompt: string) => string;
   answerLanguage?: AnswerLanguageOptions;
-}): Promise<string> {
-  const { query, conversation, context, ragMode, generatorModel, signal, promptEnv, decorateSystemPrompt, answerLanguage } = input;
+  /** D-29: the turn's output-cap decision; the limit is min(model limit, cap) only when the cap applies. */
+  outputCap?: OutputCapDecision | null;
+}
+
+export interface EvalAnswerResult {
+  text: string;
+  /** D-33: the model's finish reason, recorded on the trace. */
+  finishReason: string;
+  maxOutputTokens: number;
+}
+
+export async function generateEvalAnswerDetailed(input: EvalAnswerInput): Promise<EvalAnswerResult> {
+  const { query, conversation, context, ragMode, generatorModel, signal, promptEnv, decorateSystemPrompt, answerLanguage, outputCap } = input;
   const basePrompt = buildEvalSystemPrompt({ context, ragMode, promptEnv, answerLanguage });
   const system = decorateSystemPrompt ? decorateSystemPrompt(basePrompt) : basePrompt;
+  const maxOutputTokens = effectiveMaxOutputTokens(maxOutputTokensForModel(generatorModel), outputCap?.applied ? outputCap.cap : null);
   const result = await generateText({
     model: currentFactory(generatorModel),
     system,
     messages: buildEvalMessages(query, conversation),
     temperature: 0.1,
-    maxOutputTokens: maxOutputTokensForModel(generatorModel),
+    maxOutputTokens,
     abortSignal: signal,
   });
-  return result.text;
+  return { text: result.text, finishReason: result.finishReason, maxOutputTokens };
+}
+
+export async function generateEvalAnswer(input: EvalAnswerInput): Promise<string> {
+  return (await generateEvalAnswerDetailed(input)).text;
 }

@@ -753,3 +753,135 @@ describe('requestRetrievalConfigHash lexical scoring block (04.4-01, D-08)', () 
     });
   });
 });
+
+describe('Phase 5.2 answer-rule inputs of the retrieval config hash (05.2-31, D-58, RESEARCH Pitfall 24)', () => {
+  const ANSWER_ENV = [
+    'RAG_REGISTRY_TEXTS',
+    'RAG_PARTIAL_ANSWER_RULE',
+    'RAG_CONTEXT_RELEVANCE_RULE',
+    'RAG_CITATION_PER_SENTENCE',
+    'RAG_CITATIONS',
+    'RAG_VERSION_LABELS',
+    'RAG_MAX_OUTPUT_TOKENS',
+    'RAG_OUTPUT_GUARD',
+    'RAG_CLAIM_CHECK',
+    'RAG_SECURITY_EVENTS',
+  ] as const;
+  const processEnv = process.env as Record<string, string | undefined>;
+  let savedAnswerEnv: Record<string, string | undefined>;
+
+  beforeEach(() => {
+    savedAnswerEnv = Object.fromEntries(ANSWER_ENV.map((name) => [name, processEnv[name]]));
+    for (const name of ANSWER_ENV) delete processEnv[name];
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    setRetrievalBackendForTests({ id: 'pgvector' } as unknown as RetrievalBackend);
+    setActiveChunkingProfilesForTests({ general: 'legacy' });
+  });
+
+  afterEach(() => {
+    for (const name of ANSWER_ENV) {
+      if (savedAnswerEnv[name] === undefined) delete processEnv[name];
+      else processEnv[name] = savedAnswerEnv[name];
+    }
+    vi.restoreAllMocks();
+    resetRetrievalBackendForTests();
+    resetActiveChunkingProfilesForTests();
+    resetRagConfigForTests();
+  });
+
+  function requestInput() {
+    return {
+      input: { scope: null, query: 'q', profile: 'chat', signal: new AbortController().signal } as RunRetrievalInput,
+      config: baseConfig({ RAG_LEXICAL_SEARCH: 'true' }),
+      profile: 'chat' as const,
+      embeddingProfileId: 'openai-3-small-1536',
+      queryLanguage: 'en',
+      security: readSecurityConfig({}),
+    };
+  }
+
+  async function hashWith(env: Record<string, string>): Promise<string> {
+    for (const name of ANSWER_ENV) delete processEnv[name];
+    Object.assign(processEnv, env);
+    return requestRetrievalConfigHash(requestInput());
+  }
+
+  it('every switch off, unset or explicit, keeps the pinned off-hash', async () => {
+    expect(await hashWith({})).toBe(PINNED_REQUEST_OFF_HASH);
+    expect(
+      await hashWith({
+        RAG_REGISTRY_TEXTS: 'false',
+        RAG_PARTIAL_ANSWER_RULE: 'false',
+        RAG_CONTEXT_RELEVANCE_RULE: 'false',
+        RAG_CITATION_PER_SENTENCE: 'false',
+        RAG_VERSION_LABELS: 'false',
+        RAG_MAX_OUTPUT_TOKENS: 'off',
+        RAG_OUTPUT_GUARD: 'off',
+      }),
+    ).toBe(PINNED_REQUEST_OFF_HASH);
+  });
+
+  it('switches that change neither prompt nor output keep the off-hash', async () => {
+    expect(await hashWith({ RAG_SECURITY_EVENTS: 'true' })).toBe(PINNED_REQUEST_OFF_HASH);
+  });
+
+  it('each prompt- or output-affecting switch gives its own hash', async () => {
+    const envs: Array<Record<string, string>> = [
+      { RAG_REGISTRY_TEXTS: 'true' },
+      { RAG_PARTIAL_ANSWER_RULE: 'true' },
+      { RAG_CONTEXT_RELEVANCE_RULE: 'true' },
+      { RAG_CITATIONS: 'true', RAG_CITATION_PER_SENTENCE: 'true' },
+      { RAG_VERSION_LABELS: 'true' },
+      { RAG_MAX_OUTPUT_TOKENS: '512' },
+      { RAG_MAX_OUTPUT_TOKENS: '768' },
+      { RAG_MAX_OUTPUT_TOKENS: 'auto' },
+      { RAG_OUTPUT_GUARD: 'flag' },
+      { RAG_OUTPUT_GUARD: 'enforce' },
+    ];
+    const hashes = [PINNED_REQUEST_OFF_HASH];
+    for (const env of envs) hashes.push(await hashWith(env));
+    expect(new Set(hashes).size).toBe(envs.length + 1);
+  });
+
+  it('the guard rule-set and TLD versions move the hash only while the guard is on; the pack version while any part is on', async () => {
+    const hashModule = await import('@/lib/rag/v2/config-hash');
+    const { readAnswerConfig } = await import('@/lib/rag/generation/answer-config');
+    expect(typeof hashModule.answerRulesHashComponent).toBe('function');
+    const VERSIONS = { packVersion: 'en:1', guardRulesVersion: 'guard-v1', tldVersion: 'tld-v1', capsVersion: 'caps-v1' };
+    const component = (env: Record<string, string>, versions: Partial<typeof VERSIONS> = {}) =>
+      hashModule.answerRulesHashComponent(readAnswerConfig(env), { ...VERSIONS, ...versions });
+    const hashOf = (answerRules: ReturnType<typeof component>) => computeRetrievalConfigHash({ ...literalHashInput(), answerRules });
+
+    expect(component({})).toBeNull();
+    expect(hashOf(component({}))).toBe(PINNED_DEFAULT_HASH);
+    const guard = { RAG_OUTPUT_GUARD: 'enforce' };
+    expect(hashOf(component(guard, { guardRulesVersion: 'guard-v2' }))).not.toBe(hashOf(component(guard)));
+    expect(hashOf(component(guard, { tldVersion: 'tld-v2' }))).not.toBe(hashOf(component(guard)));
+    const rule = { RAG_CONTEXT_RELEVANCE_RULE: 'true' };
+    expect(hashOf(component(rule, { guardRulesVersion: 'guard-v2' }))).toBe(hashOf(component(rule)));
+    expect(hashOf(component(rule, { packVersion: 'en:2' }))).not.toBe(hashOf(component(rule)));
+    expect(hashOf(component({}, { packVersion: 'en:2', guardRulesVersion: 'guard-v2' }))).toBe(PINNED_DEFAULT_HASH);
+    const auto = { RAG_MAX_OUTPUT_TOKENS: 'auto' };
+    expect(hashOf(component(auto, { capsVersion: 'caps-v2' }))).not.toBe(hashOf(component(auto)));
+    expect(hashOf(component({ RAG_MAX_OUTPUT_TOKENS: '512' }, { capsVersion: 'caps-v2' }))).toBe(
+      hashOf(component({ RAG_MAX_OUTPUT_TOKENS: '512' })),
+    );
+  });
+
+  it('reads the real rule-set, TLD and registry versions when none are given', async () => {
+    const hashModule = await import('@/lib/rag/v2/config-hash');
+    const { readAnswerConfig } = await import('@/lib/rag/generation/answer-config');
+    const { outputGuardRulesVersion } = await import('@/lib/rag/security/credential-rules');
+    const { registryPackVersion } = await import('@/lib/rag/lang/texts');
+    const { TLD_SNAPSHOT_VERSION } = await import('@/lib/rag/security/link-targets');
+    expect(typeof hashModule.answerRulesHashComponent).toBe('function');
+    const component = hashModule.answerRulesHashComponent(readAnswerConfig({ RAG_OUTPUT_GUARD: 'flag' }));
+    expect(component).toMatchObject({
+      outputGuard: 'flag',
+      outputGuardRulesVersion: outputGuardRulesVersion(),
+      tldVersion: TLD_SNAPSHOT_VERSION,
+      packVersion: registryPackVersion(),
+    });
+  });
+});
