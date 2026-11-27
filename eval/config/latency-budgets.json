@@ -75,6 +75,7 @@
         "search": 400,
         "semantic_cache": 150,
         "table_lookup": 60,
+        "source_recheck": 150,
         "terminology": 5,
         "translate": 600
       },
@@ -115,6 +116,7 @@
         "search": 400,
         "semantic_cache": 150,
         "table_lookup": 60,
+        "source_recheck": 150,
         "terminology": 5,
         "translate": 600
       },
@@ -142,6 +144,7 @@
         "rerank": 250,
         "search": 300,
         "table_lookup": 40,
+        "source_recheck": 80,
         "terminology": 3,
         "translate": 5
       },
