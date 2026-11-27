@@ -17,6 +17,22 @@ describe('markdown section chunker', () => {
     expect(chunks.map((chunk) => chunk.content)).toEqual(['Preamble text.', 'alpha body', 'beta body', 'gamma body', 'delta body']);
   });
 
+  it('shortens a section path longer than the chunk budget instead of cutting the body to single tokens', () => {
+    const longHeading = Array.from({ length: 60 }, (_, i) => `heading word ${i}`).join(' ');
+    const body = Array.from({ length: 12 }, (_, i) => `Body sentence number ${i} with a few plain words.`).join(' ');
+    const chunks = chunkMarkdownSections([`# Top`, '', `## ${longHeading}`, '', body].join('\n'), OPTIONS);
+    expect(chunks.length).toBeLessThanOrEqual(3);
+    expect(chunks.every((chunk) => countTokens(chunk.content) > 10)).toBe(true);
+    expect(chunks.every((chunk) => embeddingTokens(chunk) <= OPTIONS.maxTokens)).toBe(true);
+    expect(chunks[0]?.section_path[0]).toBe('Top');
+    expect(chunks[0]?.section_path[1]?.startsWith('heading word 0')).toBe(true);
+  });
+
+  it('keeps a section path within its share of the budget unchanged', () => {
+    const chunks = chunkMarkdownSections(['# Alpha', '', '## Beta gamma', '', 'short body'].join('\n'), OPTIONS);
+    expect(chunks[0]?.section_path).toEqual(['Alpha', 'Beta gamma']);
+  });
+
   it('does not treat a hash line inside a code fence as a heading', () => {
     const chunks = chunkMarkdownSections(['# Real', '', '```sh', '# comment line', 'run --now', '```'].join('\n'), OPTIONS);
     expect(chunks).toHaveLength(1);
