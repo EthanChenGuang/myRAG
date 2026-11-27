@@ -885,3 +885,103 @@ describe('Phase 5.2 answer-rule inputs of the retrieval config hash (05.2-31, D-
     });
   });
 });
+
+describe('Phase 5.2.1 calculation and prompt-budget inputs of the retrieval config hash (05.2.1-13, D-88, D-58)', () => {
+  const CALC_ENV = ['RAG_CALC_TOOL', 'RAG_CALC_CHECK', 'RAG_PROMPT_BUDGET', 'RAG_CONTEXT_OVERFLOW'] as const;
+  const processEnv = process.env as Record<string, string | undefined>;
+  let saved: Record<string, string | undefined>;
+
+  beforeEach(() => {
+    saved = Object.fromEntries(CALC_ENV.map((name) => [name, processEnv[name]]));
+    for (const name of CALC_ENV) delete processEnv[name];
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    setRetrievalBackendForTests({ id: 'pgvector' } as unknown as RetrievalBackend);
+    setActiveChunkingProfilesForTests({ general: 'legacy' });
+  });
+
+  afterEach(() => {
+    for (const name of CALC_ENV) {
+      if (saved[name] === undefined) delete processEnv[name];
+      else processEnv[name] = saved[name];
+    }
+    vi.restoreAllMocks();
+    resetRetrievalBackendForTests();
+    resetActiveChunkingProfilesForTests();
+    resetRagConfigForTests();
+  });
+
+  async function hashWith(env: Record<string, string>): Promise<string> {
+    for (const name of CALC_ENV) delete processEnv[name];
+    Object.assign(processEnv, env);
+    return requestRetrievalConfigHash({
+      input: { scope: null, query: 'q', profile: 'chat', signal: new AbortController().signal } as RunRetrievalInput,
+      config: baseConfig({ RAG_LEXICAL_SEARCH: 'true' }),
+      profile: 'chat' as const,
+      embeddingProfileId: 'openai-3-small-1536',
+      queryLanguage: 'en',
+      security: readSecurityConfig({}),
+    });
+  }
+
+  it('the four switches at their defaults, unset or explicit, keep the pinned off-hash', async () => {
+    expect(await hashWith({})).toBe(PINNED_REQUEST_OFF_HASH);
+    expect(
+      await hashWith({ RAG_CALC_TOOL: 'false', RAG_CALC_CHECK: 'false', RAG_PROMPT_BUDGET: 'false', RAG_CONTEXT_OVERFLOW: 'truncate' }),
+    ).toBe(PINNED_REQUEST_OFF_HASH);
+  });
+
+  it('refine without the budget resolves to truncate and keeps the off-hash', async () => {
+    expect(await hashWith({ RAG_CONTEXT_OVERFLOW: 'refine' })).toBe(PINNED_REQUEST_OFF_HASH);
+  });
+
+  it('each non-default switch gives its own hash', async () => {
+    const envs: Array<Record<string, string>> = [
+      { RAG_CALC_TOOL: 'true' },
+      { RAG_CALC_CHECK: 'true' },
+      { RAG_PROMPT_BUDGET: 'true' },
+      { RAG_PROMPT_BUDGET: 'true', RAG_CONTEXT_OVERFLOW: 'refine' },
+    ];
+    const hashes = [PINNED_REQUEST_OFF_HASH];
+    for (const env of envs) hashes.push(await hashWith(env));
+    expect(new Set(hashes).size).toBe(envs.length + 1);
+  });
+
+  it('the data-file versions move the hash only while a 5.2.1 switch is on', async () => {
+    const hashModule = await import('@/lib/rag/v2/config-hash');
+    const { readAnswerConfig } = await import('@/lib/rag/generation/answer-config');
+    expect(typeof hashModule.calcBudgetHashComponent).toBe('function');
+    const VERSIONS = { calcLimitsVersion: 'limits-v1', promptBudgetConfigVersion: 'budget-v1', tokenizerCalibrationVersion: 'cal-v1' };
+    const component = (env: Record<string, string>, versions: Partial<typeof VERSIONS> = {}) =>
+      hashModule.calcBudgetHashComponent(readAnswerConfig(env), { ...VERSIONS, ...versions });
+    const hashOf = (calcBudget: ReturnType<typeof component>) => computeRetrievalConfigHash({ ...literalHashInput(), calcBudget });
+
+    expect(component({})).toBeNull();
+    expect(hashOf(component({}))).toBe(PINNED_DEFAULT_HASH);
+    expect(hashOf(component({}, { calcLimitsVersion: 'limits-v2', promptBudgetConfigVersion: 'budget-v2' }))).toBe(PINNED_DEFAULT_HASH);
+    const onEnvs: Array<Record<string, string>> = [{ RAG_CALC_TOOL: 'true' }, { RAG_PROMPT_BUDGET: 'true' }];
+    for (const on of onEnvs) {
+      const base = hashOf(component(on));
+      expect(hashOf(component(on, { calcLimitsVersion: 'limits-v2' }))).not.toBe(base);
+      expect(hashOf(component(on, { promptBudgetConfigVersion: 'budget-v2' }))).not.toBe(base);
+      expect(hashOf(component(on, { tokenizerCalibrationVersion: 'cal-v2' }))).not.toBe(base);
+    }
+  });
+
+  it('reads the real file versions when none are given', async () => {
+    const hashModule = await import('@/lib/rag/v2/config-hash');
+    const { readAnswerConfig } = await import('@/lib/rag/generation/answer-config');
+    const { calcLimitsVersion } = await import('@/lib/rag/calc/limits');
+    const { promptBudgetConfigVersion, tokenizerCalibrationVersion } = await import('@/lib/rag/context/prompt-budget-config');
+    expect(typeof hashModule.calcBudgetHashComponent).toBe('function');
+    expect(hashModule.calcBudgetHashComponent(readAnswerConfig({ RAG_CALC_CHECK: 'true' }))).toEqual({
+      calcTool: false,
+      calcCheck: true,
+      promptBudget: false,
+      contextOverflow: 'truncate',
+      calcLimitsVersion: calcLimitsVersion(),
+      promptBudgetConfigVersion: promptBudgetConfigVersion(),
+      tokenizerCalibrationVersion: tokenizerCalibrationVersion(),
+    });
+  });
+});
