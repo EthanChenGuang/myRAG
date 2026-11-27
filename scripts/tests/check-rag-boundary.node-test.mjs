@@ -957,3 +957,31 @@ test('run-retrieval-access and content-table-read pass on the repository routes 
   const violations = checkBoundary(ROOT).filter((v) => v.rule === 'run-retrieval-access' || v.rule === 'content-table-read');
   assert.deepEqual(violations, []);
 });
+
+test('eval-harness-import: src/ must not import eval/harness (static, type, side-effect, dynamic and require forms)', () => {
+  const files = {
+    'src/lib/rag/generation/a.ts': "import { createFakeQueryLlm } from '../../../../eval/harness/fake-query-llm.mts';\n",
+    'src/app/api/b/route.ts': "import type { RunConfig } from '../../../../eval/harness/run-eval.mts';\n",
+    'src/lib/c.ts': "import '../../eval/harness/setup';\n",
+    'src/lib/d.ts': "const m = await import('../../eval/harness/run-judge.mts');\n",
+    'src/lib/e.cjs': "const m = require('../../eval/harness/index.cjs');\n",
+    'src/lib/f.ts': "import { x } from 'eval/harness/fake-query-llm';\n",
+  };
+  assert.deepEqual(
+    rulesFor(files).filter((v) => v.endsWith(':eval-harness-import')).sort(),
+    Object.keys(files).map((rel) => `${rel}:eval-harness-import`).sort(),
+  );
+});
+
+test('eval-harness-import: tests, scripts and the harness itself may import it; a src mention in a comment or a look-alike path passes', () => {
+  assert.deepEqual(
+    rulesFor({
+      'tests/rag/a.test.ts': "import { createFakeQueryLlm } from '../../eval/harness/fake-query-llm.mts';\n",
+      'scripts/rag/b.mjs': "import { run } from '../../eval/harness/run-eval.mts';\n",
+      'eval/harness/c.mts': "import { y } from './fake-query-llm.mts';\n",
+      'src/lib/rag/generation/d.ts': "// Only the eval calibration harness (eval/harness/run-judge.mts) calls this\nexport const d = 1;\n",
+      'src/lib/e.ts': "import { z } from './eval/harness-like';\n",
+    }).filter((v) => v.endsWith(':eval-harness-import')),
+    [],
+  );
+});
