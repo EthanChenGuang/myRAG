@@ -169,13 +169,16 @@ QUERY_CHAT_STAGES = {"condense": 600, "translate": 600, "expand": 700, "decompos
 QUERY_VOICE_STAGES = {"condense": 300}
 TERMINOLOGY_CHAT_STAGES = {"terminology": 5}
 TERMINOLOGY_VOICE_STAGES = {"terminology": 3}
+# 06.3-27 (D-19): the RET-14 recheck, report-only p95.
+SOURCE_RECHECK_CHAT_STAGES = {"source_recheck": 150}
+SOURCE_RECHECK_VOICE_STAGES = {"source_recheck": 80}
 
 
 def test_committed_budgets_carry_the_v2_stage_p95_targets():
     profiles = load_latency_budgets(BUDGETS_PATH).profiles
-    assert profiles["chat"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES, **TERMINOLOGY_CHAT_STAGES}
-    assert profiles["embed"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES, **TERMINOLOGY_CHAT_STAGES}
-    assert profiles["voice"].stages == {**V2_VOICE_STAGES, **QUERY_VOICE_STAGES, **TERMINOLOGY_VOICE_STAGES}
+    assert profiles["chat"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES, **TERMINOLOGY_CHAT_STAGES, **SOURCE_RECHECK_CHAT_STAGES}
+    assert profiles["embed"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES, **TERMINOLOGY_CHAT_STAGES, **SOURCE_RECHECK_CHAT_STAGES}
+    assert profiles["voice"].stages == {**V2_VOICE_STAGES, **QUERY_VOICE_STAGES, **TERMINOLOGY_VOICE_STAGES, **SOURCE_RECHECK_VOICE_STAGES}
     assert profiles["chat"].stages["rerank"] == 600 and profiles["voice"].stages["rerank"] == 250
 
 

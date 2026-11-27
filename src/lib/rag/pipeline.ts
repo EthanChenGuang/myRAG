@@ -482,6 +482,7 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
   let context = '';
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
+  let sourceRecheck: SourceRecheckMarker | undefined;
 
   try {
     const embedding = requireValue(
@@ -510,6 +511,20 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
       ),
       'search',
     );
+
+    if (config.sourceRecheck) {
+      const recheck = await runSourceRecheckStage({
+        spec: spec('source_recheck', 'skip'),
+        signal,
+        collector,
+        scope,
+        client: () => requireAdminSearchClient(deps),
+        items: rawChunks,
+        chunkIdOf: (chunk) => chunk.chunk_id,
+      });
+      rawChunks = recheck.items;
+      sourceRecheck = recheck.marker ?? undefined;
+    }
 
     if (security.injectionCheck !== 'off') {
       warnInjectionCheckDisabled(config, security.injectionCheck);
@@ -580,7 +595,13 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
       : status === 'empty'
         ? 'no_candidates'
         : injectionReason(records, injectionStalled);
-  return { ...failure(collector, status, reason, null), candidates, context, ...(injection ? { injection } : {}) };
+  return {
+    ...failure(collector, status, reason, null),
+    candidates,
+    context,
+    ...(injection ? { injection } : {}),
+    ...(sourceRecheck ? { sourceRecheck } : {}),
+  };
 }
 
 export async function runRefsStage(
@@ -645,6 +666,7 @@ async function runOverviewPipeline(
   let overview: OverviewContext = { context: '', usedDocuments: [] };
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
+  let sourceRecheck: SourceRecheckMarker | undefined;
 
   try {
     let referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
@@ -675,6 +697,20 @@ async function runOverviewPipeline(
       ),
       'search',
     );
+
+    if (config.sourceRecheck) {
+      const recheck = await runSourceRecheckStage({
+        spec: spec('source_recheck', 'skip'),
+        signal,
+        collector,
+        scope,
+        client: () => requireAdminSearchClient(deps),
+        items: rawChunks,
+        chunkIdOf: (chunk) => chunk.chunk_id,
+      });
+      rawChunks = recheck.items;
+      sourceRecheck = recheck.marker ?? undefined;
+    }
 
     let flaggedForRender: ReadonlySet<string> | undefined;
     let documentRows: Map<string, AssemblyDocumentRow> | null = null;
@@ -768,6 +804,7 @@ async function runOverviewPipeline(
     context: overview.context,
     usedDocuments: overview.usedDocuments,
     ...(injection ? { injection } : {}),
+    ...(sourceRecheck ? { sourceRecheck } : {}),
   };
 }
 
@@ -1147,6 +1184,10 @@ function toVoiceChunk(row: RawChunk, scope: NonNullable<RunRetrievalInput['scope
   return scope.kind === 'single' ? { ...row } : { ...row, id: row.chunk_id };
 }
 
+function voiceChunkId(chunk: VoiceChunk): string | null {
+  return chunk.chunk_id ?? chunk.id ?? null;
+}
+
 async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
   const deps = getRagDeps();
   const scope = input.scope;
@@ -1167,6 +1208,7 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
   let voiceInput = 0;
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
+  let sourceRecheck: SourceRecheckMarker | undefined;
 
   try {
     const embedding = requireValue(
@@ -1203,7 +1245,25 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
       collector,
       { candidatesIn: searched.length, candidatesOut: (value) => value.length },
     );
-    const merged = expanded.skipped ? searched : expanded.value;
+    let merged = expanded.skipped ? searched : expanded.value;
+
+    if (config.sourceRecheck) {
+      // Search rows carry chunk_id, keyword-fallback rows id; a row with neither cannot be shown current and is not forwarded once checked.
+      const checkable = merged.filter((chunk) => voiceChunkId(chunk) !== null);
+      const recheck = await runSourceRecheckStage({
+        spec: spec('source_recheck', 'skip'),
+        signal,
+        collector,
+        scope,
+        client: () => requireAdmin() as unknown as RpcClient,
+        items: checkable,
+        chunkIdOf: (chunk) => voiceChunkId(chunk) ?? '',
+      });
+      if (recheck.marker) {
+        merged = recheck.items;
+        sourceRecheck = recheck.marker;
+      }
+    }
 
     const reranked = await runStage(
       spec('local_rerank', 'skip'),
@@ -1283,5 +1343,10 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
       : status === 'empty'
         ? 'no_candidates'
         : injectionReason(records, injectionStalled);
-  return { ...failure(collector, status, reason, null), voice, ...(injection ? { injection } : {}) };
+  return {
+    ...failure(collector, status, reason, null),
+    voice,
+    ...(injection ? { injection } : {}),
+    ...(sourceRecheck ? { sourceRecheck } : {}),
+  };
 }

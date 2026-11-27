@@ -34,6 +34,7 @@
         "rerank": 600,
         "search": 400,
         "semantic_cache": 150,
+        "source_recheck": 150,
         "terminology": 5,
         "translate": 600
       },
@@ -63,6 +64,7 @@
         "rerank": 600,
         "search": 400,
         "semantic_cache": 150,
+        "source_recheck": 150,
         "terminology": 5,
         "translate": 600
       },
@@ -85,6 +87,7 @@
         "refusal": 1,
         "rerank": 250,
         "search": 300,
+        "source_recheck": 80,
         "terminology": 3,
         "translate": 5
       },
