@@ -19,11 +19,11 @@ const state = {
   tokens: {} as Record<string, string>,
   tables: {} as Record<string, Row[]>,
   rpcCalls: [] as Array<{ fn: string; args: Record<string, unknown> }>,
-  outcomes: {} as Record<string, RpcOutcome | ((args: Record<string, unknown>) => RpcOutcome)>,
+  outcomes: {} as Record<string, RpcOutcome | ((_args: Record<string, unknown>) => RpcOutcome)>,
 };
 
 function query(table: string) {
-  const filters: Array<(row: Row) => boolean> = [];
+  const filters: Array<(_row: Row) => boolean> = [];
   let limit = Infinity;
   const run = () => ({ data: (state.tables[table] ?? []).filter((row) => filters.every((filter) => filter(row))).slice(0, limit), error: null });
   const builder = {
@@ -46,7 +46,7 @@ function query(table: string) {
       const result = run();
       return Promise.resolve({ data: result.data[0] ?? null, error: null });
     },
-    then(onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) {
+    then(onFulfilled: (_value: unknown) => unknown, onRejected?: (_reason: unknown) => unknown) {
       return Promise.resolve(run()).then(onFulfilled, onRejected);
     },
   };
@@ -68,7 +68,7 @@ function fakeClient() {
       const outcome = typeof configured === 'function' ? configured(args) : (configured ?? { data: [], error: null });
       const request = {
         abortSignal: () => request,
-        then: (onFulfilled: (value: RpcOutcome) => unknown, onRejected?: (reason: unknown) => unknown) => Promise.resolve(outcome).then(onFulfilled, onRejected),
+        then: (onFulfilled: (_value: RpcOutcome) => unknown, onRejected?: (_reason: unknown) => unknown) => Promise.resolve(outcome).then(onFulfilled, onRejected),
       };
       return request;
     },
@@ -391,7 +391,7 @@ describe('access group routes: rename, impact and counted delete', () => {
     state.outcomes.rag_access_group_delete = (args) =>
       args.p_expected_only_count === 4
         ? { data: [{ fell_back: 4, relabelled: 2 }], error: null }
-        : { data: null, error: { code: 'P0001', message: 'count_required 4' } };
+        : { data: null, error: { code: '22023', message: 'count_required: 4' } };
   });
 
   const patch = (l: Loaded, id: string, body: unknown, org?: string) => l.group.PATCH(req(base(`/${id}`, org), { method: 'PATCH', body }), idParams(id));
