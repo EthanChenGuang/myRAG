@@ -163,6 +163,22 @@ describe('pinned eval env', () => {
     expect(() => parseRunConfig({ name: 'bad-cap', env: { RAG_MAX_OUTPUT_TOKENS: 'lots' } }, 'inline')).toThrow(RunConfigError);
   });
 
+  test('pins the four Phase 5.2.1 switches at their defaults and lets a run config set them (05.2.1 D-88)', () => {
+    const expected = { RAG_CALC_TOOL: 'false', RAG_CALC_CHECK: 'false', RAG_PROMPT_BUDGET: 'false', RAG_CONTEXT_OVERFLOW: 'truncate' };
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    for (const [name, value] of Object.entries(expected)) {
+      expect(pinned[name], name).toBe(value);
+      expect(RUN_CONFIG_ENV_ALLOWLIST, `${name} is settable by a run config`).toContain(name);
+    }
+    const config = parseRunConfig(
+      { name: 'calc-budget', env: { RAG_CALC_TOOL: 'true', RAG_CALC_CHECK: 'true', RAG_PROMPT_BUDGET: 'true', RAG_CONTEXT_OVERFLOW: 'refine' } },
+      'inline',
+    );
+    expect(config.env).toEqual({ RAG_CALC_CHECK: 'true', RAG_CALC_TOOL: 'true', RAG_CONTEXT_OVERFLOW: 'refine', RAG_PROMPT_BUDGET: 'true' });
+    expect(() => parseRunConfig({ name: 'bad-overflow', env: { RAG_CONTEXT_OVERFLOW: 'drop' } }, 'inline')).toThrow(RunConfigError);
+    expect(() => parseRunConfig({ name: 'bad-calc', env: { RAG_CALC_TOOL: 'yes' } }, 'inline')).toThrow(RunConfigError);
+  });
+
   test('a run config cannot set the embed version-scope switch (D-58)', () => {
     expect(RUN_CONFIG_ENV_ALLOWLIST).toContain('RAG_VERSION_SCOPE');
     expect(RUN_CONFIG_ENV_ALLOWLIST).not.toContain('RAG_EMBED_VERSION_SCOPE');
