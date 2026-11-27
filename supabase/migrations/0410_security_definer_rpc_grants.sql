@@ -684,6 +684,50 @@ BEGIN
     REVOKE ALL ON FUNCTION public.unshare_chat(uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.unshare_chat(uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_withdrawn_citation(jsonb, timestamptz)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_withdrawn_citation(jsonb, timestamptz) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_withdrawn_citation(jsonb, timestamptz) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_withdrawn_citations(jsonb, text[], timestamptz)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_withdrawn_citations(jsonb, text[], timestamptz) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_withdrawn_citations(jsonb, text[], timestamptz) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_withdrawn_document_refs(jsonb, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_withdrawn_document_refs(jsonb, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_withdrawn_document_refs(jsonb, text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_image_pattern(text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_image_pattern(text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_image_pattern(text, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_withdrawn_chat_messages(jsonb, text[], text, timestamptz)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_withdrawn_chat_messages(jsonb, text[], text, timestamptz) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_withdrawn_chat_messages(jsonb, text[], text, timestamptz) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_citation_leftover_count(jsonb, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_citation_leftover_count(jsonb, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_citation_leftover_count(jsonb, text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_chat_messages_leftover_count(jsonb, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_chat_messages_leftover_count(jsonb, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_chat_messages_leftover_count(jsonb, text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_chat_messages_reference(jsonb, text[], text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_chat_messages_reference(jsonb, text[], text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_chat_messages_reference(jsonb, text[], text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_scrub_answer_records(text, uuid, uuid[], timestamptz)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_scrub_answer_records(text, uuid, uuid[], timestamptz) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_scrub_answer_records(text, uuid, uuid[], timestamptz) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_scrub_chats(text, uuid, uuid[], timestamptz)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_scrub_chats(text, uuid, uuid[], timestamptz) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_scrub_chats(text, uuid, uuid[], timestamptz) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_citation_leftovers(text, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_citation_leftovers(text, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_citation_leftovers(text, uuid[]) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_table_rows_follow_document()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_table_rows_follow_document() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_table_rows_follow_document() TO service_role;
