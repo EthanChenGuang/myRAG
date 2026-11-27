@@ -10,6 +10,8 @@ from rag_sidecar.contracts.answer_checks import (
     OutputGuardSummary,
     VersionConflict,
 )
+from rag_sidecar.contracts.calc import CalcCheck, CalcOrigin, DecimalString
+from rag_sidecar.contracts.prompt_budget import PromptBudgetTrace
 from rag_sidecar.contracts.answers import AnswerGroundedness, CitationRecord, CitationStrategy
 from rag_sidecar.contracts.ingest import DocType
 from rag_sidecar.contracts.omit import omit_default_schema, omit_none_schema
@@ -312,6 +314,24 @@ def _optional_field(**kwargs: object) -> object:
     return Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema, **kwargs)  # type: ignore[arg-type]
 
 
+class TraceCalcObserved(_Contract):
+    """D-77: what the answer showed of a calculation, recorded with the check on or off."""
+
+    stated: DecimalString | None = None
+    steps_listed: bool
+    tool_used: bool
+    origin: CalcOrigin | None = None
+
+
+class TraceUsage(_Contract):
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+
+
+# A short error code from the generation step; never provider text.
+AnswerErrorCode = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")]
+
+
 class RagTrace(_Contract):
     schema_version: Literal[1] = 1
     item_id: str | None = None
@@ -375,6 +395,12 @@ class RagTrace(_Contract):
     finish_reason: FinishReason | None = _optional_field()
     answer_rules_parts: list[AnswerRulePartId] | None = _optional_field()
     notices: list[AnswerNotice] | None = _optional_field()
+    # Phase 5.2.1 (D-77, D-86); absent on traces recorded before it.
+    calc: list[CalcCheck] | None = _optional_field()
+    calc_observed: TraceCalcObserved | None = _optional_field()
+    prompt_budget: PromptBudgetTrace | None = _optional_field()
+    usage: TraceUsage | None = _optional_field()
+    answer_error: AnswerErrorCode | None = _optional_field()
 
     @model_validator(mode="after")
     def _phase52_rules(self) -> "RagTrace":
