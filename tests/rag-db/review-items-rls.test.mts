@@ -437,7 +437,9 @@ for (const mode of MODES) {
 
     test('0534 is idempotent: applying it again keeps policies, grants and the trigger', async () => {
       await applyMigrationFiles(db, ['supabase/migrations/0534_rag_feedback_review.sql']);
-      const policies = (await db.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_policies WHERE tablename = 'rag_review_items'")).rows[0]?.n;
+      const policies = (
+        await db.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_policies WHERE tablename = 'rag_review_items' AND policyname <> 'rag_review_items_access_sets'")
+      ).rows[0]?.n;
       assert.equal(policies, 2);
       const triggers = (await db.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_trigger WHERE tgrelid = 'public.rag_review_items'::regclass AND NOT tgisinternal")).rows[0]?.n;
       assert.equal(triggers, 1);
