@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { AudienceLine } from '@/components/ui/access-audience';
+import { AudienceLine, deriveAudienceField } from '@/components/ui/access-audience';
 import {
   AccessEditDialogBody,
   DOCUMENTS_ACCESS_PATH,
@@ -283,5 +283,26 @@ describe('the bulk dialog (UI-SPEC 6.2.2 Bulk, 6.11)', () => {
     expect(html).toContain('Who can see &lt;img');
     expect(html).not.toContain('<img');
     expect(html).toContain('Visible to: group-b');
+  });
+});
+
+describe('the field edge states in the Edit access dialog (UI Considerations: empty, error)', () => {
+  const two: AccessEditDocument = {
+    id: DOC_A,
+    name: 'a.pdf',
+    access: { restricted: true, kind: 'groups', groups: [{ id: GROUP_A, name: 'group-a' }, { id: GROUP_B, name: 'group-b' }] },
+  };
+
+  it('no group in the workspace: the second radio is disabled with field.noGroups, Everyone available', () => {
+    const derived = deriveAudienceField(initAccessEditField([two]), [], 'en', { mode: 'org' });
+    expect(derived.radios[1]).toMatchObject({ disabled: true, help: 'No access groups yet. Create one first.' });
+    expect(derived.radios[0]!.disabled).toBe(false);
+  });
+
+  it('a chosen group deleted meanwhile: after the reload the remaining chips stay', () => {
+    const state = initAccessEditField([two]);
+    const derived = deriveAudienceField(state, [{ id: GROUP_B, name: 'group-b' }], 'en', { mode: 'org' });
+    expect(derived.chips).toEqual([{ id: GROUP_B, name: 'group-b' }]);
+    expect(derived.submit).toEqual({ groupIds: [GROUP_B] });
   });
 });

@@ -51,13 +51,19 @@ import { AudienceLine } from "@/components/ui/access-audience"
 import {
   AccessEditDialog,
   applyAccessUpdates,
+  headerSelectionState,
+  pruneSelection,
   readDocumentAccess,
+  selectableIds,
+  toggleAllVisible,
+  toggleSelected,
   rowMarkView,
   showAccessControls,
   type AccessSaveOutcome,
   type DocumentAccess,
 } from "@/components/ui/access-edit-dialog"
 import { toast } from "@/components/ui/use-toast"
+import { Checkbox } from "@/components/ui/checkbox"
 import type { ReplaceCandidate } from "@/components/ui/replaces-picker"
 import {
   UPLOAD_REPLACES_OFF,
@@ -395,6 +401,8 @@ export function DocumentDashboard({
   const [accessEdit, setAccessEdit] = React.useState<{ documentIds: string[]; bulk: boolean; key: number } | null>(null);
   const [accessAnnouncement, setAccessAnnouncement] = React.useState("");
   const accessOpenerRef = React.useRef<HTMLElement | null>(null);
+  const accessHeaderCheckboxRef = React.useRef<HTMLButtonElement | null>(null);
+  const [accessSelectedRaw, setAccessSelectedRaw] = React.useState<string[]>([]);
   const accessStatusRef = React.useRef<HTMLParagraphElement | null>(null);
   const accessWorkspaceId = isMultiTenant() && !isPersonalMode && currentOrganization ? currentOrganization.id : null;
 
@@ -777,6 +785,17 @@ export function DocumentDashboard({
       })
     : []
 
+  const accessSelected = accessAdmin ? pruneSelection(accessSelectedRaw, filteredDocuments) : []
+  const accessVisibleIds = accessAdmin ? selectableIds(filteredDocuments) : []
+  const accessHeaderState = headerSelectionState(accessVisibleIds, accessSelected)
+
+  const changeAccessSelection = (next: string[]) => {
+    if (accessSelected.length === 0 && next.length > 0) {
+      setAccessAnnouncement(accessGroupText('bulk.selected', language, { count: next.length }))
+    }
+    setAccessSelectedRaw(next)
+  }
+
   const openAccessEdit = (documentIds: string[], bulk: boolean, opener: HTMLElement | null) => {
     if (documentIds.length === 0) return
     accessOpenerRef.current = opener
@@ -789,9 +808,11 @@ export function DocumentDashboard({
   }
 
   const finishAccessEdit = (outcome: AccessSaveOutcome) => {
+    const wasBulk = accessEdit?.bulk === true
     setAccessEdit(null)
     if (outcome.kind === "saved") {
       setStoredDocuments((prev) => applyAccessUpdates(prev, outcome.updates))
+      if (wasBulk) setAccessSelectedRaw([])
       announceAccess(outcome.message)
       return
     }
@@ -1750,6 +1771,29 @@ export function DocumentDashboard({
                     </div>
                   </div>
 
+                  {accessAdmin && (
+                    <div className="mb-2 flex min-h-9 flex-wrap items-center gap-2 text-sm">
+                      {accessSelected.length > 0 && (
+                        <>
+                          <span className="text-gray-700 dark:text-gray-300">
+                            {accessGroupText('bulk.selected', language, { count: accessSelected.length })}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={(event) => openAccessEdit(accessSelected, true, event.currentTarget)}
+                          >
+                            {accessGroupText('action.changeAccess', language)}
+                          </Button>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setAccessSelectedRaw([])}>
+                            {accessGroupText('action.clearSelection', language)}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   <div
                     ref={tableContainerRef}
                     className="flex-1 border border-[#FFE0D0] dark:border-[#2A2A2A] bg-[#FFF0E8] dark:bg-[#1A1A1A] rounded-lg overflow-hidden"
@@ -1760,6 +1804,17 @@ export function DocumentDashboard({
                         <Table className="w-full">
                           <TableHeader>
                             <TableRow>
+                              {accessAdmin && (
+                                <TableHead className="pl-3 pr-0" style={{ width: '32px' }}>
+                                  <Checkbox
+                                    ref={accessHeaderCheckboxRef}
+                                    checked={accessHeaderState}
+                                    disabled={accessVisibleIds.length === 0}
+                                    onCheckedChange={() => changeAccessSelection(toggleAllVisible(accessVisibleIds, accessSelected))}
+                                    aria-label={accessGroupText('select.allAria', language)}
+                                  />
+                                </TableHead>
+                              )}
                               <TableHead className="pl-4 pr-3" style={{ maxWidth: '450px' }}>
                                 {t('docName')}
                               </TableHead>
@@ -1782,6 +1837,7 @@ export function DocumentDashboard({
                               <>
                                 {[...Array(5)].map((_, index) => (
                                   <TableRow key={`skeleton-${index}`} className="h-14 animate-pulse-subtle">
+                                    {accessAdmin && <TableCell className="pl-3 pr-0" />}
                                     <TableCell className="pl-4 pr-3">
                                       <div className="h-4 bg-[#FFE0D0] dark:bg-[#2A2A2A] rounded w-3/4 opacity-60"></div>
                                     </TableCell>
@@ -1801,13 +1857,24 @@ export function DocumentDashboard({
                               </>
                             ) : filteredDocuments.length === 0 ? (
                               <TableRow>
-                                <TableCell colSpan={readOnly ? 3 : 4} className="h-[200px] text-center text-gray-700 dark:text-gray-300">
+                                <TableCell colSpan={(readOnly ? 3 : 4) + (accessAdmin ? 1 : 0)} className="h-[200px] text-center text-gray-700 dark:text-gray-300">
                                   {t('noDocumentsFound')}
                                 </TableCell>
                               </TableRow>
                             ) : (
                               filteredDocuments.map((doc) => (
                                 <TableRow key={doc.id} className="table-row-hover h-14 hover:bg-[#FFF0E8]/50 dark:hover:bg-[#212121]/50 transition-colors">
+                                  {accessAdmin && (
+                                    <TableCell className="pl-3 pr-0" style={{ width: '32px' }}>
+                                      <Checkbox
+                                        checked={accessSelected.includes(doc.id)}
+                                        disabled={!accessVisibleIds.includes(doc.id)}
+                                        title={doc.access?.connectorManaged ? accessGroupText('docs.connectorManaged', language) : undefined}
+                                        onCheckedChange={() => changeAccessSelection(toggleSelected(accessSelected, doc.id))}
+                                        aria-label={accessGroupText('select.aria', language, { file: doc.name })}
+                                      />
+                                    </TableCell>
+                                  )}
                                   <TableCell className="pl-4 pr-3" style={{ maxWidth: '450px' }}>
                                     <div className="flex items-center gap-2">
                                       <div className="flex-1 min-w-0">
@@ -2003,7 +2070,11 @@ export function DocumentDashboard({
                   onCancel={() => setAccessEdit(null)}
                   onReloadGroups={() => void loadAccessGroups(accessWorkspaceId)}
                   returnFocus={() =>
-                    accessOpenerRef.current?.isConnected ? accessOpenerRef.current : accessStatusRef.current
+                    accessOpenerRef.current?.isConnected
+                      ? accessOpenerRef.current
+                      : accessEdit.bulk && accessHeaderCheckboxRef.current?.isConnected
+                        ? accessHeaderCheckboxRef.current
+                        : accessStatusRef.current
                   }
                 />
               )}

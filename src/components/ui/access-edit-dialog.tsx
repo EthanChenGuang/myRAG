@@ -169,7 +169,7 @@ export function readAccessSaveResponse(
     const skipped = count(record.skipped);
     const notFound = count(record.notFound);
     let message: string;
-    if (documents.length === 1) {
+    if (documents.length === 1 && context.bulk !== true) {
       const only = documents[0]!;
       const next = updates.get(only.id.toLowerCase());
       const view = audienceViewOf(next ?? only.access, isAdmin, language);
@@ -200,10 +200,10 @@ type SaveFetch = (url: string, init: RequestInit) => Promise<Pick<Response, 'sta
 export async function saveDocumentsAccess(
   documents: readonly AccessEditDocument[],
   submit: AccessSubmit,
-  options: { organizationId: string | null; isAdmin: boolean; language: string; fetcher?: SaveFetch; signal?: AbortSignal },
+  options: { organizationId: string | null; isAdmin: boolean; language: string; bulk?: boolean; fetcher?: SaveFetch; signal?: AbortSignal },
 ): Promise<AccessSaveOutcome> {
   const fetcher: SaveFetch = options.fetcher ?? ((url, init) => fetch(url, init));
-  const context = { documents, isAdmin: options.isAdmin, language: options.language };
+  const context = { documents, isAdmin: options.isAdmin, language: options.language, bulk: options.bulk === true };
   let response: Pick<Response, 'status' | 'json'>;
   try {
     response = await fetcher(DOCUMENTS_ACCESS_PATH, {
@@ -250,6 +250,19 @@ export interface AccessEditDialogProps {
   returnFocus: () => HTMLElement | null;
 }
 
+const DialogDescriptionDiv = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(function DialogDescriptionDiv(
+  { children, ...props },
+  ref,
+) {
+  return (
+    <DialogDescription asChild>
+      <div ref={ref} {...props}>
+        {children}
+      </div>
+    </DialogDescription>
+  );
+});
+
 /** The Edit access dialog for one or many documents (D-17, UI-SPEC 6.11, 9 item 7). */
 export function AccessEditDialog({
   open,
@@ -271,14 +284,11 @@ export function AccessEditDialog({
   const fieldId = `access-edit-${React.useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const groups = mine.assignableGroups;
   const derived = deriveAudienceField(field, groups, language, { mode, bulk });
-  const single = documents.length === 1 && !bulk ? documents[0]! : null;
-  const currentView = single ? audienceViewOf(single.access, mine.isAdmin, language) : null;
-
   const save = async () => {
     if (!derived.submit || saving) return;
     setSaving(true);
     setError(null);
-    const outcome = await saveDocumentsAccess(documents, derived.submit, { organizationId, isAdmin: mine.isAdmin, language });
+    const outcome = await saveDocumentsAccess(documents, derived.submit, { organizationId, isAdmin: mine.isAdmin, language, bulk });
     setSaving(false);
     if (outcome.kind === 'error') {
       if (outcome.reloadGroups) onReloadGroups();
@@ -319,20 +329,14 @@ export function AccessEditDialog({
           if (saving) event.preventDefault();
         }}
       >
-        <DialogHeader className="min-w-0">
-          <DialogTitle className="break-words">
-            {single ? accessGroupText('edit.title', language, { file: single.name }) : accessGroupText('bulk.title', language)}
-          </DialogTitle>
-          <DialogDescription asChild>
-            <div className="min-w-0 text-sm text-muted-foreground">
-              {currentView ? (
-                <AudienceLine view={currentView} context="dialog" />
-              ) : (
-                <p>{accessGroupText('bulk.selected', language, { count: documents.length })}</p>
-              )}
-            </div>
-          </DialogDescription>
-        </DialogHeader>
+        <AccessEditDialogBody
+          documents={documents}
+          bulk={bulk}
+          language={language}
+          isAdmin={mine.isAdmin}
+          Title={DialogTitle}
+          Description={DialogDescriptionDiv}
+        />
         <AudienceField
           id={fieldId}
           state={field}
@@ -372,33 +376,72 @@ export interface SelectableRow {
 }
 
 /** A row an admin can relabel: the server sent its access, it is stored (ready) and not connector-managed. */
-export function isSelectableRow(_row: SelectableRow): boolean {
-  return false;
+export function isSelectableRow(row: SelectableRow): boolean {
+  return row.access !== undefined && row.access.connectorManaged !== true && (row.status === undefined || row.status === 'ready');
 }
 
-export function selectableIds(_rows: readonly SelectableRow[]): string[] {
-  return [];
+export function selectableIds(rows: readonly SelectableRow[]): string[] {
+  return rows.filter(isSelectableRow).map((row) => row.id);
 }
 
 /** Keeps only ids that are still selectable rows (a deleted, filtered-out-and-relabelled or connector row drops out). */
-export function pruneSelection(selected: readonly string[], _rows: readonly SelectableRow[]): string[] {
-  return [...selected];
+export function pruneSelection(selected: readonly string[], rows: readonly SelectableRow[]): string[] {
+  const allowed = new Set(selectableIds(rows));
+  return selected.filter((id) => allowed.has(id));
 }
 
-export function toggleSelected(selected: readonly string[], _id: string): string[] {
-  return [...selected];
+export function toggleSelected(selected: readonly string[], id: string): string[] {
+  return selected.includes(id) ? selected.filter((each) => each !== id) : [...selected, id];
 }
 
 /** The header checkbox: the filtered rows on screen only (UI-SPEC 6.11, 9 item 10). */
-export function headerSelectionState(_visibleIds: readonly string[], _selected: readonly string[]): boolean | 'indeterminate' {
-  return false;
+export function headerSelectionState(visibleIds: readonly string[], selected: readonly string[]): boolean | 'indeterminate' {
+  if (visibleIds.length === 0) return false;
+  const chosen = new Set(selected);
+  const ticked = visibleIds.filter((id) => chosen.has(id)).length;
+  if (ticked === 0) return false;
+  return ticked === visibleIds.length ? true : 'indeterminate';
 }
 
-export function toggleAllVisible(_visibleIds: readonly string[], selected: readonly string[]): string[] {
-  return [...selected];
+export function toggleAllVisible(visibleIds: readonly string[], selected: readonly string[]): string[] {
+  if (headerSelectionState(visibleIds, selected) === true) {
+    const visible = new Set(visibleIds);
+    return selected.filter((id) => !visible.has(id));
+  }
+  const chosen = new Set(selected);
+  return [...selected, ...visibleIds.filter((id) => !chosen.has(id))];
 }
 
 /** The dialog's title and description, rendered without the Radix portal (tests and the dialog share it). */
-export function AccessEditDialogBody(_props: { documents: readonly AccessEditDocument[]; bulk: boolean; language: string; isAdmin: boolean }) {
-  return null;
+export function AccessEditDialogBody({
+  documents,
+  bulk,
+  language,
+  isAdmin,
+  Title = 'h2',
+  Description = 'div',
+}: {
+  documents: readonly AccessEditDocument[];
+  bulk: boolean;
+  language: string;
+  isAdmin: boolean;
+  Title?: React.ElementType;
+  Description?: React.ElementType;
+}) {
+  const single = documents.length === 1 && !bulk ? documents[0]! : null;
+  const currentView = single ? audienceViewOf(single.access, isAdmin, language) : null;
+  return (
+    <DialogHeader className="min-w-0">
+      <Title className="break-words text-lg font-semibold leading-none tracking-tight">
+        {single ? accessGroupText('edit.title', language, { file: single.name }) : accessGroupText('bulk.title', language)}
+      </Title>
+      <Description className="min-w-0 text-sm text-muted-foreground">
+        {currentView ? (
+          <AudienceLine view={currentView} context="dialog" />
+        ) : (
+          <p>{accessGroupText('bulk.selected', language, { count: documents.length })}</p>
+        )}
+      </Description>
+    </DialogHeader>
+  );
 }
