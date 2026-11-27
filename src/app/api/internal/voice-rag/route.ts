@@ -3,14 +3,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { env } from '@/lib/env';
 import {
+    createAnswerTurn,
     createTraceCollector,
     deriveVoiceKeywords,
     finishTrace,
+    readAnswerConfig,
     readFeedbackLoopConfig,
     readSecurityConfig,
     resolveVoiceScope,
     runRetrieval,
     scopeKey,
+    untaggedVoiceContext,
     voiceServerCondenses,
     VOICE_SCOPE_HEADER,
     type HistoryTurn,
@@ -39,6 +42,22 @@ const bodySchema = z.object({
 /** The session binding of a history turn: the first 22 characters of base64url SHA-256 over the raw scope token. */
 function historyBinding(rawToken: string): string {
     return createHash('sha256').update(rawToken, 'utf8').digest('base64url').slice(0, 22);
+}
+
+/**
+ * Phase 5.2 D-07: the composed voice block (relevance, partial answer, version, output policy; the spoken phrase in place of the
+ * sentinel), or '' when no part applies. It is the composer output for an empty prompt, so it starts with a blank line.
+ */
+function voiceAnswerBlock(query: string, history: HistoryTurn[] | undefined, contextTagging: boolean): string {
+    const turn = createAnswerTurn({
+        config: readAnswerConfig(),
+        question: query,
+        history: history ?? [],
+        uiLanguage: null,
+        channel: 'voice',
+        ragMode: 'strict',
+    });
+    return turn.composeSystemPrompt('', { mode: 'strict', webSearchOffered: false, contextTagging });
 }
 
 function fellBack(result: RetrievalResult): boolean {
@@ -131,6 +150,11 @@ export async function POST(req: NextRequest) {
 
         if (logged && result.logOutcome) result.logOutcome.value = 'answered';
         const keywords = deriveVoiceKeywords(query);
+        const contextTagging = readSecurityConfig().contextTagging;
+        const taggedContext = contextTagging && typeof voice.context === 'string' && voice.context.trim() !== '' ? voice.context : null;
+        // The block follows the Phase 5.1 reminder; with tagging off it follows the agent's own context format. '' changes nothing.
+        const answerBlock = voiceAnswerBlock(query, history, contextTagging);
+        const context = answerBlock !== '' ? `${taggedContext ?? untaggedVoiceContext(voice.results)}${answerBlock}` : taggedContext;
         return NextResponse.json({
             results: voice.results,
             source_images: voice.source_images,
@@ -140,9 +164,7 @@ export async function POST(req: NextRequest) {
                 keywords: keywords.keywords,
                 searchKeywords: keywords.searchKeywords
             } : undefined,
-            ...(readSecurityConfig().contextTagging && typeof voice.context === 'string' && voice.context.trim() !== ''
-                ? { context: voice.context }
-                : {}),
+            ...(context !== null ? { context } : {}),
         }, { headers });
 
     } catch (error: unknown) {

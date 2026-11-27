@@ -8,6 +8,7 @@ import type { QueryFramework, QueryTransformSwitches, SemanticCacheBackend, Stag
 import type { TemporalQueryContext } from './query/temporal-query-detector';
 import type { RefusalRecord } from './refusal/types';
 import type { DocType } from './ingest/profiles/load';
+import type { VersionConflict } from './context/version-conflicts';
 import type { InjectionCheckMode } from './security/config';
 import type { RerankProviderId } from './rerank/types';
 import type { TenantScope } from './tenant/scope';
@@ -385,6 +386,8 @@ export interface RetrievalResult {
   identifierSuggestions?: string[];
   /** D-31: identifier filter counts for the trace; absent while RAG_IDENTIFIER_FILTER is off or the resolve stage did not run. */
   identifierFilter?: IdentifierFilterSummary;
+  /** D-52: version conflicts among the context blocks; absent without one or while RAG_VERSION_LABELS is off. */
+  versionConflict?: VersionConflict;
 }
 
 /** D-31: counts only, never an identifier. */

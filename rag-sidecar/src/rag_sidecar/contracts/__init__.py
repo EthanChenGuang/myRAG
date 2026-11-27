@@ -143,6 +143,8 @@ from rag_sidecar.contracts.output_guard import (
 )
 from rag_sidecar.contracts.security_events import (
     LinkPreviewStatus,
+    ReviewCheckDetails,
+    ReviewCheckDocument,
     SecurityAlert,
     SecurityAlertView,
     SecurityEvent,
@@ -512,6 +514,8 @@ __all__ = [
     "OutputCaps",
     "OutputGuardRules",
     "LinkPreviewStatus",
+    "ReviewCheckDetails",
+    "ReviewCheckDocument",
     "SecurityAlert",
     "SecurityAlertView",
     "SecurityEvent",

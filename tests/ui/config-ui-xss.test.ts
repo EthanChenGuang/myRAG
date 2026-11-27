@@ -510,3 +510,121 @@ describe('rag-panels/answer-rules.js renders server data and page values as text
     }
   });
 });
+
+const SECURITY_JS_LINK = 'javascript:alert(1)';
+
+function securityEventsDoc(): FakeDocument {
+  const doc = new FakeDocument();
+  const banner = doc.createElement('div');
+  banner.id = 'rag-security-alert-banner';
+  doc.body.appendChild(banner);
+  const holder = doc.createElement('div');
+  doc.body.appendChild(holder);
+  holder.innerHTML = between(html, '<section id="rag-administration-security-events"', '<!-- rag-security-events:end -->');
+  doc.innerHtmlWrites = 0;
+  return doc;
+}
+
+function securityEventsReplies(apiPath: string): unknown {
+  const uploader = { uploader_id: 'b1000000-0000-4000-8000-000000000001', uploader_name: XSS_PAYLOAD, uploader_email: SECURITY_JS_LINK };
+  if (apiPath.startsWith('/api/rag/admin/security-events/alerts')) {
+    return {
+      success: true,
+      events_recorded: true,
+      hold_mode: 'manual',
+      alert_level: 5,
+      window_hours: 24,
+      open_count: 1,
+      next_cursor: null,
+      items: [
+        { id: 'a1000000-0000-4000-8000-000000000001', tenant_key: `o:${XSS_PAYLOAD}`, workspace_name: XSS_PAYLOAD, event_count: 7, window_hours: 24, threshold: 5, opened_at: XSS_PAYLOAD, status: 'open', held: false, ...uploader },
+        { id: 'a1000000-0000-4000-8000-000000000002', tenant_key: 's:default', workspace_name: null, event_count: 7, window_hours: 24, threshold: 5, opened_at: '2026-11-20T09:30:00.000Z', status: 'acknowledged', held: true, ...uploader },
+      ],
+    };
+  }
+  if (apiPath.startsWith('/api/rag/admin/security-events/uploaders')) {
+    return {
+      success: true,
+      events_recorded: true,
+      hold_mode: 'manual',
+      next_cursor: null,
+      items: [{ user_id: uploader.uploader_id, tenant_key: 's:default', workspace_name: XSS_PAYLOAD, display_name: XSS_PAYLOAD, email: SECURITY_JS_LINK, event_count: 2, last_event_at: XSS_PAYLOAD, held: true, held_since: XSS_PAYLOAD }],
+    };
+  }
+  if (apiPath.startsWith('/api/rag/admin/security-events/link-previews')) {
+    return { success: true, state: 'mismatch', preview_hosts: [XSS_PAYLOAD], hosts_not_allowlisted: [XSS_PAYLOAD, SECURITY_JS_LINK] };
+  }
+  return {
+    success: true,
+    events_recorded: true,
+    next_cursor: null,
+    items: [
+      { id: 'c1000000-0000-4000-8000-000000000001', tenant_key: 's:default', workspace_name: XSS_PAYLOAD, created_at: XSS_PAYLOAD, source: XSS_PAYLOAD, action: SECURITY_JS_LINK, detector: 'rules', document_id: 'd1', file_name: XSS_PAYLOAD, rule_ids: [XSS_PAYLOAD, SECURITY_JS_LINK], ...uploader },
+    ],
+  };
+}
+
+describe('rag-panels/security-events.js renders server data as text (XSS, D-57, UI-SPEC section 11)', () => {
+  it('uploader names, e-mails, workspace and file names, hosts, rule ids and codes create no element, link or title', async () => {
+    const doc = securityEventsDoc();
+    const context = makeContext(doc, {
+      navigator: { language: 'en-US' },
+      setTimeout,
+      clearTimeout,
+      AbortController,
+      Intl,
+      URL,
+      ragFetch: async (apiPath: string) => ({ ok: true, status: 200, body: securityEventsReplies(apiPath) }),
+    });
+    for (const file of ['rag-panels/rag-ui.js', 'rag-panels/security-events.js']) {
+      new vm.Script(fs.readFileSync(path.join(configUiDir, file), 'utf8'), { filename: file }).runInContext(context);
+    }
+    await (context.initSecurityEventsPanel as () => Promise<unknown>)();
+    await flush(10);
+    for (const tab of ['uploaders', 'events', 'previews']) {
+      doc.getElementById(`rag-security-events-tab-${tab}`)!.click();
+      await flush(10);
+    }
+    doc.dispatch('DOMContentLoaded');
+    await flush(10);
+    doc.getElementById('rag-security-events-tab-alerts')!.click();
+    await flush(10);
+    doc.querySelector('[data-security-hold]')!.click();
+    await flush(10);
+    expectNoInjection(doc);
+    const all = [doc.documentElement, ...doc.documentElement.querySelectorAll('*')];
+    expect(all.filter((el) => ['a', 'img', 'script', 'iframe'].includes(el.tagName)).map((el) => el.tagName)).toEqual([]);
+    for (const el of all) {
+      for (const [name, value] of el.attributes) {
+        expect(name.startsWith('on'), `${el.tagName} ${name}`).toBe(false);
+        expect(['href', 'src', 'title', 'style'].includes(name), `${el.tagName} ${name}`).toBe(false);
+        // UI-SPEC 9.11 row-action names carry the uploader ("Hold uploads: Uploader A"); setAttribute keeps them inert.
+        if (value.includes('PWNED')) expect(['value', 'aria-label'], `${el.tagName} ${name}=${value}`).toContain(name);
+      }
+    }
+    expect(doc.innerHtmlWrites).toBe(0);
+    expect(doc.body.textContent).toContain(XSS_PAYLOAD);
+    expect(doc.body.textContent).toContain(SECURITY_JS_LINK);
+  });
+
+  it('security-events.js and the panel additions have no innerHTML, inline handler, anchor or link attribute in their source', () => {
+    for (const file of ['security-events.js', 'injection-defense.js']) {
+      const source = fs.readFileSync(path.join(configUiDir, 'rag-panels', file), 'utf8');
+      expect(source, file).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function/);
+      expect(source, file).not.toMatch(/\bon[a-z]+\s*=|setAttribute\(\s*['"]on/i);
+      expect(source, file).not.toMatch(/createElement\(\s*['"]a['"]|ragUiEl\([^)]*['"]a['"]|this\.el\(\s*['"]a['"]/);
+      expect(source, file).not.toMatch(/['"](href|src|srcdoc|formaction)['"]\s*:|\.href\s*=|\.src\s*=|mailto:/);
+    }
+    for (const [file, start] of [
+      ['quarantine.js', '  uploaderNodes(item) {'],
+      ['upload-approvals.js', '  renderRow(row) {'],
+      ['versions-dates.js', '  versionLabelField() {'],
+      ['versions-dates.js', '  versionNode(view) {'],
+      ['review-labelling.js', '  renderCheckDetails() {'],
+      ['review-labelling.js', '  checkUploader(d) {'],
+    ] as const) {
+      const block = methodSource(fs.readFileSync(path.join(configUiDir, 'rag-panels', file), 'utf8'), start);
+      expect(block, `${file} ${start}`).not.toMatch(/innerHTML|['"]a['"]|href|mailto:|['"]title['"]/);
+    }
+  });
+});
