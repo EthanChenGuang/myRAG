@@ -160,3 +160,38 @@ describe('cache inputs on the retrieval contract', () => {
     expect(result.cacheTicket).toBeUndefined();
   });
 });
+
+describe('query-addition switches in the query-layer hash (06.2 G5)', () => {
+  const DEFAULTS = { completeness: true, historyFallback: true, langidSidecar: false, scopeGate: false } as const;
+  type Name = keyof typeof DEFAULTS;
+  const NAMES = Object.keys(DEFAULTS) as Name[];
+  const hashOf = (queryLayer: RetrievalConfigHashQueryLayer) => computeRetrievalConfigHash({ ...literalHashInput(), queryLayer });
+
+  function component(additions?: Partial<Record<Name, boolean>>): RetrievalConfigHashQueryLayer {
+    resetRagConfigForTests();
+    const layer = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true' }).queryLayer;
+    const gated = additions === undefined ? {} : ({ additions } as Parameters<typeof queryLayerHashComponent>[2]);
+    const out = queryLayerHashComponent(layer, effectiveQueryParams('chat'), gated);
+    resetRagConfigForTests();
+    return out;
+  }
+
+  it('every switch at its default leaves the component and the hash unchanged', () => {
+    const unset = component();
+    const defaults = component({ ...DEFAULTS });
+    expect(defaults).toEqual(unset);
+    expect('additions' in defaults).toBe(false);
+    expect(hashOf(defaults)).toBe(hashOf(unset));
+  });
+
+  it.each(NAMES)('%s at its non-default value changes the hash', (name) => {
+    const base = hashOf(component({ ...DEFAULTS }));
+    const flipped = hashOf(component({ ...DEFAULTS, [name]: !DEFAULTS[name] }));
+    expect(flipped).not.toBe(base);
+  });
+
+  it('each non-default switch gives its own hash', () => {
+    const hashes = NAMES.map((name) => hashOf(component({ ...DEFAULTS, [name]: !DEFAULTS[name] })));
+    expect(new Set(hashes).size).toBe(NAMES.length);
+  });
+});
