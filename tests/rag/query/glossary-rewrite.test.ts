@@ -218,7 +218,7 @@ describe('run-layer: glossaryProtected from the tenant glossary, cache bypass un
     install(terms());
     const on = await run(scopeA, { RAG_TRANSLATION_GLOSSARY: 'true' });
     expect(expanded(on)).toEqual([`${TERM} wiring diagram`]);
-    expect(on.plan?.skipped).toContainEqual({ transform: 'expand', reason: 'protected_token_lost' });
+    expect(on.queryLayer?.plan?.skipped).toContainEqual({ transform: 'expand', reason: 'protected_token_lost' });
 
     invalidateTerminologyCache('all');
     resetTerminologyLexiconForTests();
@@ -230,8 +230,8 @@ describe('run-layer: glossaryProtected from the tenant glossary, cache bypass un
     const off = await run(scopeA, {});
     expect(expanded(off)).toEqual([`${TERM} wiring diagram`, 'relay wiring diagram']);
 
-    expect(on.plan?.gate.protectedTokens).toEqual([]);
-    expect(on.plan?.gate.protectedTokens).toEqual(off.plan?.gate.protectedTokens);
+    expect(on.queryLayer?.plan?.gate.protected_tokens).toEqual([]);
+    expect(on.queryLayer?.plan?.gate.protected_tokens).toEqual(off.queryLayer?.plan?.gate.protected_tokens);
   });
 
   it('a glossary-only query stays cacheable: the bypass decision does not see glossary terms', () => {

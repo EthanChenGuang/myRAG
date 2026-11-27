@@ -31,9 +31,14 @@ export type VariantCheck = { ok: true; text: string } | { ok: false; skip: PostC
 export type CondensedCheck = { text: string; passThrough: boolean; skip: PostCheckSkip | null };
 export type SubQuestionsCheck = { subQuestions: string[]; notCompound: boolean; skipped: PostCheckSkip[] };
 
-export type VariantInput = { kind: VariantKind; text: string; input: string; protectedTokens: readonly string[] };
-export type CondensedInput = { text: string; input: string; protectedTokens: readonly string[] };
-export type SubQuestionsInput = { questions: readonly string[]; input: string; protectedTokens: readonly string[] };
+/**
+ * D-14: glossaryProtected holds the glossary source terms found in the input (RAG_TRANSLATION_GLOSSARY effective). A rewrite must
+ * keep each verbatim (sub-questions: together), like a protected token; they are a separate list, never the gate's tokens.
+ */
+export type GlossaryProtection = { glossaryProtected?: readonly string[] };
+export type VariantInput = { kind: VariantKind; text: string; input: string; protectedTokens: readonly string[] } & GlossaryProtection;
+export type CondensedInput = { text: string; input: string; protectedTokens: readonly string[] } & GlossaryProtection;
+export type SubQuestionsInput = { questions: readonly string[]; input: string; protectedTokens: readonly string[] } & GlossaryProtection;
 
 function charCount(text: string): number {
   return Array.from(text).length;
@@ -49,6 +54,7 @@ function failure(
   input: string,
   protectedTokens: readonly string[],
   limits: PostCheckLimits,
+  glossaryProtected: readonly string[] = [],
 ): PostCheckSkipReason | null {
   if (text.trim().length === 0) return 'empty';
   const length = charCount(text);
@@ -58,11 +64,12 @@ function failure(
   if (kind === 'hyde') return null;
   if (length > limits.variantMaxRatio * charCount(input)) return 'length';
   if (!keepsProtectedTokens(text, protectedTokens)) return 'protected_token_lost';
+  if (!keepsProtectedTokens(text, glossaryProtected)) return 'protected_token_lost';
   return null;
 }
 
 export function checkVariant(variant: VariantInput, limits: PostCheckLimits): VariantCheck {
-  const reason = failure(variant.kind, variant.text, variant.input, variant.protectedTokens, limits);
+  const reason = failure(variant.kind, variant.text, variant.input, variant.protectedTokens, limits, variant.glossaryProtected);
   if (reason) return { ok: false, skip: { kind: variant.kind, reason } };
   return { ok: true, text: variant.text };
 }
@@ -72,7 +79,7 @@ export function checkCondensed(condensed: CondensedInput, limits: PostCheckLimit
   if (normalizeForCompare(condensed.text) === normalizeForCompare(condensed.input)) {
     return { text: condensed.input, passThrough: true, skip: null };
   }
-  const reason = failure('condense', condensed.text, condensed.input, condensed.protectedTokens, limits);
+  const reason = failure('condense', condensed.text, condensed.input, condensed.protectedTokens, limits, condensed.glossaryProtected);
   if (reason) return { text: condensed.input, passThrough: false, skip: { kind: 'condense', reason } };
   return { text: condensed.text, passThrough: false, skip: null };
 }
@@ -104,13 +111,19 @@ function perQuestionChecks(sub: SubQuestionsInput, limits: PostCheckLimits): Per
   return { kept, skipped };
 }
 
-function capAndUnion(kept: string[], skipped: PostCheckSkip[], protectedTokens: readonly string[], limits: PostCheckLimits): SubQuestionsCheck {
+function capAndUnion(
+  kept: string[],
+  skipped: PostCheckSkip[],
+  protectedTokens: readonly string[],
+  limits: PostCheckLimits,
+  glossaryProtected: readonly string[] = [],
+): SubQuestionsCheck {
   if (kept.length > limits.maxSubQuestions) {
     skipped.push({ kind: 'decompose', reason: 'cap', count: kept.length - limits.maxSubQuestions });
     kept.length = limits.maxSubQuestions;
   }
 
-  if (kept.length > 0 && !keepsProtectedTokens(kept.join('\n'), protectedTokens)) {
+  if (kept.length > 0 && !keepsProtectedTokens(kept.join('\n'), [...protectedTokens, ...glossaryProtected])) {
     return { subQuestions: [], notCompound: false, skipped: [{ kind: 'decompose', reason: 'protected_token_lost' }] };
   }
 
@@ -125,7 +138,7 @@ function capAndUnion(kept: string[], skipped: PostCheckSkip[], protectedTokens: 
 export function checkSubQuestions(sub: SubQuestionsInput, limits: PostCheckLimits): SubQuestionsCheck {
   const checked = perQuestionChecks(sub, limits);
   if ('early' in checked) return checked.early;
-  return capAndUnion(checked.kept, checked.skipped, sub.protectedTokens, limits);
+  return capAndUnion(checked.kept, checked.skipped, sub.protectedTokens, limits, sub.glossaryProtected);
 }
 
 export type CompletenessCheck = SubQuestionsCheck & { completeness?: CompletenessRecord };
@@ -142,7 +155,7 @@ export function checkSubQuestionsWithCompleteness(
 ): CompletenessCheck {
   const checked = perQuestionChecks(sub, limits);
   if ('early' in checked) return checked.early;
-  if (checked.kept.length === 0) return capAndUnion(checked.kept, checked.skipped, sub.protectedTokens, limits);
+  if (checked.kept.length === 0) return capAndUnion(checked.kept, checked.skipped, sub.protectedTokens, limits, sub.glossaryProtected);
   const repaired = checkDecompositionCompleteness({
     original: sub.input,
     subQuestions: checked.kept,
@@ -152,5 +165,5 @@ export function checkSubQuestionsWithCompleteness(
   if (repaired.completeness.action === 'discarded') {
     return { subQuestions: [], notCompound: false, skipped: checked.skipped, completeness: repaired.completeness };
   }
-  return { ...capAndUnion(repaired.subQuestions, checked.skipped, sub.protectedTokens, limits), completeness: repaired.completeness };
+  return { ...capAndUnion(repaired.subQuestions, checked.skipped, sub.protectedTokens, limits, sub.glossaryProtected), completeness: repaired.completeness };
 }

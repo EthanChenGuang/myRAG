@@ -12,7 +12,7 @@ import type { NativeTransformSkip } from './llamaindex/call';
 import type { PostCheckLimits, PostCheckSkip, PostCheckSkipReason } from './post-checks';
 import { getKbLanguageShares, translationTargets, type KbLanguageShares } from './kb-languages';
 import type { GlossaryHashStage } from '../v2/config-hash';
-import { loadTenantGlossary } from './glossary';
+import { glossarySourceSurfaces, loadTenantGlossary, type TenantGlossary } from './glossary';
 import type { TranslateSkip } from './llamaindex/translate';
 import { buildQueryPlan, planToVariants, type SkippedTransform } from './plan';
 import { effectiveQueryParams } from './query-params';
@@ -656,6 +656,25 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   }
   const routed = new Set(route.transforms);
 
+  // D-14: one glossary read per request (4.1.1 per-tenant loader, whatever RAG_TERMINOLOGY says), shared by the rewrites that keep
+  // glossary terms verbatim and by translate; started only when one of them runs. Its terms never enter gate.protectedTokens.
+  const glossaryOn = config.queryAdditions.effective.translationGlossary;
+  let glossaryLoad: Promise<TenantGlossary | null> | null = null;
+  const tenantGlossary = (): Promise<TenantGlossary | null> => {
+    if (!glossaryOn || !ctx.scope) return Promise.resolve(null);
+    glossaryLoad ??= loadTenantGlossary(ctx.scope, { signal }).then((glossary) => {
+      if (glossary) ctx.onGlossary?.({ enabled: true, version: glossary.version });
+      return glossary;
+    });
+    return glossaryLoad;
+  };
+  const glossaryProtectedFor = async (text: string): Promise<{ glossaryProtected?: string[] }> => {
+    if (!glossaryOn) return {};
+    const glossaryProtected = glossarySourceSurfaces(text, gate.lang, await tenantGlossary());
+    return glossaryProtected.length > 0 ? { glossaryProtected } : {};
+  };
+  if (glossaryOn) ctx.onGlossary?.({ enabled: true, version: null });
+
   let condensed: string | null = null;
   let condenseOk = false;
   let condenseLanguage: string | null = null;
@@ -668,8 +687,16 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
         collector,
         detail: (value) => (value.skip ? `discarded=${value.skip.reason}` : value.passThrough ? 'pass_through' : undefined),
       },
-      (stageSignal) =>
-        transformer.condense({ query: input.query, history, language: gate.lang, protectedTokens: gate.protectedTokens, limits, signal: stageSignal }),
+      async (stageSignal) =>
+        transformer.condense({
+          query: input.query,
+          history,
+          language: gate.lang,
+          protectedTokens: gate.protectedTokens,
+          ...(await glossaryProtectedFor(input.query)),
+          limits,
+          signal: stageSignal,
+        }),
     );
     if (outcome.ran) {
       if (outcome.value.skip) {
@@ -723,9 +750,6 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   let translateReported: Lang | null = null;
   const runTranslate = handledTranslate && routed.has('translate');
   const translateTargets: Lang[] = runTranslate ? translationTargets(translateSource, kbShares) : [];
-  // D-14: the glossary is read (4.1.1 per-tenant loader, whatever RAG_TERMINOLOGY says) only when translate has targets.
-  const glossaryOn = config.queryAdditions.effective.translationGlossary;
-  if (glossaryOn) ctx.onGlossary?.({ enabled: true, version: null });
 
   const tasks: [
     Promise<TransformOutcome<NormalizedDates>> | null,
@@ -741,8 +765,8 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
         })
       : null,
     runExpand
-      ? runTransform(transformRun<ExpandResult>('expand', { failed: (value) => callFailed(value.skipped) }), (stageSignal) =>
-          transformer.expand({ ...base, maxItems: expandItems, signal: stageSignal }),
+      ? runTransform(transformRun<ExpandResult>('expand', { failed: (value) => callFailed(value.skipped) }), async (stageSignal) =>
+          transformer.expand({ ...base, ...(await glossaryProtectedFor(standalone)), maxItems: expandItems, signal: stageSignal }),
         )
       : null,
     runHyde
@@ -757,7 +781,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
             detail: (value) => (value.notCompound ? 'not_compound' : undefined),
           }),
           async (stageSignal) => {
-            const [requiredTerms, subqFilters] = await Promise.all([
+            const [requiredTerms, subqFilters, glossaryProtection] = await Promise.all([
               completenessOn
                 ? requiredTermsFor({
                     query: standalone,
@@ -777,9 +801,11 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
                     signal: stageSignal,
                   })
                 : Promise.resolve(null),
+              glossaryProtectedFor(standalone),
             ]);
             return transformer.decompose({
               ...base,
+              ...glossaryProtection,
               ...(requiredTerms ? { requiredTerms } : {}),
               ...(subqFilters ? { subqFilters } : {}),
               signal: stageSignal,
@@ -797,8 +823,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
             detail: (value) => (translateTargets.length === 0 ? 'no_targets' : `targets=${translateTargets.join(',')} variants=${value.length}`),
           },
           async (stageSignal) => {
-            const glossary = glossaryOn && ctx.scope && translateTargets.length > 0 ? await loadTenantGlossary(ctx.scope, { signal: stageSignal }) : null;
-            if (glossaryOn && glossary) ctx.onGlossary?.({ enabled: true, version: glossary.version });
+            const glossary = translateTargets.length > 0 ? await tenantGlossary() : null;
             const translateCtx: QueryLayerTranslateContext = {
               signal: stageSignal,
               sourceLanguage: translateSource,
