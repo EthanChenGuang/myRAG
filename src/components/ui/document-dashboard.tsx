@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { format } from "date-fns"
-import { FileUp, Loader2, MoreHorizontal, Search, Trash2, Upload, HardDriveUpload, Download, FileText, FileX, Loader, X, Cloud, Globe } from "lucide-react"
+import { FileUp, Loader2, MoreHorizontal, Search, Trash2, Upload, HardDriveUpload, Download, FileText, FileX, Loader, X, Cloud, Globe, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -47,6 +47,17 @@ import {
 } from "@/components/ui/access-group-picker"
 import { accessGroupText } from "@/components/ui/access-group-labels"
 import { useAccessGroupsStore } from "@/lib/stores/access-groups-store"
+import { AudienceLine } from "@/components/ui/access-audience"
+import {
+  AccessEditDialog,
+  applyAccessUpdates,
+  readDocumentAccess,
+  rowMarkView,
+  showAccessControls,
+  type AccessSaveOutcome,
+  type DocumentAccess,
+} from "@/components/ui/access-edit-dialog"
+import { toast } from "@/components/ui/use-toast"
 import type { ReplaceCandidate } from "@/components/ui/replaces-picker"
 import {
   UPLOAD_REPLACES_OFF,
@@ -97,6 +108,8 @@ export interface ProcessedDocument {
   jobId?: string
   jobOrganizationId?: string | null
   ingest?: IngestJobState
+  /** 04.3-15: present only while RAG_DOC_ACCESS_GROUPS is on (the server sends `restricted`). */
+  access?: DocumentAccess
 }
 
 export interface DocumentDashboardProps {
@@ -129,6 +142,9 @@ type ApiDocumentRecord = {
   source_provider?: string
   source_file_id?: string
   source_connection_id?: string
+  restricted?: boolean
+  audience?: unknown
+  connectorManaged?: boolean
 }
 
 interface DocumentsApiResponse {
@@ -140,7 +156,12 @@ const inferDocumentType = (filename: string): ProcessedDocument['type'] => {
   return extension && SUPPORTED_DOC_EXTENSIONS.includes(extension) ? extension : 'txt'
 }
 
-const mapApiDocumentToProcessed = (doc: ApiDocumentRecord): ProcessedDocument => ({
+const mapApiDocumentToProcessed = (doc: ApiDocumentRecord): ProcessedDocument => {
+  const access = readDocumentAccess(doc)
+  return { ...mapApiDocumentFields(doc), ...(access ? { access } : {}) }
+}
+
+const mapApiDocumentFields = (doc: ApiDocumentRecord): ProcessedDocument => ({
   id: doc.id,
   name: doc.filename,
   type: inferDocumentType(doc.filename),
@@ -155,7 +176,12 @@ const mapApiDocumentToProcessed = (doc: ApiDocumentRecord): ProcessedDocument =>
 })
 
 // Smart column width calculation utility with responsive breakpoints
-const calculateOptimalColumnWidths = (containerWidth: number, readOnly: boolean = false) => {
+// 04.3 UI-SPEC 6.11, 10: the checkbox column and the third icon button are subtracted from the name column.
+const ACCESS_SELECT_WIDTH = 32;
+const ACCESS_ACTION_WIDTH = 32;
+
+const calculateOptimalColumnWidths = (containerWidth: number, readOnly: boolean = false, accessAdmin: boolean = false) => {
+  const accessWidth = accessAdmin && !readOnly ? ACCESS_SELECT_WIDTH + ACCESS_ACTION_WIDTH : 0;
   // Responsive breakpoints
   const isMobile = containerWidth < 768;
   const isTablet = containerWidth >= 768 && containerWidth < 1024;
@@ -169,7 +195,7 @@ const calculateOptimalColumnWidths = (containerWidth: number, readOnly: boolean 
     const PADDING_BUFFER = 15;     // Minimal padding
 
     const fixedWidths = UPLOAD_DATE_WIDTH + STATUS_WIDTH +
-      (readOnly ? 0 : ACTIONS_WIDTH) + PADDING_BUFFER;
+      (readOnly ? 0 : ACTIONS_WIDTH) + PADDING_BUFFER + accessWidth;
     const availableForName = containerWidth - fixedWidths;
     const nameWidth = Math.max(120, Math.min(250, availableForName > 0 ? availableForName : 120));
 
@@ -189,7 +215,7 @@ const calculateOptimalColumnWidths = (containerWidth: number, readOnly: boolean 
     const PADDING_BUFFER = 25;     // Balanced padding
 
     const fixedWidths = UPLOAD_DATE_WIDTH + STATUS_WIDTH +
-      (readOnly ? 0 : ACTIONS_WIDTH) + PADDING_BUFFER;
+      (readOnly ? 0 : ACTIONS_WIDTH) + PADDING_BUFFER + accessWidth;
     const availableForName = containerWidth - fixedWidths;
     const nameWidth = Math.max(180, Math.min(350, availableForName > 0 ? availableForName * 0.65 : 180));
 
@@ -211,7 +237,7 @@ const calculateOptimalColumnWidths = (containerWidth: number, readOnly: boolean 
 
   // Calculate fixed space requirements
   const fixedWidths = UPLOAD_DATE_WIDTH + STATUS_WIDTH +
-    (readOnly ? 0 : ACTIONS_WIDTH) + PADDING_BUFFER;
+    (readOnly ? 0 : ACTIONS_WIDTH) + PADDING_BUFFER + accessWidth;
 
   // Calculate available space for name column (can be negative on very small widths)
   const availableForName = containerWidth - fixedWidths;
@@ -359,6 +385,18 @@ export function DocumentDashboard({
     useShallow((s) => ({ accessMine: s.mine, loadAccessGroups: s.load })),
   )
   const accessPickerShown = accessPickerVisible(accessMine);
+  const accessControls = showAccessControls({
+    enabled: accessMine.enabled,
+    isAdmin: accessMine.isAdmin,
+    readOnly,
+    personal: accessMine.personal,
+  });
+  const accessAdmin = accessControls.edit;
+  const [accessEdit, setAccessEdit] = React.useState<{ documentIds: string[]; bulk: boolean; key: number } | null>(null);
+  const [accessAnnouncement, setAccessAnnouncement] = React.useState("");
+  const accessOpenerRef = React.useRef<HTMLElement | null>(null);
+  const accessStatusRef = React.useRef<HTMLParagraphElement | null>(null);
+  const accessWorkspaceId = isMultiTenant() && !isPersonalMode && currentOrganization ? currentOrganization.id : null;
 
   // Track visibility of the dashboard so we can ignore bogus ResizeObserver events
   const [isVisible, setIsVisible] = React.useState(true)
@@ -371,8 +409,8 @@ export function DocumentDashboard({
   const autoColumnWidths = React.useMemo(() => {
     // Use a stable default width if not initialized
     const effectiveWidth = hasInitializedWidth.current ? containerWidth : 800;
-    return calculateOptimalColumnWidths(effectiveWidth, readOnly);
-  }, [containerWidth, readOnly]);
+    return calculateOptimalColumnWidths(effectiveWidth, readOnly, accessAdmin);
+  }, [containerWidth, readOnly, accessAdmin]);
 
   // Dynamically estimate width needed for the longest filename using
   // real pixel measurement instead of crude character counts to avoid
@@ -533,6 +571,12 @@ export function DocumentDashboard({
     if (!docTypeDefaultsKey) return
     void loadAccessGroups(isMultiTenant() && !isPersonalMode && currentOrganization ? currentOrganization.id : null)
   }, [docTypeDefaultsKey, defaultsReload, currentOrganization, isPersonalMode, loadAccessGroups])
+
+  const storedHasAccess = storedDocuments.some((doc) => doc.access !== undefined)
+  React.useEffect(() => {
+    if (activeTab !== "stored" || !storedHasAccess) return
+    void loadAccessGroups(isMultiTenant() && !isPersonalMode && currentOrganization ? currentOrganization.id : null)
+  }, [activeTab, storedHasAccess, currentOrganization, isPersonalMode, loadAccessGroups])
 
   React.useEffect(() => {
     if (!docTypePickerEnabled) return
@@ -725,6 +769,36 @@ export function DocumentDashboard({
   }, [storedDocuments, refreshDocuments]);
 
   const filteredDocuments = storedDocuments.filter((doc) => doc.name.toLowerCase().includes(searchQuery.toLowerCase()))
+
+  const accessEditDocuments = accessEdit
+    ? accessEdit.documentIds.flatMap((id) => {
+        const doc = storedDocuments.find((row) => row.id === id)
+        return doc ? [{ id: doc.id, name: doc.name, access: doc.access }] : []
+      })
+    : []
+
+  const openAccessEdit = (documentIds: string[], bulk: boolean, opener: HTMLElement | null) => {
+    if (documentIds.length === 0) return
+    accessOpenerRef.current = opener
+    setAccessEdit({ documentIds, bulk, key: Date.now() })
+  }
+
+  const announceAccess = (message: string) => {
+    setAccessAnnouncement(message)
+    toast({ description: message })
+  }
+
+  const finishAccessEdit = (outcome: AccessSaveOutcome) => {
+    setAccessEdit(null)
+    if (outcome.kind === "saved") {
+      setStoredDocuments((prev) => applyAccessUpdates(prev, outcome.updates))
+      announceAccess(outcome.message)
+      return
+    }
+    announceAccess(outcome.message)
+    if (outcome.reloadMine) void loadAccessGroups(accessWorkspaceId)
+    if (outcome.reloadRows) void refreshDocuments()
+  }
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -1659,6 +1733,11 @@ export function DocumentDashboard({
 
               <TabsContent value="stored" className="h-[320px]">
                 <div className="flex flex-col h-full">
+                  {accessControls.mark && (
+                    <p ref={accessStatusRef} tabIndex={-1} role="status" aria-live="polite" className="sr-only">
+                      {accessAnnouncement}
+                    </p>
+                  )}
                   <div className="flex items-center gap-4 mb-2 h-[48px]">
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1691,7 +1770,7 @@ export function DocumentDashboard({
                                 {t('docStatus')}
                               </TableHead>
                               {!readOnly && (
-                                <TableHead className="text-center px-1" style={{ width: '90px' }}>
+                                <TableHead className="text-center px-1" style={{ width: accessAdmin ? '122px' : '90px' }}>
                                   <span className="sr-only">Actions</span>
                                 </TableHead>
                               )}
@@ -1775,6 +1854,10 @@ export function DocumentDashboard({
                                             Firecrawl
                                           </div>
                                         )}
+                                        {(() => {
+                                          const view = rowMarkView(doc.access, accessMine.isAdmin, language)
+                                          return view ? <AudienceLine view={view} context="list" className="mt-1" /> : null
+                                        })()}
                                       </div>
                                     </div>
                                   </TableCell>
@@ -1831,7 +1914,7 @@ export function DocumentDashboard({
                                     )}
                                   </TableCell>
                                   {!readOnly && (
-                                    <TableCell className="text-center px-1" style={{ width: '90px' }}>
+                                    <TableCell className="text-center px-1" style={{ width: accessAdmin ? '122px' : '90px' }}>
                                       <div className="flex items-center justify-center gap-1">
                                         {/* Globe icon for URL management */}
                                         <Button
@@ -1856,6 +1939,23 @@ export function DocumentDashboard({
                                           )}
                                           <span className="sr-only">{doc.external_url ? 'Edit URL' : 'Add URL'}</span>
                                         </Button>
+                                        {accessAdmin && (
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 flex-shrink-0"
+                                            onClick={(event) => openAccessEdit([doc.id], false, event.currentTarget)}
+                                            title={
+                                              doc.access?.connectorManaged
+                                                ? accessGroupText('docs.connectorManaged', language)
+                                                : accessGroupText('action.editAccessAria', language, { file: doc.name })
+                                            }
+                                            disabled={!doc.access || doc.access.connectorManaged === true || doc.status !== "ready"}
+                                          >
+                                            <Lock aria-hidden="true" className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
+                                            <span className="sr-only">{accessGroupText('action.editAccessAria', language, { file: doc.name })}</span>
+                                          </Button>
+                                        )}
                                         {/* Delete button */}
                                         <Button
                                           variant="ghost"
@@ -1888,6 +1988,25 @@ export function DocumentDashboard({
                   </div>
                 </div>
               </TabsContent>
+
+              {accessEdit && (
+                <AccessEditDialog
+                  key={accessEdit.key}
+                  open
+                  documents={accessEditDocuments}
+                  bulk={accessEdit.bulk}
+                  mine={accessMine}
+                  mode={isMultiTenant() ? "org" : "single"}
+                  organizationId={accessWorkspaceId}
+                  language={language}
+                  onDone={finishAccessEdit}
+                  onCancel={() => setAccessEdit(null)}
+                  onReloadGroups={() => void loadAccessGroups(accessWorkspaceId)}
+                  returnFocus={() =>
+                    accessOpenerRef.current?.isConnected ? accessOpenerRef.current : accessStatusRef.current
+                  }
+                />
+              )}
 
               {isNangoEnabled && connectorConfig?.feature_enabled && connectorConfig?.show_on_dashboard && (
                 <TabsContent value="connectors" className="h-[320px]">
