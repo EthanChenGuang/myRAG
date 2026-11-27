@@ -287,6 +287,134 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       assert.deepEqual(audit, [{ actor: null, actor_kind: 'connector' }]);
     });
 
+    test('the access_groups checks call no function and agree with rag_access_keys_valid on every labelled table', async () => {
+      const defs = (await db.query<{ conname: string; def: string }>(
+        "SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname LIKE '%\\_access\\_groups\\_check' AND connamespace = 'public'::regnamespace ORDER BY conname",
+      )).rows;
+      assert.deepEqual(defs.map((row) => row.conname), [
+        'chunk_translations_access_groups_check',
+        'document_chunks_access_groups_check',
+        'document_parents_access_groups_check',
+        'documents_access_groups_check',
+        'rag_table_rows_access_groups_check',
+      ]);
+      for (const row of defs) assert.doesNotMatch(row.def, /rag_access_keys_valid/, row.conname);
+      const docId = (await db.query<{ id: string }>('SELECT id FROM documents ORDER BY id LIMIT 1')).rows[0]!.id;
+      const before = (await db.query<{ access_groups: string[] }>('SELECT access_groups FROM documents WHERE id = $1', [docId])).rows[0]!.access_groups;
+      const g1 = `g:${groupA}`;
+      const u1 = `u:${MEMBER_A}`;
+      const cases: string[][] = [['all'], [g1], [g1, u1], ['all', g1], [], [`${g1},${u1}`], ['g:not-a-uuid'], [g1.toUpperCase()], [''], [`${g1},`], ['all,all'], [u1, 'all']];
+      for (const value of cases) {
+        const expected = (await db.query<{ ok: boolean }>('SELECT rag_access_keys_valid($1::text[]) AS ok', [value])).rows[0]!.ok;
+        let accepted = true;
+        try {
+          await db.query('UPDATE documents SET access_groups = $2::text[] WHERE id = $1', [docId, value]);
+        } catch (error) {
+          assert.match(error instanceof Error ? error.message : String(error), /documents_access_groups_check/, JSON.stringify(value));
+          accepted = false;
+        }
+        assert.equal(accepted, expected, JSON.stringify(value));
+      }
+      await assert.rejects(() => db.query("UPDATE documents SET access_groups = ARRAY[NULL]::text[] WHERE id = $1", [docId]), /documents_access_groups_check/);
+      await db.query('UPDATE documents SET access_groups = $2::text[] WHERE id = $1', [docId, before]);
+    });
+
+    test('a client cannot set or change access_groups on a document; service_role can (D-06, D-16)', async () => {
+      const multi = mode === 'multi-tenant';
+      const clientDoc = id('9205', 1);
+      const serverDoc = id('9205', 2);
+      const insertDoc = (docId: string): Promise<unknown> =>
+        db.query(
+          `INSERT INTO documents (id, filename, content, user_id${multi ? ', organization_id' : ''}, access_groups)
+           VALUES ($1, 'client.md', 'Neutral synthetic client record.', $2${multi ? ', $4' : ''}, $3::text[])`,
+          multi ? [docId, MEMBER_A, [`g:${groupA}`], ORG] : [docId, MEMBER_A, [`g:${groupA}`]],
+        );
+      const groupsOf = async (docId: string): Promise<unknown> =>
+        (await db.query<Row>('SELECT access_groups FROM documents WHERE id = $1', [docId])).rows[0]?.access_groups;
+
+      await asRole(db, 'authenticated', MEMBER_A, () => insertDoc(clientDoc));
+      assert.deepEqual(await groupsOf(clientDoc), ['all'], 'a client insert gets the default');
+      await asRole(db, 'authenticated', MEMBER_A, async () => {
+        await rejects(
+          () => db.query('UPDATE documents SET access_groups = $2::text[] WHERE id = $1', [clientDoc, [`g:${groupA}`]]),
+          /access_groups_server_only/,
+          'client relabel',
+        );
+        await db.query("UPDATE documents SET filename = 'client-renamed.md', access_groups = '{all}' WHERE id = $1", [clientDoc]);
+      });
+      assert.deepEqual(await groupsOf(clientDoc), ['all']);
+
+      await asRole(db, 'service_role', null, () => insertDoc(serverDoc));
+      assert.deepEqual(await groupsOf(serverDoc), [`g:${groupA}`], 'service_role sets the label on insert');
+      await asRole(db, 'service_role', null, () => db.query('UPDATE documents SET access_groups = $2::text[] WHERE id = $1', [clientDoc, [`g:${groupA}`]]));
+      assert.deepEqual(await groupsOf(clientDoc), [`g:${groupA}`], 'service_role relabels');
+      await asRole(db, 'authenticated', MEMBER_A, async () => {
+        await rejects(() => db.query("UPDATE documents SET access_groups = '{all}' WHERE id = $1", [clientDoc]), /access_groups_server_only/, 'client widening');
+      });
+      assert.deepEqual(await groupsOf(clientDoc), [`g:${groupA}`]);
+    });
+
+    test('a client write on a chunk, parent or derived row never changes its stored label (D-06)', async () => {
+      const clientDoc = id('9205', 1);
+      const chunkId = id('9206', 1);
+      const expected = [`g:${groupA}`];
+      const refused = /permission denied|row-level security/;
+      const clientInsert = await asRole(db, 'authenticated', MEMBER_A, async () => {
+        try {
+          await db.query("INSERT INTO document_chunks (id, document_id, content, access_groups) VALUES ($1, $2, 'Neutral synthetic client chunk.', '{all}')", [chunkId, clientDoc]);
+          return true;
+        } catch (error) {
+          assert.match(error instanceof Error ? error.message : String(error), refused, 'client chunk insert');
+          return false;
+        }
+      });
+      // Single-tenant owners may write chunks of their own documents; the multi-tenant policies refuse a not-yet-ready document's chunk.
+      assert.equal(clientInsert, mode === 'single-tenant', 'which modes let the client insert a chunk at all');
+      if (!clientInsert) {
+        await db.query("INSERT INTO document_chunks (id, document_id, content, access_groups) VALUES ($1, $2, 'Neutral synthetic client chunk.', '{all}')", [chunkId, clientDoc]);
+      }
+      const chunkGroups = async (): Promise<unknown> => (await db.query<Row>('SELECT access_groups FROM document_chunks WHERE id = $1', [chunkId])).rows[0]?.access_groups;
+      assert.deepEqual(await chunkGroups(), expected, 'client chunk insert');
+      await asRole(db, 'authenticated', MEMBER_A, () => db.query("UPDATE document_chunks SET access_groups = '{all}' WHERE id = $1", [chunkId]));
+      assert.deepEqual(await chunkGroups(), expected, 'client chunk update');
+
+      const attempts: Array<[string, string, unknown[]]> = [
+        [
+          'document_parents',
+          "INSERT INTO document_parents (document_id, tenant_key, chunking_profile_id, content, token_count, parent_index, access_groups) VALUES ($1, $2, 'legacy', 'Neutral synthetic parent.', 3, 0, '{all}')",
+          [clientDoc, TENANT[mode]],
+        ],
+        [
+          'chunk_translations',
+          "INSERT INTO chunk_translations (chunk_id, document_id, tenant_key, language, content, source_content_hash, model, access_groups) VALUES ($3, $1, $2, 'xx', 'Neutral synthetic translation.', 'hash', 'fixture-model', '{all}')",
+          [clientDoc, TENANT[mode], chunkId],
+        ],
+        [
+          'rag_table_rows',
+          "INSERT INTO rag_table_rows (tenant_key, document_id, version, is_current, status, table_key, row_index, access_groups) VALUES ($2, $1, 1, true, 'ready', 'table-1', 0, '{all}')",
+          [clientDoc, TENANT[mode]],
+        ],
+      ];
+      for (const [table, sql, params] of attempts) {
+        for (const role of ['anon', 'authenticated'] as const) {
+          await asRole(db, role, role === 'anon' ? null : MEMBER_A, async () => {
+            try {
+              await db.query(sql, params);
+            } catch (error) {
+              assert.match(error instanceof Error ? error.message : String(error), /permission denied|row-level security/, `${role} ${table}`);
+            }
+            try {
+              await db.query(`UPDATE ${table} SET access_groups = '{all}' WHERE document_id = $1`, [clientDoc]);
+            } catch (error) {
+              assert.match(error instanceof Error ? error.message : String(error), /permission denied|row-level security/, `${role} ${table} update`);
+            }
+          });
+        }
+        const stored = (await db.query<{ access_groups: string[] }>(`SELECT access_groups FROM ${table} WHERE document_id = $1`, [clientDoc])).rows;
+        for (const row of stored) assert.deepEqual(row.access_groups, expected, `${table} keeps the document label`);
+      }
+    });
+
     test('deleting a group removes its members and mappings; audit rows keep the group id', async () => {
       const groupC = await createGroup(db, mode, 'group-c');
       await db.query('INSERT INTO rag_access_group_members (group_id, user_id) VALUES ($1, $2)', [groupC, MEMBER_B]);

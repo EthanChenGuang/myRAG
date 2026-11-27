@@ -72,6 +72,18 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_access_groups_from_document() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_access_groups_from_document() TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_access_groups_propagate()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_access_groups_propagate() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_access_groups_propagate() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_access_groups_propagate_table_rows()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_access_groups_propagate_table_rows() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_access_groups_propagate_table_rows() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_access_groups_propagate_translations()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_access_groups_propagate_translations() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_access_groups_propagate_translations() TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_access_groups_on_org_member_delete()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_access_groups_on_org_member_delete() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_access_groups_on_org_member_delete() TO service_role;
@@ -783,6 +795,10 @@ BEGIN
   IF to_regprocedure('public.rag_purge_hook_table_rows(text, uuid, uuid[])') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_purge_hook_table_rows(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_hook_table_rows(text, uuid, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_documents_access_inherit()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_documents_access_inherit() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_documents_access_inherit() TO service_role;
   END IF;
   IF to_regprocedure('public.rag_dup_clusters_mark_dirty_delete()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_dup_clusters_mark_dirty_delete() FROM PUBLIC, anon, authenticated;
