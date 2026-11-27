@@ -41,6 +41,7 @@ export { getAccessStartupVerdict, syncAccessEnforcementNow, verifyAccessGroupsSt
 export type { AccessStartupStatus, AccessStartupVerdict } from './tenant/access-startup';
 export { createCitationRecheck, recordSecurityEvent, scheduleSecurityEvent, visibleChunkIds, visibleDocumentIds } from './access/visibility';
 export type { SecurityEventInput, VisibilityOptions, VisibilityResult } from './access/visibility';
+export { UNKNOWN_ACCESS_SET, accessSetsFor } from './access/sets';
 export type {
   AccessIdentity,
   AccessScopeRefusalReason,

@@ -58,6 +58,7 @@ import {
   resolveTenantScope,
   accessGroupsEnabled,
   createCitationRecheck,
+  accessSetsFor,
   scheduleSecurityEvent,
   bodyNamesAccessGroups,
   resolveAccessScope,
@@ -75,6 +76,7 @@ import {
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
 import type { JSONValue } from '@ai-sdk/provider';
+import { createDocumentReferenceTool } from '@/lib/chat/document-reference-tool';
 import { REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE, readSecurityConfig, escapeToolOutput, scanToolOutput, type ToolResultGuardMode } from '@/lib/rag';
 // Keep custom tool definitions if needed
 
@@ -165,38 +167,6 @@ function citationRecheckFor(scope: TenantScope | null) {
     };
   }
 }
-
-const documentReferenceTool = tool({
-  description: 'IMPORTANT: This is a FUNCTION TOOL to track document usage internally. Call this tool when you use information from documents. DO NOT write "useDocument" as text in your response. This tool tracks which documents you referenced to answer the query.',
-  inputSchema: z.object({
-    documentId: z.string().describe('The ID of the document that was used'),
-    documentName: z.string().describe('The name/filename of the document'),
-    relevance: z.number().min(0).max(100).describe('How relevant this document was to the query (0-100)'),
-    reason: z.string().describe('Why this document was used to answer the query')
-  }),
-  execute: async ({ documentId, documentName, relevance, reason }) => {
-    // Log the document reference for tracking
-    console.log('[Document Reference Tool] Document referenced:', {
-      documentId,
-      documentName,
-      relevance,
-      reason
-    });
-
-    // Format a nice source citation that can be included in the response
-    const sourceText = `📚 **Source:** ${documentName} (Relevance: ${relevance}%)`;
-
-    // Return a structured response with formatted source
-    return {
-      success: true,
-      message: sourceText,
-      // Allow this to be shown as a source citation
-      internal: false,
-      documentName,
-      relevance
-    };
-  }
-});
 
 // Legacy document URL mapping - hardcoded URLs for specific documents
 // Database metadata (external_url) takes precedence over these mappings
@@ -3106,7 +3076,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       // Prepare base application tools for AI SDK
       // Note: Specialized content tools removed - using unified RAG pipeline with workspace isolation
       const baseTools: Record<string, any> = {
-        useDocument: documentReferenceTool
+        // D-15: built per request, so the tool accepts only this request's used (access-filtered) documents
+        useDocument: createDocumentReferenceTool(usedDocuments)
       };
 
       // Initialize MCP client if requested, only for tool discovery (NOT execution)
@@ -4395,6 +4366,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             : [];
         const knowledgeBaseContext =
           premiseBlocks.length > 0 && (retrievalResult?.status === 'ok' || retrievalResult?.status === 'degraded');
+        // D-25, A-06: the cited documents' label sets, only while access is on (the labels map is absent while off)
+        const citedAccessSets = accessSetsFor(retrievalResult?.accessLabels, (records?.citations ?? []).map((record) => record.documentId));
         return scheduleAnswerFinish({
           answerId,
           scope,
@@ -4420,6 +4393,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           },
           requestLanguage: userLanguage,
           ...(answerTurn.config.anyNonDefault ? answerFinishFields(answerTurn, retrievalResult) : {}),
+          ...(citedAccessSets && citedAccessSets.length > 0 ? { accessSets: citedAccessSets } : {}),
         });
       };
 
@@ -4549,6 +4523,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               ...(accessCheck?.failed ? ['access_recheck_failed'] : []),
             ];
             const counts = accessCheck ? { ...answerTrace.counts, access_violations: accessCheck.violations } : answerTrace.counts;
+            if (accessCheck) ragTrace.collector.addAccessViolations(accessCheck.violations);
             ragTrace.collector.record({
               name: 'generation',
               status,

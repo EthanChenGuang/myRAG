@@ -73,7 +73,7 @@ import {
 import { securitySpanAttributes } from './security/security-events';
 import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
 import { hybridRerank } from './rerank/local-hybrid';
-import { AccessScopeMissingError, accessScopeTiming, scopeAccessFilter, type ScopeAccessFilter } from './tenant/access';
+import { ACCESS_ADMIN_HASH, AccessScopeMissingError, accessScopeTiming, scopeAccessFilter, type ScopeAccessFilter } from './tenant/access';
 import { assertTenantScope, scopeKey, type TenantScope } from './tenant/scope';
 import { createTraceCollector, sanitizeStageCounts, type TraceCollector } from './trace/collector';
 import { finishTrace, type FinishTraceOptions } from './trace/finish';
@@ -847,7 +847,7 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
       return missing;
     }
   }
-  if (input.scope !== null && access !== undefined && access.mode !== 'off') recordAccessScope(collector, input.scope);
+  if (input.scope !== null && access !== undefined && access.mode !== 'off') recordAccessScope(collector, input.scope, access);
   const result = await dispatchRetrieval(input, collector, access ?? OFF_ACCESS);
   if (input.scope !== null && access !== undefined && access.mode !== 'off') await attachAccessLabels(result, input.scope, input.signal);
   if (ownsTrace) finishTrace(collector, result, traceOptions(input));
@@ -916,7 +916,9 @@ const OFF_ACCESS: ScopeAccessFilter = Object.freeze({ mode: 'off' });
  * D-08: the resolution time of the request's access scope, recorded directly on the trace (never through runStage or the optional
  * stage list, so no configuration can disable or skip it). A scope minted without a timed resolution records zero, marked untimed.
  */
-function recordAccessScope(collector: TraceCollector, scope: NonNullable<RunRetrievalInput['scope']>): void {
+function recordAccessScope(collector: TraceCollector, scope: NonNullable<RunRetrievalInput['scope']>, access: ScopeAccessFilter): void {
+  if (access.mode === 'keys') collector.setAccess({ mode: 'keys', setHash: access.setHash });
+  else if (access.mode === 'admin_all') collector.setAccess({ mode: 'admin_all', setHash: ACCESS_ADMIN_HASH });
   const endedAt = collector.now();
   const elapsed = accessScopeTiming(scope);
   collector.record({
@@ -967,6 +969,9 @@ function bufferedCollector(parent: TraceCollector): TraceCollector & { commit():
     markFirstTextDelta: () => parent.markFirstTextDelta(),
     setCacheState: (state) => parent.setCacheState(state),
     timing: () => parent.timing(),
+    setAccess: (access) => parent.setAccess(access),
+    addAccessViolations: (count) => parent.addAccessViolations(count),
+    access: () => parent.access(),
     commit() {
       for (const record of buffer.stages()) {
         parent.record({

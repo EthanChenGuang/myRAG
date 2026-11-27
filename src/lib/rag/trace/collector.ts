@@ -56,6 +56,14 @@ export interface TraceTiming {
   cache: TraceCacheState;
 }
 
+/** D-25, D-26: the access mode a request retrieved under and the citations its recheck dropped; never keys or group names. */
+export interface TraceAccessState {
+  mode: 'admin_all' | 'keys';
+  /** The caller's key-set hash; only an 8-character prefix leaves the server. */
+  setHash: string;
+  violations: number;
+}
+
 /** The retrieval profiles plus `ingest`, the profile of an ingestion trace. */
 export type TraceProfile = Profile | 'ingest';
 
@@ -78,6 +86,12 @@ export interface TraceCollector {
   setCacheState(state: TraceCacheState): void;
   /** Null until a request start was marked, so a request that records no timing exports what it exported before. */
   timing(): TraceTiming | null;
+  /** D-25: set by runRetrieval while the scope's access mode is not off. */
+  setAccess(access: { mode: 'admin_all' | 'keys'; setHash: string }): void;
+  /** D-26: counted on top of an access state; ignored while no access state was set (access off). */
+  addAccessViolations(count: number): void;
+  /** Null while access is off, so an off trace exports and logs what it did before. */
+  access(): TraceAccessState | null;
 }
 
 export interface TraceCollectorOptions {
@@ -100,6 +114,7 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
   let preGenerationMs: number | null = null;
   let ttftMs: number | null = null;
   let cacheState: TraceCacheState = 'bypass';
+  let accessState: TraceAccessState | null = null;
   const elapsedSince = (start: number): number => {
     const elapsed = deps.now() - start;
     return Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0;
@@ -164,6 +179,15 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
         cache: cacheState,
       };
     },
+    setAccess(access) {
+      if (access.mode !== 'admin_all' && access.mode !== 'keys') return;
+      accessState = { mode: access.mode, setHash: typeof access.setHash === 'string' ? access.setHash : '', violations: accessState?.violations ?? 0 };
+    },
+    addAccessViolations(count) {
+      if (!accessState || !Number.isInteger(count) || count <= 0) return;
+      accessState = { ...accessState, violations: accessState.violations + count };
+    },
+    access: () => (accessState ? { ...accessState } : null),
     toStageStatus() {
       const status: Record<string, StageRunStatus> = {};
       for (const record of records) status[record.name] = record.status;

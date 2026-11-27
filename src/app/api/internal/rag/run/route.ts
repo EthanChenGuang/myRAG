@@ -669,6 +669,7 @@ export async function POST(req: NextRequest) {
       }
       const citationFields = citationTraceFields(citationSession);
       const accessCheck = citationSession?.accessCheck() ?? null;
+      if (accessCheck) collector.addAccessViolations(accessCheck.violations);
       if (accessCheck && !accessCheck.failed && accessCheck.violations > 0) {
         scheduleSecurityEvent(scope, {
           event: 'citation_access_violation',
