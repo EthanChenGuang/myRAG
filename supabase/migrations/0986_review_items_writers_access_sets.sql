@@ -12,6 +12,7 @@
 -- which adds the documents' access_groups only while access is enforced. With access off and no access_sets key in a row the stored
 -- value is NULL, exactly as before.
 -- While access is enforced at apply time, items still without access_sets that have a retrieval log row get their sets from it.
+-- Each writer is rebuilt only where its Phase 5.3 file already created it (no-op otherwise, so 0986 never owns a 5.3 function).
 -- One common file: nothing differs by deployment mode. Not folded into the setup files. Idempotent. No signature changes, so no DROP.
 -- Apply after 0967, 0974 and 0984; re-running 0967 or 0974 later restores the old bodies, so re-run this file after them.
 
@@ -144,6 +145,14 @@ BEGIN
 END
 $do$;
 
+DO $do_re_review$
+BEGIN
+  IF pg_catalog.to_regprocedure('public.rag_review_items_enqueue_re_review(text, jsonb)') IS NULL THEN
+    RAISE NOTICE '[0986] rag_review_items_enqueue_re_review is missing (apply 0974 first); skipped';
+    RETURN;
+  END IF;
+
+  EXECUTE $create$
 CREATE OR REPLACE FUNCTION public.rag_review_items_enqueue_re_review(p_tenant_key text, p_rows jsonb)
 RETURNS integer
 LANGUAGE plpgsql
@@ -234,10 +243,13 @@ BEGIN
 
   RETURN v_count;
 END
-$fn$;
+$fn$
+  $create$;
 
-REVOKE ALL ON FUNCTION public.rag_review_items_enqueue_re_review(text, jsonb) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.rag_review_items_enqueue_re_review(text, jsonb) TO service_role;
+  EXECUTE 'REVOKE ALL ON FUNCTION public.rag_review_items_enqueue_re_review(text, jsonb) FROM PUBLIC, anon, authenticated';
+  EXECUTE 'GRANT EXECUTE ON FUNCTION public.rag_review_items_enqueue_re_review(text, jsonb) TO service_role';
+END
+$do_re_review$;
 
 DO $backfill$
 BEGIN
