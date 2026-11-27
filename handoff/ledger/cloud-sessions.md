@@ -741,3 +741,8 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - R-4 SECURITY (the scope centroids ignore access groups, giving a 1-bit oracle) -> quick-scope-access.
   - G11, R-3, R-1, G4 plan fixes -> plan-62-fixes (Fable).
   - R-1 decision on the owner's behalf: keep the D-34 grouping, but the scope gate must not ship on fixture evidence. 06.2-26 needs a real-embedder separation run first.
+- 22:35Z VERIFY 3.2.1: human_needed (verify/03.2.1 f4dc6ebcd). No code defect; switches-off behaviour unchanged. Security OPEN_THREATS: T-04 weights and T-11 repudiation (the executor answered the human checkpoint itself). EMB-11 is blocked on hosted vectors (DeepInfra 402) or an owner decision on the OpenRouter route. Live items G3 go to the owner desk. OpenRouter branch fixes (OR-1/2/4 + catalog) -> quick-openrouter-fixes (session ...smUH2Z) on exec/quick-openrouter-fallback. Session archived.
+- 22:35Z 06.3-04 DONE exec/06.3-04 248b485c6 (0720-0722 + 0410 entries) -> train 41. Archived.
+- 22:35Z 06-46 CHECKPOINT human-verify exec/06-46 8169aab9 (4 tasks, all human; Task 3 blocked by the missing golden set). Plan command fixes -> plan-62-fixes. Archived. Resume with "approved" plus the numbers.
+- 22:35Z quick-deps-switches DONE exec/quick-deps-switches 2ad05b48f -> train 41 (conflicts with 06.2-36 on 2 lines: take the dsw lines). The archive was denied by the classifier (the session had just received a message); retry later.
+- 22:35Z OWNER DESK: EVAL fsgaeysipkukqoocgzbx now matches main 00afa6d9 (t30-37, 43/43 md5). Connector still on the eval org.
