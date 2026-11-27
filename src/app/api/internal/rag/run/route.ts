@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import type { ModelMessage } from 'ai';
+import { asSchema, type ModelMessage } from 'ai';
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 import { validateRequest } from '@/lib/api-middleware';
@@ -74,6 +74,19 @@ import {
   turnCanUseTools,
   observeCalc,
   type CalcObserved,
+  answerReserveTokens,
+  assertQuestionLast,
+  CALCULATE_TOOL_NAME,
+  currentDocumentTokenTarget,
+  decideOutputCap,
+  finalizePromptBudget,
+  modelContextLength,
+  modelFamily,
+  planPromptBudget,
+  PROMPT_BUDGET_EXCEEDED,
+  PromptOrderError,
+  type BudgetMessage,
+  type PromptBudgetPlan,
 } from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest, type RagTrace } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
@@ -87,9 +100,15 @@ import {
   evalTraceLanguages,
 } from '@/lib/rag-eval/trace';
 import {
+  buildEvalAnswerSystemPrompt,
+  buildEvalBudgetMessages,
+  buildEvalBudgetSystemPrompt,
   evalGroundednessRequest,
+  evalModelOutputLimit,
   evalModelToolCapability,
   generateEvalAnswerDetailed,
+  type EvalAnswerUsage,
+  type EvalBudgetInput,
   isGPTGeneratorModel,
   resolveEvalPromptTemplate,
   resolveGeneratorModel,
@@ -590,6 +609,37 @@ function evalAnswerRulesInput(input: {
   };
 }
 
+type PromptBudgetInput = Parameters<typeof planPromptBudget>[0];
+
+/** Phase 5.2.1 D-80: the tool schemas as the model receives them (name, description, JSON schema), counted on their JSON. */
+async function toolSchemaParts(tools: Record<string, unknown>): Promise<unknown[]> {
+  return Promise.all(
+    Object.entries(tools).map(async ([name, definition]) => {
+      const tool = definition as { description?: unknown; inputSchema?: unknown };
+      let parameters: unknown = null;
+      try {
+        parameters = tool.inputSchema ? await Promise.resolve(asSchema(tool.inputSchema as Parameters<typeof asSchema>[0]).jsonSchema) : null;
+      } catch {
+        parameters = null;
+      }
+      return { name, description: typeof tool.description === 'string' ? tool.description : '', parameters };
+    }),
+  );
+}
+
+/** D-82: the eval conversation is user and assistant turns only, so kept history maps back one to one. */
+function toEvalConversation(messages: readonly BudgetMessage[]): EvalConversationTurn[] {
+  return messages.map((message) => ({
+    role: message.role === 'assistant' ? 'assistant' : 'user',
+    content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+  }));
+}
+
+/** The first occurrence of `part` removed, so the system part is measured without the documents and the rules. */
+function withoutPart(text: string, part: string): string {
+  return part ? text.replace(part, () => '') : text;
+}
+
 type EvalTraceCacheState = NonNullable<RagTrace['cache']>;
 
 /** D-38: the eval request asked for the semantic cache (the environment still has to select a backend). */
@@ -713,6 +763,58 @@ export async function POST(req: NextRequest) {
     const calcHolder = createCalcTraceHolder();
     let calcOffer: EvalCalcOffer | null = null;
 
+    // Phase 5.2.1 D-79 to D-82, D-95: with RAG_PROMPT_BUDGET on, the prompt is planned against the generator's window before
+    // retrieval, with the v2 token budget as the document target in both pipelines; off, nothing is computed
+    let budgetInput: PromptBudgetInput | null = null;
+    let budgetPlan: PromptBudgetPlan | null = null;
+    if (answerTurn !== null && generatorModel !== null && answerTurn.config.promptBudget) {
+      const modelLimit = evalModelOutputLimit(generatorModel);
+      // D-31, D-80: the reserve the Phase 5.2 cap gives on a knowledge turn; checked again once the cap is decided
+      const plannedReserve =
+        answerTurn.config.maxOutputTokens.kind !== 'off'
+          ? answerReserveTokens({
+              decision: decideOutputCap({
+                config: answerTurn.config,
+                mode: ragMode,
+                knowledgeContext: true,
+                userMaxTokens: false,
+                reasoning: generatorModel.includes('gpt-5'),
+                approvalContinuation: false,
+                channel: 'eval',
+              }),
+              modelLimit,
+            })
+          : modelLimit;
+      budgetInput = {
+        window: modelContextLength(generatorModel),
+        family: modelFamily(generatorModel),
+        parts: {
+          system: buildEvalBudgetSystemPrompt(ragMode),
+          rules: answerTurn.rulesBlock({ ...answerRuleOptions, ...(calcMayBeOffered ? { calculation: { mode: 'tool' as const } } : {}) }),
+          tools: calcMayBeOffered
+            ? await toolSchemaParts({ [CALCULATE_TOOL_NAME]: buildCalculateTool({ aliases: new Set<string>(), holder: createCalcTraceHolder() }) })
+            : '',
+          question: query,
+        },
+        history: history as BudgetMessage[],
+        answerReserve: plannedReserve,
+        documentTarget: currentDocumentTokenTarget(),
+        ...(answerTurn.answerLanguage ? { answerLanguage: answerTurn.answerLanguage } : {}),
+        overflowMode: 'truncate',
+      };
+      budgetPlan = planPromptBudget(budgetInput);
+      if (budgetPlan.status === 'exceeded') {
+        console.warn('[Prompt Budget] Eval request does not fit the model window; not sent', {
+          code: PROMPT_BUDGET_EXCEEDED,
+          window: budgetPlan.trace.window,
+          windowSource: budgetPlan.trace.window_source,
+        });
+      }
+    }
+    let promptBudgetTrace = budgetPlan?.trace ?? null;
+    let answerError: string | null = null;
+    let answerUsage: EvalAnswerUsage | null = null;
+
     // D-37/D-38: the key parts of an eval lookup; the pipeline derives the eval entry profile, so no entry reaches chat or embed.
     const cacheOverride = cacheOverrideOn(options);
     const cacheContext: RetrievalCacheContext | undefined = cacheOverride
@@ -735,6 +837,8 @@ export async function POST(req: NextRequest) {
         isGPTModel,
         ragMode,
         webSearchEnabled: false,
+        // Packing counts raw counter tokens, so the planner's raw packing budget is the option (not the factor-scaled one)
+        ...(budgetPlan?.status === 'ok' ? { documentTokenBudget: budgetPlan.packingBudget } : {}),
         ...(options?.degrade ? { degrade: options.degrade } : {}),
         ...(options?.embedding_profile ? { embeddingProfile: options.embedding_profile } : {}),
         ...bindingOverrides.value,
@@ -785,6 +889,9 @@ export async function POST(req: NextRequest) {
       const serverRefused = cacheHit ? cacheHit.answer.is_refusal : result.refusalCandidate || result.refusal?.decision === 'refuse';
       if (cacheHit) {
         if (includeAnswer) answer = cacheHit.answer.answer_text;
+      } else if (generatorModel !== null && !serverRefused && budgetPlan?.status === 'exceeded') {
+        // D-84: the request would not fit the window, so it is not sent; the eval records the structured error
+        answerError = PROMPT_BUDGET_EXCEEDED;
       } else if (generatorModel !== null && !serverRefused) {
         // D-25: only a turn that generates records timing, so a retrieval-only run traces as before
         collector.markRequestStart(requestReceivedAt);
@@ -836,16 +943,66 @@ export async function POST(req: NextRequest) {
           });
         }
         // D-04, D-07: the chat route's order: enhanced prompt, citation decoration, then the answer-rule block (with context only)
+        let builtRules = '';
         const decorateSystemPrompt = (prompt: string): string => {
           if (!answerTurn || result.context.length === 0) return citationSession ? citationSession.decorateSystemPrompt(prompt) : prompt;
-          return answerTurn.composeSystemPrompt(citationSession ? citationSession.decorateSystemPrompt(prompt) : prompt, answerRuleOptions);
+          const decorated = citationSession ? citationSession.decorateSystemPrompt(prompt) : prompt;
+          const composed = answerTurn.composeSystemPrompt(decorated, answerRuleOptions);
+          builtRules = composed.startsWith(decorated) ? composed.slice(decorated.length) : '';
+          return composed;
         };
-        try {
+        const calcTool = calcOffer?.mode === 'tool' ? buildCalculateTool({ aliases: calcOffer.aliases, holder: calcHolder }) : undefined;
+        // Phase 5.2.1 D-80 to D-84: the built request is checked against the window; history goes before any document and the
+        // question stays last. A request that still does not fit is not sent.
+        let budgetConversation = conversation;
+        let budgetRequest: EvalBudgetInput | null = null;
+        if (budgetPlan && budgetInput && answerTurn) {
+          let plan = budgetPlan;
+          const reserve = answerTurn.maxOutputTokens(evalModelOutputLimit(generatorModel));
+          if (reserve > budgetInput.answerReserve) {
+            budgetInput = { ...budgetInput, answerReserve: reserve };
+            plan = planPromptBudget({ ...budgetInput, documentTarget: 0 });
+          }
+          // D-82: when turns were dropped and the query layer condensed the question, the note is planned with the packed documents
+          const standalone = result.queryPlan?.standalone?.trim();
+          if (plan.status === 'ok' && standalone && standalone !== result.queryPlan?.original?.trim() && plan.trace.dropped_history_turns > 0) {
+            const replanned = planPromptBudget({ ...budgetInput, standaloneQuery: standalone, documentTarget: plan.documentBudget });
+            if (replanned.status === 'ok') plan = replanned;
+          }
+          const system = buildEvalAnswerSystemPrompt({ context: result.context, ragMode, decorateSystemPrompt, ...(answerLanguage ? { answerLanguage } : {}) });
+          const finalized = finalizePromptBudget(plan, {
+            builtParts: {
+              system: withoutPart(withoutPart(system, result.context), builtRules),
+              rules: builtRules,
+              tools: calcTool ? await toolSchemaParts({ [CALCULATE_TOOL_NAME]: calcTool }) : '',
+              documents: result.context,
+            },
+            droppedDocuments: result.packing?.droppedDocuments ?? 0,
+          });
+          promptBudgetTrace = finalized.trace;
+          if (finalized.status === 'exceeded') {
+            console.warn('[Prompt Budget] Built eval request does not fit the model window; not sent', {
+              code: PROMPT_BUDGET_EXCEEDED,
+              window: finalized.trace.window,
+            });
+            answerError = PROMPT_BUDGET_EXCEEDED;
+          } else {
+            budgetConversation = toEvalConversation(finalized.keptHistory);
+            budgetRequest = { system, standaloneNote: finalized.standaloneNote };
+            try {
+              assertQuestionLast(buildEvalBudgetMessages(query, budgetConversation, finalized.standaloneNote) as BudgetMessage[], query);
+            } catch (error: unknown) {
+              if (!(error instanceof PromptOrderError)) throw error;
+              answerError = error.code;
+            }
+          }
+        }
+        if (answerError === null) try {
           if (citationSession?.strategy === 'claude-citations') {
             const claude = await generateClaudeAnswer({
               session: citationSession,
               query,
-              conversation: conversation ?? [],
+              conversation: budgetConversation ?? [],
               signal: req.signal,
               ...(answerLanguage ? { answerLanguage } : {}),
               answerTurn,
@@ -859,7 +1016,7 @@ export async function POST(req: NextRequest) {
           if (answer === null) {
             const generated = await generateEvalAnswerDetailed({
               query,
-              conversation,
+              conversation: budgetConversation,
               context: result.context,
               ragMode,
               generatorModel,
@@ -871,13 +1028,15 @@ export async function POST(req: NextRequest) {
                     calc: {
                       mode: calcOffer.mode,
                       holder: calcHolder,
-                      ...(calcOffer.mode === 'tool' ? { tool: buildCalculateTool({ aliases: calcOffer.aliases, holder: calcHolder }) } : {}),
+                      ...(calcTool ? { tool: calcTool } : {}),
                     },
                   }
                 : {}),
+              ...(budgetRequest ? { budget: budgetRequest } : {}),
             });
             answer = generated.text;
             finishReason = generated.finishReason;
+            if (budgetRequest) answerUsage = generated.usage;
             await citationSession?.ingestFullText(answer);
           }
           await citationSession?.settleAccessCheck();
@@ -1107,6 +1266,10 @@ export async function POST(req: NextRequest) {
         ...(accessMode ? { access: { mode: accessMode, violations: accessCheck?.violations ?? 0 } } : {}),
         ...(calcRun.outcome ? { calc: calcRun.outcome.checks, review_reasons: calcRun.outcome.reviewReasons } : {}),
         ...(calcObserved ? { calc_observed: calcObserved } : {}),
+        // Phase 5.2.1 D-86: counts and fixed words only; absent while RAG_PROMPT_BUDGET is off
+        ...(promptBudgetTrace ? { prompt_budget: promptBudgetTrace } : {}),
+        ...(answerUsage ? { usage: answerUsage } : {}),
+        ...(answerError ? { answer_error: answerError } : {}),
         stage_latency_ms: collector.toStageLatency(),
         stage_status: collector.toStageStatus(),
         effective_config: effectiveConfig,
