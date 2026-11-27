@@ -541,7 +541,7 @@ for (const mode of MODES) {
         ['unknown chunking profile in override', 8, JSON.stringify({ general: 'no-such-profile' })],
       ];
       for (const [label, index, value] of cases) {
-        const params = [...base];
+        const params: unknown[] = [...base];
         params[index] = value;
         const error = await errorOf(db, BAD_CALL, params);
         assert.equal(codeOf(error), '22023', `${label}: ${messageOf(error)}`);
