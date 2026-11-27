@@ -343,3 +343,151 @@ describe('Config UI proxies forward the access field unchanged', () => {
     });
   }
 });
+
+describe('legacy writers take the label in their insert (RESEARCH Pitfall 7)', () => {
+  type Row = Record<string, unknown>;
+  const inserts: Array<{ table: string; rows: Row[] }> = [];
+  const legacy = { allowGroups: false, parses: 0 };
+
+  function writeAdmin() {
+    return {
+      storage: { from: () => ({ upload: async () => ({ data: null, error: null }), getPublicUrl: () => ({ data: { publicUrl: '' } }) }) },
+      from(table: string) {
+        const builder = {
+          eq: () => builder,
+          order: () => builder,
+          limit: () => builder,
+          abortSignal: () => builder,
+          maybeSingle: () =>
+            Promise.resolve({ data: table === 'admin_settings' ? { read_only_doc_dashboard: false } : table === 'admin_users' ? { id: USER } : null, error: null }),
+          insert(rows: Row[] | Row) {
+            inserts.push({ table, rows: Array.isArray(rows) ? rows : [rows] });
+            return builder;
+          },
+          select: () => builder,
+          single: () => Promise.resolve({ data: inserts.at(-1)?.rows[0] ?? null, error: null }),
+          then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
+            Promise.resolve({ data: null, error: null }).then(onFulfilled, onRejected),
+        };
+        return builder;
+      },
+    };
+  }
+
+  async function mockCommon() {
+    vi.resetModules();
+    vi.stubEnv('RAG_INGEST_PIPELINE', 'legacy');
+    vi.stubEnv('RAG_DOC_ACCESS_GROUPS', 'off');
+    vi.doMock('@/lib/deployment-mode', () => ({ isSingleTenant: () => true, isMultiTenant: () => false, getDeploymentMode: () => 'single-tenant' }));
+    vi.doMock('@/lib/supabase/server', () => ({ createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: USER } }, error: null }) } }) }));
+    vi.doMock('@supabase/supabase-js', () => ({ createClient: () => writeAdmin() }));
+    vi.doMock('@/lib/supabase', () => ({ supabaseAdmin: writeAdmin(), getSupabaseAdmin: () => writeAdmin() }));
+    vi.doMock('openai', () => ({
+      default: class FakeOpenAI {
+        chat = { completions: { create: async () => ({ choices: [{ message: { content: 'Neutral Title' } }] }) } };
+      },
+    }));
+    vi.doMock('@/lib/rag', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@/lib/rag')>();
+      return {
+        ...actual,
+        embedText: async () => Array.from({ length: 1536 }, () => 0.01),
+        resolveTenantScope: async () => ({ ok: true, scope: (await import('@/lib/rag/tenant/scope')).mintScope('single', null, null) }),
+        repairOwnerMembership: async () => undefined,
+        assertCloudAllowed: () => {
+          legacy.parses += 1;
+          return { ok: false };
+        },
+        // A member of GROUP_A, as resolveAccessScope would report with the switch on.
+        checkUploadAccess: async (input: Parameters<typeof actual.checkUploadAccess>[0]) => {
+          if (!legacy.allowGroups) return actual.checkUploadAccess(input);
+          const { mintAccessScope: mintAccess } = await import('@/lib/rag/tenant/access');
+          const { withAccess: attach } = await import('@/lib/rag/tenant/scope');
+          return actual.checkUploadAccess({
+            ...input,
+            resolve: async () => ({ ok: true, scope: attach(input.scope, mintAccess('keys', ['all', `u:${USER}`, `g:${GROUP_A}`])) }),
+          });
+        },
+      };
+    });
+  }
+
+  beforeEach(() => {
+    inserts.length = 0;
+    legacy.allowGroups = false;
+    legacy.parses = 0;
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    for (const id of ['@/lib/deployment-mode', '@/lib/supabase/server', '@supabase/supabase-js', '@/lib/supabase', 'openai', '@/lib/rag']) vi.doUnmock(id);
+  });
+
+  const aiToRag = async (body: Record<string, unknown>) => {
+    await mockCommon();
+    const { POST } = await import('@/app/api/ai-to-rag/route');
+    return POST(
+      new Request('http://localhost/api/ai-to-rag', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content: 'A neutral synthetic paragraph.\n\nAnother neutral paragraph.', messageId: 'message-1', chatId: 'chat-1', ...body }),
+      }),
+    );
+  };
+
+  const documentInserts = () => inserts.filter((insert) => insert.table === 'documents').flatMap((insert) => insert.rows);
+
+  it('ai-to-rag: a group label is in the document insert itself', async () => {
+    legacy.allowGroups = true;
+    const res = await aiToRag({ access: { groupIds: [GROUP_A] } });
+    expect(res.status).toBe(200);
+    expect(documentInserts()).toHaveLength(1);
+    expect(documentInserts()[0]?.access_groups).toEqual([`g:${GROUP_A}`]);
+  });
+
+  it('ai-to-rag: a group the caller may not assign answers 400 and inserts nothing; no field inserts no label', async () => {
+    const refused = await aiToRag({ access: { groupIds: [GROUP_A] } });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({ error: 'group_not_allowed' });
+    expect(inserts).toEqual([]);
+    const plain = await aiToRag({});
+    expect(plain.status).toBe(200);
+    expect(documentInserts()).toHaveLength(1);
+    expect('access_groups' in (documentInserts()[0] ?? {})).toBe(false);
+  });
+
+  it('storeDocument: the label goes in the document insert as a column, never into metadata; a malformed one inserts nothing', async () => {
+    vi.resetModules();
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:1');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'placeholder-anon');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'placeholder-service');
+    vi.doMock('@supabase/supabase-js', () => ({ createClient: () => writeAdmin() }));
+    const { storeDocument } = await vi.importActual<typeof import('@/lib/supabase')>('@/lib/supabase');
+    const chunk = { content: 'A neutral synthetic sentence.', embedding: [0.1, 0.2] };
+    await storeDocument('neutral.md', 'A neutral synthetic sentence.', [chunk], { user_id: USER, access_groups: [`u:${USER}`] });
+    const doc = documentInserts()[0]!;
+    expect(doc.access_groups).toEqual([`u:${USER}`]);
+    expect((doc.metadata as Row).access_groups).toBeUndefined();
+    const chunkRow = inserts.find((insert) => insert.table === 'document_chunks')!.rows[0]!;
+    expect((chunkRow.metadata as Row).access_groups).toBeUndefined();
+    inserts.length = 0;
+    await storeDocument('plain.md', 'A neutral synthetic sentence.', [chunk], { user_id: USER });
+    expect('access_groups' in documentInserts()[0]!).toBe(false);
+    inserts.length = 0;
+    await expect(storeDocument('bad.md', 'x', [chunk], { user_id: USER, access_groups: ['g:not-a-group'] })).rejects.toThrow();
+    expect(inserts).toEqual([]);
+  });
+
+  it('process-document legacy: a refused group answers 400 before any parse or insert', async () => {
+    await mockCommon();
+    const { POST } = await import('@/app/api/process-document/route');
+    const form = new FormData();
+    form.append('file', new File(['A neutral synthetic sentence.'], 'neutral.pdf', { type: 'application/pdf' }));
+    form.append('access', JSON.stringify({ groupIds: [GROUP_A] }));
+    const res = await POST(new Request('http://localhost/api/process-document', { method: 'POST', body: form }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'group_not_allowed' });
+    expect(legacy.parses).toBe(0);
+    expect(inserts).toEqual([]);
+  });
+});

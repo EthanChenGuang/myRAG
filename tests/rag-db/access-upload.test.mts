@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { createFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
+import { embedText } from '../../eval/harness/fixture-embedder.mts';
 
 // Phase 4.3 plan 23 (SEC-12, D-16, D-19, RESEARCH Pitfall 7): an upload's access label is on the version (and its chunks) before
 // rag_publish_document_version runs, a new version without a choice inherits it, and an explicit choice relabels the whole lineage.
@@ -220,6 +221,41 @@ for (const mode of ['single-tenant', 'multi-tenant'] as DeploymentMode[]) {
       assert.equal(atPublish.length, 0, 'publish was never called');
       const stored = await rows("SELECT status, is_current FROM documents WHERE filename = 'other-record.md'");
       for (const row of stored) assert.notEqual(row.status, 'ready');
+    });
+
+    test('a legacy insert that carries the label is restricted from its first moment, chunks included (Pitfall 7)', async () => {
+      // The statement the legacy writers send (storeDocument, process-document, ai-to-rag), as the service role: one INSERT with the label.
+      const content = 'The neutral legacy record lists a quiet teal cobalt sequence for testing.';
+      const docId = '00000000-0000-4000-8000-0000000230d1';
+      const plainId = '00000000-0000-4000-8000-0000000230d2';
+      const orgColumn = multi ? ', organization_id' : '';
+      await db.exec('SET ROLE service_role');
+      try {
+        await db.query(
+          `INSERT INTO documents (id, filename, content, metadata, user_id, access_groups${orgColumn}) VALUES ($1, 'legacy-a.md', $2, '{}'::jsonb, $3, $4::text[]${multi ? ', $5' : ''})`,
+          [docId, content, IDS.member, [GROUP_KEY], ...(multi ? [IDS.org] : [])],
+        );
+        await db.query(
+          `INSERT INTO documents (id, filename, content, metadata, user_id${orgColumn}) VALUES ($1, 'legacy-b.md', $2, '{}'::jsonb, $3${multi ? ', $4' : ''})`,
+          [plainId, content, IDS.member, ...(multi ? [IDS.org] : [])],
+        );
+        for (const id of [docId, plainId]) {
+          await db.query(
+            `INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata${orgColumn}) VALUES (gen_random_uuid(), $1, $2, $3::vector, 0, '{}'::jsonb${multi ? ', $4' : ''})`,
+            [id, content, '[' + embedText(content).join(',') + ']', ...(multi ? [IDS.org] : [])],
+          );
+        }
+      } finally {
+        await db.exec('RESET ROLE');
+      }
+      const label = async (id: string) => ({
+        doc: (await rows('SELECT access_groups FROM documents WHERE id = $1', [id]))[0]?.access_groups,
+        chunks: (await rows('SELECT access_groups FROM document_chunks WHERE document_id = $1', [id])).map((row) => row.access_groups),
+      });
+      assert.deepEqual(await label(docId), { doc: [GROUP_KEY], chunks: [[GROUP_KEY]] });
+      assert.deepEqual(await label(plainId), { doc: ['all'], chunks: [['all']] }, 'no label: the default, as today');
+      const audit = await rows('SELECT count(*)::int AS n FROM rag_access_audit WHERE document_id = ANY($1::uuid[])', [[docId, plainId]]);
+      assert.equal(audit[0]?.n, 0, 'no relabel after the insert');
     });
   });
 }
