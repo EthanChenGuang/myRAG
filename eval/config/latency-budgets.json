@@ -1,4 +1,19 @@
 {
+  "answer_checks": {
+    "claim_check": {
+      "p50_ms": 2000,
+      "p95_ms": 6000
+    },
+    "groundedness_judge": {
+      "p50_ms": 5000,
+      "p95_ms": 10000
+    },
+    "output_guard": {
+      "p50_ms": 1,
+      "p95_ms": 2
+    },
+    "report_only": true
+  },
   "groundedness": {
     "hhem_2_1_open": {
       "p50_ms": 2500,
