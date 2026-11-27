@@ -20,12 +20,12 @@
     },
     {
       "confident": true,
-      "correct": 219,
+      "correct": 221,
       "length_bucket": "medium",
-      "n": 221,
+      "n": 223,
       "script_class": "single",
       "source": "calibrated",
-      "value": 0.9865
+      "value": 0.9867
     },
     {
       "confident": true,
@@ -110,7 +110,7 @@
     }
   ],
   "detector": "heuristic",
-  "generated_at": "2026-11-27T15:50:14Z",
+  "generated_at": "2026-11-27T21:14:04Z",
   "inputs": [
     {
       "path": "eval/fixtures/golden.jsonl",
@@ -122,7 +122,7 @@
     },
     {
       "path": "eval/fixtures/ingest/golden-ingest.jsonl",
-      "sha256": "c3669dd5e0f994ed1b03d4b8d35d4495d302958e94c4b43822fea9fd4caa0995"
+      "sha256": "d6e9b919e0b18abebde45e35d0d20f8a51e5e37f996a6e861d1e4cadd8f8d529"
     },
     {
       "path": "eval/fixtures/lang-detect/cases.jsonl",

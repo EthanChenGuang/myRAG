@@ -1,8 +1,15 @@
-import { generateText, type LanguageModel } from 'ai';
+import { generateText, stepCountIs, type LanguageModel, type Tool } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { env } from '@/lib/env';
 import { SystemPromptManager } from '@/lib/system-prompt-manager';
-import { createEnhancedRAGPrompt, effectiveMaxOutputTokens, type AnswerLanguageOptions, type OutputCapDecision } from '@/lib/rag';
+import {
+  CALCULATE_TOOL_NAME,
+  createEnhancedRAGPrompt,
+  effectiveMaxOutputTokens,
+  type AnswerLanguageOptions,
+  type CalcTraceHolder,
+  type OutputCapDecision,
+} from '@/lib/rag';
 import type { GroundednessRequest, GroundednessResult } from '@/lib/rag-eval/contracts.generated';
 
 export const EVAL_DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
@@ -31,7 +38,10 @@ export interface EvalConversationTurn {
   content: string;
 }
 
-export type EvalLanguageModelFactory = (_modelId: string) => LanguageModel;
+export type EvalLanguageModelFactory = ((_modelId: string) => LanguageModel) & {
+  /** Harness seam (D-78): a fake registry declares a model's tool support; undefined keeps the chat route's rule. */
+  canUseTools?: (_modelId: string) => boolean | undefined;
+};
 
 const defaultFactory: EvalLanguageModelFactory = (modelId) => {
   const provider = createOpenRouter({
@@ -46,6 +56,14 @@ let currentFactory: EvalLanguageModelFactory = defaultFactory;
 export function setEvalLanguageModelFactory(factory: EvalLanguageModelFactory | null): void {
   currentFactory = factory ?? defaultFactory;
 }
+
+/** The installed factory's tool-support declaration for a model id; undefined when it declares none. */
+export function evalModelToolCapability(modelId: string): boolean | undefined {
+  return currentFactory.canUseTools?.(modelId);
+}
+
+/** D-65, RESEARCH Pattern F: the eval tool loop's step limit (a calculation step, its answer, one retry). */
+const EVAL_CALC_MAX_STEPS = 3;
 
 export type EvalGroundednessRequest = (
   _request: GroundednessRequest,
@@ -151,6 +169,21 @@ export interface EvalAnswerInput {
   answerLanguage?: AnswerLanguageOptions;
   /** D-29: the turn's output-cap decision; the limit is min(model limit, cap) only when the cap applies. */
   outputCap?: OutputCapDecision | null;
+  /** Phase 5.2.1 D-65, D-72: the calculation offered on this turn; absent, the call is exactly the one without it (A12). */
+  calc?: EvalCalcInput | null;
+}
+
+export interface EvalCalcInput {
+  mode: 'tool' | 'trailing_block';
+  /** The calculate tool from buildCalculateTool (tool mode only). */
+  tool?: Tool;
+  /** The turn's trace holder; a tool step's end anchors the traces it recorded. */
+  holder: Pick<CalcTraceHolder, 'markToolCall'>;
+}
+
+export interface EvalAnswerUsage {
+  input_tokens: number;
+  output_tokens: number;
 }
 
 export interface EvalAnswerResult {
@@ -158,13 +191,23 @@ export interface EvalAnswerResult {
   /** D-33: the model's finish reason, recorded on the trace. */
   finishReason: string;
   maxOutputTokens: number;
+  /** Input and output tokens over every step. */
+  usage: EvalAnswerUsage;
+  /** The text of each step, in order (one entry without the tool loop). */
+  stepTexts: string[];
+  /** The answer-text offset at which each tool-calls step ended (the calculation anchors). */
+  toolStepEnds: number[];
 }
 
 export async function generateEvalAnswerDetailed(input: EvalAnswerInput): Promise<EvalAnswerResult> {
-  const { query, conversation, context, ragMode, generatorModel, signal, promptEnv, decorateSystemPrompt, answerLanguage, outputCap } = input;
+  const { query, conversation, context, ragMode, generatorModel, signal, promptEnv, decorateSystemPrompt, answerLanguage, outputCap, calc } = input;
   const basePrompt = buildEvalSystemPrompt({ context, ragMode, promptEnv, answerLanguage });
   const system = decorateSystemPrompt ? decorateSystemPrompt(basePrompt) : basePrompt;
   const maxOutputTokens = effectiveMaxOutputTokens(maxOutputTokensForModel(generatorModel), outputCap?.applied ? outputCap.cap : null);
+  const toolLoop = calc?.mode === 'tool' && calc.tool ? { tool: calc.tool, holder: calc.holder } : null;
+  const stepTexts: string[] = [];
+  const toolStepEnds: number[] = [];
+  let offset = 0;
   const result = await generateText({
     model: currentFactory(generatorModel),
     system,
@@ -172,8 +215,25 @@ export async function generateEvalAnswerDetailed(input: EvalAnswerInput): Promis
     temperature: 0.1,
     maxOutputTokens,
     abortSignal: signal,
+    ...(toolLoop
+      ? {
+          tools: { [CALCULATE_TOOL_NAME]: toolLoop.tool },
+          stopWhen: stepCountIs(EVAL_CALC_MAX_STEPS),
+          onStepFinish: (step: { text: string; finishReason: string }) => {
+            stepTexts.push(step.text);
+            offset += step.text.length;
+            if (step.finishReason === 'tool-calls') {
+              toolStepEnds.push(offset);
+              toolLoop.holder.markToolCall(offset);
+            }
+          },
+        }
+      : {}),
   });
-  return { text: result.text, finishReason: result.finishReason, maxOutputTokens };
+  const usage = { input_tokens: result.totalUsage.inputTokens ?? 0, output_tokens: result.totalUsage.outputTokens ?? 0 };
+  // With the tool loop the answer is every step's text, as the chat stream shows it; without it, exactly today's text
+  const text = toolLoop ? stepTexts.join('') : result.text;
+  return { text, finishReason: result.finishReason, maxOutputTokens, usage, stepTexts: toolLoop ? stepTexts : [result.text], toolStepEnds };
 }
 
 export async function generateEvalAnswer(input: EvalAnswerInput): Promise<string> {

@@ -190,7 +190,7 @@
           },
           {
             "id": "total",
-            "op": "add",
+            "op": "sum",
             "args": [
               "part_1",
               "part_2",
@@ -455,7 +455,7 @@
           },
           {
             "id": "total",
-            "op": "add",
+            "op": "sum",
             "args": [
               "low_charge_1",
               "high_charge_1",
@@ -536,8 +536,7 @@
               "kind": "chunk",
               "alias": "B1"
             },
-            "unit_from": "days",
-            "unit_to": "pell"
+            "unit": "pell"
           }
         ],
         "steps": [
@@ -780,7 +779,7 @@
           },
           {
             "id": "total",
-            "op": "add",
+            "op": "sum",
             "args": [
               "part_1",
               "part_2",
@@ -1045,7 +1044,7 @@
           },
           {
             "id": "total",
-            "op": "add",
+            "op": "sum",
             "args": [
               "low_charge_1",
               "high_charge_1",
@@ -1126,8 +1125,7 @@
               "kind": "chunk",
               "alias": "B1"
             },
-            "unit_from": "天",
-            "unit_to": "璆分"
+            "unit": "璆分"
           }
         ],
         "steps": [
@@ -1371,7 +1369,7 @@
           },
           {
             "id": "total",
-            "op": "add",
+            "op": "sum",
             "args": [
               "part_1",
               "part_2",
@@ -1636,7 +1634,7 @@
           },
           {
             "id": "total",
-            "op": "add",
+            "op": "sum",
             "args": [
               "low_charge_1",
               "high_charge_1",
@@ -1717,8 +1715,7 @@
               "kind": "chunk",
               "alias": "B1"
             },
-            "unit_from": "giorni",
-            "unit_to": "dalt"
+            "unit": "dalt"
           }
         ],
         "steps": [

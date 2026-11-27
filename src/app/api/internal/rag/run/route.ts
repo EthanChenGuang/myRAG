@@ -64,6 +64,16 @@ import {
   readAnswerConfig,
   type AnswerTextPipelineResult,
   type AnswerTurn,
+  buildAliasMap,
+  buildCalculateTool,
+  createCalcTraceHolder,
+  createCitationLabeler,
+  mayOfferCalc,
+  runCalcChecks,
+  shouldOfferCalcTool,
+  turnCanUseTools,
+  observeCalc,
+  type CalcObserved,
 } from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest, type RagTrace } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
@@ -78,6 +88,7 @@ import {
 } from '@/lib/rag-eval/trace';
 import {
   evalGroundednessRequest,
+  evalModelToolCapability,
   generateEvalAnswerDetailed,
   isGPTGeneratorModel,
   resolveEvalPromptTemplate,
@@ -457,6 +468,19 @@ function errorDetail(error: unknown): string {
 interface EvalAnswerRuleOptions {
   mode: string;
   webSearchOffered: boolean;
+  /** Phase 5.2.1 D-70, D-72: set only when the calculation is offered on this turn. */
+  calculation?: { mode: 'tool' | 'trailing_block' } | null;
+}
+
+type EvalCalcOffer = { mode: 'tool' | 'trailing_block'; aliases: ReadonlySet<string>; stripMarkers: boolean };
+
+/** Phase 5.2.1 D-65: RAG_CALC_TOOL through the one answer-config reader. */
+function calcToolSwitchOn(config: object): boolean {
+  return (config as { readonly calcTool?: unknown }).calcTool === true;
+}
+
+function calcCheckSwitchOn(config: object): boolean {
+  return (config as { readonly calcCheck?: unknown }).calcCheck === true;
 }
 
 /** D-09 and D-10 in the eval: the direct Claude call; a failure before any text falls back to chunk-alias once. */
@@ -647,6 +671,8 @@ export async function POST(req: NextRequest) {
     // D-05: an eval run has the citations capability only when it asks for it, and only when an answer is generated.
     const generationConfig = readGenerationConfig();
     const citationRecheck = evalCitationRecheck(scope);
+    // 05.2.1 D-71: per-request facts, so a calculation turn can keep the citation strategy off the direct Claude path
+    const claudeFacts: ClaudeTurnFacts = { ...EVAL_CLAUDE_FACTS };
     const citationSession =
       generatorModel !== null && options?.citations === true
         ? createCitationSession({
@@ -655,7 +681,7 @@ export async function POST(req: NextRequest) {
             modelId: generatorModel,
             language: detectLanguage(query) ?? 'en',
             config: { ...generationConfig, citations: true },
-            facts: EVAL_CLAUDE_FACTS,
+            facts: claudeFacts,
             ...(citationRecheck ? { recheck: citationRecheck } : {}),
           })
         : null;
@@ -671,7 +697,13 @@ export async function POST(req: NextRequest) {
             ragMode,
           })
         : null;
-    const answerRuleOptions: EvalAnswerRuleOptions = { mode: ragMode, webSearchOffered: false };
+    let answerRuleOptions: EvalAnswerRuleOptions = { mode: ragMode, webSearchOffered: false };
+    // Phase 5.2.1 D-65, D-66: a turn that may get the calculation labels its blocks, so chunk operands can name an alias
+    const calcMayBeOffered =
+      answerTurn !== null && calcToolSwitchOn(answerTurn.config) && mayOfferCalc(query, answerTurn.answerLanguage);
+    const retrievalLabeler = citationSession?.labeler ?? (calcMayBeOffered ? createCitationLabeler() : undefined);
+    const calcHolder = createCalcTraceHolder();
+    let calcOffer: EvalCalcOffer | null = null;
 
     // D-37/D-38: the key parts of an eval lookup; the pipeline derives the eval entry profile, so no entry reaches chat or embed.
     const cacheOverride = cacheOverrideOn(options);
@@ -703,7 +735,7 @@ export async function POST(req: NextRequest) {
       trace: collector,
       ...(stageOverrides ? { stageOverrides } : {}),
       ...(retrievalFilters ? { retrievalFilters } : {}),
-      ...(citationSession?.labeler ? { citationLabeler: citationSession.labeler } : {}),
+      ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
       ...(history.length > 0 ? { history } : {}),
       ...(classification ? { classification } : {}),
       ...(cacheContext ? { cacheContext } : {}),
@@ -739,6 +771,8 @@ export async function POST(req: NextRequest) {
       let answer: string | null = null;
       let finishReason: string | null = null;
       let answerChain: AnswerTextPipelineResult | null = null;
+      const calcRun: { outcome: ReturnType<typeof runCalcChecks> | null } = { outcome: null };
+      let calcObserved: CalcObserved | null = null;
       const cacheHit = isCacheHitResult(result) ? result.cacheHit : undefined;
       const serverRefused = cacheHit ? cacheHit.answer.is_refusal : result.refusalCandidate || result.refusal?.decision === 'refuse';
       if (cacheHit) {
@@ -749,7 +783,37 @@ export async function POST(req: NextRequest) {
         await awaitPreGenerationDelay();
         collector.markGenerationStart();
         const generationStart = collector.now();
+        // Phase 5.2.1 D-70, D-72: the chat route's offer decision; the mode follows the tool rule, a fake registry may declare it
+        let calcMode: 'tool' | 'trailing_block' | null = null;
+        if (calcMayBeOffered && answerTurn && result.context.length > 0) {
+          const decision = shouldOfferCalcTool({
+            question: query,
+            blockTexts: textBlocks.map((block) => block.text),
+            language: answerTurn.answerLanguage,
+          });
+          if (decision.offer) {
+            const canUseTools =
+              evalModelToolCapability(generatorModel) ?? turnCanUseTools({ provider: env.NEXT_PUBLIC_AI_PROVIDER, modelId: generatorModel });
+            calcMode = canUseTools ? 'tool' : 'trailing_block';
+            claudeFacts.calculation = true;
+            console.log('[Calc]', { offered: true, mode: calcMode, reason: decision.reason });
+          }
+        }
         citationSession?.attach(result);
+        if (calcMode) {
+          let aliases: ReadonlySet<string> = new Set<string>();
+          if (citationSession?.strategy) {
+            aliases = citationSession.aliases();
+          } else {
+            try {
+              aliases = buildAliasMap(result.blocks, result.usedDocuments).aliases;
+            } catch {
+              console.warn('[Calc]', { offered: true, aliases: 'unavailable' });
+            }
+          }
+          calcOffer = { mode: calcMode, aliases, stripMarkers: !citationSession?.strategy };
+          answerRuleOptions = { ...answerRuleOptions, calculation: { mode: calcMode } };
+        }
         const answerLanguage = answerLanguageOptions(result);
         // Phase 5.2 D-30: decided once, before the composer, with the chat route's rule (the eval request sets no limit of its own)
         if (answerTurn && answerTurn.config.maxOutputTokens.kind !== 'off') {
@@ -794,6 +858,15 @@ export async function POST(req: NextRequest) {
               decorateSystemPrompt,
               ...(answerLanguage ? { answerLanguage } : {}),
               outputCap: answerTurn?.outputCapDecision() ?? null,
+              ...(calcOffer
+                ? {
+                    calc: {
+                      mode: calcOffer.mode,
+                      holder: calcHolder,
+                      ...(calcOffer.mode === 'tool' ? { tool: buildCalculateTool({ aliases: calcOffer.aliases, holder: calcHolder }) } : {}),
+                    },
+                  }
+                : {}),
             });
             answer = generated.text;
             finishReason = generated.finishReason;
@@ -807,16 +880,51 @@ export async function POST(req: NextRequest) {
         }
         // Phase 5.2 RESEARCH Pitfall 21: the eval does not stream, so the whole-text twin of the chain runs on the answer:
         // sentinel, output guard, then the notices as a final paragraph (D-16, D-35, D-11, D-33). Off: the answer is untouched.
+        const modelText = answer;
         if (answerTurn?.config.anyNonDefault && answer !== null) {
           answerTurn.setGuardSources(guardSources);
+          const calcLanguage = answerTurn.answerLanguage;
+          // Phase 5.2.1 D-73: RAG_CALC_CHECK on an answer that was offered the calculation, as the chat route's stream-end check
+          const calcCheck =
+            calcOffer && calcCheckSwitchOn(answerTurn.config) && calcLanguage !== null
+              ? (rawText: string) => {
+                  const outcome = runCalcChecks({
+                    traces: calcHolder.traces(),
+                    invalid: calcHolder.invalid(),
+                    offered: true,
+                    rawText,
+                    blocks: textBlocks.filter((block) => block.alias).map((block) => ({ alias: block.alias ?? '', text: block.text })),
+                    question: query,
+                    answerLanguage: calcLanguage,
+                  });
+                  calcRun.outcome = outcome;
+                  return outcome.notices;
+                }
+              : null;
           answerChain = applyAnswerPipelineToText(answer, {
             refusalText: answerTurn.sentinelRefusalText(answerRuleOptions.webSearchOffered),
             finishReason,
             language: answerTurn.answerLanguage,
             channel: 'eval',
             guard: answerTurn.guardPolicy(),
+            // D-72: the trailing block in block mode; in tool mode only the marker stripping, when it is needed
+            ...(calcOffer?.mode === 'trailing_block'
+              ? { calcBlock: { onTrace: calcHolder.recordBlock, stripMarkers: calcOffer.stripMarkers } }
+              : calcOffer?.stripMarkers
+                ? { calcBlock: { stripMarkers: true } }
+                : {}),
+            ...(calcCheck ? { calcCheck } : {}),
           });
           answer = answerChain.text;
+        }
+        // D-77: what the answer showed of a calculation, recorded on every generated answer, with the check on or off
+        if (modelText !== null) {
+          calcObserved = observeCalc({
+            rawText: answerChain?.calcBlock?.rawText ?? modelText,
+            traces: calcHolder.traces(),
+            aliases: calcOffer?.aliases ?? citationSession?.aliases() ?? new Set<string>(),
+            language: answerTurn?.answerLanguage ?? detectLanguage(modelText) ?? detectLanguage(query) ?? null,
+          });
         }
         // The eval answer is generated whole, so its first text is the full answer
         if (answer !== null && answer.length > 0) collector.markFirstTextDelta();
@@ -985,6 +1093,8 @@ export async function POST(req: NextRequest) {
         ...(cacheState ? { cache: cacheState } : {}),
         ...answerRulesFields,
         ...(accessMode ? { access: { mode: accessMode, violations: accessCheck?.violations ?? 0 } } : {}),
+        ...(calcRun.outcome ? { calc: calcRun.outcome.checks, review_reasons: calcRun.outcome.reviewReasons } : {}),
+        ...(calcObserved ? { calc_observed: calcObserved } : {}),
         stage_latency_ms: collector.toStageLatency(),
         stage_status: collector.toStageStatus(),
         effective_config: effectiveConfig,

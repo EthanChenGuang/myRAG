@@ -417,6 +417,7 @@ export { modelBlocksTools, turnCanUseTools } from './generation/tool-capability'
 export { mayOfferCalc, shouldOfferCalcTool } from './calc/signal';
 export { createCalcTraceHolder } from './calc/trace-holder';
 export type { CalcTraceHolder } from './calc/trace-holder';
+export { observeCalc, type CalcObserved } from './calc/observe';
 export { CLAUDE_FIRST_TOKEN_TIMEOUT_MS, errorStatusOf, fallbackReasonFor, firstTokenGate } from './generation/citations/fallback';
 export type { FallbackReason, FirstTokenGateResult } from './generation/citations/fallback';
 export type {

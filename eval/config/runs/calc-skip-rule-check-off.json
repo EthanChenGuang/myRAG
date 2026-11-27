@@ -1,0 +1,9 @@
+{
+  "name": "calc-skip-rule-check-off",
+  "env": {
+    "RAG_CALC_CHECK": "false",
+    "RAG_CALC_TOOL": "true"
+  },
+  "overrides": null,
+  "generator_model": "fake/calc-skip-rule-v1"
+}

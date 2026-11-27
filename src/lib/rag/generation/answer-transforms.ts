@@ -177,6 +177,11 @@ export interface AnswerTextPipelineOptions {
   guard?: OutputGuardPolicy | null;
   /** Phase 5.2.1 D-72: removes the trailing calculation block after the sentinel and before the guard; absent: no extraction. */
   calcBlock?: CalcBlockOptions | null;
+  /**
+   * Phase 5.2.1 D-73: the calculation check, after the guard and before the notice stage (the stream's slot order); it reads the
+   * block's raw text (else the text at this point) and returns the notices to render. Absent: no check.
+   */
+  calcCheck?: ((rawText: string) => readonly AnswerNotice[]) | null;
 }
 
 export interface AnswerTextPipelineResult {
@@ -225,6 +230,9 @@ export function applyAnswerPipelineToText(text: string | readonly string[], opti
     });
     out = guarded.text;
     outputGuard = guarded.summary;
+  }
+  if (options.calcCheck) {
+    for (const notice of options.calcCheck(calcBlock?.rawText ?? out)) state.add(notice);
   }
   const guardField = { ...(outputGuard ? { outputGuard } : {}), ...(calcBlock ? { calcBlock } : {}) };
   if (options.notices === false) return { text: out, refused, strippedCount, notices: [], truncated: false, ...guardField };

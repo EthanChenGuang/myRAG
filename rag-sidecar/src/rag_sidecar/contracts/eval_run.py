@@ -346,6 +346,10 @@ class TraceCalcObserved(_Contract):
     origin: CalcOrigin | None = None
 
 
+# D-75: the review reasons the calculation check gives an eval answer (the chat path records them on the answer record).
+CalcReviewReason = Literal["calc_mismatch", "calc_unverified"]
+
+
 class TraceUsage(_Contract):
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
@@ -421,6 +425,7 @@ class RagTrace(_Contract):
     # Phase 5.2.1 (D-77, D-86); absent on traces recorded before it.
     calc: list[CalcCheck] | None = _optional_field()
     calc_observed: TraceCalcObserved | None = _optional_field()
+    review_reasons: list[CalcReviewReason] | None = _optional_field()
     prompt_budget: PromptBudgetTrace | None = _optional_field()
     usage: TraceUsage | None = _optional_field()
     answer_error: AnswerErrorCode | None = _optional_field()
