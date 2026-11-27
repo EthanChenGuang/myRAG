@@ -1015,6 +1015,15 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_attribute_documents(text, jsonb, integer, text[], boolean) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_attribute_documents(text, jsonb, integer, text[], boolean) TO service_role;
   END IF;
+  -- 0986 (quick task): Phase 5.3 review-queue writers with access sets (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_review_items_enqueue(text, text, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_review_items_enqueue(text, text, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_review_items_enqueue(text, text, jsonb) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_review_items_enqueue_re_review(text, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_review_items_enqueue_re_review(text, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_review_items_enqueue_re_review(text, jsonb) TO service_role;
+  END IF;
 END
 $service_role_only$;
 
