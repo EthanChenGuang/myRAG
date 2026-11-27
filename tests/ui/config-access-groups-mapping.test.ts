@@ -687,6 +687,37 @@ describe('Sharing rules (D-20, UI-SPEC 6.5, decisions 11 and 17)', () => {
   });
 });
 
+describe('design pass (UI-SPEC 9, 10)', () => {
+  it('row actions are outline buttons, full height below md; forms are one column below md and two from md', async () => {
+    const page = loadPage();
+    await page.openMapping();
+    for (const text of ['Save mapping', 'Remove mapping']) {
+      const b = button(page.row('dbgid:AAA'), text);
+      expect(b.className).toContain('btn-outline');
+      expect(b.className).toContain('md:btn-sm');
+    }
+    button(page.panel(), 'New mapping').click();
+    const form = page.panel().querySelector('[data-access-groups-mapping-form]')!;
+    expect(form.className).toContain('md:grid-cols-2');
+    expect(form.querySelector('[data-access-groups-mapping-findings]')!.className).toContain('md:col-span-2');
+    button(page.panel(), 'Add domain rule').click();
+    expect(page.panel().querySelector('[data-access-groups-rule-domain]')!.getAttribute('placeholder')).toBe('example.org…');
+  });
+
+  it('both tables sit in focusable scroll regions with hidden captions; counts use tabular numbers', async () => {
+    const page = loadPage();
+    await page.openMapping();
+    for (const data of ['data-access-groups-mapping-table', 'data-access-groups-rules-table']) {
+      const region = page.panel().querySelector('[' + data + ']')!;
+      expect(region.getAttribute('tabindex')).toBe('0');
+      expect(region.getAttribute('role')).toBe('region');
+      expect(region.querySelector('caption')!.className).toContain('sr-only');
+    }
+    expect(page.row('group-x@example.org').querySelector('[data-access-groups-mapping-documents]')!.className).toContain('tabular-nums');
+    expect(page.ruleRow(R_1).querySelector('label')!.querySelector('[data-access-groups-rule-toggle]')).toBeTruthy();
+  });
+});
+
 describe('text only (T-04.3-442)', () => {
   it('markup and script injected into source group ids and domains create no element and no link', async () => {
     const page = loadPage({

@@ -3845,7 +3845,7 @@ class AccessGroupsPanel {
     const actions = [save];
     let remove = null;
     if (row.mapped) {
-      remove = this.btn(this.t('action.removeMapping'), 'btn-ghost md:btn-sm md:min-h-8 py-1', {
+      remove = this.btn(this.t('action.removeMapping'), 'btn-outline md:btn-sm md:min-h-8 py-1', {
         'aria-label': this.t('action.removeMappingAria', { principal: row.principal }),
         'data-access-groups-mapping-remove': row.key,
       });
@@ -3987,7 +3987,7 @@ class AccessGroupsPanel {
     group.value = form.groupId;
     const help = this.el('p', { className: 'text-xs text-base-content/70 mt-1 max-w-prose', id: 'rag-access-groups-map-principal-help', text: this.t('mapping.form.principalHelp') });
     const error = this.el('p', { className: 'text-xs text-error mt-1 empty:hidden break-words', id: 'rag-access-groups-map-principal-error' });
-    const findings = this.el('p', { className: 'text-xs text-base-content/70 lg:col-span-2 break-words empty:hidden', id: 'rag-access-groups-map-findings', attrs: { 'data-access-groups-mapping-findings': '' } });
+    const findings = this.el('p', { className: 'text-xs text-base-content/70 md:col-span-2 break-words empty:hidden', id: 'rag-access-groups-map-findings', attrs: { 'data-access-groups-mapping-findings': '' } });
     const create = this.btn(this.t('action.createMapping'), 'btn-primary btn-sm min-h-8 py-1', { 'aria-describedby': 'rag-access-groups-map-findings rag-access-groups-map-principal-error', 'data-access-groups-mapping-create': '' }, () =>
       this.createMapping(),
     );
@@ -4297,7 +4297,7 @@ class AccessGroupsPanel {
         spellcheck: 'false',
         translate: 'no',
         maxlength: '253',
-        placeholder: 'example.org',
+        placeholder: 'example.org…',
         'aria-describedby': 'rag-access-groups-rule-domain-error',
         'data-access-groups-rule-domain': '',
       },
