@@ -534,3 +534,13 @@ Train-36/37 must include verify/05, verify/05.1, verify/06 branches.
 12:15 archived 14 completed sessions
 12:37 archived 06.2-37 04.3-31 04.3-22 05.2.1-15
 12:38 launched 04.3-09 04.3-24 04.3-33 05.2.1-19 07-42
+
+## 2026-11-27 resume (new account, orchestrator session_01X342shLsAZx6PYph2vA7hc)
+13:24 owner desk session_01X342smENMnyrGEa4FK53eB (main) — told orchestrator ID; applies sql/train36-live.sql with owner present.
+13:25 relaunched WIP: 07-42 session_01X342sk3CryzBn1oJDzxRcN, 04.3-23 session_01X342sht4QBMMAdKbVpy8Lx, 06.2-06 session_01X342sjZCPZBopRCru2i7ba, 05.2.1-12 session_01X342smErdeBBMGPBzN6dFV, 04.3-09 session_01X342skmWqEGPB1bHUBz4kN, quick-openrouter-fallback session_01X342shHvKAbfiRXF7NjEsd.
+13:25 03.3-25 session_01X342sisfrVRS5ucDYn9zJM — owner decision (a): calibrate v2 ingest-mode refusal floor + fix en false_refusal 0.3143.
+13:25 fix PR executor (main, fix/ai-to-rag-title-audio-guard): ai-to-rag title via OpenRouter + /api/audio graceful 503 without OPENAI_API_KEY — session_01X342sjU8YMoXKs2NRYV3Pk.
+13:26 new: 04.3-41 session_01X342sjqAaVetZDDq2ZyheH (exec/04.3-24); 05.2.1-21 session_01X342sjwFCL2rc5voTcsyEQ, 05.2.1-22 session_01X342skNNHvjRzh3Rar5B3q (base/05.2.1-21 = 05.2.1-18+05.2.1-13, 4a4f3380); 06.2-12 session_01X342shCbqnvGJN56cgdhys (exec/06.2-08).
+13:27 train-37 builder agent (local, background): 29 branches incl. verify/05, verify/05.1, verify/06.
+HOLD: 04.3-32, 04.3-46 until 04.3-23 SUMMARY is final; 06.3-14/07-37 still wait on Phase 6.3 close; auto=false: 04.4-15, 06-46, 06.3-04, 06.3-15.
+Pending owner: train36 SQL (owner desk), then ask owner before deploying main 274d0456.
