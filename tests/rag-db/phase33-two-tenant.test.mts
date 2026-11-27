@@ -494,7 +494,7 @@ function runChild(mode: DeploymentMode): ChildReport {
     cwd: REPO_ROOT,
     encoding: 'utf8',
     // Without the parent's test-runner context, so the child's node:test import stays inert and its stdout holds the report only.
-    env: { ...Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== 'NODE_TEST_CONTEXT')), PHASE33_MATRIX_CHILD: mode },
+    env: { ...(Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== 'NODE_TEST_CONTEXT')) as NodeJS.ProcessEnv), PHASE33_MATRIX_CHILD: mode },
     timeout: 300_000,
   });
   assert.equal(out.status, 0, `child (${mode}) failed: ${out.stderr.slice(-2000)}`);
