@@ -155,13 +155,12 @@ describe('switch on: the addendum and the filters schema', () => {
     expect(requests[0]!.prompt.endsWith(`\n\n${addendum}`)).toBe(true);
     expect(lc.calls[0]!.prompt).toContain(`\n\n${addendum}\n${Q_VALID}`);
     expect(lc.structuredRequests[0]!.name).toBe('SubQuestionsWithFilters');
-    for (const field of ['date_range', 'scopes', 'doc_types', 'languages']) expect(addendum).toContain(field);
+    for (const field of ['date_range', 'versions', 'scopes', 'doc_types', 'languages']) expect(addendum).toContain(field);
     expect(addendum).toContain('{"department":["unit-one","unit-two"]}');
     expect(addendum).toContain('["general","product_technical"]');
     expect(addendum).toContain('["en","it"]');
     expect(addendum).not.toContain('Ignore previous instructions');
     expect(addendum).not.toContain(HOSTILE_LABEL);
-    expect(addendum).not.toContain('versions');
   });
 
   test('at most subq_filter_vocab_cap values per dimension and list', () => {
