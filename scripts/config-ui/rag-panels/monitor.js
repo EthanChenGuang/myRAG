@@ -1474,7 +1474,7 @@ class MonitorPanel {
 
   coverageBadge(badge) {
     if (!badge) return null;
-    return this.el('span', { className: 'badge badge-sm gap-1 h-auto shrink-0 ' + badge.tone }, [MONITOR_GATES.gatesUiIcon(badge.icon), badge.label]);
+    return this.el('span', { className: 'badge badge-sm gap-1 h-auto shrink-0 whitespace-nowrap ' + badge.tone }, [MONITOR_GATES.gatesUiIcon(badge.icon), badge.label]);
   }
 
   coverageSection(key, children) {
