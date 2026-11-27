@@ -1,6 +1,8 @@
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import vm from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FakeDocument, FakeElement, FakeText, type FakeNode, injectedElements } from './helpers/html-fake-dom';
+import { FakeDocument, FakeElement, FakeText, type FakeNode, blockFrom, functionSource, injectedElements } from './helpers/html-fake-dom';
 
 const require = createRequire(import.meta.url);
 
@@ -451,5 +453,283 @@ describe('what the dialog never shows (UI-SPEC 11)', () => {
     expect(doc.getElementById(el.getAttribute('aria-describedby')!)).toBeTruthy();
     expect(el.querySelector('[role="status"]')!.getAttribute('aria-live')).toBe('polite');
     expect(el.getAttribute('lang')).toBe('en');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// The three save paths in index.html (UI-SPEC 6.3.1, plan 05.3-42 Task 3)
+
+const indexHtml = fs.readFileSync('scripts/config-ui/index.html', 'utf8');
+
+type PageCall = { url: string; method: string; headers: unknown; body: string | undefined };
+type FakeGuard = {
+  beforeSave: (r: Json) => Promise<Decision>;
+  required: (r: Json) => Promise<Decision>;
+  saved: (b: unknown) => void;
+  saveFailed: (s: number, b: unknown) => Promise<Decision>;
+  isOpen: () => boolean;
+};
+
+function pageContext(globals: Json, answers: Array<{ status: number; body?: unknown }>) {
+  const calls: PageCall[] = [];
+  const toasts: Array<[string, string]> = [];
+  const page = new FakeDocument();
+  for (const id of ['desktop-save-indicator', 'mobile-save-indicator']) {
+    const el = page.createElement('div');
+    el.id = id;
+    el.className = 'alert hidden';
+    page.body.appendChild(el);
+  }
+  const context: Json = {
+    document: page,
+    console: { log() {}, error() {}, warn() {} },
+    setTimeout,
+    clearTimeout,
+    CustomEvent: class {
+      constructor(
+        public type: string,
+        public init: unknown,
+      ) {}
+    },
+    showToast: (message: string, type: string) => toasts.push([message, type]),
+    fetch: async (url: string, init: Json = {}) => {
+      calls.push({ url, method: String(init.method ?? 'GET'), headers: init.headers, body: init.body as string | undefined });
+      const answer = answers.shift() ?? { status: 200, body: { success: true } };
+      return { ok: answer.status >= 200 && answer.status < 300, status: answer.status, statusText: 'Status', json: async () => answer.body ?? {}, text: async () => JSON.stringify(answer.body ?? {}) };
+    },
+    ...globals,
+  };
+  context.window = context;
+  page.dispatchEvent = () => true;
+  vm.createContext(context);
+  if (/function ragGuardedSave\(/.test(indexHtml)) new vm.Script(functionSource(indexHtml, 'ragGuardedSave')).runInContext(context);
+  return { context, calls, toasts, page };
+}
+
+function loadSaveConfig(globals: Json, answers: Array<{ status: number; body?: unknown }>, config: Json, savedConfig: Json) {
+  const ctx = pageContext({ saveRagPrompt: async () => true, ...globals }, answers);
+  const source = blockFrom(indexHtml, indexHtml.indexOf('async saveConfig() {'));
+  const manager = vm.runInContext(`({ ${source}, showSaveIndicator() {} })`, ctx.context) as Json & { saveConfig: () => Promise<void> };
+  manager.config = config;
+  manager.savedConfig = savedConfig;
+  return { ...ctx, manager };
+}
+
+function fakeGuard(decisions: Partial<Record<'beforeSave' | 'required' | 'saveFailed', Decision[]>>, log: string[] = []): FakeGuard {
+  let open = false;
+  const next = (name: 'beforeSave' | 'required' | 'saveFailed') => {
+    const decision = decisions[name]?.shift() ?? { proceed: false };
+    open = decision.proceed && Boolean(decision.gate);
+    return decision;
+  };
+  return {
+    beforeSave: async (r) => {
+      log.push('beforeSave:' + JSON.stringify(r.changed ?? null));
+      return next('beforeSave');
+    },
+    required: async (r) => {
+      log.push('required:' + String(r.kind));
+      return next('required');
+    },
+    saved: () => {
+      log.push('saved');
+      open = false;
+    },
+    saveFailed: async (s) => {
+      log.push('saveFailed:' + s);
+      return next('saveFailed');
+    },
+    isOpen: () => open,
+  };
+}
+
+describe('saveConfig() through the setting check (UI-SPEC 6.3.1)', () => {
+  it('with RAG_CONFIG_GATE off the request is the same as before this plan and no rag-gate request is made', async () => {
+    const guard = load().settingCheckCreateGuard({ savedConfig: () => ({ RAG_CONFIG_GATE: 'off' }), fetch: async () => { throw new Error('no rag-gate request expected'); } });
+    const { manager, calls } = loadSaveConfig({ ragSettingCheck: guard }, [], { RAG_PRE_CONTEXT: 'synthetic', RAG_CONFIG_GATE: 'off' }, { RAG_PRE_CONTEXT: 'old', RAG_CONFIG_GATE: 'off' });
+    await manager.saveConfig();
+    expect(calls).toEqual([
+      { url: '/api/config', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: { RAG_PRE_CONTEXT: 'synthetic', RAG_CONFIG_GATE: 'off' } }) },
+    ]);
+  });
+
+  it('in enforce mode a changed RAG_PRE_CONTEXT awaits the guard; proceed false posts nothing, shows no error toast and the held indicator for 3 seconds', async () => {
+    const log: string[] = [];
+    const { manager, calls, toasts, page } = loadSaveConfig(
+      { ragSettingCheck: fakeGuard({ beforeSave: [{ proceed: false }] }, log) },
+      [],
+      { RAG_PRE_CONTEXT: 'synthetic', RAG_CONFIG_GATE: 'enforce' },
+      { RAG_PRE_CONTEXT: 'old', RAG_CONFIG_GATE: 'enforce' },
+    );
+    await manager.saveConfig();
+    expect(log).toEqual(['beforeSave:["RAG_PRE_CONTEXT"]']);
+    expect(calls).toEqual([]);
+    expect(toasts.filter(([, type]) => type === 'error')).toEqual([]);
+    const indicator = page.getElementById('desktop-save-indicator')!;
+    expect(indicator.textContent).toBe('Not saved');
+    expect(indicator.className).toContain('alert-warning');
+    expect(indicator.className).not.toContain('hidden');
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(indicator.className).toContain('hidden');
+  });
+
+  it('posts ragGate with the decision and reports the answer back', async () => {
+    const log: string[] = [];
+    const gate = { override: { reason: 'a synthetic reason text' }, check_id: CHECK_ID };
+    const { manager, calls } = loadSaveConfig(
+      { ragSettingCheck: fakeGuard({ beforeSave: [{ proceed: true, gate }] }, log) },
+      [{ status: 200, body: { success: true, ragGate: { record_id: 'rec-0001' } } }],
+      { RAG_PRE_CONTEXT: 'synthetic' },
+      { RAG_PRE_CONTEXT: 'old' },
+    );
+    await manager.saveConfig();
+    expect(JSON.parse(calls[0]!.body!)).toEqual({ config: { RAG_PRE_CONTEXT: 'synthetic' }, ragGate: gate });
+    expect(log).toEqual(['beforeSave:["RAG_PRE_CONTEXT"]', 'saved']);
+    expect(manager.savedConfig).toEqual({ RAG_PRE_CONTEXT: 'synthetic' });
+  });
+
+  it('a 409 rag_gate_required with no dialog open calls required once and shows no Failed to save toast', async () => {
+    const log: string[] = [];
+    const { manager, calls, toasts } = loadSaveConfig(
+      { ragSettingCheck: fakeGuard({ beforeSave: [{ proceed: true }], required: [{ proceed: true, gate: { check_id: CHECK_ID } }] }, log) },
+      [{ status: 409, body: { error: 'rag_gate_required' } }, { status: 200, body: { success: true } }],
+      { RAG_PRE_CONTEXT: 'synthetic' },
+      { RAG_PRE_CONTEXT: 'old' },
+    );
+    await manager.saveConfig();
+    expect(log).toEqual(['beforeSave:["RAG_PRE_CONTEXT"]', 'required:config', 'saved']);
+    expect(calls).toHaveLength(2);
+    expect(JSON.parse(calls[1]!.body!)).toEqual({ config: { RAG_PRE_CONTEXT: 'synthetic' }, ragGate: { check_id: CHECK_ID } });
+    expect(toasts.map(([m]) => m)).not.toContain('Failed to save configuration');
+  });
+
+  it('a held required answer posts nothing more and shows no error', async () => {
+    const log: string[] = [];
+    const { manager, calls, toasts } = loadSaveConfig(
+      { ragSettingCheck: fakeGuard({ beforeSave: [{ proceed: true }], required: [{ proceed: false }] }, log) },
+      [{ status: 409, body: { error: 'rag_gate_required' } }],
+      { RAG_PRE_CONTEXT: 'synthetic' },
+      { RAG_PRE_CONTEXT: 'old' },
+    );
+    await manager.saveConfig();
+    expect(calls).toHaveLength(1);
+    expect(toasts.filter(([, type]) => type === 'error')).toEqual([]);
+  });
+
+  it('with the guard script missing, saves post as today and a 409 shows the toast error.required', async () => {
+    const { manager, calls, toasts } = loadSaveConfig({}, [{ status: 409, body: { error: 'rag_gate_required' } }], { RAG_PRE_CONTEXT: 'synthetic' }, { RAG_PRE_CONTEXT: 'old' });
+    await manager.saveConfig();
+    expect(calls).toEqual([{ url: '/api/config', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: { RAG_PRE_CONTEXT: 'synthetic' } }) }]);
+    expect(toasts).toEqual([['Not saved. These settings need a passed check or a reason. Reload the page, then save again to start the check.', 'error']]);
+  });
+
+  it('the Phase 3.2 impact guard runs first, and the setting check sees what remains', async () => {
+    const log: string[] = [];
+    const { manager } = loadSaveConfig(
+      {
+        ragIngestImpactGuard: async (next: Json) => {
+          log.push('impact');
+          return { ...next, RAG_TABLE_HEADER_REPEAT: 'profile' };
+        },
+        ragSettingCheck: fakeGuard({ beforeSave: [{ proceed: false }] }, log),
+      },
+      [],
+      { RAG_TABLE_HEADER_REPEAT: 'always', RAG_PRE_CONTEXT: 'synthetic' },
+      { RAG_TABLE_HEADER_REPEAT: 'profile', RAG_PRE_CONTEXT: 'old' },
+    );
+    await manager.saveConfig();
+    expect(log).toEqual(['impact', 'beforeSave:["RAG_PRE_CONTEXT"]']);
+  });
+});
+
+describe('saveRagPrompt() and the model save through the setting check', () => {
+  function loadPrompt(globals: Json, answers: Array<{ status: number; body?: unknown }>) {
+    const ctx = pageContext(
+      {
+        ragPreContextArea: { value: 'synthetic pre' },
+        ragPostContextArea: { value: 'synthetic post' },
+        updateLivePreview() {},
+        ...globals,
+      },
+      answers,
+    );
+    new vm.Script(functionSource(indexHtml, 'saveRagPrompt')).runInContext(ctx.context);
+    return { ...ctx, saveRagPrompt: ctx.context.saveRagPrompt as (toast?: boolean) => Promise<unknown> };
+  }
+
+  it("returns 'held' when the guard holds the save and posts nothing", async () => {
+    const log: string[] = [];
+    const { saveRagPrompt, calls, toasts } = loadPrompt({ ragSettingCheck: fakeGuard({ beforeSave: [{ proceed: false }] }, log) }, []);
+    await expect(saveRagPrompt(false)).resolves.toBe('held');
+    expect(calls).toEqual([]);
+    expect(toasts).toEqual([]);
+  });
+
+  it('without a gate it posts the same body as before; with one it adds ragGate', async () => {
+    const plain = loadPrompt({ ragSettingCheck: fakeGuard({ beforeSave: [{ proceed: true }] }) }, [{ status: 200, body: { success: true } }]);
+    await expect(plain.saveRagPrompt(false)).resolves.toBe(true);
+    expect(plain.calls[0]).toEqual({ url: '/api/config/rag-prompt', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preContext: 'synthetic pre', postContext: 'synthetic post' }) });
+    const gated = loadPrompt({ ragSettingCheck: fakeGuard({ beforeSave: [{ proceed: true, gate: { check_id: CHECK_ID } }] }) }, [{ status: 200, body: { success: true } }]);
+    await expect(gated.saveRagPrompt(false)).resolves.toBe(true);
+    expect(JSON.parse(gated.calls[0]!.body!)).toEqual({ preContext: 'synthetic pre', postContext: 'synthetic post', ragGate: { check_id: CHECK_ID } });
+  });
+
+  it('the template chooser retry loop stops on held and its timeout waits while the dialog is open', () => {
+    const start = indexHtml.indexOf('const maxRetries = 3;');
+    expect(start).toBeGreaterThan(-1);
+    const loop = indexHtml.slice(start, indexHtml.indexOf('// Verify save by reading back the data', start));
+    expect(loop).toMatch(/saveSuccess === 'held'\)\s*\{?\s*break;?/);
+    expect(loop).toContain('ragSettingCheck.isOpen()');
+    const after = indexHtml.slice(start, indexHtml.indexOf('} catch (error) {', indexHtml.indexOf('All save attempts failed', start)));
+    expect(after).toMatch(/if \(saveSuccess === 'held'\)/);
+  });
+
+  it('the model save posts with ragGate after a decision', async () => {
+    const modelConfig = { provider: 'openrouter', openaiModels: [], openrouterModels: [], groqModels: [] };
+    const saveButton = { disabled: false, textContent: 'Save Model Configuration' };
+    const ctx = pageContext(
+      { modelConfig, event: { target: saveButton }, alert() {}, ragSettingCheck: fakeGuard({ beforeSave: [{ proceed: true, gate: { check_id: CHECK_ID } }] }) },
+      [{ status: 200, body: { success: true, config: modelConfig, ragGate: { record_id: 'rec-0003' } } }, { status: 200, body: {} }],
+    );
+    new vm.Script(functionSource(indexHtml, 'saveModelConfiguration')).runInContext(ctx.context);
+    await (ctx.context.saveModelConfiguration as () => Promise<void>)();
+    expect(ctx.calls[0]!.url).toBe('../api/config/models');
+    expect(JSON.parse(ctx.calls[0]!.body!)).toEqual({ ...modelConfig, ragGate: { check_id: CHECK_ID } });
+    expect(saveButton.disabled).toBe(false);
+  });
+
+  it('the model save posts the same body as before when the guard passes it through, and posts nothing when held', async () => {
+    const modelConfig = { provider: 'openrouter', openaiModels: [], openrouterModels: [], groqModels: [] };
+    const plain = pageContext({ modelConfig, event: { target: null }, alert() {}, ragSettingCheck: fakeGuard({ beforeSave: [{ proceed: true }] }) }, [{ status: 200, body: { success: true, config: modelConfig } }]);
+    new vm.Script(functionSource(indexHtml, 'saveModelConfiguration')).runInContext(plain.context);
+    await (plain.context.saveModelConfiguration as () => Promise<void>)();
+    expect(plain.calls[0]!.body).toBe(JSON.stringify(modelConfig));
+    const saveButton = { disabled: false, textContent: 'Save Model Configuration' };
+    const held = pageContext({ modelConfig, event: { target: saveButton }, alert() {}, ragSettingCheck: fakeGuard({ beforeSave: [{ proceed: false }] }) }, []);
+    new vm.Script(functionSource(indexHtml, 'saveModelConfiguration')).runInContext(held.context);
+    await (held.context.saveModelConfiguration as () => Promise<void>)();
+    expect(held.calls).toEqual([]);
+    expect(saveButton).toEqual({ disabled: false, textContent: 'Save Model Configuration' });
+  });
+});
+
+describe('index.html wiring (UI-SPEC 6.1)', () => {
+  it('loads setting-check.js after gates-ui.js and has the Setting checks section after Judge calibration', () => {
+    const gates = indexHtml.indexOf('<script src="rag-panels/gates-ui.js"></script>');
+    const tag = indexHtml.indexOf('<script src="rag-panels/setting-check.js"></script>');
+    expect(gates).toBeGreaterThan(-1);
+    expect(tag).toBeGreaterThan(gates);
+    const judge = indexHtml.indexOf('id="rag-administration-judge"');
+    const section = indexHtml.indexOf('id="rag-administration-setting-checks"');
+    expect(section).toBeGreaterThan(judge);
+    const tagEnd = indexHtml.indexOf('</section>', section);
+    const body = indexHtml.slice(section, tagEnd);
+    expect(body).toMatch(/<h3[^>]*tabindex="-1"/);
+    expect(body).toContain('role="status"');
+    expect(body).toContain('aria-live="polite"');
+  });
+
+  it('the RAG administration intro names setting checks and monitoring alerts', () => {
+    expect(indexHtml).toContain('check settings before they apply, and follow monitoring alerts');
   });
 });
