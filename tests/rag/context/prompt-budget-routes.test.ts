@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixedText } from '@/lib/rag/lang/texts';
 import { chatRequest, installChatPipeline, readSse, retrievalWith } from '../../helpers/chat-route-fakes';
@@ -482,6 +484,81 @@ describe('chat route prompt budget (05.2.1-21)', () => {
       expect(onCapture.messages).toBe(offCapture!.messages);
       expect(onCapture.tools).toEqual(offCapture!.tools);
       expect(onCapture.maxOutputTokens).toBe(offCapture!.maxOutputTokens);
+    });
+  });
+
+  describe('trace, record and latency entry', () => {
+    const recordData = { capabilities: { citations: true }, chatId: '00000000-0000-4000-8000-0000000000b1' };
+
+    function budgetSpans() {
+      return h.traces.flatMap((t) => t.stages()).filter((stage) => stage.name === 'prompt_budget');
+    }
+
+    it('the trace has one prompt_budget span with parts, window, estimator, drops, near_limit, overflow mode and status', async () => {
+      process.env.RAG_PROMPT_BUDGET = 'true';
+      smallWindowModels(20000);
+      await post({ model: SMALL_MODEL, messages: [...history(8, 400), { role: 'user', content: QUESTION }] });
+
+      const spans = budgetSpans();
+      expect(spans).toHaveLength(1);
+      const span = spans[0]!;
+      expect(span.status).toBe('ok');
+      expect(span.counts).toMatchObject({
+        prompt_tokens_system: expect.any(Number),
+        prompt_tokens_rules: expect.any(Number),
+        prompt_tokens_tools: expect.any(Number),
+        prompt_tokens_history: expect.any(Number),
+        prompt_tokens_question: expect.any(Number),
+        prompt_tokens_documents: expect.any(Number),
+        prompt_tokens_reserve: expect.any(Number),
+        window: 20000,
+        dropped_documents: expect.any(Number),
+        dropped_history_turns: h.finals[0]!.output.trace.dropped_history_turns,
+      });
+      expect(span.attributes).toMatchObject({
+        window_source: 'model',
+        context_length_unknown: false,
+        estimator: 'cl100k_base',
+        factor_source: 'default',
+        near_limit: expect.any(Boolean),
+        overflow_mode: 'truncate',
+        status: 'ok',
+      });
+      expect(JSON.stringify(span)).not.toContain('lorem');
+      expect(JSON.stringify(span)).not.toContain('Item one');
+    });
+
+    it('an unlisted model shows context_length_unknown on the span', async () => {
+      process.env.RAG_PROMPT_BUDGET = 'true';
+      await post({ model: UNLISTED_MODEL });
+
+      expect(budgetSpans()[0]?.attributes).toMatchObject({ window_source: 'default', context_length_unknown: true });
+    });
+
+    it('the answer record job receives the prompt-budget summary for checks.prompt_budget', async () => {
+      process.env.RAG_PROMPT_BUDGET = 'true';
+      process.env.RAG_ANSWER_FEEDBACK = 'true';
+      await post({ data: recordData });
+
+      expect(h.scheduled).toHaveLength(1);
+      const summary = h.scheduled[0]!.promptBudget;
+      expect(Object.keys(summary ?? {}).sort()).toEqual(['dropped_documents', 'dropped_history_turns', 'near_limit', 'parts', 'status', 'window']);
+      expect(summary).toMatchObject({ status: 'ok', window: 1000000, dropped_history_turns: 0, near_limit: false });
+    });
+
+    it('switch off: no span and no promptBudget member on the record input', async () => {
+      process.env.RAG_ANSWER_FEEDBACK = 'true';
+      await post({ data: recordData });
+
+      expect(budgetSpans()).toHaveLength(0);
+      expect(h.scheduled).toHaveLength(1);
+      expect(h.scheduled[0]).not.toHaveProperty('promptBudget');
+    });
+
+    it('latency-budgets.json has a report-only prompt_budget stage entry for chat', () => {
+      const budgets = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../eval/config/latency-budgets.json'), 'utf8'));
+      expect(budgets.profiles.chat.stages.prompt_budget).toEqual(expect.any(Number));
+      expect(budgets.profiles.chat.stages.prompt_budget).toBeGreaterThan(0);
     });
   });
 });
