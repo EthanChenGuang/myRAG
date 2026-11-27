@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "default_window": 16384,
+  "margin_ratio": 0.05,
+  "margin_tokens": 256,
+  "near_limit_ratio": 0.9,
+  "mcp_tool_reserve": 2000,
+  "voice_document_budget": 2000,
+  "voice_system_reserve": 1200,
+  "voice_answer_reserve": 600,
+  "refine_max_calls": 4
+}

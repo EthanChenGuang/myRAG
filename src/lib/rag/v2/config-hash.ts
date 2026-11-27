@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import rawOutputCaps from '../../../../eval/config/output-caps.json';
 import type { AnswerConfig } from '../generation/answer-config';
+import { calcLimitsVersion } from '../calc/limits';
+import { promptBudgetConfigVersion, tokenizerCalibrationVersion } from '../context/prompt-budget-config';
 import { registryPackVersion } from '../lang/texts';
 import { outputGuardRulesVersion } from '../security/credential-rules';
 import { TLD_SNAPSHOT_VERSION } from '../security/link-targets';
@@ -140,6 +142,41 @@ export function answerRulesHashComponent(
 }
 
 /** The query layer's setup (D-04, research A-7); present only while the layer is on, so a Phase 4 hash is unchanged. */
+/** Phase 5.2.1 D-88: the calculation and prompt-budget switches and the versions of the data they read. */
+export interface RetrievalConfigHashCalcBudget {
+  calcTool: boolean;
+  calcCheck: boolean;
+  promptBudget: boolean;
+  contextOverflow: AnswerConfig['contextOverflow'];
+  calcLimitsVersion: string;
+  promptBudgetConfigVersion: string;
+  tokenizerCalibrationVersion: string;
+}
+
+export type CalcBudgetHashConfig = Pick<AnswerConfig, 'calcTool' | 'calcCheck' | 'promptBudget' | 'contextOverflow'>;
+
+/**
+ * D-88, D-58: null while the four Phase 5.2.1 switches are at their defaults (calc tool and check off, budget off, overflow
+ * truncate), so the hash keeps its pre-5.2.1 value; otherwise the switches and the versions of calc-limits.json,
+ * prompt-budget.json and tokenizer-calibration.json.
+ */
+export function calcBudgetHashComponent(
+  config: CalcBudgetHashConfig,
+  options: { calcLimitsVersion?: string; promptBudgetConfigVersion?: string; tokenizerCalibrationVersion?: string } = {},
+): RetrievalConfigHashCalcBudget | null {
+  const on = config.calcTool || config.calcCheck || config.promptBudget || config.contextOverflow !== 'truncate';
+  if (!on) return null;
+  return {
+    calcTool: config.calcTool,
+    calcCheck: config.calcCheck,
+    promptBudget: config.promptBudget,
+    contextOverflow: config.contextOverflow,
+    calcLimitsVersion: options.calcLimitsVersion ?? calcLimitsVersion(),
+    promptBudgetConfigVersion: options.promptBudgetConfigVersion ?? promptBudgetConfigVersion(),
+    tokenizerCalibrationVersion: options.tokenizerCalibrationVersion ?? tokenizerCalibrationVersion(),
+  };
+}
+
 export interface RetrievalConfigHashQueryLayer {
   framework: string;
   model: string;
@@ -213,6 +250,8 @@ export interface RetrievalConfigHashInput {
   security?: RetrievalConfigHashSecurity | null;
   /** Phase 5.2 D-58: present only while a prompt- or output-affecting answer switch is on (answerRulesHashComponent). */
   answerRules?: RetrievalConfigHashAnswerRules | null;
+  /** Phase 5.2.1 D-88: present only while a calculation or prompt-budget switch is not at its default (calcBudgetHashComponent). */
+  calcBudget?: RetrievalConfigHashCalcBudget | null;
   /** Doc type to binding profile id of the legs planned for the request; omitted (or empty) when none is planned. */
   embeddingBindings?: Record<string, string> | null;
   /** Eval only: the doc type of the control leg. */
@@ -318,6 +357,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     thresholds_config_hash: input.switches.refusalThreshold ? input.thresholdsConfigHash : null,
     ...(input.security ? { security: input.security } : {}),
     ...(input.answerRules ? { answer_rules: input.answerRules } : {}),
+    ...(input.calcBudget ? { calc_budget: input.calcBudget } : {}),
     ...(input.embeddingBindings && Object.keys(input.embeddingBindings).length > 0 ? { embedding_bindings: input.embeddingBindings } : {}),
     ...(input.domainControlLeg ? { domain_control_leg: input.domainControlLeg } : {}),
     ...(input.effectiveOn ? { effective_on: input.effectiveOn } : {}),
