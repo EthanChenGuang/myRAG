@@ -170,21 +170,17 @@ BEGIN
 END
 $table_rows_access$;
 
--- Key checks (D-02) on every labelled table. The expression is the one of rag_access_keys_valid written without a function call: a CHECK
--- runs with the writing role's privileges, and the function stays service_role only, so a client insert would otherwise fail with
--- permission denied (found by plan 04's client cases). Non-empty, no NULL element, each key 'all', 'g:<uuid>' or 'u:<uuid>', 'all' alone; the
--- comma count rules out an element that itself holds a comma. A constraint of the earlier form is replaced; absent tables are skipped.
+-- Key checks (D-02) on every labelled table. The expression is the inline rule of 0921 (train 35), character for character, so every
+-- labelled table carries the same check: a CHECK runs with the writing role's privileges and rag_access_keys_valid stays service_role
+-- only, so a check that called it would fail client inserts with permission denied (found by plan 04's client cases). A constraint of
+-- the function-call form is replaced; an inline one is kept; absent tables are skipped.
 
 DO $access_checks$
 DECLARE
   v_table text;
   v_name text;
   v_def text;
-  v_expr constant text := 'pg_catalog.cardinality(access_groups) > 0'
-    || ' AND pg_catalog.array_position(access_groups, NULL::text) IS NULL'
-    || ' AND pg_catalog.array_to_string(access_groups, '','') ~ ''^(all|[gu]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(,[gu]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})*)$'''
-    || ' AND pg_catalog.length(pg_catalog.array_to_string(access_groups, '',''))'
-    || ' - pg_catalog.length(pg_catalog.replace(pg_catalog.array_to_string(access_groups, '',''), '','', '''')) = pg_catalog.cardinality(access_groups) - 1';
+  v_expr constant text := 'access_groups IS NOT NULL AND pg_catalog.cardinality(access_groups) > 0 AND pg_catalog.array_position(access_groups, NULL::text) IS NULL AND pg_catalog.array_to_string(access_groups, '','') ~ ''^(all|[gu]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(,(all|[gu]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))*$'' AND pg_catalog.cardinality(access_groups) = pg_catalog.cardinality(pg_catalog.string_to_array(pg_catalog.array_to_string(access_groups, '',''), '','')) AND (pg_catalog.array_position(access_groups, ''all'') IS NULL OR pg_catalog.cardinality(access_groups) = 1)';
 BEGIN
   FOREACH v_table IN ARRAY ARRAY['documents', 'document_chunks', 'document_parents', 'chunk_translations', 'rag_table_rows'] LOOP
     CONTINUE WHEN NOT EXISTS (
