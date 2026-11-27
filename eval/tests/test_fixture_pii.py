@@ -70,7 +70,10 @@ def _fixture_files():
     assert len(ingest) == INGEST_FILE_COUNT
     parse_files = _parse_files()
     assert len(parse_files) >= 13
-    return corpus + ingest + parse_files
+    # 06.2-34: the twelve q62 documents of the isolated Phase 6.2 tenant and their manifest.
+    q62 = sorted((FIXTURES / "q62-corpus").rglob("*.md")) + [FIXTURES / "q62-corpus" / "manifest.json"]
+    assert len(q62) == 12 + 1
+    return corpus + ingest + parse_files + q62
 
 
 def test_fixture_text_has_only_reserved_phone_numbers():
