@@ -194,6 +194,20 @@ export async function judgeClaims(input: JudgeClaimsInput): Promise<JudgeClaimsR
   const generatorFamily = modelFamily(input.generatorModelId);
   if (judgeFamily === null || generatorFamily === null) return notChecked('judge_unknown_family', judgeModel, null);
   if (judgeFamily === generatorFamily) return notChecked('judge_same_family', judgeModel, null);
+  return runJudge(input, judgeModel);
+}
+
+/**
+ * D-27: one judge call over one answer without the D-25 family gate. Only the eval calibration harness (eval/harness/run-judge.mts)
+ * calls it, to measure a judge's verdicts on labelled answers; the app always goes through judgeClaims.
+ */
+export async function judgeClaimsForCalibration(input: Omit<JudgeClaimsInput, 'generatorModelId'>): Promise<JudgeClaimsResult> {
+  const judgeModel = input.judgeModel.trim();
+  if (!judgeModel) return notChecked('judge_not_configured', null, null);
+  return runJudge(input, judgeModel);
+}
+
+async function runJudge(input: Omit<JudgeClaimsInput, 'generatorModelId'>, judgeModel: string): Promise<JudgeClaimsResult> {
   const version = judgeVersion(judgeModel);
   if (input.claims.length === 0) {
     return { status: 'judged', judgeModel, judgeVersion: version, verdicts: [], usage: { inputTokens: null, outputTokens: null, latencyMs: 0, costUsd: null } };
