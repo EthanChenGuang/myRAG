@@ -697,3 +697,12 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   (a) the sentinel finds rag_scope_centroids_rebuild unclassified -> mark it EXEMPT, with the follow-up "should restricted chunks shape scope centroids?";
   (b) the q62-scope-separation report is stale -> re-generate it.
 - 22:08Z 03.3-25 DONE (9286399d) and archived -> train 40. TPL-01..08 have passing gates; TPL-09 no_other_slice_drop FAIL is recorded (decision b, re-checked in 03.3-26).
+- 22:10Z More parallel (user asked).
+  06.3-04 and 06.3-15 were auto=false only because of a decision checkpoint whose recommended option (option-a) the owner had pre-authorized. Per the user's standing rule I launched both with option-a:
+  - 06.3-04 on main
+  - 06.3-15 on exec/06.3-10
+  These two unblock most of the 06.3 tree.
+  Also launched 06.2-23 on train 39; it merges 06.2-27 itself.
+  Still held:
+  - 06.3-14: needs 06.3-07 and 06.3-27, which arrive with train 40.
+  - 07-37: blocked earlier by its own check; retry after train 40.
