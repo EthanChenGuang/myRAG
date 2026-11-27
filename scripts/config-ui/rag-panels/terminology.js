@@ -23,7 +23,7 @@ const TERMINOLOGY_LABELS = {
     'tab.candidates': 'Candidates',
     'tab.history': 'History',
     'list.search': 'Search terms',
-    'list.searchPlaceholder': 'termalpha',
+    'list.searchPlaceholder': 'termalpha…',
     'list.count': 'Entries',
     'list.range': 'Showing {from}–{to} of {total}',
     'list.label': 'Dictionary entries',
@@ -79,8 +79,8 @@ const TERMINOLOGY_LABELS = {
     'form.variantsHelp': 'Other ways people write it. One per line, at most 16. A variant cannot contain the character |.',
     'form.variantsPair': 'Source-language terms',
     'form.variantsPairHelp': 'The terms in the source language, one per line. A translation pair never expands a query.',
-    'form.variantsPlaceholder': 'termalpha',
-    'form.canonicalPlaceholder': 'term alpha beta',
+    'form.variantsPlaceholder': 'termalpha…',
+    'form.canonicalPlaceholder': 'term alpha beta…',
     'form.kind': 'Kind',
     'form.language': 'Language',
     'form.sourceLanguage': 'Source language',
@@ -157,6 +157,7 @@ const TERMINOLOGY_LABELS = {
     'import.tooLarge': 'The file is too large (1 MB or 5,000 rows at most).',
     'import.invalidFile': 'The file could not be read.',
     'import.report': 'Check result',
+    'import.checked': 'File checked. The result is shown below the Check file button.',
     'import.create': 'To create',
     'import.update': 'To update',
     'import.unchanged': 'Unchanged',
@@ -179,7 +180,7 @@ const TERMINOLOGY_LABELS = {
     'export.running': 'Exporting…',
     'export.done': 'Export downloaded.',
     'preview.query': 'Query',
-    'preview.queryPlaceholder': 'termalpha',
+    'preview.queryPlaceholder': 'termalpha…',
     'preview.help': 'Shows what a search would add for this query. Nothing is saved. Translation pairs never match.',
     'preview.run': 'Preview',
     'preview.running': 'Previewing…',
@@ -249,7 +250,7 @@ const TERMINOLOGY_LABELS = {
     'tab.candidates': '候选词',
     'tab.history': '历史',
     'list.search': '搜索词条',
-    'list.searchPlaceholder': 'termalpha',
+    'list.searchPlaceholder': 'termalpha…',
     'list.count': '词条',
     'list.range': '第 {from}–{to} 条，共 {total} 条',
     'list.label': '词典词条',
@@ -305,8 +306,8 @@ const TERMINOLOGY_LABELS = {
     'form.variantsHelp': '人们的其他写法。每行一个，最多 16 个。变体不能包含字符 |。',
     'form.variantsPair': '源语言术语',
     'form.variantsPairHelp': '源语言中的术语，每行一个。翻译对从不扩展查询。',
-    'form.variantsPlaceholder': 'termalpha',
-    'form.canonicalPlaceholder': 'term alpha beta',
+    'form.variantsPlaceholder': 'termalpha…',
+    'form.canonicalPlaceholder': 'term alpha beta…',
     'form.kind': '类型',
     'form.language': '语言',
     'form.sourceLanguage': '源语言',
@@ -383,6 +384,7 @@ const TERMINOLOGY_LABELS = {
     'import.tooLarge': '文件过大（最多 1 MB 或 5,000 行）。',
     'import.invalidFile': '无法读取该文件。',
     'import.report': '检查结果',
+    'import.checked': '文件已检查。结果显示在“检查文件”按钮下方。',
     'import.create': '将新增',
     'import.update': '将更新',
     'import.unchanged': '不变',
@@ -405,7 +407,7 @@ const TERMINOLOGY_LABELS = {
     'export.running': '正在导出…',
     'export.done': '导出文件已下载。',
     'preview.query': '查询',
-    'preview.queryPlaceholder': 'termalpha',
+    'preview.queryPlaceholder': 'termalpha…',
     'preview.help': '显示检索会为此查询添加的内容。不会保存任何内容。翻译对从不匹配。',
     'preview.run': '预览',
     'preview.running': '正在预览…',
@@ -476,7 +478,7 @@ const TERMINOLOGY_LABELS = {
     'tab.candidates': 'Candidati',
     'tab.history': 'Cronologia',
     'list.search': 'Cerca termini',
-    'list.searchPlaceholder': 'termalpha',
+    'list.searchPlaceholder': 'termalpha…',
     'list.count': 'Voci',
     'list.range': '{from}–{to} di {total}',
     'list.label': 'Voci del dizionario',
@@ -532,8 +534,8 @@ const TERMINOLOGY_LABELS = {
     'form.variantsHelp': 'Altri modi in cui viene scritto. Una per riga, al massimo 16. Una variante non può contenere il carattere |.',
     'form.variantsPair': 'Termini nella lingua di origine',
     'form.variantsPairHelp': 'I termini nella lingua di origine, uno per riga. Una coppia di traduzione non amplia mai una query.',
-    'form.variantsPlaceholder': 'termalpha',
-    'form.canonicalPlaceholder': 'term alpha beta',
+    'form.variantsPlaceholder': 'termalpha…',
+    'form.canonicalPlaceholder': 'term alpha beta…',
     'form.kind': 'Tipo',
     'form.language': 'Lingua',
     'form.sourceLanguage': 'Lingua di origine',
@@ -610,6 +612,7 @@ const TERMINOLOGY_LABELS = {
     'import.tooLarge': 'Il file è troppo grande (al massimo 1 MB o 5.000 righe).',
     'import.invalidFile': 'Non è stato possibile leggere il file.',
     'import.report': 'Risultato del controllo',
+    'import.checked': 'File controllato. Il risultato è sotto il pulsante Controlla il file.',
     'import.create': 'Da creare',
     'import.update': 'Da aggiornare',
     'import.unchanged': 'Invariate',
@@ -632,7 +635,7 @@ const TERMINOLOGY_LABELS = {
     'export.running': 'Esportazione…',
     'export.done': 'Esportazione scaricata.',
     'preview.query': 'Query',
-    'preview.queryPlaceholder': 'termalpha',
+    'preview.queryPlaceholder': 'termalpha…',
     'preview.help': 'Mostra cosa aggiungerebbe una ricerca per questa query. Non viene salvato nulla. Le coppie di traduzione non corrispondono mai.',
     'preview.run': 'Anteprima',
     'preview.running': 'Anteprima in corso…',
@@ -1102,9 +1105,15 @@ class TerminologyPanel {
       onSelect: (id) => this.onTab(id),
     });
     for (const id of Object.keys(this.tabs.panels)) this.tabs.panels[id].appendChild(this.hosts[id]);
+    // Five labels do not fit a phone width: the tab row scrolls inside its own strip instead of wrapping or widening the page.
+    this.tabs.tablist.classList.remove('flex-wrap');
+    this.tabs.tablist.classList.add('flex-nowrap', 'w-max', 'min-w-full', 'mb-0');
+    for (const tab of Array.from(this.tabs.tablist.querySelectorAll('button'))) tab.classList.add('whitespace-nowrap');
+    const strip = this.el('div', { className: 'overflow-x-auto overscroll-x-contain mb-4 min-w-0' }, [this.tabs.tablist]);
     const content = this.root.querySelector('[data-terminology-content]');
-    if (content) content.replaceChildren(this.hosts.layer, this.tabs.tablist, ...Object.values(this.tabs.panels));
+    if (content) content.replaceChildren(this.hosts.layer, strip, ...Object.values(this.tabs.panels));
     this.bindWorkspace();
+    this.bindUnload();
     await this.load('first');
   }
 
@@ -1130,6 +1139,16 @@ class TerminologyPanel {
     this.organizationId = selector && selector.value ? String(selector.value) : null;
     const line = this.root.querySelector('[data-terminology-workspace]');
     if (line) line.textContent = this.singleTenant ? '' : this.ui().ragUiLabel('panel.workspace', this.locale, { name: this.workspaceName() });
+  }
+
+  /** An unsaved draft in the editor asks before the page is left (web-design-guidelines: unsaved changes). */
+  bindUnload() {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+    window.addEventListener('beforeunload', (event) => {
+      if (!this.editor || !this.editor.dirty) return;
+      event.preventDefault();
+      event.returnValue = '';
+    });
   }
 
   bindWorkspace() {
@@ -1254,6 +1273,7 @@ class TerminologyPanel {
   }
 
   onTab(id) {
+    this.announce('');
     if (id === 'candidates' && !this.candidates.loaded) this.loadCandidates(false);
     if (id === 'history') this.loadAudit(false);
     if (id === 'preview') this.renderPreview();
@@ -1380,10 +1400,10 @@ class TerminologyPanel {
       actions.push(this.btn(this.t('action.show'), { className: 'btn btn-ghost md:btn-sm', attrs: { 'aria-label': this.t('action.showAria', { term }) } }, (event) => this.setSuppression(view.suppressesEntryId, false, term, event)));
     } else {
       actions.push(this.btn(this.t('action.edit'), { className: 'btn btn-ghost md:btn-sm', attrs: { 'aria-label': this.t('action.editAria', { term }), 'data-terminology-edit': view.id } }, () => this.openEditor({ mode: 'edit', id: view.id, draft: terminologyDraftFromEntry(item) })));
+      actions.push(this.btn(this.t('action.delete'), { className: 'btn btn-ghost md:btn-sm text-error', attrs: { 'aria-label': this.t('action.deleteAria', { term }) } }, (event) => this.confirmDelete(view, event)));
       if (this.layer === 'shared' && !this.singleTenant) {
         actions.push(this.btn(this.t('action.hide'), { className: 'btn btn-ghost md:btn-sm', attrs: { 'aria-label': this.t('action.hideAria', { term }) } }, (event) => this.setSuppression(view.id, true, term, event)));
       }
-      actions.push(this.btn(this.t('action.delete'), { className: 'btn btn-ghost md:btn-sm text-error', attrs: { 'aria-label': this.t('action.deleteAria', { term }) } }, (event) => this.confirmDelete(view, event)));
     }
     const mono = 'font-mono text-xs break-words';
     const termCell = this.el('td', { className: 'min-w-32' }, [
@@ -1399,7 +1419,7 @@ class TerminologyPanel {
       this.el('td', {}, [
         this.el('span', { className: 'badge badge-sm badge-outline whitespace-nowrap' + (view.suppression ? ' border-warning' : view.enabled ? '' : ' opacity-70'), text: view.status }),
       ]),
-      this.el('td', {}, [this.el('div', { className: 'flex flex-wrap gap-1' }, actions)]),
+      this.el('td', { className: 'min-w-48' }, [this.el('div', { className: 'flex flex-wrap gap-1' }, actions)]),
     ]);
   }
 
@@ -1433,6 +1453,7 @@ class TerminologyPanel {
       const alert = ui.ragUiAlert(this.doc, { tone: 'error', icon: 'exclamation-circle', body: [this.t('form.notSaved')], role: 'alert' });
       alert.setAttribute('tabindex', '-1');
       alert.setAttribute('data-terminology-summary', '');
+      alert.classList.add('scroll-mt-24');
       nodes.push(alert);
     }
     if (summary.length) nodes.push(this.issueLines(summary, 'summary'));
@@ -1450,7 +1471,8 @@ class TerminologyPanel {
     editor.focus = null;
     if (focus) {
       setTimeout(() => {
-        const target = focus === 'summary' ? block.querySelector('[data-terminology-summary]') : focus === 'alert' ? block.querySelector('[role="alert"]') : heading;
+        const firstInvalid = block.querySelector('[aria-invalid="true"]');
+        const target = focus === 'summary' ? firstInvalid || block.querySelector('[data-terminology-summary]') : focus === 'alert' ? block.querySelector('[role="alert"]') : heading;
         if (target && typeof target.focus === 'function') target.focus();
       }, 0);
     }
@@ -1487,6 +1509,7 @@ class TerminologyPanel {
       control.checked = Boolean(f.value);
       control.addEventListener('change', () => {
         this.editor.draft.enabled = Boolean(control.checked);
+        this.editor.dirty = true;
       });
       wrap.appendChild(this.el('label', { className: 'label cursor-pointer justify-start gap-3 w-fit min-h-11 md:min-h-8', attrs: { for: id } }, [control, this.el('span', { className: 'label-text', text: f.label })]));
     } else {
@@ -1521,6 +1544,7 @@ class TerminologyPanel {
       const key = f.name === 'variants' ? 'variantsText' : f.name;
       const update = () => {
         this.editor.draft[key] = control.value;
+        this.editor.dirty = true;
       };
       control.addEventListener('input', update);
       control.addEventListener('change', () => {
@@ -1534,6 +1558,7 @@ class TerminologyPanel {
       });
       wrap.appendChild(control);
     }
+    if (control) control.classList.add('scroll-mt-24');
     if (f.help) wrap.appendChild(this.el('p', { className: 'text-xs text-base-content/70 mt-1 max-w-prose', id: helpId, text: f.help }));
     const lines = this.issueLines(issues, f.name);
     lines.id = issuesId;
@@ -1797,7 +1822,7 @@ class TerminologyPanel {
         this.el('td', { className: 'tabular-nums', text: issue.row === null ? '' : ui.ragUiFormatNumber(issue.row, this.locale) }),
         this.el('td', { className: issue.severity === 'error' ? 'text-error' : '', text: this.t('severity.' + issue.severity) }),
         this.el('td', { text: issue.label }),
-        this.el('td', { className: 'break-words max-w-md', text: issue.message }),
+        this.el('td', { className: 'break-words min-w-48 max-w-md', text: issue.message }),
       ]),
     );
     return this.el('div', { className: 'overflow-x-auto rounded bg-base-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', attrs: { tabindex: '0', role: 'region', 'aria-label': this.t('import.issues') } }, [
@@ -1843,7 +1868,7 @@ class TerminologyPanel {
         this.audit.loaded = false;
         await this.reloadAll();
         this.announce(this.t('import.applied'));
-      } else this.announce(this.t('import.report'));
+      } else this.announce(this.t('import.checked'));
       this.renderImportResult();
       return;
     }
