@@ -772,3 +772,41 @@ def table_split_report(
         },
         items=rows,
     )
+
+
+
+# Phase 5.2 answer-rule metrics (D-21, D-54): stubs until plan 05.2-32 Task 1 lands.
+def general_knowledge_label(language: str) -> str | None:
+    return None
+
+
+def uncited_sentence_rate(traces: Iterable[RagTrace]) -> MetricValue | None:
+    return None
+
+
+def unsupported_addition(trace: RagTrace, item: GoldenItem) -> float:
+    return 0.0
+
+
+def covered_part_answered(trace: RagTrace, item: GoldenItem) -> float:
+    return 0.0
+
+
+def current_value(trace: RagTrace, item: GoldenItem) -> float:
+    return 0.0
+
+
+def mixed_versions(trace: RagTrace, item: GoldenItem) -> float:
+    return 0.0
+
+
+def adjacent_repurpose(trace: RagTrace, item: GoldenItem, rag_mode: str) -> float:
+    return 0.0
+
+
+def answer_rule_metrics(traces: list[RagTrace], golden: list[GoldenItem], *, rag_mode: str = "strict") -> None:
+    return None
+
+
+def allowlisted_link_kept(trace: RagTrace, item: GoldenItem) -> float:
+    return 0.0
