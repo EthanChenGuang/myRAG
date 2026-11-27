@@ -19,7 +19,7 @@ import {
 } from '../../embeddings/query-embedding';
 import { requireValue, runStage, StageError, stageSpec, type StageSpec } from '../../pipeline';
 import { exactIdStage } from '../../retrieval/exact-id';
-import { identifierSuggestions, resolveQueryIdentifiers, type QueryIdentifiers } from '../../retrieval/identifiers';
+import { digitLookalikeMatches, identifierSuggestions, resolveQueryIdentifiers, type QueryIdentifiers } from '../../retrieval/identifiers';
 import { loadTenantIdentifierPatterns } from '../../identifiers/patterns';
 import { tableLookupStage, type TableLookupRow } from '../../retrieval/table-lookup';
 import type { LexicalOptions } from '../../lexical/options';
@@ -236,6 +236,8 @@ export interface SearchIdentifiers {
   suggestions: string[];
   /** The tenant's compiled patterns, so the guard reads candidates as ingestion indexed them. */
   patterns: readonly RegExp[];
+  /** The question's spellings (after NFKC) of the asked identifiers that resolved; in memory only, never traced (D-34). */
+  foundSpellings: string[];
 }
 
 /** D-12, D-40: fixed trace codes of the search stage detail. */
@@ -1071,7 +1073,13 @@ async function runIdentifierResolve(ctx: SearchStagesInput): Promise<ResolvedIde
       const { expressions } = await loadTenantIdentifierPatterns(scope, { signal: stageSignal });
       try {
         const client = requireAdminSearchClient(getRagDeps());
-        const resolved = await resolveQueryIdentifiers(scope, input.query, expressions, { client, signal: stageSignal });
+        const exact = await resolveQueryIdentifiers(scope, input.query, expressions, { client, signal: stageSignal });
+        const lookalikes = exact.missing.length > 0 ? await digitLookalikeMatches(scope, exact.missing, { client, signal: stageSignal }) : new Map<string, string>();
+        const resolved: QueryIdentifiers = {
+          asked: exact.asked,
+          found: [...new Set([...exact.found, ...lookalikes.values()])],
+          missing: exact.missing.filter((norm) => !lookalikes.has(norm)),
+        };
         const notFound = resolved.asked.length > 0 && resolved.found.length === 0;
         const suggestions = notFound ? await identifierSuggestions(scope, resolved.missing, { client, signal: stageSignal }) : [];
         return { ok: true, resolved, patterns: expressions, suggestions };
@@ -1097,6 +1105,7 @@ async function runIdentifierResolve(ctx: SearchStagesInput): Promise<ResolvedIde
   );
   if (outcome.skipped || !outcome.value.ok) return null;
   const { resolved, patterns, suggestions } = outcome.value;
+  const missing = new Set(resolved.missing);
   return {
     asked: resolved.asked.map((entry) => entry.norm),
     found: resolved.found,
@@ -1104,6 +1113,7 @@ async function runIdentifierResolve(ctx: SearchStagesInput): Promise<ResolvedIde
     notFound: resolved.asked.length > 0 && resolved.found.length === 0,
     suggestions,
     patterns,
+    foundSpellings: resolved.asked.filter((entry) => !missing.has(entry.norm)).map((entry) => entry.raw),
   };
 }
 
