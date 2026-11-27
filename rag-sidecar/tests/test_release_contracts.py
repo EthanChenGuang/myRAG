@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -431,6 +433,17 @@ class TestVendorDataFlow:
     def test_requires_ack_names_its_switch(self):
         with pytest.raises(ValidationError, match="ack_switch"):
             VendorDataFlow.model_validate({"vendors": [_vendor(multi_tenant="requires_ack")]})
+
+    def test_host_shared_by_two_vendors_validates(self):
+        inventory = VendorDataFlow.model_validate(
+            {"vendors": [_vendor(), _vendor(vendor="example-judge", name="Example judge", content=["query", "answer"])]}
+        )
+        assert [entry.hosts for entry in inventory.vendors] == [["api.example.com"], ["api.example.com"]]
+
+    def test_committed_inventory_validates(self):
+        path = Path(__file__).resolve().parents[2] / "config" / "rag" / "vendor-data-flow.json"
+        inventory = VendorDataFlow.model_validate_json(path.read_text(encoding="utf-8"))
+        assert {"weaviate", "qdrant", "judge", "prompt_guard"} <= {entry.vendor for entry in inventory.vendors}
 
     def test_repeated_vendor_fails(self):
         with pytest.raises(ValidationError, match="vendors"):
