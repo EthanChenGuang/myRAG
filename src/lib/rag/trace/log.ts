@@ -1,6 +1,6 @@
 import type { RefusalRecord } from '../refusal/types';
 import type { RetrievalResult, StageRecord } from '../types';
-import type { TraceCollector } from './collector';
+import type { TraceCollector, TraceLanguages } from './collector';
 import { sanitizeStageCounts } from './collector';
 
 export interface TraceLogSink {
@@ -72,7 +72,7 @@ function timingForLog(collector: TraceCollector): Record<string, unknown> {
 }
 
 /** LANG-10: the codes-only languages block, once the trace was finished with one. */
-function languagesForLog(collector: TraceCollector): Record<string, unknown> {
+function languagesForLog(collector: TraceCollector): { languages?: TraceLanguages } {
   const block = collector.languages();
   if (!block) return {};
   return {

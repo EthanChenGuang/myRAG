@@ -878,6 +878,8 @@ function bufferedCollector(parent: TraceCollector): TraceCollector & { commit():
     markGenerationStart: () => parent.markGenerationStart(),
     markFirstTextDelta: () => parent.markFirstTextDelta(),
     setCacheState: (state) => parent.setCacheState(state),
+    setLanguages: (block) => parent.setLanguages(block),
+    languages: () => parent.languages(),
     timing: () => parent.timing(),
     commit() {
       for (const record of buffer.stages()) {
