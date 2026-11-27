@@ -139,6 +139,26 @@ export function answerRulesHashComponent(
 }
 
 /** The query layer's setup (D-04, research A-7); present only while the layer is on, so a Phase 4 hash is unchanged. */
+/** Phase 5.2.1 D-88: the calculation and prompt-budget switches and the versions of the data they read. */
+export interface RetrievalConfigHashCalcBudget {
+  calcTool: boolean;
+  calcCheck: boolean;
+  promptBudget: boolean;
+  contextOverflow: AnswerConfig['contextOverflow'];
+  calcLimitsVersion: string;
+  promptBudgetConfigVersion: string;
+  tokenizerCalibrationVersion: string;
+}
+
+export type CalcBudgetHashConfig = Pick<AnswerConfig, 'calcTool' | 'calcCheck' | 'promptBudget' | 'contextOverflow'>;
+
+export function calcBudgetHashComponent(
+  _config: CalcBudgetHashConfig,
+  _options: { calcLimitsVersion?: string; promptBudgetConfigVersion?: string; tokenizerCalibrationVersion?: string } = {},
+): RetrievalConfigHashCalcBudget | null {
+  return null;
+}
+
 export interface RetrievalConfigHashQueryLayer {
   framework: string;
   model: string;
@@ -210,6 +230,8 @@ export interface RetrievalConfigHashInput {
   security?: RetrievalConfigHashSecurity | null;
   /** Phase 5.2 D-58: present only while a prompt- or output-affecting answer switch is on (answerRulesHashComponent). */
   answerRules?: RetrievalConfigHashAnswerRules | null;
+  /** Phase 5.2.1 D-88: present only while a calculation or prompt-budget switch is not at its default (calcBudgetHashComponent). */
+  calcBudget?: RetrievalConfigHashCalcBudget | null;
   /** Doc type to binding profile id of the legs planned for the request; omitted (or empty) when none is planned. */
   embeddingBindings?: Record<string, string> | null;
   /** Eval only: the doc type of the control leg. */
