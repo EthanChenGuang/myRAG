@@ -83,7 +83,6 @@ import {
   type CitationLabeler,
   type ClaudeTurnFacts,
   assertQuestionLast,
-  composeAnswerRules,
   currentContextTokenBudget,
   finalizePromptBudget,
   fixedText,
@@ -2454,31 +2453,15 @@ Context:
           : {};
       const budgetSystem = [
         `${createEnhancedRAGPrompt((await resolveRagSystemPrompt()).ragSystemPrompt, '', ragMode)}${EMAIL_TOOL_PREFERENCE}`,
-        ...[
-          formattingSystemMessage,
-          toolUsagePriorityMessage,
-          ctaSystemMessage,
-          documentReferenceSystemMessage,
-          toolResultSummarySystemMessage,
-          gmailGeneralSystemMessage,
-          gmailAttachmentSystemMessage,
-          mediaUploadSystemMessage,
-        ].map((message) => messageContentText(message.content)),
+        ...[...messages.slice(0, messages.length - originalMessages.length), gmailAttachmentSystemMessage, mediaUploadSystemMessage].map(
+          (message) => messageContentText(message.content),
+        ),
       ].join('\n\n');
-      const budgetRules = composeAnswerRules(
-        {
-          prompt: '',
-          mode: ragMode,
-          language: answerTurn.answerLanguage,
-          config: answerTurn.config,
-          channel: answerTurn.channel,
-          webSearchOffered: budgetWebSearch,
-          capApplies: false,
-          contextTagging: readSecurityConfig().contextTagging,
-          ...(calcMayBeOffered ? { calculation: { mode: 'tool' as const } } : {}),
-        },
-        { log: false },
-      );
+      const budgetRules = answerTurn.rulesBlock({
+        mode: ragMode,
+        webSearchOffered: budgetWebSearch,
+        ...(calcMayBeOffered ? { calculation: { mode: 'tool' as const } } : {}),
+      });
       const budgetModelLimit = modelBlocksTools(model) ? 16384 : getMaxTokensForModel(model);
       promptBudgetInput = {
         window: modelContextLength(model),
@@ -3002,10 +2985,14 @@ Context:
         ...(calcOffer ? { calculation: { mode: calcOffer.mode } } : {}),
       };
       const historyNotEvidence = ragMode !== 'bypass' && historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE);
-      const decoratedPrompt = citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage));
-      const composedPrompt = answerTurn.composeSystemPrompt(decoratedPrompt, answerRuleOptions);
-      if (promptBudgetPlan && composedPrompt.startsWith(decoratedPrompt)) budgetBuiltRules = composedPrompt.slice(decoratedPrompt.length);
-      systemPrompt = appendHistoryNotEvidence(composedPrompt, historyNotEvidence);
+      systemPrompt = appendHistoryNotEvidence(
+        answerTurn.composeSystemPrompt(
+          citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage)),
+          answerRuleOptions,
+        ),
+        historyNotEvidence,
+      );
+      if (promptBudgetPlan) budgetBuiltRules = answerTurn.rulesBlock(answerRuleOptions);
       if (citationSession.strategy === 'claude-citations') {
         claudeSystemText = [
           appendHistoryNotEvidence(
