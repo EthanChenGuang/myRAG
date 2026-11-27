@@ -533,6 +533,206 @@ $fn$;
 REVOKE ALL ON FUNCTION public.rag_access_my_groups(text, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_access_my_groups(text, uuid) TO service_role;
 
+-- Admin document view (D-17, D-20, D-28; UI-SPEC 6.2.1, 6.4, 8.1). Current documents of the tenant only.
+
+CREATE INDEX IF NOT EXISTS rag_access_audit_lineage_idx ON public.rag_access_audit (lineage_id, created_at);
+
+CREATE OR REPLACE FUNCTION public.rag_access_audience_kind(p_groups text[], p_uploader uuid)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+  SELECT CASE
+    WHEN p_groups = ARRAY['all']::text[] THEN 'everyone'
+    WHEN p_uploader IS NOT NULL AND p_groups = ARRAY['u:' || p_uploader::text] THEN 'uploader_only'
+    ELSE 'groups'
+  END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_access_audience_kind(text[], uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_access_audience_kind(text[], uuid) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_access_audience_details(p_tenant_key text, p_lineage uuid, p_groups text[], p_uploader uuid)
+RETURNS TABLE (
+  group_ids uuid[], group_names text[], people_count integer, fallback_reason text, connector_managed boolean, source text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_ids uuid[];
+  v_names text[];
+  v_people integer;
+  v_reason text;
+  v_after text[];
+  v_action_reason text;
+  v_source text;
+BEGIN
+  SELECT COALESCE(pg_catalog.array_agg(g.id ORDER BY g.id), '{}'::uuid[]), COALESCE(pg_catalog.array_agg(g.name ORDER BY g.id), '{}'::text[])
+    INTO v_ids, v_names
+  FROM public.rag_access_groups g
+  WHERE g.tenant_key = p_tenant_key
+    AND ('g:' || g.id::text) = ANY (p_groups);
+
+  SELECT pg_catalog.count(*)::integer INTO v_people
+  FROM pg_catalog.unnest(p_groups) AS k(key)
+  WHERE pg_catalog.left(k.key, 2) = 'u:' AND k.key IS DISTINCT FROM ('u:' || p_uploader::text);
+
+  SELECT a.after_groups, a.reason INTO v_after, v_action_reason
+  FROM public.rag_access_audit a
+  WHERE a.lineage_id = p_lineage AND a.tenant_key = p_tenant_key AND a.action IN ('document_set', 'document_fallback')
+  ORDER BY a.created_at DESC, a.id DESC
+  LIMIT 1;
+  IF FOUND AND v_after = p_groups AND v_action_reason IN ('group_deleted', 'unmapped_source', 'source_error') THEN
+    v_reason := v_action_reason;
+  END IF;
+
+  SELECT r.provider INTO v_source
+  FROM public.nango_sync_records r
+  JOIN public.documents d ON d.id = r.document_id
+  WHERE (d.lineage_id = p_lineage OR d.id = p_lineage) AND d.tenant_key = p_tenant_key
+  ORDER BY r.created_at DESC NULLS LAST, r.id
+  LIMIT 1;
+
+  RETURN QUERY SELECT v_ids, v_names, v_people, v_reason, v_source IS NOT NULL, v_source;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_access_audience_details(text, uuid, text[], uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_access_audience_details(text, uuid, text[], uuid) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_access_document_audience(p_tenant_key text, p_document_ids uuid[])
+RETURNS TABLE (
+  document_id uuid, filename text, doc_type text, status text, created_at timestamptz, kind text, group_ids uuid[], group_names text[],
+  people_count integer, fallback_reason text, connector_managed boolean, source text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  RETURN QUERY
+  SELECT d.id, d.filename::text, d.doc_type::text, d.status::text, d.created_at,
+    public.rag_access_audience_kind(d.access_groups, d.user_id),
+    x.group_ids, x.group_names, x.people_count, x.fallback_reason, x.connector_managed, x.source
+  FROM public.documents d
+  CROSS JOIN LATERAL public.rag_access_audience_details(p_tenant_key, COALESCE(d.lineage_id, d.id), d.access_groups, d.user_id) x
+  WHERE d.id = ANY (COALESCE(p_document_ids, '{}'::uuid[]))
+    AND d.tenant_key = p_tenant_key
+    AND d.is_current;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_access_document_audience(text, uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_access_document_audience(text, uuid[]) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_access_documents_list(p_tenant_key text, p_filter text, p_query text, p_cursor text, p_limit integer)
+RETURNS TABLE (
+  document_id uuid, filename text, doc_type text, status text, created_at timestamptz, kind text, group_ids uuid[], group_names text[],
+  people_count integer, fallback_reason text, connector_managed boolean, source text, cursor text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_filter text := COALESCE(p_filter, 'all');
+  v_limit integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 50);
+  v_query text := NULLIF(pg_catalog.btrim(COALESCE(p_query, '')), '');
+  v_pattern text;
+  v_decoded text;
+  v_after_id uuid;
+  v_after_name text;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF v_filter NOT IN ('restricted', 'uploader_only', 'everyone', 'all') THEN
+    RAISE EXCEPTION 'invalid_filter' USING ERRCODE = '22023';
+  END IF;
+  IF v_query IS NOT NULL THEN
+    v_pattern := public.rag_access_like_pattern(pg_catalog.left(v_query, 200));
+  END IF;
+  IF p_cursor IS NOT NULL THEN
+    BEGIN
+      v_decoded := pg_catalog.convert_from(pg_catalog.decode(p_cursor, 'base64'), 'UTF8');
+      v_after_id := pg_catalog.split_part(v_decoded, ':', 1)::uuid;
+      v_after_name := pg_catalog.substr(v_decoded, 38);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'invalid_cursor' USING ERRCODE = '22023';
+    END;
+    IF pg_catalog.substr(v_decoded, 37, 1) <> ':' THEN
+      RAISE EXCEPTION 'invalid_cursor' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+  RETURN QUERY
+  SELECT p.id, p.filename, p.doc_type, p.status, p.created_at, p.kind,
+    x.group_ids, x.group_names, x.people_count, x.fallback_reason, x.connector_managed, x.source,
+    pg_catalog.translate(pg_catalog.encode(pg_catalog.convert_to(p.id::text || ':' || p.filename, 'UTF8'), 'base64'), E'\n', '')
+  FROM (
+    SELECT d.id, COALESCE(d.filename::text, '') AS filename, d.doc_type::text AS doc_type, d.status::text AS status, d.created_at,
+      public.rag_access_audience_kind(d.access_groups, d.user_id) AS kind,
+      COALESCE(d.lineage_id, d.id) AS lineage, d.access_groups, d.user_id
+    FROM public.documents d
+    WHERE d.tenant_key = p_tenant_key
+      AND d.is_current
+      AND (v_pattern IS NULL OR COALESCE(d.filename::text, '') ILIKE v_pattern ESCAPE '\')
+  ) p
+  CROSS JOIN LATERAL public.rag_access_audience_details(p_tenant_key, p.lineage, p.access_groups, p.user_id) x
+  WHERE (v_filter = 'all'
+      OR (v_filter = 'restricted' AND p.kind = 'groups')
+      OR (v_filter = 'uploader_only' AND p.kind = 'uploader_only')
+      OR (v_filter = 'everyone' AND p.kind = 'everyone'))
+    AND (v_after_id IS NULL OR (p.filename COLLATE "C", p.id) > (v_after_name COLLATE "C", v_after_id))
+  ORDER BY p.filename COLLATE "C", p.id
+  LIMIT v_limit;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_access_documents_list(text, text, text, text, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_access_documents_list(text, text, text, text, integer) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_access_documents_counts(p_tenant_key text, p_query text)
+RETURNS TABLE (restricted bigint, uploader_only bigint, everyone bigint, "all" bigint)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_query text := NULLIF(pg_catalog.btrim(COALESCE(p_query, '')), '');
+  v_pattern text;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF v_query IS NOT NULL THEN
+    v_pattern := public.rag_access_like_pattern(pg_catalog.left(v_query, 200));
+  END IF;
+  RETURN QUERY
+  SELECT
+    pg_catalog.count(*) FILTER (WHERE k.kind = 'groups'),
+    pg_catalog.count(*) FILTER (WHERE k.kind = 'uploader_only'),
+    pg_catalog.count(*) FILTER (WHERE k.kind = 'everyone'),
+    pg_catalog.count(*)
+  FROM (
+    SELECT public.rag_access_audience_kind(d.access_groups, d.user_id) AS kind
+    FROM public.documents d
+    WHERE d.tenant_key = p_tenant_key
+      AND d.is_current
+      AND (v_pattern IS NULL OR COALESCE(d.filename::text, '') ILIKE v_pattern ESCAPE '\')
+  ) k;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_access_documents_counts(text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_access_documents_counts(text, text) TO service_role;
+
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;
