@@ -1,4 +1,7 @@
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import path from 'node:path';
+import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import { FakeDocument, FakeElement, FakeText, injectedElements, type FakeNode } from './helpers/html-fake-dom';
 
@@ -475,5 +478,42 @@ describe('MonitorPanel: Test set coverage', () => {
       expect(injectedElements(root)).toEqual([]);
       expect(root.querySelectorAll('img')).toHaveLength(0);
     });
+  });
+});
+
+describe('Test set coverage as classic scripts (the way index.html loads them)', () => {
+  it('renders the groups with share bars when gates-ui.js and monitor.js share one global scope', async () => {
+    const doc = new FakeDocument();
+    workspaceSelector(doc);
+    const root = monitorRoot(doc);
+    const errors: unknown[] = [];
+    const context: Record<string, unknown> = {
+      document: doc,
+      console: { log() {}, error: (...args: unknown[]) => errors.push(args), warn() {}, info() {}, debug() {} },
+      navigator: { language: 'en-US' },
+      location: { origin: 'http://config.local' },
+      setTimeout,
+      clearTimeout,
+      Intl,
+      URLSearchParams,
+      configManager: { savedConfig: ON() },
+      ragFetch: async (apiPath: string) => driftAnswer(report())(apiPath),
+    };
+    context.window = context;
+    vm.createContext(context);
+    const dir = path.resolve(__dirname, '../../scripts/config-ui');
+    for (const file of ['utils/safe-dom.js', 'rag-panels/gates-ui.js', 'rag-panels/monitor.js']) {
+      new vm.Script(fs.readFileSync(path.join(dir, file), 'utf8'), { filename: file }).runInContext(context);
+    }
+    (context.initMonitorPanel as () => void)();
+    await flush();
+    const panel = context.monitorPanel as { selectTab: (id: string) => Promise<void> };
+    await panel.selectTab('coverage');
+    await flush();
+    const groups = root.querySelector('[data-monitor-coverage-groups]') as FakeElement;
+    expect(groups, 'topic group table').toBeTruthy();
+    expect(groups.querySelectorAll('[aria-hidden="true"].w-24')).toHaveLength(8);
+    expect(text(root)).toContain('Questions');
+    expect(errors).toEqual([]);
   });
 });
