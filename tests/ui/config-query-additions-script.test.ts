@@ -33,7 +33,14 @@ function cardMarkup(): string {
   const start = indexHtml.indexOf('<!-- Query layer -->');
   const end = indexHtml.indexOf('<!-- Ingestion and embedding profiles -->', start);
   expect(start).toBeGreaterThan(-1);
-  return indexHtml.slice(start, end);
+  // Plan 07-20: the transform switches the nested rows depend on are rows of the generated RAG pipeline section, which renders
+  // them with id and name equal to the env name; the static card no longer holds them, so the harness adds them the same way.
+  const generated =
+    '<div id="rag-pipeline-settings">' +
+    '<input type="checkbox" id="RAG_QUERY_CONDENSE" name="RAG_QUERY_CONDENSE" checked>' +
+    '<input type="checkbox" id="RAG_QUERY_DECOMPOSE" name="RAG_QUERY_DECOMPOSE" checked>' +
+    '</div>';
+  return generated + indexHtml.slice(start, end);
 }
 
 interface PageOptions {

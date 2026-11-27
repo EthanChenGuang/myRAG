@@ -78,32 +78,30 @@ describe('Query layer card: Phase 6.2 env controls', () => {
     }
   });
 
-  it('nests the four switches under their transform as div.form-control.pl-8, directly after the parent', () => {
+  // Plan 07-20: RAG_QUERY_CONDENSE, RAG_QUERY_DECOMPOSE, the voice transforms and the translate profiles are rows of the generated
+  // RAG pipeline section now; the Phase 6.2 switches stay hand-written in this card (the hand-written control wins).
+  it('keeps the four nested switches in the Transforms box as div.form-control.pl-8, in parent order', () => {
     const section = card();
-    const nested = [
-      ['RAG_QUERY_CONDENSE', ['RAG_QUERY_HISTORY_FALLBACK']],
-      ['RAG_QUERY_DECOMPOSE', ['RAG_QUERY_DECOMPOSE_COMPLETENESS', 'RAG_QUERY_SUBQ_FILTERS', 'RAG_DECOMPOSED_ANSWER']],
-    ] as const;
-    for (const [parent, children] of nested) {
-      let cursor = section.indexOf('</div>', at(section, `id="${parent}"`)) + '</div>'.length;
-      for (const child of children) {
-        const childBlock = block(section, child);
-        expect(childBlock.startsWith('<div class="form-control pl-8"'), child).toBe(true);
-        const start = section.indexOf(childBlock);
-        expect(section.slice(cursor, start).trim(), `${child} directly after ${parent}`).toBe('');
-        cursor = start + childBlock.length;
-      }
+    const children = ['RAG_QUERY_HISTORY_FALLBACK', 'RAG_QUERY_DECOMPOSE_COMPLETENESS', 'RAG_QUERY_SUBQ_FILTERS', 'RAG_DECOMPOSED_ANSWER'];
+    for (const moved of ['RAG_QUERY_CONDENSE', 'RAG_QUERY_DECOMPOSE', 'RAG_QUERY_VOICE_TRANSFORMS', 'RAG_QUERY_TRANSLATE_DISABLED_PROFILES']) {
+      expect(section, moved).not.toMatch(new RegExp(`<(?:input|select)[^>]*\\bid="${moved}"`));
     }
-    const transforms = section.slice(at(section, '>Transforms</h4>'), at(section, 'id="RAG_QUERY_VOICE_TRANSFORMS"'));
-    for (const [, children] of nested) for (const child of children) expect(transforms).toContain(`id="${child}"`);
+    const transforms = section.slice(at(section, '>Transforms</h4>'), at(section, 'id="RAG_WHATSAPP_HISTORY"'));
+    let cursor = 0;
+    for (const child of children) {
+      const childBlock = block(section, child);
+      expect(childBlock.startsWith('<div class="form-control pl-8"'), child).toBe(true);
+      const position = transforms.indexOf(`id="${child}"`);
+      expect(position, child).toBeGreaterThan(cursor);
+      cursor = position;
+    }
   });
 
-  it('places WhatsApp history after Voice transforms, then the Languages and Speed boxes before the Semantic cache box', () => {
+  it('places WhatsApp history after the Transforms box, then the Languages and Speed boxes before the Semantic cache box', () => {
     const section = card();
     const order = [
-      'id="RAG_QUERY_VOICE_TRANSFORMS"',
+      '>Transforms</h4>',
       'id="RAG_WHATSAPP_HISTORY"',
-      'id="RAG_QUERY_TRANSLATE_DISABLED_PROFILES"',
       '>Languages</h4>',
       'id="RAG_TRANSLATION_GLOSSARY"',
       'id="RAG_LANGID_SIDECAR"',
@@ -116,8 +114,8 @@ describe('Query layer card: Phase 6.2 env controls', () => {
     ].map((needle) => at(section, needle));
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(block(section, 'RAG_WHATSAPP_HISTORY').startsWith('<div class="form-control mb-4"')).toBe(true);
-    const languages = section.slice(order[3], order[6]);
-    const speed = section.slice(order[6], order[11]);
+    const languages = section.slice(order[2], order[5]);
+    const speed = section.slice(order[5], order[10]);
     expect(languages.match(/No effect while the query layer is off\./g)).toHaveLength(1);
     expect(speed.match(/No effect while the query layer is off\./g)).toHaveLength(1);
   });

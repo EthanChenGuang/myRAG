@@ -17,8 +17,8 @@ const TOGGLES = ['RAG_REFUSAL_FEEDBACK', 'RAG_SOURCE_OPEN_SIGNAL', 'RAG_EMBED_FE
 function card(): string {
   const start = html.indexOf('id="rag-feedback-loop-settings"');
   expect(start, 'feedback loop card exists').toBeGreaterThan(-1);
-  const end = html.indexOf('<!-- Prompt-injection defense -->', start);
-  expect(end, 'card sits before the prompt-injection card').toBeGreaterThan(start);
+  const end = html.indexOf('<!-- Answer rules and output safety -->', start);
+  expect(end, 'card sits before the answer rules card').toBeGreaterThan(start);
   return html.slice(start, end);
 }
 
@@ -29,13 +29,13 @@ function tagOf(markup: string, name: string): string {
 }
 
 describe('Config UI: retrieval log and feedback card (UI-SPEC 6.2)', () => {
-  it('sits after "Citations and groundedness" and before "Prompt-injection defense"', () => {
-    const citations = html.indexOf('<!-- Citations and groundedness -->');
+  it('sits after the generated RAG pipeline settings and before "Answer rules and output safety" (plan 07-20 removed the cards around it)', () => {
+    const generated = html.indexOf('id="rag-pipeline-settings"');
     const feedback = html.indexOf('id="rag-feedback-loop-settings"');
-    const injection = html.indexOf('<!-- Prompt-injection defense -->');
-    expect(citations).toBeGreaterThan(-1);
-    expect(feedback).toBeGreaterThan(citations);
-    expect(injection).toBeGreaterThan(feedback);
+    const answerRules = html.indexOf('<!-- Answer rules and output safety -->');
+    expect(generated).toBeGreaterThan(-1);
+    expect(feedback).toBeGreaterThan(generated);
+    expect(answerRules).toBeGreaterThan(feedback);
     expect(card()).toContain('Retrieval log and feedback');
   });
 
