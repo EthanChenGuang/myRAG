@@ -27,11 +27,52 @@ class ProfileMetricBlocks(_Contract):
     candidates: ComparisonSliceBlock
 
 
+ServingMode = Literal["hosted", "sidecar"]
+NonNegative = Annotated[float, Field(ge=0)]
+
+
+class ServingModeMeasurement(_Contract):
+    """Throughput, query latency and cost of one serving mode of a profile; every figure is null while the mode was not measured."""
+
+    mode: ServingMode
+    measured: bool
+    source: str | None = None
+    ingest_chunks_per_second: NonNegative | None = None
+    query_embed_p50_ms: NonNegative | None = None
+    query_embed_p95_ms: NonNegative | None = None
+    usd_per_million_tokens: NonNegative | None = None
+    run_tokens: Annotated[int, Field(ge=0)] | None = None
+    run_cost_usd: NonNegative | None = None
+
+    @model_validator(mode="after")
+    def _figures_match_measured(self) -> "ServingModeMeasurement":
+        figures = (
+            self.ingest_chunks_per_second,
+            self.query_embed_p50_ms,
+            self.query_embed_p95_ms,
+            self.usd_per_million_tokens,
+            self.run_tokens,
+            self.run_cost_usd,
+        )
+        if not self.measured and any(value is not None for value in figures):
+            raise ValueError("an unmeasured serving mode carries no figures")
+        if self.measured and all(value is None for value in figures):
+            raise ValueError("a measured serving mode carries at least one figure")
+        if (
+            self.query_embed_p50_ms is not None
+            and self.query_embed_p95_ms is not None
+            and self.query_embed_p50_ms > self.query_embed_p95_ms
+        ):
+            raise ValueError("query_embed_p50_ms must not exceed query_embed_p95_ms")
+        return self
+
+
 class ProfileComparisonEntry(_Contract):
     profile_id: str
     metrics: ProfileMetricBlocks
     default_candidate: bool | None = None
     default_candidate_note: str | None = None
+    serving: list[ServingModeMeasurement] | None = None
 
 
 class PreMigrationSlice(_Contract):
@@ -51,6 +92,8 @@ class EmbeddingProfileComparison(_Contract):
     gate_passed: bool
     backfill_run_id: str | None = None
     notes: list[str] = Field(default_factory=list)
+    wiring_proof: bool = False
+    label: str | None = None
 
 
 class PreMigrationEvidence(_Contract):
