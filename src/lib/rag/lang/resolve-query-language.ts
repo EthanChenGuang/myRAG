@@ -32,6 +32,7 @@ export interface ResolveQueryLanguageInput {
   sidecar?: { enabled: boolean; request?: typeof requestLanguageId } | null;
 }
 
+const SIDECAR_PROFILES: ReadonlySet<Profile> = new Set<Profile>(['chat', 'embed', 'eval']);
 const DOMINANT_SCRIPT_SHARE = 0.7;
 const SHORT_MAX_WORDS = 3;
 const CODE_DOMINATED_SHARE = 0.5;
@@ -104,8 +105,8 @@ function confidentDetection(
 
 /**
  * LANG-08 (D-17): the query language among the enabled languages. One enabled language skips detection. A confident
- * detection wins; otherwise the chain runs and the first step that answers wins: the previous turn's language, the UI
- * language, then the primary language. Caller-supplied hints count only when they name an enabled language. Never logs text.
+ * detection wins; otherwise the chain runs and the first step that answers wins: the sidecar language ID (switch on, chat,
+ * embed and eval only, never voice), the previous turn's language, the UI language, then the primary language. Caller-supplied hints count only when they name an enabled language. Never logs text.
  */
 export async function resolveQueryLanguage(input: ResolveQueryLanguageInput): Promise<QueryLanguageDetection> {
   const enabled = [...new Set(input.enabled)];
@@ -119,6 +120,16 @@ export async function resolveQueryLanguage(input: ResolveQueryLanguageInput): Pr
   const detected = enabledLanguage(detection.language, enabled);
   if (detected && confidentDetection(input.text, prose, input.params.language_confidence_threshold, detection)) {
     return { language: detected, confidence, source: 'detector' };
+  }
+
+  if (input.sidecar?.enabled && SIDECAR_PROFILES.has(input.profile) && !input.signal?.aborted) {
+    const request = input.sidecar.request ?? requestLanguageId;
+    const answer = await request(input.text, enabled, {
+      timeoutMs: input.params.langid_timeout_ms,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+    const language = enabledLanguage(answer?.language, enabled);
+    if (answer && language) return { language, confidence: clamp01(answer.confidence), source: 'sidecar' };
   }
 
   const previous = enabledLanguage(input.previousTurnLanguage, enabled);

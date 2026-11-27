@@ -29,6 +29,7 @@ import {
 } from './transformer';
 import { resolveQueryLanguage, type QueryLanguageDetection } from '../lang/resolve-query-language';
 import { getLanguageSettings, languageVariablesUnset } from '../lang/settings';
+import { langidConfigured } from '../lang/langid-client';
 import type { SearchDelegate } from './port-types';
 import { queryLayerTranslator, type QueryLayerTranslateContext } from './translate';
 import type { TranslatedQuery } from './variants';
@@ -469,13 +470,18 @@ interface RequestLanguage {
  * D-17, P-21: the query language resolved before the gate, only under the effective layer and only with the languages
  * configured; null keeps the gate's own detector, exactly as before.
  */
-async function resolveRequestLanguage(ctx: QueryLayerInput, params: ReturnType<typeof effectiveQueryParams>): Promise<RequestLanguage | null> {
+async function resolveRequestLanguage(
+  ctx: QueryLayerInput,
+  params: ReturnType<typeof effectiveQueryParams>,
+): Promise<RequestLanguage | null> {
   if (languageVariablesUnset()) return null;
   const settings = getLanguageSettings();
   if (!settings.configured || !settings.primary || settings.languages.length === 0) return null;
   const enabled = settings.languages.filter(isPlanLanguage);
   if (enabled.length === 0) return null;
   const { input, profile, signal } = ctx;
+  // D-17 step 1: RAG_LANGID_SIDECAR (effective only under the layer) with the sidecar configured; never voice (resolver).
+  const sidecar = { enabled: ctx.config.queryAdditions.effective.langidSidecar && langidConfigured() };
   const detection = await resolveQueryLanguage({
     text: input.query,
     enabled,
@@ -485,6 +491,7 @@ async function resolveRequestLanguage(ctx: QueryLayerInput, params: ReturnType<t
     profile,
     params,
     signal,
+    sidecar,
   });
   if (!isPlanLanguage(detection.language)) return null;
   return { detection: { ...detection, language: detection.language }, enabled };
