@@ -617,3 +617,12 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 20:12Z 06.2-15 DONE (ca924e38; 0982 + 0983, with 0410 locked by 03a8e696) and archived -> train 38/39.
   OWNER FINDING (D-34): the scope separation report on the fixtures gives d34_separates_at_least_as_well = false (doc_type/language keys put 0 of 6 OOD items below threshold, doc_type-only puts 2 of 6). The grouping is kept per D-34. Needs a live run with a real embedder before 06.2-21's gate is trusted.
 - 20:12Z TRAIN 37 PROD SQL APPLIED and verified (0924, 0925, 0934, 0980, 0410 r20; md5 matches; enforced=false). Owner desk log fdf1db83. Asking the user to deploy main 00afa6d9.
+- 20:24Z DONE and archived:
+  - 06.2-20 (e9974360). It also fixed readRagEnvInput for RAG_QUERY_HISTORY_FALLBACK.
+  - 06.2-21 (124b5c2b; WASM SIMD max-dot kernel).
+  - 05.2.1-17 (5fc0ccd7). It re-recorded the ingest baseline and characterizations.
+    FINDING for 05.2.1-23/11: the calc skip-rule fake gives 9 "verified" results for a WRONG total when the cap total equals an operand. The scripts or the rule must change before the SC-8 gate.
+  These go to train 39, plus 06.2-15, 06.2-17, 06.2-18, quick-attribute-access if train 38 does not take them.
+  Launched 06.2-27 from exec/06.2-21.
+  Waiting for train 38: 04.3-52, 05.2.1-20, 06.2-22, 06.2-24, 06.2-25, 06.2-36.
+  Train 38 is at d49d1b6a (subq-filters switch-gated hash fix).
