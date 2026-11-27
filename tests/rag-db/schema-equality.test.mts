@@ -567,8 +567,9 @@ async function assertTerminologySecured(db: PGlite): Promise<void> {
             has_function_privilege('service_role', p.oid, 'EXECUTE') AS service
      FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname LIKE 'rag\\_term\\_%' ORDER BY 1`,
   );
-  const present = new Set(functions.rows.map((row) => row.signature.replace(/^public\./, '')));
-  assert.deepEqual(TERMINOLOGY_SERVICE_ROLE_FUNCTIONS.filter((signature) => !present.has(signature)), [], 'every rag_term_ function is defined');
+  const bare = (signature: string) => signature.replace(/^public\./, '').replace(/\s+/g, '');
+  const present = new Set(functions.rows.map((row) => bare(row.signature)));
+  assert.deepEqual(TERMINOLOGY_SERVICE_ROLE_FUNCTIONS.filter((signature) => !present.has(bare(signature))), [], 'every rag_term_ function is defined');
   assert.deepEqual(functions.rows.filter((row) => row.anon || row.authenticated).map((row) => row.signature), [], 'anon and authenticated execute no rag_term_ function');
   assert.deepEqual(
     functions.rows.filter((row) => !row.helper && !row.trigger && !row.service).map((row) => row.signature),
