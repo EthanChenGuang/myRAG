@@ -93,8 +93,8 @@ function docTypesFrom(data: unknown): string[] {
   const values: string[] = [];
   for (const row of rpcRows(data)) {
     if (typeof row !== 'object' || row === null) continue;
-    const { doc_type: docType } = row as Record<string, unknown>;
-    if (typeof docType === 'string' && docType !== '' && !values.includes(docType)) values.push(docType);
+    const value = (row as Record<string, unknown>).doc_type;
+    if (typeof value === 'string' && value.length > 0 && !values.includes(value)) values.push(value);
   }
   return values;
 }

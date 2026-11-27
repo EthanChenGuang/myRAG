@@ -24,6 +24,10 @@ export interface BuildQueryPlanInput {
   subQuestions?: readonly string[];
   /** D-04: the completeness counts; absent while the check did not run, so the plan is unchanged with the switch off. */
   completeness?: QueryPlan['completeness'];
+  /** D-05: the narrowed specs (texts equal subQuestions); absent with RAG_QUERY_SUBQ_FILTERS off, so the plan is unchanged. */
+  subQuestionSpecs?: QueryPlan['sub_question_specs'];
+  /** D-06: one entry per spec with the switch on; with it off only when a returned filter was stripped. */
+  filterTrace?: QueryPlan['filter_trace'];
 }
 
 /** QueryPlan.variants holds at most 8 entries (D-08 hard cap of 8 searches). */
@@ -87,6 +91,8 @@ export function buildQueryPlan(input: BuildQueryPlanInput): QueryPlan {
     skipped: [...(input.skipped ?? [])],
     framework: input.framework,
     ...(input.completeness ? { completeness: { ...input.completeness } } : {}),
+    ...(input.subQuestionSpecs ? { sub_question_specs: input.subQuestionSpecs.slice(0, subQuestions.length).map((spec) => ({ ...spec })) } : {}),
+    ...(input.filterTrace ? { filter_trace: input.filterTrace.slice(0, subQuestions.length).map((entry) => ({ ...entry })) } : {}),
   };
 }
 

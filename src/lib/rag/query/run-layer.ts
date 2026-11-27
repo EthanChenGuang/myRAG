@@ -42,7 +42,9 @@ import type { CacheHit, CacheKeyParts, CacheTicket, EntryProfile } from '../cach
 import { resolveFinalResultCount } from '../config';
 import { effectiveVersionScope } from './filters';
 import { collectRequiredTerms, type RequiredTerm } from './completeness';
-import { loadTenantVocabulary } from './tenant-vocabulary';
+import { loadTenantDocTypes, loadTenantVocabulary } from './tenant-vocabulary';
+import { getLanguageSettings } from '../lang/settings';
+import type { SubqFilterContext } from './llamaindex/decompose';
 import { terminologyMatcherFor } from '../terminology/load';
 import { terminologyParams } from '../terminology/expand';
 import type { RpcClient } from '../backend/supabase-rpc';
@@ -160,6 +162,34 @@ export async function requiredTermsFor(args: {
     args.terminology && scope ? terminologySurfaces(scope, args.query, args.signal) : Promise.resolve([]),
   ]);
   return collectRequiredTerms(args.query, args.gate, { vocabulary: vocabulary ?? [], termSurfaces });
+}
+
+/**
+ * D-06, D-07: the sub-question filter inputs, read for the request's own minted scope only. Scope slugs only with
+ * RAG_SCOPE_TAGS on (a scopes filter is refused otherwise); doc types from 0981; languages are the enabled ones. A read
+ * failure leaves that list empty, so its proposals are dropped as unknown. The base is the request's own filters.
+ */
+export async function subqFilterContextFor(args: {
+  scope: TenantScope | undefined;
+  scopeTags: boolean;
+  base: SubqFilterContext['base'];
+  vocabCap: number;
+  signal: AbortSignal;
+}): Promise<SubqFilterContext> {
+  const { scope } = args;
+  const [vocabulary, docTypes] = await Promise.all([
+    args.scopeTags && scope ? loadTenantVocabulary(scope, { signal: args.signal }) : Promise.resolve(null),
+    scope ? loadTenantDocTypes(scope, { signal: args.signal }) : Promise.resolve(null),
+  ]);
+  return {
+    base: args.base,
+    vocabulary: {
+      scopes: (vocabulary ?? []).map((value) => ({ dimension: value.dimension, slug: value.slug })),
+      docTypes: docTypes ?? [],
+      languages: [...getLanguageSettings().languages],
+    },
+    vocabCap: args.vocabCap,
+  };
 }
 
 function gateDetail(gate: GateResult): string {
@@ -620,6 +650,8 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   const base = { query: standalone, language: gate.lang, protectedTokens: gate.protectedTokens, limits };
   // D-04: inert under the master switch (effective = raw && layer on); off keeps the D-15 checks exactly as before.
   const completenessOn = config.queryAdditions.effective.completeness;
+  // D-06: inert under the master switch; off keeps the Phase 6 decomposer request and plan.
+  const subqFiltersOn = config.queryAdditions.effective.subqFilters;
 
   const translateSkips: TranslateSkip[] = [];
   const runTranslate = handledTranslate && routed.has('translate');
@@ -654,23 +686,35 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
             failed: (value) => callFailed(value.skipped),
             detail: (value) => (value.notCompound ? 'not_compound' : undefined),
           }),
-          async (stageSignal) =>
-            transformer.decompose({
+          async (stageSignal) => {
+            const [requiredTerms, subqFilters] = await Promise.all([
+              completenessOn
+                ? requiredTermsFor({
+                    query: standalone,
+                    gate,
+                    scope: ctx.scope,
+                    scopeTags: config.scopeTags,
+                    terminology: spec('terminology', 'skip').enabled,
+                    signal: stageSignal,
+                  })
+                : Promise.resolve(null),
+              subqFiltersOn
+                ? subqFilterContextFor({
+                    scope: ctx.scope,
+                    scopeTags: config.scopeTags,
+                    base: input.retrievalFilters,
+                    vocabCap: params.subq_filter_vocab_cap,
+                    signal: stageSignal,
+                  })
+                : Promise.resolve(null),
+            ]);
+            return transformer.decompose({
               ...base,
-              ...(completenessOn
-                ? {
-                    requiredTerms: await requiredTermsFor({
-                      query: standalone,
-                      gate,
-                      scope: ctx.scope,
-                      scopeTags: config.scopeTags,
-                      terminology: spec('terminology', 'skip').enabled,
-                      signal: stageSignal,
-                    }),
-                  }
-                : {}),
+              ...(requiredTerms ? { requiredTerms } : {}),
+              ...(subqFilters ? { subqFilters } : {}),
               signal: stageSignal,
-            }),
+            });
+          },
         )
       : null,
     runTranslate
@@ -745,6 +789,8 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     hyde: hypothetical?.variant ? { text: hypothetical.variant.text, protectedOk: hypothetical.variant.protectedOk } : null,
     subQuestions: subQuestions?.variants.map((variant) => variant.text) ?? [],
     ...(subQuestions?.completeness ? { completeness: subQuestions.completeness } : {}),
+    ...(subQuestions?.subQuestionSpecs ? { subQuestionSpecs: subQuestions.subQuestionSpecs } : {}),
+    ...(subQuestions?.filterTrace ? { filterTrace: subQuestions.filterTrace } : {}),
   });
 
   if (ctx.afterTransforms) await ctx.afterTransforms(standalone);
