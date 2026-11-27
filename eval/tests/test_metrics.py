@@ -1006,7 +1006,7 @@ PHASE42_CORPUS_FILES_04_2_37 = {
 P52_CORPUS_FILES_05_2_28 = {
     f"{language}/{name}.{language}.md"
     for language in ("en", "it", "zh")
-    for name in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links")
+    for name in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links", "sec-link-topics")
 }
 # Plan 05.3-15 added these later; they are removed too before the pre-terms hash is compared.
 PHASE53_CORPUS_FILES = {

@@ -65,6 +65,8 @@ PHASE6_TAGS = frozenset(
 TERM_ITEM_ID = re.compile(r"^[a-z]+-(colloquial|no_answer)-term-\d{3}$")
 # Plan 05.3-15 appended the implicit_condition and near-miss no-answer items under this tag.
 PHASE53_TAG = "phase53_fixture"
+# And plan 05.2-29 the answer-rule and link-injection items.
+PHASE52_CATEGORIES = frozenset({"partial_answer", "stale_version", "off_topic_context"})
 
 
 def _added_after_snapshot(item: GoldenItem) -> bool:
@@ -74,6 +76,8 @@ def _added_after_snapshot(item: GoldenItem) -> bool:
         or bool(PHASE6_TAGS & set(item.tags))
         or bool(TERM_ITEM_ID.match(item.id))
         or PHASE53_TAG in item.tags
+        or item.category in PHASE52_CATEGORIES
+        or "link_injection" in item.tags
     )
 
 
