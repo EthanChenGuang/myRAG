@@ -150,6 +150,16 @@ describe('showToast timing', () => {
   });
 });
 
+describe('toast markup', () => {
+  it('wraps long sentences inside the viewport instead of DaisyUI’s nowrap', () => {
+    const markup = /<div id="toast"[^>]*>\s*<div class="([^"]*)">/.exec(indexHtml);
+    expect(markup).not.toBeNull();
+    const classes = (markup?.[1] ?? '').split(/\s+/);
+    expect(classes).toContain('whitespace-normal');
+    expect(classes.some((c) => c.startsWith('max-w-'))).toBe(true);
+  });
+});
+
 describe('panel wiring', () => {
   it('index.html loads panel-status.js right before rag-fetch.js, ahead of every panel', () => {
     const scripts = [...indexHtml.matchAll(/<script src="rag-panels\/([\w-]+)\.js"><\/script>/g)].map((m) => m[1]);
