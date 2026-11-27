@@ -6,6 +6,23 @@ import type { Reranker, RerankOptions } from './types';
 const K1 = 1.2;
 const B = 0.75;
 
+// lexicalTokens is pure for a text without options, and the same chunks are reranked again and again, so their tokens are memoized
+// (bounded, oldest entry evicted first). Callers never mutate the arrays.
+const DOC_TOKEN_CACHE_LIMIT = 2048;
+const docTokenCache = new Map<string, string[]>();
+
+function docTokensOf(doc: string): string[] {
+  const cached = docTokenCache.get(doc);
+  if (cached) return cached;
+  const tokens = lexicalTokens(doc);
+  if (docTokenCache.size >= DOC_TOKEN_CACHE_LIMIT) {
+    const oldest = docTokenCache.keys().next().value;
+    if (oldest !== undefined) docTokenCache.delete(oldest);
+  }
+  docTokenCache.set(doc, tokens);
+  return tokens;
+}
+
 function documentFrequency(docTokens: string[][]): Map<string, number> {
   const df = new Map<string, number>();
   for (const tokens of docTokens) {
@@ -72,11 +89,18 @@ export function createLocalBm25Reranker(): Reranker {
         throw opts.signal.reason ?? new DOMException('Aborted', 'AbortError');
       }
       const defaultQueryTokens = queryLexicalTokens(query);
+      const variantTokens = new Map<string, string[]>();
       const queryTokensPerDoc = docs.map((_, index) => {
         const variant = opts.queryByDoc?.[index];
-        return variant !== undefined && variant !== '' ? queryLexicalTokens(variant) : defaultQueryTokens;
+        if (variant === undefined || variant === '') return defaultQueryTokens;
+        let tokens = variantTokens.get(variant);
+        if (!tokens) {
+          tokens = queryLexicalTokens(variant);
+          variantTokens.set(variant, tokens);
+        }
+        return tokens;
       });
-      const docTokens = docs.map((doc) => lexicalTokens(doc));
+      const docTokens = docs.map(docTokensOf);
       const normalized = bm25Scores(queryTokensPerDoc, docTokens);
       const rows = normalized.map((score, index) => ({ index, score }));
       return { scores: completeScores(docs.length, rows) };

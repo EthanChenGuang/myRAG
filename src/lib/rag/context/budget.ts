@@ -27,8 +27,20 @@ export interface BudgetResult<C extends BudgetCandidate = BudgetCandidate> {
   usedTokens: number;
 }
 
+// The same rendered blocks are counted on every request that retrieves them; counts are memoized (bounded, oldest evicted first).
+const TOKEN_COUNT_CACHE_LIMIT = 2048;
+const tokenCountCache = new Map<string, number>();
+
 export function countContextTokens(text: string): number {
-  return countTokens(text);
+  const cached = tokenCountCache.get(text);
+  if (cached !== undefined) return cached;
+  const count = countTokens(text);
+  if (tokenCountCache.size >= TOKEN_COUNT_CACHE_LIMIT) {
+    const oldest = tokenCountCache.keys().next().value;
+    if (oldest !== undefined) tokenCountCache.delete(oldest);
+  }
+  tokenCountCache.set(text, count);
+  return count;
 }
 
 function isImageDocument(filename: string, imageExtensions: string[]): boolean {
