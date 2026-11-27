@@ -45,8 +45,13 @@ const LANGUAGES_LABELS = {
       'Not saved. The active embedding profile, {profile}, does not declare {language}. Activate a profile that does, then save again.',
     'error.reranker_unsupported':
       'Not saved. The active reranker, {reranker}, does not declare {language}. Choose another reranker under RAG Modes, then save again.',
-    'warn.notVerified':
-      'The embedding profile could not be read from the database, so the languages were not verified against the active profile.',
+    'warn.notVerified': 'The languages were not verified against the active embedding profile.',
+    'warn.notVerified.profiles_on':
+      'Embedding profiles are on (RAG_EMBEDDING_PROFILES), and the Config UI does not read the active profile from the database, so the languages were checked against the default profile only. The app checks them against the active profile when it starts and logs any language that profile does not declare.',
+    'warn.notVerified.no_declarations':
+      'No embedding language declarations are installed, so the languages were not checked against an embedding profile.',
+    'warn.notVerified.default_not_active':
+      'The default profile in the embedding declarations is not the profile the app uses while embedding profiles are off, so the languages were not verified against the active profile.',
     'list.loading': 'Loading languages…',
     'list.unavailable':
       'The language list is unavailable right now. Check that the Config UI server is running, then select Reload panel.',
@@ -86,7 +91,11 @@ const LANGUAGES_LABELS = {
     'error.incomplete_pack': '未保存。{language}尚未完整支持，无法选择。',
     'error.embedding_profile_unsupported': '未保存。当前的 Embedding 配置 {profile} 未声明支持{language}。请先启用支持它的配置，再保存。',
     'error.reranker_unsupported': '未保存。当前的重排模型 {reranker} 未声明支持{language}。请在“RAG 模式”中换一个重排模型，再保存。',
-    'warn.notVerified': '无法从数据库读取 Embedding 配置，因此未按当前配置核对语言。',
+    'warn.notVerified': '语言未按当前使用的 Embedding 配置核对。',
+    'warn.notVerified.profiles_on':
+      'Embedding 配置已开启（RAG_EMBEDDING_PROFILES），Config UI 不从数据库读取当前使用的配置，因此只按默认配置核对了语言。应用启动时会按当前配置核对，并记录该配置未声明的语言。',
+    'warn.notVerified.no_declarations': '未安装 Embedding 语言声明，因此语言未按任何 Embedding 配置核对。',
+    'warn.notVerified.default_not_active': 'Embedding 声明中的默认配置不是关闭 Embedding 配置时应用实际使用的配置，因此语言未按当前配置核对。',
     'list.loading': '正在加载语言…',
     'list.unavailable': '暂时无法获取语言列表。请确认 Config UI 服务器正在运行，然后选择“重新加载面板”。',
   },
@@ -133,8 +142,13 @@ const LANGUAGES_LABELS = {
       'Non salvato. Il profilo di embedding attivo, {profile}, non dichiara {language}. Attiva un profilo che la dichiara, poi salva di nuovo.',
     'error.reranker_unsupported':
       'Non salvato. Il reranker attivo, {reranker}, non dichiara {language}. Scegli un altro reranker in RAG Modes, poi salva di nuovo.',
-    'warn.notVerified':
-      'Non è stato possibile leggere il profilo di embedding dal database, quindi le lingue non sono state verificate rispetto al profilo attivo.',
+    'warn.notVerified': 'Le lingue non sono state verificate rispetto al profilo di embedding attivo.',
+    'warn.notVerified.profiles_on':
+      'I profili di embedding sono attivi (RAG_EMBEDDING_PROFILES) e la Config UI non legge il profilo attivo dal database, quindi le lingue sono state verificate solo rispetto al profilo predefinito. L’app le verifica rispetto al profilo attivo all’avvio e registra ogni lingua che quel profilo non dichiara.',
+    'warn.notVerified.no_declarations':
+      'Non è installata alcuna dichiarazione delle lingue di embedding, quindi le lingue non sono state verificate rispetto a un profilo di embedding.',
+    'warn.notVerified.default_not_active':
+      'Il profilo predefinito nelle dichiarazioni di embedding non è quello che l’app usa con i profili di embedding disattivati, quindi le lingue non sono state verificate rispetto al profilo attivo.',
     'list.loading': 'Caricamento delle lingue…',
     'list.unavailable':
       'L’elenco delle lingue non è disponibile. Verifica che il server della Config UI sia in esecuzione, poi seleziona Ricarica pannello.',
@@ -255,8 +269,17 @@ function languagesBuildView(answer, options) {
     banner: languagesBannerForm(body),
     saved: { languages: savedLanguages, primary: savedPrimary },
     verified: body.verifiedAgainstActiveProfile === true,
+    notVerifiedReason: languagesNotVerifiedReason(body),
     countsAvailable: Boolean(counts),
   };
+}
+
+const LANGUAGES_NOT_VERIFIED_REASONS = ['profiles_on', 'no_declarations', 'default_not_active'];
+
+/** The reason the server gave for an unverified check, when it is one this panel has copy for; null otherwise. */
+function languagesNotVerifiedReason(body) {
+  const reason = body && body.notVerifiedReason;
+  return LANGUAGES_NOT_VERIFIED_REASONS.includes(reason) ? reason : null;
 }
 
 /** The POST body: languages in registry order, the primary as chosen. */
@@ -341,10 +364,15 @@ function languagesErrorItems(details, rows) {
     });
 }
 
-/** Warnings of a successful save: groundedness_not_checked becomes note.groundedness; anything else its code. */
+/**
+ * Warnings of a successful save: groundedness_not_checked becomes note.groundedness; anything else its code. A groundedness
+ * warning for a language whose row already carries the inline note (groundedness none) is left out, so it shows once.
+ */
 function languagesWarningItems(warnings, rows) {
+  const noted = new Set((Array.isArray(rows) ? rows : []).filter((r) => r.groundedness === 'none').map((r) => r.code));
   return (Array.isArray(warnings) ? warnings : [])
     .filter((w) => w && typeof w === 'object' && typeof w.code === 'string')
+    .filter((w) => !(w.code === 'groundedness_not_checked' && noted.has(w.language)))
     .map((w) =>
       w.code === 'groundedness_not_checked'
         ? { key: 'note.groundedness', vars: { language: languagesNameOf(rows, w.language) }, codeVars: [] }
@@ -489,6 +517,7 @@ class LanguagesPanel {
     this.checked = new Set(initial.checked);
     this.primary = languagesNextPrimary(this.view.rows, initial.checked, initial.primary).primary;
     this.verified = this.view.verified;
+    this.notVerifiedReason = this.view.notVerifiedReason;
     this.findings = [];
     languagesRenderBanner(this.view.banner, this.locale);
     this.render();
@@ -632,8 +661,10 @@ class LanguagesPanel {
 
   onPrimary(code) {
     if (this.saving || !this.checked.has(code)) return;
+    const changed = this.primary !== code;
     this.primary = code;
     this.updateControls();
+    if (changed) this.announce(this.t('primary.moved', { language: languagesNameOf(this.view.rows, code) }));
   }
 
   reset() {
@@ -641,6 +672,7 @@ class LanguagesPanel {
     this.checked = new Set(this.view.saved.languages);
     this.primary = languagesNextPrimary(this.view.rows, this.view.saved.languages, this.view.saved.primary).primary;
     this.updateControls();
+    this.announce('');
   }
 
   isChanged() {
@@ -714,7 +746,8 @@ class LanguagesPanel {
       nodes.push(alert);
     }
     if (!this.verified) {
-      nodes.push(ui.ragUiAlert(this.doc, { tone: 'warning', icon: 'exclamation-triangle', body: [this.t('warn.notVerified')] }));
+      const key = this.notVerifiedReason ? 'warn.notVerified.' + this.notVerifiedReason : 'warn.notVerified';
+      nodes.push(ui.ragUiAlert(this.doc, { tone: 'warning', icon: 'exclamation-triangle', body: [this.t(key)] }));
     }
     this.findingsHost.replaceChildren(...nodes);
     return nodes;
@@ -792,6 +825,7 @@ class LanguagesPanel {
     this.checked = new Set(languages);
     this.primary = primary;
     this.verified = answer.verifiedAgainstActiveProfile === true;
+    this.notVerifiedReason = languagesNotVerifiedReason(answer);
     const warnings = languagesWarningItems(answer.warnings, this.view.rows);
     this.findings = warnings.length ? [{ tone: 'warning', items: warnings }] : [];
     languagesClearBanner();

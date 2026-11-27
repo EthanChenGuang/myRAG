@@ -3662,6 +3662,7 @@ function describeLanguageSettings(root = REPO_ROOT) {
     const explicit = languageSettings.isSet(values[name]);
     pipelines[name] = { value: explicit ? values[name].trim() : null, explicit };
   }
+  const notVerifiedReason = languageSettings.activeProfileCheck(context);
   const packs = languageSettings.completePacks(context.registry).map((pack) => {
     const reasons = languageSettings.packBlockingReasons(pack.code, context);
     return {
@@ -3683,7 +3684,8 @@ function describeLanguageSettings(root = REPO_ROOT) {
     pipelines,
     reranker: context.reranker ? { id: context.reranker.id } : null,
     embeddingProfile: context.embeddingProfile ? { id: context.embeddingProfile.id } : null,
-    verifiedAgainstActiveProfile: false,
+    verifiedAgainstActiveProfile: notVerifiedReason === null,
+    notVerifiedReason,
     packs,
   };
 }
@@ -3730,6 +3732,7 @@ app.post('/api/config/languages', async (req, res) => {
       primary: result.normalized.primary,
       warnings: result.warnings,
       verifiedAgainstActiveProfile: result.verifiedAgainstActiveProfile,
+      notVerifiedReason: result.notVerifiedReason,
       ...(gate.ragGate ? { ragGate: gate.ragGate } : {}),
     });
   } catch (error) {
