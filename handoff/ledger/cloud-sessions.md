@@ -733,3 +733,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   Respected HOLD: 04.3-53/54, 05.2-39/40, 05.3-49/50, 06.2-13/19/33.
   Waiting on predecessors: 05.2.1-25, 06.3-24/25, 07-32/33/50.
 - 22:29Z 06.2-36 DONE (4c28c5e7). Added the 6.2 canary rows to the two-tenant matrix (352/0); deps.ts now reads RAG_SCOPE_GATE and RAG_WHATSAPP_HISTORY; full vitest 16070/0. Archived -> train 41. Told quick-deps-switches to match that form and to add RAG_MODEL_ROUTING.
+- 22:31Z 06.3-15 DONE (99b684d9; migrations 0726/0727, purge is irreversible, D-11 option a) and archived -> train 40. Launched 06.3-19 and 06.3-20 on exec/06.3-15. 07-37 waits for train 40, whose base would hold 06.3-07, 06.3-15, 07-28 and 07-34; building that base myself hit 23 conflict files. Told the t40 builder to add 06.3-15, quick-composer-comet and quick-it-refusal-locale.
