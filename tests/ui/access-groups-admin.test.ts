@@ -169,3 +169,128 @@ describe('workspace settings modal wiring', () => {
 });
 
 export { INJECTED };
+
+import {
+  DELETE_DIALOG_INITIAL,
+  MEMBER_SEARCH_INITIAL,
+  deleteDialogReducer,
+  deriveDeleteDialog,
+  deriveMemberSearch,
+  memberLabel,
+  memberSearchReducer,
+  readCandidates,
+  readImpact,
+  readMembers,
+  shouldSearchMembers,
+  type MemberCandidate,
+} from '@/components/ui/access-groups-admin';
+
+const USER = '00000000-0000-4000-8000-0000000000u1';
+const candidate = (n: number, already = false): MemberCandidate => ({ userId: `u-${n}`, displayName: `member-${n}`, email: null, already });
+
+describe('members', () => {
+  it('reads members and candidates and labels a member by name, e-mail or the id in mono', () => {
+    expect(readMembers([{ userId: USER, displayName: 'member-a', email: 'a@example.org', addedAt: '2026-01-01T00:00:00Z' }, { nope: 1 }]))
+      .toEqual([{ userId: USER, displayName: 'member-a', email: 'a@example.org', addedAt: '2026-01-01T00:00:00Z' }]);
+    expect(readCandidates([{ userId: USER, displayName: null, email: null, already: true }])).toEqual([
+      { userId: USER, displayName: null, email: null, already: true },
+    ]);
+    expect(memberLabel({ userId: USER, displayName: 'member-a', email: 'a@example.org' })).toEqual({ text: 'member-a', mono: false });
+    expect(memberLabel({ userId: USER, displayName: '  ', email: 'a@example.org' })).toEqual({ text: 'a@example.org', mono: false });
+    expect(memberLabel({ userId: USER, displayName: null, email: null })).toEqual({ text: USER, mono: true });
+  });
+
+  it('searches only from 2 characters, says the hint before, and caps the results at 20', () => {
+    expect(shouldSearchMembers('a')).toBe(false);
+    expect(shouldSearchMembers(' a ')).toBe(false);
+    expect(shouldSearchMembers('ab')).toBe(true);
+    let state = memberSearchReducer(MEMBER_SEARCH_INITIAL, { type: 'query', value: 'a' });
+    expect(deriveMemberSearch(state, 'en').message).toBe('Type at least 2 characters.');
+    state = memberSearchReducer(state, { type: 'query', value: 'ab' });
+    state = memberSearchReducer(state, { type: 'start', query: 'ab' });
+    expect(deriveMemberSearch(state, 'en')).toMatchObject({ spinner: true, message: 'Searching…' });
+    state = memberSearchReducer(state, { type: 'results', query: 'ab', candidates: Array.from({ length: 25 }, (_, i) => candidate(i)) });
+    const view = deriveMemberSearch(state, 'en');
+    expect(view.spinner).toBe(false);
+    expect(view.results).toHaveLength(20);
+    expect(view.message).toBeNull();
+  });
+
+  it('keeps earlier results while a new search runs and ignores a late answer', () => {
+    let state = memberSearchReducer(MEMBER_SEARCH_INITIAL, { type: 'query', value: 'ab' });
+    state = memberSearchReducer(state, { type: 'start', query: 'ab' });
+    state = memberSearchReducer(state, { type: 'results', query: 'ab', candidates: [candidate(1)] });
+    state = memberSearchReducer(state, { type: 'query', value: 'abc' });
+    state = memberSearchReducer(state, { type: 'start', query: 'abc' });
+    expect(deriveMemberSearch(state, 'en').results).toEqual([candidate(1)]);
+    state = memberSearchReducer(state, { type: 'results', query: 'ab', candidates: [candidate(9)] });
+    expect(state.searching).toBe(true);
+    expect(deriveMemberSearch(state, 'en').results).toEqual([candidate(1)]);
+  });
+
+  it('says no match with the query as text', () => {
+    let state = memberSearchReducer(MEMBER_SEARCH_INITIAL, { type: 'query', value: INJECTED });
+    state = memberSearchReducer(state, { type: 'start', query: INJECTED });
+    state = memberSearchReducer(state, { type: 'results', query: INJECTED, candidates: [] });
+    expect(deriveMemberSearch(state, 'en').message).toBe(`No member of this workspace matches "${INJECTED}".`);
+  });
+});
+
+describe('delete dialog', () => {
+  const impact = { onlyCount: 0, sharedCount: 0, memberCount: 0, mappingCount: 0 };
+
+  it('opens counting with Delete group disabled', () => {
+    const view = deriveDeleteDialog(DELETE_DIALOG_INITIAL, 'group-a', 'en');
+    expect(view.title).toBe('Delete group-a?');
+    expect(view.message).toBe('Counting affected documents…');
+    expect(view.canDelete).toBe(false);
+    expect(view.lines).toEqual([]);
+  });
+
+  it('shows the three counts, zeros included, and mappings only when some exist', () => {
+    expect(readImpact({ onlyCount: 0, sharedCount: 0, memberCount: 0, mappingCount: 0 })).toEqual(impact);
+    expect(readImpact({ onlyCount: 'x' })).toBeNull();
+    const zero = deriveDeleteDialog(deleteDialogReducer(DELETE_DIALOG_INITIAL, { type: 'counted', impact }), 'group-a', 'en');
+    expect(zero.canDelete).toBe(true);
+    expect(zero.message).toBeNull();
+    expect(zero.lines).toEqual([
+      'Documents restricted to this group alone: 0',
+      'Documents that stay visible to their other groups: 0',
+      'Members who lose access through this group: 0',
+    ]);
+    const mapped = deriveDeleteDialog(
+      deleteDialogReducer(DELETE_DIALOG_INITIAL, { type: 'counted', impact: { ...impact, onlyCount: 7, mappingCount: 2 } }),
+      'group-a',
+      'en',
+    );
+    expect(mapped.lines).toHaveLength(4);
+    expect(mapped.lines[0]).toBe('Documents restricted to this group alone: 7');
+    expect(mapped.lines[3]).toBe('Connector mappings removed with it: 2');
+  });
+
+  it('without the count offers Count again and never Delete group; a stale count recounts', () => {
+    const failed = deleteDialogReducer(DELETE_DIALOG_INITIAL, { type: 'countFailed' });
+    const view = deriveDeleteDialog(failed, 'group-a', 'en');
+    expect(view.canDelete).toBe(false);
+    expect(view.countAgain).toBe(true);
+    expect(view.message).toContain('could not be counted');
+    let state = deleteDialogReducer(DELETE_DIALOG_INITIAL, { type: 'counted', impact });
+    state = deleteDialogReducer(state, { type: 'delete' });
+    expect(deriveDeleteDialog(state, 'group-a', 'en')).toMatchObject({ canDelete: false, busy: true });
+    state = deleteDialogReducer(state, { type: 'count' });
+    expect(state).toEqual({ phase: 'counting', impact: null });
+    expect(deriveDeleteDialog(state, 'group-a', 'en').canDelete).toBe(false);
+  });
+});
+
+describe('the tab code', () => {
+  const source = readFileSync('src/components/ui/access-groups-admin.tsx', 'utf8');
+  it('uses no browser alert or confirm and never sets inner HTML', () => {
+    expect(source).not.toMatch(/\b(window\.)?(alert|confirm)\(/);
+    expect(source).not.toContain('dangerouslySetInnerHTML');
+  });
+  it('replaces the content with error.notAdmin and uses the destructive button in the dialog', () => {
+    expect(source).toContain("text('error.notAdmin')");
+    expect(source).toContain('variant="destructive"');
+  });
+});

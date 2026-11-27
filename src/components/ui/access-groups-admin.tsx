@@ -239,6 +239,53 @@ export function deriveCreateForm(state: CreateFormState): CreateFormView {
   };
 }
 
+// --- Members and delete dialog ---------------------------------------------------------------------------------------
+
+export const MEMBER_SEARCH_MIN = 2;
+export const MEMBER_SEARCH_DELAY_MS = 400;
+export const MEMBER_SEARCH_MAX = 20;
+
+export interface GroupMember { userId: string; displayName: string | null; email: string | null; addedAt: string | null }
+export interface MemberCandidate { userId: string; displayName: string | null; email: string | null; already: boolean }
+
+export function readMembers(_value: unknown): GroupMember[] { return []; }
+export function readCandidates(_value: unknown): MemberCandidate[] { return []; }
+export function memberLabel(_member: { userId: string; displayName: string | null; email: string | null }): { text: string; mono: boolean } {
+  return { text: '', mono: false };
+}
+
+export interface MemberSearchState { query: string; searching: boolean; results: MemberCandidate[]; resultsFor: string | null; failed: boolean }
+export type MemberSearchAction =
+  | { type: 'query'; value: string }
+  | { type: 'start'; query: string }
+  | { type: 'results'; query: string; candidates: MemberCandidate[] }
+  | { type: 'failed'; query: string }
+  | { type: 'reset' };
+export const MEMBER_SEARCH_INITIAL: MemberSearchState = { query: '', searching: false, results: [], resultsFor: null, failed: false };
+export function shouldSearchMembers(_query: string): boolean { return false; }
+export function memberSearchReducer(state: MemberSearchState, _action: MemberSearchAction): MemberSearchState { return state; }
+export interface MemberSearchView { message: string | null; spinner: boolean; results: MemberCandidate[] }
+export function deriveMemberSearch(_state: MemberSearchState, _language: string): MemberSearchView {
+  return { message: null, spinner: false, results: [] };
+}
+
+export interface GroupImpact { onlyCount: number; sharedCount: number; memberCount: number; mappingCount: number }
+export function readImpact(_value: unknown): GroupImpact | null { return null; }
+export type DeletePhase = 'counting' | 'counted' | 'unavailable' | 'deleting';
+export interface DeleteDialogState { phase: DeletePhase; impact: GroupImpact | null }
+export type DeleteDialogAction =
+  | { type: 'count' }
+  | { type: 'counted'; impact: GroupImpact }
+  | { type: 'countFailed' }
+  | { type: 'delete' }
+  | { type: 'deleteFailed' };
+export const DELETE_DIALOG_INITIAL: DeleteDialogState = { phase: 'counting', impact: null };
+export function deleteDialogReducer(state: DeleteDialogState, _action: DeleteDialogAction): DeleteDialogState { return state; }
+export interface DeleteDialogView { title: string; message: string | null; lines: string[]; canDelete: boolean; countAgain: boolean; busy: boolean }
+export function deriveDeleteDialog(_state: DeleteDialogState, _group: string, _language: string): DeleteDialogView {
+  return { title: '', message: null, lines: [], canDelete: true, countAgain: false, busy: false };
+}
+
 // --- Status region ----------------------------------------------------------------------------------------------------
 
 export interface StatusMessage {
