@@ -1,6 +1,6 @@
 ---
 quick_id: 261127-sbh
-status: in_progress
+status: complete
 files_modified:
   - src/lib/sidebar-button-config.ts
   - src/components/ui/sidebar.tsx
