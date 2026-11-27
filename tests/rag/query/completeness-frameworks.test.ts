@@ -12,12 +12,22 @@ import { createFakeQueryLlm, type FakeQueryLlmTable } from '../../../eval/harnes
 const NOW = new Date('2026-06-15T12:00:00Z');
 const signal = () => new AbortController().signal;
 
-function committedTable(): FakeLangChainTable {
-  return JSON.parse(readFileSync(join(process.cwd(), 'eval/fixtures/query-llm/transforms.json'), 'utf8')) as FakeLangChainTable;
+const PROTECTED_DROP = '比较 QX-210 和 QX-220 的状态码含义有什么区别？';
+
+/**
+ * The committed table plus the protected-token drop: the committed table keeps every protected code by rule
+ * (fake-query-llm.test.ts), so the one script that drops a code lives here.
+ */
+function buildTable(): FakeLangChainTable {
+  const committed = JSON.parse(readFileSync(join(process.cwd(), 'eval/fixtures/query-llm/transforms.json'), 'utf8')) as FakeLangChainTable;
+  return {
+    ...committed,
+    entries: [...committed.entries, { transform: 'decompose', query: PROTECTED_DROP, output: { questions: ['QX-210 的状态码含义是什么？'] } }],
+  };
 }
 
 function frameworks(): { native: QueryTransformer; langchain: QueryTransformer } {
-  const table = committedTable();
+  const table = buildTable();
   const nativeFake = createFakeQueryLlm({ table: table as unknown as FakeQueryLlmTable });
   setRagDepsForTests({ queryLlm: () => nativeFake });
   const fake = createFakeLangChainChatModel({ table });
@@ -57,7 +67,7 @@ const CASES: DropCase[] = [
   },
   {
     name: 'zh protected token',
-    query: '比较 QX-210 和 QX-220 的状态码含义有什么区别？',
+    query: PROTECTED_DROP,
     language: 'zh',
     expected: ['QX-210 的状态码含义是什么？', 'QX-220 的状态码含义是什么？'],
     action: 'added',

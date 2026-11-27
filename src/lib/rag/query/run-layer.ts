@@ -42,6 +42,9 @@ import type { CacheHit, CacheKeyParts, CacheTicket, EntryProfile } from '../cach
 import { resolveFinalResultCount } from '../config';
 import { effectiveVersionScope } from './filters';
 import { collectRequiredTerms, type RequiredTerm } from './completeness';
+import { loadTenantVocabulary } from './tenant-vocabulary';
+import { terminologyMatcherFor } from '../terminology/load';
+import { terminologyParams } from '../terminology/expand';
 import type { RpcClient } from '../backend/supabase-rpc';
 
 export type QueryLayerShortCircuit = { kind: 'small_talk' } | { kind: 'cache_hit' };
@@ -128,9 +131,35 @@ function postCheckReason(reason: PostCheckSkipReason): SkippedTransform['reason'
   return reason;
 }
 
-/** D-03: the required-term inputs for the decomposed (standalone) question. */
-async function requiredTermsFor(args: { query: string; gate: GateResult }): Promise<RequiredTerm[]> {
-  return collectRequiredTerms(args.query, args.gate);
+/** The 4.1.1 matcher on the decomposed question (the terminology stage runs after the parallel group, D-15). */
+async function terminologySurfaces(scope: TenantScope, query: string, signal: AbortSignal): Promise<string[]> {
+  try {
+    const { matcher } = await terminologyMatcherFor(scope, { signal, minHanChars: terminologyParams().min_han_chars });
+    return matcher.match(query).map((match) => match.surface);
+  } catch {
+    console.warn('[Query Layer] terminology unavailable; completeness runs without dictionary terms');
+    return [];
+  }
+}
+
+/**
+ * D-03: the required-term inputs for the decomposed (standalone) question. Vocabulary terms only with RAG_SCOPE_TAGS on and
+ * dictionary terms only while the terminology stage is enabled, both read for the request's own minted scope only.
+ */
+export async function requiredTermsFor(args: {
+  query: string;
+  gate: GateResult;
+  scope: TenantScope | undefined;
+  scopeTags: boolean;
+  terminology: boolean;
+  signal: AbortSignal;
+}): Promise<RequiredTerm[]> {
+  const { scope } = args;
+  const [vocabulary, termSurfaces] = await Promise.all([
+    args.scopeTags && scope ? loadTenantVocabulary(scope, { signal: args.signal }) : Promise.resolve(null),
+    args.terminology && scope ? terminologySurfaces(scope, args.query, args.signal) : Promise.resolve([]),
+  ]);
+  return collectRequiredTerms(args.query, args.gate, { vocabulary: vocabulary ?? [], termSurfaces });
 }
 
 function gateDetail(gate: GateResult): string {
@@ -628,7 +657,18 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
           async (stageSignal) =>
             transformer.decompose({
               ...base,
-              ...(completenessOn ? { requiredTerms: await requiredTermsFor({ query: standalone, gate }) } : {}),
+              ...(completenessOn
+                ? {
+                    requiredTerms: await requiredTermsFor({
+                      query: standalone,
+                      gate,
+                      scope: ctx.scope,
+                      scopeTags: config.scopeTags,
+                      terminology: spec('terminology', 'skip').enabled,
+                      signal: stageSignal,
+                    }),
+                  }
+                : {}),
               signal: stageSignal,
             }),
         )

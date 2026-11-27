@@ -732,15 +732,6 @@
     },
     {
       "transform": "decompose",
-      "query": "比较 QX-210 和 QX-220 的状态码含义有什么区别？",
-      "output": {
-        "questions": [
-          "QX-210 的状态码含义是什么？"
-        ]
-      }
-    },
-    {
-      "transform": "decompose",
       "query": "How do the Alder Module and the Birch Module differ in setup?",
       "output": {
         "questions": [
