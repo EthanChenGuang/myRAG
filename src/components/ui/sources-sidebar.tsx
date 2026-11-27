@@ -162,7 +162,7 @@ export function SourceAlsoIn({ view, language, className }: { view: SourceAlsoIn
     <details className={cn('group', className)}>
       <summary
         className={cn(
-          'flex cursor-pointer list-none items-center gap-1 rounded py-1 text-xs font-medium text-gray-700 dark:text-gray-300 [&::-webkit-details-marker]:hidden',
+          'flex cursor-pointer list-none items-center gap-1 rounded py-1 text-xs font-medium text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100 [&::-webkit-details-marker]:hidden',
           FOCUS_RING,
         )}
       >
