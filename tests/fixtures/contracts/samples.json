@@ -1060,6 +1060,7 @@
       "notes": [
         "Fixture sample only."
       ],
+      "population": "fixture",
       "provenance_counts": {
         "human": 30,
         "synthetic_fixture": 10

@@ -59,6 +59,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--hashes-json", required=True, type=Path)
     parser.add_argument("--catalog-json", required=True, type=Path, help="profile id → model, price and supported languages")
     parser.add_argument("--fixture-embedder", action="store_true")
+    parser.add_argument(
+        "--live-deployment",
+        action="store_true",
+        help="the arms ran against a real deployment (run-binding-compare --base-url); population is real only then",
+    )
     parser.add_argument("--note", action="append", default=[], help="extra note recorded in the comparison")
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args(argv)
@@ -80,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
             hashes=hashes,
             reembed_run_ids=_pairs(args.reembed_run, "--reembed-run"),
             fixture_embedder=args.fixture_embedder,
+            live_deployment=args.live_deployment,
             golden_doc_types=golden_doc_types_from_tags(load_golden(resolve_cli_path(args.golden))),
             report_paths={"baseline": str(args.baseline), "control": str(args.control), **candidate_paths},
             extra_notes=args.note,
@@ -93,7 +99,9 @@ def main(argv: list[str] | None = None) -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(comparison.model_dump_json(indent=2) + "\n", encoding="utf-8")
     verdict = comparison.recommended_profile or "none"
-    print(f"binding-compare: wrote {out_path} (doc type {comparison.doc_type}, recommended {verdict})")
+    print(
+        f"binding-compare: wrote {out_path} (doc type {comparison.doc_type}, population {comparison.population}, recommended {verdict})"
+    )
     return EXIT_WRITTEN
 
 
