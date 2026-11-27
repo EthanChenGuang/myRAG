@@ -71,8 +71,8 @@
       "prerequisites": ["DeepInfra key with balance", "a sidecar host running the bge-m3 image", "a tenant with real documents", "migration 0811 on the target database"],
       "dry_run": {
         "command": "node --import tsx eval/harness/run-profile-compare.mts --out eval/out/03.2.1-05-compare; uv run --directory eval pytest -q tests/test_profile_compare.py",
-        "exit": null,
-        "result": "filled in by the executor after the run"
+        "exit": 0,
+        "result": "fixture wiring proof on 2026-11-27: the bge-m3-1024 arm is present; 'serving hosted [fixture embedder]' measures the fixture embedder only and 'serving sidecar: not measured'; output under eval/out/ (not committed); profile_compare tests pass"
       }
     }
   ],
