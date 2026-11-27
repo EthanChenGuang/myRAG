@@ -181,14 +181,14 @@ for (const mode of MODES) {
       const userId = await createUser(db);
       await insertRecord(db, { userId, extra: { review_reasons: ['claim_unsupported'] } });
       await insertRecord(db, { userId, extra: { review_reasons: ['feedback_negative', 'groundedness_flagged', 'claim_unsupported'] } });
-      for (const reason of ['output_guard', 'version_conflict', 'calc_mismatch', 'low_score']) {
+      for (const reason of ['output_guard', 'version_conflict', 'calc_other', 'low_score']) {
         await rejectsWith(() => insertRecord(db, { userId, extra: { review_reasons: [reason] } }), '23514');
       }
     });
 
-    test('applying 0944 a second time leaves the answer-record catalog unchanged', async () => {
-      const files = migrationFiles(mode).filter((file) => file.includes('/0944_'));
-      assert.equal(files.length, 1);
+    test('applying 0944 and the later 0950 a second time leaves the answer-record catalog unchanged', async () => {
+      const files = migrationFiles(mode).filter((file) => file.includes('/0944_') || file.includes('/0950_'));
+      assert.equal(files.length, 2);
       const once = await recordCatalog(db);
       for (const file of files) await db.exec(fs.readFileSync(path.join(REPO_ROOT, file), 'utf8'));
       assert.deepEqual(await recordCatalog(db), once);
