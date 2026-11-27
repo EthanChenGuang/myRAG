@@ -146,7 +146,10 @@ async function load() {
   vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => fakeClient(), getSupabase: () => ({}) }));
   const map = await import('@/app/api/rag/access-groups/connector-map/route');
   const mapId = await import('@/app/api/rag/access-groups/connector-map/[id]/route');
-  return { map, mapId };
+  const failClosed = await import('@/app/api/rag/access-groups/connector-map/fail-closed/route');
+  const rules = await import('@/app/api/rag/access-groups/sharing-rules/route');
+  const ruleId = await import('@/app/api/rag/access-groups/sharing-rules/[id]/route');
+  return { map, mapId, failClosed, rules, ruleId };
 }
 
 type Loaded = Awaited<ReturnType<typeof load>>;
@@ -353,6 +356,123 @@ describe('connector mapping routes (multi-tenant organization admin)', () => {
     const write = await createMap(loaded, driveGroup(GROUP_A));
     expect(write.status).toBe(400);
     expect(await write.json()).toEqual({ success: false, error: 'personal_tenant' });
+    expect(connectorCalls()).toEqual([]);
+  });
+});
+
+const listRules = (l: Loaded, org?: string) => l.rules.GET(req(withOrg('/sharing-rules', org)));
+const createRule = (l: Loaded, body: unknown, org?: string) => l.rules.POST(req(withOrg('/sharing-rules', org), { method: 'POST', body }));
+const toggleRule = (l: Loaded, id: string, body: unknown, org?: string) => l.ruleId.PUT(req(withOrg(`/sharing-rules/${id}`, org), { method: 'PUT', body }), idParams(id));
+const failClosedOf = (l: Loaded, org?: string) => l.failClosed.GET(req(withOrg('/connector-map/fail-closed', org)));
+
+describe('sharing rule routes', () => {
+  it('creates a domain rule off and lists it with its document count', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const created = await createRule(loaded, { provider: 'google-drive', kind: 'domain', domain: 'Example.ORG' });
+    expect(created.status).toBe(201);
+    const body = await created.json();
+    expect(body).toMatchObject({ success: true, rule: { enabled: false, outcome: 'created' }, appliesAt: 'next_sync' });
+    expect(state.rpcCalls).toContainEqual({
+      fn: 'rag_connector_rule_set',
+      args: { p_tenant_key: 's:default', p_id: null, p_provider: 'google-drive', p_kind: 'domain', p_domain: 'example.org', p_enabled: false, p_actor: ADMIN_ID },
+    });
+    const listed = await listRules(loaded);
+    expect(listed.status).toBe(200);
+    expect(listed.headers.get('cache-control')).toBe('no-store');
+    expect(await listed.json()).toEqual({
+      success: true,
+      personal: false,
+      visibilityApplies: true,
+      rules: [{ id: body.rule.id, provider: 'google-drive', kind: 'domain', domain: 'example.org', enabled: false, documents: 4 }],
+    });
+    const link = await createRule(loaded, { provider: 'dropbox', kind: 'anyone' });
+    expect(link.status).toBe(201);
+    expect((await link.json()).rule.enabled).toBe(false);
+    const duplicate = await createRule(loaded, { provider: 'google-drive', kind: 'domain', domain: 'example.org' });
+    expect(duplicate.status).toBe(409);
+    expect(await duplicate.json()).toEqual({ success: false, error: 'rule_exists' });
+  });
+
+  it('answers 400 bad_domain for a malformed domain without a call', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    for (const domain of ['https://example.org', 'example.org/path', '*.example.org', 'example', 'exa mple.org', 'example.org:8080', '']) {
+      const response = await createRule(loaded, { provider: 'google-drive', kind: 'domain', domain });
+      expect(response.status, domain).toBe(400);
+      expect(await response.json()).toEqual({ success: false, error: 'bad_domain' });
+    }
+    const missing = await createRule(loaded, { provider: 'google-drive', kind: 'domain' });
+    expect(await missing.json()).toEqual({ success: false, error: 'bad_domain' });
+    const linkWithDomain = await createRule(loaded, { provider: 'notion', kind: 'public', domain: 'example.org' });
+    expect(await linkWithDomain.json()).toEqual({ success: false, error: 'bad_domain' });
+    const enabledOnCreate = await createRule(loaded, { provider: 'google-drive', kind: 'anyone', enabled: true });
+    expect(enabledOnCreate.status).toBe(400);
+    expect((await enabledOnCreate.json()).error).toBe('Invalid request data');
+    expect(connectorCalls()).toEqual([]);
+  });
+
+  it('PUT turns a rule on and off; an unknown id answers 404', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const { rule } = await (await createRule(loaded, { provider: 'google-drive', kind: 'anyone' })).json();
+    const on = await toggleRule(loaded, rule.id, { enabled: true });
+    expect(on.status).toBe(200);
+    expect(await on.json()).toMatchObject({ success: true, rule: { id: rule.id, enabled: true, outcome: 'enabled' }, appliesAt: 'next_sync' });
+    const off = await toggleRule(loaded, rule.id, { enabled: false });
+    expect(await off.json()).toMatchObject({ rule: { enabled: false, outcome: 'disabled' } });
+    const unknown = await toggleRule(loaded, UNKNOWN, { enabled: true });
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toEqual({ success: false, error: 'not_found' });
+    expect((await toggleRule(loaded, rule.id, {})).status).toBe(400);
+    expect((await toggleRule(loaded, rule.id, { enabled: 'yes' })).status).toBe(400);
+  });
+
+  it('a rule of another organization answers 404; a member cannot reach the rule routes', async () => {
+    state.mode = 'multi-tenant';
+    state.tables.organization_members = [
+      { organization_id: ORG_O, user_id: ORG_ADMIN_ID, role: 'owner' },
+      { organization_id: ORG_O, user_id: MEMBER_A, role: 'member' },
+    ];
+    state.rules = [{ id: UNKNOWN, tenant: `o:${ORG_P}`, provider: 'google-drive', kind: 'anyone', domain: null, enabled: false }];
+    const loaded = await load();
+    state.session = { id: ORG_ADMIN_ID };
+    const other = await toggleRule(loaded, UNKNOWN, { enabled: true }, ORG_O);
+    expect(other.status).toBe(404);
+    expect(state.rules[0].enabled).toBe(false);
+    expect((await (await listRules(loaded, ORG_O)).json()).visibilityApplies).toBe(false);
+
+    state.session = { id: MEMBER_A };
+    state.rpcCalls = [];
+    for (const response of [await listRules(loaded, ORG_O), await createRule(loaded, { provider: 'google-drive', kind: 'anyone' }, ORG_O), await toggleRule(loaded, UNKNOWN, { enabled: true }, ORG_O)]) {
+      expect(response.status).toBe(403);
+    }
+    expect(connectorCalls()).toEqual([]);
+  });
+});
+
+describe('fail-closed counts route', () => {
+  it('returns per connection the number of documents left with the fallback audience', async () => {
+    state.failClosed = { 's:default': [{ connection_id: 'connection-1', documents: 3 }, { connection_id: 'connection-2', documents: 1 }] };
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const response = await failClosedOf(loaded);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toEqual({
+      success: true,
+      connections: [
+        { connectionId: 'connection-1', documents: 3 },
+        { connectionId: 'connection-2', documents: 1 },
+      ],
+    });
+    expect(state.rpcCalls).toContainEqual({ fn: 'rag_connector_fail_closed_counts', args: { p_tenant_key: 's:default' } });
+  });
+
+  it('a member gets 403 with no call', async () => {
+    const loaded = await load();
+    state.session = { id: MEMBER_A };
+    expect((await failClosedOf(loaded)).status).toBe(403);
     expect(connectorCalls()).toEqual([]);
   });
 });
