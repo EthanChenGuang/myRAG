@@ -12,6 +12,8 @@ export type GroundednessLabel = NonNullable<CachedAnswer['groundedness']['label'
 
 /** Every part of key_hash. Document references and retrieval options are bypass rules, not key parts. */
 export interface CacheKeyParts {
+  /** D-23, A-05: cacheAccessKeyPart(scope); required, so no key is built without the caller's group-set hash. */
+  accessGroupSetHash: string;
   answerLanguage: CacheAnswerLanguage;
   ragMode: CacheRagMode;
   generatorModel: string;
