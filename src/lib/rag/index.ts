@@ -183,6 +183,7 @@ export type {
   UsedDocument,
 } from './types';
 export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
+export { untaggedVoiceContext } from './context/voice';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
 export {
@@ -221,11 +222,13 @@ export {
   parseBodyChannel,
   type AnswerChannel,
   type AnswerTurn,
+  type OutputGuardTurnSources,
   type TextsSource,
 } from './generation/answer-turn';
-export { guardChannelReply, guardSummaryText } from './security/channel-reply-guard';
+export { guardChannelReply, guardSummaryText, guardVoiceTranscript } from './security/channel-reply-guard';
 export { formatGuardedLinks, linkUsageInstructions } from './security/link-section';
-export type { ChannelReplyGuardInput, ChannelReplyGuardResult, SummaryGuardInput } from './security/channel-reply-guard';
+export type { ChannelReplyGuardInput, ChannelReplyGuardResult, SummaryGuardInput, VoiceTranscriptMessage } from './security/channel-reply-guard';
+export { recordOutputGuardEvents } from './security/security-events';
 export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource } from './lang/answer-language';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';

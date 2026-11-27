@@ -142,3 +142,42 @@ export function guardSummaryText(input: SummaryGuardInput): string {
   }
   return text;
 }
+
+export interface VoiceTranscriptMessage {
+  role: string;
+  content?: unknown;
+}
+
+/**
+ * D-40: the post-hoc voice check. Every assistant turn of a stored voice transcript is run through the whole-text guard in
+ * flag behaviour (the text is never changed), with the allowlist, the site host and the user turn before it as allow
+ * evidence. Returns the summaries that have findings, in turn order; empty with RAG_OUTPUT_GUARD off.
+ */
+export function guardVoiceTranscript(messages: readonly VoiceTranscriptMessage[]): OutputGuardLinkSummary[] {
+  if (readAnswerConfig().outputGuard === 'off') return [];
+  const language = languageVariablesUnset() ? '' : getLanguageSettings().primary ?? '';
+  const placeholder = fixedText('notices.link_removed', language);
+  const findings: OutputGuardLinkSummary[] = [];
+  let userMessage = '';
+  for (const message of messages) {
+    const content = typeof message.content === 'string' ? message.content : '';
+    if (message.role === 'user') {
+      userMessage = content;
+      continue;
+    }
+    if (message.role !== 'assistant' || content === '') continue;
+    const { summary } = guardWholeText(content, {
+      mode: 'flag',
+      links: createOutputLinkPolicy({
+        allowlistValue: process.env.RAG_OUTPUT_LINK_ALLOWLIST ?? env.RAG_OUTPUT_LINK_ALLOWLIST,
+        siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? env.NEXT_PUBLIC_SITE_URL,
+        userMessage,
+      }),
+      placeholder,
+      language,
+    });
+    if (hasFindings(summary)) findings.push(summary);
+  }
+  return findings;
+}
+
