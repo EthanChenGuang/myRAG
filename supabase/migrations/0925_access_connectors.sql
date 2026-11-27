@@ -199,4 +199,74 @@ $fn$;
 REVOKE ALL ON FUNCTION public.rag_connector_apply_access(text, uuid, text, jsonb, uuid, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_connector_apply_access(text, uuid, text, jsonb, uuid, text) TO service_role;
 
+CREATE OR REPLACE FUNCTION public.rag_connector_match_members(p_tenant_key text, p_addresses text[])
+RETURNS TABLE (idx integer, user_id uuid)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_prefix text;
+  v_tenant_id uuid;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_addresses IS NULL OR pg_catalog.cardinality(p_addresses) = 0 THEN
+    RETURN;
+  END IF;
+  IF pg_catalog.cardinality(p_addresses) > 5000 THEN
+    RAISE EXCEPTION 'too_many_addresses' USING ERRCODE = '22023';
+  END IF;
+  v_prefix := pg_catalog.left(p_tenant_key, 2);
+  IF v_prefix <> 's:' THEN
+    v_tenant_id := pg_catalog.substr(p_tenant_key, 3)::uuid;
+  END IF;
+
+  -- One query per mode: organization_members exists only in multi-tenant databases.
+  IF v_prefix = 's:' THEN
+    RETURN QUERY
+    WITH c AS (
+      SELECT a.ord::integer AS idx, u.id AS user_id
+      FROM pg_catalog.unnest(p_addresses) WITH ORDINALITY AS a(address, ord)
+      JOIN auth.users u ON pg_catalog.lower(u.email) = pg_catalog.lower(pg_catalog.btrim(a.address))
+      WHERE a.address IS NOT NULL
+        AND pg_catalog.btrim(a.address) <> ''
+        AND (pg_catalog.to_jsonb(u) ->> 'email_confirmed_at') IS NOT NULL
+        AND (pg_catalog.to_jsonb(u) ->> 'deleted_at') IS NULL
+    )
+    SELECT c.idx, c.user_id FROM c ORDER BY c.idx;
+  ELSIF v_prefix = 'u:' THEN
+    RETURN QUERY
+    WITH c AS (
+      SELECT a.ord::integer AS idx, u.id AS user_id
+      FROM pg_catalog.unnest(p_addresses) WITH ORDINALITY AS a(address, ord)
+      JOIN auth.users u ON pg_catalog.lower(u.email) = pg_catalog.lower(pg_catalog.btrim(a.address))
+      WHERE a.address IS NOT NULL
+        AND pg_catalog.btrim(a.address) <> ''
+        AND (pg_catalog.to_jsonb(u) ->> 'email_confirmed_at') IS NOT NULL
+        AND (pg_catalog.to_jsonb(u) ->> 'deleted_at') IS NULL
+    )
+    SELECT c.idx, c.user_id FROM c WHERE c.user_id = v_tenant_id ORDER BY c.idx;
+  ELSE
+    RETURN QUERY
+    WITH c AS (
+      SELECT a.ord::integer AS idx, u.id AS user_id
+      FROM pg_catalog.unnest(p_addresses) WITH ORDINALITY AS a(address, ord)
+      JOIN auth.users u ON pg_catalog.lower(u.email) = pg_catalog.lower(pg_catalog.btrim(a.address))
+      WHERE a.address IS NOT NULL
+        AND pg_catalog.btrim(a.address) <> ''
+        AND (pg_catalog.to_jsonb(u) ->> 'email_confirmed_at') IS NOT NULL
+        AND (pg_catalog.to_jsonb(u) ->> 'deleted_at') IS NULL
+    )
+    SELECT c.idx, c.user_id FROM c
+    WHERE EXISTS (SELECT 1 FROM public.organization_members m WHERE m.organization_id = v_tenant_id AND m.user_id = c.user_id)
+       OR EXISTS (SELECT 1 FROM public.organizations o WHERE o.id = v_tenant_id AND o.owner_id = c.user_id)
+    ORDER BY c.idx;
+  END IF;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_connector_match_members(text, text[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_connector_match_members(text, text[]) TO service_role;
+
 COMMIT;
