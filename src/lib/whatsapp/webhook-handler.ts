@@ -10,6 +10,7 @@ import { nanoid } from 'nanoid';
 import { generateTitle, generateSmartTitle } from '@/lib/title-generator';
 import { guardChannelReply, readAnswerConfig } from '@/lib/rag';
 import { createChatStreamParser, type ChatStreamFacts } from './chat-stream-parser';
+import { buildWhatsAppHistory, stampWhatsAppMessage, whatsappHistoryEnabled, withRagMetadata, type WhatsAppStamp } from './history';
 
 function messageText(message: ExtendedMessage): string {
   if (typeof message.content === 'string') return message.content;
@@ -20,12 +21,31 @@ function messageText(message: ExtendedMessage): string {
     .join('\n');
 }
 
+type SessionManagerPort = Pick<ReturnType<typeof getSessionManager>, 'getSessionById' | 'updateSessionStatus'>;
+
+/** Injected collaborators for in-process tests and the eval entry point; each defaults to today's singleton. */
+export interface WebhookHandlerDeps {
+  sessionManager: SessionManagerPort;
+  whatsappClient: ReturnType<typeof getWhatsAppClient>;
+  db: Pick<typeof supabaseAdmin, 'from'>;
+  fetch: typeof fetch;
+}
+
 /**
  * Handles incoming webhooks from WhatsApp provider (Koyeb/Fly.io)
  */
 export class WhatsAppWebhookHandler {
-  private sessionManager = getSessionManager();
-  private whatsappClient = getWhatsAppClient();
+  private sessionManager: SessionManagerPort;
+  private whatsappClient: ReturnType<typeof getWhatsAppClient>;
+  private db: Pick<typeof supabaseAdmin, 'from'>;
+  private fetchImpl: typeof fetch;
+
+  constructor(deps: Partial<WebhookHandlerDeps> = {}) {
+    this.sessionManager = deps.sessionManager ?? getSessionManager();
+    this.whatsappClient = deps.whatsappClient ?? getWhatsAppClient();
+    this.db = deps.db ?? supabaseAdmin;
+    this.fetchImpl = deps.fetch ?? ((input, init) => fetch(input, init));
+  }
 
   /**
    * Process incoming webhook
@@ -143,7 +163,7 @@ export class WhatsAppWebhookHandler {
         logger.info('WhatsAppWebhookHandler', 'Reset command received, clearing conversation history');
         
         // Clear the messages in the database
-        const { error: resetError } = await supabaseAdmin
+        const { error: resetError } = await this.db
           .from('chats')
           .update({
             messages: [],
@@ -170,7 +190,7 @@ export class WhatsAppWebhookHandler {
     await this.trackMessage(conversation.id, messageId, 'incoming');
 
     // Process through myRAG
-    await this.processMessageThroughMyRAG(conversation, myRAGMessage, session.sessionId);
+    await this.processMessageThroughMyRAG(conversation, myRAGMessage, session.sessionId, whatsappJid);
   }
 
   /**
@@ -184,7 +204,7 @@ export class WhatsAppWebhookHandler {
     }
 
     // Update message status in database
-    const { error } = await supabaseAdmin
+    const { error } = await this.db
       .from('whatsapp_messages')
       .update({ status })
       .eq('whatsapp_message_id', messageId);
@@ -252,7 +272,7 @@ export class WhatsAppWebhookHandler {
     phoneNumber: string
   ): Promise<WhatsAppConversation> {
     // Check if conversation exists
-    const { data: existing } = await supabaseAdmin
+    const { data: existing } = await this.db
       .from('whatsapp_conversations')
       .select('*')
       .eq('user_id', userId)
@@ -278,7 +298,7 @@ export class WhatsAppWebhookHandler {
     
     // Create chat directly in database without any system messages
     // The chat API will add the appropriate system messages dynamically
-    const { error: chatError } = await supabaseAdmin
+    const { error: chatError } = await this.db
       .from('chats')
       .insert({
         id: chatId,
@@ -295,7 +315,7 @@ export class WhatsAppWebhookHandler {
     }
 
     // Create conversation mapping
-    const { data: conversation, error } = await supabaseAdmin
+    const { data: conversation, error } = await this.db
       .from('whatsapp_conversations')
       .insert({
         chat_id: chatId,
@@ -329,24 +349,29 @@ export class WhatsAppWebhookHandler {
    */
   private async processMessageThroughMyRAG(
     conversation: WhatsAppConversation,
-    message: ExtendedMessage,
-    sessionId: string
+    incoming: ExtendedMessage,
+    sessionId: string,
+    senderJid: string = conversation.whatsappJid
   ): Promise<void> {
+    // D-24: with RAG_WHATSAPP_HISTORY on, every stored turn carries the session and sender it came from
+    const historyOn = false && whatsappHistoryEnabled();
+    const stamp: WhatsAppStamp = { sessionId, senderJid };
+    const message = historyOn ? stampWhatsAppMessage(incoming, stamp) : incoming;
     try {
       // Get existing chat messages
-      const { data: chat } = await supabaseAdmin
+      const { data: chat } = await this.db
         .from('chats')
         .select('messages')
         .eq('id', conversation.chatId)
         .single();
 
-      const existingMessages = chat?.messages || [];
+      const existingMessages: ExtendedMessage[] = chat?.messages || [];
       
       // Add new message to chat using admin client
       const updatedMessages = [...existingMessages, message];
       
       // Update chat with new message
-      const { error: updateError } = await supabaseAdmin
+      const { error: updateError } = await this.db
         .from('chats')
         .update({
           messages: updatedMessages,
@@ -374,13 +399,13 @@ export class WhatsAppWebhookHandler {
       
       logger.info('WhatsAppWebhookHandler', `Using API endpoint: ${baseUrl}/api/chat (isDevelopment: ${isDevelopment})`);
       
-      // IMPORTANT: Always send only the current message to ensure fresh context
-      // Send the message to the chat API
-      // This will use the main RAG_SYSTEM_PROMPT from .env.local
-      const messagesToSend = [message];  // Always fresh context, no history
+      // Switch off: only the current message, as before. On: the D-16 window of this sender's turns in this session (D-24, P-24)
+      const history = historyOn ? buildWhatsAppHistory(existingMessages, stamp) : [];
+      if (historyOn) console.log('[WhatsApp History] Window built:', { stored: existingMessages.length, turns: history.length });
+      const messagesToSend = [...history, message];
       const answerConfig = readAnswerConfig();
       
-      const response = await fetch(`${baseUrl}/api/chat`, {
+      const response = await this.fetchImpl(`${baseUrl}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -478,18 +503,20 @@ export class WhatsAppWebhookHandler {
 
       // Store the AI response in the database
       // This ensures the conversation history is complete
-      const aiResponse: ExtendedMessage = {
+      const answer: ExtendedMessage = {
         id: nanoid(),
         role: 'assistant',
         content: fullResponse,
         createdAt: new Date()
       };
+      const aiResponse = historyOn ? stampWhatsAppMessage(answer, stamp) : answer;
 
-      // Get the updated messages array and add the AI response
-      const finalMessages = [...updatedMessages, aiResponse];
+      // D-22: the turn's streamed standalone query is kept on its user message, as in chat
+      const storedTurn = withRagMetadata(message, undefined);
+      const finalMessages = [...existingMessages, storedTurn, aiResponse];
 
       // Update the chat with the complete conversation
-      const { error: finalUpdateError } = await supabaseAdmin
+      const { error: finalUpdateError } = await this.db
         .from('chats')
         .update({
           messages: finalMessages,
@@ -504,7 +531,7 @@ export class WhatsAppWebhookHandler {
 
       // Generate and update chat title if this is the first exchange
       // Check if the chat title is still the default "New Chat"
-      const { data: currentChat } = await supabaseAdmin
+      const { data: currentChat } = await this.db
         .from('chats')
         .select('title')
         .eq('id', conversation.chatId)
@@ -516,7 +543,7 @@ export class WhatsAppWebhookHandler {
           const basicTitle = generateTitle(finalMessages);
           
           // Update with basic title first
-          await supabaseAdmin
+          await this.db
             .from('chats')
             .update({ title: basicTitle })
             .eq('id', conversation.chatId);
@@ -527,7 +554,7 @@ export class WhatsAppWebhookHandler {
           generateSmartTitle(finalMessages)
             .then(async (smartTitle) => {
               if (smartTitle && smartTitle !== basicTitle) {
-                await supabaseAdmin
+                await this.db
                   .from('chats')
                   .update({ title: smartTitle })
                   .eq('id', conversation.chatId);
@@ -649,7 +676,7 @@ export class WhatsAppWebhookHandler {
     whatsappMessageId: string,
     direction: 'incoming' | 'outgoing'
   ): Promise<void> {
-    const { error } = await supabaseAdmin
+    const { error } = await this.db
       .from('whatsapp_messages')
       .insert({
         conversation_id: conversationId,
@@ -667,7 +694,7 @@ export class WhatsAppWebhookHandler {
    * Get conversation by WhatsApp JID
    */
   private async getConversationByJid(whatsappJid: string): Promise<WhatsAppConversation | null> {
-    const { data } = await supabaseAdmin
+    const { data } = await this.db
       .from('whatsapp_conversations')
       .select('*')
       .eq('whatsapp_jid', whatsappJid)
