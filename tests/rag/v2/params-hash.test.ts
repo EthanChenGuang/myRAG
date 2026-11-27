@@ -721,7 +721,8 @@ describe('requestRetrievalConfigHash lexical scoring block (04.4-01, D-08)', () 
   });
 
   it.each(runConfigs)('run config %s: ts_rank_cd with any k1 and b keeps its hash', async (_name, env) => {
-    const before = await requestRetrievalConfigHash(requestFor({ ...env }));
+    // A run config may itself select bm25 (v2-lexical-bm25-on.json, 04.4-13); the claim is about ts_rank_cd, so both sides use it.
+    const before = await requestRetrievalConfigHash(requestFor({ ...env, RAG_LEXICAL_SCORING: 'ts_rank_cd' }));
     resetRagConfigForTests();
     const after = await requestRetrievalConfigHash(requestFor({ ...env, RAG_LEXICAL_SCORING: 'ts_rank_cd', RAG_LEXICAL_BM25_K1: '2', RAG_LEXICAL_BM25_B: '0.3' }));
     expect(after).toBe(before);
