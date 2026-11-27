@@ -549,7 +549,7 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       await rejects(() => record(multi ? 's:default' : `o:${ORG}`, 'citation_access_violation'), /tenant key/, 'tenant key of the other mode');
     });
 
-    test('every 0923 resolution function is executable by service_role only', async () => {
+    test('every 0923 resolution function is executable by service_role only (rag_access_enforced also by the client roles, 0926)', async () => {
       const rows = await db.query<{ sig: string; anon: boolean; auth: boolean; svc: boolean; pub: boolean }>(
         `SELECT p.oid::regprocedure::text AS sig,
                 has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
@@ -574,7 +574,9 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       );
       assert.equal(rows.rows.length, 9, 'nine functions');
       for (const row of rows.rows) {
-        assert.deepEqual({ sig: row.sig, anon: row.anon, auth: row.auth, svc: row.svc, pub: row.pub }, { sig: row.sig, anon: false, auth: false, svc: true, pub: false });
+        // rag_access_enforced() is also an allow-listed helper of the 0926 restrictive read policies (04.3-06), so anon and authenticated may run it.
+        const client = row.sig === 'rag_access_enforced()';
+        assert.deepEqual({ sig: row.sig, anon: row.anon, auth: row.auth, svc: row.svc, pub: row.pub }, { sig: row.sig, anon: client, auth: client, svc: true, pub: false });
       }
       await rejects(
         () => asRole(db, 'authenticated', MEMBER_A, () => db.query('SELECT * FROM public.rag_resolve_access_scope($1, $2)', [fx.tenantKey, MEMBER_A])),
