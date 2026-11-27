@@ -70,6 +70,18 @@ MiningReason = Literal[
 ]
 # Phase 5.2 D-55: reasons written by the answer checks and by rag_enqueue_review_item (0944); never produced by weekly mining alone.
 CheckReviewReason = Literal["claim_unsupported", "output_guard", "version_conflict"]
+ReviewItemReason = Literal[
+    "feedback_negative",
+    "refusal_disputed",
+    "groundedness_flagged",
+    "refused_high_score",
+    "zero_results",
+    "low_score",
+    "no_source_opened",
+    "representative",
+    "re_review",
+]
+ReviewSource = Literal["representative", "pilot", "drift_fill", "historical"]
 ReviewItemStatus = Literal["open", "labelled", "skipped", "exported"]
 Triage = Literal["dictionary", "training", "golden", "kb_gap", "not_a_failure"]
 DictionaryRelation = Literal["synonym", "abbreviation", "translation", "misspelling"]
@@ -277,7 +289,7 @@ class ReviewItem(_LanguageSnapshot):
     outcome: LogOutcome
     candidates: list[RetrievalLogCandidate] = Field(default_factory=list, max_length=MAX_LOG_CANDIDATES)
     retrieval_config_hash: str | None = Field(default=None, max_length=128)
-    reasons: list[MiningReason | CheckReviewReason] = _unique(default_factory=list)
+    reasons: list[ReviewItemReason | CheckReviewReason] = _unique(default_factory=list)
     occurrences: int = Field(default=1, ge=1)
     tags: list[ReviewTag] = Field(default_factory=list)
     status: ReviewItemStatus

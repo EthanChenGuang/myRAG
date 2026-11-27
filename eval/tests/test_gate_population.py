@@ -222,7 +222,7 @@ def test_real_mode_with_production_only_counts_production_items():
 
 def test_committed_gate_population_file_is_legacy_and_loads_with_its_sha256():
     config, digest = load_gate_population()
-    assert config == GatePopulationConfig(mode="legacy", provenances=["production", "human"], min_items=100)
+    assert config == GatePopulationConfig(mode="legacy", provenances=["production", "human", "historical"], min_items=100)
     assert digest == hashlib.sha256(GATE_POPULATION_PATH.read_bytes()).hexdigest()
     assert GATE_POPULATION_PATH == REPO_ROOT / "eval" / "config" / "gate-population.json"
 

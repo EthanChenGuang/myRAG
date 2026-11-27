@@ -1,7 +1,7 @@
 import hashlib
 import json
 import os
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +10,7 @@ from rag_sidecar.contracts.golden import GoldenItem, GoldenSplitManifest, GoldSp
 SPLIT_RULE = "sha256-first8hex-mod100-lt70-dev"
 DOCGROUP_SPLIT_RULE = "docgroup-sha256-first8hex-mod100-lt70-dev"
 NEAR_DUPLICATE_TAG = "near_duplicate_confirmed:"
+PARAPHRASE_OF_TAG = "paraphrase_of:"
 
 
 def assign_split(item_id: str) -> str:
@@ -42,7 +43,10 @@ def _manifest_rule(path: Path) -> str | None:
     return GoldenSplitManifest.model_validate_json(path.read_text(encoding="utf-8")).rule
 
 
-def freeze_splits(items: list[GoldenItem], manifest_path: Path) -> list[GoldenItem]:
+def freeze_splits(
+    items: list[GoldenItem], manifest_path: Path, pinned: Mapping[str, str] | None = None
+) -> list[GoldenItem]:
+    """Freeze item-rule splits; a new item takes its pinned split (D-53 paraphrases: the parent's) or the hash rule."""
     if _manifest_rule(manifest_path) == DOCGROUP_SPLIT_RULE:
         raise ValueError(f"{manifest_path} uses the {DOCGROUP_SPLIT_RULE} rule; a manifest never switches rule")
     assignments = load_manifest(manifest_path)
@@ -55,7 +59,7 @@ def freeze_splits(items: list[GoldenItem], manifest_path: Path) -> list[GoldenIt
         seen.add(item.id)
         recorded = assignments.get(item.id)
         if recorded is None:
-            recorded = assign_split(item.id)
+            recorded = (pinned or {}).get(item.id) or assign_split(item.id)
             assignments[item.id] = recorded
             added = True
         elif item.split != recorded:
@@ -103,6 +107,8 @@ def _confirmed_pairs(items: Iterable[GoldenItem]) -> list[tuple[str, str]]:
         for tag in item.tags:
             if tag.startswith(NEAR_DUPLICATE_TAG):
                 pairs.append((item.id, tag[len(NEAR_DUPLICATE_TAG):]))
+            elif tag.startswith(PARAPHRASE_OF_TAG):
+                pairs.append((item.id, tag[len(PARAPHRASE_OF_TAG):]))
     return pairs
 
 
