@@ -702,6 +702,15 @@
       "transform": "translate",
       "query": "synthetic translate error probe",
       "fail": "error"
+    },
+    {
+      "transform": "decompose",
+      "query": "How did the launch rules of the Marrowfield Rocketry Club differ between 2025 and 2026?",
+      "output": {
+        "questions": [
+          "What were the launch rules of the Marrowfield Rocketry Club in 2025?"
+        ]
+      }
     }
   ]
 }
