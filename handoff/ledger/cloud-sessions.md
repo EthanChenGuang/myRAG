@@ -920,3 +920,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - DECISION on the owner's behalf (design, not a signature): revise D-28 to admit exact_id rows into the legacy_rule pool with the legacy keep rule.
   - plan-41-18-revise (Fable) is replanning; re-execute after it.
   - Archived.
+- 00:02Z quick-43-apply-test DONE exec/quick-43-apply-test d3bfbb3c6 -> train 41. The access-migrations apply test passes 8/8 in both modes, and still passes with 0986-0990 copied in. The 53 plan list is corrected. Archived.
