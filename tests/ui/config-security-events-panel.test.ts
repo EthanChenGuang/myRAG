@@ -562,7 +562,7 @@ describe('Security events panel: Uploaders, Events and Link previews', () => {
     const rows = page.view('uploaders').querySelectorAll('tr[data-security-uploader-row]');
     expect(rows).toHaveLength(2);
     expect(rows[0]!.textContent).toContain('Uploads held');
-    expect(rows[0]!.textContent).toContain('Held since 2026-11-19');
+    expect(rows[0]!.textContent).toContain('Held since Nov 19, 2026');
     expect(rows[0]!.querySelector('[data-security-release]')).not.toBeNull();
     expect(rows[0]!.querySelector('[data-security-hold]')).toBeNull();
     expect(rows[1]!.textContent).toContain('Allowed');
@@ -807,6 +807,35 @@ describe('Security events panel: untrusted values stay text (D-57, UI-SPEC 11)',
     expect(links(page.banner())).toEqual([]);
     expect(page.doc.innerHtmlWrites).toBe(0);
     expect(page.root.textContent).toContain(XSS_PAYLOAD);
+  });
+
+  it('hides responsive columns with max-* variants: the page rule .hidden { display: none !important } would beat md:table-cell', () => {
+    expect(indexHtml).toMatch(/\.hidden\s*\{\s*display:\s*none\s*!important;/);
+    expect(panelSource).not.toMatch(/['" ]hidden (?:sm|md|lg|xl):/);
+    expect(panelSource).toContain('max-md:hidden');
+    expect(panelSource).toContain('max-lg:hidden');
+  });
+
+  it('alert paragraphs keep the alert colour against the page rule [data-theme="dark"] .card-body p', async () => {
+    expect(indexHtml).toMatch(/\[data-theme="dark"\] \.card-body p \{/);
+    const page = loadPage({
+      replies: {
+        alerts: { status: 200, body: alertsAnswer([], { events_recorded: false }) },
+        previews: { status: 200, body: { success: true, state: 'mismatch', preview_hosts: ['host.example'], hosts_not_allowlisted: ['host.example'] } },
+      },
+    });
+    await page.init();
+    await selectTab(page, 'previews');
+    const paragraphs = [...page.view('alerts').querySelectorAll('.alert p'), ...page.view('previews').querySelectorAll('.alert p')];
+    expect(paragraphs.length).toBeGreaterThanOrEqual(3);
+    for (const p of paragraphs) expect(p.className).toContain('!text-current');
+  });
+
+  it('filter selects carry a name', async () => {
+    const page = loadPage();
+    await page.init();
+    await selectTab(page, 'events');
+    for (const id of ['rag-security-events-filter-check', 'rag-security-events-filter-period']) expect(page.doc.getElementById(id)!.getAttribute('name')).toBe(id);
   });
 
   it('the panel source never parses markup or builds links', () => {
