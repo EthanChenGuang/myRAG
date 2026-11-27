@@ -69,6 +69,8 @@ PHASE53_TAG = "phase53_fixture"
 PHASE52_CATEGORIES = frozenset({"partial_answer", "stale_version", "off_topic_context"})
 # And plan 05.2.1-12 the calculation and context-overflow items.
 PHASE521_CATEGORIES = frozenset({"multi_step_calc", "context_overflow"})
+# And plan 06.2-22 the q62 tenant items under this tag.
+PHASE62_TAG = "phase62"
 
 
 def _added_after_snapshot(item: GoldenItem) -> bool:
@@ -81,6 +83,7 @@ def _added_after_snapshot(item: GoldenItem) -> bool:
         or item.category in PHASE52_CATEGORIES
         or item.category in PHASE521_CATEGORIES
         or "link_injection" in item.tags
+        or PHASE62_TAG in item.tags
     )
 
 
