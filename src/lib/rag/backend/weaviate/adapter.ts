@@ -1,8 +1,10 @@
 import type { StoreHit, StoreLegs, StoreSearchRequest } from '../../sync/stores/types';
 import type { TenantScope } from '../../tenant/scope';
-import { RetrievalBackendError } from '../supabase-rpc';
+import { createExternalBackend, type ExternalStoreReader } from '../external';
+import type { SecurityLogSink } from '../revalidate';
+import { RetrievalBackendError, type RpcClient } from '../supabase-rpc';
 import { canonicalTenantKey, isCanonicalTenantKey, weaviateCollectionName, weaviateTenantName } from '../tenant-key';
-import type { BackendSearchRequest, RetrievalFilters } from '../types';
+import type { BackendSearchRequest, RetrievalBackend, RetrievalFilters } from '../types';
 import { WEAVIATE_LEXICAL_PROPERTY } from './collection';
 import { mapWeaviateError } from './errors';
 import type { WeaviateClientLike, WeaviateFilterValue, WeaviateQueryResult, WeaviateTenantCollection } from './types';
@@ -144,7 +146,8 @@ async function resolveClient(source: WeaviateClientSource): Promise<WeaviateClie
 
 /**
  * D-13, A-4: nearVector and bm25 run concurrently on the tenant handle with the same native pre-filters; an empty token list
- * skips bm25 (the server rejects an empty query). Similarity is 1 - cosine distance; lexical scores are BM25 scores.
+ * skips bm25 (the server rejects an empty query). Similarity is 1 - cosine distance; lexical scores are BM25 scores. A missing
+ * or inactive tenant (or collection) throws BackendNotReadyError and is never retried without a tenant.
  */
 export async function searchWeaviateLegs(source: WeaviateClientSource, req: StoreSearchRequest): Promise<StoreLegs> {
   const { signal } = req;
@@ -190,24 +193,48 @@ export async function searchWeaviateLegs(source: WeaviateClientSource, req: Stor
   }
 }
 
-export interface WeaviateBackendDeps {
-  readClient: WeaviateClientSource;
-  revalidate: () => import('../supabase-rpc').RpcClient | null;
-  readiness?: (scope: TenantScope) => Promise<boolean>;
-  securityLog?: (line: string) => void;
+export function createWeaviateReader(source: WeaviateClientSource): ExternalStoreReader {
+  return {
+    target: 'weaviate',
+    searchLegs: (req) => searchWeaviateLegs(source, req),
+    async health() {
+      try {
+        const ready = await (await resolveClient(source)).isReady();
+        return ready ? { ok: true } : { ok: false, detail: 'not_ready' };
+      } catch {
+        return { ok: false, detail: 'unreachable' };
+      }
+    },
+  };
 }
 
-export function createWeaviateBackend(_deps: WeaviateBackendDeps): import('../types').RetrievalBackend {
+export interface WeaviateBackendDeps {
+  readClient: WeaviateClientSource;
+  /** The Supabase admin client for rag_validate_chunks (isolation layer 2). */
+  revalidate: () => RpcClient | null;
+  readiness?: (scope: TenantScope) => Promise<boolean>;
+  securityLog?: SecurityLogSink;
+}
+
+/** The Weaviate RetrievalBackend: tenant-only legs, then re-validation and hydration from Supabase (createExternalBackend). */
+export function createWeaviateBackend(deps: WeaviateBackendDeps): RetrievalBackend {
+  const inner = createExternalBackend({
+    reader: createWeaviateReader(deps.readClient),
+    adminClient: deps.revalidate,
+    isReady: deps.readiness,
+    securityLog: deps.securityLog,
+  });
   return {
     id: 'weaviate',
-    async search() {
-      return { dense: [], lexical: [] };
+    search(req) {
+      try {
+        assertWeaviateRequestSupported(req);
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      return inner.search(req);
     },
-    async health() {
-      return { ok: false };
-    },
-    async isReady() {
-      return false;
-    },
+    health: () => inner.health(),
+    isReady: (scope) => inner.isReady(scope),
   };
 }
