@@ -1,0 +1,32 @@
+{
+  "capped_candidate_limit": 500,
+  "items": [
+    {
+      "item_id": "en-general-001",
+      "overlap": 1.0,
+      "uncapped": 10
+    },
+    {
+      "item_id": "it-general-001",
+      "overlap": 1.0,
+      "uncapped": 10
+    },
+    {
+      "item_id": "zh-general-001",
+      "overlap": 1.0,
+      "uncapped": 10
+    },
+    {
+      "item_id": "en-no_answer-001",
+      "overlap": 1.0,
+      "uncapped": 10
+    }
+  ],
+  "k": 10,
+  "mean_overlap_at_k": 1.0,
+  "measured": 4,
+  "min_overlap_at_k": 1.0,
+  "questions": 4,
+  "schema_version": 1,
+  "tenant_hash": "000000000000"
+}

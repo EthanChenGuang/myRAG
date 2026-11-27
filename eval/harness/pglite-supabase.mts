@@ -508,6 +508,35 @@ export async function seedFixtureFeatures(
   return report;
 }
 
+/** What lexical statistics seeding did for a bm25 run (D-36); null when the run's effective scoring is ts_rank_cd. */
+export interface RunLexicalStatsReport {
+  k1: number;
+  b: number;
+  tenants: import('./lexical-stats.mts').TenantLexicalStats[];
+}
+
+/**
+ * D-36: after the corpus is loaded and relexed (and after seedFixtureFeatures), enable and rebuild the lexical statistics of every
+ * fixture tenant, the isolated table_split tenants included, when the run's effective scoring (the app config under the run's
+ * environment) is bm25. Under ts_rank_cd nothing is read or written and the database inputs hash is unchanged, so the four statistics
+ * tables stay empty.
+ */
+export async function seedRunLexicalStats(fixture: {
+  db: PGlite;
+  sqlSha256: Record<string, string>;
+  tableSplitTenants?: ReadonlyArray<{ db: PGlite; tenantKey: string }>;
+}): Promise<RunLexicalStatsReport | null> {
+  const { loadRagConfig } = await import('@/lib/rag/config');
+  const { getRagDeps } = await import('@/lib/rag/deps');
+  const scoring = loadRagConfig(getRagDeps().ragEnv()).v2.lexicalScoring;
+  if (scoring.mode !== 'bm25') return null;
+  const { fixtureTenantKeys, seedFixtureLexicalStats } = await import('./lexical-stats.mts');
+  const tenants = await seedFixtureLexicalStats(fixture.db, await fixtureTenantKeys(fixture.db));
+  for (const tenant of fixture.tableSplitTenants ?? []) tenants.push(...(await seedFixtureLexicalStats(tenant.db, [tenant.tenantKey])));
+  fixture.sqlSha256['lexical_stats:bm25'] = sha256Hex('bm25');
+  return { k1: scoring.k1, b: scoring.b, tenants };
+}
+
 export async function createFixtureDatabase(options: {
   deploymentMode: DeploymentMode;
   corpusDir: string;
