@@ -90,21 +90,32 @@ export interface VectorSyncTargetFlag {
   enabled: boolean;
 }
 
-export async function listVectorSyncTargets(_rpc: RpcClient): Promise<VectorSyncTargetFlag[]> {
-  return [];
+/** D-24: the enabled flag of both targets for the Config UI; a target with no row reads as disabled. */
+export async function listVectorSyncTargets(rpc: RpcClient): Promise<VectorSyncTargetFlag[]> {
+  const status = await readVectorSyncStatus(rpc);
+  return VECTOR_SYNC_TARGETS.map((target) => ({ target, enabled: status.find((row) => row.target === target)?.enabled ?? false }));
 }
 
 export interface SetVectorSyncTargetResult {
   target: VectorSyncTarget;
   enabled: boolean;
+  /** What 0703 rag_vector_sync_set_target enqueued: one tenant entity per tenant on a first enable, else 0. */
   tenantsEnqueued: number;
 }
 
+/** D-24: turns a sync target on or off through 0703 rag_vector_sync_set_target with the caller's id as the audit actor. */
 export async function setVectorSyncTarget(
-  _rpc: RpcClient,
+  rpc: RpcClient,
   target: VectorSyncTarget,
   enabled: boolean,
-  _actor: string,
+  actor: string,
 ): Promise<SetVectorSyncTargetResult> {
-  return { target, enabled, tenantsEnqueued: 0 };
+  if (!isVectorSyncTarget(target)) throw new RetrievalBackendError('rag_vector_sync_set_target', 'invalid_target');
+  if (typeof actor !== 'string' || actor.trim() === '') throw new RetrievalBackendError('rag_vector_sync_set_target', 'actor_required');
+  const response = await rpc
+    .rpc('rag_vector_sync_set_target', { p_target: target, p_enabled: enabled, p_actor: actor })
+    .abortSignal(new AbortController().signal);
+  if (response.error) throw new RetrievalBackendError('rag_vector_sync_set_target', response.error.code ?? null);
+  const raw = Array.isArray(response.data) ? response.data[0] : response.data;
+  return { target, enabled, tenantsEnqueued: count(raw) };
 }
