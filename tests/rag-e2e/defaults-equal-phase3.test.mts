@@ -64,6 +64,9 @@ function phase33RpcNames(): Set<string> {
   return names;
 }
 
+// Phase 4.4 (D-02): with RAG_LEXICAL_SCORING unset nothing enables statistics, so the 0901 triggers stage nothing and no counter exists.
+const LEXICAL_STATS_TABLES = ['rag_lexical_stats_state', 'rag_lexical_stats_pending', 'rag_lexical_df', 'rag_lexical_corpus'] as const;
+
 const QUEUE_TABLES = [
   'ingestion_jobs',
   'ingestion_batches',
@@ -389,5 +392,10 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
       .map((call) => /^\/rest\/v1\/rpc\/([a-z0-9_]+)/.exec(call.path)?.[1])
       .filter((name): name is string => name !== undefined && phase33.has(name));
     assert.deepEqual([...new Set(called)], []);
+  });
+
+  test('at the end of the run, with default settings, the four lexical statistics tables hold no row (D-02)', async () => {
+    assert.equal(process.env.RAG_LEXICAL_SCORING, undefined, 'the run leaves RAG_LEXICAL_SCORING unset');
+    assert.deepEqual(await queueRowCounts(LEXICAL_STATS_TABLES), Object.fromEntries(LEXICAL_STATS_TABLES.map((table) => [table, 0])));
   });
 });
