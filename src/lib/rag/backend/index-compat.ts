@@ -141,8 +141,69 @@ async function probeStore(factory: (() => Promise<VectorStore>) | undefined, pro
  * profile, when it is selected while the pipeline is legacy, when sync is not enabled for it, when it cannot be reached, and when any
  * target has dead outbox rows. Everything returned is a count, a profile id or a code. Database read errors throw.
  */
-export async function computeIndexCompat(_input: IndexCompatInput): Promise<IndexCompatReport> {
-  return { warnings: [], backends: [] };
+export async function computeIndexCompat(input: IndexCompatInput): Promise<IndexCompatReport> {
+  const timeoutMs = input.storeTimeoutMs ?? INDEX_COMPAT_STORE_TIMEOUT_MS;
+  const [status, stateCounts] = await Promise.all([readVectorSyncStatus(input.rpc), readStateCounts(input.rpc)]);
+  const selected = selectedExternal(input.config.backend);
+  const profileId = input.activeProfile.id;
+
+  const backends: IndexCompatBackend[] = VECTOR_SYNC_TARGETS.map((target) => {
+    const row = status.find((entry) => entry.target === target);
+    const profiles = [...(stateCounts.get(target)?.values() ?? [])].sort((a, b) => (a.profileId < b.profileId ? -1 : a.profileId > b.profileId ? 1 : 0));
+    return {
+      target,
+      enabled: row?.enabled ?? false,
+      pending: row?.pending ?? 0,
+      leased: row?.leased ?? 0,
+      dead: row?.dead ?? 0,
+      oldestPendingSeconds: row?.oldestPendingSeconds ?? null,
+      selected: selected.has(target),
+      profiles,
+    };
+  });
+
+  const probes = new Map<VectorSyncTarget, StoreProbe>();
+  await Promise.all(
+    [...selected].map(async (target) => {
+      probes.set(target, await probeStore(input.stores[target], profileId, timeoutMs));
+    }),
+  );
+
+  const warnings: IndexCompatWarning[] = [];
+  for (const backend of backends) {
+    const { target } = backend;
+    if (backend.selected) {
+      if (input.config.pipeline === 'legacy') {
+        warnings.push({ code: 'legacy_pipeline', backend: target, detail: { pipeline: 'legacy' } });
+      }
+      if (!backend.enabled) {
+        warnings.push({ code: 'sync_not_enabled', backend: target, detail: {} });
+      } else {
+        const active = backend.profiles.find((entry) => entry.profileId === profileId);
+        if (active && active.building + active.stale + active.failed > 0) {
+          warnings.push({
+            code: 'backend_not_ready',
+            backend: target,
+            detail: { profileId, building: active.building, stale: active.stale, failed: active.failed, ready: active.ready },
+          });
+        }
+      }
+      const probe = probes.get(target);
+      if (probe && !probe.ok) {
+        warnings.push({ code: 'backend_unreachable', backend: target, detail: { stage: probe.stage, reason: probe.reason } });
+      } else if (probe && probe.ok && probe.collectionDims !== null && probe.collectionDims !== input.activeProfile.dims) {
+        warnings.push({
+          code: 'dimension_mismatch',
+          backend: target,
+          detail: { profileId, profileDims: input.activeProfile.dims, collectionDims: probe.collectionDims },
+        });
+      }
+    }
+    if (backend.dead > 0) {
+      warnings.push({ code: 'dead_letters', backend: target, detail: { dead: backend.dead } });
+    }
+  }
+  return { warnings, backends };
 }
 
 /** D-15 caveat: when the app process loaded .env.local (Next.js reads it at process start), so the Config UI can show a later edit. */
