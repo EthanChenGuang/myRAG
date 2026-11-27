@@ -1,6 +1,7 @@
 import type { FusedHit } from '../fusion/rrf';
 import type { ResultDiversityMode } from '../config';
 import { lexicalTokens } from '../lexical/tokenize';
+import { extractIdentifierEntries } from '../ids/normalize';
 import type { AlsoIn } from '../types';
 
 export type { AlsoIn } from '../types';
@@ -44,10 +45,26 @@ function soleCovers(hits: FusedHit[], subQuestionOf: DiversifyOptions['subQuesti
   return protectedIndexes;
 }
 
+const CHUNK_HEADER = /^Document: .*?\. Chunk \d+ of \d+\. Content: /su;
+
+/**
+ * The value tokens of a chunk body (numbers, dates, identifiers; the identifier normalization of D-28), without the
+ * stored "Document: … Chunk i of n." header. Two documents whose texts differ here are not duplicates.
+ */
+function valueSignature(content: string): string {
+  const body = content.replace(CHUNK_HEADER, '');
+  return [...new Set(extractIdentifierEntries(body).map((entry) => entry.norm))].sort().join('\u0000');
+}
+
+interface ClusterKeeper {
+  row: FusedHit;
+  signature: string;
+  documents: Set<string>;
+}
+
 function collapse(hits: FusedHit[], options: DiversifyOptions): { hits: FusedHit[]; alsoIn: Map<string, AlsoIn[]> } {
   const guarded = soleCovers(hits, options.subQuestionOf);
-  const keeperByCluster = new Map<string, FusedHit>();
-  const listed = new Map<string, Set<string>>();
+  const keepersByCluster = new Map<string, ClusterKeeper[]>();
   const alsoIn = new Map<string, AlsoIn[]>();
   const kept: FusedHit[] = [];
   hits.forEach((row, index) => {
@@ -56,10 +73,14 @@ function collapse(hits: FusedHit[], options: DiversifyOptions): { hits: FusedHit
       kept.push(row);
       return;
     }
-    const keeper = keeperByCluster.get(cluster);
+    const keepers = keepersByCluster.get(cluster) ?? [];
+    const signature = valueSignature(row.hit.content);
+    const keeper =
+      keepers.find((entry) => entry.documents.has(row.hit.documentId)) ??
+      keepers.find((entry) => entry.signature === signature);
     if (!keeper) {
-      keeperByCluster.set(cluster, row);
-      listed.set(row.hit.chunkId, new Set([row.hit.documentId]));
+      keepers.push({ row, signature, documents: new Set([row.hit.documentId]) });
+      keepersByCluster.set(cluster, keepers);
       kept.push(row);
       return;
     }
@@ -67,12 +88,11 @@ function collapse(hits: FusedHit[], options: DiversifyOptions): { hits: FusedHit
       kept.push(row);
       return;
     }
-    const seen = listed.get(keeper.hit.chunkId)!;
-    if (seen.has(row.hit.documentId)) return;
-    seen.add(row.hit.documentId);
-    const entries = alsoIn.get(keeper.hit.chunkId) ?? [];
+    if (keeper.documents.has(row.hit.documentId)) return;
+    keeper.documents.add(row.hit.documentId);
+    const entries = alsoIn.get(keeper.row.hit.chunkId) ?? [];
     entries.push({ documentId: row.hit.documentId, filename: row.hit.document.filename, chunkId: row.hit.chunkId });
-    alsoIn.set(keeper.hit.chunkId, entries);
+    alsoIn.set(keeper.row.hit.chunkId, entries);
   });
   return { hits: kept, alsoIn };
 }
@@ -121,7 +141,8 @@ function mmrOrder(window: FusedHit[], options: DiversifyOptions): FusedHit[] {
 }
 
 /**
- * D-21, D-48: `collapse` keeps the best-ranked chunk of each duplicate cluster; `mmr` collapses first, then reorders
+ * D-21, D-48: `collapse` keeps the best-ranked chunk of each duplicate cluster (chunks of another document whose value
+ * tokens differ are kept as their own representative: a conflicting value is not a duplicate); `mmr` collapses first, then reorders
  * the top window by maximal marginal relevance (min-max relevance, Jaccard of lexical token sets). Pure and deterministic.
  */
 export function diversify(hits: FusedHit[], options: DiversifyOptions): DiversifyResult {
@@ -146,12 +167,17 @@ export function diversify(hits: FusedHit[], options: DiversifyOptions): Diversif
 }
 
 /**
- * D-22: the largest share of the kept chunks that sits in one duplicate cluster; a chunk without a cluster counts alone.
+ * D-22: the largest share of the kept chunks that sits in one duplicate cluster with one value signature (the same
+ * signature collapse uses, so members with conflicting values are not redundant); a chunk without a cluster counts alone.
  * Null when no kept chunk carries a cluster id.
  */
-export function topkRedundancy(kept: ReadonlyArray<{ dupClusterId?: string }>): number | null {
+export function topkRedundancy(kept: ReadonlyArray<{ dupClusterId?: string; content?: string }>): number | null {
   if (kept.length === 0 || !kept.some((chunk) => chunk.dupClusterId)) return null;
   const sizes = new Map<string, number>();
-  for (const chunk of kept) if (chunk.dupClusterId) sizes.set(chunk.dupClusterId, (sizes.get(chunk.dupClusterId) ?? 0) + 1);
+  for (const chunk of kept) {
+    if (!chunk.dupClusterId) continue;
+    const key = `${chunk.dupClusterId}\u0001${valueSignature(chunk.content ?? '')}`;
+    sizes.set(key, (sizes.get(key) ?? 0) + 1);
+  }
   return Math.max(1, ...sizes.values()) / kept.length;
 }
