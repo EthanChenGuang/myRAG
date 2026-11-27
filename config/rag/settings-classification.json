@@ -609,6 +609,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_SOURCE_RECHECK",
+      "side": "query"
+    },
+    {
       "name": "RAG_STAGE_TIMEOUTS",
       "side": "query"
     },

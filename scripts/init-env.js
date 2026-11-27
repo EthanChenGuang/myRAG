@@ -555,6 +555,8 @@ RAG_DOC_TYPE_LLM_DETECT=false
 RAG_INVOICE_LLM_EXTRACT=false
 # Look up exact identifiers (invoice numbers, contract ids) before vector search: true | false
 RAG_EXACT_ID_LOOKUP=false
+# Recheck before rerank that each candidate's document still exists and is current: true | false
+RAG_SOURCE_RECHECK=false
 # Create image chunks from PDF pages: true | false
 RAG_PDF_IMAGE_CHUNKS=false
 # Prompt injection scan on ingested text: off | quarantine

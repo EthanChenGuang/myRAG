@@ -7166,6 +7166,19 @@
                                         </div>
 
                                         <div class="form-control mb-4">
+                                            <label class="label" for="RAG_SOURCE_RECHECK">
+                                                <span class="label-text">Source recheck before rerank</span>
+                                            </label>
+                                            <select id="RAG_SOURCE_RECHECK" name="RAG_SOURCE_RECHECK" class="select select-bordered w-full" translate="no" aria-describedby="RAG_SOURCE_RECHECK-help">
+                                                <option value="false">false</option>
+                                                <option value="true">true</option>
+                                            </select>
+                                            <label class="label">
+                                                <span id="RAG_SOURCE_RECHECK-help" class="label-text-alt">false keeps today's retrieval. true checks, before reranking, that each candidate's document still exists and is current, and drops the rest. Always on when the retrieval backend is Weaviate or Qdrant.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
                                             <label class="label">
                                                 <span class="label-text">PDF image chunks</span>
                                             </label>

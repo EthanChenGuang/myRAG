@@ -273,6 +273,7 @@ class EnvironmentConfig {
       RAG_DOC_TYPE_LLM_DETECT: process.env.RAG_DOC_TYPE_LLM_DETECT || 'false',
       RAG_INVOICE_LLM_EXTRACT: process.env.RAG_INVOICE_LLM_EXTRACT || 'false',
       RAG_EXACT_ID_LOOKUP: process.env.RAG_EXACT_ID_LOOKUP || 'false',
+      RAG_SOURCE_RECHECK: process.env.RAG_SOURCE_RECHECK || 'false',
       RAG_PDF_IMAGE_CHUNKS: process.env.RAG_PDF_IMAGE_CHUNKS || 'false',
       RAG_INJECTION_SCAN: process.env.RAG_INJECTION_SCAN || 'off',
       RAG_EMBEDDING_PROFILES: process.env.RAG_EMBEDDING_PROFILES || 'off',

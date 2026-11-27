@@ -464,6 +464,11 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_SOURCE_RECHECK",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_EXACT_SCAN_CUTOFF",
       "status": "managed",
       "knownGaps": []
