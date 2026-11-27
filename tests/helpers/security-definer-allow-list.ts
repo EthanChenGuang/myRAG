@@ -36,6 +36,9 @@ export const AUTHENTICATED_ALLOW_LIST: Record<string, AllowListEntry> = {
   'kb_writes_locked()': { anon: false, reason: 'RLS helper in single-tenant knowledge-base write policies (TO authenticated)' },
   'rag_is_domain_expert(text)': { anon: false, reason: 'RLS helper in the rag_review_items policies (TO authenticated); answers only for auth.uid() against rag_domain_experts or, single-tenant, admin_users for s:default' },
   'rag_ingest_realtime_topic_allowed(text)': { anon: false, reason: 'RLS helper in the realtime.messages policy for ingestion job topics; reads auth.uid() and realtime.topic()' },
+  'rag_access_enforced()': { anon: true, reason: 'RLS helper in the restrictive rag_access_groups_restrict policies (0923, TO anon, authenticated); returns the deployment-wide enforced flag only' },
+  'rag_caller_access_keys()': { anon: true, reason: 'RLS helper in the restrictive rag_access_groups_restrict policies (0923, TO anon, authenticated); no argument, returns the access keys of auth.uid() only' },
+  'rag_caller_is_access_admin()': { anon: true, reason: 'single-tenant RLS helper in the restrictive rag_access_groups_restrict policies (0923, TO anon, authenticated); no argument, checks auth.uid() in admin_users, false for anon' },
 };
 
 /** Lowercases and strips the schema, quotes and blanks from a `name(arg,arg)` signature, as `regprocedure::text` and `signatureKey` print it. */
