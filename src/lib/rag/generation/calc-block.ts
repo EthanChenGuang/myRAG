@@ -360,7 +360,7 @@ export function calcBlockTransform(options: CalcBlockOptions = {}): CalcBlockTra
         close(controller);
       },
     });
-  }) as CalcBlockTransform;
+  }) as unknown as CalcBlockTransform;
   transform.rawText = () => current?.rawText() ?? '';
   transform.visibleText = () => current?.visibleText() ?? '';
   return transform;
