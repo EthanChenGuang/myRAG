@@ -1191,3 +1191,37 @@ Numbers are unique across `supabase/migrations` (0708, 0709 after 0707; 0740 in 
 - Baselines: kept train 33's `fixture-baseline.json` and `fixture-ingest-baseline.json` (05.2-32 re-recorded the same fixture inputs on train 32; the two differ only in run metadata). The explicit-legacy smoke tiers on the merged tree report `paired.all_zero == true` for both, so nothing is re-recorded.
 - Conflict resolutions (both intents kept): `src/lib/rag/index.ts` (union of exports, train 33's `guardVoiceTranscript` kept); `eval/harness/run-nightly.mts` and `run-smoke.mts` (both new CLI options); `rag-eval/trace.ts`, `v2/config-hash.ts`, the eval run route (05.2 answer-rule fields and 07-12 `retrieval_backend` together); `.github/workflows/pr-smoke.yml` and `check-workflows.py` (the `backend-canary` job and the `pr-smoke` aggregate; the aggregate now needs `eval-smoke-p52` and `backend-canary` too, because it must list every other job); `config-security-events-panel.test.ts` (05.3-42's stricter CSS assertion, which holds on the tree); fixture count and comment hunks and `ingest-mode-routing.test.mts` take train 33's version (its link-injection accounting replaces 05.2-32's filter for the same items); `schema-equality.test.mts` and `AGENTS.md` keep train 33's Phase 6.1 fold.
 - Train fix: 07-13's kick imports `after` from `next/server` in the ingest writer, which the PGlite harness reaches statically, so four tests that set the global AsyncLocalStorage after their static imports failed at load. `tests/helpers/next-async-storage.mts` is imported first in them.
+
+## Train 35: 0921, 0922, 0930 and 0410 r18 (to apply after train 35 reaches `origin/main`)
+
+Branch `ci/merge-train-35`, built on `ci/merge-train-34` (1eb70f84), then `origin/main` merged after PR #129 (train 34) landed as 7651adbc (adds only c453e3a2, the ts-db shard rebalance renames). PR #130. Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+Merged with `--no-ff` in this order; each carries its SUMMARY. `exec/04.2-32` and `exec/04.2-33` are still running and are not in this train. 05.3-43 and 05.2-38 were built from main and self-merged their dependencies (05.3-42; train 33, 05.2-26, 05.2-32), which train 34 already holds.
+
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/04.3-03` | 04.3-03 access_groups columns, `rag_access_enforced` and the access-filtered `hybrid_search_chunks` (tracer) | 0921, 0922, 0930; 0410 entries (r18) |
+| `exec/05.3-43` | 05.3-43 Setting checks panel, refusal calibration pending and shift marks | none |
+| `exec/05.2-38` | 05.2-38 Phase 5.2 comparison spec and report, `truncation_rate`, AGENTS.md Phase 5.2 section | none |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0921_access_groups_columns.sql` | Needs 0920 (train 34). `documents.access_groups` and `document_chunks.access_groups` (`text[] NOT NULL DEFAULT '{all}'`, ADD COLUMN IF NOT EXISTS: no rewrite), CHECK constraints via `rag_access_keys_valid` (added only when missing; validates every existing row), two GIN indexes (IF NOT EXISTS, not CONCURRENTLY: writes to both tables wait while they build), trigger copying the document's groups to its chunks. **DROP:** `DROP TRIGGER IF EXISTS document_chunks_access_groups_from_document`, re-created at once. Run in a quiet window. |
+| 2 | `0922_access_resolution.sql` | `rag_access_enforced()` reads `rag_access_group_settings` (seeded `enforced` false by 0920). service_role only. **DROP:** none. |
+| 3 | `0930_access_retrieval_functions.sql` | Needs 0856 (live) and 0922. **DROP:** a `DO $drop_overloads$` block drops every `public.hybrid_search_chunks` overload in the catalog, then one 28-argument function is created in the same transaction (0856 arguments unchanged plus `p_access_keys text[] DEFAULT NULL`, `p_access_all boolean DEFAULT false`), service_role only. Named-argument callers of the 0856 shape keep working. Re-running any lower file that defines `hybrid_search_chunks` (0407, 0413, 0602, 0802, 0856, a setup file) requires re-running 0930. |
+| 4 | `0410_security_definer_rpc_grants.sql` (r18) | +8 lines since r17: guarded REVOKE/GRANT (service_role only) for `rag_access_enforced()` and `rag_access_groups_from_document()`. Grants only; run it last. |
+
+Numbers are unique (0921, 0922, 0930 in the 4.3 block after 0920; no mode files). None is folded into the setup files; all are idempotent. The combined live SQL (the three files verbatim in this order after `-- ==== <file>` lines, then the 0410 r18 delta as a `DO $r18$` block, DROP sections listed in its header) is `train35-live.sql` in the orchestrator scratchpad.
+
+### Operator actions
+- Apply the table above after train 34 is live; 0921 in a quiet window (CHECK validation and non-concurrent GIN builds on `documents` and `document_chunks`).
+- `RAG_DOC_ACCESS_GROUPS` stays off; with it off, retrieval sends no new argument and the request body is today's.
+- Watch item: `rag_access_keys_valid(text[])` is executable by service_role only but is called by the new CHECK constraints, so an INSERT or UPDATE of `documents` / `document_chunks` running as `authenticated` or `anon` fails with "permission denied for function" (checked in PGlite). Every app write path found uses the admin client (`process-document`, `ai-to-rag`, `documents/[id]`, `src/lib/supabase.ts`), but the RLS policies still allow direct client writes. Raised for 04.3's next plan; not changed on the train.
+
+### Deviations
+- Characterization snapshots (`chat`, `embed`, `voice`, `voice-v2-default`) re-recorded on the merged tree (`UPDATE_CHARACTERIZATION=1`): no entry added or removed; changes are order swaps among the `dup-passage-*` copies, two equal-score `p52-rules-v1/v2` zh swaps, and `voice-v2-default` scores moving at most 5.6e-4 (the cause 04.3-03 recorded: the 0921 column changes PGlite tuple layout). A second run without the update flag passes.
+- Same change on both sides, train 34's version kept: `tests/rag-db/schema-equality.test.mts` (Phase 4.1.1 fold, ordering only), `eval/harness/run-smoke.mts` (option order), `src/lib/rag/index.ts` (`attributeSourceChunks` export).
+- Train fixes: train 34's Qdrant, Weaviate, fallback, canary and vector-sync tracer test requests gain `access: { mode: 'off' }` (required by 04.3-03; tsc 6 errors to 0); `phase32-migrations-apply` counts 0930 among the final definers of a block function; `phase32-all-off` parses the `'{all}'::text[]` default.
+- Not changed, raised: `backendForRequest` does not yet route by `accessFilter`, so an external backend ignores `req.access` (04.3-03 SUMMARY; Phase 7 07-38/39 own it). Harmless while `RAG_DOC_ACCESS_GROUPS` is off.
