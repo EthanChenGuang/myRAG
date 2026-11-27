@@ -2507,7 +2507,7 @@ Context:
         return promptBudgetExceededResponse(budgetLanguage);
       }
     }
-    const documentTokenBudgetOption = promptBudgetPlan ? { documentTokenBudget: promptBudgetPlan.documentBudget } : {};
+    const documentTokenBudgetOption = promptBudgetPlan ? { documentTokenBudget: promptBudgetPlan.packingBudget } : {};
 
     // Initialize variables for RAG
     let context = '';
