@@ -181,6 +181,17 @@ const ACCESS_GROUPS_LABELS = {
     'rules.badDomain': "Enter a domain such as example.org, without a scheme, path or port.",
     'action.createRule': "Create rule",
     'rules.empty': "No sharing with a whole domain or by link seen yet. Rules appear after the next connector sync.",
+    'mapping.caption': "Source groups and their access groups",
+    'mapping.loaded': "Source groups shown: {count}.",
+    'mapping.need': "To create the mapping, fill in: {fields}.",
+    'mapping.form.choose': "Choose…",
+    'mapping.selectAria': "Access group: {principal}",
+    'action.loadMoreMapping': "Load more source groups",
+    'rules.caption': "Sharing with a whole domain or by link, per source",
+    'rules.need': "To create the rule, fill in: {fields}.",
+    'rules.created': "Rule created and off: {rule}, {source}. Turn it on to count this sharing as Everyone from the next sync.",
+    'action.loadMoreRules': "Load more rules",
+    'error.ruleExists': "This rule already exists. Find it in the table.",
     'panel.title': "Access groups",
     'panel.description': "Limit documents to groups of members. A restricted document is found, quoted and cited only for members of its groups and for admins. Groups, Documents and Connector mapping follow the workspace chosen under Document Processing.",
     'panel.tabsLabel': "Access group views",
@@ -460,6 +471,17 @@ const ACCESS_GROUPS_LABELS = {
     'rules.badDomain': "请输入域名，例如 example.org，不要包含协议、路径或端口。",
     'action.createRule': "创建规则",
     'rules.empty': "尚未发现与整个域或通过链接的共享。下次连接器同步后会显示规则。",
+    'mapping.caption': "来源群组及其访问组",
+    'mapping.loaded': "已显示的来源群组：{count}。",
+    'mapping.need': "要创建映射，请填写：{fields}。",
+    'mapping.form.choose': "请选择…",
+    'mapping.selectAria': "访问组：{principal}",
+    'action.loadMoreMapping': "加载更多来源群组",
+    'rules.caption': "按来源列出的与整个域或通过链接的共享",
+    'rules.need': "要创建规则，请填写：{fields}。",
+    'rules.created': "规则已创建，处于关闭状态：{rule}，{source}。开启后，下次同步起此共享方式视为“所有人”。",
+    'action.loadMoreRules': "加载更多规则",
+    'error.ruleExists': "该规则已存在。请在表格中查找。",
     'panel.title': "访问组",
     'panel.description': "把文档限定给特定的成员组。受限文档只会被其访问组的成员和管理员检索、引用和标注来源。“访问组”“文档”和“连接器映射”跟随“文档处理”中选择的工作区。",
     'panel.tabsLabel': "访问组视图",
@@ -739,6 +761,17 @@ const ACCESS_GROUPS_LABELS = {
     'rules.badDomain': "Inserisci un dominio come example.org, senza schema, percorso o porta.",
     'action.createRule': "Crea regola",
     'rules.empty': "Nessuna condivisione con un intero dominio o tramite link rilevata. Le regole compaiono dopo la prossima sincronizzazione del connettore.",
+    'mapping.caption': "Gruppi della fonte e i loro gruppi di accesso",
+    'mapping.loaded': "Gruppi della fonte mostrati: {count}.",
+    'mapping.need': "Per creare la mappatura, compila: {fields}.",
+    'mapping.form.choose': "Scegli…",
+    'mapping.selectAria': "Gruppo di accesso: {principal}",
+    'action.loadMoreMapping': "Carica altri gruppi della fonte",
+    'rules.caption': "Condivisione con un intero dominio o tramite link, per fonte",
+    'rules.need': "Per creare la regola, compila: {fields}.",
+    'rules.created': "Regola creata e disattivata: {rule}, {source}. Attivala per considerare questa condivisione come Tutti dalla prossima sincronizzazione.",
+    'action.loadMoreRules': "Carica altre regole",
+    'error.ruleExists': "Questa regola esiste già. Cercala nella tabella.",
     'panel.title': "Gruppi di accesso",
     'panel.description': "Riserva i documenti a gruppi di membri. Un documento riservato viene trovato, citato e indicato come fonte solo per i membri dei suoi gruppi e per gli amministratori. Gruppi, Documenti e Mappatura dei connettori seguono lo spazio di lavoro scelto in Document Processing.",
     'panel.tabsLabel': "Viste dei gruppi di accesso",
@@ -1051,6 +1084,18 @@ function mapAccessGroupsError(result, locale, ctx) {
     const key = err === 'invalid_key' ? 'form.badKey' : 'form.reservedKey';
     return { key, kind: 'field', field: 'key', message: accessGroupsLabel(key, locale) };
   }
+  if (status === 409 && err === 'mapping_exists') {
+    return { key: 'error.mappingExists', kind: 'field', field: 'principal', message: accessGroupsLabel('error.mappingExists', locale) };
+  }
+  if (status === 409 && err === 'rule_exists') {
+    return { key: 'error.ruleExists', kind: 'field', field: 'domain', message: accessGroupsLabel('error.ruleExists', locale) };
+  }
+  if (status === 400 && err === 'bad_domain') {
+    return { key: 'rules.badDomain', kind: 'field', field: 'domain', message: accessGroupsLabel('rules.badDomain', locale) };
+  }
+  if (status === 400 && err === 'personal_tenant') {
+    return { key: 'groups.personal', kind: 'changed', message: accessGroupsLabel('groups.personal', locale), reload: true };
+  }
   if (status === 400 && err === 'unknown_group') {
     return { key: 'error.groupGone', kind: 'groupGone', message: accessGroupsLabel('error.groupGone', locale), reload: true };
   }
@@ -1319,6 +1364,117 @@ function accessGroupsSourceLabel(source, locale) {
   const lookup = typeof window !== 'undefined' && typeof window.ingestionLabel === 'function' ? window.ingestionLabel : null;
   const label = lookup ? lookup('source.' + text, locale) : '';
   return label && label !== 'source.' + text ? String(label) : text;
+}
+
+// Connector mapping and sharing rules (D-20, D-21, UI-SPEC 6.5)
+
+const ACCESS_GROUPS_PROVIDERS = ['google-drive', 'dropbox', 'notion'];
+/** Fallback product names, as in the provider configuration (src/lib/nango/types.ts); never translated. */
+const ACCESS_GROUPS_PROVIDER_NAMES = { 'google-drive': 'Google Drive', dropbox: 'Dropbox', notion: 'Notion' };
+/** The kind a mapping created by hand gets: Notion maps through the whole workspace (D-21). */
+const ACCESS_GROUPS_PROVIDER_KIND = { 'google-drive': 'group', dropbox: 'team', notion: 'workspace' };
+const ACCESS_GROUPS_MAP_KINDS = new Set(['group', 'team', 'workspace']);
+const ACCESS_GROUPS_RULE_KINDS = new Set(['domain', 'anyone', 'public']);
+const ACCESS_GROUPS_DOMAIN_RE = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/** The product name from the Connectors tab's provider configuration, else the known name, else the stored value. */
+function accessGroupsProviderName(provider) {
+  const id = accessGroupsText(provider);
+  const config = typeof window !== 'undefined' && window.connectorsConfig && window.connectorsConfig.config ? window.connectorsConfig.config : null;
+  const list = config && Array.isArray(config.providers) ? config.providers : [];
+  const found = list.find((p) => p && p.provider === id);
+  const label = found && typeof found.button_label === 'string' ? found.button_label.trim() : '';
+  return label || ACCESS_GROUPS_PROVIDER_NAMES[id] || id;
+}
+
+/** One row of GET connector-map: the source id exactly as given (trimmed by the server only), never a name. */
+function buildAccessGroupsMappingRow(row) {
+  if (!row || typeof row !== 'object') return null;
+  const provider = typeof row.provider === 'string' ? row.provider : '';
+  const principal = typeof row.externalPrincipalId === 'string' ? row.externalPrincipalId : '';
+  if (!provider || !principal) return null;
+  const id = typeof row.id === 'string' && row.id ? row.id : null;
+  const kind = accessGroupsText(row.kind);
+  const groupId = typeof row.groupId === 'string' && row.groupId ? row.groupId : null;
+  return {
+    key: id ? 'm:' + id : 's:' + provider + ':' + kind + ':' + principal,
+    id,
+    provider,
+    kind,
+    principal,
+    groupId,
+    documents: accessGroupsCount(row.documents),
+    mapped: Boolean(id && groupId),
+  };
+}
+
+/** The GET connector-map answer: unmapped rows first (stable), the paging offset and whether mapping changes visibility. */
+function buildAccessGroupsMappingList(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  const rows = (Array.isArray(b.rows) ? b.rows : []).map(buildAccessGroupsMappingRow).filter(Boolean);
+  const ordered = [...rows.filter((r) => !r.mapped), ...rows.filter((r) => r.mapped)];
+  const next = Number(b.nextOffset);
+  return {
+    personal: b.personal === true,
+    visibilityApplies: b.visibilityApplies !== false,
+    rows: ordered,
+    total: accessGroupsCount(b.total),
+    nextOffset: b.nextOffset !== null && b.nextOffset !== undefined && Number.isInteger(next) && next >= 0 ? next : null,
+  };
+}
+
+function accessGroupsMappingKindLabel(row, locale) {
+  const kind = accessGroupsText(row && row.kind);
+  return ACCESS_GROUPS_MAP_KINDS.has(kind) ? accessGroupsLabel('mapping.kind.' + kind, locale) : kind;
+}
+
+/** What Save mapping does for the select's value: create, change, remove or nothing. */
+function accessGroupsMappingAction(row, selected) {
+  const value = accessGroupsText(selected);
+  if (!row) return 'none';
+  if (!row.mapped) return value ? 'create' : 'none';
+  if (!value) return 'remove';
+  return value === row.groupId ? 'none' : 'change';
+}
+
+function buildAccessGroupsRuleRow(rule) {
+  if (!rule || typeof rule !== 'object') return null;
+  const id = typeof rule.id === 'string' ? rule.id : '';
+  const provider = typeof rule.provider === 'string' ? rule.provider : '';
+  const kind = accessGroupsText(rule.kind);
+  if (!id || !provider || !ACCESS_GROUPS_RULE_KINDS.has(kind)) return null;
+  const domain = typeof rule.domain === 'string' && rule.domain ? rule.domain : null;
+  if (kind === 'domain' && !domain) return null;
+  return { id, provider, kind, domain, enabled: rule.enabled === true, documents: accessGroupsCount(rule.documents) };
+}
+
+function buildAccessGroupsRulesList(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  return { personal: b.personal === true, rows: (Array.isArray(b.rules) ? b.rules : []).map(buildAccessGroupsRuleRow).filter(Boolean) };
+}
+
+/** The rule as text (accessible names and messages); the table cell renders {domain} as a code element. */
+function accessGroupsRuleText(rule, locale) {
+  const kind = accessGroupsText(rule && rule.kind);
+  if (kind === 'domain') return accessGroupsLabel('rules.kind.domain', locale, { domain: accessGroupsText(rule.domain) });
+  return ACCESS_GROUPS_RULE_KINDS.has(kind) ? accessGroupsLabel('rules.kind.' + kind, locale) : kind;
+}
+
+/** A host name with at least one dot and no scheme, path, port, wildcard or space (the server's own rule); else null. */
+function accessGroupsNormalizeDomain(value) {
+  const text = accessGroupsText(value).trim().toLowerCase();
+  if (!text || text.length > 253 || !ACCESS_GROUPS_DOMAIN_RE.test(text)) return null;
+  return text;
+}
+
+/** The New mapping form: the fields still missing, in screen order. */
+function accessGroupsMappingFindings(form) {
+  const f = form || {};
+  const missing = [];
+  if (!ACCESS_GROUPS_PROVIDERS.includes(accessGroupsText(f.provider))) missing.push('provider');
+  if (!accessGroupsText(f.principal).trim()) missing.push('principal');
+  if (!accessGroupsText(f.groupId)) missing.push('groupId');
+  return { missing, valid: missing.length === 0 };
 }
 
 /**
@@ -1591,6 +1747,25 @@ class AccessGroupsPanel {
     this.docEditor = null;
     this.bulk = null;
     this.docsMoreButton = null;
+    this.mapping = null;
+    this.mappingFailure = null;
+    this.mappingSeq = 0;
+    this.mappingRequested = false;
+    this.mappingUpdatedAt = null;
+    this.mappingHosts = {};
+    this.mappingDraft = new Map();
+    this.mappingBusy = null;
+    this.mappingMoreButton = null;
+    this.mapForm = this.emptyMapForm();
+    this.mapFormHosts = null;
+    this.rules = null;
+    this.rulesFailure = null;
+    this.rulesSeq = 0;
+    this.rulesShown = ACCESS_GROUPS_PAGE;
+    this.ruleBusy = null;
+    this.ruleForm = this.emptyRuleForm();
+    this.ruleFormHosts = null;
+    this.unmappedFromList = 0;
   }
 
   t(key, vars) {
@@ -1643,6 +1818,7 @@ class AccessGroupsPanel {
       tabs: [
         { id: 'groups', label: this.t('tab.groupsPlain') },
         { id: 'documents', label: this.t('tab.documents') },
+        { id: 'mapping', label: this.t('tab.mapping') },
         { id: 'enforcement', label: this.t('tab.enforcement') },
       ],
       selected: 'groups',
@@ -1650,6 +1826,7 @@ class AccessGroupsPanel {
     });
     this.buildGroups(this.tabs.panels.groups);
     this.buildDocuments(this.tabs.panels.documents);
+    this.buildMapping(this.tabs.panels.mapping);
     this.buildEnforcement(this.tabs.panels.enforcement);
     const content = this.root.querySelector('[data-access-groups-content]');
     if (content) content.replaceChildren(this.tabs.tablist, ...Object.values(this.tabs.panels));
@@ -1669,6 +1846,7 @@ class AccessGroupsPanel {
     this.bindWorkspace();
     await this.loadGroups('refresh');
     if (this.docsRequested) await this.loadDocuments('refresh');
+    if (this.mappingRequested) await Promise.all([this.loadMapping('refresh'), this.loadRules('quiet')]);
     await this.loadStatus('refresh');
   }
 
@@ -1965,6 +2143,19 @@ class AccessGroupsPanel {
     const nodes = [];
     if (view.state === 'blocked') nodes.push(ui.ragUiAlert(this.doc, { tone: 'error', icon: 'x-octagon', body: [this.t('alert.blocked')], actions: [open()] }));
     else if (this.statusLoaded && view.running === 'off') nodes.push(ui.ragUiAlert(this.doc, { tone: 'info', icon: 'info-circle', body: [this.t('alert.off')], actions: [open()] }));
+    const unmapped = this.unmappedCount();
+    if (unmapped > 0) {
+      const mapping = this.el('button', { className: 'btn btn-sm h-auto min-h-8 py-1 whitespace-normal', text: this.t('action.openMapping'), attrs: { type: 'button', 'data-access-groups-alert-mapping': '' } });
+      mapping.addEventListener('click', () => this.selectMapping());
+      nodes.push(
+        ui.ragUiAlert(this.doc, {
+          tone: 'warning',
+          icon: 'exclamation-triangle',
+          body: [this.t('alert.unmapped', { count: ui.ragUiFormatNumber(unmapped, this.locale) })],
+          actions: [mapping],
+        }),
+      );
+    }
     host.replaceChildren(...nodes);
   }
 
@@ -2216,8 +2407,13 @@ class AccessGroupsPanel {
       this.form = this.emptyForm();
       this.renderForm();
       this.resetDocuments();
+      this.resetMapping();
       this.loadGroups('first').then(() => {
         if (this.docsRequested) this.loadDocuments('first');
+        if (this.mappingRequested) {
+          this.loadMapping('first');
+          this.loadRules('first');
+        }
       });
     });
   }
@@ -2327,9 +2523,13 @@ class AccessGroupsPanel {
         this.groups = { personal: list.personal, rows: [...this.groups.rows, ...fresh], nextCursor: list.nextCursor };
       } else {
         this.groups = list;
+        const alerts = result.body.alerts && typeof result.body.alerts === 'object' ? result.body.alerts : {};
+        this.unmappedFromList = list.personal ? 0 : accessGroupsCount(alerts.unmappedSourceGroups);
       }
       this.groupsFailure = null;
       this.groupsUpdatedAt = new Date();
+      this.updateUnmappedUi();
+      if (this.mappingRequested) this.renderMapping();
       if (this.members && !this.findRow(this.members.groupId)) this.closeMembers({ render: false });
       if (this.renaming && !this.findRow(this.renaming.id)) this.renaming = null;
       if (this.groups.personal) this.form = this.emptyForm();
@@ -3278,6 +3478,925 @@ class AccessGroupsPanel {
       this.docsRequested = true;
       this.loadDocuments('first');
     }
+    if (id === 'mapping' && !this.mappingRequested) {
+      this.mappingRequested = true;
+      this.loadMapping('first');
+      this.loadRules('first');
+    }
+  }
+
+  // Connector mapping sub-view (D-20, D-21, A-10, UI-SPEC 6.5)
+
+  emptyMapForm() {
+    return { open: false, provider: '', principal: '', groupId: '', error: null, busy: false };
+  }
+
+  emptyRuleForm() {
+    return { open: false, provider: '', domain: '', error: null, busy: false };
+  }
+
+  mappingUnavailable() {
+    return this.t('mapping.unavailable', { reload: this.t('action.reload') });
+  }
+
+  mappingComplete() {
+    return Boolean(this.mapping && !this.mapping.personal && this.mapping.nextOffset === null);
+  }
+
+  /** Source groups not mapped: counted on screen once every page is loaded, else the count from GET / (UI-SPEC 8.1). */
+  unmappedCount() {
+    if (this.mappingComplete()) return this.mapping.rows.filter((r) => !r.mapped).length;
+    if (this.mapping && this.mapping.personal) return 0;
+    return this.unmappedFromList;
+  }
+
+  updateUnmappedUi() {
+    const tab = this.doc.getElementById('rag-access-groups-tab-mapping');
+    const count = this.unmappedCount();
+    if (tab) tab.textContent = count > 0 ? this.t('tab.mappingUnmapped', { count: accessGroupsUiLib().ragUiFormatNumber(count, this.locale) }) : this.t('tab.mapping');
+    this.renderAlerts();
+  }
+
+  resetMapping() {
+    this.mapping = null;
+    this.mappingFailure = null;
+    this.mappingUpdatedAt = null;
+    this.mappingDraft.clear();
+    this.mappingBusy = null;
+    this.mapForm = this.emptyMapForm();
+    this.rules = null;
+    this.rulesFailure = null;
+    this.rulesShown = ACCESS_GROUPS_PAGE;
+    this.ruleForm = this.emptyRuleForm();
+    this.renderMapping();
+  }
+
+  groupName(id) {
+    const row = this.findRow(id);
+    return row ? row.name : accessGroupsText(id);
+  }
+
+  joinFields(names) {
+    return names.join(this.locale === 'zh' ? '、' : ', ');
+  }
+
+  providerOptions(select, chosen) {
+    select.appendChild(this.el('option', { text: this.t('mapping.form.choose'), attrs: { value: '' } }));
+    for (const provider of ACCESS_GROUPS_PROVIDERS) {
+      select.appendChild(this.el('option', { text: accessGroupsProviderName(provider), attrs: { value: provider } }));
+    }
+    select.value = chosen || '';
+  }
+
+  buildMapping(panel) {
+    const h = this.mappingHosts;
+    h.heading = this.el('h4', {
+      className: 'text-base font-semibold text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+      text: this.t('mapping.groups.title'),
+      attrs: { tabindex: '-1', 'data-access-groups-mapping-heading': '' },
+    });
+    h.description = this.el('p', { className: 'text-sm text-base-content/70 max-w-prose mb-4', text: this.t('mapping.description'), attrs: { 'data-access-groups-mapping-description': '' } });
+    h.note = this.el('div', { className: 'mb-4 empty:hidden' });
+    h.top = this.el('div', { className: 'min-w-0 empty:hidden' });
+    this.newMappingButton = this.btn(
+      this.t('action.newMapping'),
+      'btn-outline btn-sm min-h-8 py-1',
+      { 'aria-expanded': 'false', 'aria-controls': 'rag-access-groups-map-form', 'data-access-groups-mapping-new': '' },
+      () => this.openMapForm(),
+    );
+    this.mappingUpdated = this.el('span', { className: 'text-xs text-base-content/70', attrs: { 'data-access-groups-mapping-updated': '' } });
+    this.refreshMappingButton = this.btn(this.t('action.refreshMapping'), 'btn-outline btn-sm min-h-8 py-1', { 'data-access-groups-mapping-refresh': '' }, () => {
+      this.loadMapping('refresh');
+      this.loadRules('quiet');
+    });
+    h.groupsHeader = this.el('div', { className: 'flex flex-wrap items-center gap-2 min-w-0' }, [
+      h.heading,
+      this.newMappingButton,
+      this.el('div', { className: 'flex flex-wrap items-center gap-2 ml-auto' }, [this.mappingUpdated, this.refreshMappingButton]),
+    ]);
+    h.form = this.el('div', { className: 'min-w-0', id: 'rag-access-groups-map-form' });
+    h.list = this.el('div', { className: 'min-w-0 mt-4', attrs: { 'data-access-groups-mapping-list': '' } });
+    h.more = this.el('div', { className: 'mt-4 empty:hidden' });
+    h.groups = this.el('section', { className: 'min-w-0', attrs: { 'aria-labelledby': 'rag-access-groups-mapping-title' } }, [h.groupsHeader, h.form, h.list, h.more]);
+    h.heading.id = 'rag-access-groups-mapping-title';
+
+    this.addRuleButton = this.btn(
+      this.t('action.addDomain'),
+      'btn-outline btn-sm min-h-8 py-1',
+      { 'aria-expanded': 'false', 'aria-controls': 'rag-access-groups-rule-form', 'data-access-groups-rule-new': '' },
+      () => this.openRuleForm(),
+    );
+    h.rulesHeader = this.el('div', { className: 'flex flex-wrap items-center gap-2 min-w-0' }, [
+      this.el('h4', { className: 'text-base font-semibold text-balance', id: 'rag-access-groups-rules-title', text: this.t('rules.title') }),
+      this.addRuleButton,
+    ]);
+    h.rulesDescription = this.el('p', { className: 'text-sm text-base-content/70 max-w-prose mt-1', text: this.t('rules.description') });
+    h.ruleForm = this.el('div', { className: 'min-w-0', id: 'rag-access-groups-rule-form' });
+    h.rulesList = this.el('div', { className: 'min-w-0 mt-4', attrs: { 'data-access-groups-rules-list': '' } });
+    h.rulesMore = this.el('div', { className: 'mt-4 empty:hidden' });
+    h.rules = this.el('section', { className: 'min-w-0 mt-8', attrs: { 'aria-labelledby': 'rag-access-groups-rules-title' } }, [
+      h.rulesHeader,
+      h.rulesDescription,
+      h.ruleForm,
+      h.rulesList,
+      h.rulesMore,
+    ]);
+    panel.replaceChildren(h.description, h.note, h.top, h.groups, h.rules);
+  }
+
+  async loadMapping(source) {
+    const ui = accessGroupsUiLib();
+    const host = this.mappingHosts.list;
+    if (!host) return false;
+    this.mappingRequested = true;
+    const seq = ++this.mappingSeq;
+    const append = source === 'more' && this.mapping && this.mapping.nextOffset !== null;
+    let restore = null;
+    if (append) {
+      restore = this.mappingMoreButton ? ui.ragUiButtonBusy(this.doc, this.mappingMoreButton, this.t('mapping.loading')) : null;
+    } else if (!this.mapping && !this.mappingFailure) {
+      ui.ragUiListLoading(this.doc, host, this.t('mapping.loading'));
+      if (source !== 'quiet') this.announce(this.t('mapping.loading'));
+    } else {
+      ui.ragUiListBusy(host, true);
+      if (this.refreshMappingButton && source !== 'quiet') restore = ui.ragUiButtonBusy(this.doc, this.refreshMappingButton, this.t('mapping.loading'));
+    }
+    let result;
+    try {
+      result = await this.request(ACCESS_GROUPS_PATH + '/connector-map' + this.orgQuery({ offset: append ? this.mapping.nextOffset : null }), { method: 'GET' });
+    } finally {
+      if (restore) restore();
+    }
+    if (seq !== this.mappingSeq) return false;
+    ui.ragUiListBusy(host, false);
+    if (result && result.ok && result.body && typeof result.body === 'object') {
+      const list = buildAccessGroupsMappingList(result.body);
+      let firstNew = null;
+      if (append) {
+        const seen = new Set(this.mapping.rows.map((r) => r.key));
+        const fresh = list.rows.filter((r) => !seen.has(r.key));
+        firstNew = fresh[0] || null;
+        this.mapping = { ...list, rows: [...this.mapping.rows, ...fresh] };
+      } else {
+        this.mapping = list;
+      }
+      this.mappingFailure = null;
+      this.mappingUpdatedAt = new Date();
+      for (const key of [...this.mappingDraft.keys()]) {
+        if (!this.mapping.rows.some((r) => r.key === key)) this.mappingDraft.delete(key);
+      }
+      if (this.mapping.personal) this.mapForm = this.emptyMapForm();
+      this.renderMapping();
+      this.updateUnmappedUi();
+      if (source !== 'quiet' && !append) this.announce(this.t('mapping.loaded', { count: ui.ragUiFormatNumber(this.mapping.rows.length, this.locale) }));
+      if (firstNew) this.focusMappingRow(firstNew.key);
+      else if (append) this.focusStatus();
+      return true;
+    }
+    const mapped = mapAccessGroupsError(result, this.locale, { unavailable: this.mappingUnavailable() });
+    this.mappingFailure = mapped.kind === 'unavailable' || mapped.kind === 'network' ? { ...mapped, kind: 'unavailable', message: this.mappingUnavailable() } : mapped;
+    this.renderMapping();
+    this.announce(this.mappingFailure.message, true);
+    return false;
+  }
+
+  async loadRules(source) {
+    if (!this.mappingHosts.rulesList) return false;
+    const ui = accessGroupsUiLib();
+    const seq = ++this.rulesSeq;
+    if (!this.rules && !this.rulesFailure) ui.ragUiListLoading(this.doc, this.mappingHosts.rulesList, this.t('mapping.loading'));
+    else ui.ragUiListBusy(this.mappingHosts.rulesList, true);
+    const result = await this.request(ACCESS_GROUPS_PATH + '/sharing-rules' + this.orgQuery(), { method: 'GET' });
+    if (seq !== this.rulesSeq) return false;
+    ui.ragUiListBusy(this.mappingHosts.rulesList, false);
+    if (result && result.ok && result.body && typeof result.body === 'object') {
+      this.rules = buildAccessGroupsRulesList(result.body);
+      this.rulesFailure = null;
+      if (this.rules.personal) this.ruleForm = this.emptyRuleForm();
+      this.renderMapping();
+      return true;
+    }
+    const mapped = mapAccessGroupsError(result, this.locale, { unavailable: this.mappingUnavailable() });
+    this.rulesFailure = mapped.kind === 'unavailable' || mapped.kind === 'network' ? { ...mapped, kind: 'unavailable', message: this.mappingUnavailable() } : mapped;
+    this.renderMapping();
+    if (source !== 'quiet' && !this.mappingFailure) this.announce(this.rulesFailure.message, true);
+    return false;
+  }
+
+  reloadMappingView() {
+    this.loadMapping('refresh');
+    this.loadRules('refresh');
+  }
+
+  renderMapping() {
+    const h = this.mappingHosts;
+    if (!h.list) return;
+    const ui = accessGroupsUiLib();
+    const failures = [this.mappingFailure, this.rulesFailure].filter(Boolean);
+    const replaced = failures.find((f) => f.kind === 'signIn' || f.kind === 'workspace') || null;
+    const personal = Boolean((this.mapping && this.mapping.personal) || (this.rules && this.rules.personal));
+    const shown = !replaced && !personal;
+    h.groups.hidden = !shown;
+    h.rules.hidden = !shown;
+    h.note.replaceChildren();
+    if (this.mapping && !this.mapping.visibilityApplies && shown) {
+      const note = ui.ragUiAlert(this.doc, { tone: 'info', icon: 'info-circle', body: [this.t('mapping.personalNote')] });
+      note.setAttribute('data-access-groups-mapping-note', '');
+      h.note.appendChild(note);
+    }
+    if (replaced) {
+      h.top.replaceChildren(
+        replaced.kind === 'signIn'
+          ? ui.ragUiSignInAlert(this.doc, this.locale, () => this.reloadMappingView())
+          : ui.ragUiAlert(this.doc, { tone: 'warning', icon: 'person-lock', body: [replaced.message], actions: [ui.ragUiReloadButton(this.doc, this.locale, () => this.reloadMappingView())] }),
+      );
+    } else if (personal) {
+      h.top.replaceChildren(ui.ragUiAlert(this.doc, { tone: 'info', icon: 'person', body: [this.t('groups.personal')] }));
+    } else {
+      h.top.replaceChildren();
+    }
+    if (!shown) {
+      this.mapForm = this.emptyMapForm();
+      this.ruleForm = this.emptyRuleForm();
+      h.list.replaceChildren();
+      h.more.replaceChildren();
+      h.rulesList.replaceChildren();
+      h.rulesMore.replaceChildren();
+      this.renderMapForm();
+      this.renderRuleForm();
+      return;
+    }
+    this.renderMapForm();
+    this.renderRuleForm();
+    this.renderMappingList();
+    this.renderRules();
+  }
+
+  renderMappingList() {
+    const h = this.mappingHosts;
+    const ui = accessGroupsUiLib();
+    if (this.mappingUpdatedAt) this.mappingUpdated.replaceChildren(...this.withNode(this.t('panel.updated'), 'time', this.timeEl(this.mappingUpdatedAt)));
+    else this.mappingUpdated.replaceChildren();
+    this.mappingMoreButton = null;
+    h.more.replaceChildren();
+    const nodes = [];
+    if (this.mappingFailure) nodes.push(ui.ragUiUnavailableAlert(this.doc, this.locale, this.mappingFailure.message, () => this.loadMapping('refresh')));
+    if (!this.mapping) {
+      if (nodes.length) h.list.replaceChildren(...nodes);
+      return;
+    }
+    const content = this.mapping.rows.length ? this.mappingTable() : this.mappingEmpty();
+    if (this.mappingFailure) content.classList.add('opacity-60');
+    nodes.push(content);
+    h.list.replaceChildren(...nodes);
+    if (this.mapping.nextOffset !== null) {
+      this.mappingMoreButton = this.btn(this.t('action.loadMoreMapping'), 'btn-outline btn-sm min-h-8 py-1', { 'data-access-groups-mapping-load-more': '' }, () => this.loadMapping('more'));
+      h.more.replaceChildren(this.mappingMoreButton);
+    }
+  }
+
+  mappingEmpty() {
+    return this.el('div', { className: 'py-8 text-center', attrs: { 'data-access-groups-mapping-empty': '' } }, [
+      this.el('p', { className: 'text-base font-semibold text-balance', text: this.t('mapping.empty.title') }),
+      this.el('p', { className: 'text-sm max-w-prose mx-auto mt-1', text: this.t('mapping.empty.body') }),
+    ]);
+  }
+
+  scrollRegion(label, data, table) {
+    return this.el(
+      'div',
+      {
+        className: 'overflow-x-auto rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+        attrs: { tabindex: '0', role: 'region', 'aria-label': label, [data]: '' },
+      },
+      [table],
+    );
+  }
+
+  mappingTable() {
+    const th = (text, extra) => this.el('th', { className: 'font-semibold ' + (extra || ''), text, attrs: { scope: 'col' } });
+    const body = this.el('tbody');
+    for (const row of this.mapping.rows) body.appendChild(this.mappingRow(row));
+    const table = this.el('table', { className: 'table table-sm' }, [
+      this.el('caption', { className: 'sr-only', text: this.t('mapping.caption') }),
+      this.el('thead', {}, [
+        this.el('tr', {}, [
+          th(this.t('mapping.col.source')),
+          th(this.t('mapping.col.principal')),
+          th(this.t('col.documents'), 'hidden md:table-cell text-right'),
+          th(this.t('mapping.col.accessGroup')),
+          th(this.t('col.actions')),
+        ]),
+      ]),
+      body,
+    ]);
+    return this.scrollRegion(this.t('mapping.caption'), 'data-access-groups-mapping-table', table);
+  }
+
+  mappingValue(row) {
+    return this.mappingDraft.has(row.key) ? this.mappingDraft.get(row.key) : row.groupId || '';
+  }
+
+  mappingRow(row) {
+    const ui = accessGroupsUiLib();
+    const busy = this.mappingBusy === row.key;
+    const principalCell = this.el('th', { className: 'font-normal align-top min-w-0 max-w-[14rem] sm:max-w-xs md:max-w-sm', attrs: { scope: 'row' } }, [
+      this.el('code', { className: 'block font-mono text-xs break-all', text: row.principal, attrs: { translate: 'no' } }),
+      this.el('span', { className: 'block text-xs text-base-content/70 mt-0.5', text: accessGroupsMappingKindLabel(row, this.locale) }),
+    ]);
+    if (!row.mapped) {
+      principalCell.appendChild(
+        this.el('span', { className: 'badge badge-warning badge-outline badge-sm gap-1 mt-1 h-auto whitespace-normal text-base-content', attrs: { 'data-access-groups-not-mapped': '' } }, [
+          ui.ragUiIcon(this.doc, 'exclamation-triangle', 'text-warning'),
+          this.el('span', { text: this.t('mapping.notMapped') }),
+        ]),
+      );
+    }
+    principalCell.appendChild(
+      this.el('span', {
+        className: 'block text-xs text-base-content/70 mt-1 md:hidden tabular-nums',
+        text: this.countText('group.documents', row.documents),
+        attrs: { 'data-access-groups-mapping-documents-under': '' },
+      }),
+    );
+    const selectId = ui.ragUiNextId('rag-access-groups-map-select');
+    const select = this.el('select', {
+      className: 'select select-bordered select-sm w-full max-w-xs',
+      id: selectId,
+      attrs: { 'aria-label': this.t('mapping.selectAria', { principal: row.principal }), name: 'access-group-mapping', 'data-access-groups-mapping-select': row.key },
+    });
+    select.appendChild(this.el('option', { text: this.t('mapping.notMapped'), attrs: { value: '' } }));
+    const options = this.groupOptions();
+    for (const option of options) select.appendChild(this.el('option', { text: option.name, attrs: { value: option.id } }));
+    if (row.groupId && !options.some((o) => o.id === row.groupId)) select.appendChild(this.el('option', { text: row.groupId, attrs: { value: row.groupId } }));
+    select.value = this.mappingValue(row);
+    select.disabled = busy;
+    const save = this.btn(this.t('action.saveMapping'), 'btn-outline md:btn-sm md:min-h-8 py-1', {
+      'aria-label': this.t('action.saveMappingAria', { principal: row.principal }),
+      'data-access-groups-mapping-save': row.key,
+    });
+    save.disabled = busy || accessGroupsMappingAction(row, select.value) === 'none';
+    select.addEventListener('change', () => {
+      const value = accessGroupsText(select.value);
+      if (value === (row.groupId || '')) this.mappingDraft.delete(row.key);
+      else this.mappingDraft.set(row.key, value);
+      save.disabled = this.mappingBusy !== null || accessGroupsMappingAction(row, value) === 'none';
+    });
+    const actions = [save];
+    let remove = null;
+    if (row.mapped) {
+      remove = this.btn(this.t('action.removeMapping'), 'btn-ghost md:btn-sm md:min-h-8 py-1', {
+        'aria-label': this.t('action.removeMappingAria', { principal: row.principal }),
+        'data-access-groups-mapping-remove': row.key,
+      });
+      remove.disabled = busy;
+      remove.addEventListener('click', () => this.saveMapping(row, 'remove', remove, [save, select]));
+      actions.push(remove);
+    }
+    save.addEventListener('click', () => this.saveMapping(row, accessGroupsMappingAction(row, select.value), save, [remove, select]));
+    return this.el('tr', { className: 'align-top', attrs: { 'data-access-groups-mapping-row': row.key } }, [
+      this.el('td', { className: 'align-top break-words', text: accessGroupsProviderName(row.provider) }),
+      principalCell,
+      this.el('td', { className: 'hidden md:table-cell text-right tabular-nums align-top', text: ui.ragUiFormatNumber(row.documents, this.locale), attrs: { 'data-access-groups-mapping-documents': '' } }),
+      this.el('td', { className: 'align-top min-w-[10rem]' }, [select]),
+      this.el('td', { className: 'align-top' }, [this.el('div', { className: 'flex flex-col md:flex-row flex-wrap gap-2' }, actions)]),
+    ]);
+  }
+
+  focusMappingRow(key) {
+    const select = this.byData('data-access-groups-mapping-select', key)[0];
+    if (select && typeof select.focus === 'function') select.focus();
+  }
+
+  async saveMapping(row, action, button, siblings) {
+    if (action === 'none' || this.mappingBusy !== null) return;
+    const ui = accessGroupsUiLib();
+    const groupId = action === 'remove' ? null : accessGroupsText(this.mappingValue(row));
+    this.mappingBusy = row.key;
+    const restore = ui.ragUiButtonBusy(this.doc, button, action === 'remove' ? this.t('members.removing') : this.t('save.running'), siblings);
+    let result;
+    try {
+      if (action === 'create') {
+        result = await this.request(ACCESS_GROUPS_PATH + '/connector-map' + this.orgQuery(), {
+          method: 'POST',
+          body: JSON.stringify({ provider: row.provider, kind: row.kind, externalPrincipalId: row.principal, groupId }),
+        });
+      } else if (action === 'change') {
+        result = await this.request(ACCESS_GROUPS_PATH + '/connector-map/' + encodeURIComponent(row.id) + this.orgQuery(), {
+          method: 'PUT',
+          body: JSON.stringify({ groupId }),
+        });
+      } else {
+        result = await this.request(ACCESS_GROUPS_PATH + '/connector-map/' + encodeURIComponent(row.id) + this.orgQuery(), { method: 'DELETE' });
+      }
+    } finally {
+      this.mappingBusy = null;
+      restore();
+    }
+    if (result && result.ok) {
+      this.mappingDraft.delete(row.key);
+      const message =
+        action === 'remove'
+          ? this.t('mapping.removed', { principal: row.principal })
+          : this.t('mapping.saved', { principal: row.principal, group: this.groupName(groupId) });
+      await this.afterMappingWrite();
+      this.announce(message);
+      this.focusStatus();
+      return;
+    }
+    await this.mappingWriteFailed(result);
+  }
+
+  async afterMappingWrite() {
+    await this.loadMapping('quiet');
+    if (!this.mappingComplete()) await this.loadGroups('quiet');
+  }
+
+  async mappingWriteFailed(result) {
+    const mapped = mapAccessGroupsError(result, this.locale, { write: true, unavailable: this.mappingUnavailable() });
+    const reload = mapped.reload || mapped.kind === 'field';
+    const message = mapped.kind === 'field' ? this.t('error.changed') : mapped.message;
+    this.announce(message, true);
+    if (mapped.kind === 'groupGone') await this.loadGroups('quiet');
+    if (reload) await this.loadMapping('quiet');
+    this.renderMapping();
+    this.announce(message, true);
+    this.focusStatus();
+  }
+
+  // New mapping form (UI-SPEC 6.5, 9.5, 9.6)
+
+  openMapForm() {
+    if (!this.mapForm.open) {
+      this.mapForm = { ...this.emptyMapForm(), open: true };
+      this.renderMapForm();
+    }
+    const provider = this.mapFormHosts && this.mapFormHosts.provider;
+    if (provider) provider.focus();
+  }
+
+  closeMapForm(focusBack) {
+    this.mapForm = this.emptyMapForm();
+    this.renderMapForm();
+    if (focusBack && this.newMappingButton) this.newMappingButton.focus();
+  }
+
+  formKeys(inputs, close) {
+    for (const input of inputs) {
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && input.tagName && String(input.tagName).toLowerCase() === 'input' && typeof event.preventDefault === 'function') event.preventDefault();
+        if (event.key === 'Escape') {
+          if (typeof event.preventDefault === 'function') event.preventDefault();
+          close();
+        }
+      });
+    }
+  }
+
+  renderMapForm() {
+    const host = this.mappingHosts.form;
+    if (!host) return;
+    if (!this.mapForm.open) {
+      host.replaceChildren();
+      this.mapFormHosts = null;
+      if (this.newMappingButton) this.newMappingButton.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    this.newMappingButton.setAttribute('aria-expanded', 'true');
+    const form = this.mapForm;
+    const provider = this.el('select', { className: 'select select-bordered select-sm w-full', id: 'rag-access-groups-map-provider', attrs: { name: 'access-group-mapping-source', 'data-access-groups-mapping-provider': '' } });
+    this.providerOptions(provider, form.provider);
+    const principal = this.el('input', {
+      className: 'input input-bordered input-sm w-full font-mono',
+      id: 'rag-access-groups-map-principal',
+      attrs: {
+        type: 'text',
+        name: 'access-group-mapping-principal',
+        autocomplete: 'off',
+        spellcheck: 'false',
+        translate: 'no',
+        maxlength: '512',
+        'aria-describedby': 'rag-access-groups-map-principal-help rag-access-groups-map-principal-error',
+        'data-access-groups-mapping-principal': '',
+      },
+    });
+    principal.value = form.principal;
+    const group = this.el('select', { className: 'select select-bordered select-sm w-full', id: 'rag-access-groups-map-group', attrs: { name: 'access-group-mapping-group', 'data-access-groups-mapping-group': '' } });
+    group.appendChild(this.el('option', { text: this.t('mapping.form.choose'), attrs: { value: '' } }));
+    for (const option of this.groupOptions()) group.appendChild(this.el('option', { text: option.name, attrs: { value: option.id } }));
+    group.value = form.groupId;
+    const help = this.el('p', { className: 'text-xs text-base-content/70 mt-1 max-w-prose', id: 'rag-access-groups-map-principal-help', text: this.t('mapping.form.principalHelp') });
+    const error = this.el('p', { className: 'text-xs text-error mt-1 empty:hidden break-words', id: 'rag-access-groups-map-principal-error' });
+    const findings = this.el('p', { className: 'text-xs text-base-content/70 lg:col-span-2 break-words empty:hidden', id: 'rag-access-groups-map-findings', attrs: { 'data-access-groups-mapping-findings': '' } });
+    const create = this.btn(this.t('action.createMapping'), 'btn-primary btn-sm min-h-8 py-1', { 'aria-describedby': 'rag-access-groups-map-findings rag-access-groups-map-principal-error', 'data-access-groups-mapping-create': '' }, () =>
+      this.createMapping(),
+    );
+    const close = this.btn(this.t('action.closeForm'), 'btn-ghost btn-sm min-h-8 py-1', { 'data-access-groups-mapping-close': '' }, () => this.closeMapForm(true));
+    this.mapFormHosts = { provider, principal, group, error, findings, create, close };
+    provider.addEventListener('change', () => {
+      form.provider = accessGroupsText(provider.value);
+      this.updateMapFindings();
+    });
+    principal.addEventListener('input', () => {
+      form.principal = accessGroupsText(principal.value);
+      form.error = null;
+      this.updateMapFindings();
+    });
+    group.addEventListener('change', () => {
+      form.groupId = accessGroupsText(group.value);
+      this.updateMapFindings();
+    });
+    this.formKeys([provider, principal, group], () => this.closeMapForm(true));
+    host.replaceChildren(
+      this.el('div', { className: 'bg-base-100 rounded-lg p-4 mt-4 grid gap-x-6 gap-y-3 md:grid-cols-2 min-w-0', attrs: { 'data-access-groups-mapping-form': '' } }, [
+        this.formField('rag-access-groups-map-provider', this.t('mapping.col.source'), provider),
+        this.formField('rag-access-groups-map-principal', this.t('mapping.form.principal'), principal, [help, error]),
+        this.formField('rag-access-groups-map-group', this.t('mapping.col.accessGroup'), group),
+        findings,
+        this.el('div', { className: 'md:col-span-2 flex flex-wrap gap-2' }, [create, close]),
+      ]),
+    );
+    this.updateMapFindings();
+  }
+
+  updateMapFindings() {
+    const h = this.mapFormHosts;
+    if (!h) return;
+    const form = this.mapForm;
+    const { missing, valid } = accessGroupsMappingFindings(form);
+    const names = { provider: this.t('mapping.col.source'), principal: this.t('mapping.form.principal'), groupId: this.t('mapping.col.accessGroup') };
+    h.findings.textContent = valid ? '' : this.t('mapping.need', { fields: this.joinFields(missing.map((m) => names[m])) });
+    h.create.disabled = !valid || form.busy;
+    h.error.textContent = form.error ? form.error : '';
+    if (form.error) h.principal.setAttribute('aria-invalid', 'true');
+    else h.principal.removeAttribute('aria-invalid');
+    h.principal.classList.toggle('input-error', Boolean(form.error));
+  }
+
+  async createMapping() {
+    const h = this.mapFormHosts;
+    const form = this.mapForm;
+    if (!h || form.busy || !accessGroupsMappingFindings(form).valid) return;
+    const ui = accessGroupsUiLib();
+    form.busy = true;
+    const principal = form.principal.trim();
+    const restore = ui.ragUiButtonBusy(this.doc, h.create, this.t('create.running'), [h.close]);
+    let result;
+    try {
+      result = await this.request(ACCESS_GROUPS_PATH + '/connector-map' + this.orgQuery(), {
+        method: 'POST',
+        body: JSON.stringify({ provider: form.provider, kind: ACCESS_GROUPS_PROVIDER_KIND[form.provider], externalPrincipalId: principal, groupId: form.groupId }),
+      });
+    } finally {
+      form.busy = false;
+      restore();
+    }
+    if (this.mapForm !== form) return;
+    if (result && result.ok) {
+      const message = this.t('mapping.saved', { principal, group: this.groupName(form.groupId) });
+      this.closeMapForm(false);
+      await this.afterMappingWrite();
+      this.announce(message);
+      this.focusStatus();
+      return;
+    }
+    const mapped = mapAccessGroupsError(result, this.locale, { write: true, unavailable: this.mappingUnavailable() });
+    if (mapped.kind === 'field' && mapped.field === 'principal') {
+      form.error = mapped.message;
+      this.updateMapFindings();
+      this.announce(mapped.message, true);
+      h.principal.focus();
+      return;
+    }
+    this.updateMapFindings();
+    this.announce(mapped.message, true);
+    if (mapped.kind === 'groupGone') {
+      await this.loadGroups('quiet');
+      this.renderMapForm();
+      this.announce(mapped.message, true);
+    } else if (mapped.reload) {
+      await this.loadMapping('quiet');
+      this.announce(mapped.message, true);
+    }
+  }
+
+  // Sharing rules (D-20, UI-SPEC 6.5, 9.7, 9.11, 12.1 decisions 11 and 17)
+
+  renderRules() {
+    const h = this.mappingHosts;
+    const ui = accessGroupsUiLib();
+    h.rulesMore.replaceChildren();
+    const nodes = [];
+    if (this.rulesFailure) nodes.push(ui.ragUiUnavailableAlert(this.doc, this.locale, this.rulesFailure.message, () => this.loadRules('refresh')));
+    if (!this.rules) {
+      if (nodes.length) h.rulesList.replaceChildren(...nodes);
+      return;
+    }
+    const content = this.rules.rows.length
+      ? this.rulesTable()
+      : this.el('p', { className: 'text-sm py-4 max-w-prose', text: this.t('rules.empty'), attrs: { 'data-access-groups-rules-empty': '' } });
+    if (this.rulesFailure) content.classList.add('opacity-60');
+    nodes.push(content);
+    h.rulesList.replaceChildren(...nodes);
+    if (this.rules.rows.length > this.rulesShown) {
+      const more = this.btn(this.t('action.loadMoreRules'), 'btn-outline btn-sm min-h-8 py-1', { 'data-access-groups-rules-load-more': '' }, () => {
+        const first = this.rules.rows[this.rulesShown];
+        this.rulesShown += ACCESS_GROUPS_PAGE;
+        this.renderRules();
+        if (first) this.focusRule(first.id);
+      });
+      h.rulesMore.replaceChildren(more);
+    }
+  }
+
+  rulesTable() {
+    const th = (text, extra) => this.el('th', { className: 'font-semibold ' + (extra || ''), text, attrs: { scope: 'col' } });
+    const body = this.el('tbody');
+    for (const rule of this.rules.rows.slice(0, this.rulesShown)) body.appendChild(this.ruleRow(rule));
+    const table = this.el('table', { className: 'table table-sm' }, [
+      this.el('caption', { className: 'sr-only', text: this.t('rules.caption') }),
+      this.el('thead', {}, [
+        this.el('tr', {}, [th(this.t('mapping.col.source')), th(this.t('rules.col.sharedWith')), th(this.t('col.documents'), 'text-right'), th(this.t('rules.col.counts'))]),
+      ]),
+      body,
+    ]);
+    return this.scrollRegion(this.t('rules.caption'), 'data-access-groups-rules-table', table);
+  }
+
+  ruleSharedWith(rule) {
+    if (rule.kind !== 'domain') return [this.doc.createTextNode(accessGroupsRuleText(rule, this.locale))];
+    return accessGroupsUiLib().ragUiTemplateNodes(this.doc, this.t('rules.kind.domain'), { domain: rule.domain }, ['domain']);
+  }
+
+  ruleRow(rule) {
+    const ui = accessGroupsUiLib();
+    const text = accessGroupsRuleText(rule, this.locale);
+    const source = accessGroupsProviderName(rule.provider);
+    const toggle = this.el('input', {
+      className: 'toggle toggle-sm',
+      attrs: { type: 'checkbox', 'aria-label': this.t('rules.toggleAria', { rule: text, source }), 'data-access-groups-rule-toggle': rule.id },
+    });
+    toggle.checked = rule.enabled;
+    toggle.disabled = this.ruleBusy !== null;
+    toggle.addEventListener('change', () => {
+      if (toggle.checked) {
+        toggle.checked = false;
+        this.confirmRuleOn(rule, toggle);
+      } else {
+        this.setRule(rule, false, toggle);
+      }
+    });
+    return this.el('tr', { className: 'align-top', attrs: { 'data-access-groups-rule-row': rule.id } }, [
+      this.el('td', { className: 'align-top break-words', text: source }),
+      this.el('th', { className: 'font-normal align-top min-w-0 max-w-[14rem] sm:max-w-xs md:max-w-sm break-words', attrs: { scope: 'row' } }, this.ruleSharedWith(rule)),
+      this.el('td', { className: 'text-right tabular-nums align-top', text: ui.ragUiFormatNumber(rule.documents, this.locale) }),
+      this.el('td', { className: 'align-top' }, [
+        this.el('label', { className: 'inline-flex items-center gap-2 cursor-pointer min-h-8' }, [
+          toggle,
+          this.el('span', { className: 'text-sm', text: rule.enabled ? this.t('value.on') : this.t('value.off'), attrs: { 'data-access-groups-rule-word': '' } }),
+        ]),
+      ]),
+    ]);
+  }
+
+  focusRule(id) {
+    const toggle = this.byData('data-access-groups-rule-toggle', id)[0];
+    if (toggle && typeof toggle.focus === 'function') toggle.focus();
+    else this.focusStatus();
+  }
+
+  async putRule(rule, enabled) {
+    return this.request(ACCESS_GROUPS_PATH + '/sharing-rules/' + encodeURIComponent(rule.id) + this.orgQuery(), { method: 'PUT', body: JSON.stringify({ enabled }) });
+  }
+
+  ruleMessage(rule, enabled) {
+    return this.t(enabled ? 'rules.turnedOn' : 'rules.turnedOff', { rule: accessGroupsRuleText(rule, this.locale), source: accessGroupsProviderName(rule.provider) });
+  }
+
+  applyRule(rule, result, enabled) {
+    const answer = result && result.body && result.body.rule;
+    rule.enabled = answer && typeof answer.enabled === 'boolean' ? answer.enabled : enabled;
+  }
+
+  async confirmRuleOn(rule, opener) {
+    if (this.ruleBusy !== null) return;
+    const ui = accessGroupsUiLib();
+    const source = accessGroupsProviderName(rule.provider);
+    const text = accessGroupsRuleText(rule, this.locale);
+    let done = false;
+    let followUp = null;
+    const confirmed = await ui.ragUiConfirmDialog(this.doc, {
+      title: this.t('rules.confirm.title'),
+      body: [this.t('rules.confirm.body', { source, rule: text, count: ui.ragUiFormatNumber(rule.documents, this.locale) })],
+      keepLabel: this.t('action.keepRuleOff'),
+      confirmLabel: this.t('action.turnRuleOn'),
+      runningLabel: this.t('save.running'),
+      tone: 'primary',
+      opener,
+      fallbackFocus: this.statusEl(),
+      onConfirm: async () => {
+        this.ruleBusy = rule.id;
+        let result;
+        try {
+          result = await this.putRule(rule, true);
+        } finally {
+          this.ruleBusy = null;
+        }
+        if (result && result.ok) {
+          this.applyRule(rule, result, true);
+          done = true;
+          return undefined;
+        }
+        const mapped = mapAccessGroupsError(result, this.locale, { write: true, unavailable: this.mappingUnavailable() });
+        if (mapped.reload) {
+          followUp = mapped;
+          return undefined;
+        }
+        return { keepOpen: true, message: mapped.message };
+      },
+    });
+    if (done) {
+      this.renderRules();
+      this.announce(this.ruleMessage(rule, true));
+      this.focusRule(rule.id);
+      return;
+    }
+    if (followUp) {
+      this.announce(followUp.message, true);
+      await this.loadRules('quiet');
+      this.announce(followUp.message, true);
+      this.focusStatus();
+      return;
+    }
+    if (!confirmed) this.renderRules();
+  }
+
+  async setRule(rule, enabled, toggle) {
+    if (this.ruleBusy !== null) return;
+    this.ruleBusy = rule.id;
+    toggle.disabled = true;
+    let result;
+    try {
+      result = await this.putRule(rule, enabled);
+    } finally {
+      this.ruleBusy = null;
+    }
+    if (result && result.ok) {
+      this.applyRule(rule, result, enabled);
+      this.renderRules();
+      this.announce(this.ruleMessage(rule, enabled));
+      this.focusRule(rule.id);
+      return;
+    }
+    const mapped = mapAccessGroupsError(result, this.locale, { write: true, unavailable: this.mappingUnavailable() });
+    this.renderRules();
+    this.announce(mapped.message, true);
+    if (mapped.reload) {
+      await this.loadRules('quiet');
+      this.announce(mapped.message, true);
+    }
+    this.focusRule(rule.id);
+  }
+
+  openRuleForm() {
+    if (!this.ruleForm.open) {
+      this.ruleForm = { ...this.emptyRuleForm(), open: true };
+      this.renderRuleForm();
+    }
+    const provider = this.ruleFormHosts && this.ruleFormHosts.provider;
+    if (provider) provider.focus();
+  }
+
+  closeRuleForm(focusBack) {
+    this.ruleForm = this.emptyRuleForm();
+    this.renderRuleForm();
+    if (focusBack && this.addRuleButton) this.addRuleButton.focus();
+  }
+
+  renderRuleForm() {
+    const host = this.mappingHosts.ruleForm;
+    if (!host) return;
+    if (!this.ruleForm.open) {
+      host.replaceChildren();
+      this.ruleFormHosts = null;
+      if (this.addRuleButton) this.addRuleButton.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    this.addRuleButton.setAttribute('aria-expanded', 'true');
+    const form = this.ruleForm;
+    const provider = this.el('select', { className: 'select select-bordered select-sm w-full', id: 'rag-access-groups-rule-provider', attrs: { name: 'access-group-rule-source', 'data-access-groups-rule-provider': '' } });
+    this.providerOptions(provider, form.provider);
+    const domain = this.el('input', {
+      className: 'input input-bordered input-sm w-full font-mono',
+      id: 'rag-access-groups-rule-domain',
+      attrs: {
+        type: 'text',
+        name: 'access-group-rule-domain',
+        inputmode: 'url',
+        autocomplete: 'off',
+        spellcheck: 'false',
+        translate: 'no',
+        maxlength: '253',
+        placeholder: 'example.org',
+        'aria-describedby': 'rag-access-groups-rule-domain-error',
+        'data-access-groups-rule-domain': '',
+      },
+    });
+    domain.value = form.domain;
+    const error = this.el('p', { className: 'text-xs text-error mt-1 empty:hidden break-words', id: 'rag-access-groups-rule-domain-error' });
+    const findings = this.el('p', { className: 'text-xs text-base-content/70 md:col-span-2 break-words empty:hidden', id: 'rag-access-groups-rule-findings' });
+    const create = this.btn(this.t('action.createRule'), 'btn-primary btn-sm min-h-8 py-1', { 'aria-describedby': 'rag-access-groups-rule-findings rag-access-groups-rule-domain-error', 'data-access-groups-rule-create': '' }, () =>
+      this.createRule(),
+    );
+    const close = this.btn(this.t('action.closeForm'), 'btn-ghost btn-sm min-h-8 py-1', { 'data-access-groups-rule-close': '' }, () => this.closeRuleForm(true));
+    this.ruleFormHosts = { provider, domain, error, findings, create, close };
+    provider.addEventListener('change', () => {
+      form.provider = accessGroupsText(provider.value);
+      this.updateRuleFindings();
+    });
+    domain.addEventListener('input', () => {
+      form.domain = accessGroupsText(domain.value);
+      form.error = null;
+      this.updateRuleFindings();
+    });
+    this.formKeys([provider, domain], () => this.closeRuleForm(true));
+    host.replaceChildren(
+      this.el('div', { className: 'bg-base-100 rounded-lg p-4 mt-4 grid gap-x-6 gap-y-3 md:grid-cols-2 min-w-0', attrs: { 'data-access-groups-rule-form': '' } }, [
+        this.formField('rag-access-groups-rule-provider', this.t('mapping.col.source'), provider),
+        this.formField('rag-access-groups-rule-domain', this.t('rules.form.domain'), domain, [error]),
+        findings,
+        this.el('div', { className: 'md:col-span-2 flex flex-wrap gap-2' }, [create, close]),
+      ]),
+    );
+    this.updateRuleFindings();
+  }
+
+  ruleFormState() {
+    const form = this.ruleForm;
+    const missing = [];
+    if (!ACCESS_GROUPS_PROVIDERS.includes(form.provider)) missing.push(this.t('mapping.col.source'));
+    if (!form.domain.trim()) missing.push(this.t('rules.form.domain'));
+    const normalized = accessGroupsNormalizeDomain(form.domain);
+    const bad = Boolean(form.domain.trim()) && !normalized;
+    return { missing, normalized, bad, valid: missing.length === 0 && !bad };
+  }
+
+  updateRuleFindings() {
+    const h = this.ruleFormHosts;
+    if (!h) return;
+    const form = this.ruleForm;
+    const state = this.ruleFormState();
+    h.findings.textContent = state.missing.length ? this.t('rules.need', { fields: this.joinFields(state.missing) }) : '';
+    const message = form.error || (state.bad ? this.t('rules.badDomain') : '');
+    h.error.textContent = message;
+    if (message) h.domain.setAttribute('aria-invalid', 'true');
+    else h.domain.removeAttribute('aria-invalid');
+    h.domain.classList.toggle('input-error', Boolean(message));
+    h.create.disabled = !state.valid || form.busy;
+  }
+
+  async createRule() {
+    const h = this.ruleFormHosts;
+    const form = this.ruleForm;
+    const state = this.ruleFormState();
+    if (!h || form.busy || !state.valid) return;
+    const ui = accessGroupsUiLib();
+    form.busy = true;
+    const restore = ui.ragUiButtonBusy(this.doc, h.create, this.t('create.running'), [h.close]);
+    let result;
+    try {
+      result = await this.request(ACCESS_GROUPS_PATH + '/sharing-rules' + this.orgQuery(), {
+        method: 'POST',
+        body: JSON.stringify({ provider: form.provider, kind: 'domain', domain: state.normalized }),
+      });
+    } finally {
+      form.busy = false;
+      restore();
+    }
+    if (this.ruleForm !== form) return;
+    if (result && result.ok) {
+      const rule = { kind: 'domain', domain: state.normalized, provider: form.provider };
+      const message = this.t('rules.created', { rule: accessGroupsRuleText(rule, this.locale), source: accessGroupsProviderName(form.provider) });
+      this.closeRuleForm(false);
+      await this.loadRules('quiet');
+      this.announce(message);
+      this.focusStatus();
+      return;
+    }
+    const mapped = mapAccessGroupsError(result, this.locale, { write: true, unavailable: this.mappingUnavailable() });
+    if (mapped.kind === 'field' && mapped.field === 'domain') {
+      form.error = mapped.message;
+      this.updateRuleFindings();
+      this.announce(mapped.message, true);
+      h.domain.focus();
+      return;
+    }
+    this.updateRuleFindings();
+    this.announce(mapped.message, true);
+    if (mapped.reload) {
+      await this.loadRules('quiet');
+      this.announce(mapped.message, true);
+    }
   }
 
   selectMapping() {
@@ -3957,6 +5076,16 @@ if (typeof module !== 'undefined' && module.exports) {
     accessGroupsFieldFindings,
     accessGroupsAccessBody,
     accessGroupsSourceLabel,
+    accessGroupsProviderName,
+    buildAccessGroupsMappingRow,
+    buildAccessGroupsMappingList,
+    accessGroupsMappingKindLabel,
+    accessGroupsMappingAction,
+    buildAccessGroupsRuleRow,
+    buildAccessGroupsRulesList,
+    accessGroupsRuleText,
+    accessGroupsNormalizeDomain,
+    accessGroupsMappingFindings,
     AccessGroupsAudienceField,
     AccessGroupsPanel,
     initAccessGroupsPanel,

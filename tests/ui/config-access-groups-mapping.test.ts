@@ -376,7 +376,9 @@ describe('Connector mapping sub-view (D-20, UI-SPEC 6.5, 7.2)', () => {
     const rows = page.rows();
     expect(rows.map((r) => r.querySelector('code')!.textContent)).toEqual(['group-x@example.org', 'workspace-1', 'dbgid:AAA']);
     const first = page.row('group-x@example.org');
-    expect(first.textContent).toContain('Not mapped');
+    const badge = first.querySelector('[data-access-groups-not-mapped]')!;
+    expect(badge.textContent).toBe('Not mapped');
+    expect(badge.className).toContain('badge-warning badge-outline');
     expect(first.textContent).toContain('Google Drive');
     expect(first.textContent).toContain('Group');
     expect(first.querySelector('[data-access-groups-mapping-documents]')!.textContent).toBe('9');
@@ -385,7 +387,7 @@ describe('Connector mapping sub-view (D-20, UI-SPEC 6.5, 7.2)', () => {
     expect(code.className).toContain('break-all');
     expect(code.getAttribute('translate')).toBe('no');
     expect(page.row('workspace-1').textContent).toContain('Whole workspace');
-    expect(page.row('dbgid:AAA').textContent).not.toContain('Not mapped');
+    expect(page.row('dbgid:AAA').querySelector('[data-access-groups-not-mapped]')).toBeNull();
     expect(page.panel().querySelector('[data-access-groups-mapping-note]')).toBeNull();
   });
 
