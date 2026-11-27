@@ -25,7 +25,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from rag_sidecar.contracts.baseline import NoiseConfig
 
-from rag_eval.metrics import TEMPLATED_CATEGORY
+from rag_eval.metrics import TEMPLATED_CATEGORY, report_gate_items
 from rag_eval.paired import _bootstrap_interval, item_metrics
 from rag_eval.paths import REPO_ROOT, resolve_cli_path
 from rag_eval.phase33_gate import (
@@ -86,13 +86,16 @@ class HeaderAbResult(BaseModel):
 
 
 def _slice_items(output: RunOutput, slice_name: str):
+    """The gated items of a slice: the items the report's slice metrics count (gated split and population)."""
+    report = output.report
+    gated = report_gate_items(report.items, report.golden_filter.gate_split, report.gate_population)
     kind, _, name = slice_name.partition(":")
     if slice_name == "overall":
-        return list(output.report.items)
+        return gated
     field = {"category": "category", "language": "language"}.get(kind)
     if field is None:
         raise InputError(f"unsupported slice {slice_name}; use overall, category:<name> or language:<code>")
-    return [item for item in output.report.items if getattr(item, field) == name]
+    return [item for item in gated if getattr(item, field) == name]
 
 
 def _slice_value(output: RunOutput, slice_name: str, metric: str) -> tuple[float | None, int]:
