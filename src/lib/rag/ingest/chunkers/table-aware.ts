@@ -1,7 +1,7 @@
 import { buildEmbeddingText } from '../text/embedding-text';
 import { countTokens } from '../text/tokens';
 import type { ChunkDraft, ChunkResult } from '../types';
-import { chunkSection, splitSections, type MarkdownChunkOptions } from './markdown-sections';
+import { chunkSection, fitSectionPath, splitSections, type MarkdownChunkOptions } from './markdown-sections';
 import { splitTableBlocks, type TableBlock } from './markdown-tables';
 
 /** A piece of a section that is packed into chunks as a whole. */
@@ -46,11 +46,12 @@ export function tableSegments(
 
 /** Chunks the body lines of one section: tables by rows under their header, text as markdown_sections does. */
 export function chunkTableSection(
-  path: string[],
+  fullPath: string[],
   lines: readonly string[],
   options: MarkdownChunkOptions,
   warnings: Set<string>,
 ): ChunkDraft[] {
+  const path = fitSectionPath(fullPath, options.maxTokens);
   const chunks: ChunkDraft[] = [];
   const fits = (content: string): boolean =>
     countTokens(buildEmbeddingText({ section_path: path, content })) <= options.maxTokens;

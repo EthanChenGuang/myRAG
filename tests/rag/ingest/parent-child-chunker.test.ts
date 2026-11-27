@@ -120,6 +120,15 @@ describe('parent-child chunker', () => {
     }
   });
 
+  it('structure mode keeps children whole under a heading that is a whole paragraph', () => {
+    const paragraphHeading = Array.from({ length: 120 }, (_, i) => `run on heading text ${i}`).join(' ');
+    const body = Array.from({ length: 40 }, (_, i) => `Plain body sentence ${i} of the sample section text.`).join(' ');
+    const result = chunkParentChild(['# Part', '', `## ${paragraphHeading}`, '', body, ''].join('\n'), STRUCTURE_256, SECTIONS);
+    const bodyTokens = countTokens(body);
+    expect(result.children.length).toBeLessThanOrEqual(Math.ceil(bodyTokens / 100) + 1);
+    expect(result.children.every((child) => embeddingTokens(child) <= STRUCTURE_256.childTokens)).toBe(true);
+  });
+
   it('is deterministic and numbers parents from zero', () => {
     const first = chunkParentChild(`${LONG_CLAUSE}\n`, STRUCTURE_256, LEGAL);
     const second = chunkParentChild(`${LONG_CLAUSE}\n`, STRUCTURE_256, LEGAL);

@@ -2,7 +2,7 @@ import { legacyBlockSplitter, type BlockSplitter } from '@/lib/rag/lang/sentence
 import { countTokens } from '../text/tokens';
 import type { ChunkDraft } from '../types';
 import { CHUNKERS, ChunkerUnavailableError, type ChunkerConfig } from './index';
-import { chunkMarkdownSections, type MarkdownChunkOptions } from './markdown-sections';
+import { chunkMarkdownSections, fitSectionPath, type MarkdownChunkOptions } from './markdown-sections';
 import { carryTableHeaders, markCarriedChunks, type TableHeaderCarry } from './markdown-tables';
 import { chunkTableSection } from './table-aware';
 
@@ -59,7 +59,7 @@ function fixedParents(markdown: string, cap: number, sentences: BlockSplitter): 
 
 /** Children of one parent: text packed to the child budget, tables by whole rows with the header row repeated. */
 function childrenOf(parent: ParentDraft, options: MarkdownChunkOptions, warnings: Set<string>): ChunkDraft[] {
-  return chunkTableSection(parent.section_path, parent.content.split('\n'), options, warnings);
+  return chunkTableSection(fitSectionPath(parent.section_path, options.maxTokens), parent.content.split('\n'), options, warnings);
 }
 
 /**
@@ -126,8 +126,9 @@ export function chunkParentChild(
 
   const children: ChildDraft[] = [];
   for (const parent of parents) {
+    const childPath = fitSectionPath(parent.section_path, childOptions.maxTokens);
     for (const draft of childrenOf(parent, childOptions, warnings)) {
-      children.push({ ...draft, section_path: [...parent.section_path], parent_index: parent.parent_index });
+      children.push({ ...draft, section_path: [...childPath], parent_index: parent.parent_index });
     }
   }
   return { parents, children: mark(children), warnings: [...warnings] };
