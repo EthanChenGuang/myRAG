@@ -56,6 +56,9 @@ import {
   readGenerationConfig,
   repairOwnerMembership,
   resolveTenantScope,
+  accessGroupsEnabled,
+  bodyNamesAccessGroups,
+  resolveAccessScope,
   runRetrieval,
   scheduleAnswerFinish,
   scopeKey,
@@ -1282,6 +1285,8 @@ export async function POST(req: Request) {
 
   try {
     const requestBody = await req.json();
+    // D-06: groups never come from the body; a claim is ignored and logged once per request
+    if (bodyNamesAccessGroups(requestBody)) console.warn('[RAG Access] body_group_claim_ignored', { route: 'chat' });
     const { messages: rawMessages, data, imageStorage }: {
       messages: APIMessage[],
       data?: {
@@ -1371,7 +1376,24 @@ export async function POST(req: Request) {
         tenant.status === 403 ? 'Forbidden' : tenant.status === 401 ? 'Unauthorized' : 'Workspace verification unavailable';
       return NextResponse.json({ error }, { status: tenant.status });
     }
-    const scope: TenantScope | null = tenant.scope;
+    let scope: TenantScope | null = tenant.scope;
+
+    // D-05, D-06: the access groups come from the verified session only (anonymous without one, e.g. WhatsApp webhook posts). A refusal
+    // keeps the scope unresolved, so runRetrieval fails closed with status error and the knowledge-base failure path below applies (D-10).
+    if (scope && accessGroupsEnabled()) {
+      let sessionUserId: string | null = null;
+      try {
+        sessionUserId = (await getSessionUser())?.id ?? null;
+      } catch {
+        sessionUserId = null;
+      }
+      const access = await resolveAccessScope({
+        scope,
+        identity: sessionUserId ? { kind: 'user', userId: sessionUserId } : { kind: 'anonymous' },
+        signal: req.signal,
+      });
+      if (access.ok) scope = access.scope;
+    }
 
     // D-39: a scopes filter narrows only the verified tenant, and only with values of that tenant's vocabulary
     if (retrievalFilters?.scopes) {

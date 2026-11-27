@@ -29,6 +29,11 @@ function accessGroupsOn(): boolean {
   return loadRagConfig(getRagDeps().ragEnv()).accessGroups === 'on';
 }
 
+/** D-09: whether RAG_DOC_ACCESS_GROUPS is on, for a route that would otherwise look up an identity it does not need while off. */
+export function accessGroupsEnabled(): boolean {
+  return accessGroupsOn();
+}
+
 /** A-14 seam 1: the scope's access filter; an unattached scope is off while the switch is off and throws while it is on. */
 export function scopeAccessFilter(scope: TenantScope): ScopeAccessFilter {
   assertTenantScope(scope);
@@ -196,6 +201,11 @@ export function accessScopeTiming(scope: TenantScope): number | null {
   const access = scope.access;
   if (access === undefined) return null;
   return timings.get(access) ?? null;
+}
+
+/** D-07: the embed identity's group key, from RAG_EMBED_ACCESS_GROUP only; empty means visitors see documents labelled all. */
+export function embedAccessGroup(): string {
+  return loadRagConfig(getRagDeps().ragEnv()).embedAccessGroup;
 }
 
 /** D-06: whether a raw request body names groups at the top level (the route ignores the value and logs once). */
