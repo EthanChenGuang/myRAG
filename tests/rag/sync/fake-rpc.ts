@@ -388,3 +388,31 @@ export function createFakeRpc(clock: FakeClock, options: { target?: string } = {
 }
 
 export { NIL };
+
+/**
+ * The same client, but every scalar answer comes back as one row keyed by the function name, as the PGlite fake edge sends it
+ * (`SELECT * FROM fn(...)`); real PostgREST sends the bare value. Product code must read both.
+ */
+export function keyedScalarClient(client: RpcClient): RpcClient {
+  return {
+    rpc(fn: string, args: Record<string, unknown>): RpcRequest {
+      const inner = client.rpc(fn, args);
+      const request: RpcRequest = {
+        abortSignal(signal) {
+          inner.abortSignal(signal);
+          return request;
+        },
+        then(onFulfilled, onRejected) {
+          return Promise.resolve(inner)
+            .then((response): RpcResponse => {
+              const { data } = response;
+              const scalar = data !== null && data !== undefined && typeof data !== 'object';
+              return scalar ? { ...response, data: [{ [fn]: data }] } : response;
+            })
+            .then(onFulfilled, onRejected);
+        },
+      };
+      return request;
+    },
+  };
+}

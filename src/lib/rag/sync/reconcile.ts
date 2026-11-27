@@ -7,7 +7,7 @@ import {
   type ReconcileReport,
   type VectorSyncSliceReport,
 } from '@/lib/rag-eval/contracts.generated';
-import { readSyncProfiles, type SyncProfile } from './claim';
+import { readSyncProfiles, scalarCount, scalarValue, type SyncProfile } from './claim';
 import { logVectorSync, type VectorSyncLogSink } from './log';
 import type { StoreScanPoint, VectorStore } from './stores/types';
 import { traceVectorSync, type VectorSyncTraceOptions } from './trace';
@@ -180,21 +180,21 @@ async function enqueueRepair(
   rpc: RpcClient,
   args: { target: string; entity: 'chunk' | 'document' | 'tenant'; entityId: string; tenantKey: string; profileId: string },
 ): Promise<number> {
-  const [n] = await call(rpc, 'rag_vector_sync_enqueue_repair', {
+  const rows = await call(rpc, 'rag_vector_sync_enqueue_repair', {
     p_target: args.target,
     p_entity: args.entity,
     p_entity_id: args.entityId,
     p_tenant_key: args.tenantKey,
     p_profile_id: args.profileId,
   });
-  return Number(n ?? 0);
+  return scalarCount(rows, 'rag_vector_sync_enqueue_repair');
 }
 
 async function setState(
   rpc: RpcClient,
   args: { target: string; profileId: string; tenantKey: string; state: 'ready' | 'stale' | 'failed'; supabaseCount: number | null; backendCount: number | null; error: string | null },
 ): Promise<ReconcileReport['state']> {
-  const [state] = await call(rpc, 'rag_set_backend_index_state', {
+  const rows = await call(rpc, 'rag_set_backend_index_state', {
     p_target: args.target,
     p_profile_id: args.profileId,
     p_tenant_key: args.tenantKey,
@@ -203,6 +203,7 @@ async function setState(
     p_backend_count: args.backendCount,
     p_error: args.error,
   });
+  const state = scalarValue(rows, 'rag_set_backend_index_state');
   return state === 'building' || state === 'ready' || state === 'stale' || state === 'failed' ? state : args.state;
 }
 
@@ -356,8 +357,7 @@ export async function reconcileSlice(options: ReconcileSliceOptions): Promise<Re
   const stores = new Map<string, VectorStore>();
   for (const store of options.stores) stores.set(store.target, store);
 
-  const [prunedRaw] = await call(rpc, 'rag_vector_sync_prune', { p_days: RECONCILE_PRUNE_DAYS });
-  const pruned = Number(prunedRaw ?? 0);
+  const pruned = scalarCount(await call(rpc, 'rag_vector_sync_prune', { p_days: RECONCILE_PRUNE_DAYS }), 'rag_vector_sync_prune');
 
   const profiles = [...(await readSyncProfiles(rpc))].sort((a, b) => (a.profile_id < b.profile_id ? -1 : 1));
   const candidates: Candidate[] = [];
