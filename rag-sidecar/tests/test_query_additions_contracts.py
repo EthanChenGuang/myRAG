@@ -33,7 +33,7 @@ def _rejects(model: Any, data: dict[str, Any]) -> bool:
 # --- query.py -----------------------------------------------------------------------------------------------------
 
 
-def test_sub_question_filter_accepts_exactly_the_four_fields():
+def test_sub_question_filter_accepts_exactly_the_allowlisted_fields():
     sub_filter = _symbol("query", "SubQuestionFilter")
     value = sub_filter.model_validate(
         {
@@ -44,7 +44,19 @@ def test_sub_question_filter_accepts_exactly_the_four_fields():
         }
     )
     assert value.scopes == {"region": ["north"]}
-    assert set(sub_filter.model_fields) == {"date_range", "scopes", "doc_types", "languages"}
+    assert value.versions is None
+    assert set(sub_filter.model_fields) == {"date_range", "scopes", "doc_types", "languages", "versions"}
+
+
+@pytest.mark.parametrize("versions", ["current", "all", {"from": "2023-01-01"}, {"from": "2023-01-01", "to": "2024-12-31"}])
+def test_sub_question_filter_versions_takes_the_ret11_values(versions):
+    """06.2-25 (P-17): versions reuses the RET-11 VersionScope; a range needs a bound and ordered bounds."""
+    sub_filter = _symbol("query", "SubQuestionFilter")
+    base = {"date_range": None, "scopes": None, "doc_types": None, "languages": None}
+    assert sub_filter.model_validate({**base, "versions": versions}).versions is not None
+    for bad in ("superseded", {}, {"from": "2024-01-01", "to": "2023-01-01"}):
+        with pytest.raises(ValidationError):
+            sub_filter.model_validate({**base, "versions": bad})
 
 
 @pytest.mark.parametrize(
