@@ -12,6 +12,8 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'placeholder-service-role-key';
 process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'http://127.0.0.1:9';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= 'placeholder-anon-key';
 const { drawWeeklySample, sampleStatus, sampleTenants } = await import('@/lib/rag/monitor/sample');
+const { storeDriftReport } = await import('@/lib/rag/monitor/drift-store');
+const { loadMonitorAlertsConfig } = await import('@/lib/rag/monitor/alerts-config');
 
 const MODES: DeploymentMode[] = ['multi-tenant', 'single-tenant'];
 const DIM = 8;
@@ -77,6 +79,10 @@ function serviceClient(db: PGlite): SupabaseClient {
         },
         lt(column: string, value: unknown) {
           where.push(`${ident(column)} < ${bind(value)}`);
+          return builder;
+        },
+        neq(column: string, value: unknown) {
+          where.push(`${ident(column)} <> ${bind(value)}`);
           return builder;
         },
         in(column: string, values: unknown[]) {
@@ -362,6 +368,49 @@ for (const mode of MODES) {
         assert.ok(rows.filter((row) => row.source === 'pilot').every((row) => row.user_id === pilot));
         assert.ok(rows.filter((row) => row.source === 'representative').every((row) => row.user_id !== pilot && !row.stratum.startsWith('c-03|')));
         assert.equal(await count(db, 'rag_review_items WHERE tenant_key = $1', [tenantB]), 0);
+      });
+
+      test('a posted drift report names the under-covered cluster, raises one alert and the next sample draws drift_fill from it (SC 8)', async () => {
+        const owner = await createUser(db);
+        const org = await createOrg(db, owner);
+        const tenant = `o:${org}`;
+        await writeClusterSet(db, tenant);
+        const config = loadMonitorAlertsConfig();
+        assert.ok(config);
+        const report = {
+          week: '2026-W47',
+          divergence: 0.3,
+          null_p95: 0.05,
+          state: 'ok',
+          limits: { warn: 0.1, alert: 0.2, gap: 0.15 },
+          clusters: [
+            { id: 'c-03', production_share: 0.3, test_share: 0.02, test_items: 1, state: 'ok' },
+            { id: 'c-01', production_share: 0.7, test_share: 0.98, test_items: 60, state: 'ok' },
+          ],
+        };
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const stored = await storeDriftReport(admin, { tenantKey: tenant, report, config: config!, monitorOn: true, channels: [], now: NOW });
+          assert.equal(stored.ok, true);
+          if (stored.ok) assert.equal(stored.state, 'alert');
+        }
+        const weekly = (await db.query<{ state: string; report: { clusters: Array<{ id: string; state: string }> } }>(
+          'SELECT state, report FROM rag_drift_weekly WHERE tenant_key = $1', [tenant])).rows;
+        assert.equal(weekly.length, 1);
+        assert.equal(weekly[0]?.state, 'alert');
+        assert.deepEqual(weekly[0]?.report.clusters.map((c) => [c.id, c.state]), [['c-03', 'under'], ['c-01', 'off']]);
+        const alerts = (await db.query<{ rule: string; cluster_ids: string[] }>(
+          'SELECT rule, cluster_ids FROM rag_monitor_alerts WHERE tenant_key = $1', [tenant])).rows;
+        assert.deepEqual(alerts, [{ rule: 'test_set_not_representative', cluster_ids: ['c-03'] }]);
+
+        for (let g = 0; g < 4; g += 1) await insertLog(db, { userId: owner, orgId: org, topic: g, count: 30, at: lastWeek, label: `d${g}` });
+        const result = await drawWeeklySample(admin, { tenantKey: tenant, now: NOW, embed: fakeEmbed, env: ON });
+        assert.equal(result.written, true);
+        if (!result.written) return;
+        assert.equal(result.by_source.drift_fill, 15);
+        const fill = (await db.query<{ stratum: string }>(
+          "SELECT stratum FROM rag_review_item_strata WHERE tenant_key = $1 AND source = 'drift_fill'", [tenant])).rows;
+        assert.equal(fill.length, 15);
+        assert.ok(fill.every((row) => row.stratum.startsWith('c-03|')));
       });
     }
   });
