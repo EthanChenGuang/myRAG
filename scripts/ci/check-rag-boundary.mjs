@@ -427,6 +427,14 @@ const inLangchainDir = (rel) => rel.startsWith(LANGCHAIN_DIR);
 const outsideSelfTests = (rel) => !rel.startsWith(SELF_TEST_DIR);
 const everywhere = () => true;
 
+const EVAL_HARNESS_DIR = 'eval/harness';
+// A relative spec is resolved against the importing file; any other spec names the directory as written.
+function reachesEvalHarness(rel, spec) {
+  const target = spec.startsWith('.') ? path.posix.normalize(path.posix.join(path.posix.dirname(rel), spec)) : spec.replace(/^\/+/, '');
+  if (spec.startsWith('.')) return target === EVAL_HARNESS_DIR || target.startsWith(`${EVAL_HARNESS_DIR}/`);
+  return new RegExp(`(?:^|/)${EVAL_HARNESS_DIR}(?:/|$)`).test(target);
+}
+
 export const RULES = [
   {
     id: 'embeddings-call',
@@ -669,6 +677,12 @@ export const RULES = [
     description: 'query-LLM client imported outside src/lib/rag/query/ and deps.ts, or an ai generate/stream call in src/lib/rag/query/ outside llm.ts (D-13)',
     appliesTo: everywhere,
     find: findQueryLlmCall,
+  },
+  {
+    id: 'eval-harness-import',
+    description: 'src/ must not import eval/harness (the eval harness and its fakes stay out of the app bundle)',
+    appliesTo: inSrc,
+    find: (text, rel) => importMatches(text, ({ spec }) => (reachesEvalHarness(rel, spec) ? spec : null)),
   },
   {
     id: 'zod-v4',
