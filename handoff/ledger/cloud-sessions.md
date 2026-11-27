@@ -906,3 +906,10 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - Reserved quicks dispatched: 261127-idn (neutral id names) and 261127-rbm (new rebuild mechanism for the 3 switches).
 - 23:52Z NF-1: full rag-db suite about halfway, 0 failures; fix f13f6428 pushed.
 - 23:53Z quick-44-gate-diag DONE exec/quick-44-gate-diag 3f47d40f -> train 41. G2 rerun: (b) FAIL with 4 offenders, incl. scanned ingest R@10. G1 diag: the cause is BM25 IDF (the flood passage is copied into 30 docs); not ties, not dedupe. Possible fix: cluster-aware DF. OWNER choice pending: A override, or keep not_flipped and plan cluster-aware DF (recommended). Archived.
+- 23:54Z VERIFY 3.3: PASS_WITH_GAPS (verify/03.3 721587f1). Security SECURED.
+  - G1: 03.3-25 is already on t40; after merging, run phase_compare and the phase33_gate.
+  - G2: TPL-09 owner decision, best decided by the 03.3-26 real check.
+  - G3/4/5/8/9/10 -> quick-33-fixes.
+  - G7 is already fixed by 1010 (t39).
+  - Archived.
+- 23:54Z PR #136 attempt 2: ts-db 3/10 cancelled again; already commented on the PR. Wait for the timeout fix to reach main, then merge main into fix/composer-comet.
