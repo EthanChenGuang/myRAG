@@ -5,9 +5,9 @@
     "tenant": 3
   },
   "counts": {
-    "answerable": 259,
+    "answerable": 310,
     "cross_lingual": 34,
-    "dev_answerable": 162,
+    "dev_answerable": 194,
     "near_miss": 46,
     "out_of_domain": 6
   },
@@ -17,9 +17,9 @@
     "d34_all": {
       "answerable_below": {
         "by_pair": {
-          "en->en": 3,
+          "en->en": 2,
           "it->it": 1,
-          "zh->zh": 8
+          "zh->zh": 9
         },
         "total": 12
       },
@@ -39,15 +39,15 @@
         "ids": [],
         "total": 0
       },
-      "threshold": 0.045
+      "threshold": 0.047
     },
     "doc_type": {
       "answerable_below": {
         "by_pair": {
           "en->en": 2,
-          "zh->zh": 9
+          "zh->zh": 10
         },
-        "total": 11
+        "total": 12
       },
       "centroids": 5,
       "cross_lingual_below": {
@@ -62,14 +62,9 @@
         "total": 3
       },
       "out_of_domain_below": {
-        "by_language": {
-          "en": 2
-        },
-        "ids": [
-          "en-no-answer-003",
-          "en-no-answer-004"
-        ],
-        "total": 2
+        "by_language": {},
+        "ids": [],
+        "total": 0
       },
       "threshold": 0.035
     },
@@ -77,9 +72,10 @@
       "answerable_below": {
         "by_pair": {
           "en->en": 3,
-          "zh->zh": 7
+          "it->it": 1,
+          "zh->zh": 9
         },
-        "total": 10
+        "total": 13
       },
       "centroids": 10,
       "cross_lingual_below": {
@@ -97,55 +93,25 @@
         "ids": [],
         "total": 0
       },
-      "threshold": 0.044
+      "threshold": 0.047
     },
     "tenant": {
       "answerable_below": {
         "by_pair": {
           "en->en": 1,
-          "zh->zh": 7
+          "zh->zh": 11
         },
-        "total": 8
+        "total": 12
       },
       "centroids": 1,
       "cross_lingual_below": {
         "max_over_variants": 0,
-        "original_only": 5
+        "original_only": 6
       },
       "near_miss_below": {
         "by_language": {
-          "it": 1
-        },
-        "total": 1
-      },
-      "out_of_domain_below": {
-        "by_language": {
+          "it": 1,
           "zh": 1
-        },
-        "ids": [
-          "zh-no-answer-003"
-        ],
-        "total": 1
-      },
-      "threshold": -0.006
-    },
-    "tenant_language": {
-      "answerable_below": {
-        "by_pair": {
-          "en->en": 2,
-          "it->it": 1,
-          "zh->zh": 10
-        },
-        "total": 13
-      },
-      "centroids": 3,
-      "cross_lingual_below": {
-        "max_over_variants": 0,
-        "original_only": 5
-      },
-      "near_miss_below": {
-        "by_language": {
-          "zh": 2
         },
         "total": 2
       },
@@ -158,7 +124,36 @@
         ],
         "total": 1
       },
-      "threshold": 0.017
+      "threshold": -0.002
+    },
+    "tenant_language": {
+      "answerable_below": {
+        "by_pair": {
+          "en->en": 3,
+          "it->it": 1,
+          "zh->zh": 8
+        },
+        "total": 12
+      },
+      "centroids": 3,
+      "cross_lingual_below": {
+        "max_over_variants": 0,
+        "original_only": 4
+      },
+      "near_miss_below": {
+        "by_language": {},
+        "total": 0
+      },
+      "out_of_domain_below": {
+        "by_language": {
+          "zh": 1
+        },
+        "ids": [
+          "zh-no-answer-003"
+        ],
+        "total": 1
+      },
+      "threshold": 0.018
     }
   },
   "items": [
@@ -170,8 +165,8 @@
         "d34_all": 0.056,
         "doc_type": 0.056,
         "doc_type_language": 0.056,
-        "tenant": 0.005,
-        "tenant_language": 0.012
+        "tenant": 0.004,
+        "tenant_language": 0.013
       },
       "split": "dev"
     },
@@ -183,8 +178,8 @@
         "d34_all": 0.089,
         "doc_type": 0.086,
         "doc_type_language": 0.089,
-        "tenant": 0.052,
-        "tenant_language": 0.083
+        "tenant": 0.06,
+        "tenant_language": 0.084
       },
       "split": "dev"
     },
@@ -196,8 +191,8 @@
         "d34_all": 0.11,
         "doc_type": 0.11,
         "doc_type_language": 0.11,
-        "tenant": 0.051,
-        "tenant_language": 0.053
+        "tenant": 0.052,
+        "tenant_language": 0.056
       },
       "split": "test"
     },
@@ -209,8 +204,8 @@
         "d34_all": 0.258,
         "doc_type": 0.156,
         "doc_type_language": 0.258,
-        "tenant": 0.051,
-        "tenant_language": 0.049
+        "tenant": 0.052,
+        "tenant_language": 0.05
       },
       "split": "dev"
     },
@@ -222,8 +217,8 @@
         "d34_all": 0.149,
         "doc_type": 0.125,
         "doc_type_language": 0.149,
-        "tenant": 0.03,
-        "tenant_language": 0.059
+        "tenant": 0.026,
+        "tenant_language": 0.05
       },
       "split": "dev"
     },
@@ -235,8 +230,8 @@
         "d34_all": 0.066,
         "doc_type": 0.066,
         "doc_type_language": 0.066,
-        "tenant": 0.015,
-        "tenant_language": 0.021
+        "tenant": 0.021,
+        "tenant_language": 0.029
       },
       "split": "dev"
     },
@@ -248,8 +243,8 @@
         "d34_all": 0.062,
         "doc_type": 0.062,
         "doc_type_language": 0.062,
-        "tenant": 0.038,
-        "tenant_language": 0.051
+        "tenant": 0.04,
+        "tenant_language": 0.054
       },
       "split": "dev"
     },
@@ -261,8 +256,8 @@
         "d34_all": 0.113,
         "doc_type": 0.113,
         "doc_type_language": 0.113,
-        "tenant": 0.073,
-        "tenant_language": 0.081
+        "tenant": 0.075,
+        "tenant_language": 0.086
       },
       "split": "test"
     },
@@ -274,8 +269,8 @@
         "d34_all": 0.082,
         "doc_type": 0.082,
         "doc_type_language": 0.082,
-        "tenant": 0.07,
-        "tenant_language": 0.058
+        "tenant": 0.071,
+        "tenant_language": 0.06
       },
       "split": "dev"
     },
@@ -287,8 +282,8 @@
         "d34_all": 0.083,
         "doc_type": 0.052,
         "doc_type_language": 0.083,
-        "tenant": 0.044,
-        "tenant_language": 0.053
+        "tenant": 0.036,
+        "tenant_language": 0.057
       },
       "split": "dev"
     },
@@ -300,8 +295,8 @@
         "d34_all": 0.099,
         "doc_type": 0.076,
         "doc_type_language": 0.099,
-        "tenant": 0.012,
-        "tenant_language": 0.035
+        "tenant": 0.018,
+        "tenant_language": 0.04
       },
       "split": "dev"
     },
@@ -313,8 +308,8 @@
         "d34_all": 0.121,
         "doc_type": 0.121,
         "doc_type_language": 0.121,
-        "tenant": 0.106,
-        "tenant_language": 0.093
+        "tenant": 0.107,
+        "tenant_language": 0.094
       },
       "split": "dev"
     },
@@ -323,11 +318,11 @@
       "id": "en-colloquial-002",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.098,
+        "d34_all": 0.101,
         "doc_type": 0.083,
-        "doc_type_language": 0.094,
-        "tenant": 0.081,
-        "tenant_language": 0.098
+        "doc_type_language": 0.098,
+        "tenant": 0.085,
+        "tenant_language": 0.101
       },
       "split": "dev"
     },
@@ -336,11 +331,11 @@
       "id": "en-colloquial-term-001",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.151,
-        "doc_type": 0.119,
-        "doc_type_language": 0.147,
-        "tenant": 0.123,
-        "tenant_language": 0.151
+        "d34_all": 0.154,
+        "doc_type": 0.12,
+        "doc_type_language": 0.151,
+        "tenant": 0.124,
+        "tenant_language": 0.154
       },
       "split": "dev"
     },
@@ -349,11 +344,11 @@
       "id": "en-colloquial-term-002",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.142,
-        "doc_type": 0.111,
-        "doc_type_language": 0.14,
-        "tenant": 0.113,
-        "tenant_language": 0.142
+        "d34_all": 0.144,
+        "doc_type": 0.11,
+        "doc_type_language": 0.142,
+        "tenant": 0.112,
+        "tenant_language": 0.144
       },
       "split": "dev"
     },
@@ -362,11 +357,11 @@
       "id": "en-colloquial-term-003",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.141,
-        "doc_type": 0.11,
-        "doc_type_language": 0.139,
-        "tenant": 0.111,
-        "tenant_language": 0.141
+        "d34_all": 0.142,
+        "doc_type": 0.108,
+        "doc_type_language": 0.141,
+        "tenant": 0.109,
+        "tenant_language": 0.142
       },
       "split": "dev"
     },
@@ -375,11 +370,11 @@
       "id": "en-colloquial-term-004",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.149,
+        "d34_all": 0.151,
         "doc_type": 0.121,
-        "doc_type_language": 0.146,
+        "doc_type_language": 0.148,
         "tenant": 0.122,
-        "tenant_language": 0.149
+        "tenant_language": 0.151
       },
       "split": "test"
     },
@@ -388,11 +383,11 @@
       "id": "en-colloquial-term-005",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.107,
-        "doc_type": 0.068,
-        "doc_type_language": 0.105,
-        "tenant": 0.07,
-        "tenant_language": 0.107
+        "d34_all": 0.106,
+        "doc_type": 0.065,
+        "doc_type_language": 0.103,
+        "tenant": 0.066,
+        "tenant_language": 0.106
       },
       "split": "dev"
     },
@@ -401,11 +396,11 @@
       "id": "en-compound-001",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.044,
+        "d34_all": 0.047,
         "doc_type": 0.039,
-        "doc_type_language": 0.041,
-        "tenant": 0.031,
-        "tenant_language": 0.044
+        "doc_type_language": 0.045,
+        "tenant": 0.033,
+        "tenant_language": 0.047
       },
       "split": "dev"
     },
@@ -417,8 +412,8 @@
         "d34_all": 0.255,
         "doc_type": 0.189,
         "doc_type_language": 0.255,
-        "tenant": 0.047,
-        "tenant_language": 0.048
+        "tenant": 0.054,
+        "tenant_language": 0.052
       },
       "split": "dev"
     },
@@ -430,8 +425,8 @@
         "d34_all": 0.164,
         "doc_type": 0.164,
         "doc_type_language": 0.164,
-        "tenant": 0.101,
-        "tenant_language": 0.093
+        "tenant": 0.105,
+        "tenant_language": 0.098
       },
       "split": "dev"
     },
@@ -443,8 +438,8 @@
         "d34_all": 0.145,
         "doc_type": 0.145,
         "doc_type_language": 0.145,
-        "tenant": 0.075,
-        "tenant_language": 0.078
+        "tenant": 0.082,
+        "tenant_language": 0.081
       },
       "split": "test"
     },
@@ -457,7 +452,33 @@
         "doc_type": 0.149,
         "doc_type_language": 0.161,
         "tenant": 0.085,
-        "tenant_language": 0.102
+        "tenant_language": 0.103
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-context-overflow-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.129,
+        "doc_type": 0.095,
+        "doc_type_language": 0.127,
+        "tenant": 0.097,
+        "tenant_language": 0.129
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-context-overflow-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.108,
+        "doc_type": 0.097,
+        "doc_type_language": 0.104,
+        "tenant": 0.074,
+        "tenant_language": 0.108
       },
       "split": "dev"
     },
@@ -467,9 +488,9 @@
       "pair": "en->en",
       "scores": {
         "d34_all": 0.306,
-        "doc_type": 0.297,
+        "doc_type": 0.291,
         "doc_type_language": 0.306,
-        "tenant": 0.295,
+        "tenant": 0.289,
         "tenant_language": 0.305
       },
       "split": "dev"
@@ -479,11 +500,11 @@
       "id": "en-duplicate-flood-002",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.272,
-        "doc_type": 0.248,
-        "doc_type_language": 0.272,
-        "tenant": 0.246,
-        "tenant_language": 0.272
+        "d34_all": 0.27,
+        "doc_type": 0.247,
+        "doc_type_language": 0.27,
+        "tenant": 0.245,
+        "tenant_language": 0.269
       },
       "split": "dev"
     },
@@ -492,11 +513,11 @@
       "id": "en-duplicate-flood-003",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.321,
-        "doc_type": 0.262,
-        "doc_type_language": 0.321,
-        "tenant": 0.26,
-        "tenant_language": 0.321
+        "d34_all": 0.318,
+        "doc_type": 0.261,
+        "doc_type_language": 0.318,
+        "tenant": 0.258,
+        "tenant_language": 0.317
       },
       "split": "test"
     },
@@ -508,8 +529,8 @@
         "d34_all": 0.264,
         "doc_type": 0.204,
         "doc_type_language": 0.264,
-        "tenant": 0.035,
-        "tenant_language": 0.043
+        "tenant": 0.049,
+        "tenant_language": 0.052
       },
       "split": "dev"
     },
@@ -522,7 +543,7 @@
         "doc_type": 0.151,
         "doc_type_language": 0.26,
         "tenant": 0.034,
-        "tenant_language": 0.032
+        "tenant_language": 0.033
       },
       "split": "dev"
     },
@@ -534,8 +555,8 @@
         "d34_all": 0.189,
         "doc_type": 0.117,
         "doc_type_language": 0.189,
-        "tenant": 0.053,
-        "tenant_language": 0.062
+        "tenant": 0.048,
+        "tenant_language": 0.06
       },
       "split": "dev"
     },
@@ -544,11 +565,11 @@
       "id": "en-general-001",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.047,
+        "d34_all": 0.05,
         "doc_type": 0.036,
-        "doc_type_language": 0.046,
-        "tenant": 0.033,
-        "tenant_language": 0.047
+        "doc_type_language": 0.049,
+        "tenant": 0.036,
+        "tenant_language": 0.05
       },
       "split": "dev"
     },
@@ -560,8 +581,8 @@
         "d34_all": 0.066,
         "doc_type": 0.074,
         "doc_type_language": 0.066,
-        "tenant": 0.03,
-        "tenant_language": 0.033
+        "tenant": 0.035,
+        "tenant_language": 0.037
       },
       "split": "dev"
     },
@@ -574,7 +595,7 @@
         "doc_type": 0.103,
         "doc_type_language": 0.103,
         "tenant": 0.039,
-        "tenant_language": 0.046
+        "tenant_language": 0.05
       },
       "split": "test"
     },
@@ -586,8 +607,8 @@
         "d34_all": 0.126,
         "doc_type": 0.103,
         "doc_type_language": 0.126,
-        "tenant": 0.048,
-        "tenant_language": 0.06
+        "tenant": 0.051,
+        "tenant_language": 0.061
       },
       "split": "dev"
     },
@@ -599,8 +620,8 @@
         "d34_all": 0.053,
         "doc_type": 0.053,
         "doc_type_language": 0.053,
-        "tenant": 0.001,
-        "tenant_language": 0.027
+        "tenant": 0.004,
+        "tenant_language": 0.03
       },
       "split": "dev"
     },
@@ -612,7 +633,7 @@
         "d34_all": 0.123,
         "doc_type": 0.123,
         "doc_type_language": 0.123,
-        "tenant": 0.081,
+        "tenant": 0.077,
         "tenant_language": 0.059
       },
       "split": "dev"
@@ -625,8 +646,8 @@
         "d34_all": 0.089,
         "doc_type": 0.089,
         "doc_type_language": 0.089,
-        "tenant": 0.027,
-        "tenant_language": 0.026
+        "tenant": 0.03,
+        "tenant_language": 0.029
       },
       "split": "dev"
     },
@@ -636,10 +657,10 @@
       "pair": "en->en",
       "scores": {
         "d34_all": 0.048,
-        "doc_type": 0.043,
+        "doc_type": 0.042,
         "doc_type_language": 0.048,
-        "tenant": 0.046,
-        "tenant_language": 0.046
+        "tenant": 0.037,
+        "tenant_language": 0.041
       },
       "split": "dev"
     },
@@ -651,8 +672,8 @@
         "d34_all": 0.068,
         "doc_type": 0.067,
         "doc_type_language": 0.068,
-        "tenant": 0.053,
-        "tenant_language": 0.063
+        "tenant": 0.048,
+        "tenant_language": 0.058
       },
       "split": "test"
     },
@@ -664,8 +685,8 @@
         "d34_all": 0.064,
         "doc_type": 0.062,
         "doc_type_language": 0.064,
-        "tenant": 0.016,
-        "tenant_language": 0.021
+        "tenant": 0.011,
+        "tenant_language": 0.018
       },
       "split": "dev"
     },
@@ -677,8 +698,8 @@
         "d34_all": 0.062,
         "doc_type": 0.057,
         "doc_type_language": 0.062,
-        "tenant": 0.05,
-        "tenant_language": 0.048
+        "tenant": 0.045,
+        "tenant_language": 0.046
       },
       "split": "dev"
     },
@@ -687,11 +708,11 @@
       "id": "en-implicit-condition-001",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.083,
-        "doc_type": 0.078,
-        "doc_type_language": 0.08,
-        "tenant": 0.08,
-        "tenant_language": 0.083
+        "d34_all": 0.085,
+        "doc_type": 0.081,
+        "doc_type_language": 0.082,
+        "tenant": 0.083,
+        "tenant_language": 0.085
       },
       "split": "test"
     },
@@ -700,11 +721,11 @@
       "id": "en-implicit-condition-002",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.13,
+        "d34_all": 0.135,
         "doc_type": 0.105,
-        "doc_type_language": 0.124,
-        "tenant": 0.091,
-        "tenant_language": 0.13
+        "doc_type_language": 0.128,
+        "tenant": 0.099,
+        "tenant_language": 0.135
       },
       "split": "dev"
     },
@@ -716,8 +737,8 @@
         "d34_all": 0.071,
         "doc_type": 0.071,
         "doc_type_language": 0.071,
-        "tenant": 0.029,
-        "tenant_language": 0.045
+        "tenant": 0.033,
+        "tenant_language": 0.048
       },
       "split": "test"
     },
@@ -729,8 +750,8 @@
         "d34_all": 0.069,
         "doc_type": 0.075,
         "doc_type_language": 0.069,
-        "tenant": 0.054,
-        "tenant_language": 0.065
+        "tenant": 0.047,
+        "tenant_language": 0.052
       },
       "split": "dev"
     },
@@ -742,8 +763,8 @@
         "d34_all": 0.104,
         "doc_type": 0.073,
         "doc_type_language": 0.104,
-        "tenant": 0.037,
-        "tenant_language": 0.04
+        "tenant": 0.035,
+        "tenant_language": 0.038
       },
       "split": "test"
     },
@@ -752,11 +773,11 @@
       "id": "en-injection-002",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.065,
-        "doc_type": 0.082,
-        "doc_type_language": 0.065,
-        "tenant": 0.078,
-        "tenant_language": 0.064
+        "d34_all": 0.07,
+        "doc_type": 0.081,
+        "doc_type_language": 0.07,
+        "tenant": 0.077,
+        "tenant_language": 0.068
       },
       "split": "dev"
     },
@@ -768,8 +789,8 @@
         "d34_all": 0.086,
         "doc_type": 0.09,
         "doc_type_language": 0.086,
-        "tenant": 0.045,
-        "tenant_language": 0.047
+        "tenant": 0.047,
+        "tenant_language": 0.049
       },
       "split": "dev"
     },
@@ -778,11 +799,11 @@
       "id": "en-injection-004",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.147,
-        "doc_type": 0.089,
-        "doc_type_language": 0.145,
-        "tenant": 0.09,
-        "tenant_language": 0.147
+        "d34_all": 0.145,
+        "doc_type": 0.088,
+        "doc_type_language": 0.144,
+        "tenant": 0.089,
+        "tenant_language": 0.145
       },
       "split": "test"
     },
@@ -794,8 +815,8 @@
         "d34_all": 0.069,
         "doc_type": 0.04,
         "doc_type_language": 0.069,
-        "tenant": 0.024,
-        "tenant_language": 0.028
+        "tenant": 0.032,
+        "tenant_language": 0.029
       },
       "split": "dev"
     },
@@ -807,8 +828,8 @@
         "d34_all": 0.047,
         "doc_type": 0.052,
         "doc_type_language": 0.047,
-        "tenant": 0.024,
-        "tenant_language": 0.038
+        "tenant": 0.033,
+        "tenant_language": 0.04
       },
       "split": "dev"
     },
@@ -820,8 +841,8 @@
         "d34_all": 0.123,
         "doc_type": 0.119,
         "doc_type_language": 0.123,
-        "tenant": 0.049,
-        "tenant_language": 0.057
+        "tenant": 0.058,
+        "tenant_language": 0.063
       },
       "split": "dev"
     },
@@ -830,11 +851,11 @@
       "id": "en-injection-evasive-004",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.057,
+        "d34_all": 0.059,
         "doc_type": 0.049,
-        "doc_type_language": 0.056,
+        "doc_type_language": 0.058,
         "tenant": 0.048,
-        "tenant_language": 0.057
+        "tenant_language": 0.059
       },
       "split": "dev"
     },
@@ -843,11 +864,11 @@
       "id": "en-injection-evasive-005",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.099,
-        "doc_type": 0.102,
-        "doc_type_language": 0.097,
-        "tenant": 0.103,
-        "tenant_language": 0.099
+        "d34_all": 0.101,
+        "doc_type": 0.109,
+        "doc_type_language": 0.1,
+        "tenant": 0.109,
+        "tenant_language": 0.101
       },
       "split": "dev"
     },
@@ -857,10 +878,205 @@
       "pair": "en->en",
       "scores": {
         "d34_all": 0.1,
-        "doc_type": 0.074,
+        "doc_type": 0.077,
         "doc_type_language": 0.1,
-        "tenant": 0.076,
-        "tenant_language": 0.064
+        "tenant": 0.078,
+        "tenant_language": 0.066
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.092,
+        "doc_type": 0.097,
+        "doc_type_language": 0.092,
+        "tenant": 0.085,
+        "tenant_language": 0.086
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.079,
+        "doc_type": 0.081,
+        "doc_type_language": 0.077,
+        "tenant": 0.085,
+        "tenant_language": 0.079
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.095,
+        "doc_type": 0.104,
+        "doc_type_language": 0.091,
+        "tenant": 0.098,
+        "tenant_language": 0.095
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-004",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.107,
+        "doc_type": 0.113,
+        "doc_type_language": 0.107,
+        "tenant": 0.082,
+        "tenant_language": 0.098
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-005",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.065,
+        "doc_type": 0.073,
+        "doc_type_language": 0.063,
+        "tenant": 0.057,
+        "tenant_language": 0.065
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-006",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.084,
+        "doc_type": 0.095,
+        "doc_type_language": 0.084,
+        "tenant": 0.061,
+        "tenant_language": 0.074
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-007",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.13,
+        "doc_type": 0.101,
+        "doc_type_language": 0.13,
+        "tenant": 0.094,
+        "tenant_language": 0.09
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-008",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.117,
+        "doc_type": 0.101,
+        "doc_type_language": 0.117,
+        "tenant": 0.108,
+        "tenant_language": 0.097
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-009",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.095,
+        "doc_type": 0.093,
+        "doc_type_language": 0.095,
+        "tenant": 0.077,
+        "tenant_language": 0.068
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-010",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.09,
+        "doc_type": 0.087,
+        "doc_type_language": 0.086,
+        "tenant": 0.091,
+        "tenant_language": 0.09
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-011",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.069,
+        "doc_type": 0.071,
+        "doc_type_language": 0.067,
+        "tenant": 0.074,
+        "tenant_language": 0.069
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-012",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.076,
+        "doc_type": 0.085,
+        "doc_type_language": 0.076,
+        "tenant": 0.09,
+        "tenant_language": 0.074
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-013",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.181,
+        "doc_type": 0.129,
+        "doc_type_language": 0.181,
+        "tenant": 0.088,
+        "tenant_language": 0.097
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-014",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.196,
+        "doc_type": 0.122,
+        "doc_type_language": 0.196,
+        "tenant": 0.089,
+        "tenant_language": 0.09
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-015",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.182,
+        "doc_type": 0.109,
+        "doc_type_language": 0.182,
+        "tenant": 0.083,
+        "tenant_language": 0.087
       },
       "split": "test"
     },
@@ -869,11 +1085,11 @@
       "id": "en-no-answer-001",
       "pair": "en",
       "scores": {
-        "d34_all": 0.051,
-        "doc_type": 0.045,
-        "doc_type_language": 0.05,
-        "tenant": 0.046,
-        "tenant_language": 0.051
+        "d34_all": 0.058,
+        "doc_type": 0.051,
+        "doc_type_language": 0.056,
+        "tenant": 0.052,
+        "tenant_language": 0.058
       },
       "split": "dev"
     },
@@ -885,8 +1101,8 @@
         "d34_all": 0.4,
         "doc_type": 0.245,
         "doc_type_language": 0.4,
-        "tenant": 0.064,
-        "tenant_language": 0.065
+        "tenant": 0.066,
+        "tenant_language": 0.069
       },
       "split": "dev"
     },
@@ -895,10 +1111,10 @@
       "id": "en-no-answer-003",
       "pair": "en",
       "scores": {
-        "d34_all": 0.047,
-        "doc_type": 0.028,
-        "doc_type_language": 0.047,
-        "tenant": 0.029,
+        "d34_all": 0.048,
+        "doc_type": 0.039,
+        "doc_type_language": 0.048,
+        "tenant": 0.039,
         "tenant_language": 0.046
       },
       "split": "dev"
@@ -908,11 +1124,11 @@
       "id": "en-no-answer-004",
       "pair": "en",
       "scores": {
-        "d34_all": 0.06,
-        "doc_type": 0.032,
-        "doc_type_language": 0.059,
-        "tenant": 0.033,
-        "tenant_language": 0.06
+        "d34_all": 0.056,
+        "doc_type": 0.037,
+        "doc_type_language": 0.056,
+        "tenant": 0.037,
+        "tenant_language": 0.056
       },
       "split": "test"
     },
@@ -924,8 +1140,8 @@
         "d34_all": 0.239,
         "doc_type": 0.168,
         "doc_type_language": 0.239,
-        "tenant": 0.092,
-        "tenant_language": 0.141
+        "tenant": 0.091,
+        "tenant_language": 0.142
       },
       "split": "dev"
     },
@@ -937,8 +1153,8 @@
         "d34_all": 0.066,
         "doc_type": 0.065,
         "doc_type_language": 0.066,
-        "tenant": 0.048,
-        "tenant_language": 0.064
+        "tenant": 0.055,
+        "tenant_language": 0.065
       },
       "split": "test"
     },
@@ -950,8 +1166,8 @@
         "d34_all": 0.107,
         "doc_type": 0.104,
         "doc_type_language": 0.107,
-        "tenant": 0.053,
-        "tenant_language": 0.078
+        "tenant": 0.059,
+        "tenant_language": 0.082
       },
       "split": "dev"
     },
@@ -963,8 +1179,8 @@
         "d34_all": 0.063,
         "doc_type": 0.063,
         "doc_type_language": 0.063,
-        "tenant": 0.047,
-        "tenant_language": 0.047
+        "tenant": 0.051,
+        "tenant_language": 0.051
       },
       "split": "dev"
     },
@@ -976,8 +1192,8 @@
         "d34_all": 0.171,
         "doc_type": 0.135,
         "doc_type_language": 0.171,
-        "tenant": 0.087,
-        "tenant_language": 0.115
+        "tenant": 0.09,
+        "tenant_language": 0.116
       },
       "split": "dev"
     },
@@ -989,8 +1205,8 @@
         "d34_all": 0.207,
         "doc_type": 0.126,
         "doc_type_language": 0.207,
-        "tenant": 0.085,
-        "tenant_language": 0.074
+        "tenant": 0.076,
+        "tenant_language": 0.061
       },
       "split": "dev"
     },
@@ -1002,7 +1218,7 @@
         "d34_all": 0.049,
         "doc_type": 0.041,
         "doc_type_language": 0.049,
-        "tenant": 0.005,
+        "tenant": 0.001,
         "tenant_language": 0.024
       },
       "split": "dev"
@@ -1015,8 +1231,8 @@
         "d34_all": 0.069,
         "doc_type": 0.061,
         "doc_type_language": 0.069,
-        "tenant": 0.033,
-        "tenant_language": 0.037
+        "tenant": 0.029,
+        "tenant_language": 0.038
       },
       "split": "test"
     },
@@ -1028,8 +1244,8 @@
         "d34_all": 0.078,
         "doc_type": 0.052,
         "doc_type_language": 0.078,
-        "tenant": 0.039,
-        "tenant_language": 0.037
+        "tenant": 0.037,
+        "tenant_language": 0.036
       },
       "split": "dev"
     },
@@ -1038,11 +1254,11 @@
       "id": "en-no-answer-014",
       "pair": "en",
       "scores": {
-        "d34_all": 0.073,
-        "doc_type": 0.077,
-        "doc_type_language": 0.07,
-        "tenant": 0.079,
-        "tenant_language": 0.073
+        "d34_all": 0.078,
+        "doc_type": 0.082,
+        "doc_type_language": 0.074,
+        "tenant": 0.084,
+        "tenant_language": 0.078
       },
       "split": "dev"
     },
@@ -1054,8 +1270,8 @@
         "d34_all": 0.119,
         "doc_type": 0.102,
         "doc_type_language": 0.119,
-        "tenant": 0.043,
-        "tenant_language": 0.042
+        "tenant": 0.039,
+        "tenant_language": 0.038
       },
       "split": "dev"
     },
@@ -1067,8 +1283,8 @@
         "d34_all": 0.121,
         "doc_type": 0.121,
         "doc_type_language": 0.121,
-        "tenant": 0.08,
-        "tenant_language": 0.1
+        "tenant": 0.087,
+        "tenant_language": 0.102
       },
       "split": "dev"
     },
@@ -1077,11 +1293,11 @@
       "id": "en-no-answer-017",
       "pair": "en",
       "scores": {
-        "d34_all": 0.098,
-        "doc_type": 0.101,
-        "doc_type_language": 0.096,
-        "tenant": 0.101,
-        "tenant_language": 0.098
+        "d34_all": 0.097,
+        "doc_type": 0.104,
+        "doc_type_language": 0.095,
+        "tenant": 0.105,
+        "tenant_language": 0.097
       },
       "split": "dev"
     },
@@ -1090,11 +1306,11 @@
       "id": "en-no_answer-term-001",
       "pair": "en",
       "scores": {
-        "d34_all": 0.104,
-        "doc_type": 0.083,
-        "doc_type_language": 0.1,
-        "tenant": 0.086,
-        "tenant_language": 0.104
+        "d34_all": 0.109,
+        "doc_type": 0.089,
+        "doc_type_language": 0.106,
+        "tenant": 0.092,
+        "tenant_language": 0.109
       },
       "split": "test"
     },
@@ -1103,11 +1319,11 @@
       "id": "en-partial-answer-001",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.144,
-        "doc_type": 0.127,
+        "d34_all": 0.145,
+        "doc_type": 0.134,
         "doc_type_language": 0.141,
-        "tenant": 0.132,
-        "tenant_language": 0.144
+        "tenant": 0.139,
+        "tenant_language": 0.145
       },
       "split": "test"
     },
@@ -1119,8 +1335,8 @@
         "d34_all": 0.019,
         "doc_type": 0.007,
         "doc_type_language": 0.019,
-        "tenant": -0.036,
-        "tenant_language": 0.008
+        "tenant": -0.032,
+        "tenant_language": 0.011
       },
       "split": "test"
     },
@@ -1132,7 +1348,7 @@
         "d34_all": 0.058,
         "doc_type": 0.058,
         "doc_type_language": 0.058,
-        "tenant": 0.056,
+        "tenant": 0.058,
         "tenant_language": 0.054
       },
       "split": "dev"
@@ -1145,8 +1361,8 @@
         "d34_all": 0.113,
         "doc_type": 0.079,
         "doc_type_language": 0.113,
-        "tenant": 0.044,
-        "tenant_language": 0.041
+        "tenant": 0.057,
+        "tenant_language": 0.05
       },
       "split": "dev"
     },
@@ -1158,8 +1374,8 @@
         "d34_all": 0.234,
         "doc_type": 0.227,
         "doc_type_language": 0.234,
-        "tenant": 0.027,
-        "tenant_language": 0.066
+        "tenant": 0.028,
+        "tenant_language": 0.065
       },
       "split": "dev"
     },
@@ -1171,8 +1387,8 @@
         "d34_all": 0.288,
         "doc_type": 0.256,
         "doc_type_language": 0.288,
-        "tenant": 0.011,
-        "tenant_language": 0.036
+        "tenant": 0.013,
+        "tenant_language": 0.035
       },
       "split": "dev"
     },
@@ -1185,7 +1401,7 @@
         "doc_type": 0.26,
         "doc_type_language": 0.26,
         "tenant": 0.086,
-        "tenant_language": 0.111
+        "tenant_language": 0.115
       },
       "split": "dev"
     },
@@ -1197,8 +1413,8 @@
         "d34_all": 0.289,
         "doc_type": 0.289,
         "doc_type_language": 0.289,
-        "tenant": 0.08,
-        "tenant_language": 0.089
+        "tenant": 0.089,
+        "tenant_language": 0.1
       },
       "split": "test"
     },
@@ -1210,8 +1426,8 @@
         "d34_all": 0.125,
         "doc_type": 0.125,
         "doc_type_language": 0.125,
-        "tenant": 0.031,
-        "tenant_language": 0.026
+        "tenant": 0.03,
+        "tenant_language": 0.025
       },
       "split": "dev"
     },
@@ -1223,8 +1439,8 @@
         "d34_all": 0.139,
         "doc_type": 0.139,
         "doc_type_language": 0.139,
-        "tenant": 0.094,
-        "tenant_language": 0.074
+        "tenant": 0.088,
+        "tenant_language": 0.071
       },
       "split": "test"
     },
@@ -1233,11 +1449,11 @@
       "id": "en-stale-version-001",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.109,
-        "doc_type": 0.092,
-        "doc_type_language": 0.109,
-        "tenant": 0.091,
-        "tenant_language": 0.108
+        "d34_all": 0.108,
+        "doc_type": 0.09,
+        "doc_type_language": 0.108,
+        "tenant": 0.089,
+        "tenant_language": 0.107
       },
       "split": "dev"
     },
@@ -1246,11 +1462,11 @@
       "id": "en-stale-version-002",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.084,
-        "doc_type": 0.09,
-        "doc_type_language": 0.08,
-        "tenant": 0.092,
-        "tenant_language": 0.084
+        "d34_all": 0.089,
+        "doc_type": 0.091,
+        "doc_type_language": 0.085,
+        "tenant": 0.093,
+        "tenant_language": 0.089
       },
       "split": "dev"
     },
@@ -1272,11 +1488,11 @@
       "id": "en-stale-version-004",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.121,
-        "doc_type": 0.095,
-        "doc_type_language": 0.116,
-        "tenant": 0.098,
-        "tenant_language": 0.121
+        "d34_all": 0.125,
+        "doc_type": 0.098,
+        "doc_type_language": 0.12,
+        "tenant": 0.102,
+        "tenant_language": 0.125
       },
       "split": "dev"
     },
@@ -1288,8 +1504,8 @@
         "d34_all": 0.156,
         "doc_type": 0.123,
         "doc_type_language": 0.156,
-        "tenant": 0.044,
-        "tenant_language": 0.063
+        "tenant": 0.042,
+        "tenant_language": 0.061
       },
       "split": "dev"
     },
@@ -1301,8 +1517,8 @@
         "d34_all": 0.241,
         "doc_type": 0.142,
         "doc_type_language": 0.241,
-        "tenant": 0.043,
-        "tenant_language": 0.047
+        "tenant": 0.041,
+        "tenant_language": 0.043
       },
       "split": "dev"
     },
@@ -1314,8 +1530,8 @@
         "d34_all": 0.063,
         "doc_type": 0.043,
         "doc_type_language": 0.063,
-        "tenant": 0.014,
-        "tenant_language": 0.02
+        "tenant": 0.009,
+        "tenant_language": 0.017
       },
       "split": "dev"
     },
@@ -1327,8 +1543,8 @@
         "d34_all": 0.111,
         "doc_type": 0.111,
         "doc_type_language": 0.111,
-        "tenant": 0.07,
-        "tenant_language": 0.079
+        "tenant": 0.056,
+        "tenant_language": 0.063
       },
       "split": "dev"
     },
@@ -1337,11 +1553,11 @@
       "id": "en-typo-001",
       "pair": "en->en",
       "scores": {
-        "d34_all": 0.033,
-        "doc_type": 0.031,
-        "doc_type_language": 0.033,
-        "tenant": 0.03,
-        "tenant_language": 0.033
+        "d34_all": 0.034,
+        "doc_type": 0.032,
+        "doc_type_language": 0.034,
+        "tenant": 0.031,
+        "tenant_language": 0.034
       },
       "split": "dev"
     },
@@ -1353,8 +1569,8 @@
         "d34_all": 0.095,
         "doc_type": 0.095,
         "doc_type_language": 0.095,
-        "tenant": 0.04,
-        "tenant_language": 0.041
+        "tenant": 0.048,
+        "tenant_language": 0.047
       },
       "split": "dev"
     },
@@ -1363,11 +1579,11 @@
       "id": "it-ambiguous-001",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.092,
+        "d34_all": 0.089,
         "doc_type": 0.066,
-        "doc_type_language": 0.088,
-        "tenant": 0.052,
-        "tenant_language": 0.092
+        "doc_type_language": 0.086,
+        "tenant": 0.054,
+        "tenant_language": 0.089
       },
       "split": "dev"
     },
@@ -1377,10 +1593,10 @@
       "pair": "it->it",
       "scores": {
         "d34_all": 0.12,
-        "doc_type": 0.098,
+        "doc_type": 0.1,
         "doc_type_language": 0.12,
-        "tenant": 0.102,
-        "tenant_language": 0.112
+        "tenant": 0.104,
+        "tenant_language": 0.116
       },
       "split": "dev"
     },
@@ -1392,7 +1608,7 @@
         "d34_all": 0.216,
         "doc_type": 0.134,
         "doc_type_language": 0.216,
-        "tenant": 0.054,
+        "tenant": 0.051,
         "tenant_language": 0.049
       },
       "split": "dev"
@@ -1405,7 +1621,7 @@
         "d34_all": 0.168,
         "doc_type": 0.146,
         "doc_type_language": 0.168,
-        "tenant": 0.08,
+        "tenant": 0.09,
         "tenant_language": 0.093
       },
       "split": "dev"
@@ -1415,11 +1631,11 @@
       "id": "it-cache-near-miss-003",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.125,
+        "d34_all": 0.127,
         "doc_type": 0.126,
-        "doc_type_language": 0.122,
-        "tenant": 0.046,
-        "tenant_language": 0.125
+        "doc_type_language": 0.124,
+        "tenant": 0.044,
+        "tenant_language": 0.127
       },
       "split": "test"
     },
@@ -1431,8 +1647,8 @@
         "d34_all": 0.097,
         "doc_type": 0.069,
         "doc_type_language": 0.097,
-        "tenant": 0.052,
-        "tenant_language": 0.064
+        "tenant": 0.059,
+        "tenant_language": 0.075
       },
       "split": "dev"
     },
@@ -1442,10 +1658,10 @@
       "pair": "it->it",
       "scores": {
         "d34_all": 0.07,
-        "doc_type": 0.06,
+        "doc_type": 0.061,
         "doc_type_language": 0.07,
-        "tenant": 0.062,
-        "tenant_language": 0.069
+        "tenant": 0.063,
+        "tenant_language": 0.07
       },
       "split": "dev"
     },
@@ -1457,8 +1673,8 @@
         "d34_all": 0.092,
         "doc_type": 0.061,
         "doc_type_language": 0.092,
-        "tenant": 0.06,
-        "tenant_language": 0.077
+        "tenant": 0.062,
+        "tenant_language": 0.079
       },
       "split": "dev"
     },
@@ -1470,8 +1686,8 @@
         "d34_all": 0.275,
         "doc_type": 0.18,
         "doc_type_language": 0.275,
-        "tenant": 0.055,
-        "tenant_language": 0.106
+        "tenant": 0.062,
+        "tenant_language": 0.109
       },
       "split": "dev"
     },
@@ -1483,8 +1699,8 @@
         "d34_all": 0.132,
         "doc_type": 0.083,
         "doc_type_language": 0.132,
-        "tenant": 0.057,
-        "tenant_language": 0.113
+        "tenant": 0.062,
+        "tenant_language": 0.12
       },
       "split": "dev"
     },
@@ -1496,8 +1712,8 @@
         "d34_all": 0.236,
         "doc_type": 0.146,
         "doc_type_language": 0.236,
-        "tenant": 0.107,
-        "tenant_language": 0.145
+        "tenant": 0.111,
+        "tenant_language": 0.151
       },
       "split": "test"
     },
@@ -1509,8 +1725,8 @@
         "d34_all": 0.161,
         "doc_type": 0.095,
         "doc_type_language": 0.161,
-        "tenant": 0.07,
-        "tenant_language": 0.095
+        "tenant": 0.075,
+        "tenant_language": 0.097
       },
       "split": "dev"
     },
@@ -1520,10 +1736,10 @@
       "pair": "it->it",
       "scores": {
         "d34_all": 0.168,
-        "doc_type": 0.135,
+        "doc_type": 0.138,
         "doc_type_language": 0.168,
-        "tenant": 0.135,
-        "tenant_language": 0.133
+        "tenant": 0.148,
+        "tenant_language": 0.141
       },
       "split": "dev"
     },
@@ -1535,8 +1751,8 @@
         "d34_all": 0.084,
         "doc_type": 0.084,
         "doc_type_language": 0.084,
-        "tenant": 0.065,
-        "tenant_language": 0.057
+        "tenant": 0.07,
+        "tenant_language": 0.063
       },
       "split": "dev"
     },
@@ -1548,8 +1764,8 @@
         "d34_all": 0.076,
         "doc_type": 0.062,
         "doc_type_language": 0.076,
-        "tenant": 0.058,
-        "tenant_language": 0.053
+        "tenant": 0.064,
+        "tenant_language": 0.06
       },
       "split": "dev"
     },
@@ -1559,10 +1775,10 @@
       "pair": "it->it",
       "scores": {
         "d34_all": 0.064,
-        "doc_type": 0.064,
+        "doc_type": 0.065,
         "doc_type_language": 0.064,
-        "tenant": 0.059,
-        "tenant_language": 0.056
+        "tenant": 0.064,
+        "tenant_language": 0.061
       },
       "split": "dev"
     },
@@ -1572,10 +1788,10 @@
       "pair": "it->it",
       "scores": {
         "d34_all": 0.084,
-        "doc_type": 0.072,
+        "doc_type": 0.083,
         "doc_type_language": 0.084,
-        "tenant": 0.077,
-        "tenant_language": 0.068
+        "tenant": 0.087,
+        "tenant_language": 0.075
       },
       "split": "dev"
     },
@@ -1585,10 +1801,10 @@
       "pair": "it->it",
       "scores": {
         "d34_all": 0.125,
-        "doc_type": 0.08,
+        "doc_type": 0.084,
         "doc_type_language": 0.125,
-        "tenant": 0.084,
-        "tenant_language": 0.089
+        "tenant": 0.09,
+        "tenant_language": 0.093
       },
       "split": "dev"
     },
@@ -1597,11 +1813,11 @@
       "id": "it-compound-001",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.102,
-        "doc_type": 0.088,
-        "doc_type_language": 0.099,
-        "tenant": 0.09,
-        "tenant_language": 0.102
+        "d34_all": 0.103,
+        "doc_type": 0.092,
+        "doc_type_language": 0.101,
+        "tenant": 0.094,
+        "tenant_language": 0.103
       },
       "split": "dev"
     },
@@ -1613,8 +1829,8 @@
         "d34_all": 0.394,
         "doc_type": 0.316,
         "doc_type_language": 0.394,
-        "tenant": 0.112,
-        "tenant_language": 0.11
+        "tenant": 0.123,
+        "tenant_language": 0.12
       },
       "split": "test"
     },
@@ -1626,8 +1842,8 @@
         "d34_all": 0.342,
         "doc_type": 0.205,
         "doc_type_language": 0.342,
-        "tenant": 0.111,
-        "tenant_language": 0.197
+        "tenant": 0.118,
+        "tenant_language": 0.214
       },
       "split": "test"
     },
@@ -1639,8 +1855,8 @@
         "d34_all": 0.284,
         "doc_type": 0.209,
         "doc_type_language": 0.284,
-        "tenant": 0.099,
-        "tenant_language": 0.123
+        "tenant": 0.104,
+        "tenant_language": 0.132
       },
       "split": "dev"
     },
@@ -1652,21 +1868,47 @@
         "d34_all": 0.251,
         "doc_type": 0.134,
         "doc_type_language": 0.251,
-        "tenant": 0.102,
-        "tenant_language": 0.134
+        "tenant": 0.106,
+        "tenant_language": 0.14
       },
       "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-context-overflow-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.122,
+        "doc_type": 0.09,
+        "doc_type_language": 0.119,
+        "tenant": 0.065,
+        "tenant_language": 0.122
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-context-overflow-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.114,
+        "doc_type": 0.071,
+        "doc_type_language": 0.111,
+        "tenant": 0.075,
+        "tenant_language": 0.114
+      },
+      "split": "dev"
     },
     {
       "class": "answerable",
       "id": "it-duplicate-flood-001",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.447,
-        "doc_type": 0.28,
-        "doc_type_language": 0.447,
-        "tenant": 0.278,
-        "tenant_language": 0.443
+        "d34_all": 0.437,
+        "doc_type": 0.278,
+        "doc_type_language": 0.437,
+        "tenant": 0.275,
+        "tenant_language": 0.432
       },
       "split": "test"
     },
@@ -1675,11 +1917,11 @@
       "id": "it-duplicate-flood-002",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.38,
-        "doc_type": 0.248,
-        "doc_type_language": 0.38,
-        "tenant": 0.245,
-        "tenant_language": 0.376
+        "d34_all": 0.368,
+        "doc_type": 0.242,
+        "doc_type_language": 0.368,
+        "tenant": 0.239,
+        "tenant_language": 0.363
       },
       "split": "dev"
     },
@@ -1688,11 +1930,11 @@
       "id": "it-duplicate-flood-005",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.486,
-        "doc_type": 0.303,
-        "doc_type_language": 0.486,
-        "tenant": 0.303,
-        "tenant_language": 0.483
+        "d34_all": 0.477,
+        "doc_type": 0.299,
+        "doc_type_language": 0.477,
+        "tenant": 0.298,
+        "tenant_language": 0.474
       },
       "split": "dev"
     },
@@ -1704,8 +1946,8 @@
         "d34_all": 0.252,
         "doc_type": 0.228,
         "doc_type_language": 0.252,
-        "tenant": 0.073,
-        "tenant_language": 0.146
+        "tenant": 0.09,
+        "tenant_language": 0.156
       },
       "split": "dev"
     },
@@ -1717,8 +1959,8 @@
         "d34_all": 0.245,
         "doc_type": 0.154,
         "doc_type_language": 0.245,
-        "tenant": 0.059,
-        "tenant_language": 0.051
+        "tenant": 0.056,
+        "tenant_language": 0.052
       },
       "split": "dev"
     },
@@ -1730,8 +1972,8 @@
         "d34_all": 0.299,
         "doc_type": 0.161,
         "doc_type_language": 0.299,
-        "tenant": 0.046,
-        "tenant_language": 0.078
+        "tenant": 0.045,
+        "tenant_language": 0.077
       },
       "split": "test"
     },
@@ -1741,9 +1983,9 @@
       "pair": "it->it",
       "scores": {
         "d34_all": 0.143,
-        "doc_type": 0.093,
+        "doc_type": 0.096,
         "doc_type_language": 0.143,
-        "tenant": 0.096,
+        "tenant": 0.098,
         "tenant_language": 0.123
       },
       "split": "dev"
@@ -1756,8 +1998,8 @@
         "d34_all": 0.348,
         "doc_type": 0.221,
         "doc_type_language": 0.348,
-        "tenant": 0.128,
-        "tenant_language": 0.16
+        "tenant": 0.137,
+        "tenant_language": 0.179
       },
       "split": "test"
     },
@@ -1769,8 +2011,8 @@
         "d34_all": 0.175,
         "doc_type": 0.109,
         "doc_type_language": 0.175,
-        "tenant": 0.064,
-        "tenant_language": 0.121
+        "tenant": 0.07,
+        "tenant_language": 0.13
       },
       "split": "dev"
     },
@@ -1782,8 +2024,8 @@
         "d34_all": 0.191,
         "doc_type": 0.114,
         "doc_type_language": 0.191,
-        "tenant": 0.044,
-        "tenant_language": 0.089
+        "tenant": 0.048,
+        "tenant_language": 0.094
       },
       "split": "dev"
     },
@@ -1795,8 +2037,8 @@
         "d34_all": 0.232,
         "doc_type": 0.121,
         "doc_type_language": 0.232,
-        "tenant": 0.094,
-        "tenant_language": 0.139
+        "tenant": 0.092,
+        "tenant_language": 0.14
       },
       "split": "test"
     },
@@ -1808,8 +2050,8 @@
         "d34_all": 0.23,
         "doc_type": 0.168,
         "doc_type_language": 0.23,
-        "tenant": 0.147,
-        "tenant_language": 0.165
+        "tenant": 0.148,
+        "tenant_language": 0.167
       },
       "split": "dev"
     },
@@ -1821,8 +2063,8 @@
         "d34_all": 0.164,
         "doc_type": 0.124,
         "doc_type_language": 0.164,
-        "tenant": 0.068,
-        "tenant_language": 0.114
+        "tenant": 0.081,
+        "tenant_language": 0.142
       },
       "split": "dev"
     },
@@ -1834,8 +2076,8 @@
         "d34_all": 0.084,
         "doc_type": 0.073,
         "doc_type_language": 0.084,
-        "tenant": 0.051,
-        "tenant_language": 0.054
+        "tenant": 0.056,
+        "tenant_language": 0.055
       },
       "split": "dev"
     },
@@ -1844,11 +2086,11 @@
       "id": "it-general-009",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.066,
+        "d34_all": 0.071,
         "doc_type": 0.056,
-        "doc_type_language": 0.063,
-        "tenant": 0.048,
-        "tenant_language": 0.066
+        "doc_type_language": 0.069,
+        "tenant": 0.054,
+        "tenant_language": 0.071
       },
       "split": "test"
     },
@@ -1857,11 +2099,11 @@
       "id": "it-general-010",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.053,
-        "doc_type": 0.05,
-        "doc_type_language": 0.052,
-        "tenant": 0.05,
-        "tenant_language": 0.053
+        "d34_all": 0.055,
+        "doc_type": 0.055,
+        "doc_type_language": 0.054,
+        "tenant": 0.055,
+        "tenant_language": 0.055
       },
       "split": "dev"
     },
@@ -1870,11 +2112,11 @@
       "id": "it-identifier-near-miss-001",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.056,
-        "doc_type": 0.038,
-        "doc_type_language": 0.056,
+        "d34_all": 0.05,
+        "doc_type": 0.037,
+        "doc_type_language": 0.05,
         "tenant": 0.037,
-        "tenant_language": 0.056
+        "tenant_language": 0.05
       },
       "split": "dev"
     },
@@ -1883,11 +2125,11 @@
       "id": "it-identifier-near-miss-002",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.044,
-        "doc_type": 0.039,
-        "doc_type_language": 0.044,
-        "tenant": 0.039,
-        "tenant_language": 0.044
+        "d34_all": 0.039,
+        "doc_type": 0.035,
+        "doc_type_language": 0.039,
+        "tenant": 0.036,
+        "tenant_language": 0.037
       },
       "split": "dev"
     },
@@ -1896,11 +2138,11 @@
       "id": "it-identifier-near-miss-003",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.064,
-        "doc_type": 0.063,
-        "doc_type_language": 0.064,
-        "tenant": 0.062,
-        "tenant_language": 0.063
+        "d34_all": 0.06,
+        "doc_type": 0.061,
+        "doc_type_language": 0.06,
+        "tenant": 0.06,
+        "tenant_language": 0.059
       },
       "split": "test"
     },
@@ -1909,11 +2151,11 @@
       "id": "it-identifier-near-miss-004",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.08,
-        "doc_type": 0.051,
-        "doc_type_language": 0.08,
-        "tenant": 0.052,
-        "tenant_language": 0.079
+        "d34_all": 0.078,
+        "doc_type": 0.048,
+        "doc_type_language": 0.078,
+        "tenant": 0.049,
+        "tenant_language": 0.074
       },
       "split": "dev"
     },
@@ -1925,8 +2167,8 @@
         "d34_all": 0.212,
         "doc_type": 0.127,
         "doc_type_language": 0.212,
-        "tenant": 0.088,
-        "tenant_language": 0.125
+        "tenant": 0.092,
+        "tenant_language": 0.128
       },
       "split": "dev"
     },
@@ -1938,8 +2180,8 @@
         "d34_all": 0.157,
         "doc_type": 0.155,
         "doc_type_language": 0.157,
-        "tenant": 0.119,
-        "tenant_language": 0.14
+        "tenant": 0.128,
+        "tenant_language": 0.147
       },
       "split": "test"
     },
@@ -1948,11 +2190,11 @@
       "id": "it-implicit-condition-003",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.142,
+        "d34_all": 0.145,
         "doc_type": 0.095,
-        "doc_type_language": 0.141,
-        "tenant": 0.09,
-        "tenant_language": 0.142
+        "doc_type_language": 0.142,
+        "tenant": 0.092,
+        "tenant_language": 0.145
       },
       "split": "dev"
     },
@@ -1964,8 +2206,8 @@
         "d34_all": 0.141,
         "doc_type": 0.141,
         "doc_type_language": 0.141,
-        "tenant": 0.062,
-        "tenant_language": 0.07
+        "tenant": 0.066,
+        "tenant_language": 0.075
       },
       "split": "dev"
     },
@@ -1977,8 +2219,8 @@
         "d34_all": 0.108,
         "doc_type": 0.098,
         "doc_type_language": 0.108,
-        "tenant": 0.086,
-        "tenant_language": 0.1
+        "tenant": 0.085,
+        "tenant_language": 0.106
       },
       "split": "test"
     },
@@ -1987,11 +2229,11 @@
       "id": "it-injection-002",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.136,
-        "doc_type": 0.131,
-        "doc_type_language": 0.133,
-        "tenant": 0.132,
-        "tenant_language": 0.136
+        "d34_all": 0.145,
+        "doc_type": 0.139,
+        "doc_type_language": 0.143,
+        "tenant": 0.14,
+        "tenant_language": 0.145
       },
       "split": "dev"
     },
@@ -2004,7 +2246,7 @@
         "doc_type": 0.07,
         "doc_type_language": 0.072,
         "tenant": 0.026,
-        "tenant_language": 0.03
+        "tenant_language": 0.037
       },
       "split": "test"
     },
@@ -2014,10 +2256,10 @@
       "pair": "it->it",
       "scores": {
         "d34_all": 0.157,
-        "doc_type": 0.118,
+        "doc_type": 0.12,
         "doc_type_language": 0.157,
         "tenant": 0.123,
-        "tenant_language": 0.149
+        "tenant_language": 0.152
       },
       "split": "dev"
     },
@@ -2026,11 +2268,11 @@
       "id": "it-injection-evasive-001",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.133,
+        "d34_all": 0.137,
         "doc_type": 0.094,
-        "doc_type_language": 0.129,
-        "tenant": 0.088,
-        "tenant_language": 0.133
+        "doc_type_language": 0.133,
+        "tenant": 0.095,
+        "tenant_language": 0.137
       },
       "split": "test"
     },
@@ -2039,11 +2281,11 @@
       "id": "it-injection-evasive-002",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.092,
+        "d34_all": 0.097,
         "doc_type": 0.09,
         "doc_type_language": 0.092,
-        "tenant": 0.041,
-        "tenant_language": 0.077
+        "tenant": 0.061,
+        "tenant_language": 0.097
       },
       "split": "dev"
     },
@@ -2055,8 +2297,8 @@
         "d34_all": 0.109,
         "doc_type": 0.104,
         "doc_type_language": 0.109,
-        "tenant": 0.066,
-        "tenant_language": 0.098
+        "tenant": 0.08,
+        "tenant_language": 0.106
       },
       "split": "dev"
     },
@@ -2066,9 +2308,9 @@
       "pair": "it->it",
       "scores": {
         "d34_all": 0.069,
-        "doc_type": 0.044,
-        "doc_type_language": 0.068,
-        "tenant": 0.042,
+        "doc_type": 0.056,
+        "doc_type_language": 0.069,
+        "tenant": 0.053,
         "tenant_language": 0.069
       },
       "split": "dev"
@@ -2081,8 +2323,8 @@
         "d34_all": 0.15,
         "doc_type": 0.157,
         "doc_type_language": 0.15,
-        "tenant": 0.069,
-        "tenant_language": 0.069
+        "tenant": 0.086,
+        "tenant_language": 0.087
       },
       "split": "test"
     },
@@ -2091,11 +2333,206 @@
       "id": "it-injection-evasive-006",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.117,
+        "d34_all": 0.12,
         "doc_type": 0.08,
+        "doc_type_language": 0.117,
+        "tenant": 0.085,
+        "tenant_language": 0.12
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.1,
+        "doc_type": 0.087,
+        "doc_type_language": 0.1,
+        "tenant": 0.087,
+        "tenant_language": 0.1
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.102,
+        "doc_type": 0.093,
+        "doc_type_language": 0.099,
+        "tenant": 0.09,
+        "tenant_language": 0.102
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.087,
+        "doc_type": 0.095,
+        "doc_type_language": 0.087,
+        "tenant": 0.081,
+        "tenant_language": 0.069
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.115,
+        "doc_type": 0.079,
         "doc_type_language": 0.114,
-        "tenant": 0.08,
+        "tenant": 0.069,
+        "tenant_language": 0.115
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-005",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.117,
+        "doc_type": 0.088,
+        "doc_type_language": 0.113,
+        "tenant": 0.078,
         "tenant_language": 0.117
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-006",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.092,
+        "doc_type": 0.097,
+        "doc_type_language": 0.089,
+        "tenant": 0.055,
+        "tenant_language": 0.092
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-007",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.151,
+        "doc_type": 0.158,
+        "doc_type_language": 0.151,
+        "tenant": 0.116,
+        "tenant_language": 0.143
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-008",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.133,
+        "doc_type": 0.134,
+        "doc_type_language": 0.133,
+        "tenant": 0.101,
+        "tenant_language": 0.119
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-009",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.148,
+        "doc_type": 0.15,
+        "doc_type_language": 0.148,
+        "tenant": 0.114,
+        "tenant_language": 0.114
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-010",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.169,
+        "doc_type": 0.146,
+        "doc_type_language": 0.167,
+        "tenant": 0.151,
+        "tenant_language": 0.169
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-011",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.188,
+        "doc_type": 0.166,
+        "doc_type_language": 0.184,
+        "tenant": 0.172,
+        "tenant_language": 0.188
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-012",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.171,
+        "doc_type": 0.149,
+        "doc_type_language": 0.167,
+        "tenant": 0.158,
+        "tenant_language": 0.171
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-013",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.174,
+        "doc_type": 0.102,
+        "doc_type_language": 0.174,
+        "tenant": 0.102,
+        "tenant_language": 0.086
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-014",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.143,
+        "doc_type": 0.116,
+        "doc_type_language": 0.143,
+        "tenant": 0.094,
+        "tenant_language": 0.087
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-015",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.147,
+        "doc_type": 0.098,
+        "doc_type_language": 0.147,
+        "tenant": 0.094,
+        "tenant_language": 0.076
       },
       "split": "dev"
     },
@@ -2105,10 +2542,10 @@
       "pair": "it",
       "scores": {
         "d34_all": 0.154,
-        "doc_type": 0.097,
+        "doc_type": 0.101,
         "doc_type_language": 0.154,
-        "tenant": 0.099,
-        "tenant_language": 0.133
+        "tenant": 0.104,
+        "tenant_language": 0.132
       },
       "split": "dev"
     },
@@ -2120,8 +2557,8 @@
         "d34_all": 0.435,
         "doc_type": 0.276,
         "doc_type_language": 0.435,
-        "tenant": 0.085,
-        "tenant_language": 0.092
+        "tenant": 0.09,
+        "tenant_language": 0.096
       },
       "split": "dev"
     },
@@ -2130,11 +2567,11 @@
       "id": "it-no-answer-003",
       "pair": "it",
       "scores": {
-        "d34_all": 0.176,
-        "doc_type": 0.135,
-        "doc_type_language": 0.176,
-        "tenant": 0.138,
-        "tenant_language": 0.176
+        "d34_all": 0.174,
+        "doc_type": 0.144,
+        "doc_type_language": 0.174,
+        "tenant": 0.147,
+        "tenant_language": 0.174
       },
       "split": "dev"
     },
@@ -2146,8 +2583,8 @@
         "d34_all": 0.187,
         "doc_type": 0.087,
         "doc_type_language": 0.187,
-        "tenant": 0.068,
-        "tenant_language": 0.111
+        "tenant": 0.074,
+        "tenant_language": 0.116
       },
       "split": "test"
     },
@@ -2159,8 +2596,8 @@
         "d34_all": 0.319,
         "doc_type": 0.168,
         "doc_type_language": 0.319,
-        "tenant": 0.108,
-        "tenant_language": 0.123
+        "tenant": 0.115,
+        "tenant_language": 0.131
       },
       "split": "test"
     },
@@ -2172,8 +2609,8 @@
         "d34_all": 0.192,
         "doc_type": 0.158,
         "doc_type_language": 0.192,
-        "tenant": 0.082,
-        "tenant_language": 0.114
+        "tenant": 0.083,
+        "tenant_language": 0.117
       },
       "split": "test"
     },
@@ -2185,8 +2622,8 @@
         "d34_all": 0.126,
         "doc_type": 0.125,
         "doc_type_language": 0.126,
-        "tenant": 0.048,
-        "tenant_language": 0.054
+        "tenant": 0.058,
+        "tenant_language": 0.066
       },
       "split": "dev"
     },
@@ -2196,10 +2633,10 @@
       "pair": "it",
       "scores": {
         "d34_all": 0.127,
-        "doc_type": 0.081,
+        "doc_type": 0.084,
         "doc_type_language": 0.127,
-        "tenant": 0.084,
-        "tenant_language": 0.119
+        "tenant": 0.086,
+        "tenant_language": 0.127
       },
       "split": "dev"
     },
@@ -2209,10 +2646,10 @@
       "pair": "it",
       "scores": {
         "d34_all": 0.176,
-        "doc_type": 0.123,
+        "doc_type": 0.132,
         "doc_type_language": 0.176,
-        "tenant": 0.133,
-        "tenant_language": 0.165
+        "tenant": 0.14,
+        "tenant_language": 0.173
       },
       "split": "dev"
     },
@@ -2224,8 +2661,8 @@
         "d34_all": 0.322,
         "doc_type": 0.178,
         "doc_type_language": 0.322,
-        "tenant": 0.064,
-        "tenant_language": 0.082
+        "tenant": 0.07,
+        "tenant_language": 0.085
       },
       "split": "test"
     },
@@ -2237,8 +2674,8 @@
         "d34_all": 0.059,
         "doc_type": 0.033,
         "doc_type_language": 0.059,
-        "tenant": -0.008,
-        "tenant_language": 0.03
+        "tenant": -0.011,
+        "tenant_language": 0.022
       },
       "split": "test"
     },
@@ -2247,11 +2684,11 @@
       "id": "it-no-answer-012",
       "pair": "it",
       "scores": {
-        "d34_all": 0.057,
+        "d34_all": 0.054,
         "doc_type": 0.04,
-        "doc_type_language": 0.057,
-        "tenant": 0.04,
-        "tenant_language": 0.057
+        "doc_type_language": 0.054,
+        "tenant": 0.041,
+        "tenant_language": 0.053
       },
       "split": "dev"
     },
@@ -2263,8 +2700,8 @@
         "d34_all": 0.1,
         "doc_type": 0.067,
         "doc_type_language": 0.1,
-        "tenant": 0.037,
-        "tenant_language": 0.03
+        "tenant": 0.038,
+        "tenant_language": 0.034
       },
       "split": "dev"
     },
@@ -2276,8 +2713,8 @@
         "d34_all": 0.22,
         "doc_type": 0.165,
         "doc_type_language": 0.22,
-        "tenant": 0.09,
-        "tenant_language": 0.108
+        "tenant": 0.097,
+        "tenant_language": 0.116
       },
       "split": "dev"
     },
@@ -2286,11 +2723,11 @@
       "id": "it-no-answer-016",
       "pair": "it",
       "scores": {
-        "d34_all": 0.054,
-        "doc_type": 0.068,
-        "doc_type_language": 0.053,
-        "tenant": 0.071,
-        "tenant_language": 0.054
+        "d34_all": 0.055,
+        "doc_type": 0.073,
+        "doc_type_language": 0.054,
+        "tenant": 0.076,
+        "tenant_language": 0.055
       },
       "split": "dev"
     },
@@ -2302,8 +2739,8 @@
         "d34_all": 0.253,
         "doc_type": 0.175,
         "doc_type_language": 0.253,
-        "tenant": 0.072,
-        "tenant_language": 0.093
+        "tenant": 0.074,
+        "tenant_language": 0.094
       },
       "split": "dev"
     },
@@ -2315,8 +2752,8 @@
         "d34_all": 0.111,
         "doc_type": 0.086,
         "doc_type_language": 0.111,
-        "tenant": 0.056,
-        "tenant_language": 0.056
+        "tenant": 0.06,
+        "tenant_language": 0.061
       },
       "split": "dev"
     },
@@ -2328,8 +2765,8 @@
         "d34_all": 0.138,
         "doc_type": 0.107,
         "doc_type_language": 0.138,
-        "tenant": 0.042,
-        "tenant_language": 0.06
+        "tenant": 0.053,
+        "tenant_language": 0.07
       },
       "split": "test"
     },
@@ -2341,8 +2778,8 @@
         "d34_all": 0.147,
         "doc_type": 0.113,
         "doc_type_language": 0.147,
-        "tenant": 0.047,
-        "tenant_language": 0.055
+        "tenant": 0.054,
+        "tenant_language": 0.063
       },
       "split": "dev"
     },
@@ -2354,8 +2791,8 @@
         "d34_all": 0.131,
         "doc_type": 0.102,
         "doc_type_language": 0.131,
-        "tenant": 0.102,
-        "tenant_language": 0.119
+        "tenant": 0.109,
+        "tenant_language": 0.127
       },
       "split": "test"
     },
@@ -2367,7 +2804,7 @@
         "d34_all": 0.094,
         "doc_type": 0.089,
         "doc_type_language": 0.094,
-        "tenant": 0.074,
+        "tenant": 0.077,
         "tenant_language": 0.083
       },
       "split": "dev"
@@ -2380,8 +2817,8 @@
         "d34_all": 0.215,
         "doc_type": 0.18,
         "doc_type_language": 0.215,
-        "tenant": 0.055,
-        "tenant_language": 0.079
+        "tenant": 0.062,
+        "tenant_language": 0.085
       },
       "split": "test"
     },
@@ -2393,8 +2830,8 @@
         "d34_all": 0.344,
         "doc_type": 0.19,
         "doc_type_language": 0.344,
-        "tenant": 0.079,
-        "tenant_language": 0.116
+        "tenant": 0.085,
+        "tenant_language": 0.125
       },
       "split": "test"
     },
@@ -2406,8 +2843,8 @@
         "d34_all": 0.178,
         "doc_type": 0.198,
         "doc_type_language": 0.178,
-        "tenant": 0.122,
-        "tenant_language": 0.126
+        "tenant": 0.133,
+        "tenant_language": 0.145
       },
       "split": "test"
     },
@@ -2419,8 +2856,8 @@
         "d34_all": 0.151,
         "doc_type": 0.151,
         "doc_type_language": 0.151,
-        "tenant": 0.112,
-        "tenant_language": 0.126
+        "tenant": 0.114,
+        "tenant_language": 0.127
       },
       "split": "test"
     },
@@ -2432,8 +2869,8 @@
         "d34_all": 0.316,
         "doc_type": 0.165,
         "doc_type_language": 0.316,
-        "tenant": 0.06,
-        "tenant_language": 0.067
+        "tenant": 0.058,
+        "tenant_language": 0.069
       },
       "split": "dev"
     },
@@ -2445,8 +2882,8 @@
         "d34_all": 0.228,
         "doc_type": 0.183,
         "doc_type_language": 0.228,
-        "tenant": 0.067,
-        "tenant_language": 0.09
+        "tenant": 0.072,
+        "tenant_language": 0.095
       },
       "split": "dev"
     },
@@ -2455,11 +2892,11 @@
       "id": "it-stale-version-001",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.166,
-        "doc_type": 0.133,
-        "doc_type_language": 0.162,
-        "tenant": 0.137,
-        "tenant_language": 0.166
+        "d34_all": 0.164,
+        "doc_type": 0.129,
+        "doc_type_language": 0.161,
+        "tenant": 0.133,
+        "tenant_language": 0.164
       },
       "split": "dev"
     },
@@ -2468,11 +2905,11 @@
       "id": "it-stale-version-002",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.14,
-        "doc_type": 0.094,
-        "doc_type_language": 0.137,
-        "tenant": 0.094,
-        "tenant_language": 0.14
+        "d34_all": 0.143,
+        "doc_type": 0.093,
+        "doc_type_language": 0.14,
+        "tenant": 0.092,
+        "tenant_language": 0.143
       },
       "split": "dev"
     },
@@ -2481,11 +2918,11 @@
       "id": "it-stale-version-003",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.19,
-        "doc_type": 0.122,
-        "doc_type_language": 0.185,
-        "tenant": 0.125,
-        "tenant_language": 0.19
+        "d34_all": 0.212,
+        "doc_type": 0.138,
+        "doc_type_language": 0.208,
+        "tenant": 0.14,
+        "tenant_language": 0.212
       },
       "split": "dev"
     },
@@ -2494,11 +2931,11 @@
       "id": "it-stale-version-004",
       "pair": "it->it",
       "scores": {
-        "d34_all": 0.206,
+        "d34_all": 0.204,
         "doc_type": 0.248,
-        "doc_type_language": 0.204,
-        "tenant": 0.249,
-        "tenant_language": 0.206
+        "doc_type_language": 0.202,
+        "tenant": 0.248,
+        "tenant_language": 0.204
       },
       "split": "dev"
     },
@@ -2510,8 +2947,8 @@
         "d34_all": 0.171,
         "doc_type": 0.133,
         "doc_type_language": 0.171,
-        "tenant": 0.086,
-        "tenant_language": 0.082
+        "tenant": 0.096,
+        "tenant_language": 0.088
       },
       "split": "dev"
     },
@@ -2523,8 +2960,8 @@
         "d34_all": 0.319,
         "doc_type": 0.183,
         "doc_type_language": 0.319,
-        "tenant": 0.103,
-        "tenant_language": 0.121
+        "tenant": 0.108,
+        "tenant_language": 0.125
       },
       "split": "dev"
     },
@@ -2536,8 +2973,8 @@
         "d34_all": 0.169,
         "doc_type": 0.117,
         "doc_type_language": 0.169,
-        "tenant": 0.019,
-        "tenant_language": 0.054
+        "tenant": 0.018,
+        "tenant_language": 0.053
       },
       "split": "dev"
     },
@@ -2549,8 +2986,8 @@
         "d34_all": 0.123,
         "doc_type": 0.096,
         "doc_type_language": 0.123,
-        "tenant": 0.048,
-        "tenant_language": 0.092
+        "tenant": 0.055,
+        "tenant_language": 0.109
       },
       "split": "dev"
     },
@@ -2562,8 +2999,8 @@
         "d34_all": 0.207,
         "doc_type": 0.129,
         "doc_type_language": 0.207,
-        "tenant": 0.113,
-        "tenant_language": 0.136
+        "tenant": 0.123,
+        "tenant_language": 0.144
       },
       "split": "test"
     },
@@ -2576,7 +3013,7 @@
         "doc_type": 0.049,
         "doc_type_language": 0.072,
         "tenant": 0.01,
-        "tenant_language": 0.011
+        "tenant_language": 0.014
       },
       "split": "test"
     },
@@ -2588,8 +3025,8 @@
         "d34_all": 0.21,
         "doc_type": 0.198,
         "doc_type_language": 0.21,
-        "tenant": 0.068,
-        "tenant_language": 0.076
+        "tenant": 0.082,
+        "tenant_language": 0.099
       },
       "split": "test"
     },
@@ -2601,8 +3038,8 @@
         "d34_all": 0.189,
         "doc_type": 0.182,
         "doc_type_language": 0.189,
-        "tenant": 0.037,
-        "tenant_language": 0.055
+        "tenant": 0.043,
+        "tenant_language": 0.06
       },
       "split": "dev"
     },
@@ -2614,8 +3051,8 @@
         "d34_all": 0.239,
         "doc_type": 0.173,
         "doc_type_language": 0.239,
-        "tenant": 0.124,
-        "tenant_language": 0.151
+        "tenant": 0.134,
+        "tenant_language": 0.161
       },
       "split": "dev"
     },
@@ -2627,8 +3064,8 @@
         "d34_all": 0.198,
         "doc_type": 0.137,
         "doc_type_language": 0.198,
-        "tenant": 0.099,
-        "tenant_language": 0.136
+        "tenant": 0.107,
+        "tenant_language": 0.144
       },
       "split": "test"
     },
@@ -2640,8 +3077,8 @@
         "d34_all": 0.149,
         "doc_type": 0.092,
         "doc_type_language": 0.149,
-        "tenant": 0.036,
-        "tenant_language": 0.097
+        "tenant": 0.041,
+        "tenant_language": 0.102
       },
       "split": "dev"
     },
@@ -2653,8 +3090,8 @@
         "d34_all": 0.406,
         "doc_type": 0.406,
         "doc_type_language": 0.406,
-        "tenant": 0.023,
-        "tenant_language": 0.038
+        "tenant": 0.021,
+        "tenant_language": 0.036
       },
       "split": "test"
     },
@@ -2666,8 +3103,8 @@
         "d34_all": 0.139,
         "doc_type": 0.139,
         "doc_type_language": 0.139,
-        "tenant": 0.057,
-        "tenant_language": 0.07
+        "tenant": 0.063,
+        "tenant_language": 0.071
       },
       "split": "test"
     },
@@ -2679,8 +3116,8 @@
         "d34_all": 0.367,
         "doc_type": 0.367,
         "doc_type_language": 0.367,
-        "tenant": 0.035,
-        "tenant_language": 0.04
+        "tenant": 0.029,
+        "tenant_language": 0.036
       },
       "split": "dev"
     },
@@ -2692,8 +3129,8 @@
         "d34_all": 0.056,
         "doc_type": 0.056,
         "doc_type_language": 0.056,
-        "tenant": 0.043,
-        "tenant_language": 0.032
+        "tenant": 0.042,
+        "tenant_language": 0.03
       },
       "split": "dev"
     },
@@ -2705,7 +3142,7 @@
         "d34_all": 0.276,
         "doc_type": 0.276,
         "doc_type_language": 0.276,
-        "tenant": 0.102,
+        "tenant": 0.106,
         "tenant_language": 0.129
       },
       "split": "test"
@@ -2718,8 +3155,8 @@
         "d34_all": 0.394,
         "doc_type": 0.394,
         "doc_type_language": 0.394,
-        "tenant": 0.046,
-        "tenant_language": 0.04
+        "tenant": 0.049,
+        "tenant_language": 0.043
       },
       "split": "dev"
     },
@@ -2731,8 +3168,8 @@
         "d34_all": 0.251,
         "doc_type": 0.251,
         "doc_type_language": 0.251,
-        "tenant": 0.089,
-        "tenant_language": 0.104
+        "tenant": 0.09,
+        "tenant_language": 0.107
       },
       "split": "test"
     },
@@ -2744,7 +3181,7 @@
         "d34_all": 0.239,
         "doc_type": 0.239,
         "doc_type_language": 0.239,
-        "tenant": 0.087,
+        "tenant": 0.092,
         "tenant_language": 0.106
       },
       "split": "dev"
@@ -2757,8 +3194,8 @@
         "d34_all": 0.26,
         "doc_type": 0.251,
         "doc_type_language": 0.26,
-        "tenant": 0.071,
-        "tenant_language": 0.078
+        "tenant": 0.075,
+        "tenant_language": 0.077
       },
       "split": "dev"
     },
@@ -2770,8 +3207,8 @@
         "d34_all": 0.293,
         "doc_type": 0.285,
         "doc_type_language": 0.293,
-        "tenant": 0.121,
-        "tenant_language": 0.116
+        "tenant": 0.122,
+        "tenant_language": 0.117
       },
       "split": "dev"
     },
@@ -2780,11 +3217,11 @@
       "id": "xl-it-en-03",
       "pair": "it->en",
       "scores": {
-        "d34_all": 0.123,
-        "doc_type": 0.088,
-        "doc_type_language": 0.121,
-        "tenant": 0.089,
-        "tenant_language": 0.123
+        "d34_all": 0.119,
+        "doc_type": 0.086,
+        "doc_type_language": 0.117,
+        "tenant": 0.087,
+        "tenant_language": 0.119
       },
       "split": "test"
     },
@@ -2794,10 +3231,10 @@
       "pair": "it->en",
       "scores": {
         "d34_all": 0.13,
-        "doc_type": 0.077,
+        "doc_type": 0.078,
         "doc_type_language": 0.13,
-        "tenant": 0.075,
-        "tenant_language": 0.096
+        "tenant": 0.076,
+        "tenant_language": 0.095
       },
       "split": "dev"
     },
@@ -2807,10 +3244,10 @@
       "pair": "it->en",
       "scores": {
         "d34_all": 0.224,
-        "doc_type": 0.123,
+        "doc_type": 0.129,
         "doc_type_language": 0.224,
-        "tenant": 0.12,
-        "tenant_language": 0.142
+        "tenant": 0.134,
+        "tenant_language": 0.167
       },
       "split": "test"
     },
@@ -2823,7 +3260,7 @@
         "doc_type": 0.411,
         "doc_type_language": 0.411,
         "tenant": 0.062,
-        "tenant_language": 0.099
+        "tenant_language": 0.1
       },
       "split": "dev"
     },
@@ -2835,8 +3272,8 @@
         "d34_all": 0.367,
         "doc_type": 0.367,
         "doc_type_language": 0.367,
-        "tenant": 0.075,
-        "tenant_language": 0.095
+        "tenant": 0.071,
+        "tenant_language": 0.094
       },
       "split": "dev"
     },
@@ -2848,8 +3285,8 @@
         "d34_all": 0.149,
         "doc_type": 0.149,
         "doc_type_language": 0.149,
-        "tenant": 0.078,
-        "tenant_language": 0.106
+        "tenant": 0.09,
+        "tenant_language": 0.12
       },
       "split": "dev"
     },
@@ -2858,11 +3295,11 @@
       "id": "xl-it-zh-04",
       "pair": "it->zh",
       "scores": {
-        "d34_all": 0.097,
+        "d34_all": 0.096,
         "doc_type": 0.099,
         "doc_type_language": 0.096,
-        "tenant": 0.083,
-        "tenant_language": 0.097
+        "tenant": 0.081,
+        "tenant_language": 0.093
       },
       "split": "dev"
     },
@@ -2874,8 +3311,8 @@
         "d34_all": 0.468,
         "doc_type": 0.468,
         "doc_type_language": 0.468,
-        "tenant": 0.071,
-        "tenant_language": 0.116
+        "tenant": 0.07,
+        "tenant_language": 0.115
       },
       "split": "dev"
     },
@@ -2887,8 +3324,8 @@
         "d34_all": 0.457,
         "doc_type": 0.457,
         "doc_type_language": 0.457,
-        "tenant": 0.143,
-        "tenant_language": 0.18
+        "tenant": 0.159,
+        "tenant_language": 0.204
       },
       "split": "dev"
     },
@@ -2900,8 +3337,8 @@
         "d34_all": 0.229,
         "doc_type": 0.229,
         "doc_type_language": 0.229,
-        "tenant": 0.127,
-        "tenant_language": 0.16
+        "tenant": 0.13,
+        "tenant_language": 0.163
       },
       "split": "test"
     },
@@ -2913,8 +3350,8 @@
         "d34_all": 0.217,
         "doc_type": 0.217,
         "doc_type_language": 0.217,
-        "tenant": 0.122,
-        "tenant_language": 0.15
+        "tenant": 0.126,
+        "tenant_language": 0.156
       },
       "split": "test"
     },
@@ -2926,8 +3363,8 @@
         "d34_all": 0.267,
         "doc_type": 0.259,
         "doc_type_language": 0.267,
-        "tenant": 0.072,
-        "tenant_language": 0.076
+        "tenant": 0.075,
+        "tenant_language": 0.075
       },
       "split": "dev"
     },
@@ -2939,8 +3376,8 @@
         "d34_all": 0.305,
         "doc_type": 0.293,
         "doc_type_language": 0.305,
-        "tenant": 0.073,
-        "tenant_language": 0.081
+        "tenant": 0.076,
+        "tenant_language": 0.079
       },
       "split": "dev"
     },
@@ -2949,11 +3386,11 @@
       "id": "xl-zh-en-03",
       "pair": "zh->en",
       "scores": {
-        "d34_all": 0.123,
-        "doc_type": 0.088,
-        "doc_type_language": 0.121,
-        "tenant": 0.089,
-        "tenant_language": 0.123
+        "d34_all": 0.119,
+        "doc_type": 0.086,
+        "doc_type_language": 0.117,
+        "tenant": 0.087,
+        "tenant_language": 0.119
       },
       "split": "test"
     },
@@ -2963,9 +3400,9 @@
       "pair": "zh->en",
       "scores": {
         "d34_all": 0.102,
-        "doc_type": 0.07,
+        "doc_type": 0.066,
         "doc_type_language": 0.098,
-        "tenant": 0.073,
+        "tenant": 0.069,
         "tenant_language": 0.102
       },
       "split": "dev"
@@ -2978,8 +3415,8 @@
         "d34_all": 0.226,
         "doc_type": 0.18,
         "doc_type_language": 0.226,
-        "tenant": 0.138,
-        "tenant_language": 0.143
+        "tenant": 0.148,
+        "tenant_language": 0.155
       },
       "split": "dev"
     },
@@ -2991,8 +3428,8 @@
         "d34_all": 0.189,
         "doc_type": 0.216,
         "doc_type_language": 0.189,
-        "tenant": 0.078,
-        "tenant_language": 0.067
+        "tenant": 0.082,
+        "tenant_language": 0.072
       },
       "split": "dev"
     },
@@ -3004,8 +3441,8 @@
         "d34_all": 0.2,
         "doc_type": 0.205,
         "doc_type_language": 0.2,
-        "tenant": 0.098,
-        "tenant_language": 0.102
+        "tenant": 0.102,
+        "tenant_language": 0.107
       },
       "split": "test"
     },
@@ -3014,11 +3451,11 @@
       "id": "xl-zh-it-04",
       "pair": "zh->it",
       "scores": {
-        "d34_all": 0.151,
-        "doc_type": 0.12,
-        "doc_type_language": 0.144,
-        "tenant": 0.11,
-        "tenant_language": 0.151
+        "d34_all": 0.169,
+        "doc_type": 0.122,
+        "doc_type_language": 0.163,
+        "tenant": 0.129,
+        "tenant_language": 0.169
       },
       "split": "test"
     },
@@ -3030,8 +3467,8 @@
         "d34_all": 0.039,
         "doc_type": 0.008,
         "doc_type_language": 0.039,
-        "tenant": -0.006,
-        "tenant_language": 0.001
+        "tenant": -0.005,
+        "tenant_language": 0.002
       },
       "split": "dev"
     },
@@ -3043,8 +3480,8 @@
         "d34_all": 0.072,
         "doc_type": 0.043,
         "doc_type_language": 0.072,
-        "tenant": 0.011,
-        "tenant_language": 0.011
+        "tenant": 0.007,
+        "tenant_language": 0.01
       },
       "split": "dev"
     },
@@ -3056,8 +3493,8 @@
         "d34_all": 0.202,
         "doc_type": 0.099,
         "doc_type_language": 0.202,
-        "tenant": 0.009,
-        "tenant_language": 0.025
+        "tenant": 0.007,
+        "tenant_language": 0.023
       },
       "split": "test"
     },
@@ -3069,8 +3506,8 @@
         "d34_all": 0.274,
         "doc_type": 0.176,
         "doc_type_language": 0.274,
-        "tenant": 0.044,
-        "tenant_language": 0.052
+        "tenant": 0.047,
+        "tenant_language": 0.058
       },
       "split": "dev"
     },
@@ -3082,8 +3519,8 @@
         "d34_all": 0.066,
         "doc_type": 0.066,
         "doc_type_language": 0.066,
-        "tenant": -0.047,
-        "tenant_language": 0.004
+        "tenant": -0.048,
+        "tenant_language": -0.001
       },
       "split": "dev"
     },
@@ -3095,8 +3532,8 @@
         "d34_all": 0.133,
         "doc_type": 0.133,
         "doc_type_language": 0.133,
-        "tenant": -0.006,
-        "tenant_language": 0.042
+        "tenant": -0.005,
+        "tenant_language": 0.039
       },
       "split": "dev"
     },
@@ -3108,8 +3545,8 @@
         "d34_all": 0.162,
         "doc_type": 0.162,
         "doc_type_language": 0.162,
-        "tenant": -0.002,
-        "tenant_language": 0.032
+        "tenant": 0.001,
+        "tenant_language": 0.033
       },
       "split": "test"
     },
@@ -3121,8 +3558,8 @@
         "d34_all": 0.154,
         "doc_type": 0.154,
         "doc_type_language": 0.154,
-        "tenant": 0.005,
-        "tenant_language": 0.042
+        "tenant": 0.006,
+        "tenant_language": 0.04
       },
       "split": "test"
     },
@@ -3134,8 +3571,8 @@
         "d34_all": 0.095,
         "doc_type": 0.095,
         "doc_type_language": 0.095,
-        "tenant": 0.026,
-        "tenant_language": 0.037
+        "tenant": 0.027,
+        "tenant_language": 0.038
       },
       "split": "dev"
     },
@@ -3147,8 +3584,8 @@
         "d34_all": 0.4,
         "doc_type": 0.4,
         "doc_type_language": 0.4,
-        "tenant": 0.004,
-        "tenant_language": 0.077
+        "tenant": 0.007,
+        "tenant_language": 0.082
       },
       "split": "dev"
     },
@@ -3160,8 +3597,8 @@
         "d34_all": 0.329,
         "doc_type": 0.329,
         "doc_type_language": 0.329,
-        "tenant": 0.034,
-        "tenant_language": 0.082
+        "tenant": 0.037,
+        "tenant_language": 0.085
       },
       "split": "dev"
     },
@@ -3173,8 +3610,8 @@
         "d34_all": 0.093,
         "doc_type": 0.093,
         "doc_type_language": 0.093,
-        "tenant": 0.006,
-        "tenant_language": 0.01
+        "tenant": 0.007,
+        "tenant_language": 0.014
       },
       "split": "dev"
     },
@@ -3186,7 +3623,7 @@
         "d34_all": 0.105,
         "doc_type": 0.084,
         "doc_type_language": 0.105,
-        "tenant": 0.004,
+        "tenant": 0.003,
         "tenant_language": 0.05
       },
       "split": "test"
@@ -3196,11 +3633,11 @@
       "id": "zh-colloquial-term-001",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.1,
-        "doc_type": 0.053,
-        "doc_type_language": 0.097,
-        "tenant": 0.054,
-        "tenant_language": 0.1
+        "d34_all": 0.113,
+        "doc_type": 0.062,
+        "doc_type_language": 0.11,
+        "tenant": 0.063,
+        "tenant_language": 0.113
       },
       "split": "test"
     },
@@ -3209,11 +3646,11 @@
       "id": "zh-colloquial-term-002",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.045,
-        "doc_type": 0.028,
-        "doc_type_language": 0.044,
-        "tenant": 0.028,
-        "tenant_language": 0.045
+        "d34_all": 0.042,
+        "doc_type": 0.029,
+        "doc_type_language": 0.041,
+        "tenant": 0.03,
+        "tenant_language": 0.042
       },
       "split": "dev"
     },
@@ -3222,11 +3659,11 @@
       "id": "zh-colloquial-term-003",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.05,
-        "doc_type": 0.027,
-        "doc_type_language": 0.047,
-        "tenant": 0.026,
-        "tenant_language": 0.05
+        "d34_all": 0.064,
+        "doc_type": 0.034,
+        "doc_type_language": 0.062,
+        "tenant": 0.036,
+        "tenant_language": 0.064
       },
       "split": "dev"
     },
@@ -3235,11 +3672,11 @@
       "id": "zh-colloquial-term-004",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.057,
+        "d34_all": 0.071,
         "doc_type": 0.058,
-        "doc_type_language": 0.053,
-        "tenant": 0.044,
-        "tenant_language": 0.057
+        "doc_type_language": 0.067,
+        "tenant": 0.052,
+        "tenant_language": 0.071
       },
       "split": "test"
     },
@@ -3248,11 +3685,11 @@
       "id": "zh-colloquial-term-005",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.049,
-        "doc_type": 0.036,
-        "doc_type_language": 0.047,
-        "tenant": 0.029,
-        "tenant_language": 0.049
+        "d34_all": 0.065,
+        "doc_type": 0.038,
+        "doc_type_language": 0.063,
+        "tenant": 0.04,
+        "tenant_language": 0.065
       },
       "split": "test"
     },
@@ -3264,7 +3701,7 @@
         "d34_all": 0.159,
         "doc_type": 0.159,
         "doc_type_language": 0.159,
-        "tenant": 0.001,
+        "tenant": 0.004,
         "tenant_language": 0.048
       },
       "split": "test"
@@ -3277,8 +3714,8 @@
         "d34_all": 0.26,
         "doc_type": 0.183,
         "doc_type_language": 0.26,
-        "tenant": 0.012,
-        "tenant_language": 0.038
+        "tenant": 0.019,
+        "tenant_language": 0.043
       },
       "split": "dev"
     },
@@ -3290,8 +3727,8 @@
         "d34_all": 0.115,
         "doc_type": 0.115,
         "doc_type_language": 0.115,
-        "tenant": 0.041,
-        "tenant_language": 0.033
+        "tenant": 0.042,
+        "tenant_language": 0.034
       },
       "split": "dev"
     },
@@ -3303,8 +3740,8 @@
         "d34_all": 0.106,
         "doc_type": 0.106,
         "doc_type_language": 0.106,
-        "tenant": -0.019,
-        "tenant_language": 0.073
+        "tenant": -0.022,
+        "tenant_language": 0.069
       },
       "split": "test"
     },
@@ -3316,21 +3753,47 @@
         "d34_all": 0.211,
         "doc_type": 0.109,
         "doc_type_language": 0.211,
-        "tenant": -0.005,
-        "tenant_language": 0.034
+        "tenant": -0.002,
+        "tenant_language": 0.038
       },
       "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-context-overflow-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.074,
+        "doc_type": 0.06,
+        "doc_type_language": 0.074,
+        "tenant": 0.018,
+        "tenant_language": 0.048
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-context-overflow-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.06,
+        "doc_type": 0.044,
+        "doc_type_language": 0.057,
+        "tenant": 0.019,
+        "tenant_language": 0.06
+      },
+      "split": "test"
     },
     {
       "class": "answerable",
       "id": "zh-duplicate-flood-001",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.195,
+        "d34_all": 0.19,
         "doc_type": 0.08,
-        "doc_type_language": 0.193,
+        "doc_type_language": 0.188,
         "tenant": 0.079,
-        "tenant_language": 0.195
+        "tenant_language": 0.19
       },
       "split": "dev"
     },
@@ -3339,11 +3802,11 @@
       "id": "zh-duplicate-flood-002",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.281,
-        "doc_type": 0.132,
-        "doc_type_language": 0.281,
-        "tenant": 0.131,
-        "tenant_language": 0.28
+        "d34_all": 0.275,
+        "doc_type": 0.128,
+        "doc_type_language": 0.275,
+        "tenant": 0.126,
+        "tenant_language": 0.273
       },
       "split": "dev"
     },
@@ -3352,11 +3815,11 @@
       "id": "zh-duplicate-flood-013",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.293,
-        "doc_type": 0.155,
-        "doc_type_language": 0.293,
-        "tenant": 0.149,
-        "tenant_language": 0.287
+        "d34_all": 0.285,
+        "doc_type": 0.145,
+        "doc_type_language": 0.285,
+        "tenant": 0.14,
+        "tenant_language": 0.278
       },
       "split": "test"
     },
@@ -3368,8 +3831,8 @@
         "d34_all": 0.242,
         "doc_type": 0.15,
         "doc_type_language": 0.242,
-        "tenant": 0.036,
-        "tenant_language": 0.056
+        "tenant": 0.047,
+        "tenant_language": 0.062
       },
       "split": "dev"
     },
@@ -3381,8 +3844,8 @@
         "d34_all": 0.347,
         "doc_type": 0.18,
         "doc_type_language": 0.347,
-        "tenant": 0.012,
-        "tenant_language": 0.046
+        "tenant": 0.014,
+        "tenant_language": 0.044
       },
       "split": "dev"
     },
@@ -3394,8 +3857,8 @@
         "d34_all": 0.226,
         "doc_type": 0.109,
         "doc_type_language": 0.226,
-        "tenant": -0.002,
-        "tenant_language": 0.01
+        "tenant": 0.005,
+        "tenant_language": 0.014
       },
       "split": "dev"
     },
@@ -3407,8 +3870,8 @@
         "d34_all": 0.173,
         "doc_type": 0.173,
         "doc_type_language": 0.173,
-        "tenant": 0,
-        "tenant_language": 0.049
+        "tenant": 0.001,
+        "tenant_language": 0.046
       },
       "split": "dev"
     },
@@ -3420,8 +3883,8 @@
         "d34_all": 0.05,
         "doc_type": 0.05,
         "doc_type_language": 0.05,
-        "tenant": 0.005,
-        "tenant_language": 0.03
+        "tenant": 0.008,
+        "tenant_language": 0.034
       },
       "split": "test"
     },
@@ -3433,8 +3896,8 @@
         "d34_all": 0.051,
         "doc_type": 0.051,
         "doc_type_language": 0.051,
-        "tenant": 0.03,
-        "tenant_language": 0.049
+        "tenant": 0.031,
+        "tenant_language": 0.048
       },
       "split": "dev"
     },
@@ -3446,8 +3909,8 @@
         "d34_all": 0.06,
         "doc_type": 0.037,
         "doc_type_language": 0.06,
-        "tenant": -0.014,
-        "tenant_language": 0.021
+        "tenant": -0.012,
+        "tenant_language": 0.024
       },
       "split": "dev"
     },
@@ -3459,8 +3922,8 @@
         "d34_all": 0.15,
         "doc_type": 0.15,
         "doc_type_language": 0.15,
-        "tenant": 0.006,
-        "tenant_language": 0.005
+        "tenant": 0.012,
+        "tenant_language": 0.018
       },
       "split": "dev"
     },
@@ -3473,7 +3936,7 @@
         "doc_type": 0.024,
         "doc_type_language": 0.037,
         "tenant": 0.022,
-        "tenant_language": 0.017
+        "tenant_language": 0.018
       },
       "split": "dev"
     },
@@ -3482,11 +3945,11 @@
       "id": "zh-general-008",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.044,
-        "doc_type": 0.035,
-        "doc_type_language": 0.043,
-        "tenant": 0.036,
-        "tenant_language": 0.044
+        "d34_all": 0.054,
+        "doc_type": 0.042,
+        "doc_type_language": 0.053,
+        "tenant": 0.043,
+        "tenant_language": 0.054
       },
       "split": "dev"
     },
@@ -3498,8 +3961,8 @@
         "d34_all": 0.047,
         "doc_type": 0.047,
         "doc_type_language": 0.047,
-        "tenant": 0.007,
-        "tenant_language": 0.042
+        "tenant": 0.014,
+        "tenant_language": 0.045
       },
       "split": "dev"
     },
@@ -3512,7 +3975,7 @@
         "doc_type": 0.061,
         "doc_type_language": 0.061,
         "tenant": 0.02,
-        "tenant_language": 0.054
+        "tenant_language": 0.052
       },
       "split": "dev"
     },
@@ -3521,11 +3984,11 @@
       "id": "zh-identifier-near-miss-003",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.057,
+        "d34_all": 0.056,
         "doc_type": 0.035,
         "doc_type_language": 0.056,
-        "tenant": -0.002,
-        "tenant_language": 0.057
+        "tenant": 0.002,
+        "tenant_language": 0.056
       },
       "split": "dev"
     },
@@ -3534,11 +3997,11 @@
       "id": "zh-identifier-near-miss-011",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.057,
+        "d34_all": 0.056,
         "doc_type": 0.026,
-        "doc_type_language": 0.057,
-        "tenant": 0.003,
-        "tenant_language": 0.056
+        "doc_type_language": 0.056,
+        "tenant": 0.006,
+        "tenant_language": 0.054
       },
       "split": "test"
     },
@@ -3551,7 +4014,7 @@
         "doc_type": 0.047,
         "doc_type_language": 0.053,
         "tenant": 0.007,
-        "tenant_language": 0.039
+        "tenant_language": 0.035
       },
       "split": "dev"
     },
@@ -3563,8 +4026,8 @@
         "d34_all": 0.08,
         "doc_type": 0.08,
         "doc_type_language": 0.08,
-        "tenant": -0.033,
-        "tenant_language": 0.01
+        "tenant": -0.028,
+        "tenant_language": 0.024
       },
       "split": "dev"
     },
@@ -3576,8 +4039,8 @@
         "d34_all": 0.075,
         "doc_type": 0.075,
         "doc_type_language": 0.075,
-        "tenant": 0,
-        "tenant_language": 0.037
+        "tenant": -0.002,
+        "tenant_language": 0.038
       },
       "split": "test"
     },
@@ -3586,11 +4049,11 @@
       "id": "zh-implicit-condition-004",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.095,
+        "d34_all": 0.098,
         "doc_type": 0.073,
-        "doc_type_language": 0.088,
-        "tenant": 0.066,
-        "tenant_language": 0.095
+        "doc_type_language": 0.092,
+        "tenant": 0.065,
+        "tenant_language": 0.098
       },
       "split": "test"
     },
@@ -3602,7 +4065,7 @@
         "d34_all": 0.037,
         "doc_type": 0.011,
         "doc_type_language": 0.037,
-        "tenant": -0.006,
+        "tenant": -0.01,
         "tenant_language": 0.036
       },
       "split": "dev"
@@ -3612,11 +4075,11 @@
       "id": "zh-injection-002",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.06,
-        "doc_type": 0.079,
-        "doc_type_language": 0.056,
-        "tenant": 0.081,
-        "tenant_language": 0.06
+        "d34_all": 0.058,
+        "doc_type": 0.082,
+        "doc_type_language": 0.058,
+        "tenant": 0.084,
+        "tenant_language": 0.058
       },
       "split": "test"
     },
@@ -3628,8 +4091,8 @@
         "d34_all": 0.107,
         "doc_type": 0.087,
         "doc_type_language": 0.107,
-        "tenant": 0.025,
-        "tenant_language": 0.106
+        "tenant": 0.027,
+        "tenant_language": 0.107
       },
       "split": "test"
     },
@@ -3642,7 +4105,7 @@
         "doc_type": 0.04,
         "doc_type_language": 0.04,
         "tenant": 0.012,
-        "tenant_language": 0.015
+        "tenant_language": 0.016
       },
       "split": "test"
     },
@@ -3651,11 +4114,11 @@
       "id": "zh-injection-evasive-001",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.044,
+        "d34_all": 0.041,
         "doc_type": 0.005,
-        "doc_type_language": 0.044,
-        "tenant": -0.006,
-        "tenant_language": 0.043
+        "doc_type_language": 0.041,
+        "tenant": -0.004,
+        "tenant_language": 0.04
       },
       "split": "dev"
     },
@@ -3667,8 +4130,8 @@
         "d34_all": 0.047,
         "doc_type": 0.047,
         "doc_type_language": 0.047,
-        "tenant": 0,
-        "tenant_language": 0.026
+        "tenant": 0.009,
+        "tenant_language": 0.031
       },
       "split": "dev"
     },
@@ -3677,11 +4140,11 @@
       "id": "zh-injection-evasive-003",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.047,
+        "d34_all": 0.054,
         "doc_type": 0.047,
-        "doc_type_language": 0.047,
-        "tenant": 0.003,
-        "tenant_language": 0.046
+        "doc_type_language": 0.05,
+        "tenant": 0.008,
+        "tenant_language": 0.054
       },
       "split": "dev"
     },
@@ -3690,11 +4153,11 @@
       "id": "zh-injection-evasive-004",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.06,
-        "doc_type": 0.04,
-        "doc_type_language": 0.059,
-        "tenant": 0.039,
-        "tenant_language": 0.06
+        "d34_all": 0.057,
+        "doc_type": 0.035,
+        "doc_type_language": 0.057,
+        "tenant": 0.035,
+        "tenant_language": 0.057
       },
       "split": "dev"
     },
@@ -3707,7 +4170,7 @@
         "doc_type": 0.05,
         "doc_type_language": 0.063,
         "tenant": 0.047,
-        "tenant_language": 0.036
+        "tenant_language": 0.038
       },
       "split": "dev"
     },
@@ -3716,13 +4179,208 @@
       "id": "zh-injection-evasive-006",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.04,
-        "doc_type": 0.035,
-        "doc_type_language": 0.038,
-        "tenant": 0.036,
-        "tenant_language": 0.04
+        "d34_all": 0.042,
+        "doc_type": 0.038,
+        "doc_type_language": 0.04,
+        "tenant": 0.039,
+        "tenant_language": 0.042
       },
       "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.09,
+        "doc_type": 0.06,
+        "doc_type_language": 0.083,
+        "tenant": 0.059,
+        "tenant_language": 0.09
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.074,
+        "doc_type": 0.062,
+        "doc_type_language": 0.068,
+        "tenant": 0.042,
+        "tenant_language": 0.074
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.088,
+        "doc_type": 0.088,
+        "doc_type_language": 0.088,
+        "tenant": 0.046,
+        "tenant_language": 0.083
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-004",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.072,
+        "doc_type": 0.072,
+        "doc_type_language": 0.072,
+        "tenant": 0.033,
+        "tenant_language": 0.067
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-005",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.071,
+        "doc_type": 0.071,
+        "doc_type_language": 0.071,
+        "tenant": 0.021,
+        "tenant_language": 0.058
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-006",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.096,
+        "doc_type": 0.096,
+        "doc_type_language": 0.096,
+        "tenant": 0.013,
+        "tenant_language": 0.06
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-007",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.074,
+        "doc_type": 0.051,
+        "doc_type_language": 0.068,
+        "tenant": 0.053,
+        "tenant_language": 0.074
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-008",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.071,
+        "doc_type": 0.065,
+        "doc_type_language": 0.066,
+        "tenant": 0.043,
+        "tenant_language": 0.071
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-009",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.056,
+        "doc_type": 0.052,
+        "doc_type_language": 0.052,
+        "tenant": 0.047,
+        "tenant_language": 0.056
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-010",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.064,
+        "doc_type": 0.029,
+        "doc_type_language": 0.061,
+        "tenant": 0.024,
+        "tenant_language": 0.064
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-011",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.068,
+        "doc_type": 0.05,
+        "doc_type_language": 0.065,
+        "tenant": 0.035,
+        "tenant_language": 0.068
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-012",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.06,
+        "doc_type": 0.059,
+        "doc_type_language": 0.059,
+        "tenant": 0.022,
+        "tenant_language": 0.06
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-013",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.111,
+        "doc_type": 0.092,
+        "doc_type_language": 0.111,
+        "tenant": 0.063,
+        "tenant_language": 0.087
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-014",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.11,
+        "doc_type": 0.074,
+        "doc_type_language": 0.11,
+        "tenant": 0.063,
+        "tenant_language": 0.081
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-015",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.12,
+        "doc_type": 0.078,
+        "doc_type_language": 0.12,
+        "tenant": 0.058,
+        "tenant_language": 0.077
+      },
+      "split": "dev"
     },
     {
       "class": "near_miss",
@@ -3732,8 +4390,8 @@
         "d34_all": 0.133,
         "doc_type": 0.133,
         "doc_type_language": 0.133,
-        "tenant": 0.001,
-        "tenant_language": 0.04
+        "tenant": 0.003,
+        "tenant_language": 0.039
       },
       "split": "dev"
     },
@@ -3745,7 +4403,7 @@
         "d34_all": 0.435,
         "doc_type": 0.241,
         "doc_type_language": 0.435,
-        "tenant": 0.027,
+        "tenant": 0.028,
         "tenant_language": 0.053
       },
       "split": "dev"
@@ -3758,8 +4416,8 @@
         "d34_all": 0.066,
         "doc_type": 0.066,
         "doc_type_language": 0.066,
-        "tenant": -0.01,
-        "tenant_language": 0.007
+        "tenant": -0.004,
+        "tenant_language": 0.006
       },
       "split": "test"
     },
@@ -3769,9 +4427,9 @@
       "pair": "zh",
       "scores": {
         "d34_all": 0.055,
-        "doc_type": 0.041,
-        "doc_type_language": 0.055,
-        "tenant": 0.042,
+        "doc_type": 0.043,
+        "doc_type_language": 0.054,
+        "tenant": 0.044,
         "tenant_language": 0.055
       },
       "split": "dev"
@@ -3785,7 +4443,7 @@
         "doc_type": 0.122,
         "doc_type_language": 0.248,
         "tenant": 0.043,
-        "tenant_language": 0.057
+        "tenant_language": 0.058
       },
       "split": "test"
     },
@@ -3797,8 +4455,8 @@
         "d34_all": 0.037,
         "doc_type": 0.034,
         "doc_type_language": 0.037,
-        "tenant": 0.015,
-        "tenant_language": 0.014
+        "tenant": 0.021,
+        "tenant_language": 0.019
       },
       "split": "dev"
     },
@@ -3811,7 +4469,7 @@
         "doc_type": 0.035,
         "doc_type_language": 0.042,
         "tenant": -0.005,
-        "tenant_language": 0.019
+        "tenant_language": 0.02
       },
       "split": "test"
     },
@@ -3820,11 +4478,11 @@
       "id": "zh-no-answer-008",
       "pair": "zh",
       "scores": {
-        "d34_all": 0.02,
+        "d34_all": 0.019,
         "doc_type": 0.006,
-        "doc_type_language": 0.02,
-        "tenant": 0.004,
-        "tenant_language": 0.02
+        "doc_type_language": 0.018,
+        "tenant": 0.005,
+        "tenant_language": 0.019
       },
       "split": "dev"
     },
@@ -3836,8 +4494,8 @@
         "d34_all": 0.071,
         "doc_type": 0.077,
         "doc_type_language": 0.071,
-        "tenant": 0.033,
-        "tenant_language": 0.03
+        "tenant": 0.036,
+        "tenant_language": 0.035
       },
       "split": "dev"
     },
@@ -3849,8 +4507,8 @@
         "d34_all": 0.147,
         "doc_type": 0.083,
         "doc_type_language": 0.147,
-        "tenant": 0.023,
-        "tenant_language": 0.016
+        "tenant": 0.027,
+        "tenant_language": 0.019
       },
       "split": "dev"
     },
@@ -3859,11 +4517,11 @@
       "id": "zh-no-answer-011",
       "pair": "zh",
       "scores": {
-        "d34_all": 0.048,
+        "d34_all": 0.047,
         "doc_type": 0.04,
-        "doc_type_language": 0.048,
-        "tenant": 0.01,
-        "tenant_language": 0.048
+        "doc_type_language": 0.047,
+        "tenant": 0.012,
+        "tenant_language": 0.046
       },
       "split": "dev"
     },
@@ -3875,8 +4533,8 @@
         "d34_all": 0.052,
         "doc_type": 0.046,
         "doc_type_language": 0.052,
-        "tenant": 0.022,
-        "tenant_language": 0.021
+        "tenant": 0.02,
+        "tenant_language": 0.02
       },
       "split": "dev"
     },
@@ -3888,8 +4546,8 @@
         "d34_all": 0.043,
         "doc_type": 0.043,
         "doc_type_language": 0.043,
-        "tenant": -0.003,
-        "tenant_language": 0.04
+        "tenant": -0.001,
+        "tenant_language": 0.038
       },
       "split": "test"
     },
@@ -3901,8 +4559,8 @@
         "d34_all": 0.129,
         "doc_type": 0.075,
         "doc_type_language": 0.129,
-        "tenant": 0.041,
-        "tenant_language": 0.048
+        "tenant": 0.042,
+        "tenant_language": 0.05
       },
       "split": "dev"
     },
@@ -3914,8 +4572,8 @@
         "d34_all": 0.12,
         "doc_type": 0.075,
         "doc_type_language": 0.12,
-        "tenant": 0.039,
-        "tenant_language": 0.036
+        "tenant": 0.043,
+        "tenant_language": 0.04
       },
       "split": "dev"
     },
@@ -3927,8 +4585,8 @@
         "d34_all": 0.064,
         "doc_type": 0.064,
         "doc_type_language": 0.064,
-        "tenant": 0.024,
-        "tenant_language": 0.036
+        "tenant": 0.032,
+        "tenant_language": 0.039
       },
       "split": "dev"
     },
@@ -3937,11 +4595,11 @@
       "id": "zh-no_answer-term-001",
       "pair": "zh",
       "scores": {
-        "d34_all": 0.13,
-        "doc_type": 0.075,
-        "doc_type_language": 0.127,
-        "tenant": 0.076,
-        "tenant_language": 0.13
+        "d34_all": 0.145,
+        "doc_type": 0.084,
+        "doc_type_language": 0.142,
+        "tenant": 0.084,
+        "tenant_language": 0.145
       },
       "split": "test"
     },
@@ -3950,11 +4608,11 @@
       "id": "zh-partial-answer-001",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.077,
+        "d34_all": 0.079,
         "doc_type": 0.053,
-        "doc_type_language": 0.072,
-        "tenant": 0.054,
-        "tenant_language": 0.077
+        "doc_type_language": 0.074,
+        "tenant": 0.055,
+        "tenant_language": 0.079
       },
       "split": "dev"
     },
@@ -3966,7 +4624,7 @@
         "d34_all": 0.09,
         "doc_type": 0.087,
         "doc_type_language": 0.09,
-        "tenant": 0.013,
+        "tenant": 0.014,
         "tenant_language": 0.02
       },
       "split": "test"
@@ -3979,8 +4637,8 @@
         "d34_all": 0.1,
         "doc_type": 0.1,
         "doc_type_language": 0.1,
-        "tenant": -0.02,
-        "tenant_language": 0.026
+        "tenant": -0.018,
+        "tenant_language": 0.033
       },
       "split": "dev"
     },
@@ -3989,11 +4647,11 @@
       "id": "zh-partial-answer-004",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.126,
-        "doc_type": 0.114,
+        "d34_all": 0.125,
+        "doc_type": 0.126,
         "doc_type_language": 0.122,
-        "tenant": 0.119,
-        "tenant_language": 0.126
+        "tenant": 0.13,
+        "tenant_language": 0.125
       },
       "split": "dev"
     },
@@ -4005,8 +4663,8 @@
         "d34_all": 0.365,
         "doc_type": 0.365,
         "doc_type_language": 0.365,
-        "tenant": 0.01,
-        "tenant_language": 0.061
+        "tenant": 0.013,
+        "tenant_language": 0.067
       },
       "split": "dev"
     },
@@ -4018,7 +4676,7 @@
         "d34_all": 0.376,
         "doc_type": 0.376,
         "doc_type_language": 0.376,
-        "tenant": 0.043,
+        "tenant": 0.045,
         "tenant_language": 0.092
       },
       "split": "dev"
@@ -4031,8 +4689,8 @@
         "d34_all": 0.363,
         "doc_type": 0.363,
         "doc_type_language": 0.363,
-        "tenant": 0.055,
-        "tenant_language": 0.091
+        "tenant": 0.059,
+        "tenant_language": 0.093
       },
       "split": "dev"
     },
@@ -4044,8 +4702,8 @@
         "d34_all": 0.331,
         "doc_type": 0.331,
         "doc_type_language": 0.331,
-        "tenant": -0.014,
-        "tenant_language": 0.057
+        "tenant": -0.01,
+        "tenant_language": 0.062
       },
       "split": "dev"
     },
@@ -4057,7 +4715,7 @@
         "d34_all": 0.315,
         "doc_type": 0.315,
         "doc_type_language": 0.315,
-        "tenant": 0.019,
+        "tenant": 0.015,
         "tenant_language": 0.054
       },
       "split": "dev"
@@ -4070,8 +4728,8 @@
         "d34_all": 0.225,
         "doc_type": 0.225,
         "doc_type_language": 0.225,
-        "tenant": 0.008,
-        "tenant_language": 0.034
+        "tenant": 0.007,
+        "tenant_language": 0.033
       },
       "split": "dev"
     },
@@ -4093,11 +4751,11 @@
       "id": "zh-stale-version-002",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.148,
-        "doc_type": 0.079,
-        "doc_type_language": 0.148,
-        "tenant": 0.077,
-        "tenant_language": 0.146
+        "d34_all": 0.146,
+        "doc_type": 0.078,
+        "doc_type_language": 0.146,
+        "tenant": 0.075,
+        "tenant_language": 0.143
       },
       "split": "dev"
     },
@@ -4106,11 +4764,11 @@
       "id": "zh-stale-version-003",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.14,
-        "doc_type": 0.065,
-        "doc_type_language": 0.14,
-        "tenant": 0.062,
-        "tenant_language": 0.138
+        "d34_all": 0.148,
+        "doc_type": 0.062,
+        "doc_type_language": 0.148,
+        "tenant": 0.058,
+        "tenant_language": 0.146
       },
       "split": "test"
     },
@@ -4119,11 +4777,11 @@
       "id": "zh-stale-version-004",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.16,
-        "doc_type": 0.077,
-        "doc_type_language": 0.157,
-        "tenant": 0.076,
-        "tenant_language": 0.16
+        "d34_all": 0.17,
+        "doc_type": 0.081,
+        "doc_type_language": 0.168,
+        "tenant": 0.079,
+        "tenant_language": 0.17
       },
       "split": "dev"
     },
@@ -4135,8 +4793,8 @@
         "d34_all": 0.246,
         "doc_type": 0.155,
         "doc_type_language": 0.246,
-        "tenant": 0.055,
-        "tenant_language": 0.063
+        "tenant": 0.057,
+        "tenant_language": 0.066
       },
       "split": "dev"
     },
@@ -4148,8 +4806,8 @@
         "d34_all": 0.163,
         "doc_type": 0.051,
         "doc_type_language": 0.163,
-        "tenant": 0.006,
-        "tenant_language": 0.026
+        "tenant": 0.004,
+        "tenant_language": 0.025
       },
       "split": "dev"
     },
@@ -4171,11 +4829,11 @@
       "id": "zh-table-004",
       "pair": "zh->zh",
       "scores": {
-        "d34_all": 0.045,
-        "doc_type": 0.026,
-        "doc_type_language": 0.045,
-        "tenant": 0.022,
-        "tenant_language": 0.041
+        "d34_all": 0.042,
+        "doc_type": 0.021,
+        "doc_type_language": 0.042,
+        "tenant": 0.018,
+        "tenant_language": 0.039
       },
       "split": "dev"
     },
@@ -4188,7 +4846,7 @@
         "doc_type": 0.078,
         "doc_type_language": 0.078,
         "tenant": 0.013,
-        "tenant_language": 0.04
+        "tenant_language": 0.041
       },
       "split": "dev"
     },
@@ -4200,8 +4858,8 @@
         "d34_all": 0.025,
         "doc_type": 0.025,
         "doc_type_language": 0.025,
-        "tenant": -0.021,
-        "tenant_language": 0.006
+        "tenant": -0.017,
+        "tenant_language": 0.007
       },
       "split": "test"
     }
@@ -4211,8 +4869,8 @@
   "threshold_rule": "5th percentile (nearest rank, lower) of dev-split answerable, non-cross-lingual scores, per grouping",
   "verdict": {
     "answerable_below": {
-      "doc_type": 11,
-      "doc_type_language": 10
+      "doc_type": 12,
+      "doc_type_language": 13
     },
     "compared": [
       "doc_type_language",
@@ -4221,7 +4879,7 @@
     "d34_separates_at_least_as_well": false,
     "note": "Measurement on synthetic fixtures with a lexical hash embedder; it calibrates nothing and never changes the D-34 grouping.",
     "out_of_domain_below": {
-      "doc_type": 2,
+      "doc_type": 0,
       "doc_type_language": 0
     }
   },

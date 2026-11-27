@@ -201,6 +201,8 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
       'rag_get_document_for_type_change',
       'rag_golden_evidence_register',
       'rag_term_corpus_df',
+      // 0983 (06.2-15): writes the tenant's scope centroids (mean vectors) and returns per-kind group and chunk counts only.
+      'rag_scope_centroids_rebuild',
     ],
   },
   {
