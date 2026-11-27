@@ -20,6 +20,7 @@ import {
   type FakeLanguageModelFactory,
 } from './fake-citation-generator.mts';
 import { hanChars, latinTokens } from './fake-groundedness.mts';
+import { createFakeCalcModel, fakeCalcToolCapability, isFakeCalcModel } from './fake-calc-models.mts';
 
 /**
  * Harness-only scripted answer models for the Phase 5.2 gates (D-54, D-42, D-34, D-27). Each fake reads only the prompt it
@@ -47,10 +48,13 @@ export const FAKE_ANSWER_MODEL_IDS = [
 
 export type FakeAnswerModelId = (typeof FAKE_ANSWER_MODEL_IDS)[number];
 
-/** True for every model id the fake factory serves: the Phase 5.2 fakes and the fake citation generator. */
+/** True for every model id the fake factory serves: the Phase 5.2 and 5.2.1 fakes and the fake citation generator. */
 export function isFakeGeneratorModel(modelId: string): boolean {
-  return modelId === FAKE_CITATION_GENERATOR_MODEL || (FAKE_ANSWER_MODEL_IDS as readonly string[]).includes(modelId);
+  return modelId === FAKE_CITATION_GENERATOR_MODEL || (FAKE_ANSWER_MODEL_IDS as readonly string[]).includes(modelId) || isFakeCalcModel(modelId);
 }
+
+/** The fake factory with its tool-support declaration (D-78), read by the eval route through evalModelToolCapability. */
+export type FakeAnswerModelFactory = FakeLanguageModelFactory & { canUseTools: (_modelId: string) => boolean | undefined };
 
 type RuleCategory = 'partial_answer' | 'stale_version' | 'off_topic_context';
 
@@ -323,7 +327,7 @@ export interface FakeAnswerModelsOptions {
 }
 
 /** Returns the factory the harness installs with setEvalLanguageModelFactory; non-Phase-5.2 ids get the fake citation generator. */
-export function installFakeAnswerModels(options: FakeAnswerModelsOptions): FakeLanguageModelFactory {
+export function installFakeAnswerModels(options: FakeAnswerModelsOptions): FakeAnswerModelFactory {
   const seed = options.seed ?? DEFAULT_FAKE_CITATION_SEED;
   const byQuestion = new Map<string, GoldenItem>();
   for (const item of options.items) {
@@ -360,7 +364,11 @@ export function installFakeAnswerModels(options: FakeAnswerModelsOptions): FakeL
     return { text, finish: 'stop', tokens: text.split(/\s+/).filter(Boolean).length, pieces: splitForStreaming };
   };
 
-  return (modelId) => {
+  // Phase 5.2.1 D-78: the calculation fakes (fake-calc-*) answer unscripted questions as the run's citation generator does
+  const calcFallback = (callOptions: LanguageModelV3CallOptions): string =>
+    fakeCitationAnswer({ ...promptParts(callOptions), seed, ...(options.citation ?? {}) });
+  const factory = (modelId: string): LanguageModel => {
+    if (isFakeCalcModel(modelId)) return createFakeCalcModel(modelId, calcFallback);
     if (!known.has(modelId)) return citation(modelId);
     const id = modelId as FakeAnswerModelId;
     return new MockLanguageModelV3({
@@ -388,4 +396,5 @@ export function installFakeAnswerModels(options: FakeAnswerModelsOptions): FakeL
       },
     }) as unknown as LanguageModel;
   };
+  return Object.assign(factory, { canUseTools: fakeCalcToolCapability });
 }

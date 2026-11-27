@@ -387,9 +387,12 @@ def test_committed_manifests_start_at_version_one_all_active():
     # Version 1 recorded the set when 05.3-06 created the manifests; train 30 bumped it twice: version 2 added only the
     # 36 Phase 4.2 items of plan 04.2-37 (tag phase42), version 3 changed only the six small_talk items the Phase 6 gate fix
     # marked conversational. Version 4 (the merge of train 30 into 05.3-16) added only the 25 items of plan 05.3-15
-    # (tag phase53_fixture). Version 5 (train 33) added only the 48 Phase 5.2 items of plan 05.2-29. Every item is
-    # still active. Version 6 of the ingest manifest only (plan 03.3-20) added the templated collection items and five
-    # no-answer items in its vocabulary.
+    # (tag phase53_fixture). Version 5 (train 33) added only the 48 Phase 5.2 items of plan 05.2-29. Version 6 of the
+    # fixture manifest added only the 57 multi_step_calc and context_overflow items of plan 05.2.1-12. Version 6 of the ingest
+    # manifest (plan 03.3-20) added the templated collection items and five no-answer items in its vocabulary; its version 7
+    # (train 38) added the 57 items of plan 05.2.1-12 and two more no-answer items in the templated vocabulary (en-06, it-06),
+    # which keep the gate's no-answer share at its minimum for en and it once both plans are in. Version 8 (train 39) added
+    # only the two no-answer items 05.2.1-17 had made for the same purpose (en-08, it-07). Every item is still active.
     golden = load_golden(FIXTURE_GOLDEN)
     phase42 = sorted(item.id for item in golden if "phase42" in item.tags)
     phase53 = sorted(item.id for item in golden if "phase53_fixture" in item.tags)
@@ -399,16 +402,29 @@ def test_committed_manifests_start_at_version_one_all_active():
         for item in golden
         if item.category in ("partial_answer", "stale_version", "off_topic_context") or "link_injection" in item.tags
     )
+    phase521 = sorted(item.id for item in golden if item.category in ("multi_step_calc", "context_overflow"))
     assert len(phase42) == 36 and len(conversational) == 6 and len(phase53) == 25 and len(phase52) == 48
-    templated = sorted(item.id for item in load_golden(INGEST_GOLDEN) if item.id.startswith("ingest-tpl-"))
+    assert len(phase521) == 57
+    ingest = load_golden(INGEST_GOLDEN)
+    train38_no_answer = ["ingest-tpl-no-answer-en-06", "ingest-tpl-no-answer-it-06"]
+    train39_no_answer = ["ingest-tpl-no-answer-en-08", "ingest-tpl-no-answer-it-07"]
+    templated = sorted(
+        item.id
+        for item in ingest
+        if item.id.startswith("ingest-tpl-") and item.id not in train38_no_answer + train39_no_answer
+    )
     assert len(templated) == 83
     for path in (FIXTURE_MANIFEST, INGEST_MANIFEST):
         manifest = golden_set.load_manifest(path)
-        expected = 6 if path == INGEST_MANIFEST else 5
+        expected = 8 if path == INGEST_MANIFEST else 6
         assert manifest.version == expected
         assert [entry.version for entry in manifest.changelog] == list(range(1, expected + 1))
         if path == INGEST_MANIFEST:
             assert sorted(manifest.changelog[5].added) == templated and not manifest.changelog[5].changed
+            assert sorted(manifest.changelog[6].added) == sorted(phase521 + train38_no_answer) and not manifest.changelog[6].changed
+            assert sorted(manifest.changelog[7].added) == train39_no_answer and not manifest.changelog[7].changed
+        else:
+            assert sorted(manifest.changelog[5].added) == phase521 and not manifest.changelog[5].changed
         assert sorted(manifest.changelog[1].added) == phase42
         assert not manifest.changelog[1].changed
         assert sorted(manifest.changelog[2].changed) == conversational

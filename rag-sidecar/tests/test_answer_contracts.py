@@ -69,6 +69,8 @@ def test_citation_record_field_names_are_exactly_d01():
         "effectiveFrom",
         "effectiveTo",
         "alsoIn",
+        "withdrawn",
+        "withdrawnAt",
     }
 
 
@@ -84,12 +86,37 @@ def test_citation_record_field_names_are_exactly_d01():
         {"quoteHash": "A" * 64},
         {"strategy": "claude_citations"},
         {"quote": ""},
+        {"quote": "", "withdrawn": False},
         {"unexpected": 1},
+        {"withdrawn": True, "unexpected": 1},
     ],
 )
 def test_citation_record_rejects(overrides):
     with pytest.raises(ValidationError):
         CitationRecord.model_validate(_citation(**overrides))
+
+
+EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+
+def test_citation_record_accepts_a_withdrawn_citation_with_an_empty_quote():
+    payload = _citation(quote="", quoteHash=EMPTY_SHA256, withdrawn=True, withdrawnAt="2026-01-01T00:00:00Z")
+    record = CitationRecord.model_validate(payload)
+    assert record.withdrawn is True and record.quote == ""
+    assert record.model_dump(mode="json") == payload
+
+
+def test_citation_record_without_the_withdrawn_marker_serializes_unchanged():
+    record = CitationRecord.model_validate(_citation())
+    dumped = record.model_dump(mode="json")
+    assert "withdrawn" not in dumped and "withdrawnAt" not in dumped
+
+
+def test_answer_record_documents_accept_withdrawn():
+    from rag_sidecar.contracts.answers import DocumentAvailability
+    from typing import get_args
+
+    assert set(get_args(DocumentAvailability)) == {"current", "unavailable", "withdrawn"}
 
 
 def _request(**overrides):
@@ -620,3 +647,14 @@ def test_committed_configs_and_baselines_still_load():
     assert baselines
     for path in baselines:
         Baseline.model_validate_json(path.read_text())
+
+
+def test_rag_trace_stale_index_drop_is_optional_and_non_negative():
+    trace = RagTrace.model_validate(_trace())
+    assert trace.stale_index_drop is None
+    assert "stale_index_drop" not in trace.model_dump(mode="json")
+    assert RagTrace.model_validate(_trace(stale_index_drop=0)).stale_index_drop == 0
+    assert RagTrace.model_validate(_trace(stale_index_drop=3)).model_dump(mode="json")["stale_index_drop"] == 3
+    for bad in (-1, 1.5):
+        with pytest.raises(ValidationError):
+            RagTrace.model_validate(_trace(stale_index_drop=bad))

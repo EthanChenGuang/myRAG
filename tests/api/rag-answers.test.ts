@@ -314,6 +314,22 @@ describe('/api/rag/answers routes', () => {
     expect([...state.sessionQueries, ...state.adminQueries].some((q) => q.table === 'document_chunks')).toBe(false);
   });
 
+  it('reports a document withdrawn when the record carries a withdrawn citation of it, even when the row is gone', async () => {
+    const withdrawn = crypto.randomUUID();
+    const kept = crypto.randomUUID();
+    const missing = crypto.randomUUID();
+    state.tables.documents.push({ id: kept, is_current: true, status: 'ready' }, { id: withdrawn, is_current: true, status: 'ready' });
+    const scrubbed = { ...citation(1, withdrawn), quote: '', withdrawn: true, withdrawnAt: '2026-11-25T12:00:00.000Z' };
+    const row = record({ citations: [scrubbed, citation(2, withdrawn), citation(3, kept), citation(4, missing)] });
+    const gone = record({ citations: [{ ...citation(1, missing), quote: '', withdrawn: true }] });
+    state.tables.rag_answer_records.push(row, gone);
+    const { one } = await loadRoutes();
+    const body = AnswerRecordSchema.parse(await (await one.GET(getOne(String(row.id)), params(String(row.id)))).json());
+    expect(body.documents).toEqual({ [withdrawn]: 'withdrawn', [kept]: 'current', [missing]: 'unavailable' });
+    const second = AnswerRecordSchema.parse(await (await one.GET(getOne(String(gone.id)), params(String(gone.id)))).json());
+    expect(second.documents).toEqual({ [missing]: 'withdrawn' });
+  });
+
   it('mirrors RAG_ANSWER_FEEDBACK at call time', async () => {
     const row = record();
     state.tables.rag_answer_records.push(row);

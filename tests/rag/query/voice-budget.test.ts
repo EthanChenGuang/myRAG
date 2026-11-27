@@ -155,7 +155,8 @@ describe('voice profile with the query layer stays inside its budget (D-27, D-29
         expect(condense!.endedAt - condense!.startedAt).toBe(VOICE_CONDENSE_TIMEOUT_MS);
         expect(result.queryPlan?.skipped).toContainEqual({ transform: 'condense_history', reason: 'timeout' });
         expect(result.queryPlan?.standalone).toBe(FOLLOW_UP);
-        expect(harness.embedded).toEqual([FOLLOW_UP]);
+        // Plan 06.2-20 (D-23): voice sends history, so the skipped condense adds the history_fallback text to the same batch.
+        expect(harness.embedded).toEqual([FOLLOW_UP, `${HISTORY[0]!.content}\n${FOLLOW_UP}`]);
       } else {
         expect(condense?.status, `run ${index + 1}`).toBe('ok');
         expect(result.queryPlan?.standalone).toBe(STANDALONE);

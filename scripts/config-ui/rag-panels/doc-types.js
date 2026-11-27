@@ -54,12 +54,20 @@ function docTypeLabelForLocale(id, locale) {
   return table[id] || CONFIG_UI_DOC_TYPE_LABELS.en[id] || id;
 }
 
-function buildUploadForm(file, docType, pickerEnabled) {
+function docTypesAccessControls() {
+  if (typeof AccessGroupsQueueControls !== 'undefined') return AccessGroupsQueueControls;
+  return typeof globalThis !== 'undefined' && globalThis.AccessGroupsQueueControls ? globalThis.AccessGroupsQueueControls : null;
+}
+
+function buildUploadForm(file, docType, pickerEnabled, item, picker) {
   const form = new FormData();
   form.append('file', file);
   if (pickerEnabled && docType) {
     form.append('doc_type', docType);
   }
+  const access = docTypesAccessControls();
+  const field = access && item ? access.uploadField(item, picker) : null;
+  if (field) form.append('access', field);
   return form;
 }
 
@@ -86,6 +94,13 @@ async function fetchUploadPickerDefault(organizationId) {
     error: null,
   };
 }
+
+const DOC_TYPES_PANEL_STATUS =
+  typeof ragPanelSetStatus === 'function'
+    ? ragPanelSetStatus
+    : typeof require !== 'undefined'
+      ? require('./panel-status.js').ragPanelSetStatus
+      : null;
 
 class DocTypesPanel {
   constructor() {
@@ -115,10 +130,14 @@ class DocTypesPanel {
     this.load();
   }
 
-  setStatus(text, isError) {
-    if (!this.statusEl) return;
-    this.statusEl.textContent = text || '';
-    this.statusEl.classList.toggle('text-error', Boolean(isError));
+  setStatus(text, isError, options) {
+    const render = () => {
+      if (!this.statusEl) return;
+      this.statusEl.textContent = text || '';
+      this.statusEl.classList.toggle('text-error', Boolean(isError));
+    };
+    if (DOC_TYPES_PANEL_STATUS) DOC_TYPES_PANEL_STATUS(this.statusEl, render, isError, options);
+    else render();
   }
 
   async load() {
@@ -211,7 +230,7 @@ class DocTypesPanel {
         return;
       }
     }
-    this.setStatus('Defaults saved.', false);
+    this.setStatus('Defaults saved.', false, { toast: true });
     await this.load();
   }
 }

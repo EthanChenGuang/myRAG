@@ -338,6 +338,16 @@ describe('fake edge (PostgREST shim plus /v1/embeddings)', () => {
     assert.deepEqual(await asText.json(), rows);
   });
 
+  test('rpc match_document_chunks accepts the access arguments of 0930 (p_access_keys, p_access_all)', async () => {
+    const e = await getEdge();
+    const plain = (await (await post(e, '/rest/v1/rpc/match_document_chunks', rpcArgs(TRACER_QUESTION))).json()) as unknown[];
+    const withKeys = await post(e, '/rest/v1/rpc/match_document_chunks', { ...rpcArgs(TRACER_QUESTION), p_access_keys: ['all'], p_access_all: false });
+    assert.equal(withKeys.status, 200);
+    assert.deepEqual(await withKeys.json(), plain, 'every corpus row is {all}, so the open key returns the same rows');
+    const admin = await post(e, '/rest/v1/rpc/match_document_chunks', { ...rpcArgs(TRACER_QUESTION), p_access_keys: ['all'], p_access_all: true });
+    assert.equal(admin.status, 200);
+  });
+
   test('GET documents and document_chunks honour whitelisted select and eq filters', async () => {
     const e = await getEdge();
     const doc = loadCorpus(REAL_CORPUS).documents.find((d) => d.filename === 'refund-policy.en.md')!;

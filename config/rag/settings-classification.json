@@ -39,6 +39,11 @@
       "side": "query"
     },
     {
+      "name": "RAG_BGE_M3_VIA",
+      "side": "ingestion",
+      "mechanism": "reembed"
+    },
+    {
       "name": "RAG_CACHE_ENABLED",
       "side": "query"
     },
@@ -834,6 +839,22 @@
       "side": "query"
     },
     {
+      "name": "RAG_SOURCE_RECHECK",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SOURCE_RECONCILE_INTERVAL_DAYS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SOURCE_RECONCILE_MAX_AGE_DAYS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE",
+      "side": "query"
+    },
+    {
       "name": "RAG_SPECULATIVE_RETRIEVAL",
       "side": "query"
     },
@@ -899,7 +920,8 @@
     },
     {
       "name": "RAG_TRANSLATION_GLOSSARY",
-      "side": "query"
+      "side": "both",
+      "mechanism": "retranslate"
     },
     {
       "name": "RAG_UPLOADER_ALERT_THRESHOLD",

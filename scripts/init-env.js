@@ -230,6 +230,8 @@ NEXT_PUBLIC_FAVICON_URL=/favicon.svg
 NEXT_PUBLIC_HEADER_LOGO_TYPE=text
 NEXT_PUBLIC_HEADER_LOGO_TEXT=myRAG
 NEXT_PUBLIC_HEADER_LOGO_URL=
+NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT=
+NEXT_PUBLIC_SIDEBAR_BUTTON_URL=
 NEXT_PUBLIC_AI_RESPONSE_LOGO_URL=
 NEXT_PUBLIC_AI_RESPONSE_LOGO_BORDER=true
 NEXT_PUBLIC_AI_RESPONSE_LOGO_SIZE=3
@@ -640,6 +642,12 @@ RAG_DOC_TYPE_LLM_DETECT=false
 RAG_INVOICE_LLM_EXTRACT=false
 # Look up exact identifiers (invoice numbers, contract ids) before vector search: true | false
 RAG_EXACT_ID_LOOKUP=false
+# Recheck before rerank that each candidate's document still exists and is current: true | false
+RAG_SOURCE_RECHECK=false
+# Source sync: full reconcile interval and age limit (days), and the share of a connection's documents above which a full listing pauses for confirmation (0.05 to 1)
+RAG_SOURCE_RECONCILE_INTERVAL_DAYS=7
+RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=7
+RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=0.3
 # Create image chunks from PDF pages: true | false
 RAG_PDF_IMAGE_CHUNKS=false
 # Prompt injection scan on ingested text: off | quarantine
@@ -724,6 +732,8 @@ RAG_TABLE_ROW_SERIALIZATION=false
 RAG_CAPTION_LANGUAGE=en
 # BGE-M3 serving (Phase 3.2.1): hosted | sidecar
 RAG_BGE_M3_SERVING=hosted
+# Host for hosted BGE-M3 calls: deepinfra | openrouter (openrouter uses OPENROUTER_API_KEY, pins the DeepInfra upstream and records host openrouter; verify with npm run rag:embedding -- verify-route bge-m3)
+RAG_BGE_M3_VIA=deepinfra
 # Search-only translations of document chunks: off | on
 RAG_DOC_TRANSLATION=off
 # Translation model override (empty = RAG_QUERY_LLM_MODEL)
@@ -893,6 +903,11 @@ NANGO_HOST=https://api.nango.dev
 NANGO_SUPPORTED_FILE_TYPES=pdf,doc,docx,txt,md,html,pptx,xlsx
 NANGO_MAX_FILES_PER_SYNC=100
 NANGO_SYNC_INTERVAL_HOURS=1
+
+# SharePoint Online and OneDrive for Business connectors (empty keys use the Nango ids sharepoint-online and one-drive)
+NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED=false
+NANGO_SHAREPOINT_INTEGRATION_KEY=
+NANGO_ONEDRIVE_INTEGRATION_KEY=
 
 # -----------------------------
 # CONNECTORS MANAGEMENT

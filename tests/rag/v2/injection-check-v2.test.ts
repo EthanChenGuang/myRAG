@@ -95,6 +95,7 @@ function run(
   const collector = createTraceCollector({ profile, tenantKey: SINGLE_KEY });
   const params = { ...effectiveRetrievalParams(profile, cfg, null), final_top_k: 20 };
   const promise = runContextStages({
+    access: { mode: 'off' },
     input: { scope, query: 'alpha beta gamma delta', profile, signal: new AbortController().signal },
     config: cfg,
     profile,
@@ -221,6 +222,7 @@ describe('v2 injection_check placement and actions (D-06, R3)', () => {
     const cfg = config({ RAG_PARENT_CHILD: 'true' });
     const collector = createTraceCollector({ profile: 'chat', tenantKey: SINGLE_KEY });
     const out = await runContextStages({
+      access: { mode: 'off' },
       input: { scope, query: 'alpha beta', profile: 'chat', signal: new AbortController().signal, citationLabeler: aliasLabeler },
       config: cfg,
       profile: 'chat',

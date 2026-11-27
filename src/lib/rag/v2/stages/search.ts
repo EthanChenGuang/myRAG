@@ -34,6 +34,7 @@ import type { LexicalOptions } from '../../lexical/options';
 import type { LexicalStamp } from '../../lexical/resolve-options';
 import { scopeAccessFilter, type ScopeAccessFilter } from '../../tenant/access';
 import { scopeKey, type TenantScope } from '../../tenant/scope';
+import { runSourceRecheckStage, type SourceRecheckMarker } from '../../retrieval/source-recheck';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RetrievalBackendSelection, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
@@ -41,7 +42,16 @@ import { terminologyParams } from '../../terminology/expand';
 import { reserveTerminologyHits } from '../../terminology/reserve';
 import { evalChunkingOverride, evalTuningOverrides } from '../overrides';
 import { effectiveTuningParams } from '../tuning-params';
-import { createRetrievalPort, listsFromLegs, variantSearchRequest, type RetrievalPortHandle } from '../port';
+import {
+  applyVariantFilters,
+  createRetrievalPort,
+  listsFromLegs,
+  variantSearchRequest,
+  type RetrievalPortHandle,
+  type VariantFilterRetry,
+} from '../port';
+
+export { applyVariantFilters, type VariantFilterRetry } from '../port';
 import { bindingFailureDetail, hasBindingWork, runBindingLegs, type BindingEmbed, type BindingLegsOutput, type BindingLegsPlan } from './binding-legs';
 import {
   hasTranslationWork,
@@ -88,6 +98,8 @@ export interface SearchStagesInput {
   attributes?: AttributeSearchInput;
   /** D-05: the access filter runRetrieval computed once; absent reads it from the scope. Set on every backend request. */
   access?: ScopeAccessFilter;
+  /** Phase 6.2 D-08, P-10: the query layer's max_searches; set only while the layer runs, and then searchesCounted is reported. */
+  maxSearches?: number;
 }
 
 /** The request's query-side lexical options and what they were built from. */
@@ -229,7 +241,14 @@ export interface SearchStagesOutput {
   tableRows?: ReadonlyMap<string, TableRowAttachment>;
   /** D-31: the identifier_resolve outcome; absent while RAG_IDENTIFIER_FILTER is off or the stage did not run. */
   identifiers?: SearchIdentifiers;
+  /** Phase 6.2 P-10: variant searches plus filter retries; present only when maxSearches was given. */
+  searchesCounted?: number;
+  /** Phase 6.2 D-08: one entry per filtered sub-question variant; absent when no variant carried a filter. */
+  filterRetries?: VariantFilterRetry[];
+  /** Set only when the source_recheck stage completed (D-46). */
+  sourceRecheck?: SourceRecheckMarker;
 }
+
 
 /** D-31, D-51: what the identifier_resolve stage found, for the rank (guard) and context (suggestion line) stages and the result. */
 export interface SearchIdentifiers {
@@ -258,6 +277,8 @@ export const BACKEND_FIELD_UNSUPPORTED = 'backend_field_unsupported';
 /** D-45: the table_lookup stage detail when a narrowing filter makes it stand down. */
 export const TABLE_LOOKUP_NARROWED = 'narrowing_filters';
 export const TABLE_LIST_ID = 'table:0';
+/** Phase 6 D-08: the hard cap of searches when a caller gives variant filters without the layer's max_searches. */
+const MAX_SEARCHES_FALLBACK = 8;
 /** D-31: fixed codes of the identifier_resolve and search stage details. */
 export const IDENTIFIER_FILTER_FALLBACK = 'identifier_filter_fallback';
 export const IDENTIFIER_RESOLVE_FAILED = 'identifier_resolve_failed';
@@ -395,6 +416,7 @@ async function lookupRankedList(
   rows: LookupRow[],
   legsByVariant: BackendLegs[],
   signal: AbortSignal,
+  access: ScopeAccessFilter,
 ): Promise<RankedList | null> {
   if (rows.length === 0) return null;
   const known = legHitsByChunkId(legsByVariant);
@@ -422,7 +444,7 @@ async function lookupRankedList(
         similarity: 1,
         metadata: row.metadata,
       })),
-      { adminClient, signal },
+      { adminClient, signal, access },
     );
     for (let index = 0; index < rows.length; index++) {
       const row = rows[index]!;
@@ -681,6 +703,10 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       }
     };
 
+    // D-08, P-10: retries left within max_searches after the variants; term:0 keeps its own accounting but its call takes a place.
+    const retryBudget = (): number =>
+      Math.max(0, (ctx.maxSearches ?? MAX_SEARCHES_FALLBACK) - variants.length - (termTokens.length > 0 ? 1 : 0));
+
     const runDelegatedSearch = async (stageSignal: AbortSignal, delegate: SearchDelegate, roundFilters: RetrievalFilters) => {
       const domainPending = runDomainLegs(stageSignal, roundFilters);
       const translationPending = runTranslations(stageSignal, roundFilters);
@@ -705,6 +731,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         terminologyDenseWeight,
         ...lexicalOptionsArg,
         access,
+        filterRetryBudget: retryBudget(),
       });
       let order: unknown;
       try {
@@ -735,6 +762,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         soft,
         delegated: { handle, order: order as string[] } as DelegatedFusion | null,
         lexicalDetail: await lexicalDetail(),
+        filterRetries: handle.filterRetries(),
       };
     };
 
@@ -746,30 +774,57 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       const translationPending = runTranslations(stageSignal, roundFilters);
       const softPending = runSoftLeg(stageSignal, roundFilters);
       softPending.catch(() => undefined);
-      const [term, ...legsByVariant] = await Promise.all([
+      const searchVariant = (variant: QueryVariant, index: number, variantFilters: RetrievalFilters) =>
+        backend.search(
+          variantSearchRequest({
+            scope,
+            variant,
+            embedding: ctx.variantEmbeddings?.[index] ?? embedding,
+            filters: variantFilters,
+            pool,
+            lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
+            signal: stageSignal,
+            chunkingProfileOverride: chunkingOverride,
+            ...versionScopeArg,
+            ...identifierArg,
+            ...lexicalOptionsArg,
+            access,
+          }),
+        );
+      // D-08: a filtered sub-question searches its narrowed filter; every other variant the round's shared filters, unchanged.
+      const variantFilters = variants.map((variant) => applyVariantFilters(roundFilters, variant));
+      const [term, ...legsByVariant] = (await Promise.all([
         runTermLeg(stageSignal, roundFilters),
-        ...variants.map(async (variant, index) => {
-          const legs = await backend.search(
-            variantSearchRequest({
-              scope,
-              variant,
-              embedding: ctx.variantEmbeddings?.[index] ?? embedding,
-              filters: roundFilters,
-              pool,
-              lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
-              signal: stageSignal,
-              chunkingProfileOverride: chunkingOverride,
-              ...versionScopeArg,
-              ...identifierArg,
-              ...lexicalOptionsArg,
-              access,
-            }),
-          );
-          denseTotal += legs.dense.length;
-          lexicalTotal += legs.lexical.length;
-          return legs;
-        }),
-      ]) as [RankedHit[] | null, ...BackendLegs[]];
+        ...variants.map((variant, index) => searchVariant(variant, index, variantFilters[index]!)),
+      ])) as [RankedHit[] | null, ...BackendLegs[]];
+      // D-08, P-10: an empty filtered search is retried once with the shared filters, in variant order, while the searches stay
+      // within max_searches; term:0 keeps its own accounting but its call leaves no room above the cap.
+      const filterRetries: VariantFilterRetry[] = [];
+      let budget = retryBudget();
+      const retries: Array<Promise<void>> = [];
+      variants.forEach((variant, index) => {
+        if (variantFilters[index] === roundFilters) return;
+        const entry: VariantFilterRetry = { subQuestionIndex: variant.subQuestionIndex ?? index, retried: false, retrySkippedCap: false };
+        filterRetries.push(entry);
+        const first = legsByVariant[index]!;
+        if (first.dense.length + first.lexical.length > 0) return;
+        if (budget <= 0) {
+          entry.retrySkippedCap = true;
+          return;
+        }
+        budget -= 1;
+        entry.retried = true;
+        retries.push(
+          searchVariant(variant, index, roundFilters).then((legs) => {
+            legsByVariant[index] = legs;
+          }),
+        );
+      });
+      await Promise.all(retries);
+      for (const legs of legsByVariant) {
+        denseTotal += legs.dense.length;
+        lexicalTotal += legs.lexical.length;
+      }
       const domain = await domainPending;
       const translation = await translationPending;
       const soft = await softPending;
@@ -783,6 +838,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         soft,
         delegated: null as DelegatedFusion | null,
         lexicalDetail: await lexicalDetail(),
+        filterRetries,
       };
     };
 
@@ -853,6 +909,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     let termHits: RankedHit[] | null = null;
     let softLegs: BackendLegs | null = null;
     let appliedFilters: RetrievalFilters = filters;
+    let filterRetries: VariantFilterRetry[] = [];
     if (icuSkipLexical) {
       const startedAt = collector.now();
       let searched: SearchResult;
@@ -877,6 +934,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       termHits = searched.term;
       softLegs = searched.soft?.legs ?? null;
       appliedFilters = searched.appliedFilters;
+      filterRetries = searched.filterRetries;
       collector.record({
         name: 'search',
         status: 'degraded',
@@ -927,6 +985,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       termHits = searched.term;
       softLegs = searched.soft?.legs ?? null;
       appliedFilters = searched.appliedFilters;
+      filterRetries = searched.filterRetries;
     }
     // Mapped to source chunks before fusion; a chunk the original legs also found keeps the original hit (D-30).
     // D-31: translation hits cannot be filtered in SQL; while filtered only chunks the filtered legs also found are kept.
@@ -949,6 +1008,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           exactIdStage(input.query, scope, {
             client: requireAdminSearchClient(getRagDeps()),
             signal: stageSignal,
+            access,
             limit: pool,
             ...versionScopeArg,
             ...identifierArg,
@@ -961,7 +1021,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         },
       );
       if (!exact.skipped && exact.value.rows.length > 0) {
-        exactList = await lookupRankedList('exact_id', params.leg_weights?.exact_id ?? 1, exact.value.rows, searchValue, signal);
+        exactList = await lookupRankedList('exact_id', params.leg_weights?.exact_id ?? 1, exact.value.rows, searchValue, signal, access);
       }
     }
 
@@ -986,6 +1046,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
               signal: stageSignal,
               ...versionScopeArg,
               ...identifierArg,
+              access,
             }),
           collector,
           {
@@ -996,7 +1057,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         );
         if (!table.skipped && table.value.rows.length > 0) {
           const listed = tableListRows(table.value.rows);
-          tableList = await lookupRankedList(TABLE_LIST_ID, tuning.weight, listed.rows, searchValue, signal);
+          tableList = await lookupRankedList(TABLE_LIST_ID, tuning.weight, listed.rows, searchValue, signal, access);
           if (tableList) tableRows = listed.attachments;
         }
       }
@@ -1010,7 +1071,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       (exactList?.hits.length ?? 0) +
       (tableList?.hits.length ?? 0) +
       (softLegs ? softLegs.dense.length + softLegs.lexical.length : 0);
-    return { searchValue, domainLists, translationLists, delegated, termHits, exactList, tableList, tableRows, softLegs, found };
+    return { searchValue, domainLists, translationLists, delegated, termHits, exactList, tableList, tableRows, softLegs, found, filterRetries };
   };
 
   let legs = await runLegs(filterIdentifiers, []);
@@ -1019,7 +1080,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     fallback = true;
     legs = await runLegs(undefined, [IDENTIFIER_FILTER_FALLBACK]);
   }
-  const { searchValue, domainLists, translationLists, delegated, termHits, exactList, tableList, tableRows, softLegs } = legs;
+  const { searchValue, domainLists, translationLists, delegated, termHits, exactList, tableList, tableRows, softLegs, filterRetries } = legs;
 
   // D-16: weight = expansion_weight × the lexical leg weight in force, so the list stays a fraction of the lexical leg.
   const termList: RankedList | null =
@@ -1097,12 +1158,29 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
 
   const capped = deduped.skipped ? reserve(sliceCap(fused, params.rerank_input_cap)) : deduped.value;
 
+  // D-19, D-38: an index row that missed a delete never reaches rerank; a failed recheck keeps the candidates and degrades the result.
+  const recheck = config.sourceRecheck
+    ? await runSourceRecheckStage({
+        spec: spec('source_recheck', 'skip'),
+        signal,
+        collector,
+        scope,
+        client: () => requireAdminSearchClient(getRagDeps()),
+        items: capped.hits,
+        chunkIdOf: (row) => row.hit.chunkId,
+      })
+    : null;
+
   return {
-    fusedHits: capped.hits,
+    fusedHits: recheck ? recheck.items : capped.hits,
     dedupeCounts: capped.counts,
+    ...(recheck?.marker ? { sourceRecheck: recheck.marker } : {}),
     versionScope: versions.scope,
     ...(tableRows ? { tableRows } : {}),
     ...(identifiers ? { identifiers: { ...identifiers, filtered: filterIdentifiers !== undefined && !fallback, fallback } } : {}),
+    // P-10: plan variants (history fallback included) and filter retries; term:0 and translation legs keep their own caps.
+    ...(ctx.maxSearches !== undefined ? { searchesCounted: variants.length + filterRetries.filter((entry) => entry.retried).length } : {}),
+    ...(filterRetries.length > 0 ? { filterRetries } : {}),
   };
 }
 
@@ -1128,15 +1206,15 @@ async function runIdentifierResolve(ctx: SearchStagesInput): Promise<ResolvedIde
       const { expressions } = await loadTenantIdentifierPatterns(scope, { signal: stageSignal });
       try {
         const client = requireAdminSearchClient(getRagDeps());
-        const exact = await resolveQueryIdentifiers(scope, input.query, expressions, { client, signal: stageSignal });
-        const lookalikes = exact.missing.length > 0 ? await digitLookalikeMatches(scope, exact.missing, { client, signal: stageSignal }) : new Map<string, string>();
+        const exact = await resolveQueryIdentifiers(scope, input.query, expressions, { client, signal: stageSignal, access: ctx.access });
+        const lookalikes = exact.missing.length > 0 ? await digitLookalikeMatches(scope, exact.missing, { client, signal: stageSignal, access: ctx.access }) : new Map<string, string>();
         const resolved: QueryIdentifiers = {
           asked: exact.asked,
           found: [...new Set([...exact.found, ...lookalikes.values()])],
           missing: exact.missing.filter((norm) => !lookalikes.has(norm)),
         };
         const notFound = resolved.asked.length > 0 && resolved.found.length === 0;
-        const suggestions = notFound ? await identifierSuggestions(scope, resolved.missing, { client, signal: stageSignal }) : [];
+        const suggestions = notFound ? await identifierSuggestions(scope, resolved.missing, { client, signal: stageSignal, access: ctx.access }) : [];
         return { ok: true, resolved, patterns: expressions, suggestions };
       } catch (error) {
         if (stageSignal.aborted) throw error;

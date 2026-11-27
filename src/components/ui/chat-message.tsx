@@ -72,6 +72,7 @@ import { SourceImagesGrid } from './source-images-grid'
 import type { SourceImageData } from '@/types/chat'
 import { CitationChip } from './citation-chip'
 import { citationSourcesFor, documentSourceFields } from '@/components/providers/sources-provider'
+import { withdrawnCitationNumbers } from '@/lib/citations/display'
 import { citeAliasFromHref, isCitationAware, renderCitationMarkers, type CitationMarkerTarget, type CitationRenderPhase } from '@/lib/chat/citation-markers'
 import { noticesOf, pickAnswerMetadata } from '@/lib/chat/answer-metadata'
 import { useShallow } from 'zustand/react/shallow'
@@ -1389,6 +1390,30 @@ function isToolResultPart(part: any): part is ToolResultPart {
     typeof part === 'object' &&
     (part.type === 'tool-result' || part.type === 'tool_result')
   );
+}
+
+/** Phase 5.2.1: the server-executed calculation tool (D-67). Its parts are never shown (UI-SPEC 14.1, 14.5 decision 22). */
+const CALCULATE_TOOL_NAME = 'calculate';
+
+/**
+ * The message parts without calculate tool calls and their results, also a result that carries only the call id. Every other part
+ * is kept in order; the input array is returned unchanged when it holds no calculate part.
+ */
+export function visibleToolParts<T extends { type?: unknown }>(parts: readonly T[]): T[] {
+  const hidden = new Set<string>();
+  for (const part of parts) {
+    if ((isToolCallPart(part) || isToolResultPart(part)) && (part as { toolName?: unknown }).toolName === CALCULATE_TOOL_NAME) {
+      const id = (part as { toolCallId?: unknown }).toolCallId;
+      hidden.add(typeof id === 'string' ? id : '');
+    }
+  }
+  if (hidden.size === 0) return parts as T[];
+  return parts.filter((part) => {
+    if (!isToolCallPart(part) && !isToolResultPart(part)) return true;
+    if ((part as { toolName?: unknown }).toolName === CALCULATE_TOOL_NAME) return false;
+    const id = (part as { toolCallId?: unknown }).toolCallId;
+    return !(typeof id === 'string' && hidden.has(id) && (part as { toolName?: unknown }).toolName === undefined);
+  });
 }
 
 // Helper to summarize Gmail tool results and avoid raw Base64 output
@@ -2755,6 +2780,7 @@ ChatMessage = function ({
   const answerNotices = useMemo(() => (noticesKey ? noticesOf({ notices: JSON.parse(noticesKey) }) : []), [noticesKey]);
   const answerId = answerMetadata?.answerId;
   const answerDocuments = useAnswerRecordsStore((s) => (answerId ? s.records[answerId]?.documents : undefined));
+  const withdrawnCitationKey = answerMetadata ? withdrawnCitationNumbers(answerMetadata.citations ?? [], answerDocuments ?? {}).join(',') : '';
   const citationMessageId = answerMetadata ? message.id : undefined;
   const isGhostChat = useGhostModeStore((s) => s.isGhostMode);
   const metadataRecord = messageMetadata && typeof messageMetadata === 'object' ? (messageMetadata as Record<string, unknown>) : undefined;
@@ -4062,7 +4088,7 @@ ChatMessage = function ({
         const n = citationNumbers.get(citeAlias);
         return n === undefined
           ? <span>{children}</span>
-          : <CitationChip n={n} messageId={citationMessageId} buildSources={buildCitationSources} />;
+          : <CitationChip n={n} messageId={citationMessageId} buildSources={buildCitationSources} withdrawn={withdrawnCitationKey.split(',').includes(String(n))} />;
       }
       return (
         <a
@@ -4170,7 +4196,7 @@ ChatMessage = function ({
         </div>
       );
     }
-  }), [isCodeCopied, markerCitations, citationNumbers, citationMessageId, buildCitationSources, language]);
+  }), [isCodeCopied, markerCitations, citationNumbers, citationMessageId, buildCitationSources, language, withdrawnCitationKey]);
 
   // Set up layout stabilization on initial render
   useEffect(() => {
@@ -4206,7 +4232,7 @@ ChatMessage = function ({
   const processMessageContent = useMemo(() => {
     const resultsMap = new Map<string, ToolResultPart>();
     // Use parts from messageContentParts which contains the extracted tool call
-    const parts = messageContentParts.parts || [];
+    const parts = visibleToolParts(messageContentParts.parts || []);
 
     // Clean any text parts to remove JSON artifacts
     parts.forEach(part => {
@@ -4231,7 +4257,7 @@ ChatMessage = function ({
     let hasToolCalls = parts.some(part => isToolCallPart(part) || isToolResultPart(part));
 
     // CRITICAL FIX: Check for approval in messageContentParts and manually add tool call if needed
-    if (messageContentParts.requiresApproval && messageContentParts.toolCall) {
+    if (messageContentParts.requiresApproval && messageContentParts.toolCall && messageContentParts.toolCall.toolName !== CALCULATE_TOOL_NAME) {
       console.log('[processMessageContent] Found approval required flag and toolCall');
       console.log('[processMessageContent] Checking if tool call is in parts:', {
         partsCount: parts.length,

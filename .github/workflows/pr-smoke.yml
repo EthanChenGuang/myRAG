@@ -153,6 +153,8 @@ jobs:
           node --test scripts/tests/check-language-literals.node-test.mjs
           node scripts/ci/check-settings-classification.mjs
           node --test scripts/tests/check-settings-classification.node-test.mjs
+          node scripts/ci/check-migration-numbers.mjs
+          node --test scripts/tests/check-migration-numbers.node-test.mjs
       - name: Config check and type-check self-tests
         run: node --test scripts/check-config.test.mjs scripts/tests/gen-vendor-doc.node-test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs scripts/tests/check-node-runtime.node-test.mjs scripts/tests/config-server-security.node-test.mjs
       - name: Release gate, promotion and branch protection script self-tests

@@ -27,6 +27,11 @@ function rulesFor(files) {
   return checkBoundary(root).map((v) => `${v.file}:${v.rule}`);
 }
 
+// The writer tests below fix the writer rules; content-table-read (D-15) also flags these fixture reads and has its own tests.
+function writerRulesFor(files) {
+  return rulesFor(files).filter((v) => !v.endsWith(':content-table-read'));
+}
+
 function ruleIds(files) {
   const root = makeRoot(files);
   return checkBoundary(root).map((v) => v.rule);
@@ -105,6 +110,17 @@ test('finetune-export-rpc: rag_finetune_export_vectors is callable only under sr
   ]);
   assert.deepEqual(rulesFor({ 'src/lib/rag/finetune/export-vectors.ts': code }), []);
   assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('rag_finetune_list_consent', {});\n" }), []);
+});
+
+test('source-recheck-rpc: rag_source_recheck called outside src/lib/rag is flagged; inside it is allowed (RET-14)', () => {
+  const code = "const r = await db.rpc('rag_source_recheck', { p_tenant_key: key, p_chunk_ids: ids });\n";
+  const multiLine = 'const r = await db.rpc(\n  "rag_source_recheck",\n  args,\n);\n';
+  assert.deepEqual(rulesFor({ 'src/app/api/x/route.ts': code, 'src/lib/other.ts': multiLine }).sort(), [
+    'src/app/api/x/route.ts:source-recheck-rpc',
+    'src/lib/other.ts:source-recheck-rpc',
+  ]);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/retrieval/source-recheck.ts': code }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('rag_source_recheck_report', {});\n// db.rpc('rag_source_recheck')\n" }), []);
 });
 
 test('retired-module: alias and relative imports fail', () => {
@@ -326,7 +342,7 @@ test('chunk-writer: insert, update and upsert on document_chunks fail outside sr
     'src/app/api/y/route.ts': 'await admin\n  .from("document_chunks")\n  .update({ status: \'ready\' })\n  .eq(\'id\', id);\n',
     'src/lib/z.ts': 'await admin.from(`document_chunks`).upsert(rows);\n',
   };
-  assert.deepEqual(rulesFor(files).sort(), [
+  assert.deepEqual(writerRulesFor(files).sort(), [
     'src/app/api/x/route.ts:chunk-writer',
     'src/app/api/y/route.ts:chunk-writer',
     'src/lib/z.ts:chunk-writer',
@@ -335,29 +351,29 @@ test('chunk-writer: insert, update and upsert on document_chunks fail outside sr
 
 test('chunk-writer: reads and deletes pass, and so does the same write inside src/lib/rag/ingest', () => {
   const write = "await admin.from('document_chunks').insert(rows);\n";
-  assert.deepEqual(rulesFor({ 'src/app/api/x/route.ts': "await admin.from('document_chunks').select('id');\n" }), []);
-  assert.deepEqual(rulesFor({ 'src/app/api/x/route.ts': "await admin.from('document_chunks').delete().eq('id', id);\n" }), []);
-  assert.deepEqual(rulesFor({ 'src/lib/rag/ingest/writer.ts': write }), []);
-  assert.deepEqual(rulesFor({ 'src/lib/rag/context/x.ts': write }), ['src/lib/rag/context/x.ts:chunk-writer']);
-  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "// admin.from('document_chunks').insert(rows) is banned here\nexport const a = 1;\n" }), []);
+  assert.deepEqual(writerRulesFor({ 'src/app/api/x/route.ts': "await admin.from('document_chunks').select('id');\n" }), []);
+  assert.deepEqual(writerRulesFor({ 'src/app/api/x/route.ts': "await admin.from('document_chunks').delete().eq('id', id);\n" }), []);
+  assert.deepEqual(writerRulesFor({ 'src/lib/rag/ingest/writer.ts': write }), []);
+  assert.deepEqual(writerRulesFor({ 'src/lib/rag/context/x.ts': write }), ['src/lib/rag/context/x.ts:chunk-writer']);
+  assert.deepEqual(writerRulesFor({ 'src/lib/a.ts': "// admin.from('document_chunks').insert(rows) is banned here\nexport const a = 1;\n" }), []);
 });
 
 test('document-insert: insert on documents fails, update passes, and the ingest module is exempt', () => {
   assert.deepEqual(
-    rulesFor({ 'src/lib/foo.ts': "await admin.from('documents').insert({ id });\n" }),
+    writerRulesFor({ 'src/lib/foo.ts': "await admin.from('documents').insert({ id });\n" }),
     ['src/lib/foo.ts:document-insert'],
   );
   assert.deepEqual(
-    rulesFor({ 'src/lib/bar.ts': 'await admin\n  .from("documents")\n  .insert([row]);\n' }),
+    writerRulesFor({ 'src/lib/bar.ts': 'await admin\n  .from("documents")\n  .insert([row]);\n' }),
     ['src/lib/bar.ts:document-insert'],
   );
   assert.deepEqual(
-    rulesFor({ 'src/lib/baz.ts': "await admin.from('documents').upsert({ id });\n" }),
+    writerRulesFor({ 'src/lib/baz.ts': "await admin.from('documents').upsert({ id });\n" }),
     ['src/lib/baz.ts:document-insert'],
   );
-  assert.deepEqual(rulesFor({ 'src/lib/foo.ts': "await admin.from('documents').update({ metadata }).eq('id', id);\n" }), []);
-  assert.deepEqual(rulesFor({ 'src/lib/foo.ts': "await admin.from('documents').select('id');\n" }), []);
-  assert.deepEqual(rulesFor({ 'src/lib/rag/ingest/writer.ts': "await admin.from('documents').insert({ id });\n" }), []);
+  assert.deepEqual(writerRulesFor({ 'src/lib/foo.ts': "await admin.from('documents').update({ metadata }).eq('id', id);\n" }), []);
+  assert.deepEqual(writerRulesFor({ 'src/lib/foo.ts': "await admin.from('documents').select('id');\n" }), []);
+  assert.deepEqual(writerRulesFor({ 'src/lib/rag/ingest/writer.ts': "await admin.from('documents').insert({ id });\n" }), []);
 });
 
 test('writer-rpc: each ingest writer RPC fails outside src/lib/rag/ingest and passes inside', () => {
@@ -372,11 +388,11 @@ test('writer-rpc: each ingest writer RPC fails outside src/lib/rag/ingest and pa
   names.forEach((name, i) => {
     outside[`src/app/api/n${i}/route.ts`] = i % 2 ? `await db.rpc(\n  "${name}",\n  args,\n);\n` : `await db.rpc('${name}', args);\n`;
   });
-  const out = rulesFor(outside).sort();
+  const out = writerRulesFor(outside).sort();
   assert.equal(out.length, names.length);
   assert.ok(out.every((entry) => entry.endsWith(':writer-rpc')));
-  assert.deepEqual(rulesFor({ 'src/lib/rag/ingest/writer.ts': "await db.rpc('rag_write_chunks', args);\n" }), []);
-  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('rag_unrelated_function', {});\n" }), []);
+  assert.deepEqual(writerRulesFor({ 'src/lib/rag/ingest/writer.ts': "await db.rpc('rag_write_chunks', args);\n" }), []);
+  assert.deepEqual(writerRulesFor({ 'src/lib/a.ts': "await db.rpc('rag_unrelated_function', {});\n" }), []);
 });
 
 test('doc-type-branching: comparison and switch forms fail in src outside src/lib/rag/ingest/profiles', () => {
@@ -390,31 +406,31 @@ test('doc-type-branching: comparison and switch forms fail in src outside src/li
     'src/components/x.tsx': "export function X({ docType }) {\n  switch (docType) {\n    default:\n      return null;\n  }\n}\n",
     'src/lib/f.ts': "if ('invoice_receipt' === doc.doc_type) run();\n",
   };
-  const out = rulesFor(files).sort();
+  const out = writerRulesFor(files).sort();
   assert.equal(out.length, Object.keys(files).length);
   assert.ok(out.every((entry) => entry.endsWith(':doc-type-branching')));
 });
 
 test('doc-type-branching: the profiles module, assignments, object keys and non-src paths pass', () => {
   assert.deepEqual(
-    rulesFor({ 'src/lib/rag/ingest/profiles/resolve.ts': "if (doc.doc_type === 'invoice_receipt') run();\n" }),
+    writerRulesFor({ 'src/lib/rag/ingest/profiles/resolve.ts': "if (doc.doc_type === 'invoice_receipt') run();\n" }),
     [],
   );
   assert.deepEqual(
-    rulesFor({ 'src/lib/a.ts': "const docType = pick();\nconst row = { doc_type: 'general', docType };\nlet t = docType;\nt = other;\n" }),
+    writerRulesFor({ 'src/lib/a.ts': "const docType = pick();\nconst row = { doc_type: 'general', docType };\nlet t = docType;\nt = other;\n" }),
     [],
   );
-  assert.deepEqual(rulesFor({ 'scripts/x.js': "if (doc.doc_type === 'invoice_receipt') run();\n" }), []);
-  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "// docType === 'general' is handled by profiles\nexport const a = 1;\n" }), []);
+  assert.deepEqual(writerRulesFor({ 'scripts/x.js': "if (doc.doc_type === 'invoice_receipt') run();\n" }), []);
+  assert.deepEqual(writerRulesFor({ 'src/lib/a.ts': "// docType === 'general' is handled by profiles\nexport const a = 1;\n" }), []);
 });
 
 test('mint-scope: scopeKey and assertTenantScope stay importable by ingest code, mintScope does not', () => {
   assert.deepEqual(
-    rulesFor({ 'src/lib/rag/ingest/x.ts': "import { scopeKey, assertTenantScope } from '../tenant/scope';\n" }),
+    writerRulesFor({ 'src/lib/rag/ingest/x.ts': "import { scopeKey, assertTenantScope } from '../tenant/scope';\n" }),
     [],
   );
   assert.deepEqual(
-    rulesFor({ 'src/lib/rag/ingest/x.ts': "import { mintScope } from '../tenant/scope';\n" }),
+    writerRulesFor({ 'src/lib/rag/ingest/x.ts': "import { mintScope } from '../tenant/scope';\n" }),
     ['src/lib/rag/ingest/x.ts:mint-scope'],
   );
 });
@@ -453,9 +469,9 @@ test('LEGACY_WRITERS: the exemption is per path and per rule', () => {
   const entry = list.find((e) => e.rules.includes('chunk-writer'));
   assert.ok(entry, 'a legacy chunk writer entry is required');
   const write = "await admin.from('document_chunks').insert(rows);\n";
-  assert.deepEqual(rulesFor({ [entry.path]: write }), []);
-  assert.deepEqual(rulesFor({ [entry.path]: "await db.rpc('rag_write_chunks', args);\n" }), [`${entry.path}:writer-rpc`]);
-  assert.deepEqual(rulesFor({ 'src/lib/not-listed.ts': write }), ['src/lib/not-listed.ts:chunk-writer']);
+  assert.deepEqual(writerRulesFor({ [entry.path]: write }), []);
+  assert.deepEqual(writerRulesFor({ [entry.path]: "await db.rpc('rag_write_chunks', args);\n" }), [`${entry.path}:writer-rpc`]);
+  assert.deepEqual(writerRulesFor({ 'src/lib/not-listed.ts': write }), ['src/lib/not-listed.ts:chunk-writer']);
 });
 
 test('LEGACY_WRITERS: every entry still exempts a real violation on the tree, so removed writers must leave the list', () => {
@@ -892,4 +908,63 @@ test('access-admin-rpc: setter, visibility, event and admin RPCs only inside src
   }
   assert.deepEqual(onlyRule({ 'src/app/api/z/route.ts': "await db.rpc('rag_admin_audit_list', args);\n" }, 'access-admin-rpc'), []);
   assert.deepEqual(onlyRule({ 'src/lib/a.ts': "import { rag_chunks_visible } from './names';\n" }, 'access-admin-rpc'), []);
+});
+
+test('content-table-read: documents, chunks and parents read outside src/lib/rag only in reviewed files (D-15)', () => {
+  const ids = RULES.map((r) => r.id);
+  assert.ok(ids.includes('content-table-read'));
+  for (const table of ['documents', 'document_chunks', 'document_parents']) {
+    assert.deepEqual(
+      onlyRule({ 'src/app/api/new-reader/route.ts': `const rows = await admin\n  .from(\n    '${table}'\n  )\n  .select('id');\n` }, 'content-table-read'),
+      ['src/app/api/new-reader/route.ts:content-table-read'],
+      table,
+    );
+  }
+  assert.deepEqual(onlyRule({ 'scripts/rag/new-tool.js': 'await db.from(`document_chunks`).select("id");\n' }, 'content-table-read'), [
+    'scripts/rag/new-tool.js:content-table-read',
+  ]);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/ingest/x.ts': "await db.from('documents').select('id');\n" }, 'content-table-read'), []);
+  assert.deepEqual(onlyRule({ 'src/app/api/x/route.ts': "await db.from('documents_archive').select('id');\n" }, 'content-table-read'), []);
+  assert.deepEqual(onlyRule({ 'src/app/api/x/route.ts': "await db.from('chats').select('id');\n" }, 'content-table-read'), []);
+
+  assert.ok(Array.isArray(boundary.CONTENT_TABLE_READERS) && boundary.CONTENT_TABLE_READERS.length > 0);
+  for (const entry of boundary.CONTENT_TABLE_READERS) {
+    assert.equal(typeof entry.path, 'string');
+    assert.ok(typeof entry.reason === 'string' && entry.reason.trim() !== '', `${entry.path}: reason is required`);
+    assert.deepEqual(onlyRule({ [entry.path]: "await db.from('documents').select('id');\n" }, 'content-table-read'), [], entry.path);
+  }
+  const listed = boundary.CONTENT_TABLE_READERS.map((entry) => entry.path);
+  for (const path of ['src/app/api/documents/route.ts', 'src/app/api/images/route.ts', 'src/lib/chat-share-access.ts']) {
+    assert.ok(listed.includes(path), `${path} is reviewed`);
+  }
+});
+
+test('run-retrieval-access: a file outside src/lib/rag that calls runRetrieval must resolve access (D-05, A-14)', () => {
+  const ids = RULES.map((r) => r.id);
+  assert.ok(ids.includes('run-retrieval-access'));
+  assert.deepEqual(
+    onlyRule({ 'src/app/api/new-chat/route.ts': "const result = await runRetrieval({ scope, query });\n" }, 'run-retrieval-access'),
+    ['src/app/api/new-chat/route.ts:run-retrieval-access'],
+  );
+  assert.deepEqual(
+    onlyRule(
+      {
+        'src/app/api/new-chat/route.ts':
+          "const access = await resolveAccessScope({ scope, identity, signal });\nconst result = await runRetrieval({ scope: access.scope, query });\n",
+      },
+      'run-retrieval-access',
+    ),
+    [],
+  );
+  assert.deepEqual(
+    onlyRule({ 'src/app/api/new-chat/route.ts': "// resolveAccessScope( is only mentioned here\nawait runRetrieval({ scope });\n" }, 'run-retrieval-access'),
+    ['src/app/api/new-chat/route.ts:run-retrieval-access'],
+  );
+  assert.deepEqual(onlyRule({ 'src/lib/rag/v2/x.ts': 'await runRetrieval({ scope });\n' }, 'run-retrieval-access'), []);
+  assert.deepEqual(onlyRule({ 'src/app/api/y/route.ts': "import { runRetrieval } from '@/lib/rag';\n" }, 'run-retrieval-access'), []);
+});
+
+test('run-retrieval-access and content-table-read pass on the repository routes of plan 04.3-09', () => {
+  const violations = checkBoundary(ROOT).filter((v) => v.rule === 'run-retrieval-access' || v.rule === 'content-table-read');
+  assert.deepEqual(violations, []);
 });

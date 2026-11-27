@@ -455,6 +455,22 @@
       "default": "hosted"
     },
     {
+      "name": "RAG_BGE_M3_VIA",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Host for hosted BGE-M3 calls: deepinfra or openrouter (OpenRouter pinned to the DeepInfra upstream; verify vectors with rag:embedding verify-route)",
+      "ragAffecting": true,
+      "group": "data",
+      "label": "BGE-M3 hosted route",
+      "type": "enum",
+      "options": [
+        "deepinfra",
+        "openrouter"
+      ],
+      "requires": [],
+      "default": "deepinfra"
+    },
+    {
       "name": "RAG_CACHE_ENABLED",
       "status": "legacy",
       "knownGaps": [
@@ -1124,6 +1140,90 @@
       "requires": [],
       "default": "false",
       "help": "false keeps vector and keyword retrieval only."
+    },
+    {
+      "name": "RAG_SOURCE_RECHECK",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Source recheck before rerank",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "false keeps today's retrieval. true checks, before reranking, that each candidate's document still exists and is current, and drops the rest. Always on when the retrieval backend is Weaviate or Qdrant."
+    },
+    {
+      "name": "RAG_SOURCE_RECONCILE_INTERVAL_DAYS",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": false,
+      "group": "data",
+      "label": "Full reconcile interval (days)",
+      "type": "number",
+      "requires": [],
+      "default": "7",
+      "help": "How often the scheduled job reconciles each connection. The job runs only when a scheduler or npm run rag:source-reconcile starts it."
+    },
+    {
+      "name": "RAG_SOURCE_RECONCILE_MAX_AGE_DAYS",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": false,
+      "group": "data",
+      "label": "Reconcile age limit (days)",
+      "type": "number",
+      "requires": [],
+      "default": "7",
+      "help": "A connection without a completed full reconcile for longer than this is marked Overdue."
+    },
+    {
+      "name": "RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": false,
+      "group": "data",
+      "label": "Pause above this share of documents",
+      "type": "number",
+      "requires": [],
+      "default": "0.3",
+      "help": "0.3 means 30%. A full listing that would remove more than this share of a connection's documents pauses for confirmation. At 1 the pause never applies."
+    },
+    {
+      "name": "NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": false,
+      "group": "data",
+      "label": "Enable SharePoint and OneDrive",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "Lets admins connect SharePoint Online sites and OneDrive for Business libraries. Off leaves every connector as it is."
+    },
+    {
+      "name": "NANGO_SHAREPOINT_INTEGRATION_KEY",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": false,
+      "group": "data",
+      "label": "SharePoint integration key",
+      "type": "string",
+      "requires": [],
+      "default": "",
+      "help": "The integration id set for this provider in the Nango dashboard. Leave empty to use the default."
+    },
+    {
+      "name": "NANGO_ONEDRIVE_INTEGRATION_KEY",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": false,
+      "group": "data",
+      "label": "OneDrive integration key",
+      "type": "string",
+      "requires": [],
+      "default": "",
+      "help": "The integration id set for this provider in the Nango dashboard. Leave empty to use the default."
     },
     {
       "name": "RAG_EXACT_SCAN_CUTOFF",

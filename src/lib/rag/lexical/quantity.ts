@@ -160,13 +160,20 @@ function unitAt(text: string, start: number, units: QuantityUnits): string | nul
   return null;
 }
 
+/** One quantity occurrence: its tokens (decimal reading first), and the first reading's number and unit symbol. */
+export interface QuantityMatch {
+  tokens: string[];
+  number: string;
+  symbol: string;
+}
+
 /**
- * Quantity tokens (`_q_<number><unit>`) of already normalised text, in order of appearance (D-31).
+ * Quantity occurrences of already normalised text, in order of appearance (D-31).
  * One left-to-right pass; tenant alias words are map keys, never patterns (T-03.3-902).
  */
-export function quantityTokens(normalized: string, units: QuantityUnits): string[] {
+export function quantityMatches(normalized: string, units: QuantityUnits): QuantityMatch[] {
   if (units.units.size === 0 || normalized === '') return [];
-  const out: string[] = [];
+  const out: QuantityMatch[] = [];
   let i = 0;
   while (i < normalized.length) {
     if (!DIGIT.test(normalized[i]!)) {
@@ -182,10 +189,18 @@ export function quantityTokens(normalized: string, units: QuantityUnits): string
     while (j < normalized.length && HORIZONTAL_SPACE.test(normalized[j]!)) j += 1;
     const symbol = unitAt(normalized, j, units);
     if (symbol === null) continue;
-    for (const number of readings(run, units)) {
+    const numbers = readings(run, units);
+    const tokens: string[] = [];
+    for (const number of numbers) {
       const token = QUANTITY_TOKEN_PREFIX + number + symbol;
-      if (token.length <= MAX_QUANTITY_TOKEN_CHARS) out.push(token);
+      if (token.length <= MAX_QUANTITY_TOKEN_CHARS) tokens.push(token);
     }
+    if (tokens.length > 0) out.push({ tokens, number: numbers[0]!, symbol });
   }
   return out;
+}
+
+/** Quantity tokens (`_q_<number><unit>`) of already normalised text, in order of appearance (D-31). */
+export function quantityTokens(normalized: string, units: QuantityUnits): string[] {
+  return quantityMatches(normalized, units).flatMap((match) => match.tokens);
 }

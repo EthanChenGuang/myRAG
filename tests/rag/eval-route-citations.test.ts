@@ -459,3 +459,112 @@ describe('citation session ingestFullText', () => {
     expect(session.fullRecords()).toBeNull();
   });
 });
+
+describe('eval route citation access recheck (D-26, D-09)', () => {
+  const events: Array<Record<string, unknown>> = [];
+
+  beforeEach(() => {
+    saved = Object.fromEntries(ENV_NAMES.map((name) => [name, env[name]]));
+    for (const name of ENV_NAMES) delete env[name];
+    env.RAG_EVAL_SECRET = SECRET;
+    env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'single-tenant';
+    events.length = 0;
+    h.supabase.store.reset();
+    h.supabase.store.documents = [
+      { id: 'doc-1', filename: 'refund-policy-1.md', created_at: '2026-01-01T00:00:00.000Z', content: 'refund policy', metadata: {} },
+      { id: 'doc-2', filename: 'refund-policy-2.md', created_at: '2026-01-01T00:00:00.000Z', content: 'refund policy', metadata: {} },
+    ];
+    h.supabase.store.document_chunks = [
+      { id: 'chunk-1', document_id: 'doc-1', metadata: null },
+      { id: 'chunk-2', document_id: 'doc-2', metadata: null },
+    ];
+    h.retrieval.mockReset();
+    h.retrieval.mockResolvedValue(retrievalWith([chunkRow('1', 0.92), chunkRow('2', 0.88)]));
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    vi.doUnmock('@/lib/rag');
+    const answer = await import('@/lib/rag-eval/answer');
+    answer.setEvalLanguageModelFactory(null);
+    for (const name of ENV_NAMES) {
+      if (saved[name] === undefined) delete env[name];
+      else env[name] = saved[name];
+    }
+    vi.resetModules();
+  });
+
+  /** The route's scope reports access mode keys and its recheck returns `visible`; retrieval itself runs with the off filter. */
+  async function loadAccessRoute(answerText: string, prompts: CapturedPrompt[], visible: ReadonlySet<string> | 'fail') {
+    vi.resetModules();
+    await installChatPipeline(h);
+    vi.doMock('@/lib/rag', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@/lib/rag')>();
+      return {
+        ...actual,
+        scopeAccessFilter: () => ({ mode: 'keys' as const, keys: ['all'], setHash: 'f'.repeat(64) }),
+        createCitationRecheck: () => async () => {
+          if (visible === 'fail') throw new Error('lookup failed');
+          return visible;
+        },
+        scheduleSecurityEvent: (_scope: unknown, input: Record<string, unknown>) => {
+          events.push(input);
+        },
+      };
+    });
+    const answer = await import('@/lib/rag-eval/answer');
+    answer.setEvalLanguageModelFactory(() => answeringModel(answerText, prompts));
+    return import('@/app/api/internal/rag/run/route');
+  }
+
+  it('drops a citation the run may not see on the non-streamed path and reports access mode and violations', async () => {
+    const prompts: CapturedPrompt[] = [];
+    const route = await loadAccessRoute('A [S1] b [S2]', prompts, new Set(['chunk-2']));
+    const { status, trace } = await post(route, evalRequest({ citations: true }));
+
+    expect(status).toBe(200);
+    expect(RagTraceSchema.safeParse(trace).success).toBe(true);
+    expect(trace.citations.map((record) => record.alias)).toEqual(['S2']);
+    expect(trace.citations[0].n).toBe(1);
+    expect(trace.access).toEqual({ mode: 'keys', violations: 1 });
+    expect(events).toEqual([
+      { event: 'citation_access_violation', chunkIds: ['chunk-1'], documentIds: ['doc-1'], requestId: expect.any(String) },
+    ]);
+  });
+
+  it('a failed recheck drops every citation and writes no event', async () => {
+    const prompts: CapturedPrompt[] = [];
+    const route = await loadAccessRoute('A [S1] b [S2]', prompts, 'fail');
+    const { trace } = await post(route, evalRequest({ citations: true }));
+    expect(trace.citations).toEqual([]);
+    expect(trace.access).toEqual({ mode: 'keys', violations: 2 });
+    expect(events).toEqual([]);
+  });
+
+  it('drops a denied citation on the direct Claude path', async () => {
+    const anthropic = await startAnthropic({ sse: readAnthropicFixture('citations.sse') });
+    try {
+      useClaude(anthropic.baseUrl);
+      const prompts: CapturedPrompt[] = [];
+      const route = await loadAccessRoute('unused', prompts, new Set());
+      const { status, trace } = await post(route, evalRequest({ citations: true, generator_model: CLAUDE_MODEL }));
+      expect(status).toBe(200);
+      expect(trace.citation_strategy).toBe('claude-citations');
+      expect(trace.citations).toEqual([]);
+      expect(trace.access?.violations).toBeGreaterThan(0);
+      expect(RagTraceSchema.safeParse(trace).success).toBe(true);
+    } finally {
+      await anthropic.close();
+    }
+  });
+
+  it('with access off the trace carries no access block', async () => {
+    const prompts: CapturedPrompt[] = [];
+    const { route } = await loadRoute('A [S1] b', prompts);
+    const { raw, trace } = await post(route, evalRequest({ citations: true }));
+    expect(trace.citations).toHaveLength(1);
+    expect(raw).not.toContain('"access"');
+  });
+});

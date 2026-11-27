@@ -31,7 +31,7 @@ export async function POST(request: Request): Promise<Response> {
     if (!access.ok) return access.response;
     const result = await enqueueReReview(access.admin, {
       tenantKey: access.tenantKey,
-      questions: parsed.data.items.map((item) => item.question),
+      questions: parsed.data.items.map((item) => ({ question: item.question, itemId: item.item_id })),
     });
     return jsonNoStore({ success: true, requested: parsed.data.items.length, inserted: result.inserted });
   } catch (error) {

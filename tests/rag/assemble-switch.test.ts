@@ -199,6 +199,7 @@ describe('RAG_VERSION_LABELS on the v2 context stages (D-49)', () => {
     }));
     const signal = new AbortController().signal;
     return runContextStages({
+      access: { mode: 'off' },
       input: { scope, query: 'synthetic widget passage', profile: 'chat', signal },
       config: cfg,
       profile: 'chat',

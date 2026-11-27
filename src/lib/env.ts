@@ -52,8 +52,8 @@ class EnvironmentConfig {
       NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'myRAG',
       NEXT_PUBLIC_SITE_TITLE: process.env.NEXT_PUBLIC_SITE_TITLE || '',
       NEXT_PUBLIC_FAVICON_URL: process.env.NEXT_PUBLIC_FAVICON_URL || '/favicon.ico',
-      NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT: process.env.NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT || 'myRAG',
-      NEXT_PUBLIC_SIDEBAR_BUTTON_URL: process.env.NEXT_PUBLIC_SIDEBAR_BUTTON_URL || 'https://myrag.laoxiang.app/',
+      NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT: process.env.NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT || '',
+      NEXT_PUBLIC_SIDEBAR_BUTTON_URL: process.env.NEXT_PUBLIC_SIDEBAR_BUTTON_URL || '',
 
       // Chat input border customization
       NEXT_PUBLIC_BORDER_WIDTH: process.env.NEXT_PUBLIC_CHAT_BORDER_WIDTH || process.env.NEXT_PUBLIC_BORDER_WIDTH || '2.5',
@@ -316,6 +316,10 @@ class EnvironmentConfig {
       RAG_DOC_TYPE_LLM_DETECT: process.env.RAG_DOC_TYPE_LLM_DETECT || 'false',
       RAG_INVOICE_LLM_EXTRACT: process.env.RAG_INVOICE_LLM_EXTRACT || 'false',
       RAG_EXACT_ID_LOOKUP: process.env.RAG_EXACT_ID_LOOKUP || 'false',
+      RAG_SOURCE_RECHECK: process.env.RAG_SOURCE_RECHECK || 'false',
+      RAG_SOURCE_RECONCILE_INTERVAL_DAYS: process.env.RAG_SOURCE_RECONCILE_INTERVAL_DAYS || '7',
+      RAG_SOURCE_RECONCILE_MAX_AGE_DAYS: process.env.RAG_SOURCE_RECONCILE_MAX_AGE_DAYS || '7',
+      RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE: process.env.RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE || '0.3',
       RAG_PDF_IMAGE_CHUNKS: process.env.RAG_PDF_IMAGE_CHUNKS || 'false',
       RAG_INJECTION_SCAN: process.env.RAG_INJECTION_SCAN || 'off',
       RAG_EMBEDDING_PROFILES: process.env.RAG_EMBEDDING_PROFILES || 'off',
@@ -356,6 +360,7 @@ class EnvironmentConfig {
       RAG_TABLE_ROW_SERIALIZATION: process.env.RAG_TABLE_ROW_SERIALIZATION || 'false',
       RAG_CAPTION_LANGUAGE: process.env.RAG_CAPTION_LANGUAGE || 'en',
       RAG_BGE_M3_SERVING: process.env.RAG_BGE_M3_SERVING || 'hosted',
+      RAG_BGE_M3_VIA: process.env.RAG_BGE_M3_VIA || 'deepinfra',
       RAG_DOC_TRANSLATION: process.env.RAG_DOC_TRANSLATION || 'off',
       RAG_DOC_TRANSLATION_MODEL: process.env.RAG_DOC_TRANSLATION_MODEL || '',
       RAG_HIDDEN_TEXT_CHECK: process.env.RAG_HIDDEN_TEXT_CHECK || 'off',
@@ -465,6 +470,9 @@ class EnvironmentConfig {
       NANGO_SUPPORTED_FILE_TYPES: process.env.NANGO_SUPPORTED_FILE_TYPES || 'pdf,doc,docx,txt,md,html,pptx,xlsx',
       NANGO_MAX_FILES_PER_SYNC: process.env.NANGO_MAX_FILES_PER_SYNC || '100',
       NANGO_SYNC_INTERVAL_HOURS: process.env.NANGO_SYNC_INTERVAL_HOURS || '1',
+      NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED: process.env.NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED || 'false',
+      NANGO_SHAREPOINT_INTEGRATION_KEY: process.env.NANGO_SHAREPOINT_INTEGRATION_KEY || '',
+      NANGO_ONEDRIVE_INTEGRATION_KEY: process.env.NANGO_ONEDRIVE_INTEGRATION_KEY || '',
 
       // Connectors Management Configuration
       NEXT_PUBLIC_CONNECTORS_ENABLED: process.env.NEXT_PUBLIC_CONNECTORS_ENABLED || 'true',

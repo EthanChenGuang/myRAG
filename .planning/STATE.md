@@ -2,24 +2,24 @@
 gsd_state_version: "1.0"
 milestone: v5.0
 status: executing
-stopped_at: Merge trains 1-11 merged; main synced via PR; 05-22 and 05.1-06 executing; 03.1-53/54 deferred to pre-production; 04-43 partly live
-last_updated: "2026-11-26T23:24:29.092Z"
+stopped_at: 2026-11-27 state sync from origin/main 00afa6d9 and ci/merge-train-39 c6f1b3f7; 704/833 plans have a SUMMARY on main, 42 only on a train branch, 10 only on an exec branch, 77 none; see Blockers/Concerns
+last_updated: "2026-11-27T23:00:00.000Z"
 state_head: b9418d118c6fac25b68cee52fc9392cb9c7af91a
 progress:
-  total_phases: 14
-  completed_phases: 1
-  total_plans: 342
-  completed_plans: 172
+  total_phases: 25
+  completed_phases: 12
+  total_plans: 833
+  completed_plans: 704
 package_legitimacy_03_1_04:
   approved_at: 2026-11-24
   lock_commit: 3e83978e482f67da5ce6d463f39251f3e21e8bf4
   pdfplumber: 0.11.11
   pdfminer_six: 20260107
   ray_data: 2.60.1
-last_activity: 2026-11-24
-current_phase: 05
-current_phase_name: Verified Citations & Groundedness (Phases 5, 5.1, 6, 7 in parallel)
-last_activity_desc: Trunk merge train paused at 56b0349d; PRs
+last_activity: 2026-11-27
+current_phase: 06.2
+current_phase_name: Query Layer Additions (4.3, 5.2.1, 6.2, 6.3, 7 still open; see Current Position)
+last_activity_desc: Quick 261127-sync - STATE and ROADMAP synced to SUMMARY locations
 ---
 
 # Project State
@@ -33,12 +33,13 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 
 ## Current Position
 
-Trunk: `claude/ecstatic-hamilton-86gtwv` @ `01b43787` (2026-11-25). Merge trains 1–6 merged via PRs #23–#28, each with all 8 pr-smoke checks green.
+State sync 2026-11-27 (quick 261127-sync). Source of truth: `*-SUMMARY.md` existence on `origin/main` (00afa6d9), `origin/ci/merge-train-*` (base train 39 c6f1b3f7; train 40 also read) and `origin/exec/*`, `origin/verify/*`. Phase counts are in ROADMAP.md Progress; the per-plan list is in `.planning/quick/261127-sync-state-roadmap/261127-sync-SUMMARY.md`. Plan totals counted from PLAN.md files at train 39 (833).
 
-- **Phase 3.1:** code complete through 03.1-52 plus gap fixes (verification gaps 1-5 closed; 0426 and 0427 live). Live checkpoints 03.1-53 and 03.1-54 DEFERRED to pre-production by the owner (2026-11-25): no free always-on host with ~4 GB for the sidecar exists (Oracle free tier not approved; Hugging Face Docker Spaces need PRO). Until then the app uses the synchronous ingest path (RAG_INGEST_ASYNC=off). Draft HF Space files kept on branch exec/sidecar-hf-deploy. Before go-live: pick the host (owner machine + Cloudflare Tunnel, or a paid host after asking), take a backup, then run 03.1-53/54.
-- **Phase 4:** code complete through 04-47 (gap closures 04-46 refusal criterion, 04-47 search_path hardening, migration 0425). 04-VERIFICATION gaps closed; 04-43 live calibration open (human).
-- **Phases 5, 5.1, 6, 7:** executing in parallel cloud sessions. On trunk: 05-01..09, 05-12..14, 05-19, 05.1-01..03, 05.1-05, 05.1-24, 06-01, 06-03..09, 06-11, 06-12, 07-02, 07-03. Finished, awaiting train 7: 05-15, 05-18, 05-20, 06-17. Running: 05-10 (option-a decided), 05-21.
-- **Blocked on humans:** 04-43 (Cohere and Voyage keys saved; latency and DB checks running; calibration needs a real golden set and a v2 test deployment). 03.1-53/54 deferred to pre-production. 05-05 done (precondition waived: 03.1-54 and 04-43 modify no files). 05.1-18 and 05.1-25 skipped (Prompt Guard 2 declined).
+- **SUMMARY on main (704/833):** Phases 1, 2, 3.1, 3.2, 3.2.1, 4, 4.1, 4.1.1, 5, 5.1, 5.1.1 and 6.1 have a SUMMARY for every plan; the rest are partly done. A SUMMARY does not mean live checks passed (03.1-53 partial, 03.1-54 blocked, 05-26 partial, 05.1.1-23 halted, 05.1-18 and 05.1-25 skipped by owner, 04.1-09 closed-not-flipped, 04-43 live calibration open).
+- **Done, pending merge (not shipped):** train only (42): 04.2-33; 04.3-08..11, 14, 15, 23, 32, 41..49, 51, 52; 05.2.1-12, 16, 17, 21, 22; 05.3-48; 06.2-06, 10, 11, 12, 14..18, 20, 21, 27; 06.3-01..03; 07-42. Exec/verify branch only (10): 03.3-25; 06.2-24, 36, 39; 06.3-06, 07, 10, 27; 07-28, 07-34 (SUMMARY on exec/07-28).
+- **No SUMMARY anywhere (77):** 03 follow-ups (03-48-FOLLOWUP-SECURITY-RPC, -RPC-2, -SETUP-IDEMPOTENT), 03.1.1-15, 03.3-26, 04.3-53/54, 04.4-15, 05.2-39/40, 05.2.1-20, 23..26, 05.3-49/50, 06-46, 06.2-13, 19, 22, 23, 25, 26, 28..33, 35, 38, 06.3-04, 05, 08, 09, 11..26, 28, 29, 07-22, 23, 25..27, 29..33, 37..39, 43..52 (07-28 and 07-34 excepted above).
+- **Quick tasks:** 261127-acc, ras, sbd, sbh, tfs are on train 39 only; 261127-dta, rwa, cmt, irl and 2026-11-27-openrouter-fallback only on exec/quick-* (see Quick Tasks table).
+- **Prod state (from `origin/ops/owner-actions` handoff, not verified here):** migrations applied through train 36 (and train 37 on 2026-11-27 ~20:10 UTC per the owner queue); `rag_access_group_settings.enforced = false`. Anything later: unknown.
 - **Phase 3.2 owner approvals (2026-11-25, given in advance):** 03.2-36 approved: python-docx 1.2.0, lxml 6.1.3 and defusedxml 0.7.1 as direct dependencies of the `hidden-text` extra, at the versions already in rag-sidecar/uv.lock. Any other version or package stops and asks again. 03.2-65 approved: the orchestrator applies migrations 0801–0810 to the live project itself through the Supabase tools when the plan is reached. 03.2-53: approved to proceed, but its items need real-world inputs (a LlamaCloud key, real scanned zh/it pages, a real terminal, and native-speaker reviewers). No script or model may mark golden items reviewed, so those items are recorded as not done until the owner supplies them.
 - **Owner rules (2026-11-25):** free options first, ask before paying; give a direct link whenever a key or dashboard setting is needed; merge trains go to main through PRs and merge automatically when the 8 checks pass; phases 3.1.1, 3.2, 4.1, 4.1.1, 4.2, 4.3, 5.1.1, 5.2, 5.3, 6.1 and 6.2 are held until the planning session releases them.
 - **Live DB order for operators:** migrations through 0425 (pgvector must be in `public`; run 0425's header dry-run query first), then 0501–0502, 0601–0603 (re-run 0410 after 0603), 0701–0703.
@@ -189,11 +190,31 @@ None yet.
 - [Phase 6]: `@langchain/core` zod 4 isolation from the app's zod 3; LangChain HyDE has no stock retriever and is a port.
 - [Phase 7]: Weaviate hybrid inside a tenant and Chinese tokenizer availability on Cloud; Qdrant per-prefetch filters; drain worker under the 60 s cap.
 
+**Sync 2026-11-27 blockers (sources in 261127-sync-SUMMARY.md):**
+
+- **Needs the owner (auto=false or HOLD):**
+  - No SUMMARY yet, `autonomous: false` (21): 03.1.1-15, 03.3-26, 04.3-53, 04.3-54, 04.4-15, 05.2-39, 05.2-40, 05.2.1-25, 05.3-49, 05.3-50, 06-46, 06.2-13, 06.2-19, 06.2-33, 06.3-04, 06.3-15, 06.3-24, 06.3-25, 07-32, 07-33, 07-50. Owner queue marks 06-46 and 06.3-04 as unblocked owner checkpoints. 04.2-33 (`autonomous: false`) is done on train 40 only, live traffic blocked (`handoffs/04.2-33-live-blocked.md` on exec/04.2-33).
+  - `autonomous: false` with a SUMMARY on main (27, live steps may remain; status of each unknown unless listed above): 03-05, 03-48, 03.1-04, 03.1-53, 03.1-54, 03.2-36, 03.2-53, 03.2-65, 03.2.1-02, 03.2.1-05, 04-43, 04.1.1-13, 04.1.1-15, 04.2-23, 04.2-25, 04.2-26, 05-05, 05-10, 05-26, 05.1-18, 05.1-23, 05.1.1-23, 05.2-15, 06-22, 06.1-01, 06.1-19, 07-01.
+  - HOLD (owner handoff, 2026-11-27): release gate step H-3 and the first promote-production run held until the release gate passes without OpenAI and OpenRouter has credit. No plan carries a HOLD marker in its PLAN.md; unknown beyond the handoff text.
+- **Eval database behind main:** the eval Supabase project stopped at train 34 (owner queue item 28: catch-up paused after train 34, trains 35-37 remain). Whether trains 35-39 have since been applied there: unknown. Config UI walkthroughs (04.1.1-13, 04.2-23, 04.2-26) wait for it.
+- **Before access groups are switched on (security, all three must land first):**
+  - `0984_review_items_access_sets.sql` (review-queue enqueue and mining carry access_sets): on ci/merge-train-38/39/40, not on main; prod: unknown (handoff records through train 36/37 only).
+  - `1010_attribute_resolver_access.sql` (attribute resolver takes the access filter; `rag_access_readiness()` ready after it): on train 39/40, not on main.
+  - `0986` (review writers `rag_review_items_enqueue` and `rag_review_items_enqueue_re_review` carry access_sets): only on `exec/quick-review-writers-access` (261127-rwa), and the number collides with `0986_tenant_doc_types_access.sql` on `exec/quick-doc-types-access`. The review-writers migration must be renumbered before merge; the new number is not chosen yet (unknown). Apply 0986 after 0967, 0974 and 0984, then re-run 0410.
+  - Until these land, review items from restricted documents can be read by every expert of the tenant when access is enforced. Enforcement is off on prod today.
+- **06.2 switches not read in `src/lib/rag/deps.ts`:** none of the twelve 06.2 switches reach `readRagEnvInput` (06.2-18 SUMMARY: "RAG_SCOPE_GATE is not yet passed from process.env into readRagEnvInput"; checked at train 39: no RAG_SCOPE_GATE or RAG_MODEL_ROUTING reference). Owned by 06.2-32 per the owner; note 06.2-32-PLAN.md lists no deps.ts in `files_modified`, so the plan needs that file added before it runs. Until then every 06.2 switch is off in production whatever the env says.
+
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 261126-w4x | Add RAG_HISTORY_NOT_EVIDENCE switch for RAG turns | 2026-11-26 | b9418d11 | [261126-w4x-add-rag-history-not-evidence-switch-for-](./quick/261126-w4x-add-rag-history-not-evidence-switch-for-/) |
+| 261127-acc | Attribute resolver takes the access filter (1010); done, pending merge (train 39 only) | 2026-11-27 | unknown | [261127-acc-attribute-resolver-access](./quick/261127-acc-attribute-resolver-access/) |
+| 261127-ras | Review items carry access_sets (0984); done, pending merge (train 38 on) | 2026-11-27 | unknown | [261127-ras-review-items-access-sets](./quick/261127-ras-review-items-access-sets/) |
+| 261127-sbd | Sidebar button default; done, pending merge (train 39 only) | 2026-11-27 | unknown | [261127-sbd-sidebar-button-default](./quick/261127-sbd-sidebar-button-default/) |
+| 261127-sbh | Sidebar button hide; done, pending merge (train 39 only) | 2026-11-27 | unknown | [261127-sbh-sidebar-button-hide](./quick/261127-sbh-sidebar-button-hide/) |
+| 261127-tfs | RAG panel toast; done, pending merge (train 39 only) | 2026-11-27 | unknown | [261127-tfs-rag-panel-toast](./quick/261127-tfs-rag-panel-toast/) |
+| 261127-sync | Sync STATE.md and ROADMAP.md to SUMMARY locations (docs only) | 2026-11-27 | see `git log` on exec/quick-state-sync | [261127-sync-state-roadmap](./quick/261127-sync-state-roadmap/) |
 
 ### Roadmap Evolution
 

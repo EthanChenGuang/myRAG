@@ -256,7 +256,10 @@ for (const mode of MODES) {
       assert.ok(fs.existsSync(file), `${MIGRATION} exists`);
       const first = await catalog(ctx.db);
       await ctx.db.exec(fs.readFileSync(file, 'utf8'));
-      const later = migrationFiles(ctx.mode).filter((relpath) => path.basename(relpath) > path.basename(MIGRATION) && path.basename(relpath).startsWith('08'));
+      // 0856 drops rag_exact_id_documents by catalog lookup; the 0930 block (Phase 4.3) defines it last, so it runs again too (its operator rule).
+      const later = migrationFiles(ctx.mode).filter(
+        (relpath) => path.basename(relpath) > path.basename(MIGRATION) && (path.basename(relpath).startsWith('08') || path.basename(relpath).startsWith('0930_')),
+      );
       await applyMigrationFiles(ctx.db, later);
       const second = await catalog(ctx.db);
       assert.deepEqual(second, first);

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FAKE_USER_ID, chatRequest, installChatPipeline, readSse, retrievalWith } from '../helpers/chat-route-fakes';
+import { withLanguagesUnset } from '../helpers/language-env';
 
 const ORG = '11111111-1111-4111-8111-111111111111';
 const OTHER_OWNER = '22222222-2222-4222-8222-222222222222';
@@ -163,7 +164,7 @@ describe('chat route status mapping', () => {
 
   it('status error in strict mode with web search off streams the localized error part, not the refusal, and records the error status', async () => {
     h.retrieval.mockRejectedValue(new Error('vector backend down'));
-    const response = await post(await loadRoute(), { settings: { webSearch: false, language: 'zh' } });
+    const response = await withLanguagesUnset(async () => post(await loadRoute(), { settings: { webSearch: false, language: 'zh' } }));
     const body = await readSse(response);
 
     expect(response.status).toBe(200);
@@ -238,7 +239,9 @@ describe('chat route status mapping', () => {
   it('degraded without used documents in strict mode with web search off streams the localized error part and records the degraded status', async () => {
     seedDocuments(['1']);
     h.retrieval.mockResolvedValue(retrievalWith([row('1')]));
-    const body = await readSse(await post(await loadRoute({ adminClient: flakyAdmin(10) }), { settings: { webSearch: false, language: 'it' } }));
+    const body = await withLanguagesUnset(async () =>
+      readSse(await post(await loadRoute({ adminClient: flakyAdmin(10) }), { settings: { webSearch: false, language: 'it' } })),
+    );
 
     expect(body).toContain('"type":"error"');
     expect(body).toContain('La base di conoscenza non è al momento disponibile');

@@ -1,6 +1,7 @@
 import { logger } from '@/lib/logger';
 import { searchByEmbedding, type RawChunk, type RpcClient } from '../backend/supabase-rpc';
 import { analyzeQuery, validateTemporalMatch, type TemporalQueryContext } from '../query/temporal-query-detector';
+import type { ScopeAccessFilter } from '../tenant/access-filter';
 import type { TenantScope } from '../tenant/scope';
 import type { Candidate } from '../types';
 
@@ -76,6 +77,8 @@ export interface LegacySearchInput {
   scope: TenantScope;
   client: RpcClient;
   signal: AbortSignal;
+  /** D-10, D-11: the request's access filter (runRetrieval reads it once); sent with every search RPC. */
+  access: ScopeAccessFilter;
   /** When false, match_chunks_by_profile allows non-active profiles (eval comparison only). */
   profileRequireActive?: boolean;
 }
@@ -84,6 +87,7 @@ interface SearchEnv {
   scope: TenantScope;
   client: RpcClient;
   signal: AbortSignal;
+  access: ScopeAccessFilter;
   profile: SearchProfile | null;
   thresholds: SearchThresholds;
   profileRequireActive: boolean;
@@ -279,6 +283,7 @@ function search(env: SearchEnv, vector: number[], pass: LegacyPoolPass): Promise
   return searchByEmbedding(env.scope, { vector, profile: env.profile }, pass.matchCount, pass.rpcThreshold, {
     client: env.client,
     signal: env.signal,
+    access: env.access,
     requireActive: env.profileRequireActive,
   });
 }
@@ -310,6 +315,7 @@ export async function legacySearch(
     scope: input.scope,
     client: input.client,
     signal: input.signal,
+    access: input.access,
     profile,
     thresholds,
     profileRequireActive,

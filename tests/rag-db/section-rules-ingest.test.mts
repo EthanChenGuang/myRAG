@@ -185,14 +185,14 @@ describe('section rules through the pipeline (multi-tenant)', () => {
       [id],
     ))[0]!;
 
-  test('a conforming document is cut by its rule set: canonical names in the path, other headings stay body text, no page numbers, report stored', async () => {
+  test('a conforming document is cut by its rule set: heading lines in the path, other headings stay body text, no page numbers, report stored', async () => {
     const id = await addRuleSet(A.key);
     useDeps({ RAG_SECTION_RULES: 'on' });
     const result = await upload(A, singleDoc('conform'), 'conform');
     assert.equal(result.status, 'ready');
     const chunks = await chunksOf(result.documentId!);
     const alpha = chunks.find((chunk) => String(chunk.content).includes(passage('conform', '1. Alpha')));
-    assert.deepEqual(alpha?.section_path, ['Part', 'Alpha']);
+    assert.deepEqual(alpha?.section_path, ['Part 1', '1. Alpha']);
     assert.ok(String(alpha?.content).includes('A note line under 1. Alpha'), 'a heading that is not allowed stays in the body');
     for (const chunk of chunks) {
       assert.ok(!(chunk.section_path as string[]).includes('Note'));
@@ -217,7 +217,7 @@ describe('section rules through the pipeline (multi-tenant)', () => {
       assert.equal((chunk.metadata as Row).variant_label, 'Part 2');
     }
     const alphaTwo = chunks.find((chunk) => String(chunk.content).includes('A note line under 1. Alpha of part 2'));
-    assert.deepEqual(alphaTwo?.section_path, ['Part 2', 'Part', 'Alpha']);
+    assert.deepEqual(alphaTwo?.section_path, ['Part 2', '1. Alpha']);
     for (const chunk of chunks) for (const line of TOC) assert.ok(!String(chunk.content).includes(line), 'no chunk holds a table-of-contents line');
     assert.deepEqual(((await documentRow(result.documentId!)).section_rules as Row).counts, { headings: 7, variants: 2, skipped: 2 });
   });
@@ -318,7 +318,7 @@ describe('section rules through the pipeline (multi-tenant)', () => {
       );
     const parents = await parentsOf('p256sra');
     const children = await childrenOf('p256sra');
-    assert.ok(parents.some((parent) => JSON.stringify(parent.section_path) === JSON.stringify(['Part 2', 'Part', 'Alpha'])), 'a rule section is a parent');
+    assert.ok(parents.some((parent) => JSON.stringify(parent.section_path) === JSON.stringify(['Part 2', '1. Alpha'])), 'a rule section is a parent');
     assert.equal(new Set(parents.map((parent) => JSON.stringify(parent.section_path))).size, parents.length, 'one parent per rule section');
     for (const child of children) {
       assert.deepEqual(child.section_path, child.parent_path);
@@ -352,7 +352,8 @@ describe('section rules through the pipeline (multi-tenant)', () => {
     const puts = store.calls.filter((call) => call.op === 'put').length;
     assert.equal((await rechunk.runRechunk({ db, profileId: 'p256src', scopeFor })).documentsWritten, 1);
     assert.equal(store.calls.filter((call) => call.op === 'put').length, puts, 'no parser call');
-    assert.ok((await childPaths()).some((p) => JSON.stringify(p) === JSON.stringify(['Part 2', 'Partx', 'Alphax'])), 'the new canonical names');
+    assert.ok((await childPaths()).some((p) => JSON.stringify(p) === JSON.stringify(['Part 2', '1. Alpha'])), 'cut by the rule sections');
+    assert.equal(((await documentRow(documentId)).section_rules as Row).version, 2, 'cut by the edited rule set');
 
     await fixture.db.exec(`DELETE FROM chunk_embeddings WHERE chunk_id IN (SELECT id FROM document_chunks WHERE chunking_profile_id = 'p256src');
       DELETE FROM document_chunks WHERE chunking_profile_id = 'p256src'; DELETE FROM chunking_build_gaps; DELETE FROM chunking_build_runs;`);

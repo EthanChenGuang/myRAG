@@ -104,7 +104,10 @@ describe('enrich: RAG_LEXICAL_QUANTITY on (D-31, D-33)', () => {
       expect(tokens).toContain(`${Q}1250ml`);
       expect(tokens).toContain(`${Q}40%`);
       const firstQ = tokens.findIndex((token) => token.startsWith(Q));
-      expect(tokens.slice(firstQ).every((token) => token.startsWith(Q) || token.startsWith('_'))).toBe(true);
+      const tail = tokens.slice(firstQ);
+      const lastQ = tail.findLastIndex((token) => token.startsWith(Q));
+      expect(tail.slice(0, lastQ + 1).every((token) => token.startsWith(Q) || token.startsWith('_'))).toBe(true);
+      expect(tail.slice(lastQ + 1).every((token) => !token.startsWith('_') && tokens.indexOf(token) >= firstQ)).toBe(true);
       expect(lexicalKeys(chunk.metadata)).toEqual({ lexical_version: 6 });
       expect(ctx.warnings).toEqual([]);
     }

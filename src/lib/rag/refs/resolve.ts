@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
+import { accessTableFilter, withAccessGroups, type ScopeAccessFilter } from '../tenant/access-filter';
 import { tenantPredicate, type TenantPredicate, type TenantScope } from '../tenant/scope';
 import type { DocumentPartRef, ReferencedSection, ReferencedState, UsedDocument } from '../types';
 
@@ -9,6 +10,8 @@ export interface ResolveDocumentRefsInput {
   documentParts: DocumentPartRef[];
   admin: SupabaseClient;
   signal: AbortSignal;
+  /** D-11, D-15: the request's access filter; a restricted document never resolves, by name or by id, for a caller without its group. */
+  access: ScopeAccessFilter;
 }
 
 export interface ResolvedDocumentRefs extends ReferencedState {
@@ -25,11 +28,11 @@ interface Scopable {
 }
 
 /**
- * Every documents query goes through here so the tenant predicate and the D-08 filter cannot be left off:
- * only a current, ready version is ever read, so a quarantined or superseded document is not referenced.
+ * Every documents query goes through here so the tenant predicate, the D-08 filter and the access predicate cannot be left off:
+ * only a current, ready version the caller may see is ever read, so a quarantined, superseded or restricted document is not referenced.
  */
-function scoped<T>(query: T, predicate: TenantPredicate): T {
-  const filter = (query as unknown as Scopable).eq('is_current', true).eq('status', 'ready');
+function scoped<T>(query: T, predicate: TenantPredicate, keys: readonly string[] | null): T {
+  const filter = withAccessGroups((query as unknown as Scopable).eq('is_current', true).eq('status', 'ready'), keys);
   if (predicate.kind === 'org') return filter.eq('organization_id', predicate.organizationId) as unknown as T;
   if (predicate.kind === 'personal') return filter.eq('user_id', predicate.userId).is('organization_id', null) as unknown as T;
   return filter as unknown as T;
@@ -39,9 +42,9 @@ interface CurrentChunks {
   eq(column: string, value: unknown): CurrentChunks;
 }
 
-/** Chunk reads of a referenced document stop at the same line: current and ready only. */
-function currentChunks<T>(query: T): T {
-  return (query as unknown as CurrentChunks).eq('is_current', true).eq('status', 'ready') as unknown as T;
+/** Chunk reads of a referenced document stop at the same line: current, ready and visible to the caller only. */
+function currentChunks<T>(query: T, keys: readonly string[] | null): T {
+  return withAccessGroups((query as unknown as CurrentChunks).eq('is_current', true).eq('status', 'ready'), keys) as unknown as T;
 }
 
 interface DocumentRef {
@@ -73,6 +76,7 @@ function chunkSection(docRef: DocumentRef, chunks: ChunkText[]): ReferencedSecti
 export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Promise<ResolvedDocumentRefs> {
   const { scope, mentions, documentParts, admin, signal } = input;
   const predicate = tenantPredicate(scope);
+  const keys = accessTableFilter(input.access);
 
   const mentionRefs: DocumentRef[] = [];
   for (const docName of mentions) {
@@ -81,6 +85,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
     const { data: docs, error } = await scoped(
       admin.from('documents').select('id, filename').ilike('filename', `%${docName}%`).limit(1),
       predicate,
+      keys,
     ).abortSignal(signal);
 
     if (!error && docs && docs.length > 0) {
@@ -91,6 +96,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
     const { data: exactDocs, error: exactError } = await scoped(
       admin.from('documents').select('id, filename').eq('filename', docName).limit(1),
       predicate,
+      keys,
     ).abortSignal(signal);
 
     if (!exactError && exactDocs && exactDocs.length > 0) {
@@ -109,6 +115,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
     const { data: docMetadata, error: metadataError } = await scoped(
       admin.from('documents').select('id, filename, created_at, content, metadata').eq('id', docRef.id),
       predicate,
+      keys,
     )
       .abortSignal(signal)
       .single();
@@ -128,7 +135,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
       external_url: docMetadata.metadata?.external_url,
     });
 
-    const { data: chunks, error } = await currentChunks(admin.from('document_chunks').select('id, content').eq('document_id', docRef.id))
+    const { data: chunks, error } = await currentChunks(admin.from('document_chunks').select('id, content').eq('document_id', docRef.id), keys)
       .limit(REFERENCE_CHUNK_LIMIT)
       .abortSignal(signal);
 
@@ -145,6 +152,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
     const { data: docData, error: docError } = await scoped(
       admin.from('documents').select('content, text').eq('id', docRef.id),
       predicate,
+      keys,
     )
       .abortSignal(signal)
       .single();
@@ -155,7 +163,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
       continue;
     }
 
-    const { data: allChunks, error: allChunksError } = await currentChunks(admin.from('document_chunks').select('*').eq('document_id', docRef.id))
+    const { data: allChunks, error: allChunksError } = await currentChunks(admin.from('document_chunks').select('*').eq('document_id', docRef.id), keys)
       .limit(REFERENCE_CHUNK_LIMIT)
       .abortSignal(signal);
 

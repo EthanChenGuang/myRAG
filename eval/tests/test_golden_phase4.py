@@ -41,6 +41,9 @@ LATER_PHASE_CATEGORIES = frozenset(
         "partial_answer",
         "stale_version",
         "off_topic_context",
+        # Plan 05.2.1-12; test_fixture_calc_overflow.py covers them.
+        "multi_step_calc",
+        "context_overflow",
     }
 )
 # Plan 06-38 adds Phase 6 items under these tags (and small_talk); test_golden_phase6.py covers them.

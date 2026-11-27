@@ -1,0 +1,973 @@
+{
+  "recorded_from": "cce43e1c91e334558be7782b6a9ec6c385e4ce6b",
+  "recorded_with": "syncDocumentsForConnection on one Google Drive single-folder connection with three sync records and a complete listing without file-c, in-memory admin client; nangoPipeline and ingestAsync mocked per case",
+  "cases": {
+    "legacy/async-off/removes": {
+      "calls": [
+        {
+          "table": "nango_connections",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            }
+          ]
+        },
+        {
+          "table": "nango_sync_records",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "in",
+              "column": "status",
+              "value": [
+                "completed",
+                "processing"
+              ]
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "delete",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "id",
+              "value": "doc-c"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            }
+          ]
+        },
+        {
+          "table": "nango_sync_records",
+          "operation": "delete",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "id",
+              "value": "rec-c"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            }
+          ]
+        }
+      ],
+      "softDeleteLineage": [],
+      "removeDocumentObjects": [],
+      "logs": [],
+      "deleted": 1,
+      "remainingSyncRecords": [
+        "rec-a",
+        "rec-b"
+      ],
+      "remainingDocuments": [
+        "doc-a",
+        "doc-b"
+      ]
+    },
+    "legacy/async-off/fails": {
+      "calls": [
+        {
+          "table": "nango_connections",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            }
+          ]
+        },
+        {
+          "table": "nango_sync_records",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "in",
+              "column": "status",
+              "value": [
+                "completed",
+                "processing"
+              ]
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "delete",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "id",
+              "value": "doc-c"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            }
+          ]
+        },
+        {
+          "table": "nango_sync_records",
+          "operation": "delete",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "id",
+              "value": "rec-c"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            }
+          ]
+        }
+      ],
+      "softDeleteLineage": [],
+      "removeDocumentObjects": [],
+      "logs": [
+        {
+          "level": "error",
+          "component": "Nango",
+          "message": "Failed to delete document doc-c",
+          "detail": {
+            "message": "update or delete on table \"documents\" violates foreign key constraint",
+            "code": "23503"
+          }
+        }
+      ],
+      "deleted": 1,
+      "remainingSyncRecords": [
+        "rec-a",
+        "rec-b"
+      ],
+      "remainingDocuments": [
+        "doc-a",
+        "doc-b",
+        "doc-c"
+      ]
+    },
+    "legacy/async-on/removes": {
+      "calls": [
+        {
+          "table": "nango_connections",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            }
+          ]
+        },
+        {
+          "table": "nango_sync_records",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "in",
+              "column": "status",
+              "value": [
+                "completed",
+                "processing"
+              ]
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "delete",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "id",
+              "value": "doc-c"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            }
+          ]
+        },
+        {
+          "table": "nango_sync_records",
+          "operation": "delete",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "id",
+              "value": "rec-c"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            }
+          ]
+        }
+      ],
+      "softDeleteLineage": [],
+      "removeDocumentObjects": [],
+      "logs": [],
+      "deleted": 1,
+      "remainingSyncRecords": [
+        "rec-a",
+        "rec-b"
+      ],
+      "remainingDocuments": [
+        "doc-a",
+        "doc-b"
+      ]
+    },
+    "legacy/async-on/fails": {
+      "calls": [
+        {
+          "table": "nango_connections",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            }
+          ]
+        },
+        {
+          "table": "nango_sync_records",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "in",
+              "column": "status",
+              "value": [
+                "completed",
+                "processing"
+              ]
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "delete",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "id",
+              "value": "doc-c"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            }
+          ]
+        },
+        {
+          "table": "nango_sync_records",
+          "operation": "delete",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "id",
+              "value": "rec-c"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            }
+          ]
+        }
+      ],
+      "softDeleteLineage": [],
+      "removeDocumentObjects": [],
+      "logs": [
+        {
+          "level": "error",
+          "component": "Nango",
+          "message": "Failed to delete document doc-c",
+          "detail": {
+            "message": "update or delete on table \"documents\" violates foreign key constraint",
+            "code": "23503"
+          }
+        }
+      ],
+      "deleted": 1,
+      "remainingSyncRecords": [
+        "rec-a",
+        "rec-b"
+      ],
+      "remainingDocuments": [
+        "doc-a",
+        "doc-b",
+        "doc-c"
+      ]
+    },
+    "unified/async-off/removes": {
+      "calls": [
+        {
+          "table": "nango_connections",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            }
+          ]
+        },
+        {
+          "table": "nango_sync_records",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "in",
+              "column": "status",
+              "value": [
+                "completed",
+                "processing"
+              ]
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "tenant_key",
+              "value": "u:00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            },
+            {
+              "kind": "eq",
+              "column": "source_connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "source_key",
+              "value": "file-c"
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "tenant_key",
+              "value": "u:00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            },
+            {
+              "kind": "eq",
+              "column": "source_connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "source_file_id",
+              "value": "file-c"
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "in",
+              "column": "lineage_id",
+              "value": [
+                "00000000-0000-4000-8000-00000000c003"
+              ]
+            },
+            {
+              "kind": "eq",
+              "column": "tenant_key",
+              "value": "u:00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            }
+          ]
+        },
+        {
+          "table": "document_chunks",
+          "operation": "delete",
+          "filters": [
+            {
+              "kind": "in",
+              "column": "document_id",
+              "value": [
+                "doc-c"
+              ]
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "delete",
+          "filters": [
+            {
+              "kind": "in",
+              "column": "lineage_id",
+              "value": [
+                "00000000-0000-4000-8000-00000000c003"
+              ]
+            },
+            {
+              "kind": "eq",
+              "column": "tenant_key",
+              "value": "u:00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            }
+          ]
+        },
+        {
+          "table": "nango_sync_records",
+          "operation": "delete",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "id",
+              "value": "rec-c"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            }
+          ]
+        }
+      ],
+      "softDeleteLineage": [],
+      "removeDocumentObjects": [
+        {
+          "tenantKey": "u:00000000-0000-4000-8000-0000000000a1",
+          "rows": [
+            {
+              "id": "doc-c",
+              "lineage_id": "00000000-0000-4000-8000-00000000c003",
+              "version": 1,
+              "tenant_key": "u:00000000-0000-4000-8000-0000000000a1",
+              "user_id": "00000000-0000-4000-8000-0000000000a1",
+              "source": "nango",
+              "source_connection_id": "conn-char",
+              "source_file_id": "file-c",
+              "source_key": "file-c",
+              "original_path": "u:00000000-0000-4000-8000-0000000000a1/00000000-0000-4000-8000-00000000c003/1/original.bin",
+              "processing_state": null
+            }
+          ]
+        }
+      ],
+      "logs": [],
+      "deleted": 1,
+      "remainingSyncRecords": [
+        "rec-a",
+        "rec-b"
+      ],
+      "remainingDocuments": [
+        "doc-a",
+        "doc-b"
+      ]
+    },
+    "unified/async-off/fails": {
+      "calls": [
+        {
+          "table": "nango_connections",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            }
+          ]
+        },
+        {
+          "table": "nango_sync_records",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "in",
+              "column": "status",
+              "value": [
+                "completed",
+                "processing"
+              ]
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "tenant_key",
+              "value": "u:00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            },
+            {
+              "kind": "eq",
+              "column": "source_connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "source_key",
+              "value": "file-c"
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "tenant_key",
+              "value": "u:00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            },
+            {
+              "kind": "eq",
+              "column": "source_connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "source_file_id",
+              "value": "file-c"
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "in",
+              "column": "lineage_id",
+              "value": [
+                "00000000-0000-4000-8000-00000000c003"
+              ]
+            },
+            {
+              "kind": "eq",
+              "column": "tenant_key",
+              "value": "u:00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            }
+          ]
+        },
+        {
+          "table": "document_chunks",
+          "operation": "delete",
+          "filters": [
+            {
+              "kind": "in",
+              "column": "document_id",
+              "value": [
+                "doc-c"
+              ]
+            }
+          ]
+        }
+      ],
+      "softDeleteLineage": [],
+      "removeDocumentObjects": [],
+      "logs": [
+        {
+          "level": "error",
+          "component": "Nango",
+          "message": "Failed to delete the lineage of file-c",
+          "detail": {
+            "message": "chunk delete refused",
+            "code": "XX000"
+          }
+        }
+      ],
+      "deleted": 0,
+      "remainingSyncRecords": [
+        "rec-a",
+        "rec-b",
+        "rec-c"
+      ],
+      "remainingDocuments": [
+        "doc-a",
+        "doc-b",
+        "doc-c"
+      ]
+    },
+    "unified/async-on/removes": {
+      "calls": [
+        {
+          "table": "nango_connections",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            }
+          ]
+        },
+        {
+          "table": "nango_sync_records",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "in",
+              "column": "status",
+              "value": [
+                "completed",
+                "processing"
+              ]
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "tenant_key",
+              "value": "u:00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            },
+            {
+              "kind": "eq",
+              "column": "source_connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "source_key",
+              "value": "file-c"
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "tenant_key",
+              "value": "u:00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            },
+            {
+              "kind": "eq",
+              "column": "source_connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "source_file_id",
+              "value": "file-c"
+            }
+          ]
+        },
+        {
+          "table": "nango_sync_records",
+          "operation": "delete",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "id",
+              "value": "rec-c"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            }
+          ]
+        }
+      ],
+      "softDeleteLineage": [
+        [
+          {
+            "kind": "personal",
+            "userId": "00000000-0000-4000-8000-0000000000a1",
+            "organizationId": null
+          },
+          "00000000-0000-4000-8000-00000000c003",
+          "nango"
+        ]
+      ],
+      "removeDocumentObjects": [],
+      "logs": [],
+      "deleted": 1,
+      "remainingSyncRecords": [
+        "rec-a",
+        "rec-b"
+      ],
+      "remainingDocuments": [
+        "doc-a",
+        "doc-b",
+        "doc-c"
+      ]
+    },
+    "unified/async-on/fails": {
+      "calls": [
+        {
+          "table": "nango_connections",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            }
+          ]
+        },
+        {
+          "table": "nango_sync_records",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "user_id",
+              "value": "00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "in",
+              "column": "status",
+              "value": [
+                "completed",
+                "processing"
+              ]
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "tenant_key",
+              "value": "u:00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            },
+            {
+              "kind": "eq",
+              "column": "source_connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "source_key",
+              "value": "file-c"
+            }
+          ]
+        },
+        {
+          "table": "documents",
+          "operation": "select",
+          "filters": [
+            {
+              "kind": "eq",
+              "column": "tenant_key",
+              "value": "u:00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "kind": "eq",
+              "column": "source",
+              "value": "nango"
+            },
+            {
+              "kind": "eq",
+              "column": "source_connection_id",
+              "value": "conn-char"
+            },
+            {
+              "kind": "eq",
+              "column": "source_file_id",
+              "value": "file-c"
+            }
+          ]
+        }
+      ],
+      "softDeleteLineage": [
+        [
+          {
+            "kind": "personal",
+            "userId": "00000000-0000-4000-8000-0000000000a1",
+            "organizationId": null
+          },
+          "00000000-0000-4000-8000-00000000c003",
+          "nango"
+        ]
+      ],
+      "removeDocumentObjects": [],
+      "logs": [],
+      "deleted": 0,
+      "remainingSyncRecords": [
+        "rec-a",
+        "rec-b",
+        "rec-c"
+      ],
+      "remainingDocuments": [
+        "doc-a",
+        "doc-b",
+        "doc-c"
+      ]
+    }
+  }
+}

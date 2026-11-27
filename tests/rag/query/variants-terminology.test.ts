@@ -107,7 +107,7 @@ describe('buildQueryVariants with the query layer (D-31)', () => {
   const PARAMS = { max_searches: 6, max_translations: 2, max_sub_questions: 2, max_llm_variants: 2 };
 
   it('places terminology first in the multi-query group', () => {
-    expect(QUERY_LAYER_VARIANT_ORDER).toEqual(['original', 'condensed', 'translated', 'sub_question', 'terminology', 'expanded', 'hyde']);
+    expect(QUERY_LAYER_VARIANT_ORDER).toEqual(['original', 'condensed', 'history_fallback', 'translated', 'sub_question', 'terminology', 'expanded', 'hyde']);
     const provided = [variant('hyde', 'synthetic hypothetical passage'), variant('expanded', 'synthetic paraphrase one'), variant('sub_question', 'synthetic sub question')];
     const set = buildQueryVariantSet(ORIGINAL, 'en', [], provided, queryLayerVariantLimits(PARAMS), term());
     expect(set.variants.map((entry) => entry.kind)).toEqual(['original', 'sub_question', 'terminology', 'expanded']);

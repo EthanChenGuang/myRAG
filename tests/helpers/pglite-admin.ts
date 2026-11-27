@@ -11,6 +11,8 @@ export interface PgliteAdminOptions {
 }
 
 const IDENTIFIER_RE = /^[a-z_][a-z0-9_]*$/;
+/** The generic RPC names of eval/harness/fake-edge.mts (`GENERIC_RPC_NAME`). */
+const RPC_NAME_RE = /^(?:rag_[a-z0-9_]+|match_chunks_by_profile|hybrid_search_chunks|hybrid_search_translations)$/;
 const DEFAULT_JSON_COLUMNS = ['metadata', 'processing_state'];
 
 function identifier(name: string): string {
@@ -74,28 +76,48 @@ export function createPgliteAdmin(db: PGlite, options: PgliteAdminOptions = {}) 
 
   const admin = {
     queries,
-    /** supabase-js rpc over named arguments: objects and arrays bind as JSON (arrays as arrays for array-typed arguments). */
-    async rpc(fn: string, args: Row = {}): Promise<Result> {
-      const name = identifier(fn);
-      const params: unknown[] = [];
-      try {
-        const arrayArgs = await procArrayArgs(fn);
-        const named = Object.entries(args).map(([key, value]) => {
-          const asArray = Array.isArray(value) && arrayArgs.has(key);
-          params.push(!asArray && value !== null && typeof value === 'object' ? JSON.stringify(value) : value);
-          return `${identifier(key)} => $${params.length}`;
-        });
-        const sql = `SELECT * FROM public.${name}(${named.join(', ')})`;
-        queries.push({ sql, params: [...params] });
-        const shape = await procShape(fn);
-        const rows = plain((await execute(sql, params)).rows);
-        if (shape.table) return { data: rows, error: null };
-        if (shape.retset) return { data: rows.map((row) => row[fn]), error: null };
-        return { data: rows[0]?.[fn] ?? null, error: null };
-      } catch (error) {
-        const code = typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : 'XX000';
-        return { data: null, error: { code, message: error instanceof Error ? error.message : String(error) } };
-      }
+    /**
+     * supabase-js style `rpc(name, args)` over named arguments: objects bind as JSON, arrays as arrays for array-typed
+     * arguments. Only the names the fake edge serves generically are accepted, and argument names must be plain
+     * identifiers; anything else is refused before any SQL runs. Chains `abortSignal` like supabase-js.
+     */
+    rpc(fn: string, args: Row = {}) {
+      let signal: AbortSignal | null = null;
+      const call = async (): Promise<Result> => {
+        const names = Object.keys(args);
+        if (!RPC_NAME_RE.test(fn) || !names.every((arg) => IDENTIFIER_RE.test(arg))) {
+          return { data: null, error: { code: 'PGRST202', message: `[pglite-admin] unsupported rpc: ${fn}` } };
+        }
+        if (signal?.aborted) return { data: null, error: { code: '20', message: 'AbortError: the rpc was aborted' } };
+        const name = identifier(fn);
+        const params: unknown[] = [];
+        try {
+          const arrayArgs = await procArrayArgs(fn);
+          const named = Object.entries(args).map(([key, value]) => {
+            const asArray = Array.isArray(value) && arrayArgs.has(key);
+            params.push(!asArray && value !== null && typeof value === 'object' && !(value instanceof Date) ? JSON.stringify(value) : value);
+            return `${identifier(key)} => $${params.length}`;
+          });
+          const sql = `SELECT * FROM public.${name}(${named.join(', ')})`;
+          queries.push({ sql, params: [...params] });
+          const shape = await procShape(fn);
+          const rows = plain((await execute(sql, params)).rows);
+          if (shape.table) return { data: rows, error: null };
+          if (shape.retset) return { data: rows.map((row) => row[fn]), error: null };
+          return { data: rows[0]?.[fn] ?? null, error: null };
+        } catch (error) {
+          const code = error && typeof error === 'object' && typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : 'XX000';
+          return { data: null, error: { code, message: error instanceof Error ? error.message : String(error) } };
+        }
+      };
+      const builder = {
+        abortSignal(next: AbortSignal) {
+          signal = next;
+          return builder;
+        },
+        then: (onFulfilled: (value: Result) => unknown, onRejected?: (reason: unknown) => unknown) => call().then(onFulfilled, onRejected),
+      };
+      return builder;
     },
     storage: {
       from: () => ({ remove: async () => ({ error: null }) }),

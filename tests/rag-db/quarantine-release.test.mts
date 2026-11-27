@@ -469,7 +469,7 @@ describe('multi-tenant: admin release and delete of quarantined documents', () =
     assert.equal(audit.length, 1);
     assert.deepEqual(audit[0]?.rule_ids, item.ruleIds);
 
-    const hits = await (await import('@/lib/rag/retrieval/invoices')).findInvoices(await scopeOf(A), {}, { db: () => pgliteRpc(), signal: signal() });
+    const hits = await (await import('@/lib/rag/retrieval/invoices')).findInvoices(await scopeOf(A), {}, { db: () => pgliteRpc(), signal: signal(), access: { mode: 'off' } as const });
     assert.ok(!hits.some((hit) => hit.invoiceNumber === 'INV-Q-0001'), 'a released invoice has no extracted fields to search by');
   });
 });

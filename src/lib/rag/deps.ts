@@ -102,6 +102,7 @@ function readRagEnvInput(): RagEnvInput {
     RAG_EXACT_ID_LOOKUP: process.env.RAG_EXACT_ID_LOOKUP ?? env.RAG_EXACT_ID_LOOKUP,
     RAG_DOC_ACCESS_GROUPS: process.env.RAG_DOC_ACCESS_GROUPS ?? env.RAG_DOC_ACCESS_GROUPS,
     RAG_EMBED_ACCESS_GROUP: process.env.RAG_EMBED_ACCESS_GROUP ?? env.RAG_EMBED_ACCESS_GROUP,
+    RAG_SOURCE_RECHECK: process.env.RAG_SOURCE_RECHECK ?? env.RAG_SOURCE_RECHECK,
     RAG_LEXICAL_SEARCH: process.env.RAG_LEXICAL_SEARCH ?? env.RAG_LEXICAL_SEARCH,
     RAG_RERANKER: process.env.RAG_RERANKER ?? env.RAG_RERANKER,
     RAG_RERANK_TIER_CHAT: process.env.RAG_RERANK_TIER_CHAT ?? env.RAG_RERANK_TIER_CHAT,
@@ -143,6 +144,7 @@ function readRagEnvInput(): RagEnvInput {
     RAG_SCOPE_TAGS: process.env.RAG_SCOPE_TAGS ?? env.RAG_SCOPE_TAGS,
     RAG_DOC_TRANSLATION: process.env.RAG_DOC_TRANSLATION ?? env.RAG_DOC_TRANSLATION,
     RAG_BGE_M3_SERVING: process.env.RAG_BGE_M3_SERVING ?? env.RAG_BGE_M3_SERVING,
+    RAG_BGE_M3_VIA: process.env.RAG_BGE_M3_VIA ?? env.RAG_BGE_M3_VIA,
     RAG_OUTPUT_LINK_ALLOWLIST: process.env.RAG_OUTPUT_LINK_ALLOWLIST ?? env.RAG_OUTPUT_LINK_ALLOWLIST,
     RAG_EMBEDDING_PROFILES: process.env.RAG_EMBEDDING_PROFILES ?? env.RAG_EMBEDDING_PROFILES,
     RAG_DOMAIN_EMBEDDINGS: process.env.RAG_DOMAIN_EMBEDDINGS ?? env.RAG_DOMAIN_EMBEDDINGS,
@@ -154,11 +156,15 @@ function readRagEnvInput(): RagEnvInput {
     RAG_QUERY_CONDENSE: process.env.RAG_QUERY_CONDENSE ?? env.RAG_QUERY_CONDENSE,
     RAG_QUERY_EXPAND: process.env.RAG_QUERY_EXPAND ?? env.RAG_QUERY_EXPAND,
     RAG_QUERY_DECOMPOSE: process.env.RAG_QUERY_DECOMPOSE ?? env.RAG_QUERY_DECOMPOSE,
+    RAG_QUERY_DECOMPOSE_COMPLETENESS: process.env.RAG_QUERY_DECOMPOSE_COMPLETENESS,
+    RAG_QUERY_SUBQ_FILTERS: process.env.RAG_QUERY_SUBQ_FILTERS,
+    RAG_TRANSLATION_GLOSSARY: process.env.RAG_TRANSLATION_GLOSSARY ?? env.RAG_TRANSLATION_GLOSSARY,
     RAG_QUERY_TRANSLATE: process.env.RAG_QUERY_TRANSLATE ?? env.RAG_QUERY_TRANSLATE,
     RAG_QUERY_DATE_NORMALIZE: process.env.RAG_QUERY_DATE_NORMALIZE ?? env.RAG_QUERY_DATE_NORMALIZE,
     RAG_QUERY_HYDE: process.env.RAG_QUERY_HYDE ?? env.RAG_QUERY_HYDE,
     RAG_QUERY_TRANSLATE_DISABLED_PROFILES: process.env.RAG_QUERY_TRANSLATE_DISABLED_PROFILES ?? env.RAG_QUERY_TRANSLATE_DISABLED_PROFILES,
     RAG_QUERY_VOICE_TRANSFORMS: process.env.RAG_QUERY_VOICE_TRANSFORMS ?? env.RAG_QUERY_VOICE_TRANSFORMS,
+    RAG_QUERY_HISTORY_FALLBACK: process.env.RAG_QUERY_HISTORY_FALLBACK ?? env.RAG_QUERY_HISTORY_FALLBACK,
     RAG_SEMANTIC_CACHE: process.env.RAG_SEMANTIC_CACHE ?? env.RAG_SEMANTIC_CACHE,
     RAG_SEMANTIC_CACHE_TTL: process.env.RAG_SEMANTIC_CACHE_TTL ?? env.RAG_SEMANTIC_CACHE_TTL,
     RAG_SEMANTIC_CACHE_REFUSAL_TTL: process.env.RAG_SEMANTIC_CACHE_REFUSAL_TTL ?? env.RAG_SEMANTIC_CACHE_REFUSAL_TTL,
@@ -233,6 +239,11 @@ export function resetRagDepsForTests(): void {
   overrides = {};
   defaultQueryLlm = null;
 }
+/** Phase 5.2.1 D-83: RAG_CONTEXT_TOKEN_BUDGET as the pipeline reads it, the document target of the prompt budget. */
+export function currentContextTokenBudget(): number {
+  return loadRagConfig(getRagDeps().ragEnv()).v2.tokenBudget;
+}
+
 /** D-42: the effective lexical version of the configuration this process loads, the value the search stage uses. */
 export function currentLexicalVersion(): number {
   return effectiveLexicalVersion(loadRagConfig(getRagDeps().ragEnv()));

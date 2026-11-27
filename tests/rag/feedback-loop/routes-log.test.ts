@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FAKE_USER_ID, chatRequest, installChatPipeline, readSse, retrievalWith } from '../../helpers/chat-route-fakes';
 import { detectLanguage } from '@/lib/rag/lang/detect';
+import { withLanguagesUnset } from '../../helpers/language-env';
 
 const h = await vi.hoisted(async () => {
   const fakes = await import('../../helpers/chat-route-fakes');
@@ -212,8 +213,8 @@ describe('chat route retrieval log in ids mode (D-03a, D-05, D-07)', () => {
     { language: 'zh', rendered: 'en' },
     { language: 'x'.repeat(500), rendered: 'en' },
     { language: '<b onclick="x">it</b>', rendered: 'en' },
-  ])('strict with no context gives refused_no_context in the rendered language $rendered', async ({ language, rendered }) => {
-    await ask({ settings: { webSearch: false, language } });
+  ])('strict with no context gives refused_no_context in the rendered language $rendered (languages unset)', async ({ language, rendered }) => {
+    await withLanguagesUnset(() => ask({ settings: { webSearch: false, language } }));
     const row = onlyRow();
     expect(row.outcome).toBe('refused_no_context');
     expect(row.answer_language).toBe(rendered);
@@ -226,12 +227,23 @@ describe('chat route retrieval log in ids mode (D-03a, D-05, D-07)', () => {
     { language: 'fr', rendered: 'en' },
     { language: '<script>alert(1)</script>', rendered: 'en' },
     { language: 'toString', rendered: 'en' },
-  ])('a retrieval error in strict without web search gives kb_unavailable in the rendered language $rendered', async ({ language, rendered }) => {
+  ])('a retrieval error in strict without web search gives kb_unavailable in the rendered language $rendered (languages unset)', async ({ language, rendered }) => {
+    h.retrieval.mockRejectedValue(new Error('vector backend down'));
+    await withLanguagesUnset(() => ask({ settings: { webSearch: false, language } }));
+    const row = onlyRow();
+    expect(row.outcome).toBe('kb_unavailable');
+    expect(row.answer_language).toBe(rendered);
+  });
+
+  it.each(['es', 'zh', 'it'])('with zh, en and it enabled the English question logs refusals in en whatever the UI language (%s)', async (language) => {
+    await ask({ settings: { webSearch: false, language } });
+    expect(onlyRow().answer_language).toBe('en');
+    h.writes.length = 0;
     h.retrieval.mockRejectedValue(new Error('vector backend down'));
     await ask({ settings: { webSearch: false, language } });
     const row = onlyRow();
     expect(row.outcome).toBe('kb_unavailable');
-    expect(row.answer_language).toBe(rendered);
+    expect(row.answer_language).toBe('en');
   });
 
   it('a retrieval error in balanced mode gives degraded_answer', async () => {

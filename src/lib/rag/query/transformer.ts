@@ -6,7 +6,15 @@ import { DEFAULT_POST_CHECK_LIMITS, type PostCheckLimits } from './post-checks';
 import type { SearchDelegate } from './port-types';
 import type { CondensedQuery } from '@/lib/rag-eval/contracts.generated';
 import { finishCondense, llamaindexCondense, type CondenseInput, type CondenseResult } from './llamaindex/condense';
-import { finishDecompose, nativeDecompose, type DecomposeInput, type DecomposeResult, type FinishDecomposeInput } from './llamaindex/decompose';
+import {
+  finishDecompose,
+  nativeDecompose,
+  subqFilterAddendum,
+  type DecomposeInput,
+  type DecomposeResult,
+  type FinishDecomposeInput,
+  type SubqFilterContext,
+} from './llamaindex/decompose';
 import { finishExpand, nativeExpand, type ExpandInput, type ExpandResult, type FinishExpandInput } from './llamaindex/expand';
 import { finishHyde, nativeHyde, type FinishHydeInput, type HydeInput, type HydeResult } from './llamaindex/hyde';
 import {
@@ -25,6 +33,18 @@ export type { DecomposeResult } from './llamaindex/decompose';
 export type { ExpandResult } from './llamaindex/expand';
 export type { HydeResult } from './llamaindex/hyde';
 export type { NativeTranslateResult as TranslateResult, TranslateCallOutcome, TranslateRequest, TranslateSkipReason } from './llamaindex/translate';
+
+/**
+ * D-17: the language an LLM transform that ran anyway reported (condense, then translate), when it names an enabled language;
+ * null otherwise. It overrides the detection for the answer-language instruction and translation targets only; no extra call.
+ */
+export function reportedQueryLanguage<L extends string>(reports: ReadonlyArray<string | null | undefined>, enabled: readonly L[]): L | null {
+  for (const report of reports) {
+    const match = enabled.find((language) => language === report);
+    if (match) return match;
+  }
+  return null;
+}
 
 /** The shared transform inputs; the implementation supplies its own client (D-02). */
 export type TransformExpandInput = Omit<ExpandInput, 'deps'>;
@@ -125,11 +145,14 @@ export function getQueryTransformer(framework: QueryFramework = 'llamaindex'): Q
  * deps, so it imports no post-check module and its results have exactly the native shapes.
  */
 export interface QueryTransformFinishers {
-  condense(input: Pick<CondenseInput, 'query' | 'protectedTokens' | 'limits'>, output: CondensedQuery): CondenseResult;
+  /** D-14: condense, expand and decompose inputs may carry glossaryProtected, which the finishers check with the protected tokens. */
+  condense(input: Pick<CondenseInput, 'query' | 'protectedTokens' | 'glossaryProtected' | 'limits'>, output: CondensedQuery): CondenseResult;
   expand(input: FinishExpandInput, queries: readonly string[]): ExpandResult;
   hyde(input: FinishHydeInput, passage: string): HydeResult;
   /** Validates the raw SubQuestions output (wire bound) and applies the D-15 cut and checks. */
   decompose(input: FinishDecomposeInput, output: unknown): DecomposeResult;
+  /** D-07: the versioned addendum the decomposer prompt ends with while RAG_QUERY_SUBQ_FILTERS is effective. */
+  decomposeAddendum(context: SubqFilterContext): string;
   /** The translate calls to make: targets picked and the shared prompt rendered (research A-6). */
   translateRequests(input: TranslateRequestInput): TranslateRequest[];
   translate(input: TranslateRequestInput, outcomes: readonly TranslateCallOutcome[]): NativeTranslateResult;
@@ -142,6 +165,7 @@ export const QUERY_TRANSFORM_FINISHERS: QueryTransformFinishers = Object.freeze(
   expand: finishExpand,
   hyde: finishHyde,
   decompose: finishDecompose,
+  decomposeAddendum: subqFilterAddendum,
   translateRequests,
   translate: finishTranslate,
   defaultLimits: DEFAULT_POST_CHECK_LIMITS,

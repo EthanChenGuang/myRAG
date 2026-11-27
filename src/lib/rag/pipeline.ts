@@ -77,8 +77,9 @@ import {
 } from './security/injection-check';
 import { securitySpanAttributes } from './security/security-events';
 import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
+import { runSourceRecheckStage, type SourceRecheckMarker } from './retrieval/source-recheck';
 import { hybridRerank } from './rerank/local-hybrid';
-import { AccessScopeMissingError, scopeAccessFilter, type ScopeAccessFilter } from './tenant/access';
+import { ACCESS_ADMIN_HASH, AccessScopeMissingError, accessScopeTiming, scopeAccessFilter, type ScopeAccessFilter } from './tenant/access';
 import { assertTenantScope, scopeKey, type TenantScope } from './tenant/scope';
 import { createTraceCollector, sanitizeStageCounts, type TraceCollector } from './trace/collector';
 import { finishTrace, type FinishTraceOptions } from './trace/finish';
@@ -428,12 +429,12 @@ export function downweightOrder<C extends { chunk_id: string }>(candidates: read
 const ASSEMBLY_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval'];
 const EMPTY_ROWS: AssemblyRows = { documents: new Map(), chunkMetadata: new Map() };
 
-async function loadRows(candidates: Candidate[], signal: AbortSignal, tenantKey?: string): Promise<AssemblyRows> {
+async function loadRows(candidates: Candidate[], signal: AbortSignal, access: ScopeAccessFilter, tenantKey?: string): Promise<AssemblyRows> {
   if (candidates.length === 0) return EMPTY_ROWS;
   const adminClient = getRagDeps().adminClient();
   if (!adminClient) throw new Error('[RAG Assemble] admin client unavailable');
   const withPairs = tenantKey !== undefined && readAnswerConfig().versionLabels;
-  return fetchAssemblyRows(candidates, { adminClient, signal, ...(withPairs ? { tenantKey } : {}) });
+  return fetchAssemblyRows(candidates, { adminClient, signal, access, ...(withPairs ? { tenantKey } : {}) });
 }
 
 function requireAdminSearchClient(deps: RagDeps): RpcClient {
@@ -514,7 +515,12 @@ export function degradedReason(records: StageRecord[]): string {
 const MEDIA_MATCH_COUNT = 10;
 const MEDIA_SIMILARITY_THRESHOLD = 0.3;
 
-async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollector, scope: NonNullable<RunRetrievalInput['scope']>): Promise<RetrievalResult> {
+async function runMediaPipeline(
+  input: RunRetrievalInput,
+  collector: TraceCollector,
+  scope: NonNullable<RunRetrievalInput['scope']>,
+  access: ScopeAccessFilter,
+): Promise<RetrievalResult> {
   const deps = getRagDeps();
   const { signal, profile } = input;
   const config = loadRagConfig(deps.ragEnv());
@@ -526,6 +532,7 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
   let context = '';
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
+  let sourceRecheck: SourceRecheckMarker | undefined;
 
   try {
     const embedding = requireValue(
@@ -546,6 +553,7 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
             searchByEmbedding(scope, current, MEDIA_MATCH_COUNT, scaleThreshold(searchThresholdsFor(current.profile), MEDIA_SIMILARITY_THRESHOLD), {
               client: adminClient as unknown as RpcClient,
               signal: stageSignal,
+              access,
             }),
           );
         },
@@ -554,6 +562,20 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
       ),
       'search',
     );
+
+    if (config.sourceRecheck) {
+      const recheck = await runSourceRecheckStage({
+        spec: spec('source_recheck', 'skip'),
+        signal,
+        collector,
+        scope,
+        client: () => requireAdminSearchClient(deps),
+        items: rawChunks,
+        chunkIdOf: (chunk) => chunk.chunk_id,
+      });
+      rawChunks = recheck.items;
+      sourceRecheck = recheck.marker ?? undefined;
+    }
 
     if (security.injectionCheck !== 'off') {
       warnInjectionCheckDisabled(config, security.injectionCheck);
@@ -624,7 +646,13 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
       : status === 'empty'
         ? 'no_candidates'
         : injectionReason(records, injectionStalled);
-  return { ...failure(collector, status, reason, null), candidates, context, ...(injection ? { injection } : {}) };
+  return {
+    ...failure(collector, status, reason, null),
+    candidates,
+    context,
+    ...(injection ? { injection } : {}),
+    ...(sourceRecheck ? { sourceRecheck } : {}),
+  };
 }
 
 export async function runRefsStage(
@@ -632,6 +660,7 @@ export async function runRefsStage(
   scope: NonNullable<RunRetrievalInput['scope']>,
   stage: StageSpec,
   collector: TraceCollector,
+  access: ScopeAccessFilter,
 ): Promise<ReferencedState | null> {
   const documentRefs = input.documentRefs;
   if (!documentRefs || (documentRefs.mentions.length === 0 && documentRefs.documentParts.length === 0)) return null;
@@ -648,6 +677,7 @@ export async function runRefsStage(
         documentParts: documentRefs.documentParts,
         admin,
         signal: stageSignal,
+        access,
       });
     },
     collector,
@@ -663,11 +693,15 @@ export async function runRefsStage(
  * caller's scope (the ids are the scoped search results); assemble reuses them. A failed read leaves no exemption and
  * assemble reads again, so the check never fails open.
  */
-async function loadOverviewDocumentsForCheck(rawChunks: RawChunk[], signal: AbortSignal): Promise<Map<string, AssemblyDocumentRow> | null> {
+async function loadOverviewDocumentsForCheck(
+  rawChunks: RawChunk[],
+  signal: AbortSignal,
+  access: ScopeAccessFilter,
+): Promise<Map<string, AssemblyDocumentRow> | null> {
   const admin = getRagDeps().adminClient();
   if (!admin || rawChunks.length === 0) return null;
   try {
-    return await fetchOverviewDocuments(rawChunks, { admin, signal });
+    return await fetchOverviewDocuments(rawChunks, { admin, signal, access });
   } catch {
     signal.throwIfAborted();
     return null;
@@ -678,6 +712,7 @@ async function runOverviewPipeline(
   input: RunRetrievalInput,
   collector: TraceCollector,
   scope: NonNullable<RunRetrievalInput['scope']>,
+  access: ScopeAccessFilter,
 ): Promise<RetrievalResult> {
   const deps = getRagDeps();
   const { signal, profile } = input;
@@ -689,9 +724,10 @@ async function runOverviewPipeline(
   let overview: OverviewContext = { context: '', usedDocuments: [] };
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
+  let sourceRecheck: SourceRecheckMarker | undefined;
 
   try {
-    let referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
+    let referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector, access);
 
     const embedding = requireValue(
       await runStage(spec('embed', 'throw'), signal, (stageSignal) => embedQuery(OVERVIEW_QUERY, stageSignal), collector, {
@@ -711,6 +747,7 @@ async function runOverviewPipeline(
             searchByEmbedding(scope, current, OVERVIEW_MATCH_COUNT, scaleThreshold(searchThresholdsFor(current.profile), OVERVIEW_SIMILARITY_THRESHOLD), {
               client: adminClient as unknown as RpcClient,
               signal: stageSignal,
+              access,
             }),
           );
         },
@@ -720,12 +757,26 @@ async function runOverviewPipeline(
       'search',
     );
 
+    if (config.sourceRecheck) {
+      const recheck = await runSourceRecheckStage({
+        spec: spec('source_recheck', 'skip'),
+        signal,
+        collector,
+        scope,
+        client: () => requireAdminSearchClient(deps),
+        items: rawChunks,
+        chunkIdOf: (chunk) => chunk.chunk_id,
+      });
+      rawChunks = recheck.items;
+      sourceRecheck = recheck.marker ?? undefined;
+    }
+
     let flaggedForRender: ReadonlySet<string> | undefined;
     let documentRows: Map<string, AssemblyDocumentRow> | null = null;
     if (security.injectionCheck !== 'off') {
       const mode = security.injectionCheck;
       warnInjectionCheckDisabled(config, mode);
-      documentRows = await loadOverviewDocumentsForCheck(rawChunks, signal);
+      documentRows = await loadOverviewDocumentsForCheck(rawChunks, signal, access);
       const run = await runInjectionStage({
         spec: spec('injection_check', 'skip'),
         signal,
@@ -758,7 +809,7 @@ async function runOverviewPipeline(
       async (stageSignal) => {
         const adminClient = deps.adminClient();
         if (!adminClient) throw new Error('[RAG Overview] admin client unavailable');
-        const documents = documentRows ?? (await fetchOverviewDocuments(rawChunks, { admin: adminClient, signal: stageSignal }));
+        const documents = documentRows ?? (await fetchOverviewDocuments(rawChunks, { admin: adminClient, signal: stageSignal, access }));
         return assembleOverviewContext(rawChunks, documents, referenced?.usedDocuments ?? [], {
           ...(security.contextTagging ? { contextTagging: true } : {}),
           ...(flaggedForRender ? { flaggedChunkIds: flaggedForRender } : {}),
@@ -813,6 +864,7 @@ async function runOverviewPipeline(
     context: overview.context,
     usedDocuments: overview.usedDocuments,
     ...(injection ? { injection } : {}),
+    ...(sourceRecheck ? { sourceRecheck } : {}),
   };
 }
 
@@ -855,9 +907,87 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
       return missing;
     }
   }
-  const result = await dispatchRetrieval(input, collector, access);
+  if (input.scope !== null && access !== undefined && access.mode !== 'off') recordAccessScope(collector, input.scope, access);
+  const result = await dispatchRetrieval(input, collector, access ?? OFF_ACCESS);
+  if (input.scope !== null && access !== undefined && access.mode !== 'off') await attachAccessLabels(result, input.scope, input.signal);
   if (ownsTrace) finishTrace(collector, result, traceOptions(input));
   return result;
+}
+
+const ACCESS_LABEL_BATCH = 100;
+
+/** Every document id the result carries: used documents, candidates, kept and relevant chunks, voice results. */
+function resultDocumentIds(result: RetrievalResult): string[] {
+  const ids = new Set<string>();
+  const add = (value: unknown) => {
+    if (typeof value === 'string' && value.length > 0) ids.add(value);
+  };
+  for (const doc of result.usedDocuments) add(doc.id);
+  for (const row of result.candidates) add(row.document_id);
+  for (const row of result.relevantChunks) add(row.document_id);
+  for (const row of result.kept) add(row.document_id);
+  for (const row of result.voice?.results ?? []) add((row as { document_id?: unknown }).document_id);
+  return [...ids].sort();
+}
+
+/**
+ * D-25, A-06: one batched documents read (service-role client, tenant key predicate) of the labels of every document the result used,
+ * for the derived stores and traces. The map is attached as a non-enumerable property so it never reaches a client payload. A failed
+ * read leaves it absent (logged with a code only); consumers treat an absent map as unknown labels.
+ */
+async function attachAccessLabels(result: RetrievalResult, scope: NonNullable<RunRetrievalInput['scope']>, signal: AbortSignal): Promise<void> {
+  const ids = resultDocumentIds(result);
+  const labels = new Map<string, readonly string[]>();
+  try {
+    if (ids.length > 0) {
+      const admin = getRagDeps().adminClient();
+      if (!admin) {
+        logger.warn('RAG Access', 'Access labels not read', { code: 'admin_client_missing' });
+        return;
+      }
+      for (let index = 0; index < ids.length; index += ACCESS_LABEL_BATCH) {
+        const batch = ids.slice(index, index + ACCESS_LABEL_BATCH);
+        const { data, error } = await admin
+          .from('documents')
+          .select('id, access_groups')
+          .eq('tenant_key', scopeKey(scope))
+          .in('id', batch)
+          .abortSignal(signal);
+        if (error) {
+          logger.warn('RAG Access', 'Access labels not read', { code: error.code ?? 'read_failed' });
+          return;
+        }
+        for (const row of (data ?? []) as Array<{ id: unknown; access_groups: unknown }>) {
+          if (typeof row.id !== 'string' || !Array.isArray(row.access_groups)) continue;
+          labels.set(row.id, Object.freeze(row.access_groups.filter((key): key is string => typeof key === 'string')));
+        }
+      }
+    }
+    Object.defineProperty(result, 'accessLabels', { value: labels, enumerable: false, writable: false, configurable: true });
+  } catch {
+    if (!signal.aborted) logger.warn('RAG Access', 'Access labels not read', { code: 'read_failed' });
+  }
+}
+
+/** A request without a tenant never reaches a leg (no_tenant); its filter is off, so no argument is sent. */
+const OFF_ACCESS: ScopeAccessFilter = Object.freeze({ mode: 'off' });
+
+/**
+ * D-08: the resolution time of the request's access scope, recorded directly on the trace (never through runStage or the optional
+ * stage list, so no configuration can disable or skip it). A scope minted without a timed resolution records zero, marked untimed.
+ */
+function recordAccessScope(collector: TraceCollector, scope: NonNullable<RunRetrievalInput['scope']>, access: ScopeAccessFilter): void {
+  if (access.mode === 'keys') collector.setAccess({ mode: 'keys', setHash: access.setHash });
+  else if (access.mode === 'admin_all') collector.setAccess({ mode: 'admin_all', setHash: ACCESS_ADMIN_HASH });
+  const endedAt = collector.now();
+  const elapsed = accessScopeTiming(scope);
+  collector.record({
+    name: 'access_scope',
+    status: 'ok',
+    startedAt: endedAt - Math.max(0, elapsed ?? 0),
+    endedAt,
+    ...(elapsed === null ? { detail: 'untimed' } : {}),
+  });
 }
 
 /** D-09: the retrieval error reason while the switch is on and the scope carries no access scope. */
@@ -869,8 +999,8 @@ function traceOptions(input: RunRetrievalInput): FinishTraceOptions {
 
 const V2_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval', 'voice'];
 
-function runLegacyPipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
-  return input.profile === 'voice' ? runVoicePipeline(input, collector) : runPipeline(input, collector);
+function runLegacyPipeline(input: RunRetrievalInput, collector: TraceCollector, access: ScopeAccessFilter): Promise<RetrievalResult> {
+  return input.profile === 'voice' ? runVoicePipeline(input, collector, access) : runPipeline(input, collector, access);
 }
 
 /** D-07: the fallback is a trace record with its reason only, never query text, tenant id or an error body. */
@@ -901,6 +1031,9 @@ function bufferedCollector(parent: TraceCollector): TraceCollector & { commit():
     setLanguages: (block) => parent.setLanguages(block),
     languages: () => parent.languages(),
     timing: () => parent.timing(),
+    setAccess: (access) => parent.setAccess(access),
+    addAccessViolations: (count) => parent.addAccessViolations(count),
+    access: () => parent.access(),
     commit() {
       for (const record of buffer.stages()) {
         parent.record({
@@ -933,21 +1066,21 @@ function hasEvalBindingOverride(options: RetrievalOptions | undefined): boolean 
 async function dispatchRetrieval(
   input: RunRetrievalInput,
   collector: TraceCollector,
-  access: ScopeAccessFilter | undefined,
+  access: ScopeAccessFilter,
 ): Promise<RetrievalResult> {
   const evalBindingOverride = input.profile === 'eval' && hasEvalBindingOverride(input.options);
   const eligible = !input.options?.generalOverview && V2_PROFILES.includes(input.profile);
   if (evalBindingOverride && (!eligible || !loadRagConfig(getRagDeps().ragEnv()).v2.domainEmbeddings.enabled)) {
     return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
   }
-  if (!eligible) return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
+  if (!eligible) return withLogOutcome(await runLegacyPipeline(input, collector, access), 'legacy');
 
   const effective = resolveEffectivePipeline();
   if (evalBindingOverride && effective.pipeline === 'legacy') return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
   if (effective.pipeline === 'legacy') {
     if (effective.fallback !== 'none') recordPipelineFallback(collector, effective.fallback);
     warnBackendIgnoredOnLegacy(loadRagConfig(getRagDeps().ragEnv()).backend);
-    return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
+    return withLogOutcome(await runLegacyPipeline(input, collector, access), 'legacy');
   }
 
   const { runV2Pipeline } = await import('./v2/pipeline');
@@ -962,13 +1095,13 @@ async function dispatchRetrieval(
       return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
     }
     recordPipelineFallback(collector, V2_UNAVAILABLE);
-    return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
+    return withLogOutcome(await runLegacyPipeline(input, collector, access), 'legacy');
   }
   attempt.commit();
   return withLogOutcome({ ...result, stages: collector.stages() }, 'v2');
 }
 
-async function runPipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
+async function runPipeline(input: RunRetrievalInput, collector: TraceCollector, access: ScopeAccessFilter): Promise<RetrievalResult> {
   const deps = getRagDeps();
   const scope = input.scope;
 
@@ -976,8 +1109,8 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
     return failure(collector, 'empty', 'no_tenant', null);
   }
 
-  if (input.profile === 'media') return runMediaPipeline(input, collector, scope);
-  if (input.options?.generalOverview) return runOverviewPipeline(input, collector, scope);
+  if (input.profile === 'media') return runMediaPipeline(input, collector, scope, access);
+  if (input.options?.generalOverview) return runOverviewPipeline(input, collector, scope, access);
 
   const { signal, profile } = input;
   const config = loadRagConfig(deps.ragEnv());
@@ -993,12 +1126,13 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
   let injectionMarks: InjectionMarks | null = null;
+  let sourceRecheck: SourceRecheckMarker | undefined;
   const security = deps.securityConfig();
   const documentBudget = documentBudgetOf(input.options?.documentTokenBudget);
   let packing: PackingSummary | undefined;
 
   try {
-    referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
+    referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector, access);
 
     const analysis = await runStage(spec('analyze', 'skip'), signal, () => legacyAnalyze(input.query), collector);
     const analysed = analysis.skipped ? defaultQueryContext() : analysis.value;
@@ -1028,6 +1162,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
               scope,
               client: requireAdminSearchClient(deps),
               signal: stageSignal,
+              access,
               profileRequireActive: evalProfileId ? false : undefined,
             });
           return evalProfileId ? runSearch(embedding) : withStaleProfileRetry(input.query, embedding, stageSignal, runSearch);
@@ -1043,7 +1178,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
       const exact = await runStage(
         spec('exact_id_lookup', 'skip'),
         signal,
-        (stageSignal) => exactIdStage(input.query, scope, { client: requireAdminSearchClient(deps), signal: stageSignal }),
+        (stageSignal) => exactIdStage(input.query, scope, { client: requireAdminSearchClient(deps), signal: stageSignal, access }),
         collector,
         {
           candidatesIn: searched.results.length,
@@ -1052,6 +1187,21 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         },
       );
       if (!exact.skipped && exact.value.rows.length > 0) rankInput = mergeExactCandidates(searched.results, exact.value.rows, maxResults);
+    }
+
+    if (config.sourceRecheck) {
+      // D-19, D-38: after the last step that adds candidates and before ranking; a failed recheck keeps them and degrades the result.
+      const recheck = await runSourceRecheckStage({
+        spec: spec('source_recheck', 'skip'),
+        signal,
+        collector,
+        scope,
+        client: () => requireAdminSearchClient(deps),
+        items: rankInput,
+        chunkIdOf: (item) => item.chunk_id,
+      });
+      rankInput = recheck.items;
+      sourceRecheck = recheck.marker ?? undefined;
     }
 
     const ranked = await runStage(
@@ -1088,7 +1238,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         spec('post_filter', 'skip'),
         signal,
         async (stageSignal) => {
-          const loaded = await loadRows(candidates, stageSignal, scopeKey(scope));
+          const loaded = await loadRows(candidates, stageSignal, access, scopeKey(scope));
           const result = filterCandidates(assemblyInput(loaded, true));
           rows = loaded;
           filtered = result;
@@ -1134,7 +1284,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         spec('assemble', 'skip'),
         signal,
         async (stageSignal) => {
-          const loaded: AssemblyRows = rows ?? (await loadRows(candidates, stageSignal, scopeKey(scope)));
+          const loaded: AssemblyRows = rows ?? (await loadRows(candidates, stageSignal, access, scopeKey(scope)));
           const applyRelevanceFilter = !postFilter.skipped;
           const state = filtered ?? filterCandidates(assemblyInput(loaded, applyRelevanceFilter));
           if (documentBudget === null) return buildContext(state, assemblyInput(loaded, applyRelevanceFilter));
@@ -1189,7 +1339,11 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
           : 'no_relevant_context'
         : injectionReason(records, injectionStalled);
 
-  const base = { ...failure(collector, status, reason, queryContext), ...(injection ? { injection } : {}) };
+  const base = {
+    ...failure(collector, status, reason, queryContext),
+    ...(injection ? { injection } : {}),
+    ...(sourceRecheck ? { sourceRecheck } : {}),
+  };
   if (!assembly) return { ...base, candidates };
   if (assembly.versionConflict && profile !== 'eval') {
     recordAnswerConflict({ tenantKey: scopeKey(scope), conflict: assembly.versionConflict, traceId: collector.traceId });
@@ -1218,7 +1372,11 @@ function toVoiceChunk(row: RawChunk, scope: NonNullable<RunRetrievalInput['scope
   return scope.kind === 'single' ? { ...row } : { ...row, id: row.chunk_id };
 }
 
-async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
+function voiceChunkId(chunk: VoiceChunk): string | null {
+  return chunk.chunk_id ?? chunk.id ?? null;
+}
+
+async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollector, access: ScopeAccessFilter): Promise<RetrievalResult> {
   const deps = getRagDeps();
   const scope = input.scope;
   if (scope === null) return failure(collector, 'empty', 'no_tenant', null);
@@ -1239,6 +1397,7 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
   let packing: PackingSummary | undefined;
+  let sourceRecheck: SourceRecheckMarker | undefined;
 
   try {
     const embedding = requireValue(
@@ -1258,6 +1417,7 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
             return searchByEmbedding(scope, current, primary.matchCount, primary.threshold, {
               client: requireAdmin() as unknown as RpcClient,
               signal: stageSignal,
+              access,
             });
           });
           return rows.map((row) => toVoiceChunk(row, scope));
@@ -1271,11 +1431,29 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
     const expanded = await runStage(
       spec('voice_keyword_fallback', 'skip'),
       signal,
-      (stageSignal) => voiceKeywordFallback({ query, scope, admin: requireAdmin(), signal: stageSignal, existing: searched }),
+      (stageSignal) => voiceKeywordFallback({ query, scope, admin: requireAdmin(), signal: stageSignal, existing: searched, access }),
       collector,
       { candidatesIn: searched.length, candidatesOut: (value) => value.length },
     );
-    const merged = expanded.skipped ? searched : expanded.value;
+    let merged = expanded.skipped ? searched : expanded.value;
+
+    if (config.sourceRecheck) {
+      // Search rows carry chunk_id, keyword-fallback rows id; a row with neither cannot be shown current and is not forwarded once checked.
+      const checkable = merged.filter((chunk) => voiceChunkId(chunk) !== null);
+      const recheck = await runSourceRecheckStage({
+        spec: spec('source_recheck', 'skip'),
+        signal,
+        collector,
+        scope,
+        client: () => requireAdmin() as unknown as RpcClient,
+        items: checkable,
+        chunkIdOf: (chunk) => voiceChunkId(chunk) ?? '',
+      });
+      if (recheck.marker) {
+        merged = recheck.items;
+        sourceRecheck = recheck.marker;
+      }
+    }
 
     const reranked = await runStage(
       spec('local_rerank', 'skip'),
@@ -1361,5 +1539,11 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
       : status === 'empty'
         ? 'no_candidates'
         : injectionReason(records, injectionStalled);
-  return { ...failure(collector, status, reason, null), voice, ...(injection ? { injection } : {}), ...(packing ? { packing } : {}) };
+  return {
+    ...failure(collector, status, reason, null),
+    voice,
+    ...(injection ? { injection } : {}),
+    ...(packing ? { packing } : {}),
+    ...(sourceRecheck ? { sourceRecheck } : {}),
+  };
 }

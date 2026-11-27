@@ -772,6 +772,13 @@ function refusalCorrectCell(view, locale) {
   ]);
 }
 
+const REFUSAL_CALIBRATION_PANEL_STATUS =
+  typeof ragPanelSetStatus === 'function'
+    ? ragPanelSetStatus
+    : typeof require !== 'undefined'
+      ? require('./panel-status.js').ragPanelSetStatus
+      : null;
+
 class RefusalCalibrationPanel {
   constructor(root, deps) {
     const d = deps || {};
@@ -837,14 +844,18 @@ class RefusalCalibrationPanel {
     content.replaceChildren(refusalEl('div', { cls: 'flex flex-wrap items-center justify-end gap-2 mb-4' }, [this.updatedEl, this.refreshButton]), this.body);
   }
 
-  setStatus(message, isError) {
-    const host = this.hosts.status;
-    if (!host) return;
-    host.replaceChildren();
-    host.classList.toggle('text-error', Boolean(isError));
-    if (isError) host.appendChild(refusalIcon('bi-exclamation-circle', 'mr-1'));
-    if (typeof message === 'string') host.appendChild(document.createTextNode(message));
-    else refusalAppendMessage(host, message);
+  setStatus(message, isError, options) {
+    const render = () => {
+      const host = this.hosts.status;
+      if (!host) return;
+      host.replaceChildren();
+      host.classList.toggle('text-error', Boolean(isError));
+      if (isError) host.appendChild(refusalIcon('bi-exclamation-circle', 'mr-1'));
+      if (typeof message === 'string') host.appendChild(document.createTextNode(message));
+      else refusalAppendMessage(host, message);
+    };
+    if (REFUSAL_CALIBRATION_PANEL_STATUS) REFUSAL_CALIBRATION_PANEL_STATUS(this.hosts.status, render, isError, options);
+    else render();
   }
 
   reloadButton() {

@@ -1,3 +1,4 @@
+import { SCOPE_CENTROIDS_HOOK, registerScopeCentroidsHook, scopeCentroidsAfterPublishOn } from '../scope/post-publish';
 import { queueConfigFromProcessEnv, type QueueConfig } from './queue-config';
 import { enqueueTranslateJobs } from './translate/enqueue';
 import { TRANSLATION_HOOK, registerTranslationHook, translationAfterPublishOn } from './translate/produce';
@@ -66,7 +67,8 @@ function asyncIngestOn(): boolean {
  * D-41: the supersession detector is a hook only while RAG_SUPERSESSION_DETECT=on. D-29: chunk translation is a hook only while
  * RAG_DOC_TRANSLATION=on and the deployment is not monolingual: with asynchronous ingestion off it translates inline within its budget,
  * with it on it only enqueues ledger jobs of kind translate (enqueueTranslateJob, one per target) for the worker. Both check the tenant's
- * own setting first. Off, each is removed and nothing runs.
+ * own setting first. Off, each is removed and nothing runs. Phase 6.2 D-25: the scope-centroid rebuild is a hook only while
+ * RAG_SCOPE_GATE is effective.
  */
 function syncBuiltInHooks(): void {
   if (supersessionDetectOn()) registerSupersessionHook(registerPostPublishHook);
@@ -81,6 +83,8 @@ function syncBuiltInHooks(): void {
       { timeoutMs: QUEUED_TRANSLATION_HOOK_TIMEOUT_MS },
     );
   } else registerTranslationHook(registerPostPublishHook);
+  if (scopeCentroidsAfterPublishOn()) registerScopeCentroidsHook(registerPostPublishHook);
+  else unregisterPostPublishHook(SCOPE_CENTROIDS_HOOK);
 }
 
 export function resetPostPublishHooksForTests(): void {

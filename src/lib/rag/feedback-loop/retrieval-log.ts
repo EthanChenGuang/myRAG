@@ -1,3 +1,4 @@
+import { accessSetsFor } from '../access/sets';
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { RetrievalLogEntry } from '@/lib/rag-eval/contracts.generated';
@@ -119,6 +120,8 @@ export function buildRetrievalLogRow(input: BuildRetrievalLogRowInput): Retrieva
   const ragMode = logContext.ragMode && RAG_MODES.includes(logContext.ragMode) ? logContext.ragMode : null;
   const configHash = typeof result.retrievalConfigHash === 'string' && result.retrievalConfigHash.length <= 128 ? result.retrievalConfigHash : null;
   const redundancy = topkRedundancy(result.kept);
+  // D-25, A-06: the label sets of the logged documents, only while access is on (the labels map is absent while off)
+  const accessSets = accessSetsFor(result.accessLabels, candidates.map((entry) => entry.document_id));
 
   return {
     trace_id: result.traceId,
@@ -151,6 +154,7 @@ export function buildRetrievalLogRow(input: BuildRetrievalLogRowInput): Retrieva
     feedback_at: null,
     source_opened_count: 0,
     ...(redundancy !== null ? { topk_redundancy: redundancy } : {}),
+    ...(accessSets !== null ? { access_sets: accessSets } : {}),
   };
 }
 

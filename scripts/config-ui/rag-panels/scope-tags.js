@@ -2072,7 +2072,8 @@ function scopeTagsRenderQueueHost(host, item, options, context) {
       item.replaces = null;
     }
   }
-  host.replaceChildren(...nodes);
+  const tail = Array.from(host.children || []).filter((c) => c.hasAttribute && c.hasAttribute('data-queue-extras-tail'));
+  host.replaceChildren(...nodes, ...tail);
 }
 
 /**

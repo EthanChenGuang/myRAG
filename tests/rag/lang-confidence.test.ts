@@ -19,6 +19,8 @@ const COPIED = [
   'eval/fixtures/golden.jsonl',
   'eval/fixtures/domain/golden.jsonl',
   'eval/fixtures/ingest/golden-ingest.jsonl',
+  // Optional input of the tool (06.2-10's LANG-08 case file); the scratch copy needs it whenever the repository has it.
+  'eval/fixtures/lang-detect/cases.jsonl',
   'src/lib/rag/lang/detect.ts',
   'config/rag/language-packs.json',
   'eval/config/language-confidence-calibration.json',

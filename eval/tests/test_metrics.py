@@ -1012,6 +1012,10 @@ P52_CORPUS_FILES_05_2_28 = {
 PHASE53_CORPUS_FILES = {
     f"{language}/{name}.{language}.md" for language in ("en", "it", "zh") for name in ("access-rules", "instrument-catalog")
 }
+# Plan 05.2.1-12: calc-rules and long-reference per language, added after every record these history tests compare.
+PHASE521_CORPUS_FILES = frozenset(
+    f"{language}/{name}.{language}.md" for language in ("en", "it", "zh") for name in ("calc-rules", "long-reference")
+)
 
 
 def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_path):
@@ -1041,8 +1045,9 @@ def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_p
     without_terms = tmp_path / "corpus"
     shutil.copytree(corpus, without_terms)
     # Without the term files, the Phase 4.2 files (04.2-37), the 05.2-28 Phase 5.2 documents (train 30) and the 05.3-15
-    # documents (train 31) the corpus is the one 04.1.1-10 started from.
-    for relpath in TERM_CORPUS_FILES | PHASE42_CORPUS_FILES | P52_CORPUS_FILES_05_2_28 | PHASE53_CORPUS_FILES:
+    # documents (train 31) and the 05.2.1-12 documents the corpus is the one 04.1.1-10 started from.
+    later = PHASE42_CORPUS_FILES | P52_CORPUS_FILES_05_2_28 | PHASE53_CORPUS_FILES | PHASE521_CORPUS_FILES
+    for relpath in TERM_CORPUS_FILES | later:
         (without_terms / relpath).unlink()
     assert corpus_sha256(without_terms) == PRE_TERMS_CORPUS_SHA256
     assert current.corpus_sha256 != previous.corpus_sha256 and current.golden_sha256 != previous.golden_sha256
@@ -1122,6 +1127,8 @@ def test_the_04_2_37_baselines_add_only_phase42_items_and_move_no_old_item(tmp_p
     # The 05.3-15 documents joined the corpus after the train-30 record.
     for relpath in PHASE53_CORPUS_FILES:
         (without_phase42 / relpath).unlink()
+    for relpath in PHASE521_CORPUS_FILES:
+        (without_phase42 / relpath).unlink()
     assert corpus_sha256(without_phase42) == PRE_PHASE42_CORPUS_SHA256
     assert current.corpus_sha256 != previous.corpus_sha256 and current.golden_sha256 != previous.golden_sha256
 
@@ -1157,14 +1164,18 @@ def test_the_train_31_baselines_add_only_phase53_items_and_move_only_refusal_rat
     """Train 31: both baselines re-recorded on top of train 30 with the 05.3-15 items and its answers-on smoke harness.
     The added items are exactly the phase53_fixture items; an earlier item keeps its retrieval metrics, and only its
     refusal rates may move (answers-on scoring reads refusals from the answer, 05.3-15). Train 33 re-recorded them once more
-    with the 48 Phase 5.2 items of plan 05.2-29; train 36 adds the 03.3-20 templated items to the ingest baseline."""
+    with the 48 Phase 5.2 items of plan 05.2-29; train 36 adds the 03.3-20 templated items to the ingest baseline. That
+    record (train 37 for the ingest baseline) is kept as history/*.pre-05.2.1-12.json; test_fixture_calc_overflow.py compares
+    it with the current baselines."""
     from pathlib import Path
 
     from rag_sidecar.contracts.baseline import Baseline
 
     root = Path(__file__).resolve().parents[1]
     previous = Baseline.model_validate_json((root / "baselines" / "history" / f"{name}.pre-05.3-15.json").read_text(encoding="utf-8"))
-    current = Baseline.model_validate_json((root / "baselines" / f"{name}.json").read_text(encoding="utf-8"))
+    current = Baseline.model_validate_json(
+        (root / "baselines" / "history" / f"{name}.pre-05.2.1-12.json").read_text(encoding="utf-8")
+    )
     assert len(current.runs) >= 3
     assert previous.items is not None and current.items is not None
     golden = {
@@ -1189,6 +1200,8 @@ def test_the_train_31_baselines_add_only_phase53_items_and_move_only_refusal_rat
             for line in (root / "fixtures" / "ingest" / "golden-ingest.jsonl").read_text(encoding="utf-8").splitlines()
             if line.strip() and json.loads(line)["id"].startswith("ingest-tpl-")
         }
+        - {"ingest-tpl-no-answer-en-06", "ingest-tpl-no-answer-it-06"}  # train 38, after this record
+        - {"ingest-tpl-no-answer-en-08", "ingest-tpl-no-answer-it-07"}  # train 39, after this record
         if name == "fixture-ingest-baseline"
         else set()
     )

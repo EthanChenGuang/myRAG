@@ -24,6 +24,8 @@ export interface RunConfig {
   chunkingProfiles?: ChunkingProfile[];
   /** Phase 5.2 D-54: the generator model the run answers with (a fake id selects the fake generator); absent when the key is. */
   generatorModel?: string;
+  /** Phase 6.2 D-16: every request runs through the voice entry point; absent for the default eval entry. */
+  entryProfile?: 'voice';
 }
 
 /** The Phase 5.1 SEC switches (D-14) and the values each accepts; keys, acks, regions and endpoints are never among them. */
@@ -134,6 +136,11 @@ const PHASE521_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
   RAG_CONTEXT_OVERFLOW: ['truncate', 'refine'],
 };
 
+/** The Phase 4.3 access switch (D-09): the smoke tier runs with it on to show it changes no slice. RAG_EMBED_ACCESS_GROUP stays out. */
+const PHASE43_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
+  RAG_DOC_ACCESS_GROUPS: ['off', 'on'],
+};
+
 /** The Phase 5 switch a Phase 5.2 run config sets: RAG_CITATIONS=true asks the eval run for citations (D-54). */
 const PHASE5_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
   RAG_CITATIONS: BOOLEAN_VALUES,
@@ -193,12 +200,14 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   ...Object.keys(PHASE521_SWITCH_VALUES),
   ...Object.keys(PHASE5_SWITCH_VALUES),
   ...Object.keys(PHASE44_SWITCH_VALUES),
+  ...Object.keys(PHASE43_SWITCH_VALUES),
 ];
 
 export const RUN_CONFIG_REJECT_MESSAGE =
   '[Eval Harness] run-config may only set RAG_PIPELINE, Phase 4 RAG_* switches, the Phase 5.1 SEC switches and the Phase 6 query-layer and semantic-cache switches';
 
-const TOP_LEVEL_KEYS = new Set(['name', 'env', 'overrides', 'chunking_profiles', 'generator_model']);
+const TOP_LEVEL_KEYS = new Set(['name', 'env', 'overrides', 'chunking_profiles', 'generator_model', 'entry_profile']);
+const ENTRY_PROFILES = new Set(['eval', 'voice']);
 /** The trace contract's generator_model pattern. */
 const GENERATOR_MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -220,7 +229,14 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
     throw new RunConfigError(`[Eval Harness] run-config ${source} has unknown field(s): ${unknownKeys.join(', ')}`);
   }
 
-  const { name, env: rawEnv = {}, overrides: rawOverrides = null, chunking_profiles: rawProfiles, generator_model: rawGeneratorModel } = raw;
+  const {
+    name,
+    env: rawEnv = {},
+    overrides: rawOverrides = null,
+    chunking_profiles: rawProfiles,
+    generator_model: rawGeneratorModel,
+    entry_profile: rawEntryProfile,
+  } = raw;
   if (typeof name !== 'string' || !NAME_RE.test(name)) {
     throw new RunConfigError(`[Eval Harness] run-config ${source} needs a name of lowercase letters, digits, dot, dash or underscore`);
   }
@@ -254,6 +270,7 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
     ...PHASE521_SWITCH_VALUES,
     ...PHASE5_SWITCH_VALUES,
     ...PHASE44_SWITCH_VALUES,
+    ...PHASE43_SWITCH_VALUES,
   })) {
     if (!allowed) continue;
     // A malformed SEC, Phase 6, Phase 3.3, Phase 5.2 or Phase 5.2.1 value would silently fall back to off in the app; the run config fails instead (the value is never echoed).
@@ -291,12 +308,17 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
     throw new RunConfigError(`[Eval Harness] run-config ${source} generator_model must be a model id`);
   }
 
+  if (rawEntryProfile !== undefined && (typeof rawEntryProfile !== 'string' || !ENTRY_PROFILES.has(rawEntryProfile))) {
+    throw new RunConfigError(`[Eval Harness] run-config ${source} entry_profile must be eval or voice`);
+  }
+
   return {
     name,
     env,
     overrides,
     ...(chunkingProfiles ? { chunkingProfiles } : {}),
     ...(rawGeneratorModel !== undefined ? { generatorModel: rawGeneratorModel } : {}),
+    ...(rawEntryProfile === 'voice' ? { entryProfile: 'voice' as const } : {}),
   };
 }
 

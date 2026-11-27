@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
+import { accessTableFilter, withAccessGroups, type ScopeAccessFilter } from '../tenant/access-filter';
 import { tenantPredicate, type TenantScope } from '../tenant/scope';
 
 export interface VoiceChunk {
@@ -25,6 +26,8 @@ export interface VoiceKeywordFallbackInput {
   admin: SupabaseClient;
   signal: AbortSignal;
   existing: VoiceChunk[];
+  /** D-11: the request's access filter; every chunk and document read here carries it. */
+  access: ScopeAccessFilter;
 }
 
 interface ChunkQueryResult {
@@ -40,9 +43,12 @@ interface ChunkFilter {
   limit(count: number): { abortSignal(signal: AbortSignal): PromiseLike<{ data: unknown; error: { message: string } | null }> };
 }
 
-/** Every chunk read here is restricted to current, ready chunks (D-08): a quarantined or superseded chunk is never a keyword hit. */
-function chunkSelect(admin: SupabaseClient, columns: string): ChunkFilter {
-  return (admin.from('document_chunks').select(columns) as unknown as ChunkFilter).eq('is_current', true).eq('status', 'ready');
+/**
+ * Every chunk read here is restricted to current, ready chunks (D-08) the caller may see (D-11): a quarantined, superseded or
+ * restricted chunk is never a keyword hit.
+ */
+function chunkSelect(admin: SupabaseClient, columns: string, keys: readonly string[] | null): ChunkFilter {
+  return withAccessGroups((admin.from('document_chunks').select(columns) as unknown as ChunkFilter).eq('is_current', true).eq('status', 'ready'), keys);
 }
 
 const STOP_WORDS = new Set(['the', 'is', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'for', 'on', 'with', 'by', 'at', 'show', 'me', 'what', 'where', 'can', 'you', 'please', 'who']);
@@ -85,11 +91,16 @@ export function deriveVoiceKeywords(query: string): VoiceKeywords {
   return { cleanQuery, keywords, searchKeywords };
 }
 
-async function inScopeDocumentIds(admin: SupabaseClient, scope: TenantScope, signal: AbortSignal): Promise<string[] | null> {
+async function inScopeDocumentIds(
+  admin: SupabaseClient,
+  scope: TenantScope,
+  signal: AbortSignal,
+  keys: readonly string[] | null,
+): Promise<string[] | null> {
   const predicate = tenantPredicate(scope);
   if (predicate.kind === 'none') return null;
 
-  const base = admin.from('documents').select('id').eq('is_current', true).eq('status', 'ready');
+  const base = withAccessGroups(admin.from('documents').select('id').eq('is_current', true).eq('status', 'ready'), keys);
   const scoped =
     predicate.kind === 'org' ? base.eq('organization_id', predicate.organizationId) : base.eq('user_id', predicate.userId).is('organization_id', null);
   const { data, error } = await scoped.limit(MAX_SCOPE_DOCUMENTS).abortSignal(signal);
@@ -104,6 +115,7 @@ async function inScopeDocumentIds(admin: SupabaseClient, scope: TenantScope, sig
 
 async function queryChunks(
   admin: SupabaseClient,
+  keys: readonly string[] | null,
   documentIds: string[] | null,
   signal: AbortSignal,
   columns: string,
@@ -111,7 +123,7 @@ async function queryChunks(
   limit: number,
 ): Promise<ChunkQueryResult> {
   if (documentIds === null) {
-    const { data, error } = await refine(chunkSelect(admin, columns)).limit(limit).abortSignal(signal);
+    const { data, error } = await refine(chunkSelect(admin, columns, keys)).limit(limit).abortSignal(signal);
     return { data: data as VoiceChunk[] | null, error };
   }
   if (documentIds.length === 0) return { data: [], error: null };
@@ -120,7 +132,7 @@ async function queryChunks(
   for (let i = 0; i < documentIds.length; i += DOCUMENT_BATCH_SIZE) batches.push(documentIds.slice(i, i + DOCUMENT_BATCH_SIZE));
 
   const responses = await Promise.all(
-    batches.map((batch) => refine(chunkSelect(admin, columns).in('document_id', batch)).limit(limit).abortSignal(signal)),
+    batches.map((batch) => refine(chunkSelect(admin, columns, keys).in('document_id', batch)).limit(limit).abortSignal(signal)),
   );
   const failed = responses.find((response) => response.error);
   if (failed?.error) return { data: null, error: failed.error };
@@ -150,7 +162,8 @@ export async function voiceKeywordFallback(input: VoiceKeywordFallbackInput): Pr
 
   logger.db('[Document Search] Voice keyword search', { keywordCount: searchKeywords.length });
 
-  const documentIds = await inScopeDocumentIds(admin, scope, signal);
+  const keys = accessTableFilter(input.access);
+  const documentIds = await inScopeDocumentIds(admin, scope, signal, keys);
   const queryLower = query.toLowerCase();
 
   // Single-tenant vector rows carry no id, so only chunks added here are deduplicated; kept for output parity.
@@ -162,6 +175,7 @@ export async function voiceKeywordFallback(input: VoiceKeywordFallbackInput): Pr
 
     const { data: imageData, error: imageError } = await queryChunks(
       admin,
+      keys,
       documentIds,
       signal,
       'id, document_id, content, metadata',
@@ -197,7 +211,7 @@ export async function voiceKeywordFallback(input: VoiceKeywordFallbackInput): Pr
   const keyPhrase = keywords.join('%');
   const phraseConditions = [`metadata->>name.ilike.%${keyPhrase}%`, `metadata->>image_context.ilike.%${keyPhrase}%`];
 
-  const { data: phraseData } = await queryChunks(admin, documentIds, signal, 'id, document_id, content, metadata', (q) => q.or(phraseConditions.join(',')), 100);
+  const { data: phraseData } = await queryChunks(admin, keys, documentIds, signal, 'id, document_id, content, metadata', (q) => q.or(phraseConditions.join(',')), 100);
 
   if (phraseData && phraseData.length > 0) {
     const phraseIds = new Set(chunks.map((c) => c.id));
@@ -221,6 +235,7 @@ export async function voiceKeywordFallback(input: VoiceKeywordFallbackInput): Pr
   if (conditions.length > 0) {
     const { data: keywordData, error: keywordError } = await queryChunks(
       admin,
+      keys,
       documentIds,
       signal,
       'id, document_id, content, metadata',
