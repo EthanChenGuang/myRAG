@@ -960,10 +960,15 @@ class RefusalCalibrationPanel {
         for (const item of view.missing) ul.appendChild(refusalMessageEl('li', '', item));
         extra.push(ul);
       }
-      if (view.changedSettings) extra.push(refusalMessageEl('p', 'text-xs break-words', view.changedSettings));
+      if (view.changedSettings) {
+        const line = refusalMessageEl('p', 'text-xs break-words min-w-0', view.changedSettings);
+        // Env names have no break points, so they break anywhere instead of widening the alert at 360px (UI-SPEC 10).
+        for (const code of line.querySelectorAll('code')) code.className = 'font-mono text-xs break-all';
+        extra.push(line);
+      }
       if (view.reviewAlerts) {
         extra.push(
-          refusalEl('button', { cls: 'btn btn-link btn-xs px-0 h-auto min-h-0', text: this.t('action.reviewAlerts'), attrs: { type: 'button' }, on: { click: () => this.openMonitor() } }),
+          refusalEl('button', { cls: 'btn btn-link btn-xs px-0 h-auto min-h-0 text-current underline underline-offset-2', text: this.t('action.reviewAlerts'), attrs: { type: 'button' }, on: { click: () => this.openMonitor() } }),
         );
       }
       list.appendChild(refusalAlert(view.tone, view.icon, view, extra, view.lang));
@@ -1029,7 +1034,7 @@ class RefusalCalibrationPanel {
       if (row.stale) badges.appendChild(refusalEl('span', { cls: 'badge badge-warning badge-outline badge-sm h-auto whitespace-nowrap', text: row.staleLabel }));
       if (row.pending) {
         badges.appendChild(
-          refusalEl('span', { cls: 'badge badge-warning badge-outline badge-sm h-auto whitespace-normal text-left', text: row.pending.label, attrs: { 'data-refusal-mark': row.pending.kind } }),
+          refusalEl('span', { cls: 'badge badge-warning badge-outline badge-sm h-auto whitespace-nowrap', text: row.pending.label, attrs: { 'data-refusal-mark': row.pending.kind } }),
         );
       }
       const statusCell = [badges, refusalEl('div', { cls: 'text-xs text-base-content/70 mt-1', text: row.statusHint })];
@@ -1045,7 +1050,7 @@ class RefusalCalibrationPanel {
             refusalEl('div', { cls: 'text-xs text-base-content/70 md:hidden', text: row.pairing }),
           ]),
           refusalEl('td', { cls: 'align-top text-sm hidden md:table-cell', text: row.pairing }),
-          refusalEl('td', { cls: 'align-top min-w-40' }, statusCell),
+          refusalEl('td', { cls: row.pending ? 'align-top min-w-48' : 'align-top min-w-40' }, statusCell),
           refusalEl('td', { cls: 'align-top text-right tabular-nums text-sm', text: row.threshold }),
           refusalEl('td', { cls: 'align-top' }, [refusalRateCell(row.dev.falseRefusal, this.locale)]),
           refusalEl('td', { cls: 'align-top hidden lg:table-cell' }, [refusalCorrectCell(row.dev.correctRefusal, this.locale)]),

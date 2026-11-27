@@ -1395,6 +1395,14 @@ class SettingChecksPanel {
     settingCheckGates().gatesUiStatus(this.hosts.status, message, isError);
   }
 
+  /** A load outcome for screen readers only: the same line is already visible in the view's toolbar. */
+  announce(message) {
+    const host = this.hosts.status;
+    if (!host) return;
+    host.classList.remove('text-error');
+    host.replaceChildren(settingCheckMessageEl('span', 'sr-only', typeof message === 'string' ? { segments: [{ text: message }] } : message));
+  }
+
   async mount() {
     if (!this.mounted) {
       this.mounted = true;
@@ -1529,7 +1537,7 @@ class SettingChecksPanel {
       this.lastAlert.replaceChildren();
       this.lastChecked.replaceChildren();
       this.lastBody.replaceChildren(g.gatesUiEmptyBlock(this.t('last.empty.title'), this.t('last.empty.body')));
-      this.setStatus(this.t('last.empty.title'));
+      this.announce(this.t('last.empty.title'));
       return;
     }
     if (!result.ok || !result.body || typeof result.body !== 'object') {
@@ -1635,7 +1643,7 @@ class SettingChecksPanel {
     }
     this.lastBody.classList.remove('opacity-60');
     this.lastBody.replaceChildren(...nodes);
-    this.setStatus(at ? this.m('last.checkedAt', { time: { time: at } }) : this.t('result.heading'));
+    this.announce(at ? this.m('last.checkedAt', { time: { time: at } }) : this.t('result.heading'));
   }
 
   // -------------------------------------------------------------------------------------------------------------------------------------
@@ -1711,9 +1719,12 @@ class SettingChecksPanel {
     this.runs.updatedAt = new Date();
     this.runsAlert.replaceChildren();
     this.runsToolbar.hidden = false;
+    const hadFocus = append && typeof document !== 'undefined' && document.activeElement === this.moreRuns;
     this.renderRuns();
+    // The last page removes Load more runs: keep keyboard focus in the panel (status region) instead of dropping it to the body.
+    if (hadFocus && !this.runs.next && this.hosts.status && typeof this.hosts.status.focus === 'function') this.hosts.status.focus();
     const time = g.gatesUiDate(this.runs.updatedAt.toISOString(), this.locale, 'time');
-    this.setStatus(g.gatesUiMessage('updatedAt', this.locale, { time: time ? { time } : '—' }));
+    this.announce(g.gatesUiMessage('updatedAt', this.locale, { time: time ? { time } : '—' }));
   }
 
   workspaceName(tenantKey) {
@@ -1739,26 +1750,38 @@ class SettingChecksPanel {
     }
     const multi = this.multiTenant();
     const rows = settingChecksRunsRows(this.runs.requests, locale, { multiTenant: multi, workspaceName: (key) => this.workspaceName(key) });
-    const th = (key) => this.el('th', { className: 'text-xs font-semibold', text: key.startsWith('col.') ? g.gatesUiLabel(key, locale) : this.t(key), attrs: { scope: 'col' } });
+    const th = (key, extra) => this.el('th', { className: 'text-xs font-semibold ' + (extra || ''), text: key.startsWith('col.') ? g.gatesUiLabel(key, locale) : this.t(key), attrs: { scope: 'col' } });
     const headCells = [];
-    if (multi) headCells.push(th('runs.col.workspace'));
-    headCells.push(th('runs.col.reason'), th('runs.col.requested'), th('col.result'));
+    if (multi) headCells.push(th('runs.col.workspace'), th('runs.col.reason', 'max-md:hidden'));
+    else headCells.push(th('runs.col.reason'));
+    headCells.push(th('runs.col.requested', 'max-md:hidden'), th('col.result'));
     const body = this.el('tbody');
     for (const row of rows) {
       const cells = [];
       const first = (children, cls) => this.el('th', { className: 'font-normal text-sm align-top ' + (cls || ''), attrs: { scope: 'row' } }, children);
+      const requested = () => (row.requested ? this.el('time', { text: row.requested.text, attrs: { datetime: row.requested.iso } }) : '—');
+      const reasonEl = () =>
+        row.reason.label ? row.reason.label : this.el('code', { className: 'font-mono text-xs break-all', text: row.reason.code, attrs: { translate: 'no' } });
       if (row.workspace) {
         const ws = row.workspace.name
           ? this.el('span', { className: 'break-words', text: row.workspace.name, attrs: { 'data-setting-checks-workspace': '' } })
           : this.el('span', { className: 'font-mono text-xs break-all', text: row.workspace.key, attrs: { translate: 'no', 'data-setting-checks-workspace': '' } });
-        cells.push(first([ws], 'min-w-32'));
+        cells.push(
+          first(
+            [
+              this.el('span', { className: 'block' }, [ws]),
+              this.el('span', { className: 'block text-xs text-base-content/70 mt-1 md:hidden break-words' }, [reasonEl()]),
+              this.el('span', { className: 'block text-xs text-base-content/70 tabular-nums md:hidden' }, [requested()]),
+            ],
+            'min-w-28',
+          ),
+        );
+        cells.push(this.el('td', { className: 'text-sm align-top break-words max-md:hidden' }, [reasonEl()]));
+      } else {
+        cells.push(first([reasonEl(), this.el('span', { className: 'block text-xs text-base-content/70 tabular-nums md:hidden' }, [requested()])], 'break-words'));
       }
-      const reason = row.reason.label ? row.reason.label : this.el('code', { className: 'font-mono text-xs break-all', text: row.reason.code, attrs: { translate: 'no' } });
-      cells.push(row.workspace ? this.el('td', { className: 'text-sm align-top break-words' }, [reason]) : first([reason], 'break-words'));
-      cells.push(
-        this.el('td', { className: 'text-sm align-top tabular-nums' }, [row.requested ? this.el('time', { text: row.requested.text, attrs: { datetime: row.requested.iso } }) : '—']),
-      );
-      const result = this.el('td', { className: 'align-top min-w-40' }, [g.gatesUiVerdict(row.verdict.value, locale, row.verdict.reason)]);
+      cells.push(this.el('td', { className: 'text-sm align-top tabular-nums whitespace-nowrap max-md:hidden' }, [requested()]));
+      const result = this.el('td', { className: 'align-top min-w-36' }, [g.gatesUiVerdict(row.verdict.value, locale, row.verdict.reason)]);
       if (row.failedMessages.length > 0) {
         result.appendChild(
           this.el('details', { className: 'mt-1' }, [
