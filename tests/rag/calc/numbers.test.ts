@@ -94,7 +94,10 @@ describe('findNumbers', () => {
   });
 
   test('a space groups digits where the format lists it', () => {
-    expect(values(findNumbers('total 1 250 items', en))).toEqual([exact('1250')]);
+    expect(values(findNumbers('total 1\u2009250 items', en))).toEqual([exact('1250')]);
+    expect(values(findNumbers('total 1\u202F250 items', en))).toEqual([exact('1250')]);
+    expect(values(findNumbers('total 1 250 items', en))).toEqual([exact('1'), exact('250')]);
+    expect(values(findNumbers('totale 1 250,5 pezzi', it))).toEqual([exact('1250.5')]);
     expect(values(findNumbers('items 12 and 45 50', en))).toEqual([exact('12'), exact('45'), exact('50')]);
   });
 
