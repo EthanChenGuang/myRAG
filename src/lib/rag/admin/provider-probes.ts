@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { env as loadedEnv } from '@/lib/env';
+import { ProviderTestResultSchema } from '@/lib/rag-eval/contracts.generated';
 import { describeQdrantCollection } from '../backend/qdrant/collection';
 import { buildQdrantClients, type QdrantApi } from '../backend/qdrant/client';
 import { qdrantHealth } from '../backend/qdrant/adapter';
@@ -352,10 +353,9 @@ async function probeVectara(ctx: ProbeContext): Promise<void> {
   } catch {
     fail(ctx.signal.aborted ? 'timeout' : 'bad_response');
   }
-  const raw = body as { provider?: unknown; ok?: unknown; code?: unknown } | null;
-  if (!raw || raw.provider !== 'vectara' || typeof raw.ok !== 'boolean' || typeof raw.code !== 'string') fail('bad_response');
-  const code = (PROVIDER_PROBE_CODES as readonly string[]).includes(raw.code) ? (raw.code as ProviderProbeCode) : null;
-  if (code === null || (code === 'ok') !== raw.ok) fail('bad_response');
+  const parsed = ProviderTestResultSchema.safeParse(body);
+  if (!parsed.success || parsed.data.ok !== (parsed.data.code === 'ok')) fail('bad_response');
+  const code: ProviderProbeCode = parsed.data.code;
   if (code !== 'ok') fail(code);
 }
 

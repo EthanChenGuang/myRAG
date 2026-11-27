@@ -71,15 +71,47 @@ def _result(code: ProviderTestCode, latency_ms: int) -> ProviderTestResult:
     )
 
 
-async def probe_vectara(settings: SidecarSettings, transport: httpx.AsyncBaseTransport | None = None) -> ProviderTestResult:
-    raise NotImplementedError
+async def probe_vectara(
+    settings: SidecarSettings, transport: httpx.AsyncBaseTransport | None = None
+) -> ProviderTestResult:
+    """The scorer's own request with the fixed text "ok" as premise and hypothesis; no tenant text leaves the sidecar."""
+    if not settings.vectara_configured:
+        return _result("not_configured", 0)
+    scorer = VectaraScorer(
+        settings, transport=transport, total_timeout_s=PROVIDER_TEST_TIMEOUT_S
+    )
+    started = time.monotonic()
+    code: ProviderTestCode = "ok"
+    try:
+        await scorer.score([PROBE_TEXT], PROBE_TEXT)
+    except ScorerUnavailable as unavailable:
+        code = _code_for(str(unavailable))
+    except Exception:  # noqa: BLE001 - any other failure is a fixed code; its text may name the address
+        code = "provider_error"
+    finally:
+        await scorer.aclose()
+    return _result(code, max(0, round((time.monotonic() - started) * 1000)))
 
 
-def build_providers_test_router(settings: SidecarSettings, transport: TransportFactory | None = None) -> APIRouter:
+def build_providers_test_router(
+    settings: SidecarSettings, transport: TransportFactory | None = None
+) -> APIRouter:
     router = APIRouter()
 
-    @router.post("/providers/test")
+    @router.post("/providers/test", response_model=ProviderTestResult)
     async def provider_test(request: Request) -> JSONResponse:
-        return _error(501, "not_implemented")
+        body = await request.body()
+        if len(body) > MAX_BODY_BYTES:
+            return _error(413, "provider_test_request_too_large")
+        try:
+            parsed = ProviderTestRequest.model_validate_json(body)
+        except ValidationError:
+            return _error(422, "invalid_provider_test_request")
+        result = await probe_vectara(settings, (transport or default_transport)())
+        logger.info(
+            "[Providers] provider test",
+            extra={"provider": parsed.provider, "ok": result.ok, "code": result.code},
+        )
+        return JSONResponse(status_code=200, content=result.model_dump(mode="json"))
 
     return router
