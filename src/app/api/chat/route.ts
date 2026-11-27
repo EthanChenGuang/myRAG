@@ -68,6 +68,8 @@ import {
   parseRetrievalFilters,
   resolveScopesFilter,
   ScopeFilterError,
+  AttributeFilterError,
+  checkExplicitAttributeFilter,
   readFeedbackLoopConfig,
   readGenerationConfig,
   repairOwnerMembership,
@@ -1537,6 +1539,16 @@ export async function POST(req: Request) {
         retrievalFilters = await resolveScopesFilter(retrievalFilters, { scope, signal: req.signal });
       } catch (error) {
         if (!(error instanceof ScopeFilterError)) throw error;
+        return NextResponse.json({ success: false, error: error.code, details: error.details }, { status: error.status });
+      }
+    }
+
+    // 03.3 G4: an explicit attributes key the verified tenant does not define answers a structured 400, never an empty retrieval
+    if (retrievalFilters?.attributes) {
+      try {
+        await checkExplicitAttributeFilter(scope, retrievalFilters.attributes, { signal: req.signal });
+      } catch (error) {
+        if (!(error instanceof AttributeFilterError)) throw error;
         return NextResponse.json({ success: false, error: error.code, details: error.details }, { status: error.status });
       }
     }

@@ -40,6 +40,8 @@ import {
   parseRetrievalFilters,
   resolveScopesFilter,
   ScopeFilterError,
+  AttributeFilterError,
+  checkExplicitAttributeFilter,
   readFeedbackLoopConfig,
   resolveEmbedScope,
   bodyNamesAccessGroups,
@@ -446,6 +448,19 @@ export async function POST(request: NextRequest) {
         retrievalFilters = await resolveScopesFilter(retrievalFilters, { scope: embedScope.scope, signal: request.signal });
       } catch (error) {
         if (!(error instanceof ScopeFilterError)) throw error;
+        return NextResponse.json(
+          { success: false, error: error.code, details: error.details },
+          { status: error.status, headers: CORS_HEADERS }
+        );
+      }
+    }
+
+    // 03.3 G4: an explicit attributes key the embed tenant does not define answers a structured 400
+    if (retrievalFilters?.attributes) {
+      try {
+        await checkExplicitAttributeFilter(embedScope.scope, retrievalFilters.attributes, { signal: request.signal });
+      } catch (error) {
+        if (!(error instanceof AttributeFilterError)) throw error;
         return NextResponse.json(
           { success: false, error: error.code, details: error.details },
           { status: error.status, headers: CORS_HEADERS }

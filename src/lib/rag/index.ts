@@ -2,6 +2,7 @@ export { runRetrieval, runStage, deriveStatus, StageError } from './pipeline';
 export type { StageSpec, StageOutcome } from './pipeline';
 export { parseRetrievalFilters } from './query/filters';
 export { resolveScopesFilter, ScopeFilterError } from './query/scopes';
+export { AttributeFilterError, checkExplicitAttributeFilter } from './retrieval/attributes';
 export type { RetrievalFilterInput } from './backend/types';
 export { LEXICAL_VERSION } from './lexical/chunk-text';
 export { RERANK_TEXT_VERSION } from './rerank/types';
