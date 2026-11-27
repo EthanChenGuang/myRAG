@@ -113,6 +113,8 @@ from rag_sidecar.contracts import (
     SidecarHealth,
     SidecarInfo,
     SidecarReady,
+    ProviderTestRequest,
+    ProviderTestResult,
     SliceMetrics,
     StageLatency,
     TraceCandidate,
@@ -1711,6 +1713,10 @@ def _models() -> dict[str, Any]:
         "SidecarReady": SidecarReady(status="ready", scorers=["hhem_2_1_open"]),
         "SidecarInfo": SidecarInfo(service="rag-sidecar", version="0.0.0", contracts_schema_version=1),
         "SidecarError": SidecarError(error="synthetic error"),
+        "ProviderTestRequest": ProviderTestRequest(provider="vectara"),
+        "ProviderTestResult": ProviderTestResult(
+            provider="vectara", ok=False, latencyMs=0, code="not_configured", message="Not tested."
+        ),
         "EmbeddingProfileComparison": _profile_comparison(),
         "ActivationEvidence": _activation_evidence(),
         "BindingActivationEvidence": _binding_activation_evidence(),

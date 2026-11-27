@@ -14503,6 +14503,16 @@
       ],
       "schema_version": 1
     },
+    "ProviderTestRequest": {
+      "provider": "vectara"
+    },
+    "ProviderTestResult": {
+      "code": "not_configured",
+      "latencyMs": 0,
+      "message": "Not tested.",
+      "ok": false,
+      "provider": "vectara"
+    },
     "QualityCheckResult": {
       "pages": [
         {
