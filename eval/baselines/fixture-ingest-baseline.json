@@ -1,5 +1,5 @@
 {
-  "corpus_sha256": "b55090ae5d19a897b1f9b1e7ecbab3c0005622198195e5308ebc0b8c4557e9f8",
+  "corpus_sha256": "4fc9e942f0b6a40ccb5eaccd874ea703c774b83c53116494b068071e3a3ce1d1",
   "deployment_mode": "single-tenant",
   "embedder_id": "fixture-ngram",
   "embedder_source_sha256": "569156a98ef50469ce7ada4e6ee3c1c22182035c7ce6aa46b8d0bc5b200fc7ad",
@@ -11,9 +11,9 @@
       "approved"
     ]
   },
-  "golden_manifest_sha256": "2cf49a89440ed41ab8fab4790568186e209e5ae1d64b38069a72588d7c269e26",
+  "golden_manifest_sha256": "329225ff261120444402471dcef82ad10d05f97f5fde59cd8d436d0e2d855bc5",
   "golden_set_version": 6,
-  "golden_sha256": "3ec21dd1deeeb379457ce0e0266564f2dd6afe03ee81c28a2864166851efa896",
+  "golden_sha256": "e771c1326d78c614ebe933d755d85babe04874cffddeb434be7fef24a299140a",
   "items": {
     "en-ambiguous-001": {
       "correct_refusal_rate": [
@@ -6232,9 +6232,9 @@
         null
       ],
       "false_refusal_rate": [
-        1.0,
-        1.0,
-        1.0
+        0.0,
+        0.0,
+        0.0
       ],
       "mrr": [
         0.0,
@@ -6264,9 +6264,9 @@
         0.0
       ],
       "mrr": [
-        1.0,
-        1.0,
-        1.0
+        0.5,
+        0.5,
+        0.5
       ],
       "recall_at_10": [
         1.0,
@@ -6286,9 +6286,9 @@
         null
       ],
       "false_refusal_rate": [
-        1.0,
-        1.0,
-        1.0
+        0.0,
+        0.0,
+        0.0
       ],
       "mrr": [
         0.0,
@@ -12836,25 +12836,25 @@
     "stage_timeouts_ms": null,
     "user_id": null
   },
-  "run_config_hash": "3d9ef49f56dd80b5c454d34316c1849ac9933259a9eb7aa9b107ea892397d21a",
+  "run_config_hash": "bde90678a0f08bea6ced7b30514ce7dc2826058b0f117978655465bc1beaff83",
   "runs": [
     {
-      "created_at": "2026-11-27T10:31:30Z",
-      "git_sha": "45d2d56314693c3b01e1ed418870a25641afcc86",
-      "run_config_hash": "3d9ef49f56dd80b5c454d34316c1849ac9933259a9eb7aa9b107ea892397d21a",
-      "run_id": "4fc4730c-32ba-41db-b5ed-45ab888b4251"
+      "created_at": "2026-11-27T11:33:00Z",
+      "git_sha": "a4ce6eb8f47e4a89747903aa4573f9e9477f5aab",
+      "run_config_hash": "bde90678a0f08bea6ced7b30514ce7dc2826058b0f117978655465bc1beaff83",
+      "run_id": "e3a4547d-765b-4cb1-bf64-b900b0e1b12e"
     },
     {
-      "created_at": "2026-11-27T10:32:43Z",
-      "git_sha": "45d2d56314693c3b01e1ed418870a25641afcc86",
-      "run_config_hash": "3d9ef49f56dd80b5c454d34316c1849ac9933259a9eb7aa9b107ea892397d21a",
-      "run_id": "11c9db0d-dbf4-46c3-abd7-1a985f96a76c"
+      "created_at": "2026-11-27T11:34:11Z",
+      "git_sha": "a4ce6eb8f47e4a89747903aa4573f9e9477f5aab",
+      "run_config_hash": "bde90678a0f08bea6ced7b30514ce7dc2826058b0f117978655465bc1beaff83",
+      "run_id": "3a716bda-2354-40b6-bc41-18884ed5e2ed"
     },
     {
-      "created_at": "2026-11-27T10:33:56Z",
-      "git_sha": "45d2d56314693c3b01e1ed418870a25641afcc86",
-      "run_config_hash": "3d9ef49f56dd80b5c454d34316c1849ac9933259a9eb7aa9b107ea892397d21a",
-      "run_id": "b7ca3bab-c828-45b8-9547-8fa40042acad"
+      "created_at": "2026-11-27T11:35:22Z",
+      "git_sha": "a4ce6eb8f47e4a89747903aa4573f9e9477f5aab",
+      "run_config_hash": "bde90678a0f08bea6ced7b30514ce7dc2826058b0f117978655465bc1beaff83",
+      "run_id": "aeb4bbba-3275-46b9-81a4-0d833a6e87de"
     }
   ],
   "schema_version": 1,
@@ -13599,22 +13599,22 @@
         "spread": 0.0
       },
       "false_refusal_rate": {
-        "mean": 0.07142857142857142,
+        "mean": 0.03571428571428571,
         "n": 28,
         "runs": [
-          0.07142857142857142,
-          0.07142857142857142,
-          0.07142857142857142
+          0.03571428571428571,
+          0.03571428571428571,
+          0.03571428571428571
         ],
         "spread": 0.0
       },
       "mrr": {
-        "mean": 0.8244047619047619,
+        "mean": 0.806547619047619,
         "n": 28,
         "runs": [
-          0.8244047619047619,
-          0.8244047619047619,
-          0.8244047619047619
+          0.806547619047619,
+          0.806547619047619,
+          0.806547619047619
         ],
         "spread": 0.0
       },
@@ -14275,22 +14275,22 @@
         "spread": 0.0
       },
       "false_refusal_rate": {
-        "mean": 0.10465116279069768,
+        "mean": 0.09302325581395349,
         "n": 86,
         "runs": [
-          0.10465116279069768,
-          0.10465116279069768,
-          0.10465116279069768
+          0.09302325581395349,
+          0.09302325581395349,
+          0.09302325581395349
         ],
         "spread": 0.0
       },
       "mrr": {
-        "mean": 0.7124031007751938,
+        "mean": 0.7065891472868217,
         "n": 86,
         "runs": [
-          0.7124031007751938,
-          0.7124031007751938,
-          0.7124031007751938
+          0.7065891472868217,
+          0.7065891472868217,
+          0.7065891472868217
         ],
         "spread": 0.0
       },
@@ -14379,22 +14379,22 @@
         "spread": 0.0
       },
       "false_refusal_rate": {
-        "mean": 0.14074074074074075,
+        "mean": 0.13703703703703704,
         "n": 270,
         "runs": [
-          0.14074074074074075,
-          0.14074074074074075,
-          0.14074074074074075
+          0.13703703703703704,
+          0.13703703703703704,
+          0.13703703703703704
         ],
         "spread": 0.0
       },
       "mrr": {
-        "mean": 0.7089506172839506,
+        "mean": 0.7070987654320987,
         "n": 270,
         "runs": [
-          0.7089506172839506,
-          0.7089506172839506,
-          0.7089506172839506
+          0.7070987654320987,
+          0.7070987654320987,
+          0.7070987654320987
         ],
         "spread": 0.0
       },
