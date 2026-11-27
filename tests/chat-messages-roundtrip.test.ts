@@ -4,11 +4,13 @@ import {
   fromUIMessage,
   toDBMessages,
   toMessage,
+  withStandaloneQueryMetadata,
   type ContentPart,
   type DBMessage,
   type ExtendedMessage,
 } from '@/types/chat';
 import type { TraceCollector } from '@/lib/rag';
+import { extractStreamAnswerMetadata } from '@/lib/chat/answer-metadata';
 import { chatRequest, installChatPipeline, readSse, retrievalWith } from './helpers/chat-route-fakes';
 
 const h = await vi.hoisted(async () => {
@@ -373,5 +375,73 @@ describe('Phase 5.2 answer metadata persistence (D-11, D-23)', () => {
   it('loads an old message without the fields unchanged', () => {
     const metadata = answerMetadata();
     expect(saveAndReload(assistantWith(metadata)).metadata).toEqual(metadata);
+  });
+});
+
+describe('standalone-query metadata (D-22, P-12)', () => {
+  const RAG = { standaloneQuery: 'Which option controls the import format?', queryLanguage: 'en' };
+  const user = (id: string, content: string, metadata?: Record<string, unknown>): ExtendedMessage => ({
+    id,
+    role: 'user',
+    content,
+    ...(metadata ? { metadata } : {}),
+  });
+
+  it('extractStreamAnswerMetadata keeps a valid rag object and drops an invalid one', () => {
+    expect(extractStreamAnswerMetadata({ rag: RAG }).rag).toEqual(RAG);
+    expect(extractStreamAnswerMetadata({ rag: { ...RAG, scope: 'x' } })).not.toHaveProperty('rag');
+    expect(extractStreamAnswerMetadata({ rag: { standaloneQuery: 'x'.repeat(1001), queryLanguage: 'en' } })).not.toHaveProperty('rag');
+    expect(extractStreamAnswerMetadata({ rag: 'text' }, { rag: RAG }).rag).toEqual(RAG);
+  });
+
+  it('toDBMessages stores the assistant turn rag on the preceding user message, and reload keeps it there', () => {
+    const messages = [user('u-1', 'And the import one?'), assistantWith({ ragTraceId: 'f'.repeat(32), rag: RAG })];
+    const stored = JSON.parse(JSON.stringify(toDBMessages(messages))) as DBMessage[];
+    expect(stored[0].metadata).toEqual({ rag: RAG });
+    expect(stored[1].metadata).toEqual({ ragTraceId: 'f'.repeat(32) });
+    const restored = fromDBMessages(stored);
+    expect(restored[0].metadata).toEqual({ rag: RAG });
+    expect(JSON.parse(JSON.stringify(toDBMessages(restored)))).toEqual(stored);
+  });
+
+  it('never persists an invalid rag value', () => {
+    const [stored] = toDBMessages([user('u-1', 'q', { rag: { ...RAG, mode: 'bypass' } })]);
+    expect(stored).not.toHaveProperty('metadata');
+  });
+
+  it('withStandaloneQueryMetadata puts metadata.rag on the user message of each turn, from itself or its answer', () => {
+    const source = [
+      user('u-1', 'first', { rag: RAG }),
+      assistantWith(undefined),
+      user('u-2', 'second'),
+      assistantWith({ rag: { standaloneQuery: 'second, condensed', queryLanguage: null } }),
+      user('u-3', 'third'),
+    ];
+    const built = source.map((message) => ({ role: message.role, content: String(message.content) }));
+    const request = withStandaloneQueryMetadata(source, built);
+    expect(request.map((message) => message.metadata)).toEqual([
+      { rag: RAG },
+      undefined,
+      { rag: { standaloneQuery: 'second, condensed', queryLanguage: null } },
+      undefined,
+      undefined,
+    ]);
+    expect(request[1]).toEqual(built[1]);
+    expect(request[4]).toEqual(built[4]);
+  });
+
+  it('a stored chat loaded back sends metadata.rag on that user message in the next request', () => {
+    const stored = JSON.parse(
+      JSON.stringify(toDBMessages([user('u-1', 'first'), assistantWith({ rag: RAG }), user('u-2', 'next')])),
+    ) as DBMessage[];
+    const loaded = fromDBMessages(stored);
+    const request = withStandaloneQueryMetadata(loaded, loaded.map((message) => ({ role: message.role, content: message.content })));
+    expect(request[0].metadata).toEqual({ rag: RAG });
+  });
+
+  it('messages without rag build the request exactly as before', () => {
+    const source = [user('u-1', 'first'), assistantWith({ ragTraceId: 'f'.repeat(32) }), user('u-2', 'next')];
+    const built = source.map((message) => ({ role: message.role, content: String(message.content) }));
+    expect(withStandaloneQueryMetadata(source, built)).toEqual(built);
   });
 });
