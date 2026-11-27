@@ -1,8 +1,10 @@
 {
-  "config_hash": "fbdfcf0b6bb7e6318960bc1a6b8fad008ed5afcfe0dd24789b1b99576a8046fe",
+  "config_hash": "9a5a836bed8f9385881387e5561adaad10cb2b3166702e31b9c1af625a3b8c68",
   "group_deadline_ms": 900,
   "history_turn_chars": 1000,
   "history_turns": 6,
+  "langid_timeout_ms": 30,
+  "language_confidence_threshold": 0.6,
   "max_llm_variants": 2,
   "max_searches": 8,
   "max_sub_questions": 4,
@@ -15,7 +17,9 @@
     "embed": 1200,
     "voice": 300
   },
+  "routing_fast_max_context_tokens": 2000,
   "schema_version": 1,
+  "subq_filter_vocab_cap": 20,
   "variant_max_chars": 500,
   "variant_max_ratio": 4.0
 }

@@ -1892,6 +1892,7 @@
       "missing_required_kinds": []
     },
     "CondensedQuery": {
+      "language": null,
       "standalone": "Does the product warranty cover ERR_TIMEOUT, and how long is the warranty?",
       "unchanged": false
     },
@@ -6392,6 +6393,19 @@
       "reviewed_by": "reviewer-01",
       "unsupported_content": false,
       "variant": "long"
+    },
+    "LangidRequest": {
+      "candidates": [
+        "zh",
+        "en",
+        "it"
+      ],
+      "text": "What does part alpha state?"
+    },
+    "LangidResponse": {
+      "confidence": 0.97,
+      "language": "en",
+      "model": "fixture-langid"
     },
     "LanguagePack": {
       "calc_intent_terms": [
@@ -15274,11 +15288,38 @@
       ],
       "unlocated": 1
     },
+    "QueryAdditionsDecisionRecord": {
+      "d31_checklist": [
+        {
+          "evidence": "layer-off parity run",
+          "letter": "a",
+          "passed": true
+        }
+      ],
+      "decided_by": "rag_eval.compare query-additions",
+      "recorded_at": "2026-11-27T00:00:00Z",
+      "report_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "schema_version": 1,
+      "source": "fixture",
+      "switches": [
+        {
+          "eligible": false,
+          "improved_slices": [
+            "compound"
+          ],
+          "name": "RAG_QUERY_DECOMPOSE_COMPLETENESS",
+          "notes": "fixture wiring proof",
+          "regressions": []
+        }
+      ]
+    },
     "QueryParams": {
       "config_hash": null,
       "group_deadline_ms": 900,
       "history_turn_chars": 1000,
       "history_turns": 6,
+      "langid_timeout_ms": 30,
+      "language_confidence_threshold": 0.6,
       "max_llm_variants": 2,
       "max_searches": 8,
       "max_sub_questions": 4,
@@ -15291,7 +15332,9 @@
         "embed": 1200,
         "voice": 300
       },
+      "routing_fast_max_context_tokens": 2000,
       "schema_version": 1,
+      "subq_filter_vocab_cap": 20,
       "variant_max_chars": 500,
       "variant_max_ratio": 4.0
     },
@@ -15364,6 +15407,7 @@
       ]
     },
     "QueryTranslation": {
+      "source_language": null,
       "target_language": "zh",
       "text": "产品保修是否涵盖 ERR_TIMEOUT？保修期多长？"
     },
@@ -15551,6 +15595,10 @@
           "similarity": 0.82
         }
       ]
+    },
+    "RagTurnMetadata": {
+      "queryLanguage": "en",
+      "standaloneQuery": "What does part alpha state?"
     },
     "ReconcileReport": {
       "backend_count": 9,
@@ -16060,6 +16108,45 @@
       },
       "tier": "smoke"
     },
+    "ScopeGateCalibration": {
+      "cells": [
+        {
+          "correct_refusal_n": 6,
+          "correct_refusal_rate": 0.5,
+          "embedding_profile_id": "openai-3-small-1536",
+          "false_refusal_n": 12,
+          "false_refusal_rate": 0.0,
+          "false_refusal_upper_95": 0.22,
+          "margin": 0.05,
+          "rag_mode": "strict",
+          "status": "calibrated",
+          "threshold": 0.42
+        },
+        {
+          "correct_refusal_n": 0,
+          "correct_refusal_rate": null,
+          "embedding_profile_id": "openai-3-small-1536",
+          "false_refusal_n": 0,
+          "false_refusal_rate": null,
+          "false_refusal_upper_95": null,
+          "margin": null,
+          "rag_mode": "balanced",
+          "status": "uncalibrated",
+          "threshold": null
+        }
+      ],
+      "recorded_at": "2026-11-27T00:00:00Z",
+      "schema_version": 1,
+      "source": "fixture"
+    },
+    "ScopeGateResult": {
+      "centroid_count": 4,
+      "label": "in_scope",
+      "latency_ms": 1.2,
+      "negative_score": 0.2,
+      "reason": "above_threshold",
+      "score": 0.61
+    },
     "ScopeTagSuggestion": {
       "suggestions": [
         {
@@ -16250,6 +16337,26 @@
       "questions": [
         "Does the product warranty cover ERR_TIMEOUT?",
         "How long is the product warranty?"
+      ]
+    },
+    "SubQuestionsWithFilters": {
+      "questions": [
+        {
+          "filter": {
+            "date_range": {
+              "from": "2025-01-01",
+              "to": "2025-12-31"
+            },
+            "doc_types": null,
+            "languages": null,
+            "scopes": null
+          },
+          "text": "What does part alpha state?"
+        },
+        {
+          "filter": null,
+          "text": "What does part beta state?"
+        }
       ]
     },
     "SupersessionCandidate": {
@@ -17413,6 +17520,14 @@
           "Annual leave"
         ],
         "strategy": "chunk-alias"
+      }
+    },
+    "CondensedQuery:language": {
+      "model": "CondensedQuery",
+      "value": {
+        "language": "en",
+        "standalone": "What does part alpha state?",
+        "unchanged": true
       }
     },
     "EvalReport:answer_rules": {
@@ -19986,6 +20101,54 @@
         "tags": []
       }
     },
+    "GoldenItem:scoped_compound": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": true,
+        "category": "scoped_compound",
+        "expected_answer": "Part alpha states one thing and part beta states another.",
+        "gold_evidence": [
+          {
+            "document": "q62-alpha.md",
+            "quote": "part alpha states one thing",
+            "section": "Alpha"
+          },
+          {
+            "document": "q62-beta.md",
+            "quote": "part beta states another",
+            "section": "Beta"
+          }
+        ],
+        "id": "en-scoped-compound-901",
+        "language": "en",
+        "provenance": "synthetic_fixture",
+        "question": "How do part alpha and part beta compare?",
+        "review_status": "draft",
+        "split": "dev",
+        "sub_questions": [
+          {
+            "gold_spans": [
+              {
+                "document": "q62-alpha.md",
+                "quote": "part alpha states one thing",
+                "section": "Alpha"
+              }
+            ],
+            "index": 0
+          },
+          {
+            "gold_spans": [
+              {
+                "document": "q62-beta.md",
+                "quote": "part beta states another",
+                "section": "Beta"
+              }
+            ],
+            "index": 1
+          }
+        ]
+      }
+    },
     "GoldenItem:stale_version": {
       "model": "GoldenItem",
       "value": {
@@ -21181,6 +21344,104 @@
         "unlocated": 0
       }
     },
+    "QueryPlan:phase62": {
+      "model": "QueryPlan",
+      "value": {
+        "completeness": {
+          "action": "ok",
+          "missing_count": 0,
+          "required_count": 2
+        },
+        "date_range": null,
+        "filter_trace": [
+          {
+            "index": 0,
+            "retried": false,
+            "retry_skipped_cap": false,
+            "status": "applied"
+          }
+        ],
+        "framework": "llamaindex",
+        "gate": {
+          "lang": "en",
+          "protected_tokens": [],
+          "reasons": [],
+          "rewrite": true,
+          "skip_retrieval": false,
+          "transforms": [
+            "decompose"
+          ]
+        },
+        "language": "en",
+        "language_detection": {
+          "confidence": 0.92,
+          "language": "en",
+          "source": "detector"
+        },
+        "original": "How do part alpha and part beta compare?",
+        "skipped": [
+          {
+            "reason": "glossary_term_lost",
+            "transform": "translate"
+          }
+        ],
+        "standalone": "How do part alpha and part beta compare?",
+        "sub_question_specs": [
+          {
+            "filter": {
+              "date_range": {
+                "from": "2025-01-01",
+                "to": "2025-12-31"
+              },
+              "doc_types": null,
+              "languages": null,
+              "scopes": null
+            },
+            "text": "What does part alpha state?"
+          },
+          {
+            "filter": null,
+            "text": "What does part beta state?"
+          }
+        ],
+        "sub_questions": [
+          "What does part alpha state?",
+          "What does part beta state?"
+        ],
+        "variants": [
+          {
+            "kind": "original",
+            "language": "en",
+            "protected_ok": true,
+            "sub_question_index": null,
+            "text": "How do part alpha and part beta compare?"
+          },
+          {
+            "filter_applied": true,
+            "kind": "sub_question",
+            "language": "en",
+            "protected_ok": true,
+            "sub_question_index": 0,
+            "text": "What does part alpha state?"
+          },
+          {
+            "kind": "history_fallback",
+            "language": "en",
+            "protected_ok": true,
+            "sub_question_index": null,
+            "text": "part alpha part beta"
+          }
+        ]
+      }
+    },
+    "QueryTranslation:source_language": {
+      "model": "QueryTranslation",
+      "value": {
+        "source_language": "en",
+        "target_language": "it",
+        "text": "Cosa dice la parte alfa?"
+      }
+    },
     "RagRunRequest:query_only": {
       "model": "RagRunRequest",
       "value": {
@@ -21242,6 +21503,16 @@
         "rag_mode": "strict",
         "schema_version": 1,
         "web_search": false
+      }
+    },
+    "RagRunRequest:voice_entry": {
+      "model": "RagRunRequest",
+      "value": {
+        "options": {
+          "entry_profile": "voice",
+          "selected_model": "openrouter/auto-fixture"
+        },
+        "query": "What does part alpha state?"
       }
     },
     "RagTrace:answer_null": {
@@ -22350,6 +22621,251 @@
           "latest_document_id": "doc-002",
           "mixed_versions": false
         }
+      }
+    },
+    "RagTrace:phase62": {
+      "model": "RagTrace",
+      "value": {
+        "answer": "Part alpha states one thing.",
+        "answer_structure": {
+          "cited_parts": null,
+          "parts": 2,
+          "uncovered_parts": 0
+        },
+        "candidates": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "final_score": 0.85,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": "vector",
+            "rank": 1,
+            "rerank_score": null,
+            "similarity": 0.82
+          },
+          {
+            "chunk_id": "chunk-002",
+            "content": "Office hours are nine to five.",
+            "document_id": "doc-002",
+            "document_name": null,
+            "final_score": null,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": null,
+            "rank": 2,
+            "rerank_score": null,
+            "similarity": 0.41
+          }
+        ],
+        "citation_strategy": "chunk-alias",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "chunk-001"
+            ],
+            "documentId": "doc-001",
+            "documentName": "handbook.md",
+            "documentVersion": null,
+            "n": 1,
+            "page": null,
+            "quote": "Employees receive twenty days of leave per year.",
+            "quoteHash": "8ce0aa222a8339916769a9552a8ffcc2834d2f6aa1101ab636571873bf2c7bb2",
+            "sectionPath": null,
+            "strategy": "chunk-alias"
+          }
+        ],
+        "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "context": "Employees receive twenty days of leave per year.",
+        "context_tokens": null,
+        "effective_config": {
+          "deployment_mode": "single-tenant",
+          "embedding_model": "text-embedding-3-small",
+          "endpoint_version": "1",
+          "generator_model": null,
+          "rag_env": {
+            "RAG_BEHAVIOR_MODE": "strict"
+          },
+          "rag_prompt_sha256": {
+            "RAG_SYSTEM_PROMPT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "security": null
+        },
+        "groundedness": null,
+        "injection": null,
+        "invalid_citations": 0,
+        "item_id": "en-general-001",
+        "kept": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "kept_by": "similarity",
+            "rank": 1,
+            "similarity": 0.82
+          }
+        ],
+        "model_route": {
+          "rule": "short_lookup",
+          "selection": "auto",
+          "tier": "fast"
+        },
+        "query": "How many leave days do employees get?",
+        "query_context": {
+          "is_financial_query": false,
+          "is_temporal_query": false,
+          "required_precision": "medium",
+          "search_strategy": "semantic_only",
+          "suggested_threshold": 0.3
+        },
+        "query_language": null,
+        "query_plan": {
+          "completeness": {
+            "action": "ok",
+            "missing_count": 0,
+            "required_count": 2
+          },
+          "date_range": null,
+          "filter_trace": [
+            {
+              "index": 0,
+              "retried": false,
+              "retry_skipped_cap": false,
+              "status": "applied"
+            }
+          ],
+          "framework": "llamaindex",
+          "gate": {
+            "lang": "en",
+            "protected_tokens": [],
+            "reasons": [],
+            "rewrite": true,
+            "skip_retrieval": false,
+            "transforms": [
+              "decompose"
+            ]
+          },
+          "language": "en",
+          "language_detection": {
+            "confidence": 0.92,
+            "language": "en",
+            "source": "detector"
+          },
+          "original": "How do part alpha and part beta compare?",
+          "skipped": [
+            {
+              "reason": "glossary_term_lost",
+              "transform": "translate"
+            }
+          ],
+          "standalone": "How do part alpha and part beta compare?",
+          "sub_question_specs": [
+            {
+              "filter": {
+                "date_range": {
+                  "from": "2025-01-01",
+                  "to": "2025-12-31"
+                },
+                "doc_types": null,
+                "languages": null,
+                "scopes": null
+              },
+              "text": "What does part alpha state?"
+            },
+            {
+              "filter": null,
+              "text": "What does part beta state?"
+            }
+          ],
+          "sub_questions": [
+            "What does part alpha state?",
+            "What does part beta state?"
+          ],
+          "variants": [
+            {
+              "kind": "original",
+              "language": "en",
+              "protected_ok": true,
+              "sub_question_index": null,
+              "text": "How do part alpha and part beta compare?"
+            },
+            {
+              "filter_applied": true,
+              "kind": "sub_question",
+              "language": "en",
+              "protected_ok": true,
+              "sub_question_index": 0,
+              "text": "What does part alpha state?"
+            },
+            {
+              "kind": "history_fallback",
+              "language": "en",
+              "protected_ok": true,
+              "sub_question_index": null,
+              "text": "part alpha part beta"
+            }
+          ]
+        },
+        "query_transforms": [
+          {
+            "kind": "rewrite",
+            "reason": null,
+            "status": null,
+            "text": "leave days per year",
+            "transform": null
+          }
+        ],
+        "refusal": null,
+        "refusal_reason": null,
+        "refused": false,
+        "retrieval_config_hash": null,
+        "retrieval_strategy": "standard",
+        "retrieval_versions": null,
+        "schema_version": 1,
+        "scope_gate": {
+          "centroid_count": 0,
+          "label": "unsure",
+          "latency_ms": 0.4,
+          "negative_score": null,
+          "reason": "no_centroids",
+          "score": null
+        },
+        "searches_counted": 4,
+        "speculative": {
+          "cancelled_by_cache": false,
+          "overlap_ms": 40.0,
+          "started_ms": 3.0,
+          "wasted_searches": 1
+        },
+        "stage_counts": {},
+        "stage_latency_ms": {
+          "analyze": 1.5,
+          "embed": 4.0,
+          "generation": 0.0,
+          "search": 7.0
+        },
+        "stage_status": {
+          "analyze": "ok",
+          "embed": "ok",
+          "generation": "ok",
+          "search": "ok"
+        },
+        "used_documents": [
+          {
+            "document_id": "doc-001",
+            "image_url": "https://example.invalid/image.png",
+            "name": "handbook.md",
+            "similarity": 0.82
+          }
+        ]
       }
     },
     "RagTrace:query_plan": {

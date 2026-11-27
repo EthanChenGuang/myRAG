@@ -1,0 +1,40 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "language": {
+      "anyOf": [
+        {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Language"
+    },
+    "model": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Model",
+      "type": "string"
+    }
+  },
+  "required": [
+    "language",
+    "confidence",
+    "model"
+  ],
+  "title": "LangidResponse",
+  "type": "object"
+}

@@ -685,6 +685,9 @@
         },
         "notices": {
           "$ref": "#/$defs/NoticeTexts"
+        },
+        "query_layer": {
+          "$ref": "#/$defs/QueryLayerTexts"
         }
       },
       "required": [
@@ -982,6 +985,105 @@
         "grouping_separators"
       ],
       "title": "QuantityNotation",
+      "type": "object"
+    },
+    "QueryLayerTexts": {
+      "additionalProperties": false,
+      "description": "Phase 6.2 D-11, D-26: optional texts of the decomposed-answer block and the scope gate.\n\nNot part of TEXT_KEYS or D-04 completeness: a pack without them stays complete and the feature that needs one\nfalls back to its switch-off behaviour.",
+      "properties": {
+        "decomposed_answer_block_label": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decomposed Answer Block Label"
+        },
+        "decomposed_answer_cite_own": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decomposed Answer Cite Own"
+        },
+        "decomposed_answer_compare_order": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decomposed Answer Compare Order"
+        },
+        "decomposed_answer_intro": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decomposed Answer Intro"
+        },
+        "decomposed_answer_parts": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decomposed Answer Parts"
+        },
+        "scope_gate_notice": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Gate Notice"
+        },
+        "scope_gate_prompt_rule": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Gate Prompt Rule"
+        }
+      },
+      "title": "QueryLayerTexts",
       "type": "object"
     }
   },

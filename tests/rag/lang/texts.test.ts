@@ -105,7 +105,7 @@ describe('fixedText (D-08)', () => {
   });
 
   it('TEXT_KEYS lists exactly the keys of the generated contract', () => {
-    const groups = LanguagePackSchema.shape.texts.shape;
+    const { query_layer: _optionalGroup, ...groups } = LanguagePackSchema.shape.texts.shape;
     const fromSchema = Object.entries(groups).flatMap(([group, schema]) => Object.keys(schema.shape).map((name) => `${group}.${name}`));
     expect([...TEXT_KEYS].sort()).toEqual(fromSchema.sort());
   });
