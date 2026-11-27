@@ -1813,6 +1813,15 @@
       "last_reviewed_at": "2026-11-27"
     },
     {
+      "id": "ingest-tpl-no-answer-en-06",
+      "item_sha256": "7ebd7d7ed00ee2a10baa927cd7fa2d7e400dde5825337a048a62ca73cbcf707d",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "ingest-tpl-no-answer-it-03",
       "item_sha256": "7b76ad8f398f7431bd9ea5ecabc6d0e0989ead9957844fd2f970af086320e6f2",
       "status": "active",
@@ -1824,6 +1833,15 @@
     {
       "id": "ingest-tpl-no-answer-it-04",
       "item_sha256": "266a2536a9b391b0f36e99e9f43ed9f2b7760ae00ee103b72d53d43b2eb88d8e",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-no-answer-it-06",
+      "item_sha256": "981cb3729cf7e17a3b558cecb574d041e4a85f847f00e7dd7464a4502fc87f00",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -5601,6 +5619,8 @@
         "en-multi-step-calc-013",
         "en-multi-step-calc-014",
         "en-multi-step-calc-015",
+        "ingest-tpl-no-answer-en-06",
+        "ingest-tpl-no-answer-it-06",
         "it-context-overflow-001",
         "it-context-overflow-002",
         "it-context-overflow-003",
@@ -5645,5 +5665,5 @@
       "stale": []
     }
   ],
-  "manifest_sha256": "99d8fafbd005dbe8164a6fee64a6a520aba1b32184d67899b0e2286c3c91a5c8"
+  "manifest_sha256": "42f7ed48711c340a96c71f4649ea625b5f648f053eb23e0aa5daceb3676e577b"
 }

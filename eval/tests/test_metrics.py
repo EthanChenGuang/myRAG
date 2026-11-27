@@ -1200,6 +1200,7 @@ def test_the_train_31_baselines_add_only_phase53_items_and_move_only_refusal_rat
             for line in (root / "fixtures" / "ingest" / "golden-ingest.jsonl").read_text(encoding="utf-8").splitlines()
             if line.strip() and json.loads(line)["id"].startswith("ingest-tpl-")
         }
+        - {"ingest-tpl-no-answer-en-06", "ingest-tpl-no-answer-it-06"}  # train 38, after this record
         if name == "fixture-ingest-baseline"
         else set()
     )

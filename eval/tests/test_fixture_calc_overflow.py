@@ -365,10 +365,11 @@ def test_rule_skipping_and_missing_operand_scripts_are_wrong_in_the_scripted_way
 
 BASELINES = REPO_ROOT / "eval/baselines"
 PRE_PREFIX = "pre-05.2.1-12"
-# Item count and sha256 over the sorted, newline-joined item ids of each baseline before plan 05.2.1-12.
+# Item count and sha256 over the sorted, newline-joined item ids of each baseline before plan 05.2.1-12. Train 38: the ingest
+# record before 05.2.1-12 on this line is train 37's, which holds the 83 templated items of plan 03.3-20 (417 + 83).
 PRE_ITEM_SETS = {
     "fixture-baseline": (356, "8db17f757861f85c25bf6f004db4769fea880a6640163e8d651e94bc58d45a93"),
-    "fixture-ingest-baseline": (417, "420d666468ab60772988089fe0983f907ff2f34a07a83b817d609c2201251acf"),
+    "fixture-ingest-baseline": (500, "97a3b52a3824a763289e52c58419e1c6acf95c0f5f5f15d12b08d02a63b8b29f"),
 }
 NEW_CATEGORY_SLICES = ("category:multi_step_calc", "category:context_overflow")
 # Slices that also hold new items; their pre-existing items are compared one by one.

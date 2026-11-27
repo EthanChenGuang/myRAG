@@ -11,9 +11,9 @@
       "approved"
     ]
   },
-  "golden_manifest_sha256": "99d8fafbd005dbe8164a6fee64a6a520aba1b32184d67899b0e2286c3c91a5c8",
+  "golden_manifest_sha256": "42f7ed48711c340a96c71f4649ea625b5f648f053eb23e0aa5daceb3676e577b",
   "golden_set_version": 7,
-  "golden_sha256": "c677f34bea78741edd193d4d85e41852e09e655073a68fdf30581e7cd5cf8e63",
+  "golden_sha256": "115941b135dfab0fdd401348d897f42cfc6de669bab09ca0d6d370d59620b3aa",
   "items": {
     "en-ambiguous-001": {
       "correct_refusal_rate": [
@@ -5442,6 +5442,33 @@
         null
       ]
     },
+    "ingest-tpl-no-answer-en-06": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
     "ingest-tpl-no-answer-it-03": {
       "correct_refusal_rate": [
         1.0,
@@ -5470,6 +5497,33 @@
       ]
     },
     "ingest-tpl-no-answer-it-04": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "ingest-tpl-no-answer-it-06": {
       "correct_refusal_rate": [
         1.0,
         1.0,
@@ -15077,25 +15131,25 @@
     "stage_timeouts_ms": null,
     "user_id": null
   },
-  "run_config_hash": "8b5f5806e458410d9479773ef8a82ce2326ba1da0838b8f85418e7229700fb20",
+  "run_config_hash": "de38798aa20f61d82472eb87ae859bd02b1664caaa80cbf453293bbc9c207665",
   "runs": [
     {
-      "created_at": "2026-11-27T15:20:31Z",
-      "git_sha": "693644e27cfff47b0bd7079c690cca5579ee3efb",
-      "run_config_hash": "8b5f5806e458410d9479773ef8a82ce2326ba1da0838b8f85418e7229700fb20",
-      "run_id": "025b334c-3d7b-4b95-9f02-158565c3bb8f"
+      "created_at": "2026-11-27T15:35:32Z",
+      "git_sha": "763d078afc9fdcc19bd8f2c64179bf06a1de62de",
+      "run_config_hash": "de38798aa20f61d82472eb87ae859bd02b1664caaa80cbf453293bbc9c207665",
+      "run_id": "d006564b-4eda-4005-a9bc-ea6031079859"
     },
     {
-      "created_at": "2026-11-27T15:21:52Z",
-      "git_sha": "693644e27cfff47b0bd7079c690cca5579ee3efb",
-      "run_config_hash": "8b5f5806e458410d9479773ef8a82ce2326ba1da0838b8f85418e7229700fb20",
-      "run_id": "52d2745c-c67b-4386-bbca-df0b2190b107"
+      "created_at": "2026-11-27T15:36:54Z",
+      "git_sha": "763d078afc9fdcc19bd8f2c64179bf06a1de62de",
+      "run_config_hash": "de38798aa20f61d82472eb87ae859bd02b1664caaa80cbf453293bbc9c207665",
+      "run_id": "0b2a3fc3-af2a-437a-b6e8-357c2f51f31f"
     },
     {
-      "created_at": "2026-11-27T15:23:15Z",
-      "git_sha": "693644e27cfff47b0bd7079c690cca5579ee3efb",
-      "run_config_hash": "8b5f5806e458410d9479773ef8a82ce2326ba1da0838b8f85418e7229700fb20",
-      "run_id": "30c88cd9-2d7f-4d27-92ed-e1da3591c402"
+      "created_at": "2026-11-27T15:38:18Z",
+      "git_sha": "763d078afc9fdcc19bd8f2c64179bf06a1de62de",
+      "run_config_hash": "de38798aa20f61d82472eb87ae859bd02b1664caaa80cbf453293bbc9c207665",
+      "run_id": "43343187-b2d9-4784-87f9-89240e23326e"
     }
   ],
   "schema_version": 1,
@@ -15935,7 +15989,7 @@
     "category:no_answer": {
       "correct_refusal_rate": {
         "mean": 1.0,
-        "n": 48,
+        "n": 50,
         "runs": [
           1.0,
           1.0,
@@ -16507,7 +16561,7 @@
     "language:en": {
       "correct_refusal_rate": {
         "mean": 1.0,
-        "n": 21,
+        "n": 22,
         "runs": [
           1.0,
           1.0,
@@ -16559,7 +16613,7 @@
     "language:it": {
       "correct_refusal_rate": {
         "mean": 1.0,
-        "n": 19,
+        "n": 20,
         "runs": [
           1.0,
           1.0,
@@ -16663,7 +16717,7 @@
     "overall": {
       "correct_refusal_rate": {
         "mean": 1.0,
-        "n": 58,
+        "n": 60,
         "runs": [
           1.0,
           1.0,
