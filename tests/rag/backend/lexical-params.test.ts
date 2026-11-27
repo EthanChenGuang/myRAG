@@ -1,23 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendNotReadyError } from '@/lib/rag/backend/external';
+import { resetBackendFactoryForTests, resolveRetrievalBackend, setExternalBackendForTests } from '@/lib/rag/backend/factory';
 import {
   LEXICAL_PARAMS_CHECK_TTL_MS,
   LEXICAL_PARAMS_MISMATCH,
   LexicalParamsMismatchError,
+  createLexicalParamsCheck,
   externalLexicalParams,
   isLexicalParamsStore,
+  lexicalParamsMismatchMessage,
   recordedLexicalParams,
   resetLexicalParamsChecks,
   sameLexicalParams,
 } from '@/lib/rag/backend/lexical-params';
-import { searchQdrantLegs } from '@/lib/rag/backend/qdrant/adapter';
+import { createQdrantBackend, searchQdrantLegs } from '@/lib/rag/backend/qdrant/adapter';
 import { QDRANT_PAYLOAD_INDEXES, describeQdrantCollection, qdrantCollectionSpec } from '@/lib/rag/backend/qdrant/collection';
 import { assertScoped, qdrantScopedBatch } from '@/lib/rag/backend/qdrant/scoped-request';
-import { READINESS_TTL_MS } from '@/lib/rag/backend/readiness';
-import { backendForRequest } from '@/lib/rag/backend/registry';
+import { READINESS_TTL_MS, resetReadinessCacheForTests } from '@/lib/rag/backend/readiness';
+import { backendForRequest, resetRetrievalBackendForTests, setRetrievalBackendForTests } from '@/lib/rag/backend/registry';
+import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
 import { canonicalTenantKey, qdrantCollectionName, weaviateCollectionName, weaviateTenantName } from '@/lib/rag/backend/tenant-key';
-import type { BackendSearchRequest, RetrievalBackend } from '@/lib/rag/backend/types';
-import { searchWeaviateLegs } from '@/lib/rag/backend/weaviate/adapter';
+import type { BackendLegs, BackendSearchRequest, RetrievalBackend } from '@/lib/rag/backend/types';
+import { createWeaviateBackend, createWeaviateReader, searchWeaviateLegs } from '@/lib/rag/backend/weaviate/adapter';
 import { describeWeaviateCollection, ensureWeaviateCollection, weaviateCollectionSpec } from '@/lib/rag/backend/weaviate/collection';
 import { LEXICAL_SCORING_DEFAULTS, loadRagConfig, resetRagConfigForTests, type RagConfig } from '@/lib/rag/config';
 import { createQdrantStore } from '@/lib/rag/sync/stores/qdrant';
@@ -25,6 +29,7 @@ import { createWeaviateStore } from '@/lib/rag/sync/stores/weaviate';
 import type { StoreSearchRequest } from '@/lib/rag/sync/stores/types';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { lexicalScoringArg } from '@/lib/rag/v2/stages/search';
+import { hit } from '../fusion/helpers';
 import { createFakeQdrantClient, scopedBodyOf } from './qdrant-fake-client';
 import { createFakeWeaviate } from './weaviate-fake';
 
@@ -636,5 +641,134 @@ describe('legacy collections and ensure', () => {
     ]) {
       expect(() => qdrantScopedBatch(SCOPE, node(bad) as never)).toThrow(/query form not allowed/);
     }
+  });
+});
+
+function readinessRpc(): RpcClient {
+  return {
+    rpc() {
+      const answer: RpcResponse = { data: [{ state: 'ready', lag_seconds: 0, outbox_lag_seconds: 0 }], error: null };
+      const req: RpcRequest = { abortSignal: () => req, then: (ok, bad) => Promise.resolve(answer).then(ok, bad) };
+      return req;
+    },
+  };
+}
+
+describe('read-side refusal of a mismatched index (Task 2)', () => {
+  beforeEach(() => {
+    resetBackendFactoryForTests();
+    resetReadinessCacheForTests();
+    resetRetrievalBackendForTests();
+  });
+
+  afterEach(() => {
+    resetBackendFactoryForTests();
+    resetReadinessCacheForTests();
+    resetRetrievalBackendForTests();
+  });
+
+  it('mismatch falls back to pgvector: backend_not_ready, degraded, and no Weaviate query recorded', async () => {
+    const pgCalls: BackendSearchRequest[] = [];
+    const pg: RetrievalBackend = {
+      id: 'pgvector',
+      async search(req): Promise<BackendLegs> {
+        pgCalls.push(req);
+        return { dense: [hit('pgvector-1', { similarity: 0.9 })], lexical: [] };
+      },
+      health: async () => ({ ok: true }),
+      isReady: async () => true,
+    };
+    setRetrievalBackendForTests(pg);
+    const fake = createFakeWeaviate();
+    await ensureWeaviateCollection(fake, PROFILE, 3);
+    fake.calls.length = 0;
+    const logs: string[] = [];
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const weaviate = createWeaviateBackend({
+      readClient: () => fake,
+      revalidate: () => null,
+      readiness: async () => true,
+      lexicalParams: () => ({ k1: 1.5, b: 0.75 }),
+      log: (line) => logs.push(line),
+    });
+    setExternalBackendForTests('weaviate', weaviate);
+    const config = cfg({ ...BM25_15, RAG_RETRIEVAL_BACKEND: 'weaviate' });
+    const resolved = resolveRetrievalBackend('chat', config, undefined, { readinessRpc: readinessRpc() });
+    const out = await resolved.backend.search(backendReq());
+    expect(out.dense[0]?.chunkId).toBe('pgvector-1');
+    expect(resolved.selection()).toMatchObject({ backend: 'pgvector', fallbackReason: 'backend_not_ready', degraded: true });
+    expect(fake.calls.some((c) => c.op === 'bm25' || c.op === 'nearVector')).toBe(false);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain('rebuild-lexical --target weaviate --confirm');
+    expect(logs[0]).not.toContain(TENANT_KEY);
+    expect(pgCalls).toHaveLength(1);
+  });
+
+  it('the reader describes at most once per TTL window, logs once per window, and an equal pair logs nothing', async () => {
+    const fake = createFakeWeaviate();
+    await ensureWeaviateCollection(fake, PROFILE, 3);
+    let clock = 1_000;
+    let describes = 0;
+    const logs: string[] = [];
+    const check = createLexicalParamsCheck({
+      target: 'weaviate',
+      describe: async (profileId) => {
+        describes += 1;
+        return (await describeWeaviateCollection(fake, profileId)).lexicalParams;
+      },
+      configured: () => ({ k1: 1.5, b: 0.75 }),
+      log: (line) => logs.push(line),
+      now: () => clock,
+    });
+    await expect(check(PROFILE)).rejects.toBeInstanceOf(LexicalParamsMismatchError);
+    await expect(check(PROFILE)).rejects.toBeInstanceOf(LexicalParamsMismatchError);
+    expect(describes).toBe(1);
+    expect(logs).toHaveLength(1);
+    clock += LEXICAL_PARAMS_CHECK_TTL_MS;
+    await expect(check(PROFILE)).rejects.toBeInstanceOf(LexicalParamsMismatchError);
+    expect(describes).toBe(2);
+    expect(logs).toHaveLength(2);
+
+    const equalLogs: string[] = [];
+    const equal = createLexicalParamsCheck({
+      target: 'weaviate',
+      describe: async (profileId) => (await describeWeaviateCollection(fake, profileId)).lexicalParams,
+      configured: () => DEFAULT_PAIR,
+      log: (line) => equalLogs.push(line),
+    });
+    await expect(equal(PROFILE)).resolves.toBeUndefined();
+    expect(equalLogs).toEqual([]);
+  });
+
+  it('a failed describe is not a mismatch: the search proceeds under its own error mapping', async () => {
+    const fake = createFakeWeaviate();
+    await ensureWeaviateCollection(fake, PROFILE, 3);
+    fake.plant(weaviateCollectionName(PROFILE), weaviateTenantName(TENANT_KEY), {
+      id: '00000000-0000-4000-8000-0000000a0001',
+      properties: { tenant_key: TENANT_KEY, lexical_text: 'neutral marker', doc_type: 'general' },
+      vector: [0.3, 0.4, 0.5],
+    });
+    const broken = { ...fake, collections: { ...fake.collections, export: async () => { throw new Error('forbidden'); } } } as typeof fake;
+    const reader = createWeaviateReader(broken, { lexicalParams: () => ({ k1: 1.5, b: 0.75 }), log: () => undefined });
+    const legs = await reader.searchLegs(storeReq());
+    expect(legs.lexical.map((h) => h.id)).toEqual(['00000000-0000-4000-8000-0000000a0001']);
+  });
+
+  it('a query-bound qdrant reader never refuses on the recorded pair', async () => {
+    const client = createFakeQdrantClient();
+    await client.createCollection(qdrantCollectionName(PROFILE), qdrantCollectionSpec({ profileId: PROFILE, dims: 3 }));
+    const backend = createQdrantBackend({ readClient: client, adminClient: () => null, lexicalParams: () => ({ k1: 1.5, b: 0.75 }) });
+    client.requests.length = 0;
+    await expect(backend.search(backendReq())).rejects.not.toBeInstanceOf(LexicalParamsMismatchError);
+    expect(client.requests.some((r) => r.method === 'queryBatch')).toBe(true);
+    expect(lexicalNode(client).query).toEqual({ text: { query: 'neutral marker', scoring: { bm25: { k: 1.5, b: 0.75 } } } });
+  });
+
+  it('the mismatch message names target, profile, both pairs and the command, and nothing else', () => {
+    const message = lexicalParamsMismatchMessage('weaviate', PROFILE, DEFAULT_PAIR, { k1: 1.5, b: 0.75 });
+    expect(message).toBe(
+      '[RAG Backend] weaviate collection for profile neutral-profile-3 was built with BM25 k1 1.2, b 0.75 but the configuration says ' +
+        'k1 1.5, b 0.75; it is not served until `npm run rag:vector-sync -- rebuild-lexical --target weaviate --confirm` rebuilds it',
+    );
   });
 });
