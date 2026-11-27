@@ -168,3 +168,8 @@ export async function loadTenantGlossary(scope: TenantScope, options: LoadGlossa
     return null;
   }
 }
+
+/** D-14: the glossary source surfaces present in `text`. Stub until 06.2-17. */
+export function glossarySourceSurfaces(_text: string, _sourceLanguage: string, _glossary: GlossaryInput): string[] {
+  return [];
+}
