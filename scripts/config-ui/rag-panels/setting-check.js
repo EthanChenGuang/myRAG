@@ -104,7 +104,7 @@ const SETTING_CHECK_LABELS = {
     "runs.showFailed": "Show failed checks: {count}",
     "runs.drainHint": "Waiting runs start with the nightly job, or by hand with {command}.",
     "runs.empty.title": "No evaluation runs requested",
-    "runs.empty.body": "When a bulk import or a re-embedding run finishes, a run on that workspace's own test set is requested and listed here.",
+    "runs.empty.body": "When a bulk import or a re-embedding run finishes, a run on that workspace’s own test set is requested and listed here.",
   },
   zh: {
     "dialog.title.checking": "正在检查这些设置",
@@ -224,16 +224,16 @@ const SETTING_CHECK_LABELS = {
     "changed.more": "E altre: {count}",
     "result.heading": "Esito",
     "failed.heading": "Cosa non è stato superato",
-    "failed.warnNote": "I controlli sono in modalità avviso: un controllo non superato o senza esito non blocca il salvataggio. L'esito viene registrato con la modifica.",
+    "failed.warnNote": "I controlli sono in modalità avviso: un controllo non superato o senza esito non blocca il salvataggio. L’esito viene registrato con la modifica.",
     "failed.enforceNote": "Per salvare queste impostazioni serve un motivo. Viene conservato con la modifica ed elencato nel report settimanale.",
     "error.body": "Senza un esito il controllo conta come non superato.",
-    "busy.body": "Su questa macchina viene eseguito un solo controllo alla volta. L'altro è iniziato alle {time}.",
+    "busy.body": "Su questa macchina viene eseguito un solo controllo alla volta. L’altro è iniziato alle {time}.",
     "untested.heading": "Impostazioni modificate che questo controllo non ha potuto provare: {count}",
-    "untested.body": "L'esito non dice nulla su queste impostazioni. Provale in un ambiente di test, o attiva il controllo con il modello reale, prima di farvi affidamento.",
+    "untested.body": "L’esito non dice nulla su queste impostazioni. Provale in un ambiente di test, o attiva il controllo con il modello reale, prima di farvi affidamento.",
     "untested.reason.fixture_generator": "Alle domande integrate risponde un modello sostitutivo, non il modello di chat.",
     "untested.reason.fixture_embedder": "Le domande integrate usano un proprio modello di embedding.",
     "untested.reason.needs_credentials": "Per provarla serve una chiave che il controllo non usa.",
-    "notCovered": "Non coperto dal set di test dell'area di lavoro: {names}",
+    "notCovered": "Non coperto dal set di test dell’area di lavoro: {names}",
     "uncal.heading": "Soglie di rifiuto che smettono di valere: {count}",
     "uncal.body": "Sono state calibrate per il valore precedente. Finché {command} non registra un risultato reale per quello nuovo, decide la soglia minima di similarità.",
     "uncal.item": "{model}, domande in {language}",
@@ -251,16 +251,16 @@ const SETTING_CHECK_LABELS = {
     "action.close": "Chiudi controllo",
     "saving": "Salvataggio…",
     "outcome.savedOverride": "Impostazioni salvate con il tuo motivo. Registrate come modifica {id}.",
-    "outcome.savedWarn": "Impostazioni salvate. L'esito del controllo è registrato come modifica {id}.",
+    "outcome.savedWarn": "Impostazioni salvate. L’esito del controllo è registrato come modifica {id}.",
     "outcome.savedSkipped": "Impostazioni salvate senza esito. Registrate come modifica {id}.",
     "outcome.held": "Non è stato salvato nulla. Le modifiche sono ancora nel modulo.",
     "indicator.held": "Non salvato",
-    "error.changed": "Non salvato. Le impostazioni sono cambiate dopo il controllo e l'esito non corrisponde più. Seleziona Ripeti controllo.",
+    "error.changed": "Non salvato. Le impostazioni sono cambiate dopo il controllo e l’esito non corrisponde più. Seleziona Ripeti controllo.",
     "error.required": "Non salvato. Queste impostazioni richiedono un controllo superato o un motivo. Ricarica la pagina e salva di nuovo per avviare il controllo.",
     "error.recordFailed": "Non salvato. Il database non ha risposto e il motivo non è stato registrato; un salvataggio senza registrazione viene rifiutato. Riprova tra poco.",
     "error.saveFailed": "Non salvato. Il server di configurazione non ha accettato le impostazioni ({status}). Le modifiche sono ancora nel modulo.",
     "panel.title": "Controlli delle impostazioni",
-    "panel.description": "Le impostazioni che cambiano il modo in cui vengono prodotte le risposte vengono provate su domande di test prima di essere applicate. Al termine di un'importazione in blocco o di un ricalcolo degli embedding viene richiesta una valutazione per quell'area di lavoro. Vale per tutte le aree di lavoro di questa installazione.",
+    "panel.description": "Le impostazioni che cambiano il modo in cui vengono prodotte le risposte vengono provate su domande di test prima di essere applicate. Al termine di un’importazione in blocco o di un ricalcolo degli embedding viene richiesta una valutazione per quell’area di lavoro. Vale per tutte le aree di lavoro di questa installazione.",
     "panel.tabsLabel": "Viste dei controlli delle impostazioni",
     "tab.last": "Ultimo controllo",
     "tab.runs": "Valutazioni",
@@ -268,7 +268,7 @@ const SETTING_CHECK_LABELS = {
     "summary.mode": "Modalità",
     "summary.live": "Controllo con il modello reale",
     "mode.off": "Disattivato: le impostazioni si salvano subito, come prima",
-    "mode.warn": "Avviso: l'esito viene mostrato, il salvataggio non è mai bloccato",
+    "mode.warn": "Avviso: l’esito viene mostrato, il salvataggio non è mai bloccato",
     "mode.enforce": "Obbligatorio: per salvare serve un controllo superato o un motivo",
     "mode.pending": "La modalità selezionata vale dopo il salvataggio.",
     "settings.gate.label": "Controlla le impostazioni prima di salvare",
@@ -278,7 +278,7 @@ const SETTING_CHECK_LABELS = {
     "settings.live.on": "Attivo: anche il modello di chat proposto risponde a un campione fisso (consuma credito del modello)",
     "warn.liveNeedsGate": "Il controllo con il modello reale non ha effetto finché i controlli delle impostazioni sono disattivati.",
     "warn.enforceFirst": "Valuta di usare prima la modalità avviso: mostra quante volte un salvataggio sarebbe stato bloccato, senza bloccare nessuno.",
-    "last.loading": "Caricamento dell'ultimo controllo…",
+    "last.loading": "Caricamento dell’ultimo controllo…",
     "last.checkedAt": "Controllato il {time}",
     "last.savedAs": "Salvataggio: {how}",
     "how.pass": "dopo un controllo superato",
@@ -287,7 +287,7 @@ const SETTING_CHECK_LABELS = {
     "how.skipped": "senza esito",
     "how.not_saved": "non salvato",
     "last.empty.title": "Nessun controllo finora",
-    "last.empty.body": "Un controllo parte quando salvi un'impostazione che cambia il modo in cui vengono prodotte le risposte, come il prompt di sistema, la modalità RAG, il modello di chat o un'opzione di recupero. L'esito compare qui.",
+    "last.empty.body": "Un controllo parte quando salvi un’impostazione che cambia il modo in cui vengono prodotte le risposte, come il prompt di sistema, la modalità RAG, il modello di chat o un’opzione di recupero. L’esito compare qui.",
     "off.title": "I controlli delle impostazioni sono disattivati",
     "off.body": "Le impostazioni si salvano subito, come prima. Per provare prima una modifica sulle domande di test, scegli Avviso in Impostazioni e salva.",
     "action.refreshLast": "Aggiorna controllo",
@@ -298,13 +298,13 @@ const SETTING_CHECK_LABELS = {
     "runs.col.workspace": "Area di lavoro",
     "runs.col.reason": "Avviata da",
     "runs.col.requested": "Richiesta",
-    "runs.reason.backfill_completed": "Dopo un'importazione in blocco",
+    "runs.reason.backfill_completed": "Dopo un’importazione in blocco",
     "runs.reason.reembed_completed": "Dopo il ricalcolo degli embedding",
     "runs.reason.manual": "Avviata a mano",
     "runs.showFailed": "Mostra i controlli non superati: {count}",
     "runs.drainHint": "Le valutazioni in attesa partono con il job notturno, oppure a mano con {command}.",
     "runs.empty.title": "Nessuna valutazione richiesta",
-    "runs.empty.body": "Quando termina un'importazione in blocco o un ricalcolo degli embedding, viene richiesta una valutazione sul set di test di quell'area di lavoro, elencata qui.",
+    "runs.empty.body": "Quando termina un’importazione in blocco o un ricalcolo degli embedding, viene richiesta una valutazione sul set di test di quell’area di lavoro, elencata qui.",
   },
 };
 
@@ -650,8 +650,8 @@ function settingCheckEvidenceTableEl(rows, locale) {
       settingCheckEl('tr', null, [
         cell,
         settingCheckEl('td', { className: 'text-sm align-top break-words max-md:hidden', text: row.slice }),
-        settingCheckEl('td', { className: 'text-sm align-top text-right tabular-nums', text: row.measured }),
-        settingCheckEl('td', { className: 'text-sm align-top text-right tabular-nums max-md:hidden', text: row.limit }),
+        settingCheckEl('td', { className: 'text-sm align-top text-right tabular-nums whitespace-nowrap', text: row.measured }),
+        settingCheckEl('td', { className: 'text-sm align-top text-right tabular-nums whitespace-nowrap max-md:hidden', text: row.limit }),
         settingCheckEl('td', { className: 'align-top' }, [settingCheckBadgeEl(row.result, locale)]),
       ]),
     );
@@ -844,7 +844,7 @@ function settingCheckCreateGuard(deps) {
     const box = run.box;
     const keepFocus = run.reasonArea && typeof document !== 'undefined' && document.activeElement === run.reasonArea;
     box.replaceChildren();
-    run.title = settingCheckEl('h3', { className: 'text-base font-semibold text-balance', text: view.title, attrs: { id: SETTING_CHECK_ID + '-title', tabindex: '-1' } });
+    run.title = settingCheckEl('h3', { className: 'text-base font-semibold text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', text: view.title, attrs: { id: SETTING_CHECK_ID + '-title', tabindex: '-1' } });
     box.appendChild(run.title);
     if (run.check && run.check.cached === true && ['result', 'saving', 'noResult'].includes(run.phase)) {
       const at = g().gatesUiDate(run.check.finished_at || run.check.started_at, locale, 'time');
@@ -858,8 +858,13 @@ function settingCheckCreateGuard(deps) {
       box.appendChild(sectionHeading(view.changed.heading));
       const list = settingCheckEl('dl', { className: 'grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 mt-1 text-sm' });
       for (const row of view.changed.rows) {
+        const env = settingCheckEl('code', { className: 'font-mono text-xs break-all', text: row.env, attrs: { translate: 'no' } });
+        if (row.label === row.env) {
+          list.appendChild(settingCheckEl('dt', { className: 'min-w-0 sm:col-span-2' }, [env]));
+          continue;
+        }
         list.appendChild(settingCheckEl('dt', { className: 'min-w-0 break-words', text: row.label }));
-        list.appendChild(settingCheckEl('dd', { className: 'min-w-0' }, [settingCheckEl('code', { className: 'font-mono text-xs break-all', text: row.env, attrs: { translate: 'no' } })]));
+        list.appendChild(settingCheckEl('dd', { className: 'min-w-0' }, [env]));
       }
       box.appendChild(list);
       if (view.changed.more) box.appendChild(settingCheckEl('p', { className: 'text-xs text-base-content/70 mt-1', text: view.changed.more }));
@@ -916,11 +921,8 @@ function settingCheckCreateGuard(deps) {
           view.untested.heading,
           view.untested.body,
           view.untested.items.map((item) => {
-            const li = settingCheckEl('li', { className: 'break-words' }, [
-              item.label + ' ',
-              settingCheckEl('code', { className: 'font-mono text-xs break-all', text: item.env, attrs: { translate: 'no' } }),
-              ': ',
-            ]);
+            const env = settingCheckEl('code', { className: 'font-mono text-xs break-all', text: item.env, attrs: { translate: 'no' } });
+            const li = settingCheckEl('li', { className: 'break-words' }, item.label === item.env ? [env, ': '] : [item.label + ' ', env, ': ']);
             settingCheckGates().gatesUiAppendMessage(li, item.reason);
             return li;
           }),
@@ -956,7 +958,7 @@ function settingCheckCreateGuard(deps) {
       const children = pressed ? [g().gatesUiSpinner(), settingCheckLabel('saving', locale)] : [settingCheckLabel(spec.labelKey, locale)];
       const attrs = { type: 'button' };
       if (spec.id === 'saveReason') attrs['aria-describedby'] = SETTING_CHECK_ID + '-reason-short';
-      const button = settingCheckEl('button', { className: spec.className + ' max-md:w-full', attrs, on: { click: () => onButton(spec.id) } }, children);
+      const button = settingCheckEl('button', { className: spec.className + ' !ms-0 max-md:w-full', attrs, on: { click: () => onButton(spec.id) } }, children);
       if (state.saving) {
         button.disabled = true;
         button.setAttribute('disabled', '');
@@ -972,20 +974,16 @@ function settingCheckCreateGuard(deps) {
       updateReason();
     }
     if (keepFocus) return;
-    if (moveFocus === 'default') {
-      const target = run.buttons[state.focus];
-      if (target) target.focus();
-    } else if (moveFocus !== false) {
-      run.title.focus();
-    }
+    if (moveFocus !== false) run.title.focus({ preventScroll: true });
   }
 
   function setPhase(phase, extra) {
     if (!run) return;
     Object.assign(run, extra || {});
     run.phase = phase;
+    const reasonFocused = run.reasonArea && typeof document !== 'undefined' && document.activeElement === run.reasonArea;
     render(true);
-    if (phase !== 'saving') announce(run.title.textContent);
+    if (phase !== 'saving') announce(reasonFocused ? run.title.textContent : '');
     if (phase === 'result' && settingCheckState(stateInput()).autoSave) decide('save');
   }
 
@@ -1122,7 +1120,7 @@ function settingCheckCreateGuard(deps) {
 
   function open(request, mode, forced) {
     const loc = locale();
-    const status = settingCheckEl('div', { className: 'text-sm mt-4', attrs: { role: 'status', 'aria-live': 'polite' } });
+    const status = settingCheckEl('div', { className: 'sr-only', attrs: { role: 'status', 'aria-live': 'polite' } });
     const box = settingCheckEl('div', { className: 'modal-box w-11/12 max-w-2xl overscroll-contain' });
     const dialog = settingCheckEl('dialog', {
       className: 'modal',
@@ -1182,7 +1180,8 @@ function settingCheckCreateGuard(deps) {
           show();
           const state = settingCheckState(stateInput());
           const target = run.buttons[state.focus];
-          if (target) target.focus();
+          if (target) target.focus({ preventScroll: true });
+          run.box.scrollTop = 0;
         }
       });
     });
