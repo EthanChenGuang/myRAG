@@ -6,6 +6,7 @@ Every interval and p-value comes from the shared paired bootstrap in rag_eval.pa
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Literal
@@ -209,10 +210,12 @@ def gate_slices(challenger: RunSummary, incumbent: RunSummary, settings: RuleSet
             too_small.append(slice_name)
             continue
         for metric, direction in sorted(settings.metrics.items()):
-            outcome = metric_outcome(challenger, incumbent, metric, settings, items)
-            if outcome.delta is None:
+            differences = paired_differences(challenger, incumbent, metric, items)
+            if not differences:
                 continue
-            if (direction == "higher" and outcome.loss) or (direction == "lower" and outcome.gain):
+            mean = math.fsum(differences) / len(differences)
+            limit = band(settings, incumbent.spread.get(metric, 0.0))
+            if (direction == "higher" and mean < -limit) or (direction == "lower" and mean > limit):
                 regressions.append(f"{slice_name}/{metric}")
     return SliceGate(ok=not regressions, regressions=tuple(regressions), too_small=tuple(too_small))
 
