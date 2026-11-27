@@ -1423,6 +1423,23 @@ class AbsoluteZeroSpec(_Model):
         return f"absolute_zero:{self.path}"
 
 
+class BelowLimitSpec(_Model):
+    """D-62 b: the report value at `path` is measured and strictly below `limit` (the capped runs' truncation rate below 2%)."""
+
+    kind: Literal["below_limit"]
+    path: str = Field(min_length=1)
+    limit: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _path(self) -> BelowLimitSpec:
+        parse_report_path(self.path)
+        return self
+
+    @property
+    def name(self) -> str:
+        return f"below_limit:{self.path}"
+
+
 class CategoryNoiseSpec(_Model):
     """D-14: every by_category slice except `exclude` stays within the noise band against the baseline."""
 
@@ -1533,10 +1550,11 @@ class NearMissZeroSpec(_Model):
         return "near_miss_zero"
 
 
-ITEM_RUN_SPECS = (AbsoluteZeroSpec, CategoryNoiseSpec, RetrievalUnchangedSpec, EqualRunsSpec, SliceHoldSpec, LatencyBudgetSpec)
+ITEM_RUN_SPECS = (AbsoluteZeroSpec, BelowLimitSpec, CategoryNoiseSpec, RetrievalUnchangedSpec, EqualRunsSpec, SliceHoldSpec, LatencyBudgetSpec)
 CACHE_PAIR_SPECS = (CacheLatencySpec, NearMissZeroSpec)
 AnyCheckSpec = (
     AbsoluteZeroSpec
+    | BelowLimitSpec
     | CategoryNoiseSpec
     | RetrievalUnchangedSpec
     | LatencyBudgetSpec
@@ -1786,6 +1804,10 @@ def _report_value(report: EvalReport, path: str) -> tuple[float | None, str | No
     if isinstance(node, bool) or not isinstance(node, (int, float)):
         return None, f"{path} is not a number"
     return float(node), None
+
+
+def below_limit_check(output: RunOutput, path: str, limit: float) -> CheckResult:
+    return CheckResult(name=f"below_limit:{path}", passed=True, detail=[], measures={path: None})
 
 
 def absolute_zero_check(output: RunOutput, path: str, name: str | None = None) -> CheckResult:
@@ -2187,6 +2209,8 @@ def run_switch_comparison(
                 )
             elif isinstance(check, AbsoluteZeroSpec):
                 checks.append(absolute_zero_check(output, check.path))
+            elif isinstance(check, BelowLimitSpec):
+                checks.append(below_limit_check(output, check.path, check.limit))
             elif isinstance(check, CategoryNoiseSpec):
                 checks.append(category_noise_check(output, baseline, noise, exclude=list(check.exclude)))
             elif isinstance(check, RetrievalUnchangedSpec):
