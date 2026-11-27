@@ -179,6 +179,31 @@ const ACCESS_ADMIN_RPC_RE = new RegExp(
 );
 const ACCESS_REQUIRE_RE = new RegExp(String.raw`\{[^}]*\b(?:${ACCESS_SCOPE_BINDINGS.join('|')})\b[^}]*\}\s*=\s*(?:await\s+)?(?:require|import)\s*\(`, 'g');
 
+// D-15: content tables are read outside src/lib/rag/ only in reviewed files. Each entry says why the read is safe: it applies the caller's
+// access, it writes, it is an admin or operator tool, or it is service code that returns no content to a caller.
+export const CONTENT_TABLES = ['documents', 'document_chunks', 'document_parents'];
+export const CONTENT_TABLE_READERS = [
+  { path: 'src/app/api/documents/route.ts', reason: 'filters by access: overlaps on the caller keys, restricted flag, audience for access admins' },
+  { path: 'src/app/api/documents/[id]/route.ts', reason: 'filters by access: a hidden id reads like an unknown id' },
+  { path: 'src/app/api/images/route.ts', reason: 'filters by access: hidden image documents left out, hidden id is not found' },
+  { path: 'src/app/api/scrapers/status/route.ts', reason: 'filters by access: a hidden scraped page reads as not scraped' },
+  { path: 'src/app/api/rag/ingest/_lib/access.ts', reason: 'filters by access: label and uploader of one document for the ingest status routes' },
+  { path: 'src/lib/chat-share-access.ts', reason: 'filters by access: labels of cited documents for the share refusal and the shared-view check' },
+  { path: 'src/lib/answers/read.ts', reason: 'session client, so documents RLS applies; returns only current/unavailable per cited id, no content' },
+  { path: 'src/app/api/process-document/route.ts', reason: 'writer: legacy document and chunk inserts (LEGACY_WRITERS)' },
+  { path: 'src/app/api/ai-to-rag/route.ts', reason: 'writer: legacy document and chunk inserts (LEGACY_WRITERS)' },
+  { path: 'src/lib/supabase.ts', reason: 'writer: legacy storeDocument insert and its rollback delete (LEGACY_WRITERS)' },
+  { path: 'src/lib/nango/sync-manager.ts', reason: 'service code: connector sync bookkeeping and deletes by id; returns no content to a caller' },
+  { path: 'scripts/rag/check-url-metadata.js', reason: 'operator tool: service-role diagnostics run by an operator' },
+];
+const CONTENT_TABLE_RE = new RegExp(String.raw`\.from\s*(?:<[^>()]*>)?\s*\(\s*(['"\`])(?:${CONTENT_TABLES.join('|')})\1`, 'g');
+const contentReadApplies = (rel) => inSrcOrScripts(rel) && outsideRag(rel) && !CONTENT_TABLE_READERS.some((entry) => entry.path === rel);
+
+// D-05, A-14: a caller outside the pipeline that runs retrieval must resolve the scope for access first.
+const RUN_RETRIEVAL_CALL_RE = /\brunRetrieval\s*\(/g;
+const RESOLVE_ACCESS_CALL_RE = /\bresolveAccessScope\s*\(/;
+const runRetrievalApplies = (rel) => inSrc(rel) && outsideRag(rel);
+
 export const TABLE_LOOKUP_MODULE = 'src/lib/rag/retrieval/table-lookup.ts';
 const TABLE_LOOKUP_RPC_RE = new RegExp(String.raw`\.rpc\s*\(\s*(['"\`])(?:${TABLE_LOOKUP_RPCS.join('|')})\1`, 'g');
 const STRING_LITERAL_RE = /'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`/g;
@@ -494,6 +519,18 @@ export const RULES = [
     description: 'access label, visibility, security-event or group admin RPC called outside src/lib/rag/',
     appliesTo: outsideRag,
     find: (text) => regexMatches(ACCESS_ADMIN_RPC_RE, text),
+  },
+  {
+    id: 'content-table-read',
+    description: 'documents, document_chunks or document_parents read outside src/lib/rag/ in a file not on CONTENT_TABLE_READERS (D-15)',
+    appliesTo: contentReadApplies,
+    find: (text) => regexMatches(CONTENT_TABLE_RE, text),
+  },
+  {
+    id: 'run-retrieval-access',
+    description: 'runRetrieval called outside src/lib/rag/ in a file that never calls resolveAccessScope (D-05, A-14)',
+    appliesTo: runRetrievalApplies,
+    find: (text) => (RESOLVE_ACCESS_CALL_RE.test(text) ? [] : regexMatches(RUN_RETRIEVAL_CALL_RE, text)),
   },
   {
     id: 'chunk-writer',

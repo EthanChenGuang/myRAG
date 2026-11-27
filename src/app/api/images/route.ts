@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { removeDocumentObjects, repairOwnerMembership, resolveTenantScope, type RagAdminDb } from '@/lib/rag';
+import {
+  accessGroupsEnabled,
+  accessTableFilter,
+  removeDocumentObjects,
+  repairOwnerMembership,
+  resolveAccessScope,
+  resolveTenantScope,
+  scopeAccessFilter,
+  type RagAdminDb,
+} from '@/lib/rag';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 
 export const runtime = 'nodejs';
@@ -19,9 +28,15 @@ interface Scopable<Q> {
   is(column: string, value: null): Q;
 }
 
+interface Overlappable<Q> {
+  overlaps(column: string, value: readonly string[]): Q;
+}
+
 interface Authorized {
   admin: NonNullable<ReturnType<typeof getSupabaseAdmin>>;
   predicate: Predicate;
+  /** D-15: the caller's access keys; null while the switch is off or for an access admin. */
+  accessKeys: readonly string[] | null;
 }
 
 type AuthResult = { ok: true; value: Authorized } | { ok: false; response: Response };
@@ -35,6 +50,11 @@ function applyPredicate<Q extends Scopable<Q>>(query: Q, predicate: Predicate): 
   if (predicate.kind === 'personal') return query.is('organization_id', null).eq('user_id', predicate.userId);
   if (predicate.kind === 'owner') return query.eq('user_id', predicate.userId);
   return query;
+}
+
+/** D-15: an image document the caller may not see is left out, and a hidden id reads like an unknown one. */
+function applyAccess<Q extends Overlappable<Q>>(query: Q, keys: readonly string[] | null): Q {
+  return keys === null ? query : query.overlaps('access_groups', keys);
 }
 
 function isImageFilename(filename: unknown): boolean {
@@ -103,7 +123,13 @@ async function authorize(request: NextRequest, requestedOrganizationId: unknown,
   } else if (scope.kind === 'personal' && scope.userId) {
     predicate = { kind: 'personal', userId: scope.userId };
   }
-  return { ok: true, value: { admin, predicate } };
+  let accessKeys: readonly string[] | null = null;
+  if (accessGroupsEnabled()) {
+    const resolved = await resolveAccessScope({ scope, identity: { kind: 'user', userId: sessionUser.id }, signal: request.signal });
+    if (!resolved.ok) return { ok: false, response: fail(503, 'access_groups_unavailable') };
+    accessKeys = accessTableFilter(scopeAccessFilter(resolved.scope));
+  }
+  return { ok: true, value: { admin, predicate, accessKeys } };
 }
 
 // GET: List the images in the caller's verified workspace
@@ -111,11 +137,11 @@ export async function GET(request: NextRequest): Promise<Response> {
   try {
     const auth = await authorize(request, requestedOrganization(request), false);
     if (!auth.ok) return auth.response;
-    const { admin, predicate } = auth.value;
+    const { admin, predicate, accessKeys } = auth.value;
 
-    const { data, error: docError } = await applyPredicate(
-      admin.from('documents').select('id, filename, created_at').eq('is_current', true).eq('status', 'ready'),
-      predicate
+    const { data, error: docError } = await applyAccess(
+      applyPredicate(admin.from('documents').select('id, filename, created_at').eq('is_current', true).eq('status', 'ready'), predicate),
+      accessKeys
     ).order('created_at', { ascending: false });
     if (docError) {
       console.error('[Images API] Document listing failed', { code: docError.code });
@@ -162,11 +188,14 @@ export async function DELETE(request: NextRequest): Promise<Response> {
 
     const auth = await authorize(request, requestedOrganization(request), true);
     if (!auth.ok) return auth.response;
-    const { admin, predicate } = auth.value;
+    const { admin, predicate, accessKeys } = auth.value;
 
-    const { data: doc, error: lookupError } = await applyPredicate(
-      admin.from('documents').select('id, filename, tenant_key, lineage_id, version, original_path, processing_state').eq('id', id),
-      predicate
+    const { data: doc, error: lookupError } = await applyAccess(
+      applyPredicate(
+        admin.from('documents').select('id, filename, tenant_key, lineage_id, version, original_path, processing_state').eq('id', id),
+        predicate
+      ),
+      accessKeys
     ).maybeSingle();
     if (lookupError) {
       console.error('[Images API] Ownership lookup failed', { code: lookupError.code });
