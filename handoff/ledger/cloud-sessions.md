@@ -809,3 +809,8 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
     - rules/attributes idempotency + A2/A3 perf;
     - step T: header A/B on a real golden with >=10 cache_near_miss.
   - Owner HOLD. Archived.
+- 22:49Z plan-41-fixes DONE exec/plan-41-fixes add4c2f3 -> train 41.
+  - Changes: D-29, the G-05 deviation, the 07-30 fix, a new plan 04.1-18 (ingest over-refusal), 04.1-LIVE-CHECKLIST.md, and doc corrections.
+  - The orchestrator's countersign of the overrides and of T-41-01/28/SC was REFUSED by the session's classifier, correctly: a sign-off must be the owner's own. These are now owner items in 04.1-LIVE-CHECKLIST part A.
+  - RULE: never delegate owner sign-offs or accepted-risk signatures to executors. Ask the user. The same applies to the T-0411-51 "accepted" entry: it is a ledger note only, not a signature, and still needs the owner.
+  - Archived.
