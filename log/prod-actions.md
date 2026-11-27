@@ -20,3 +20,4 @@
 - Owner has never connected WhatsApp. Vercel prod env (names only, not decrypted) has no WHATSAPP_*, FLYIO_* or KOYEB_* variables: no Baileys service is configured.
 - To run the check: deploy baileys-whatsapp/ (Fly.io), set WHATSAPP_PROVIDER, FLYIO_BAILEYS_URL, WHATSAPP_WEBHOOK_URL on Vercel (owner enters FLYIO_API_KEY and WHATSAPP_WEBHOOK_SECRET), redeploy, scan the QR from the app's WhatsApp connect button with a spare number, test from another phone.
 - Asked the owner: set up now (A) or defer (B). Waiting.
+- 2026-11-27: owner chose B. 05.2-15 and 06.2-33 deferred (WhatsApp not provisioned). Nothing changed on prod.
