@@ -227,7 +227,6 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
         channel: input.channel,
         webSearchOffered: options.webSearchOffered,
         capApplies: capDecision?.concise ?? false,
-        calcOffered: false,
         contextTagging: options.contextTagging ?? readSecurityConfig().contextTagging,
       };
       const composed = composeAnswerRules(rulesInput, { log: !logged });
