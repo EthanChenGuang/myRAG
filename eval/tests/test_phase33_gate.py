@@ -504,3 +504,55 @@ def test_no_other_slice_drop_fails_in_ingest_mode_with_different_corpus_hashes(t
 @pytest.mark.skipif(not GATES_FILE.exists(), reason="the gates file is committed in the last commit of plan 03.3-22")
 def test_committed_gates_file_checks():
     assert _main("check", "--spec", str(GATES_FILE)) == 0
+
+
+# ---------- the comparison spec (Task 4)
+
+TPL_CONFIGS = (
+    "all-off",
+    "v2-off",
+    "recommended",
+    "only-boilerplate",
+    "only-section-rules",
+    "only-attributes",
+    "only-header",
+    "only-filter-hard",
+    "only-filter-soft",
+    "only-quantity",
+    "only-identifier-feed",
+)
+SPEC_CHECKS = {"gate", "paired_all_zero", "retrieval_unchanged", "no_slice_drop"}
+
+
+def _committed_comparison():
+    from rag_eval.phase_compare import SwitchComparisonSpec
+
+    assert COMPARISON_FILE.is_file(), "eval/config/phase33-comparison.json is missing"
+    return SwitchComparisonSpec.model_validate_json(COMPARISON_FILE.read_text(encoding="utf-8"))
+
+
+def test_comparison_spec_runs_every_config_in_both_modes():
+    spec = _committed_comparison()
+    assert spec.phase == "03.3"
+    assert set(spec.baselines) == {"prechunked", "ingest"}
+    assert spec.noise == "eval/config/noise.json"
+    expected = {f"tpl-{config}-{mode}" for config in TPL_CONFIGS for mode in ("prechunked", "ingest")}
+    assert {run.name for run in spec.runs} == expected
+    assert len(spec.runs) == 22
+    for run in spec.runs:
+        config = run.name.rsplit("-", 1)[0]
+        assert run.fixture_mode == run.name.rsplit("-", 1)[1]
+        assert run.base == f"eval/config/runs/{config}.json"
+        assert run.env == {}
+
+
+def test_comparison_spec_gates_only_the_all_off_runs():
+    for run in _committed_comparison().runs:
+        names = {check if isinstance(check, str) else check.name for check in run.checks}
+        if run.name.startswith("tpl-all-off-"):
+            assert names == SPEC_CHECKS, run.name
+            assert run.switches == {} and run.harness_flags == []
+        else:
+            assert names == {"report_only"}, run.name
+            assert run.switches == {"RAG_CITATIONS": "true"}
+            assert run.harness_flags == ["--citations"]
