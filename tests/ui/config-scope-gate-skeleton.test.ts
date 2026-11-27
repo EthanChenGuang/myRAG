@@ -137,3 +137,10 @@ describe('Query layer card: pointer to the Scope gate panel', () => {
     }
   });
 });
+
+describe('Narrow widths', () => {
+  it('lets long env names wrap inside the Query layer card and the Scope gate section', () => {
+    expect(html).toMatch(/id="query-layer-card">\s*<div class="card-body \[overflow-wrap:anywhere\]">/);
+    expect(scopeGate()).toMatch(/^<section[^>]*>\s*<div class="card-body \[overflow-wrap:anywhere\]">/);
+  });
+});
