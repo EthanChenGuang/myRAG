@@ -2,6 +2,7 @@ import argparse
 import math
 import random
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -53,21 +54,28 @@ def _baseline_value(runs: list[float | None] | None) -> float | None:
     return math.fsum(present) / len(present)
 
 
+def _resample_means(differences: list[float], seed: int = SEED, resamples: int = RESAMPLES) -> Iterator[float]:
+    """The one paired-bootstrap resampling loop: the interval and the p-value read the same draws (A-10)."""
+    rng = random.Random(seed)
+    n = len(differences)
+    for _ in range(resamples):
+        yield math.fsum(differences[i] for i in rng.choices(range(n), k=n)) / n
+
+
 def _bootstrap_interval(differences: list[float], seed: int = SEED, resamples: int = RESAMPLES) -> tuple[float, float]:
     if all(d == 0 for d in differences):
         return 0.0, 0.0
-    rng = random.Random(seed)
-    n = len(differences)
-    means = sorted(math.fsum(differences[i] for i in rng.choices(range(n), k=n)) / n for _ in range(resamples))
+    means = sorted(_resample_means(differences, seed, resamples))
     return means[math.ceil(resamples * 0.025) - 1], means[math.ceil(resamples * 0.975) - 1]
 
 
-def _resample_means(differences: list[float], seed: int = SEED, resamples: int = RESAMPLES):
-    return iter(())
-
-
 def paired_p_value(differences: list[float], seed: int = SEED, resamples: int = RESAMPLES) -> float | None:
-    return -1.0
+    """Share of bootstrap resamples whose mean paired difference is at most 0 (one-sided, challenger minus incumbent)."""
+    if not differences:
+        return None
+    if all(d == 0 for d in differences):
+        return 1.0
+    return sum(1 for mean in _resample_means(differences, seed, resamples) if mean <= 0) / resamples
 
 
 def _stat(differences: list[float]) -> PairedStat:
