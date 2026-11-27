@@ -37,6 +37,7 @@ export const AUTHENTICATED_ALLOW_LIST: Record<string, AllowListEntry> = {
   'is_subscribed(uuid)': { anon: false, reason: 'caller-bound subscription check; contract asserted by tests/security-gaps-rls.test.mts' },
   'get_nango_stats(uuid)': { anon: false, reason: 'caller-bound connection stats; contract asserted by tests/security-gaps-rls.test.mts' },
   'kb_writes_locked()': { anon: false, reason: 'RLS helper in single-tenant knowledge-base write policies (TO authenticated)' },
+  'rag_caller_reads_access_sets(text,jsonb)': { anon: false, reason: 'RLS helper in the restrictive access_sets policies of rag_review_items and rag_retrieval_log (TO authenticated, 0934); answers only for auth.uid(), fails closed on malformed sets' },
   'rag_is_domain_expert(text)': { anon: false, reason: 'RLS helper in the rag_review_items policies (TO authenticated); answers only for auth.uid() against rag_domain_experts or, single-tenant, admin_users for s:default' },
   'rag_ingest_realtime_topic_allowed(text)': { anon: false, reason: 'RLS helper in the realtime.messages policy for ingestion job topics; reads auth.uid() and realtime.topic()' },
   'rag_access_enforced()': { anon: true, reason: 'RLS helper in the restrictive rag_access_groups_restrict policies (0926, TO anon, authenticated); returns the deployment-wide enforced flag only' },

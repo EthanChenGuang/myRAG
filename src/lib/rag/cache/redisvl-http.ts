@@ -11,7 +11,7 @@ import type { RpcClient } from '../backend/supabase-rpc';
 import type { SemanticCacheConfig } from '../config';
 import { scopeKey, type TenantScope } from '../tenant/scope';
 import { computeCacheKeyHash } from './keys';
-import type { CacheCallOptions, CacheHit, CacheQuery, SemanticCache } from './types';
+import type { CacheAccessIo, CacheCallOptions, CacheHit, CacheQuery, SemanticCache } from './types';
 import { SemanticCacheBackendError, maskQueryText, requireFiniteVector, resolveMaxDistance, scalarOf } from './wire';
 
 const SECRET_HEADER = 'x-sidecar-secret';
@@ -28,6 +28,8 @@ export interface RedisvlSemanticCacheOptions {
   /** The service-role client, for rag_cache_sources_current on every hit. */
   adminClient: () => RpcClient | null;
   config: Pick<SemanticCacheConfig, 'ttl' | 'maxDistance'>;
+  /** D-23: every hit's source documents are re-checked for the caller; a hit with a hidden source is a miss and stays stored. */
+  access?: CacheAccessIo;
 }
 
 /**
@@ -109,6 +111,13 @@ export function createRedisvlSemanticCache(options: RedisvlSemanticCacheOptions)
         const ids = [...new Set((body.answer.source_versions ?? []).map((source) => source.document_id))];
         void invalidateTenant(q.scope, ids.length > 0 ? ids : undefined).catch(() => undefined);
         return null;
+      }
+      if (options.access) {
+        const ids = [...new Set((body.answer.source_versions ?? []).map((source) => source.document_id.toLowerCase()))];
+        if (ids.length > 0) {
+          const visible = await options.access.visibleDocumentIds(q.scope, ids, q.signal);
+          if (!visible.ok || ids.some((id) => !visible.ids.has(id))) return null;
+        }
       }
       return { entryId: body.entry_id, distance: body.distance, answer: body.answer };
     },

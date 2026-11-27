@@ -41,6 +41,19 @@ export interface CacheQuery extends CacheKeyParts {
   signal?: AbortSignal;
 }
 
+/**
+ * D-23 (04.3-13): the access hooks a backend calls, injected by deps.ts so the backends load no config or env. accessRpcArgs is
+ * accessRpcArgs(scopeAccessFilter(scope)) ({} while access groups are off); visibleDocumentIds is the batched visibility check.
+ */
+export interface CacheAccessIo {
+  accessRpcArgs(scope: TenantScope): Promise<{ p_access_keys?: string[]; p_access_all?: boolean }>;
+  visibleDocumentIds(
+    scope: TenantScope,
+    documentIds: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<{ ok: true; ids: ReadonlySet<string> } | { ok: false }>;
+}
+
 export interface CacheCallOptions {
   signal?: AbortSignal;
 }

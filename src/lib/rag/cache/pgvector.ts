@@ -3,13 +3,15 @@ import { rpcRows, type RpcClient } from '../backend/supabase-rpc';
 import type { SemanticCacheConfig } from '../config';
 import { scopeKey, type TenantScope } from '../tenant/scope';
 import { computeCacheKeyHash } from './keys';
-import type { CacheCallOptions, CacheHit, CacheQuery, SemanticCache } from './types';
+import type { CacheAccessIo, CacheCallOptions, CacheHit, CacheQuery, SemanticCache } from './types';
 import { SemanticCacheBackendError, halfvecLiteral, maskQueryText, resolveMaxDistance, scalarOf } from './wire';
 
 export interface PgvectorSemanticCacheOptions {
   /** The service-role client: the cache functions are executable by service_role only. */
   adminClient: () => RpcClient | null;
   config: Pick<SemanticCacheConfig, 'ttl' | 'refusalTtl' | 'maxDistance'>;
+  /** D-23: adds p_access_keys / p_access_all to rag_cache_check (nothing while access groups are off). */
+  access?: CacheAccessIo;
 }
 
 interface CheckRow {
@@ -42,6 +44,7 @@ export function createPgvectorSemanticCache(options: PgvectorSemanticCacheOption
         p_profile: q.embeddingProfileId,
         p_embedding: halfvecLiteral(q.vector),
         p_max_distance: resolveMaxDistance(q.maxDistance, options.config.maxDistance),
+        ...(options.access ? await options.access.accessRpcArgs(q.scope) : {}),
       };
       const data = await call(client(), 'rag_cache_check', args, q.signal);
       const row = rpcRows(data)[0] as CheckRow | undefined;

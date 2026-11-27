@@ -3,7 +3,7 @@ import { z } from 'zod/v3';
 import { createClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { answerIdsInMessages, attachAnswersToChat, listOwnedAnswerRecordsForChat } from '@/lib/answers/store';
-import { answerFeedbackEnabled, citedDocumentIds, documentStatuses, toAnswerRecord } from '@/lib/answers/read';
+import { answerFeedbackEnabled, answerReaderVisibility, citedDocumentIds, readerDocumentStatuses, toAnswerRecord } from '@/lib/answers/read';
 import { AnswerRecordSchema, type AnswerRecord } from '@/lib/rag-eval/contracts.generated';
 
 export const runtime = 'nodejs';
@@ -65,7 +65,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     const rows = await listOwnedAnswerRecordsForChat(supabase, { chatId: owned.id, userId });
-    const documents = await documentStatuses(supabase, [...new Set(rows.flatMap((row) => citedDocumentIds(row)))]);
+    const visibility = await answerReaderVisibility({ organization_id: owned.organization_id ?? null }, userId);
+    const documents = await readerDocumentStatuses(supabase, [...new Set(rows.flatMap((row) => citedDocumentIds(row)))], visibility);
     const now = new Date();
     const feedbackEnabled = answerFeedbackEnabled();
     const records: AnswerRecord[] = [];

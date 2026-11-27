@@ -67,6 +67,16 @@ function semanticCacheIo(deps: RagDeps): SemanticCacheIo {
     fetch: (input, init) => deps.fetch(input, init),
     sidecarUrl: process.env.RAG_SIDECAR_URL ?? env.RAG_SIDECAR_URL ?? '',
     sidecarSecret: process.env.RAG_SIDECAR_SECRET ?? env.RAG_SIDECAR_SECRET ?? '',
+    access: {
+      accessRpcArgs: async (scope) => {
+        const access = await import('./tenant/access');
+        return access.accessRpcArgs(access.scopeAccessFilter(scope));
+      },
+      visibleDocumentIds: async (scope, documentIds, signal) => {
+        const result = await (await import('./access/visibility')).visibleDocumentIds(scope, documentIds, signal ? { signal } : undefined);
+        return result.ok ? { ok: true, ids: result.ids } : { ok: false };
+      },
+    },
   };
 }
 

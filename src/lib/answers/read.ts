@@ -105,3 +105,59 @@ export async function documentStatuses(client: SupabaseClient, documentIds: stri
   }
   return statuses;
 }
+
+/** One batched visibility call for the reader: the ids the reader may still see, or a failure (then every document is unavailable). */
+export type ReaderDocumentVisibility = (documentIds: readonly string[]) => Promise<{ ok: true; ids: ReadonlySet<string> } | { ok: false }>;
+
+/**
+ * A-13, D-15: documentStatuses, then, while access groups are on, a document the reader can no longer see is unavailable: the citation
+ * keeps its stored snapshot text and loses its document link. A failed check marks every document unavailable (fails closed). With
+ * visibility null (access groups off) this is documentStatuses unchanged.
+ */
+export async function readerDocumentStatuses(
+  client: SupabaseClient,
+  documentIds: string[],
+  visibility: ReaderDocumentVisibility | null,
+): Promise<Record<string, DocumentAvailability>> {
+  const statuses = await documentStatuses(client, documentIds);
+  if (!visibility) return statuses;
+  const current = Object.keys(statuses).filter((id) => statuses[id] === 'current');
+  if (current.length === 0) return statuses;
+  let result: Awaited<ReturnType<ReaderDocumentVisibility>>;
+  try {
+    result = await visibility(current);
+  } catch {
+    result = { ok: false };
+  }
+  for (const id of current) {
+    if (!result.ok || !result.ids.has(id.toLowerCase())) statuses[id] = 'unavailable';
+  }
+  if (!result.ok) console.warn('[RAG Answers] citation visibility check failed', { count: current.length });
+  return statuses;
+}
+
+/**
+ * The reader's visibility check for one record's tenant, or null while access groups are off (no extra lookup, today's read). The tenant
+ * comes from the record's organization and membership is re-checked; the access scope comes from the session user only.
+ */
+export async function answerReaderVisibility(
+  row: Pick<AnswerRecordRow, 'organization_id'>,
+  userId: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<ReaderDocumentVisibility | null> {
+  const rag = await import('@/lib/rag');
+  if (!rag.accessGroupsEnabled()) return null;
+  const signal = options.signal ?? new AbortController().signal;
+  return async (documentIds) => {
+    const tenant = await rag.resolveTenantScope({
+      requestedOrganizationId: row.organization_id,
+      getUser: async () => ({ id: userId }),
+      signal,
+    });
+    if (!tenant.ok || !tenant.scope) return { ok: false };
+    const access = await rag.resolveAccessScope({ scope: tenant.scope, identity: { kind: 'user', userId }, signal });
+    if (!access.ok) return { ok: false };
+    const visible = await rag.visibleDocumentIds(access.scope, documentIds, { signal });
+    return visible.ok ? { ok: true, ids: visible.ids } : { ok: false };
+  };
+}
