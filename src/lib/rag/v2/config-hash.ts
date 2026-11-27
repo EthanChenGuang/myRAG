@@ -218,6 +218,17 @@ export type TerminologyHashStage = { enabled: false } | { enabled: true; version
 
 export const TERMINOLOGY_UNAVAILABLE = 'terminology:unavailable';
 
+/** D-14 (XLG-05): the tenant glossary a request translated with; present only while RAG_TRANSLATION_GLOSSARY is effective. */
+export interface RetrievalConfigHashGlossary {
+  /** The TERM version the glossary was read at; GLOSSARY_UNAVAILABLE when it was not loaded for the request. */
+  version: string;
+}
+
+/** The glossary as the hash sees it: switch off for the request, or on with the version it was read at (null: not loaded). */
+export type GlossaryHashStage = { enabled: false } | { enabled: true; version: string | null };
+
+export const GLOSSARY_UNAVAILABLE = 'glossary:unavailable';
+
 /** D-30: the attribute filter a request was retrieved with; present only while the attribute_resolve stage is enabled for the request. */
 export interface RetrievalConfigHashAttributeFilter {
   mode: Exclude<AttributeFilterMode, 'off'>;
@@ -373,4 +384,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
 export function computeRetrievalConfigHash(input: RetrievalConfigHashInput): string {
   const payload = buildPayload(input);
   return createHash('sha256').update(canonicalJson(payload), 'utf8').digest('hex');
+}
+export function glossaryHashBlock(_stage: GlossaryHashStage): RetrievalConfigHashGlossary | undefined {
+  return undefined;
 }
