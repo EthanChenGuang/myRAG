@@ -94,6 +94,7 @@ from rag_sidecar.contracts.profiles import (
     PreMigrationEvidence,
     PreMigrationSlice,
     ProfileComparisonEntry,
+    ServingModeMeasurement,
     ProfileMetricBlocks,
 )
 from rag_sidecar.contracts.query import (
@@ -479,6 +480,7 @@ __all__ = [
     "PreMigrationEvidence",
     "PreMigrationSlice",
     "ProfileComparisonEntry",
+    "ServingModeMeasurement",
     "ProfileMetricBlocks",
     "LanguagePack",
     "LanguageRegistry",

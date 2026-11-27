@@ -92,6 +92,32 @@ describe('rag_record_eval_evidence and activation', () => {
     assert.equal(activated, 0);
   });
 
+  test('record-evidence refuses a wiring-proof comparison as fixture evidence and stores nothing', async () => {
+    await db.query("UPDATE embedding_profiles SET status = 'available', eval_evidence = NULL");
+    await db.query("UPDATE embedding_profiles SET status = 'active' WHERE id = $1", [LEGACY]);
+    const BGE = 'bge-m3-1024';
+    const runId = await recordRun(db, BGE);
+    const comparison = {
+      schema_version: 1,
+      baseline_profile: LEGACY,
+      active_profile: LEGACY,
+      profiles: [],
+      pre_migration: { n: 4, passed: true, recall_at_5: { value: 0.5, n: 4 }, recall_at_10: { value: 0.5, n: 4 }, mrr: { value: 0.25, n: 4 } },
+      gate_passed: true,
+      backfill_run_id: runId,
+      notes: [],
+      wiring_proof: true,
+      label: 'wiring proof',
+    };
+    const file = path.join(os.tmpdir(), `comparison-wiring-${Date.now()}.json`);
+    fs.writeFileSync(file, JSON.stringify(comparison));
+    const code = await cli.main(['record-evidence', file, '--target', BGE]);
+    assert.equal(code, 1);
+    const stored = await db.query<{ eval_evidence: unknown; status: string }>('SELECT eval_evidence, status FROM embedding_profiles WHERE id = $1', [BGE]);
+    assert.equal(stored.rows[0]?.eval_evidence, null);
+    assert.equal(stored.rows[0]?.status, 'available');
+  });
+
   test('activation refuses regressing evidence', async () => {
     await db.query('DELETE FROM chunk_embeddings WHERE profile_id = $1', [VOYAGE]);
     await db.query("UPDATE embedding_profiles SET status = 'available', eval_evidence = NULL");
