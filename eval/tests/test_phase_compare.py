@@ -31,6 +31,9 @@ from rag_eval.phase_compare import (
     SwitchComparison,
     SwitchComparisonSpec,
     absolute_zero_check,
+    below_limit_check,
+    materialise_run_config,
+    RunSpec,
     category_noise_check,
     citation_validity_check,
     command_result,
@@ -1693,3 +1696,69 @@ def test_verdicts_must_name_a_check_of_a_named_run():
         broken["verdicts"][0]["checks"].append(bad)
         with pytest.raises(ValueError):
             SwitchComparisonSpec.model_validate(broken)
+
+
+# ---------- Phase 5.2 (05.2-38, D-62 b): below_limit (truncation rate below 2% on the capped run) and the committed spec
+
+SPEC52 = REPO_ROOT / "eval" / "config" / "phase52-comparison.json"
+
+
+def test_below_limit_passes_only_on_a_measured_value_strictly_below_the_limit():
+    base = _output()
+    assert below_limit_check(_with_injection(base, _injection(asr=0.0)), ASR_PATH, 0.02).passed is True
+    assert below_limit_check(_with_injection(base, _injection(asr=1 / 100)), ASR_PATH, 0.02).passed is True
+    at_limit = below_limit_check(_with_injection(base, _injection(asr=0.02)), ASR_PATH, 0.02)
+    assert at_limit.passed is False and "0.0200" in at_limit.detail[0] and at_limit.measures[ASR_PATH] == 0.02
+    assert below_limit_check(_with_injection(base, _injection(asr=1 / 12)), ASR_PATH, 0.02).passed is False
+
+
+@pytest.mark.parametrize("injection", [None, _injection(asr=None), _injection(n=0)])
+def test_below_limit_never_passes_vacuously(injection):
+    result = below_limit_check(_with_injection(_output(), injection), ASR_PATH, 0.02)
+    assert result.passed is False and result.detail
+
+
+def test_below_limit_spec_needs_a_positive_limit_and_a_wellformed_path():
+    raw = json.loads(SPEC5.read_text(encoding="utf-8"))
+    for bad in ({"kind": "below_limit", "path": ASR_PATH, "limit": 0}, {"kind": "below_limit", "path": 'a..b["x', "limit": 0.02}):
+        broken = json.loads(json.dumps(raw))
+        broken["runs"][0]["checks"].append(bad)
+        with pytest.raises(ValueError):
+            SwitchComparisonSpec.model_validate(broken)
+
+
+def test_committed_phase52_spec_gates_off_on_violating_guard_and_capped_runs():
+    spec = SwitchComparisonSpec.model_validate_json(SPEC52.read_text(encoding="utf-8"))
+    assert spec.phase == "05.2"
+    runs = {run.name: run for run in spec.runs}
+    assert runs["all-off"].base == "eval/config/runs/p52-all-off.json"
+    assert {"gate", "paired_all_zero", "characterization"} <= {c for c in runs["all-off"].checks if isinstance(c, str)}
+    assert "paired_all_zero" in runs["all-off-ingest"].checks
+    rules = runs["rules-on"]
+    assert rules.base == "eval/config/runs/p52-rules-on.json" and rules.env == {}
+    zero = {c.path for c in rules.checks if getattr(c, "kind", None) == "absolute_zero"}
+    assert zero == {f"answer_rules.{m}.overall" for m in ("unsupported_addition_rate", "mixed_versions_rate", "adjacent_repurpose_rate")}
+    assert "gate" in rules.checks
+    for name in ("violating-partial", "violating-versions", "violating-offtopic", "sec-output-guard"):
+        assert "gate" in runs[name].checks
+    guard_zero = {c.path for c in runs["sec-output-guard"].checks if getattr(c, "kind", None) == "absolute_zero"}
+    assert 'injection.attack_success_rate["tag:link_injection"]' in guard_zero
+    capped = [run for run in spec.runs if any(getattr(c, "kind", None) == "below_limit" for c in run.checks)]
+    assert capped and all(
+        c.limit == 0.02 and c.path == "answer_rules.truncation_rate.overall"
+        for run in capped
+        for c in run.checks
+        if getattr(c, "kind", None) == "below_limit"
+    )
+
+
+def test_materialise_run_config_keeps_the_base_generator_model(tmp_path: Path):
+    """05.2-38: a base run config's generator_model (the Phase 5.2 fakes) reaches the harness; dropping it ran every Phase 5.2
+    comparison leg with the default fake, so the answer-rule gates keyed on the generator passed without applying."""
+    base = tmp_path / "base.json"
+    base.write_text(json.dumps({"name": "b", "env": {"RAG_CITATIONS": "true"}, "overrides": None, "generator_model": "fake/rule-following-v1"}))
+    config = materialise_run_config(RunSpec(name="r", base=str(base), fixture_mode="prechunked", env={}), [])
+    assert config["generator_model"] == "fake/rule-following-v1"
+    plain = tmp_path / "plain.json"
+    plain.write_text(json.dumps({"name": "p", "env": {}, "overrides": None}))
+    assert "generator_model" not in materialise_run_config(RunSpec(name="r", base=str(plain), fixture_mode="prechunked", env={}), [])
