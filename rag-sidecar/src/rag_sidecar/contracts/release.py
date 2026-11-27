@@ -405,6 +405,4 @@ class VendorDataFlow(_Contract):
     @model_validator(mode="after")
     def _distinct(self) -> "VendorDataFlow":
         _no_repeats([entry.vendor for entry in self.vendors], "vendors")
-        hosts = [host for entry in self.vendors for host in entry.hosts]
-        _no_repeats(hosts, "hosts across vendors")
         return self
