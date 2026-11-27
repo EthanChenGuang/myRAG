@@ -279,6 +279,13 @@ class TraceIdentifier(_Contract):
     suggestions: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(default_factory=list, max_length=3)
 
 
+class TraceAccess(_Contract):
+    """D-09, D-26: the access mode the run retrieved under and the citations the access recheck dropped; absent while access is off."""
+
+    mode: Literal["off", "admin_all", "keys"]
+    violations: int = Field(default=0, ge=0)
+
+
 class TraceAttributeFilter(_Contract):
     """Phase 3.3 D-29, D-30, F-25: attribute filter counts and flags; never an attribute key or value."""
 
@@ -375,6 +382,7 @@ class RagTrace(_Contract):
     finish_reason: FinishReason | None = _optional_field()
     answer_rules_parts: list[AnswerRulePartId] | None = _optional_field()
     notices: list[AnswerNotice] | None = _optional_field()
+    access: TraceAccess | None = _optional_field()
 
     @model_validator(mode="after")
     def _phase52_rules(self) -> "RagTrace":
