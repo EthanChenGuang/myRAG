@@ -80,7 +80,20 @@ class RegressionPlan(_Contract):
     test_split_budget: int = Field(ge=0)
     created_at: Timestamp
 
+    @field_validator("gated_slice_prefixes")
+    @classmethod
+    def _distinct_prefixes(cls, value: list[str]) -> list[str]:
+        return _no_repeats(value, "gated_slice_prefixes")
 
+    @model_validator(mode="after")
+    def _consistent(self) -> "RegressionPlan":
+        names = [config.name for config in self.configs]
+        _no_repeats(names, "config names")
+        if self.incumbent_config not in names:
+            raise ValueError("incumbent_config must name one of the configs")
+        if self.split == "dev" and self.test_split_budget != 0:
+            raise ValueError("a dev-split plan has no test-split budget")
+        return self
 
     def canonical_json(self) -> str:
         return json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
@@ -101,6 +114,11 @@ class TestSplitUse(_Contract):
     registered: bool
     reason: str | None = Field(default=None, min_length=10, max_length=500)
 
+    @model_validator(mode="after")
+    def _reason_when_unregistered(self) -> "TestSplitUse":
+        if not self.registered and self.reason is None:
+            raise ValueError("an unregistered test-split use needs a reason")
+        return self
 
 
 class SwitchVerdict(_Contract):
@@ -119,6 +137,18 @@ class SwitchVerdict(_Contract):
     decision: SwitchDecision
     reason: Code
 
+    @model_validator(mode="after")
+    def _consistent(self) -> "SwitchVerdict":
+        _check_interval(self.ci_low, self.ci_high)
+        _no_repeats(self.too_small_slices, "too_small_slices")
+        if self.p_holm is not None and (self.p_value is None or self.p_holm < self.p_value):
+            raise ValueError("p_holm must not be below p_value")
+        if self.decision == "adopt":
+            if not (self.gated_slices_ok and self.latency_ok):
+                raise ValueError("an adopted switch holds every gated slice and the latency budgets")
+            if self.injection_asr is None or self.injection_asr != 0:
+                raise ValueError("an adopted switch keeps the injection attack-success rate at 0")
+        return self
 
 
 class BackendResult(_Contract):
@@ -133,6 +163,12 @@ class BackendResult(_Contract):
     cost_note: str = Field(min_length=1, max_length=1000)
     operational_note: str = Field(min_length=1, max_length=1000)
 
+    @model_validator(mode="after")
+    def _consistent(self) -> "BackendResult":
+        _check_interval(self.ci_low, self.ci_high)
+        if self.valid == (self.invalid_reason is not None):
+            raise ValueError("invalid_reason is set exactly when the run is invalid for a backend comparison")
+        return self
 
 
 class BackendComparison(_Contract):
@@ -141,6 +177,18 @@ class BackendComparison(_Contract):
     winner: Backend
     reason: Code
 
+    @model_validator(mode="after")
+    def _consistent(self) -> "BackendComparison":
+        _no_repeats([result.backend for result in self.results], "backends")
+        if self.winner != self.incumbent:
+            match = next((result for result in self.results if result.backend == self.winner), None)
+            if match is None or not match.valid:
+                raise ValueError("a winning backend needs a valid result")
+            if match.ci_low is None or match.ci_low <= 0 or match.delta is None or match.band is None:
+                raise ValueError("a backend wins only with ci_low above 0")
+            if match.delta <= match.band:
+                raise ValueError("a backend wins only beyond the noise band")
+        return self
 
 
 class IncumbentSource(_Contract):
@@ -152,6 +200,11 @@ class CostAmount(_Contract):
     usd: Usd | None
     reason: CostReason | None = None
 
+    @model_validator(mode="after")
+    def _amount_or_reason(self) -> "CostAmount":
+        if (self.usd is None) == (self.reason is None):
+            raise ValueError("an amount is a number or None with a reason code, never both")
+        return self
 
 
 class IngestCostParts(_Contract):
@@ -177,6 +230,15 @@ class CostPer1000(_Contract):
     documents: IngestCostParts | None = None
     queries: QueryCostParts | None = None
 
+    @model_validator(mode="after")
+    def _one_kind(self) -> "CostPer1000":
+        if (self.documents is None) == (self.queries is None):
+            raise ValueError("a cost row is per 1,000 documents or per 1,000 queries")
+        if self.documents is not None and (self.embedding_profile is None or self.backend is None):
+            raise ValueError("an ingest cost row names its embedding profile and backend")
+        if self.queries is not None and self.config_name is None:
+            raise ValueError("a query cost row names its configuration")
+        return self
 
 
 class CostBasis(_Contract):
@@ -191,6 +253,17 @@ class CostSummary(_Contract):
     per_1000_queries: list[CostPer1000] = Field(min_length=1)
     basis: CostBasis
 
+    @model_validator(mode="after")
+    def _rows_match_lists(self) -> "CostSummary":
+        if any(row.documents is None for row in self.per_1000_documents):
+            raise ValueError("per_1000_documents holds ingest cost rows only")
+        if any(row.queries is None for row in self.per_1000_queries):
+            raise ValueError("per_1000_queries holds query cost rows only")
+        _no_repeats(
+            [(row.embedding_profile, row.backend) for row in self.per_1000_documents], "ingest cost rows"
+        )
+        _no_repeats([row.config_name for row in self.per_1000_queries], "query cost rows")
+        return self
 
 
 class LatencyValue(_Contract):
@@ -208,12 +281,23 @@ class LatencyEntry(_Contract):
     channel: LatencyChannel
     values: list[LatencyValue] = Field(min_length=1)
 
+    @model_validator(mode="after")
+    def _has_total(self) -> "LatencyEntry":
+        stages = [value.stage for value in self.values]
+        _no_repeats(stages, "latency stages")
+        if "total" not in stages:
+            raise ValueError("a latency entry holds the total")
+        return self
 
 
 class LatencySummary(_Contract):
     budgets_sha256: Sha256
     entries: list[LatencyEntry] = Field(min_length=1)
 
+    @model_validator(mode="after")
+    def _distinct(self) -> "LatencySummary":
+        _no_repeats([(entry.config_name, entry.channel) for entry in self.entries], "latency entries")
+        return self
 
 
 class LanguageQuality(_Contract):
@@ -229,6 +313,11 @@ class LanguageQuality(_Contract):
     below_baseline: bool | None
     reason: Code | None = None
 
+    @model_validator(mode="after")
+    def _reason_when_undecided(self) -> "LanguageQuality":
+        if self.below_baseline is None and self.reason is None:
+            raise ValueError("a language without a below_baseline verdict names its reason")
+        return self
 
 
 class DefaultsDecision(_Contract):
@@ -259,6 +348,27 @@ class DefaultsDecision(_Contract):
             return True
         return any(self.incumbent.get(name) != value for name, value in self.defaults.items())
 
+    @model_validator(mode="after")
+    def _consistent(self) -> "DefaultsDecision":
+        if set(self.defaults) - set(self.incumbent):
+            raise ValueError("every default names a variable of the incumbent map")
+        _no_repeats([verdict.switch for verdict in self.verdicts], "verdict switches")
+        if self.backend != self.backend_comparison.winner:
+            raise ValueError("backend must equal the backend comparison winner")
+        if self.provisional == "fixtures" and self.backend != "pgvector":
+            raise ValueError("a fixture record never moves the default backend")
+        if self.provisional is None:
+            missing = [name for name in ("cost", "latency", "per_language") if getattr(self, name) is None]
+            if missing:
+                raise ValueError(f"a non-provisional record needs {', '.join(missing)}")
+        if self.per_language is not None:
+            if not self.per_language:
+                raise ValueError("per_language lists every enabled language")
+            _no_repeats([entry.language for entry in self.per_language], "per_language languages")
+            below = [entry.language for entry in self.per_language if entry.below_baseline is True]
+            if below and self.adopts_change():
+                raise ValueError(f"enabled language below its baseline: {', '.join(below)}")
+        return self
 
 
 class VendorEntry(_Contract):
@@ -274,6 +384,16 @@ class VendorEntry(_Contract):
     training: Annotated[str, Field(min_length=1, max_length=1000)]
     providers: list[ProviderId] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def _consistent(self) -> "VendorEntry":
+        _no_repeats(self.hosts, "hosts")
+        _no_repeats(self.content, "content")
+        _no_repeats(self.providers, "providers")
+        if self.multi_tenant == "requires_ack" and self.ack_switch is None:
+            raise ValueError("multi_tenant requires_ack names its ack_switch")
+        if self.multi_tenant != "requires_ack" and self.ack_switch is not None:
+            raise ValueError("ack_switch belongs to multi_tenant requires_ack only")
+        return self
 
 
 class VendorDataFlow(_Contract):
@@ -282,3 +402,9 @@ class VendorDataFlow(_Contract):
     schema_version: Literal[1] = 1
     vendors: list[VendorEntry] = Field(min_length=1)
 
+    @model_validator(mode="after")
+    def _distinct(self) -> "VendorDataFlow":
+        _no_repeats([entry.vendor for entry in self.vendors], "vendors")
+        hosts = [host for entry in self.vendors for host in entry.hosts]
+        _no_repeats(hosts, "hosts across vendors")
+        return self
