@@ -7226,6 +7226,11 @@
                                             </div>
                                         </div>
 
+                                        <div class="flex flex-wrap items-center gap-x-2 mb-4">
+                                            <span class="label-text-alt text-base-content/70" data-scope-gate-pointer-text>The scope gate switch, its thresholds and out-of-scope examples are under RAG administration, Scope gate.</span>
+                                            <button type="button" class="btn btn-link btn-xs px-0" data-scope-gate-pointer>Open scope gate</button>
+                                        </div>
+
                                         <div class="border border-base-300 rounded-lg p-4 space-y-4">
                                             <h4 class="font-semibold text-sm text-balance">Semantic cache</h4>
                                             <div class="form-control">
@@ -10742,6 +10747,7 @@
                                     <section id="rag-administration-scope-gate" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-scope-gate-title">
                                         <div class="card-body">
                                             <h3 id="rag-scope-gate-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-rag-i18n="panel.title">Scope gate</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-scope-gate-description data-rag-i18n="panel.description">Skips retrieval for questions that are clearly outside what this knowledge base covers. What is in scope is learned only from the workspace’s own documents, document types and tags; no topic list is built in.</p>
                                             <div class="form-control mb-4">
                                                 <label class="label cursor-pointer justify-start gap-3">
                                                     <input type="checkbox" id="RAG_SCOPE_GATE" name="RAG_SCOPE_GATE" class="checkbox checkbox-primary" aria-describedby="rag-scope-gate-help">
@@ -10750,7 +10756,11 @@
                                                 <label class="label pl-8">
                                                     <span class="label-text-alt min-w-0" id="rag-scope-gate-help" data-rag-i18n="switch.help">Off sends every question to retrieval, as today. Voice never uses the scope gate.</span>
                                                 </label>
+                                                <div class="pl-8 text-sm" data-scope-gate-note></div>
                                             </div>
+                                            <div data-scope-gate-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-scope-gate-content></div>
+                                            <div data-scope-gate-status class="text-sm mt-4" role="status" aria-live="polite"></div>
                                         </div>
                                     </section>
 
