@@ -1,3 +1,6 @@
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import type { LanguageModel } from 'ai';
@@ -8,6 +11,17 @@ import { CALC_BLOCK_CLOSE, CALC_BLOCK_OPEN } from '@/lib/rag/calc/block-tag';
 import { emitNotice, renderNoticeAsText } from '@/lib/rag/generation/notices';
 import { installChatPipeline, retrievalWith } from '../helpers/chat-route-fakes';
 import { contextBlocks, promptParts } from '../../eval/harness/fake-citation-generator.mts';
+import { installFakeAnswerModels, isFakeGeneratorModel } from '../../eval/harness/fake-answer-models.mts';
+import {
+  FAKE_CALC_FOLLOW_BLOCK_MODEL,
+  FAKE_CALC_FOLLOW_MODEL,
+  FAKE_CALC_MISSING_OPERAND_MODEL,
+  FAKE_CALC_SKIP_RULE_MODEL,
+  loadCalcFakeScripts,
+} from '../../eval/harness/fake-calc-models.mts';
+import { loadRunConfig } from '../../eval/harness/run-config.mts';
+
+const REPO_ROOT = path.resolve(__dirname, '../..');
 
 const SECRET = 'c'.repeat(48);
 const ENV_NAMES = [
@@ -324,5 +338,144 @@ describe('eval route calculation: offer, block, check and observation (05.2.1-17
     expect(calls[0].system).not.toContain('[rule:calculation]');
     expect(trace).not.toHaveProperty('calc');
     expect(trace.calc_observed?.tool_used).toBe(false);
+  });
+  describe('calculation fakes and run configs (05.2.1-17 Task 3, D-78)', () => {
+    const SCRIPTS = loadCalcFakeScripts();
+    const THRESHOLD = SCRIPTS.groups.find((group) => group.paraphrase_group === 'en-calc-threshold')!;
+    const THRESHOLD_ROW = chunkRow('1', `Tally note: ${THRESHOLD.blocks.B1.quote}.`, 0.92);
+    const RUN_CONFIGS = {
+      'calc-tool-follow': { model: FAKE_CALC_FOLLOW_MODEL, check: 'true' },
+      'calc-block-follow': { model: FAKE_CALC_FOLLOW_BLOCK_MODEL, check: 'true' },
+      'calc-skip-rule-check-off': { model: FAKE_CALC_SKIP_RULE_MODEL, check: 'false' },
+      'calc-skip-rule-check-on': { model: FAKE_CALC_SKIP_RULE_MODEL, check: 'true' },
+      'calc-missing-operand': { model: FAKE_CALC_MISSING_OPERAND_MODEL, check: 'true' },
+    } as const;
+
+    beforeEach(() => {
+      seed([THRESHOLD_ROW, chunkRow('2', OTHER_TEXT, 0.88)]);
+    });
+
+    async function run(modelId: string, query: string = THRESHOLD.questions[0]) {
+      const factory = installFakeAnswerModels({ items: [] });
+      const calls: Captured[] = [];
+      const route = await loadRoute(
+        Object.assign(
+          (id: string) => {
+            const inner = factory(id) as unknown as { doGenerate: (options: LanguageModelV3CallOptions) => Promise<unknown> };
+            return new MockLanguageModelV3({
+              doGenerate: async (options) => {
+                calls.push({ system: promptParts(options).system, tools: (options.tools ?? []).map((tool) => tool.name) });
+                return (await inner.doGenerate(options)) as Awaited<ReturnType<NonNullable<MockLanguageModelV3['doGenerate']>>>;
+              },
+            }) as unknown as LanguageModel;
+          },
+          { canUseTools: factory.canUseTools },
+        ),
+      );
+      const response = await route.POST(
+        new NextRequest('http://localhost/api/internal/rag/run', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-rag-eval-secret': SECRET },
+          body: JSON.stringify({ schema_version: 1, query, rag_mode: 'balanced', include_answer: true, options: { generator_model: modelId } }),
+        }),
+      );
+      const trace = JSON.parse(await response.text()) as Trace;
+      expect(response.status).toBe(200);
+      expect(RagTraceSchema.safeParse(trace).success).toBe(true);
+      return { trace, calls };
+    }
+
+    it('the follow fake calls the tool only with the instruction, lists every step and states the tool value', async () => {
+      env.RAG_CALC_TOOL = 'true';
+      env.RAG_CALC_CHECK = 'true';
+      const { trace, calls } = await run(FAKE_CALC_FOLLOW_MODEL);
+      expect(calls[0].tools).toEqual(['calculate']);
+      expect(trace.calc_observed).toEqual({ stated: THRESHOLD.expected_value, steps_listed: true, tool_used: true, origin: 'tool' });
+      expect(trace.calc?.[0]).toMatchObject({ status: 'verified', stated: THRESHOLD.expected_value, recomputed: THRESHOLD.expected_value });
+      expect(trace.review_reasons).toEqual([]);
+    });
+
+    it('the follow fake without the calculation instruction answers in plain text and calls no tool', async () => {
+      const { trace, calls } = await run(FAKE_CALC_FOLLOW_MODEL);
+      expect(calls).toHaveLength(1);
+      expect(calls[0].system).not.toContain('[rule:calculation]');
+      expect(trace.calc_observed?.tool_used).toBe(false);
+      expect(trace.calc_observed?.stated).toBe(THRESHOLD.skip_rule.stated_value);
+    });
+
+    it('the block fake declares no tool support and writes the steps and the request in the trailing block', async () => {
+      env.RAG_CALC_TOOL = 'true';
+      env.RAG_CALC_CHECK = 'true';
+      const { trace, calls } = await run(FAKE_CALC_FOLLOW_BLOCK_MODEL);
+      expect(calls).toHaveLength(1);
+      expect(calls[0].tools).toEqual([]);
+      expect(calls[0].system).toContain(CALC_BLOCK_OPEN);
+      expect(trace.answer).not.toContain(CALC_BLOCK_OPEN);
+      expect(trace.calc_observed).toEqual({ stated: THRESHOLD.expected_value, steps_listed: true, tool_used: false, origin: 'trailing_block' });
+      expect(trace.calc?.[0]).toMatchObject({ status: 'verified', origin: 'trailing_block' });
+    });
+
+    it('the skip-rule fake sends the correct trace and states the rule-skipping total: corrected with the check on', async () => {
+      env.RAG_CALC_TOOL = 'true';
+      env.RAG_CALC_CHECK = 'true';
+      const { trace } = await run(FAKE_CALC_SKIP_RULE_MODEL);
+      expect(trace.calc?.[0]).toMatchObject({ status: 'corrected', stated: THRESHOLD.skip_rule.stated_value, recomputed: THRESHOLD.expected_value });
+      expect(trace.review_reasons).toEqual(['calc_mismatch']);
+      const notice = emitNotice('calc_corrected', { language: 'en', params: { value: `${THRESHOLD.expected_value} ${THRESHOLD.unit}` } });
+      expect(trace.answer?.endsWith(renderNoticeAsText(notice))).toBe(true);
+    });
+
+    it('the skip-rule fake with the check off: the wrong total stands, observed but not checked', async () => {
+      env.RAG_CALC_TOOL = 'true';
+      const { trace } = await run(FAKE_CALC_SKIP_RULE_MODEL);
+      expect(trace).not.toHaveProperty('calc');
+      expect(trace.calc_observed).toMatchObject({ stated: THRESHOLD.skip_rule.stated_value, tool_used: true, steps_listed: true });
+    });
+
+    it('the missing-operand fake cites an operand value its block does not hold: not verified', async () => {
+      env.RAG_CALC_TOOL = 'true';
+      env.RAG_CALC_CHECK = 'true';
+      const { trace } = await run(FAKE_CALC_MISSING_OPERAND_MODEL);
+      expect(trace.calc?.[0]).toMatchObject({ status: 'not_verified', reason: 'operand_not_located' });
+      expect(trace.review_reasons).toEqual(['calc_unverified']);
+    });
+
+    it('a question outside the scripts is answered by the fallback generator', async () => {
+      const { trace } = await run(FAKE_CALC_FOLLOW_MODEL, 'Where is the Varnel ledger kept?');
+      expect(typeof trace.answer).toBe('string');
+      expect(trace.calc_observed?.tool_used).toBe(false);
+    });
+
+    it('every scripted question belongs to a golden multi_step_calc item of the same group', () => {
+      const golden = fs
+        .readFileSync(path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl'), 'utf8')
+        .split('\n')
+        .filter((line) => line.trim())
+        .map((line) => JSON.parse(line) as { id: string; question: string; category: string });
+      for (const group of SCRIPTS.groups) {
+        group.items.forEach((id, index) => {
+          const item = golden.find((candidate) => candidate.id === id);
+          expect(item?.category).toBe('multi_step_calc');
+          expect(item?.question).toBe(group.questions[index]);
+        });
+      }
+    });
+
+    it('the five run configs validate and select their fake with the switches each gate needs', () => {
+      for (const [name, expected] of Object.entries(RUN_CONFIGS)) {
+        const config = loadRunConfig(path.join(REPO_ROOT, 'eval/config/runs', `${name}.json`));
+        expect(config.name).toBe(name);
+        expect(config.generatorModel).toBe(expected.model);
+        expect(isFakeGeneratorModel(expected.model)).toBe(true);
+        expect(config.env.RAG_CALC_TOOL).toBe('true');
+        expect(config.env.RAG_CALC_CHECK).toBe(expected.check);
+      }
+    });
+
+    it('the fakes are reachable only through the eval harness', () => {
+      const grep = spawnSync('git', ['grep', '-l', '-e', 'fake-calc', '-e', 'fake/calc-', '--', 'src'], { cwd: REPO_ROOT, encoding: 'utf8' });
+      expect(grep.status).toBe(1);
+      expect(grep.stdout.trim()).toBe('');
+    });
   });
 });
