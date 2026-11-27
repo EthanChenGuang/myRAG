@@ -46,6 +46,13 @@ import {
   type RetrievalFilterInput,
   type RetrievalResult,
   type TraceCollector,
+  createCitationLabeler,
+  createCalcCheckSink,
+  createCalcTraceHolder,
+  mayOfferCalc,
+  scheduleCalcReviewEnqueue,
+  shouldOfferCalcTool,
+  type CalcCheckSink,
 } from '@/lib/rag';
 
 // Use Node.js runtime instead of Edge
@@ -381,6 +388,11 @@ export async function POST(request: NextRequest) {
     const lastUserMessage = userMessages[userMessages.length - 1];
     const queryText = lastUserMessage?.content || '';
 
+    // Phase 5.2.1 D-65, D-66, D-72: embed offers no tools; a turn that may get the calculation labels its blocks for the trailing block
+    const calcMayBeOffered =
+      answerTurn.config.calcTool && queryText.trim().length > 0 && mayOfferCalc(queryText, answerTurn.answerLanguage);
+    const calcLabeler = calcMayBeOffered ? createCitationLabeler() : undefined;
+
     let context = '';
     let smallTalkTurn = false;
     let answerLanguage: AnswerLanguageOptions | undefined;
@@ -422,6 +434,7 @@ export async function POST(request: NextRequest) {
         signal: request.signal,
         trace: collector,
         ...(retrievalFilters ? { retrievalFilters } : {}),
+        ...(calcLabeler ? { citationLabeler: calcLabeler } : {}),
         ...queryLayerInputs,
         ...(cacheContext ? { cacheContext } : {}),
       });
@@ -488,6 +501,24 @@ export async function POST(request: NextRequest) {
 
     const systemPrompt = embedTemplate();
 
+    // D-70, D-72: offered on a knowledge turn whose question or blocks carry the signal; always the trailing block on embed
+    let calcOffered = false;
+    if (calcMayBeOffered && !smallTalkTurn && context.length > 0 && retrievalResult) {
+      const decision = shouldOfferCalcTool({
+        question: queryText,
+        blockTexts: (retrievalResult.blocks ?? []).filter((block) => !block.isImage).map((block) => block.text),
+        language: answerTurn.answerLanguage,
+      });
+      if (decision.offer) {
+        calcOffered = true;
+        console.log('[Calc]', { offered: true, mode: 'trailing_block', channel: 'embed', reason: decision.reason });
+      }
+    }
+    const calcHolder = calcOffered ? createCalcTraceHolder() : null;
+    // D-73: RAG_CALC_CHECK checks the answer at the end of a stream that offered the calculation
+    const calcCheckSink: CalcCheckSink | null = calcOffered && answerTurn.config.calcCheck ? createCalcCheckSink() : null;
+    const calcEvidenceBlocks = calcCheckSink ? (retrievalResult?.blocks ?? []).filter((block) => !block.isImage && block.alias) : [];
+
     // Phase 5.2 D-30: decided once before the composer; embed sends no own limit, no reasoning and no tool approval
     if (answerTurn.config.maxOutputTokens.kind !== 'off') {
       answerTurn.decideOutputCap({
@@ -517,6 +548,7 @@ export async function POST(request: NextRequest) {
             answerTurn.composeSystemPrompt(createEnhancedRAGPrompt(systemPrompt, context, 'strict', answerLanguage), {
               mode: 'balanced',
               webSearchOffered: false,
+              ...(calcOffered ? { calculation: { mode: 'trailing_block' as const } } : {}),
             }),
             historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE),
           )
@@ -568,7 +600,22 @@ export async function POST(request: NextRequest) {
         trace: () => timingCollector,
       };
       // Empty with every Phase 5.2 switch off, so no transform is passed (as today)
-      const answerTransforms = answerTurn.transforms([], { guard: guardSources });
+      const answerTransforms = answerTurn.transforms([], {
+        guard: guardSources,
+        // D-72: embed renders no citations, so the block markers the calculation needs are removed from the visible text
+        ...(calcHolder ? { calcBlock: { onTrace: calcHolder.recordBlock, stripMarkers: true } } : {}),
+        ...(calcHolder && calcCheckSink
+          ? {
+              calcCheck: {
+                holder: calcHolder,
+                blocks: calcEvidenceBlocks.map((block) => ({ alias: block.alias ?? '', text: block.text })),
+                question: queryText,
+                offered: true,
+                sink: calcCheckSink,
+              },
+            }
+          : {}),
+      });
       await awaitPreGenerationDelay();
       timingCollector?.markGenerationStart();
       const result = await streamText({
@@ -581,6 +628,33 @@ export async function POST(request: NextRequest) {
         // Don't include tools for embed API to keep it simple
         onFinish: (event) => {
           pendingTrace?.collector.setReviewContent({ answer: event.text ?? '' });
+          const calcRun = calcCheckSink?.result() ?? null;
+          if (calcRun && pendingTrace) {
+            // D-75, D-61: the calculation check as its own span, status counts and duration only
+            const traceCollector = pendingTrace.collector;
+            const endedAt = traceCollector.now();
+            const counts: Record<string, number> = { calc_checks: calcRun.checks.length };
+            for (const check of calcRun.checks) counts[`calc_${check.status}`] = (counts[`calc_${check.status}`] ?? 0) + 1;
+            traceCollector.record({
+              name: 'calc_check',
+              status: calcRun.checks.some((check) => check.reason === 'check_error') ? 'error' : 'ok',
+              startedAt: endedAt - calcRun.durationMs,
+              endedAt,
+              counts,
+              attributes: { duration_ms: calcRun.durationMs },
+            });
+          }
+          if (calcRun && calcRun.reviewReasons.length > 0) {
+            // D-55: embed has no answer record, so its calculation reasons go to the review queue directly
+            scheduleCalcReviewEnqueue({
+              tenantKey: scopeKey(embedScope.scope),
+              reasons: calcRun.reviewReasons,
+              sourceChunkIds: [...new Set(calcEvidenceBlocks.flatMap((block) => block.chunkIds))],
+              documentIds: [...new Set(calcEvidenceBlocks.map((block) => block.documentId))],
+              traceId: pendingTrace?.collector.traceId ?? null,
+              ghost: false,
+            });
+          }
           const logOutcome = logContext ? pendingTrace?.result.logOutcome : undefined;
           if (logOutcome) logOutcome.answerLanguage = detectLanguage(event.text ?? '');
           finishPendingTrace();
