@@ -3,8 +3,8 @@ gsd_state_version: "1.0"
 milestone: v5.0
 status: executing
 stopped_at: Merge trains 1-11 merged; main synced via PR; 05-22 and 05.1-06 executing; 03.1-53/54 deferred to pre-production; 04-43 partly live
-last_updated: "2026-11-26T23:24:29.092Z"
-state_head: b9418d118c6fac25b68cee52fc9392cb9c7af91a
+last_updated: "2026-11-27T01:05:01.170Z"
+state_head: e3a057ef711f9bc84019feb8a61ef199167641ff
 progress:
   total_phases: 14
   completed_phases: 1
@@ -194,6 +194,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 261126-w4x | Add RAG_HISTORY_NOT_EVIDENCE switch for RAG turns | 2026-11-26 | b9418d11 | [261126-w4x-add-rag-history-not-evidence-switch-for-](./quick/261126-w4x-add-rag-history-not-evidence-switch-for-/) |
+| 261127-074 | Section outlines: data-driven pre-pass for numbered section markers and multi-product variant split (RAG_SECTION_OUTLINES) | 2026-11-27 | e3a057ef | [261127-074-section-outlines-data-driven-pre-pass-th](./quick/261127-074-section-outlines-data-driven-pre-pass-th/) |
 
 ### Roadmap Evolution
 
