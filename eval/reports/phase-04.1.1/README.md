@@ -37,7 +37,7 @@ The fixture corpus is smaller than the candidate pool, so every gold chunk is al
 
 ## Decision
 
-`RAG_TERMINOLOGY`, `RAG_TERMINOLOGY_DENSE` and `RAG_TERMINOLOGY_MINING` stay off (D-30). Synthetic items only, report-only per EVAL-14; propose on after Phase 5.1.1 real colloquial items pass.
+The terminology dictionary stays off: `RAG_TERMINOLOGY`, `RAG_TERMINOLOGY_DENSE` and `RAG_TERMINOLOGY_MINING` remain `false` (D-30). Synthetic items only, report-only per EVAL-14; propose on after Phase 5.1.1 real colloquial items pass.
 
 ## Reproduce
 
