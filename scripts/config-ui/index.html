@@ -73,7 +73,9 @@
     <script src="rag-panels/rag-fetch.js"></script>
     <script src="rag-panels/gates-ui.js"></script>
     <script src="rag-panels/judge-calibration.js"></script>
+    <script src="rag-panels/setting-check.js"></script>
     <script src="rag-panels/question-sources.js"></script>
+    <script src="rag-panels/monitor.js"></script>
     <script src="rag-panels/rag-ui.js"></script>
     <script src="rag-panels/languages.js"></script>
     <script src="rag-panels/ingest-impact.js"></script>
@@ -9822,7 +9824,7 @@
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
                                 <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG Administration</h2>
-                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, tags, versions and translation, the embedding and chunking profiles, and identifier patterns, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
+                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, tags, versions and translation, the embedding and chunking profiles, identifier patterns, check settings before they apply, and follow monitoring alerts, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
 
                                 <div class="grid gap-6">
                                     <section id="rag-administration-languages" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-languages-title">
@@ -10640,6 +10642,27 @@
                                         </div>
                                     </section>
 
+                                    <section id="rag-administration-setting-checks" class="card bg-base-200 shadow-md min-w-0 scroll-mt-24" aria-labelledby="rag-setting-checks-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-setting-checks-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-setting-checks-title>Setting checks</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-setting-checks-description>Settings that change how answers are produced are tried on test questions before they apply. A finished bulk import or re-embedding run requests an evaluation run for that workspace. Applies to every workspace in this deployment.</p>
+                                            <div data-setting-checks-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-setting-checks-content></div>
+                                            <div data-setting-checks-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-monitor" class="card bg-base-200 shadow-md min-w-0 scroll-mt-24" aria-labelledby="rag-monitor-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-monitor-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-monitor-title>Monitoring</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-monitor-description>Once a day, refusals, empty searches, votes, judge scores, knowledge-base failures and latency are compared with the 30 days before. A value outside its usual range raises an alert. Alerts hold counts and ids, never question or answer text.</p>
+                                            <div data-monitor-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-monitor-summary class="mb-4 empty:mb-0"></div>
+                                            <div data-monitor-content></div>
+                                            <div data-monitor-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                        </div>
+                                    </section>
+
                                     <section id="rag-administration-review" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-review-title">
                                         <div class="card-body">
                                             <h3 id="rag-review-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-review-title>Review queue</h3>
@@ -11419,6 +11442,73 @@
         window.showSuccess = showSuccess;
         window.showError = showError;
 
+        // Phase 5.3 setting check (UI-SPEC 6.3.1): a RAG-affecting save goes through window.ragSettingCheck when the script is loaded.
+        function ragSettingCheckText(key, fallback) {
+            if (typeof window.settingCheckLabel === 'function') {
+                const text = window.settingCheckLabel(key, typeof navigator !== 'undefined' ? navigator.language : 'en');
+                if (text && text !== key) return text;
+            }
+            return fallback;
+        }
+
+        function ragGateRequiredAnswer(result) {
+            return Boolean(result) && result.status === 409 && Boolean(result.body) && result.body.error === 'rag_gate_required';
+        }
+
+        // post(gate) posts once and resolves { ok, status, statusText, body }; gate is undefined when no decision was needed.
+        // Resolves that result, or { held: true } when nothing was posted or the admin left the dialog after a refused save.
+        async function ragGuardedSave(request, post) {
+            const guard = window.ragSettingCheck;
+            if (!guard || typeof guard.beforeSave !== 'function') return post(undefined);
+            let decision;
+            try {
+                decision = await guard.beforeSave(request);
+            } catch (error) {
+                console.error('[Config Gate] Setting check failed; saving without it');
+                return post(undefined);
+            }
+            if (!decision || !decision.proceed) return { held: true, ignored: Boolean(decision && decision.ignored) };
+            let gate = decision.gate;
+            let askedRequired = false;
+            for (;;) {
+                const result = await post(gate);
+                const open = typeof guard.isOpen === 'function' && guard.isOpen();
+                if (result.ok) {
+                    if (open) guard.saved(result.body);
+                    return result;
+                }
+                if (!open) {
+                    if (!ragGateRequiredAnswer(result) || askedRequired || typeof guard.required !== 'function') return result;
+                    askedRequired = true;
+                    decision = await guard.required(request);
+                } else {
+                    decision = await guard.saveFailed(result.status, result.body);
+                }
+                if (!decision || !decision.proceed) return { held: true, ignored: Boolean(decision && decision.ignored) };
+                gate = decision.gate;
+            }
+        }
+
+        // UI-SPEC 6.3.1: a held save is not a failed one; the two header indicators say so for 3 seconds.
+        function showRagSaveHeld() {
+            const text = ragSettingCheckText('indicator.held', 'Not saved');
+            for (const id of ['desktop-save-indicator', 'mobile-save-indicator']) {
+                const indicator = document.getElementById(id);
+                if (!indicator) continue;
+                indicator.textContent = text;
+                indicator.classList.remove('hidden', 'alert-info', 'alert-success', 'alert-error');
+                indicator.classList.add('alert-warning');
+                setTimeout(() => {
+                    indicator.classList.add('hidden');
+                    indicator.classList.remove('alert-warning');
+                }, 3000);
+            }
+        }
+
+        function showRagGateRequiredToast() {
+            showToast(ragSettingCheckText('error.required', 'Not saved. These settings need a passed check or a reason. Reload the page, then save again to start the check.'), 'error');
+        }
+
         // Configuration Manager
         class ConfigManager {
             constructor() {
@@ -11744,43 +11834,60 @@
 
                 console.log('SaveConfig called - showing save indicator');
 
-                // Show saving indicator immediately - handle both desktop and mobile
                 const desktopIndicator = document.getElementById('desktop-save-indicator');
                 const mobileIndicator = document.getElementById('mobile-save-indicator');
+                const savedValues = this.savedConfig || {};
+                const changed = [...new Set([...Object.keys(this.config), ...Object.keys(savedValues)])].filter((key) => String(this.config[key] ?? '') !== String(savedValues[key] ?? ''));
 
-                if (desktopIndicator) {
-                    desktopIndicator.classList.remove('hidden');
-                    desktopIndicator.textContent = 'Saving...';
-                    desktopIndicator.classList.add('alert-info');
-                    desktopIndicator.classList.remove('alert-success', 'alert-error');
-                }
+                const post = async (gate) => {
+                    // Show saving indicator - handle both desktop and mobile
+                    if (desktopIndicator) {
+                        desktopIndicator.classList.remove('hidden');
+                        desktopIndicator.textContent = 'Saving...';
+                        desktopIndicator.classList.add('alert-info');
+                        desktopIndicator.classList.remove('alert-success', 'alert-error', 'alert-warning');
+                    }
 
-                if (mobileIndicator) {
-                    mobileIndicator.classList.remove('hidden');
-                    mobileIndicator.textContent = 'Saving...';
-                    mobileIndicator.classList.add('alert-info');
-                    mobileIndicator.classList.remove('alert-success', 'alert-error');
-                }
+                    if (mobileIndicator) {
+                        mobileIndicator.classList.remove('hidden');
+                        mobileIndicator.textContent = 'Saving...';
+                        mobileIndicator.classList.add('alert-info');
+                        mobileIndicator.classList.remove('alert-success', 'alert-error', 'alert-warning');
+                    }
 
-                try {
-                    // First save the main config
                     const response = await fetch('/api/config', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({ config: this.config }),
+                        body: gate ? JSON.stringify({ config: this.config, ragGate: gate }) : JSON.stringify({ config: this.config }),
                     });
+                    let body = null;
+                    try {
+                        body = await response.json();
+                    } catch {
+                        body = null;
+                    }
+                    return { ok: response.ok, status: response.status, body };
+                };
+
+                try {
+                    // First save the main config
+                    const response = await ragGuardedSave({ kind: 'config', config: this.config, changed }, post);
+                    if (response.held) {
+                        if (!response.ignored) showRagSaveHeld();
+                        return;
+                    }
 
                     if (!response.ok) {
                         console.error('Failed to save config');
-                        let rejectedBody = null;
-                        try {
-                            rejectedBody = await response.json();
-                        } catch {
-                            rejectedBody = null;
-                        }
+                        const rejectedBody = response.body;
                         document.dispatchEvent(new CustomEvent('rag:config-save-rejected', { detail: { status: response.status, body: rejectedBody } }));
+                        if (ragGateRequiredAnswer(response)) {
+                            showRagSaveHeld();
+                            showRagGateRequiredToast();
+                            return;
+                        }
                         if (desktopIndicator) {
                             desktopIndicator.textContent = 'Failed to save configuration';
                             desktopIndicator.classList.remove('alert-info', 'alert-success');
@@ -11806,6 +11913,13 @@
                         ragPreContextArea && ragPostContextArea) {
                         // Save RAG prompt
                         const ragSaved = await saveRagPrompt(false); // false = don't show toast
+                        if (ragSaved === 'held') {
+                            this.hasChanges = false;
+                            this.savedConfig = { ...this.config };
+                            if (typeof window.gatesUiMountBanner === 'function') window.gatesUiMountBanner(this.savedConfig);
+                            showRagSaveHeld();
+                            return;
+                        }
                         if (!ragSaved) {
                             showToast('Configuration saved but RAG prompt failed to save', 'warning');
                             return;
@@ -16560,23 +16674,41 @@ When messaging:
             }
 
             try {
-                const response = await fetch('/api/config/rag-prompt', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        preContext: preContext,
-                        postContext: postContext
-                    })
-                });
+                const post = async (gate) => {
+                    const response = await fetch('/api/config/rag-prompt', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            preContext: preContext,
+                            postContext: postContext,
+                            ...(gate ? { ragGate: gate } : {})
+                        })
+                    });
+                    let body = null;
+                    try {
+                        body = await response.json();
+                    } catch (parseError) {
+                        if (response.ok) throw parseError;
+                        body = null;
+                    }
+                    return { ok: response.ok, status: response.status, statusText: response.statusText, body };
+                };
+
+                const response = await ragGuardedSave({ kind: 'prompt', preContext, postContext }, post);
+                if (response.held) return 'held';
+                if (ragGateRequiredAnswer(response)) {
+                    showRagGateRequiredToast();
+                    return false;
+                }
 
                 // Check if the response is OK before parsing JSON
                 if (!response.ok) {
                     throw new Error(`Server returned ${response.status}: ${response.statusText}`);
                 }
 
-                const data = await response.json();
+                const data = response.body;
 
                 if (data.success) {
                     if (showSuccessToast) {
@@ -17541,13 +17673,21 @@ When messaging:
                                 console.log(`[applyTemplate] Save attempt ${attempt}/${maxRetries}`);
                                 applyTemplateBtn.innerHTML = `<span class="loading loading-spinner loading-sm"></span> Saving (${attempt}/${maxRetries})...`;
 
-                                // Add timeout to prevent hanging
+                                // Add timeout to prevent hanging; a setting check dialog that is open waits for the admin instead
                                 const savePromise = saveRagPrompt(false);
                                 const timeoutPromise = new Promise((_, reject) => {
-                                    setTimeout(() => reject(new Error('Save operation timed out')), 10000);
+                                    setTimeout(() => {
+                                        if (window.ragSettingCheck && typeof window.ragSettingCheck.isOpen === 'function' && window.ragSettingCheck.isOpen()) return;
+                                        reject(new Error('Save operation timed out'));
+                                    }, 10000);
                                 });
 
                                 saveSuccess = await Promise.race([savePromise, timeoutPromise]);
+
+                                if (saveSuccess === 'held') {
+                                    console.log('[applyTemplate] Save held by the setting check');
+                                    break;
+                                }
 
                                 if (saveSuccess) {
                                     console.log(`[applyTemplate] Save successful on attempt ${attempt}`);
@@ -17568,7 +17708,9 @@ When messaging:
                         }
 
                         // Verify save by reading back the data
-                        if (saveSuccess) {
+                        if (saveSuccess === 'held') {
+                            console.log('[applyTemplate] Template applied; the save was not made');
+                        } else if (saveSuccess) {
                             try {
                                 console.log('[applyTemplate] Verifying save by reading back data...');
                                 const verifyResponse = await fetch('/api/config/rag-prompt', {
@@ -19556,28 +19698,55 @@ When messaging:
                 // Show saving state
                 const saveButton = event.target;
                 const originalText = saveButton?.textContent || 'Save Model Configuration';
-                if (saveButton) {
-                    saveButton.disabled = true;
-                    saveButton.textContent = '⏳ Saving to .env.local...';
+
+                const post = async (gate) => {
+                    if (saveButton) {
+                        saveButton.disabled = true;
+                        saveButton.textContent = '⏳ Saving to .env.local...';
+                    }
+                    const response = await fetch('../api/config/models', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: gate ? JSON.stringify({ ...modelConfig, ragGate: gate }) : JSON.stringify(modelConfig)
+                    });
+                    console.log(`📡 Save response status: ${response.status}`);
+                    const text = await response.text();
+                    let body = null;
+                    try {
+                        body = JSON.parse(text);
+                    } catch (parseError) {
+                        if (response.ok) throw parseError;
+                        body = null;
+                    }
+                    return { ok: response.ok, status: response.status, body, text };
+                };
+
+                const response = await ragGuardedSave({ kind: 'models', models: modelConfig }, post);
+                if (response.held) {
+                    if (saveButton) {
+                        saveButton.disabled = false;
+                        saveButton.textContent = originalText;
+                    }
+                    return;
                 }
 
-                const response = await fetch('../api/config/models', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(modelConfig)
-                });
-
-                console.log(`📡 Save response status: ${response.status}`);
-
                 if (!response.ok) {
-                    const errorData = await response.text();
+                    if (ragGateRequiredAnswer(response)) {
+                        if (saveButton) {
+                            saveButton.disabled = false;
+                            saveButton.textContent = originalText;
+                        }
+                        showRagGateRequiredToast();
+                        return;
+                    }
+                    const errorData = response.text;
                     console.error('❌ Save failed:', errorData);
                     throw new Error(`Failed to save: ${response.status} - ${errorData}`);
                 }
 
-                const result = await response.json();
+                const result = response.body;
                 console.log('✅ Save successful:', result);
 
                 if (result.success) {

@@ -817,8 +817,8 @@ describe('Security events panel: untrusted values stay text (D-57, UI-SPEC 11)',
   });
 
   it('alert paragraphs keep the alert colour against the page rule [data-theme="dark"] .card-body p', async () => {
-    // main's Config UI CSS fix (PR #124) narrowed the page rule to `.card-body p:not(.alert p)`; the panel keeps !text-current either way.
-    expect(indexHtml).toMatch(/\[data-theme="dark"\] \.card-body p(:not\(\.alert p\))? \{/);
+    expect(indexHtml).toMatch(/\[data-theme="dark"\] \.card-body p:not\(\.alert p\) \{/);
+    expect(indexHtml).not.toMatch(/\[data-theme="dark"\] \.card-body p \{/);
     const page = loadPage({
       replies: {
         alerts: { status: 200, body: alertsAnswer([], { events_recorded: false }) },
