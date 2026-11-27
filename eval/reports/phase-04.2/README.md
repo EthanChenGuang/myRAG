@@ -6,7 +6,7 @@ Verdict: **FAIL** over off_identity, diversity, identifier, table, versions, dic
 | --- | --- | --- | --- |
 | off_identity | D-37 | PASS | 0 |
 | diversity | D-22 | PASS | 0 |
-| identifier | D-32 | FAIL | 11 |
+| identifier | D-32 | PASS | 0 |
 | table | ROADMAP-4.2-SC3 | PASS | 0 |
 | versions | ROADMAP-4.2-SC5 | FAIL | 6 |
 | dictionary | D-09 | PASS | 0 |
@@ -40,31 +40,18 @@ Runs: v2-identifier-on, v2-default.
 
 | Number | Value |
 | --- | --- |
-| descriptive.mrr | 0.6191 |
-| descriptive.mrr.reference | 0.6191 |
-| descriptive.recall_at_10 | 0.6976 |
-| descriptive.recall_at_10.reference | 0.6976 |
-| descriptive.recall_at_5 | 0.6815 |
-| descriptive.recall_at_5.reference | 0.6815 |
-| descriptive_items | 141 |
-| identifier_precision | 0.7500 |
-| identifier_precision_n | 4 |
+| descriptive.mrr | 0.6096 |
+| descriptive.mrr.reference | 0.6096 |
+| descriptive.recall_at_10 | 0.6901 |
+| descriptive.recall_at_10.reference | 0.6901 |
+| descriptive.recall_at_5 | 0.6736 |
+| descriptive.recall_at_5.reference | 0.6736 |
+| descriptive_items | 138 |
+| identifier_precision | 1.0000 |
+| identifier_precision_n | 12 |
 | items | 12 |
 | near_miss_leakage | 0.0000 |
-| near_miss_leakage_n | 4 |
-
-Offenders:
-- category:identifier_near_miss identifier_precision measured on 4 of 12 item(s)
-- category:identifier_near_miss near_miss_leakage measured on 4 of 12 item(s)
-- category:cross_lingual:recall_at_5 dropped beyond the noise band (0.3810 < 0.4086, v2-default 0.4286)
-- category:cross_lingual:recall_at_10 dropped beyond the noise band (0.3810 < 0.4086, v2-default 0.4286)
-- category:cross_lingual:mrr dropped beyond the noise band (0.3810 < 0.4086, v2-default 0.4286)
-- category:table:recall_at_5 dropped beyond the noise band (0.3636 < 0.4345, v2-default 0.4545)
-- category:table:recall_at_10 dropped beyond the noise band (0.3636 < 0.4345, v2-default 0.4545)
-- category:table:mrr dropped beyond the noise band (0.3182 < 0.3891, v2-default 0.4091)
-- language:it:recall_at_5 dropped beyond the noise band (0.6864 < 0.7003, v2-default 0.7203)
-- language:it:recall_at_10 dropped beyond the noise band (0.7034 < 0.7173, v2-default 0.7373)
-- language:it:mrr dropped beyond the noise band (0.6136 < 0.6190, v2-default 0.6390)
+| near_miss_leakage_n | 12 |
 
 ## table (ROADMAP-4.2-SC3)
 
@@ -135,7 +122,7 @@ Runs: v2-lexical-dict-on, v2-default.
 | v2-default-phase42-off | prechunked | 0.6792 | 0.6085 | `8dccac43f6fc` |
 | v2-diversity-collapse | prechunked | 0.6792 | 0.6085 | `b581b683b475` |
 | v2-diversity-mmr | prechunked | 0.6792 | 0.6064 | `46bb67866dcc` |
-| v2-identifier-on | prechunked | 0.6676 | 0.5969 | `51c381e27231` |
+| v2-identifier-on | prechunked | 0.7717 | 0.6933 | `51c381e27231` |
 | v2-table-lookup-on | prechunked | 0.6792 | 0.6085 | `4c542c55241a` |
 | v2-version-scope-on | prechunked | 0.6792 | 0.6085 | `fab385fa4103` |
 | v2-lexical-dict-on | prechunked | 0.6792 | 0.6117 | `5bafb006d90e` |

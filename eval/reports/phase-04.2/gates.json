@@ -67,33 +67,21 @@
       "decision": "D-32",
       "name": "identifier",
       "numbers": {
-        "descriptive.mrr": 0.6190860215053763,
-        "descriptive.mrr.reference": 0.6190860215053763,
-        "descriptive.recall_at_10": 0.6975806451612904,
-        "descriptive.recall_at_10.reference": 0.6975806451612904,
-        "descriptive.recall_at_5": 0.6814516129032258,
-        "descriptive.recall_at_5.reference": 0.6814516129032258,
-        "descriptive_items": 141,
-        "identifier_precision": 0.75,
-        "identifier_precision_n": 4,
+        "descriptive.mrr": 0.6096418732782369,
+        "descriptive.mrr.reference": 0.6096418732782369,
+        "descriptive.recall_at_10": 0.6900826446280992,
+        "descriptive.recall_at_10.reference": 0.6900826446280992,
+        "descriptive.recall_at_5": 0.6735537190082644,
+        "descriptive.recall_at_5.reference": 0.6735537190082644,
+        "descriptive_items": 138,
+        "identifier_precision": 1.0,
+        "identifier_precision_n": 12,
         "items": 12,
         "near_miss_leakage": 0.0,
-        "near_miss_leakage_n": 4
+        "near_miss_leakage_n": 12
       },
-      "offenders": [
-        "category:identifier_near_miss identifier_precision measured on 4 of 12 item(s)",
-        "category:identifier_near_miss near_miss_leakage measured on 4 of 12 item(s)",
-        "category:cross_lingual:recall_at_5 dropped beyond the noise band (0.3810 < 0.4086, v2-default 0.4286)",
-        "category:cross_lingual:recall_at_10 dropped beyond the noise band (0.3810 < 0.4086, v2-default 0.4286)",
-        "category:cross_lingual:mrr dropped beyond the noise band (0.3810 < 0.4086, v2-default 0.4286)",
-        "category:table:recall_at_5 dropped beyond the noise band (0.3636 < 0.4345, v2-default 0.4545)",
-        "category:table:recall_at_10 dropped beyond the noise band (0.3636 < 0.4345, v2-default 0.4545)",
-        "category:table:mrr dropped beyond the noise band (0.3182 < 0.3891, v2-default 0.4091)",
-        "language:it:recall_at_5 dropped beyond the noise band (0.6864 < 0.7003, v2-default 0.7203)",
-        "language:it:recall_at_10 dropped beyond the noise band (0.7034 < 0.7173, v2-default 0.7373)",
-        "language:it:mrr dropped beyond the noise band (0.6136 < 0.6190, v2-default 0.6390)"
-      ],
-      "passed": false,
+      "offenders": [],
+      "passed": true,
       "runs": [
         "v2-identifier-on",
         "v2-default"
@@ -608,12 +596,12 @@
         },
         "false_refusal_rate": {
           "n": 173,
-          "value": 0.2947976878612717
+          "value": 0.18497109826589594
         },
-        "false_refusal_upper_95": 0.35707864256901434,
+        "false_refusal_upper_95": 0.24036857098271244,
         "identifier_precision": {
-          "n": 4,
-          "value": 0.75
+          "n": 12,
+          "value": 1.0
         },
         "intent_coverage": {
           "n": 9,
@@ -621,31 +609,31 @@
         },
         "k_zero": {
           "n": 173,
-          "value": 50.0
+          "value": 31.0
         },
         "mrr": {
           "n": 173,
-          "value": 0.5969171483622351
+          "value": 0.6932562620423892
         },
         "ndcg_at_context_k": {
           "n": 173,
-          "value": 0.6057394319981735
+          "value": 0.7035412862707063
         },
         "near_miss_leakage": {
-          "n": 4,
+          "n": 12,
           "value": 0.0
         },
         "recall_at_10": {
           "n": 173,
-          "value": 0.6676300578034682
+          "value": 0.7716763005780347
         },
         "recall_at_5": {
           "n": 173,
-          "value": 0.6560693641618497
+          "value": 0.7601156069364162
         },
         "topk_redundancy": {
-          "n": 141,
-          "value": 0.25821513002364066
+          "n": 164,
+          "value": 0.3133130081300813
         }
       },
       "run_config_hash": "51c381e27231e18b89ab031c61ec5784f415ba5b596f6dc5bfef4b09c5ba2395"
