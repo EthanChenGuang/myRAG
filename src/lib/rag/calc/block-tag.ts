@@ -4,3 +4,8 @@
  */
 export const CALC_BLOCK_OPEN = '<calc_trace>';
 export const CALC_BLOCK_CLOSE = '</calc_trace>';
+
+/** RED stub. */
+export function neutralizeCalcTags(text: string): { text: string; count: number } {
+  return { text, count: 0 };
+}
