@@ -865,13 +865,13 @@ Plans:
 - [ ] 07-25-PLAN.md — Connect the regression runner of plan 07-24 to the eval harness for external backends, then run the full… (wave 9)
 - [ ] ~~07-26-PLAN.md~~ — **RETIRED 2026-11-24, superseded by 05.1.1-20/21 (Phase 5.1.1).** Was: Add the periodic failure report that lists new production failures by layer and category, and run it… (wave 8)
 - [ ] 07-27-PLAN.md — Write the documentation ADM-03 asks for: a RAG pipeline guide with generated switch tables, the `.env`… (wave 10)
-- [ ] 07-28-PLAN.md — Add the semantic-cache case to the cross-tenant canary suite on all three backends, for the chat, embed and voice… (wave 7) — done, pending merge (exec/07-28)
+- [x] 07-28-PLAN.md — Add the semantic-cache case to the cross-tenant canary suite on all three backends, for the chat, embed and voice… (wave 7) — done, pending merge (exec/07-28)
 - [ ] ~~07-29-PLAN.md~~ — **RETIRED 2026-11-24, superseded by 05.1.1-17/18 (Phase 5.1.1).** Was: Let admins work the review queue in the Config UI: open a queued case, see its question, answer,… (wave 9)
 - [ ] 07-30-PLAN.md — Make CI prove that the shipped defaults equal the latest defaults decision: today's defaults while the… (wave 10)
 - [ ] 07-31-PLAN.md — Close the automated part of Phase 7: fold the Phase 7 migrations into both setup files, prove every… (wave 11)
 - [ ] 07-32-PLAN.md — Collect the three human decisions and actions Phase 7 needs before the live checks: the Vercel plan… (wave 12, autonomous: false)
 - [ ] 07-33-PLAN.md — Run the Phase 7 live verification items as explicit checkpoints, then apply the shipped defaults from… (wave 13, autonomous: false)
-- [ ] 07-34-PLAN.md — Extend the cross-tenant canary suite to the voice and embed entry points on pgvector, Weaviate and Qdrant,… (wave 6) — done, pending merge (exec/07-28)
+- [x] 07-34-PLAN.md — Extend the cross-tenant canary suite to the voice and embed entry points on pgvector, Weaviate and Qdrant,… (wave 6) — done, pending merge (exec/07-28)
 **UI hint**: yes
 
 ## Progress
