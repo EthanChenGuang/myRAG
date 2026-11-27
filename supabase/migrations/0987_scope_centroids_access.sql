@@ -1,0 +1,2 @@
+-- Phase 6.2 R-4: scope centroids and negative examples are built only from
+-- documents open to every member of the tenant (no access groups).
