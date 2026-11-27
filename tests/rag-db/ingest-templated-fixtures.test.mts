@@ -13,7 +13,7 @@ const HARNESS = path.join(ROOT, 'eval/harness/templated-fixtures.mts');
 const PLAIN_CORPUS_SHA256 = '28d34c3215950aa8b0a0397827b2a91b7001df488e524c33ca94bd4163423351';
 const RESTRICTED = ['tpl-family-zh-01', 'tpl-family-en-01', 'tpl-family-it-01', 'tpl-variants-zh', 'tpl-variants-en', 'tpl-variants-it'];
 /** A small build: one corpus document, no typed or parse fixture document (the corpus hash still covers the whole corpus). */
-const SMALL = { corpusDir: CORPUS_DIR, corpusRange: { start: 0, end: 1 }, typedFixtureIds: [], parseFixtureIds: [] } as const;
+const SMALL = { corpusDir: CORPUS_DIR, corpusRange: { start: 0, end: 1 }, typedFixtureIds: [] as string[], parseFixtureIds: [] as string[] };
 
 type Build = FixtureDatabase & { corpusSha256: string };
 type Options = Parameters<typeof ingestMode.buildIngestFixtureDatabase>[0] & { templated?: boolean; templatedFixtureIds?: string[] };

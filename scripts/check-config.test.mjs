@@ -513,8 +513,8 @@ test('does not discover an ANTHROPIC name embedded in a longer identifier', () =
   }
 });
 
-const OPUS_JSON = '{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"}';
-const OPUS_LITERAL = "{ id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },";
+const OPUS_JSON = '{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1","contextLength":200000}';
+const OPUS_LITERAL = "{ id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1', contextLength: 200000 },";
 const TEST_MODEL = 'anthropic/claude-test-9';
 
 function jsonEntry(id, anthropicId) {
