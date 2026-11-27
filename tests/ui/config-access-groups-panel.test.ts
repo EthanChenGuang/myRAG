@@ -387,3 +387,304 @@ describe('mount (D-28, UI-SPEC 6.1)', () => {
     expect(it_.doc.getElementById('RAG_DOC_ACCESS_GROUPS')!.querySelector('option')!.textContent).toBe('Disattivati, come oggi');
   });
 });
+
+describe('sync, label check, settings, alerts and errors (A-03, A-08, D-03, D-07, D-09)', () => {
+  it('Sync enforcement runs status/sync, re-reads and announces sync.done', async () => {
+    const page = loadPage({
+      saved: 'off',
+      replies: { status: { status: 200, body: { success: true, status: { ...OFF, databaseFlag: true } } }, sync: { status: 200, body: { success: true, status: OFF } } },
+    });
+    await page.init();
+    button(page.stateHost(), 'Sync enforcement').click();
+    await flush();
+    expect(page.count('sync')).toBe(1);
+    expect(page.badge()!.getAttribute('data-access-groups-badge')).toBe('off');
+    expect(page.statusRegion().textContent).toBe('The database now matches the app: Not enforced.');
+  });
+
+  it('a running sync shows its in-flight text with Check again disabled', async () => {
+    const page = loadPage({ saved: 'off', hold: ['sync'], replies: { status: { status: 200, body: { success: true, status: { ...OFF, databaseFlag: true } } } } });
+    await page.init();
+    const sync = button(page.stateHost(), 'Sync enforcement');
+    sync.click();
+    await flush();
+    expect(sync.textContent).toBe('Syncing…');
+    expect(sync.disabled).toBe(true);
+    expect(button(page.stateHost(), 'Check again').disabled).toBe(true);
+    page.release('sync', { status: 200, body: { success: true, status: OFF } });
+    await flush();
+  });
+
+  it('a failed sync shows sync.failed as an alert and the state stays Blocked', async () => {
+    const blocked = status({ status: 'not_ready', ready: false, databaseFlag: null, reasons: ['flag_write_failed'] });
+    const page = loadPage({ replies: { status: { status: 200, body: { success: true, status: blocked } }, sync: { status: 200, body: { success: true, status: blocked } } } });
+    await page.init();
+    button(page.stateHost(), 'Sync enforcement').click();
+    await flush();
+    const alert = page.root.querySelector('[data-access-groups-sync-alert] [role="alert"]')!;
+    expect(alert.textContent).toContain('The database setting could not be written.');
+    expect(page.badge()!.getAttribute('data-access-groups-badge')).toBe('blocked');
+  });
+
+  it('a sync answered with 503 also shows sync.failed', async () => {
+    const blocked = status({ status: 'not_ready', ready: false, databaseFlag: null, reasons: ['flag_write_failed'] });
+    const page = loadPage({ replies: { status: { status: 200, body: { success: true, status: blocked } }, sync: { status: 503, body: { success: false, error: 'access_groups_unavailable' } } } });
+    await page.init();
+    button(page.stateHost(), 'Sync enforcement').click();
+    await flush();
+    expect(page.root.querySelector('[data-access-groups-sync-alert] [role="alert"]')).toBeTruthy();
+    expect(page.badge()!.getAttribute('data-access-groups-badge')).toBe('blocked');
+  });
+
+  it('a sync timeout shows error.outcomeUnknown and reloads the status', async () => {
+    const page = loadPage({ saved: 'off', replies: { status: { status: 200, body: { success: true, status: { ...OFF, databaseFlag: true } } }, sync: { status: 0, throws: true } } });
+    await page.init();
+    button(page.stateHost(), 'Sync enforcement').click();
+    await flush();
+    expect(page.statusRegion().textContent).toContain('may or may not have been made');
+    expect(page.count('status')).toBe(2);
+  });
+
+  it('lists the blocked reasons; an unknown code is shown in font-mono inside a sentence', async () => {
+    const page = loadPage({
+      replies: {
+        status: {
+          status: 200,
+          body: { success: true, status: status({ status: 'not_ready', ready: false, reasons: ['readiness_not_ready', 'function_missing_filter', 'mystery_code'], objects: ['match_chunks'] }) },
+        },
+      },
+    });
+    await page.init();
+    const items = page.stateHost().querySelectorAll('li');
+    expect(items.map((li) => li.getAttribute('data-access-groups-reason'))).toEqual(['function_missing_filter', 'mystery_code']);
+    expect(items[0]!.textContent).toBe('A search function has no access filter: match_chunks. Apply the database migrations 0920 to 0939.');
+    expect(items[0]!.querySelector('code')!.textContent).toBe('match_chunks');
+    const code = items[1]!.querySelector('code')!;
+    expect(code.className).toContain('font-mono');
+    expect(items[1]!.textContent).toBe('Reported with the code mystery_code. Check the app log for [RAG Access].');
+  });
+
+  it('label check not run yet shows drift.body and the button only, no repair button', async () => {
+    const page = loadPage();
+    await page.init();
+    const drift = page.root.querySelector('[data-access-groups-drift]')!;
+    expect(drift.childNodes).toHaveLength(0);
+    expect(page.root.textContent).toContain('This check finds copies that differ from their document.');
+    expect(buttonTexts(page.root).filter((t) => /repair/i.test(t))).toEqual([]);
+  });
+
+  it('Run label check shows drift.none with the time', async () => {
+    const page = loadPage();
+    await page.init();
+    button(page.root, 'Run label check').click();
+    await flush();
+    expect(page.count('drift')).toBe(1);
+    expect(page.root.querySelector('[data-access-groups-drift]')!.textContent).toMatch(/^No differences found\. Checked .+\.$/);
+  });
+
+  it('a running label check shows drift.running on the button and in the result', async () => {
+    const page = loadPage({ hold: ['drift'] });
+    await page.init();
+    const run = button(page.root, 'Run label check');
+    run.click();
+    await flush();
+    expect(run.textContent).toBe('Checking…');
+    expect(page.root.querySelector('[data-access-groups-drift]')!.textContent).toBe('Checking…');
+    page.release('drift', { status: 200, body: { success: true, stores: [], checkedAt: null } });
+    await flush();
+  });
+
+  it('drift.found lists only the stores the server reports, never a missing store as zero', async () => {
+    const page = loadPage({
+      replies: { drift: { status: 200, body: { success: true, stores: [{ store: 'document_chunks', rows: 3 }, { store: 'document_parents', rows: 0 }, { store: 'new_store', rows: 2 }], checkedAt: '2026-11-26T10:05:00.000Z' } } },
+    });
+    await page.init();
+    button(page.root, 'Run label check').click();
+    await flush();
+    const host = page.root.querySelector('[data-access-groups-drift]')!;
+    expect(host.textContent).toContain('Rows that differ from their document: 5.');
+    const rows = host.querySelectorAll('tr[data-access-groups-drift-row]');
+    expect(rows.map((r) => r.querySelector('th')!.textContent)).toEqual(['Chunks', 'The server reported new_store.']);
+    expect(host.textContent).not.toContain('Translations');
+    expect(host.textContent).not.toContain('Table rows');
+  });
+
+  it('a failed label check shows drift.unavailable', async () => {
+    const page = loadPage({ replies: { drift: { status: 503, body: { success: false, error: 'access_groups_unavailable' } } } });
+    await page.init();
+    button(page.root, 'Run label check').click();
+    await flush();
+    expect(page.root.querySelector('[data-access-groups-drift]')!.textContent).toBe('The label check could not run. Select Run label check in a moment.');
+  });
+
+  it('the what-it-does-now sentence follows the select before saving', async () => {
+    const page = loadPage({ saved: 'off' });
+    await page.init();
+    const help = page.doc.getElementById('rag-doc-access-groups-help')!;
+    expect(help.textContent).toContain('Every member sees every document.');
+    page.select.value = 'on';
+    page.select.dispatch('change');
+    expect(help.textContent).toContain('A restricted document is visible only to members of its groups');
+  });
+
+  it('a group key while the switch is off shows warn.embedNeedsSwitch; a malformed key shows form.badKey', async () => {
+    const page = loadPage({ saved: 'off' });
+    await page.init();
+    page.embed.value = 'group-a';
+    page.embed.dispatch('input');
+    expect(page.root.textContent).toContain('The embedded chat group has no effect while access groups are off.');
+    page.embed.value = 'Group A';
+    page.embed.dispatch('input');
+    expect(page.root.textContent).toContain('Use lower-case letters, digits and hyphens, starting with a letter or a digit.');
+    expect(page.embed.getAttribute('aria-invalid')).toBe('true');
+    expect(page.embed.getAttribute('aria-describedby')).toContain('rag-access-groups-embed-check');
+    page.select.value = 'on';
+    page.select.dispatch('change');
+    page.embed.value = 'group-a';
+    page.embed.dispatch('input');
+    expect(page.root.textContent).not.toContain('has no effect while access groups are off');
+    expect(page.embed.getAttribute('aria-invalid')).toBeNull();
+  });
+
+  it('the status check of the embed group shows found with its name or notFound', async () => {
+    const found = loadPage({ embed: 'group-a', replies: { status: { status: 200, body: { success: true, status: status({ embedGroup: { key: 'group-a', valid: true, exists: true, name: 'Group A' } }) } } } });
+    await found.init();
+    expect(found.root.textContent).toContain('Group found: Group A.');
+    const missing = loadPage({ embed: 'group-a', replies: { status: { status: 200, body: { success: true, status: status({ embedGroup: { key: 'group-a', valid: true, exists: false, name: null } }) } } } });
+    await missing.init();
+    expect(missing.root.textContent).toContain('No group with this key exists in the embedded chat');
+  });
+
+  it('after Save All Changes that changed a setting, settings.restart appears', async () => {
+    const page = loadPage({ saved: 'off', replies: { status: { status: 200, body: { success: true, status: OFF } } } });
+    await page.init();
+    expect(page.root.querySelector('[data-access-groups-restart]')!.textContent).toBe('');
+    page.saved({ RAG_DOC_ACCESS_GROUPS: 'on', RAG_EMBED_ACCESS_GROUP: '' });
+    expect(page.root.querySelector('[data-access-groups-restart]')!.textContent).toBe('Saved. Restart the app to apply.');
+    expect(page.badge()!.getAttribute('data-access-groups-badge')).toBe('restart');
+  });
+
+  it('401 replaces the state with the sign-in alert and Reload panel; the Settings block stays usable', async () => {
+    const page = loadPage({ replies: { status: { status: 401, body: { success: false, error: 'Unauthorized' } } } });
+    await page.init();
+    expect(page.badge()!.getAttribute('data-access-groups-badge')).toBe('unknown');
+    expect(page.stateHost().querySelector('.alert-warning')).toBeTruthy();
+    expect(page.stateHost().querySelector('i.bi-person-lock')).toBeTruthy();
+    expect(buttonTexts(page.stateHost())).toEqual(['Reload panel']);
+    expect(page.stateHost().querySelector('input[type="password"]')).toBeNull();
+    const settings = page.root.querySelector('[data-access-groups-settings]')!;
+    expect(settings.querySelector('#RAG_DOC_ACCESS_GROUPS')!.disabled).toBe(false);
+    page.select.value = 'on';
+    page.select.dispatch('change');
+    expect(page.doc.getElementById('rag-doc-access-groups-help')!.textContent).toContain('A restricted document is visible only');
+  });
+
+  it('403 Admin access required is the sign-in alert too', async () => {
+    const page = loadPage({ replies: { status: { status: 403, body: { success: false, error: 'Admin access required' } } } });
+    await page.init();
+    expect(page.stateHost().querySelector('i.bi-person-lock')).toBeTruthy();
+  });
+
+  it('503 shows the unavailable sentence with Reload panel and keeps earlier content dimmed', async () => {
+    const page = loadPage({ replies: { status: [{ status: 200, body: { success: true, status: status() } }, { status: 503, body: { success: false, error: 'access_groups_unavailable' } }] } });
+    await page.init();
+    button(page.stateHost(), 'Check again').click();
+    await flush();
+    expect(page.stateHost().textContent).toContain('The enforcement status is unavailable right now. Select Reload panel in a moment.');
+    expect(buttonTexts(page.stateHost())).toContain('Reload panel');
+    const body = page.stateHost().querySelector('[data-access-groups-state-body]')!;
+    expect(body.className).toContain('opacity-60');
+    expect(page.badge()!.getAttribute('data-access-groups-badge')).toBe('enforced');
+  });
+
+  it('a refresh keeps content at 60% opacity with aria-busy while it runs', async () => {
+    const page = loadPage({ hold: ['status'] });
+    const first = (page.context.initAccessGroupsPanel as () => Promise<void>)();
+    await flush();
+    page.release('status', { status: 200, body: { success: true, status: status() } });
+    await first;
+    await flush();
+    button(page.stateHost(), 'Check again').click();
+    await flush();
+    expect(page.stateHost().className).toContain('opacity-60');
+    expect(page.stateHost().getAttribute('aria-busy')).toBe('true');
+    page.release('status', { status: 200, body: { success: true, status: status() } });
+    await flush();
+    expect(page.stateHost().getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('the alert host shows alert.blocked with a button that opens Enforcement', async () => {
+    const page = loadPage({ replies: { status: { status: 200, body: { success: true, status: status({ status: 'not_ready', ready: false, reasons: ['column_missing'] }) } } } });
+    await page.init();
+    const alert = page.alertHost().querySelector('.alert-error')!;
+    expect(alert.textContent).toContain('Access groups are on, but the app cannot apply them.');
+    expect(alert.getAttribute('role')).toBeNull();
+    button(alert, 'Open enforcement').click();
+    expect(page.doc.activeElement!.id).toBe('rag-access-groups-tab-enforcement');
+  });
+
+  it('the alert host shows alert.off while the running app has the switch off', async () => {
+    const page = loadPage({ saved: 'off', replies: { status: { status: 200, body: { success: true, status: OFF } } } });
+    await page.init();
+    const alert = page.alertHost().querySelector('.alert-info')!;
+    expect(alert.textContent).toContain('Access groups are off. Groups, members and document access set here are saved but not applied');
+    expect(buttonTexts(alert)).toEqual(['Open enforcement']);
+    const enforced = loadPage();
+    await enforced.init();
+    expect(enforced.alertHost().childNodes).toHaveLength(0);
+  });
+
+  it('the error mapper splits 403 by body.error and maps writes (UI-SPEC 8.2)', () => {
+    const { mapAccessGroupsError } = loadModule();
+    expect(mapAccessGroupsError({ status: 403, body: { error: 'Admin access required' } }, 'en').kind).toBe('signIn');
+    expect(mapAccessGroupsError({ status: 403, body: { error: 'Forbidden' } }, 'en').kind).toBe('workspace');
+    expect(mapAccessGroupsError({ status: 401, body: {} }, 'en').kind).toBe('signIn');
+    expect(mapAccessGroupsError({ thrown: true }, 'en', { write: true }).key).toBe('error.outcomeUnknown');
+    expect(mapAccessGroupsError({ thrown: true }, 'en').key).toBe('error.network');
+    expect(mapAccessGroupsError({ status: 404, body: {} }, 'en', { write: true }).key).toBe('error.changed');
+    expect(mapAccessGroupsError({ status: 409, body: { error: 'whatever' } }, 'en', { write: true }).key).toBe('error.changed');
+    expect(mapAccessGroupsError({ status: 400, body: { error: 'invalid_key' } }, 'en').key).toBe('form.badKey');
+    expect(mapAccessGroupsError({ status: 400, body: { error: 'reserved_key' } }, 'en').key).toBe('form.reservedKey');
+    expect(mapAccessGroupsError({ status: 503, body: { error: 'access_groups_unavailable' } }, 'en', { unavailable: 'U' }).message).toBe('U');
+  });
+
+  it('embed check and drift builders are pure', () => {
+    const { accessGroupsEmbedCheck, accessGroupsDriftView } = loadModule();
+    expect(accessGroupsEmbedCheck('', 'off', null)).toEqual({ finding: null, warn: false });
+    expect(accessGroupsEmbedCheck('all', 'on', null).finding!.key).toBe('form.reservedKey');
+    expect(accessGroupsEmbedCheck('group-a', 'off', null).warn).toBe(true);
+    const view = accessGroupsDriftView({ stores: [{ store: 'document_chunks', rows: 0 }, { store: 'bad', rows: -1 }, null] });
+    expect(view.stores).toEqual([{ store: 'document_chunks', key: 'drift.store.chunks', rows: 0 }]);
+    expect(view.total).toBe(0);
+  });
+
+  it('markup injected into reason codes, objects, store names and the embed group name creates no element and no link', async () => {
+    const hostile = 'javascript:alert(1)' + XSS_PAYLOAD;
+    const page = loadPage({
+      embed: 'group-a',
+      replies: {
+        status: {
+          status: 200,
+          body: {
+            success: true,
+            status: status({
+              status: 'not_ready',
+              ready: false,
+              reasons: [hostile, 'column_missing'],
+              objects: [hostile],
+              embedGroup: { key: 'group-a', valid: true, exists: true, name: hostile },
+            }),
+          },
+        },
+        drift: { status: 200, body: { success: true, stores: [{ store: hostile, rows: 1 }], checkedAt: hostile } },
+      },
+    });
+    await page.init();
+    button(page.root, 'Run label check').click();
+    await flush();
+    expect(injectedElements(page.doc)).toHaveLength(0);
+    expect(page.doc.querySelectorAll('a')).toHaveLength(2);
+    expect(page.doc.innerHtmlWrites).toBe(0);
+    expect(page.root.textContent).toContain(XSS_PAYLOAD);
+  });
+});
