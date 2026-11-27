@@ -39,10 +39,9 @@ export {
   uploadAccessKeys,
 } from './tenant/access';
 export { scopeAccessFilter } from './tenant/access';
-export { accessGroupsEnabled } from './tenant/access';
 export { getAccessStartupVerdict, syncAccessEnforcementNow, verifyAccessGroupsStartup } from './tenant/access-startup';
 export type { AccessStartupStatus, AccessStartupVerdict } from './tenant/access-startup';
-export { createCitationRecheck, recordSecurityEvent, visibleChunkIds, visibleDocumentIds } from './access/visibility';
+export { createCitationRecheck, recordSecurityEvent, scheduleSecurityEvent, visibleChunkIds, visibleDocumentIds } from './access/visibility';
 export type { SecurityEventInput, VisibilityOptions, VisibilityResult } from './access/visibility';
 export { ACCESS_GROUPS_REASONS, AccessGroupsError, accessReasonOf } from './access/errors';
 export type { AccessGroupsReason, AccessServiceDeps } from './access/errors';
@@ -125,6 +124,7 @@ export type {
   SharingRuleOutcome,
   SharingRuleRow,
 } from './access/connector';
+export { UNKNOWN_ACCESS_SET, accessSetsFor } from './access/sets';
 export type {
   AccessIdentity,
   AccessScopeRefusalReason,
@@ -370,6 +370,7 @@ export { createCitationSession } from './generation/citations/session';
 export type {
   CitationCapabilities,
   CitationFinishMetadata,
+  CitationAccessCheck,
   CitationSession,
   CitationSessionInput,
   ClaudeStartInput,

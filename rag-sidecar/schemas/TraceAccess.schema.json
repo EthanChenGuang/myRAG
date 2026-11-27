@@ -1,0 +1,26 @@
+{
+  "additionalProperties": false,
+  "description": "D-09, D-26: the access mode the run retrieved under and the citations the access recheck dropped; absent while access is off.",
+  "properties": {
+    "mode": {
+      "enum": [
+        "off",
+        "admin_all",
+        "keys"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "violations": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Violations",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "mode"
+  ],
+  "title": "TraceAccess",
+  "type": "object"
+}

@@ -4,7 +4,7 @@ import { setLangfuseTracerProvider, startObservation } from '@langfuse/tracing';
 import { TraceFlags } from '@opentelemetry/api';
 import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
 import { isLangfuseUsable, type LangfuseConfig } from './config';
-import { maskPII } from './mask';
+import { maskPII, type ExportedChunk } from './mask';
 import type { StageRecord } from '../types';
 import type { TraceLanguages, TraceTiming } from './collector';
 
@@ -35,7 +35,8 @@ export interface CollectedTrace {
   timing?: TraceTiming;
   /** LANG-10: language codes only, read from the collector when the export is built. */
   languages?: TraceLanguages;
-  content?: { query?: string; chunks?: Array<{ document_name: string; content: string; similarity: number; rank: number }> };
+  /** D-25: a chunk of a restricted document carries chunk_id, similarity and rank only. */
+  content?: { query?: string; chunks?: ExportedChunk[] };
 }
 
 export interface ExportTraceOptions {

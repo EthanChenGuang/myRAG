@@ -4,6 +4,7 @@ import { traceLanguagesOf, type TraceCollector } from './collector';
 import { isLangfuseUsable, readLangfuseConfig, type LangfuseConfig } from './config';
 import type { CollectedTrace } from './langfuse';
 import { logRagTrace, type TraceLogSink } from './log';
+import { stripRestrictedContent } from './mask';
 import { isSampled } from './sample';
 import { scheduleAfterResponse } from './schedule';
 
@@ -91,17 +92,11 @@ function collect(
   if (reviewCandidate) {
     trace.review = { ...(query !== undefined ? { query } : {}), ...collector.reviewContent() };
   } else if (config.captureContent) {
-    trace.content = {
-      ...(query !== undefined ? { query } : {}),
-      chunks: result.kept.map((chunk) => ({
-        document_name: chunk.document_name,
-        content: chunk.content,
-        similarity: chunk.similarity,
-        rank: chunk.rank,
-      })),
-    };
+    trace.content = { ...(query !== undefined ? { query } : {}), chunks: [] };
   }
-  return trace;
+  // D-25: while access is on (an access state was recorded), restricted or unlabelled chunks export ids and scores only.
+  const accessOn = typeof collector.access === 'function' && collector.access() !== null;
+  return stripRestrictedContent(trace, accessOn ? (result.accessLabels ?? new Map()) : null, result.kept);
 }
 
 /** Sampled requests are replayed to Langfuse after the response; everything else, and any export failure, writes the single `[RAG Trace]` line. Never throws. */

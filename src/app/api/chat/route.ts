@@ -72,6 +72,9 @@ import {
   repairOwnerMembership,
   resolveTenantScope,
   accessGroupsEnabled,
+  createCitationRecheck,
+  accessSetsFor,
+  scheduleSecurityEvent,
   bodyNamesAccessGroups,
   resolveAccessScope,
   runRetrieval,
@@ -91,6 +94,7 @@ import {
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
 import type { JSONValue } from '@ai-sdk/provider';
+import { createDocumentReferenceTool } from '@/lib/chat/document-reference-tool';
 import { REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE, readSecurityConfig, escapeToolOutput, scanToolOutput, type ToolResultGuardMode } from '@/lib/rag';
 // Keep custom tool definitions if needed
 
@@ -181,37 +185,17 @@ function withToolResultNotice(prompt: string): string {
   return `${prompt}\n\n${TOOL_RESULT_NOTICE}`;
 }
 
-const documentReferenceTool = tool({
-  description: 'IMPORTANT: This is a FUNCTION TOOL to track document usage internally. Call this tool when you use information from documents. DO NOT write "useDocument" as text in your response. This tool tracks which documents you referenced to answer the query.',
-  inputSchema: z.object({
-    documentId: z.string().describe('The ID of the document that was used'),
-    documentName: z.string().describe('The name/filename of the document'),
-    relevance: z.number().min(0).max(100).describe('How relevant this document was to the query (0-100)'),
-    reason: z.string().describe('Why this document was used to answer the query')
-  }),
-  execute: async ({ documentId, documentName, relevance, reason }) => {
-    // Log the document reference for tracking
-    console.log('[Document Reference Tool] Document referenced:', {
-      documentId,
-      documentName,
-      relevance,
-      reason
-    });
-
-    // Format a nice source citation that can be included in the response
-    const sourceText = `📚 **Source:** ${documentName} (Relevance: ${relevance}%)`;
-
-    // Return a structured response with formatted source
-    return {
-      success: true,
-      message: sourceText,
-      // Allow this to be shown as a source citation
-      internal: false,
-      documentName,
-      relevance
+/** D-26: the citation access recheck of this request's scope; a scope the check cannot read fails closed, so every citation is dropped. */
+function citationRecheckFor(scope: TenantScope | null) {
+  if (!scope) return undefined;
+  try {
+    return createCitationRecheck(scope);
+  } catch {
+    return async (): Promise<ReadonlySet<string>> => {
+      throw new Error('[RAG Access] citation recheck unavailable');
     };
   }
-});
+}
 
 // Legacy document URL mapping - hardcoded URLs for specific documents
 // Database metadata (external_url) takes precedence over these mappings
@@ -2054,6 +2038,7 @@ IMPORTANT:
       reasoning: reasoningRequested,
       attachments: hasAttachedImage,
     };
+    const citationRecheck = citationRecheckFor(scope);
     const citationSession = createCitationSession({
       capabilities: citationCapabilities,
       ragMode,
@@ -2062,6 +2047,7 @@ IMPORTANT:
       ...(registryAnswerLanguage ? { textsSource: answerTurn.textsSource } : {}),
       config: generationConfig,
       facts: citationFacts,
+      ...(citationRecheck ? { recheck: citationRecheck } : {}),
     });
     // Phase 5.2.1 D-65, D-66: a turn that may get the calculation labels its blocks, so chunk operands can name an alias
     const calcQuestion = getLastUserText(rawMessages);
@@ -3172,7 +3158,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       // Prepare base application tools for AI SDK
       // Note: Specialized content tools removed - using unified RAG pipeline with workspace isolation
       const baseTools: Record<string, any> = {
-        useDocument: documentReferenceTool
+        // D-15: built per request, so the tool accepts only this request's used (access-filtered) documents
+        useDocument: createDocumentReferenceTool(usedDocuments)
       };
 
       // Initialize MCP client if requested, only for tool discovery (NOT execution)
@@ -4497,6 +4484,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             : [];
         const knowledgeBaseContext =
           premiseBlocks.length > 0 && (retrievalResult?.status === 'ok' || retrievalResult?.status === 'degraded');
+        // D-25, A-06: the cited documents' label sets, only while access is on (the labels map is absent while off)
+        const citedAccessSets = accessSetsFor(retrievalResult?.accessLabels, (records?.citations ?? []).map((record) => record.documentId));
         return scheduleAnswerFinish({
           answerId,
           scope,
@@ -4523,6 +4512,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           requestLanguage: userLanguage,
           ...(answerTurn.config.anyNonDefault ? answerFinishFields(answerTurn, retrievalResult) : {}),
           ...(calcRun ? { calc: { primary: calcRun.primary, items: calcRun.checks, reviewReasons: calcRun.reviewReasons } } : {}),
+          ...(citedAccessSets && citedAccessSets.length > 0 ? { accessSets: citedAccessSets } : {}),
         });
       };
 
@@ -4656,14 +4646,22 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             const status = isAborted ? 'aborted' : generationFailed || finishReason === 'error' ? 'error' : 'ok';
             const fallbackReason = citationSession.fallbackReason;
             const answerTrace = answerTraceFields(answerTurn, citationSession.truncatedMarkers());
-            const rules = [...(fallbackReason ? [`citation_strategy_fallback:${fallbackReason}`] : []), ...answerTrace.rules];
+            const accessCheck = citationSession.accessCheck();
+            const rules = [
+              ...(fallbackReason ? [`citation_strategy_fallback:${fallbackReason}`] : []),
+              ...answerTrace.rules,
+              ...(accessCheck && accessCheck.violations > 0 ? ['access_violation'] : []),
+              ...(accessCheck?.failed ? ['access_recheck_failed'] : []),
+            ];
+            const counts = accessCheck ? { ...answerTrace.counts, access_violations: accessCheck.violations } : answerTrace.counts;
+            if (accessCheck) ragTrace.collector.addAccessViolations(accessCheck.violations);
             ragTrace.collector.record({
               name: 'generation',
               status,
               startedAt: aiStartTime,
               endedAt: ragTrace.collector.now(),
               ...(rules.length > 0 ? { rules } : {}),
-              ...(answerTrace.counts ? { counts: answerTrace.counts } : {}),
+              ...(counts ? { counts } : {}),
             });
             // D-75, D-61: the calculation check as its own span, status counts and duration only
             const calcRun = calcCheckSink?.result();
@@ -4682,6 +4680,16 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             }
           }
           finishRagTrace();
+          // D-26: a citation the caller may not see leaves an id-only security event, written after the response
+          const deniedCitations = citationSession.accessCheck();
+          if (scope && deniedCitations && !deniedCitations.failed && deniedCitations.violations > 0) {
+            scheduleSecurityEvent(scope, {
+              event: 'citation_access_violation',
+              chunkIds: deniedCitations.chunkIds,
+              documentIds: deniedCitations.documentIds,
+              requestId: ragTraceId ?? answerId ?? null,
+            });
+          }
           const responseText = responseMessage.parts
             .map((part) => (part.type === 'text' ? part.text : ''))
             .join('');
