@@ -107,20 +107,40 @@ function singleTenantSuite(label: string, build: () => Promise<FixtureDatabase>)
       assert.equal((await db.query('SELECT 1 FROM documents WHERE id = $1', [DOC_OWNED])).rows.length, 1);
     });
 
-    test('inserts need user_id = auth.uid(): a null or foreign owner is refused, the caller own id is accepted', async () => {
+    test('authenticated users cannot insert documents or chunks through the table, not even their own (UF-1)', async () => {
       await asRole(db, 'authenticated', OTHER, async () => {
-        await rejection(db.query("INSERT INTO documents (id, filename, content) VALUES (gen_random_uuid(), 'a', 'b')"), /row-level security/i);
+        await rejection(db.query("INSERT INTO documents (id, filename, content) VALUES (gen_random_uuid(), 'a', 'b')"), /row-level security|cannot be inserted/i);
         await rejection(
           db.query("INSERT INTO documents (id, filename, content, user_id) VALUES (gen_random_uuid(), 'a', 'b', $1)", [OWNER]),
-          /row-level security/i,
+          /row-level security|cannot be inserted/i,
         );
         await rejection(
           db.query("INSERT INTO document_chunks (id, document_id, content, embedding) VALUES (gen_random_uuid(), $1, 'c', $2::vector)", [DOC_OWNED, ZERO_VECTOR]),
-          /row-level security/i,
+          /row-level security|cannot be inserted/i,
         );
         const id = '00000000-0000-4000-8000-00000000f201';
-        await db.query("INSERT INTO documents (id, filename, content, user_id) VALUES ($1, 'mine.md', 'mine', $2)", [id, OTHER]);
-        await db.query("INSERT INTO document_chunks (id, document_id, content, embedding) VALUES (gen_random_uuid(), $1, 'c', $2::vector)", [id, ZERO_VECTOR]);
+        await rejection(
+          db.query("INSERT INTO documents (id, filename, content, user_id) VALUES ($1, 'mine.md', 'mine', $2)", [id, OTHER]),
+          /row-level security|cannot be inserted/i,
+        );
+      });
+      const id = '00000000-0000-4000-8000-00000000f201';
+      assert.equal((await db.query('SELECT 1 FROM documents WHERE id = $1', [id])).rows.length, 0);
+      await db.query("INSERT INTO documents (id, filename, content, user_id) VALUES ($1, 'mine.md', 'mine', $2)", [id, OTHER]);
+      await asRole(db, 'authenticated', OTHER, async () => {
+        await rejection(
+          db.query("INSERT INTO document_chunks (id, document_id, content, embedding) VALUES (gen_random_uuid(), $1, 'c', $2::vector)", [id, ZERO_VECTOR]),
+          /row-level security|cannot be inserted/i,
+        );
+      });
+      await asRole(db, 'authenticated', ADMIN, async () => {
+        await rejection(
+          db.query("INSERT INTO document_chunks (id, document_id, content, embedding) VALUES (gen_random_uuid(), $1, 'c', $2::vector)", [id, ZERO_VECTOR]),
+          /row-level security|cannot be inserted/i,
+        );
+      });
+      await db.query("INSERT INTO document_chunks (id, document_id, content, embedding) VALUES (gen_random_uuid(), $1, 'c', $2::vector)", [id, ZERO_VECTOR]);
+      await asRole(db, 'authenticated', OTHER, async () => {
         assert.equal((await db.query('DELETE FROM document_chunks WHERE document_id = $1 RETURNING id', [id])).rows.length, 1);
         assert.equal((await db.query('DELETE FROM documents WHERE id = $1 RETURNING id', [id])).rows.length, 1);
       });
@@ -157,7 +177,7 @@ function singleTenantSuite(label: string, build: () => Promise<FixtureDatabase>)
         await asRole(db, 'authenticated', OWNER, async () => {
           await rejection(
             db.query("INSERT INTO documents (id, filename, content, user_id) VALUES (gen_random_uuid(), 'x', 'y', $1)", [OWNER]),
-            /row-level security/i,
+            /row-level security|cannot be inserted/i,
           );
           assert.equal((await db.query('DELETE FROM documents WHERE id = $1 RETURNING id', [id])).rows.length, 0);
           assert.equal((await db.query("UPDATE documents SET content = 'x' WHERE id = $1 RETURNING id", [id])).rows.length, 0);
