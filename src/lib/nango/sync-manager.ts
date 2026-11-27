@@ -2,10 +2,19 @@ import { getNango } from './client';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { nangoPipeline, processDocumentWithMetadata } from './document-adapter';
 import { fetchFileContent } from './file-fetcher';
+import { notionWorkspaceId, syncSourcePermissions, type PermissionSyncSummary } from './permission-sync';
 import { PROVIDER_CONFIG, type NangoFileRecord, type SupportedProvider, type SyncStats } from './types';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
-import { nangoOwnerScope, queueConfigFromProcessEnv, removeDocumentObjects, scopeKey, softDeleteLineage, type DocumentObjectRow } from '@/lib/rag';
+import {
+    nangoOwnerScope,
+    queueConfigFromProcessEnv,
+    removeDocumentObjects,
+    scopeKey,
+    softDeleteLineage,
+    type ConnectorProvider,
+    type DocumentObjectRow,
+} from '@/lib/rag';
 
 const SUPPORTED_EXTENSIONS = (env.NANGO_SUPPORTED_FILE_TYPES || 'pdf,doc,docx,txt,md').split(',');
 const MAX_FILES_PER_SYNC = parseInt(env.NANGO_MAX_FILES_PER_SYNC || '100');
@@ -58,6 +67,130 @@ interface GoogleDriveFile {
     size?: string;
     parents?: string[];
     webViewLink?: string;
+}
+
+type SupabaseAdmin = NonNullable<ReturnType<typeof getSupabaseAdmin>>;
+
+const PERMISSION_STEP_TIMEOUT_MS = 60_000;
+
+/** The sharing context of one sync run: who owns the copies, and the per-run memo for values read once per sync. */
+interface PermissionRun {
+    provider: ConnectorProvider | null;
+    connectionId: string;
+    userId: string;
+    /** Notion: the connection's workspace id, read on first use and shared by every page of this run (never across requests). */
+    notionWorkspace?: () => Promise<string | null>;
+}
+
+function permissionRun(provider: string, connectionId: string, userId: string): PermissionRun {
+    const known = provider === 'google-drive' || provider === 'dropbox' || provider === 'notion' ? provider : null;
+    const run: PermissionRun = { provider: known, connectionId, userId };
+    if (known === 'notion') {
+        let memo: Promise<string | null> | undefined;
+        run.notionWorkspace = () => (memo ??= notionWorkspaceId(connectionId));
+    }
+    return run;
+}
+
+/** Provider data the reader would otherwise fetch again: the Dropbox shared folder of a file, the Notion page object already read. */
+interface PermissionSource {
+    parentSharedFolderId?: string | null;
+    notionPage?: Record<string, unknown>;
+}
+
+/** The owner-only label a new or changed connector file is written with, so it is never wider than its source before the step maps it (D-20). */
+function ownerOnlyLabel(userId: string): string[] {
+    return [`u:${userId.toLowerCase()}`];
+}
+
+/**
+ * A document id from a sync record or ingest names this file's own copy only when it is a nango document of this connection and file:
+ * ingest can answer with the id of an unrelated duplicate, whose label the connector must never change.
+ */
+async function isOwnConnectorDocument(supabaseAdmin: SupabaseAdmin, run: PermissionRun, fileId: string, documentId: string): Promise<boolean> {
+    const { data } = await supabaseAdmin
+        .from('documents')
+        .select('id, user_id, source, source_connection_id, source_file_id, source_key')
+        .eq('id', documentId)
+        .single();
+    const row = data as { user_id?: unknown; source?: unknown; source_connection_id?: unknown; source_file_id?: unknown; source_key?: unknown } | null;
+    if (!row) return false;
+    return (
+        row.source === 'nango' &&
+        row.source_connection_id === run.connectionId &&
+        row.user_id === run.userId &&
+        (row.source_file_id === fileId || row.source_key === fileId)
+    );
+}
+
+/**
+ * D-20: maps the source sharing of one processed file onto its document and stores the summary (counts and kinds, no address) on the sync
+ * record. A document that fell back to its owner counts in stats.failClosed. Throws only when even the closed fallback could not be applied.
+ */
+async function syncSourcePermissionsForFile(
+    supabaseAdmin: SupabaseAdmin,
+    run: PermissionRun,
+    fileId: string,
+    documentId: string | null | undefined,
+    stats: SyncStats,
+    source: PermissionSource = {},
+): Promise<PermissionSyncSummary | null> {
+    if (typeof documentId !== 'string' || documentId === '') return null;
+    if (run.provider === null) {
+        // No sharing reader for this provider: the copy keeps the owner-only label it was written with.
+        logger.warn('Nango', 'No sharing reader for this provider; the document stays with its owner', { provider: 'unsupported' });
+        return null;
+    }
+    if (!(await isOwnConnectorDocument(supabaseAdmin, run, fileId, documentId))) {
+        logger.warn('Nango', 'Permission step skipped: the document is not this file\'s connector copy', { provider: run.provider });
+        return null;
+    }
+    const owner = nangoOwnerScope({ ownerUserId: run.userId });
+    if (!owner.ok) throw new Error(`Connection owner cannot be a tenant (${owner.reason})`);
+    const summary = await syncSourcePermissions(
+        { provider: run.provider, connectionId: run.connectionId, fileId, documentId, ownerUserId: run.userId, scope: owner.scope, ...source },
+        {
+            access: { db: () => supabaseAdmin, signal: AbortSignal.timeout(PERMISSION_STEP_TIMEOUT_MS) },
+            ...(run.notionWorkspace ? { notionWorkspace: run.notionWorkspace } : {}),
+        },
+    );
+    if (summary.failClosed) stats.failClosed++;
+    const { data: record } = await supabaseAdmin
+        .from('nango_sync_records')
+        .select('metadata')
+        .eq('user_id', run.userId)
+        .eq('file_id', fileId)
+        .single();
+    const metadata = record && typeof (record as { metadata?: unknown }).metadata === 'object' && (record as { metadata?: unknown }).metadata !== null
+        ? ((record as { metadata: Record<string, unknown> }).metadata)
+        : {};
+    await supabaseAdmin
+        .from('nango_sync_records')
+        .update({ metadata: { ...metadata, access: summary } })
+        .eq('user_id', run.userId)
+        .eq('file_id', fileId);
+    return summary;
+}
+
+/**
+ * The permission step on a file's existing document when no new version is written: before the not-modified skip (a failure counts as
+ * failed, the record stays), and after a failed ingest (the failure is already counted), so the old copy never keeps a wider label.
+ */
+async function syncSourcePermissionsSafely(
+    supabaseAdmin: SupabaseAdmin,
+    run: PermissionRun,
+    fileId: string,
+    documentId: string | null | undefined,
+    stats: SyncStats,
+    countFailure: boolean,
+    source: PermissionSource = {},
+): Promise<void> {
+    try {
+        await syncSourcePermissionsForFile(supabaseAdmin, run, fileId, documentId, stats, source);
+    } catch (error) {
+        if (countFailure) stats.failed++;
+        logger.error('Nango', 'Permission step failed for an unchanged file', { provider: run.provider, error: error instanceof Error ? error.name : 'unknown' });
+    }
 }
 
 /** Most listing pages one run reads; a folder with more than this many pages is treated as cut short. */
@@ -340,7 +473,7 @@ async function syncGoogleDriveDocuments(
     folderId?: string | null,
     skipOrphanDeletion: boolean = false
 ): Promise<SyncStats & { fileIds?: string[]; listingComplete?: boolean }> {
-    const stats: SyncStats & { fileIds?: string[]; listingComplete?: boolean } = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
+    const stats: SyncStats & { fileIds?: string[]; listingComplete?: boolean } = { processed: 0, failed: 0, skipped: 0, deleted: 0, failClosed: 0 };
 
     if (!supabaseAdmin) {
         throw new Error('Supabase admin client not available');
@@ -388,7 +521,10 @@ async function syncGoogleDriveDocuments(
         );
         logger.debug('Nango', `${supportedFiles.length} files are supported types`);
 
+        const run = permissionRun('google-drive', connectionId, userId);
         for (const file of supportedFiles) {
+            let existingDocumentId: string | null = null;
+            let permissionsApplied = false;
             try {
                 // Check if already synced and not modified
                 const { data: existing } = await supabaseAdmin
@@ -398,6 +534,7 @@ async function syncGoogleDriveDocuments(
                     .eq('file_id', file.id)
                     .single();
 
+                existingDocumentId = typeof existing?.document_id === 'string' ? existing.document_id : null;
                 logger.debug('Nango', `File ${file.name}: existing=${existing?.id ? 'yes' : 'no'}, last_synced=${existing?.last_synced_at || 'never'}, modifiedTime=${file.modifiedTime || 'unknown'}, document_id=${existing?.document_id || 'none'}`);
 
                 if (existing?.last_synced_at && file.modifiedTime) {
@@ -416,6 +553,9 @@ async function syncGoogleDriveDocuments(
                     const fileModified = new Date(file.modifiedTime);
 
                     if (fileModified <= lastSync && documentExists) {
+                        // D-20: the content skip must not skip the sharing; the label follows a source change on the next sync.
+                        permissionsApplied = true;
+                        await syncSourcePermissionsSafely(supabaseAdmin, run, file.id, existing.document_id, stats, true);
                         logger.debug('Nango', `Skipping ${file.name}: not modified since last sync and document exists`);
                         stats.skipped++;
                         continue;
@@ -470,7 +610,10 @@ async function syncGoogleDriveDocuments(
                     nangoConnectionId: connectionId,
                     nangoFolderId: folderId ?? undefined,
                     mimeType: file.mimeType,
+                    accessKeys: ownerOnlyLabel(userId),
                 });
+                permissionsApplied = true;
+                await syncSourcePermissionsForFile(supabaseAdmin, run, file.id, documentId, stats);
 
                 // Update sync record as completed
                 await supabaseAdmin
@@ -489,6 +632,7 @@ async function syncGoogleDriveDocuments(
 
             } catch (fileError) {
                 logger.error('Nango', `Failed to process: ${file.name}`, fileError);
+                if (!permissionsApplied) await syncSourcePermissionsSafely(supabaseAdmin, run, file.id, existingDocumentId, stats, false);
 
                 await supabaseAdmin
                     .from('nango_sync_records')
@@ -519,7 +663,7 @@ async function syncGoogleDriveFilesByIds(
     supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
     fileIds: string[]
 ): Promise<SyncStats> {
-    const stats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
+    const stats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0, failClosed: 0 };
 
     if (!supabaseAdmin) {
         throw new Error('Supabase admin client not available');
@@ -559,20 +703,27 @@ async function syncGoogleDriveFilesByIds(
         );
         logger.debug('Nango', `${supportedFiles.length} files are supported types`);
 
+        const run = permissionRun('google-drive', connectionId, userId);
         for (const file of supportedFiles) {
+            let existingDocumentId: string | null = null;
+            let permissionsApplied = false;
             try {
                 // Check if already synced and not modified
                 const { data: existing } = await supabaseAdmin
                     .from('nango_sync_records')
-                    .select('id, last_synced_at, metadata')
+                    .select('id, last_synced_at, metadata, document_id')
                     .eq('user_id', userId)
                     .eq('file_id', file.id)
                     .single();
+                existingDocumentId = typeof existing?.document_id === 'string' ? existing.document_id : null;
 
                 if (existing?.last_synced_at && file.modifiedTime) {
                     const lastSync = new Date(existing.last_synced_at);
                     const fileModified = new Date(file.modifiedTime);
                     if (fileModified <= lastSync) {
+                        // D-20: the content skip must not skip the sharing.
+                        permissionsApplied = true;
+                        await syncSourcePermissionsSafely(supabaseAdmin, run, file.id, existingDocumentId, stats, true);
                         stats.skipped++;
                         continue;
                     }
@@ -624,7 +775,10 @@ async function syncGoogleDriveFilesByIds(
                     nangoConnectionId: connectionId,
                     nangoFolderId: file.parents?.[0],
                     mimeType: file.mimeType,
+                    accessKeys: ownerOnlyLabel(userId),
                 });
+                permissionsApplied = true;
+                await syncSourcePermissionsForFile(supabaseAdmin, run, file.id, documentId, stats);
 
                 // Update sync record as completed
                 await supabaseAdmin
@@ -643,6 +797,7 @@ async function syncGoogleDriveFilesByIds(
 
             } catch (fileError) {
                 logger.error('Nango', `Failed to process: ${file.name}`, fileError);
+                if (!permissionsApplied) await syncSourcePermissionsSafely(supabaseAdmin, run, file.id, existingDocumentId, stats, false);
 
                 await supabaseAdmin
                     .from('nango_sync_records')
@@ -672,9 +827,10 @@ async function syncNotionPagesByIds(
     userId: string,
     supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
     pageIds: string[],
-    folderId?: string
+    folderId?: string,
+    run: PermissionRun = permissionRun('notion', connectionId, userId)
 ): Promise<SyncStats> {
-    const stats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
+    const stats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0, failClosed: 0 };
 
     if (!supabaseAdmin) {
         throw new Error('Supabase admin client not available');
@@ -686,6 +842,9 @@ async function syncNotionPagesByIds(
         logger.debug('Nango', `Syncing ${pageIds.length} specific Notion pages`);
 
         for (const pageId of pageIds) {
+            let existingDocumentId: string | null = null;
+            let permissionsApplied = false;
+            let pageObject: Record<string, unknown> | undefined;
             try {
                 // Fetch page metadata from Notion
                 const pageResponse = await nango.proxy({
@@ -696,6 +855,7 @@ async function syncNotionPagesByIds(
                 });
 
                 const page = pageResponse.data as any;
+                pageObject = page && typeof page === 'object' ? (page as Record<string, unknown>) : undefined;
                 const pageName = page.properties?.title?.title?.[0]?.plain_text ||
                     page.properties?.Name?.title?.[0]?.plain_text ||
                     'Untitled';
@@ -708,6 +868,7 @@ async function syncNotionPagesByIds(
                     .eq('user_id', userId)
                     .eq('file_id', pageId)
                     .single();
+                existingDocumentId = typeof existing?.document_id === 'string' ? existing.document_id : null;
 
                 if (existing?.last_synced_at && modifiedAt && existing?.document_id) {
                     // Verify the document still exists
@@ -721,6 +882,9 @@ async function syncNotionPagesByIds(
                         const lastSync = new Date(existing.last_synced_at);
                         const pageModified = new Date(modifiedAt);
                         if (pageModified <= lastSync) {
+                            // D-20, D-21: the content skip must not skip the workspace and public mapping.
+                            permissionsApplied = true;
+                            await syncSourcePermissionsSafely(supabaseAdmin, run, pageId, existing.document_id, stats, true, { notionPage: pageObject });
                             stats.skipped++;
                             logger.debug('Nango', `Skipping unchanged page: ${pageName}`);
                             continue;
@@ -768,7 +932,10 @@ async function syncNotionPagesByIds(
                     nangoConnectionId: connectionId,
                     nangoFolderId: folderId,
                     mimeType: fileRecord.mime_type,
+                    accessKeys: ownerOnlyLabel(userId),
                 });
+                permissionsApplied = true;
+                await syncSourcePermissionsForFile(supabaseAdmin, run, pageId, documentId, stats, { notionPage: pageObject });
 
                 // Update sync record as completed
                 await supabaseAdmin
@@ -787,6 +954,9 @@ async function syncNotionPagesByIds(
 
             } catch (pageError) {
                 logger.error('Nango', `Failed to process Notion page ${pageId}`, pageError);
+                if (!permissionsApplied) {
+                    await syncSourcePermissionsSafely(supabaseAdmin, run, pageId, existingDocumentId, stats, false, { notionPage: pageObject });
+                }
 
                 await supabaseAdmin
                     .from('nango_sync_records')
@@ -817,9 +987,10 @@ async function syncNotionPageWithChildren(
     connectionId: string,
     userId: string,
     supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
-    parentPageId: string
+    parentPageId: string,
+    run: PermissionRun = permissionRun('notion', connectionId, userId)
 ): Promise<SyncStats> {
-    const stats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
+    const stats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0, failClosed: 0 };
 
     if (!supabaseAdmin) {
         throw new Error('Supabase admin client not available');
@@ -839,8 +1010,9 @@ async function syncNotionPageWithChildren(
 
         logger.debug('Nango', `Found ${pageIds.length} total pages to sync (1 parent + ${childPages.length} children)`);
 
-        // Use syncNotionPagesByIds for actual syncing
-        const syncResult = await syncNotionPagesByIds(connectionId, userId, supabaseAdmin, pageIds, parentPageId);
+        // Use syncNotionPagesByIds for actual syncing; every page, the parent and its children, runs syncSourcePermissions there with the
+        // run's one workspace read.
+        const syncResult = await syncNotionPagesByIds(connectionId, userId, supabaseAdmin, pageIds, parentPageId, run);
 
         return syncResult;
 
@@ -969,6 +1141,9 @@ async function listDropboxFilesViaProxy(
             mime_type: getMimeTypeFromFilename(file.name),
             size: file.size,
             modified_at: file.client_modified,
+            ...(typeof file.sharing_info?.parent_shared_folder_id === 'string'
+                ? { parent_shared_folder_id: file.sharing_info.parent_shared_folder_id }
+                : {}),
         };
     }) as NangoFileRecord[];
 }
@@ -1149,7 +1324,7 @@ export async function syncDocumentsForConnection(
         throw new Error('Supabase admin client not available');
     }
 
-    const stats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
+    const stats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0, failClosed: 0 };
 
     try {
         // Get the user_id and sync settings from the connection record
@@ -1185,7 +1360,7 @@ export async function syncDocumentsForConnection(
             if (folderId === 'multi-folder-mode' && fileIds && fileIds.length > 0) {
                 // Multi-folder mode: sync files from each folder
                 logger.debug('Nango', `Syncing ${fileIds.length} Google Drive folders`);
-                const combinedStats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
+                const combinedStats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0, failClosed: 0 };
                 const allFileIds: string[] = [];
                 let listingsComplete = true;
 
@@ -1196,6 +1371,7 @@ export async function syncDocumentsForConnection(
                         combinedStats.processed += folderStats.processed;
                         combinedStats.failed += folderStats.failed;
                         combinedStats.skipped += folderStats.skipped;
+                        combinedStats.failClosed += folderStats.failClosed;
                         // Collect file IDs from this folder
                         if (folderStats.fileIds) {
                             allFileIds.push(...folderStats.fileIds);
@@ -1232,19 +1408,21 @@ export async function syncDocumentsForConnection(
 
         // Notion-specific sync
         if (provider === 'notion') {
+            const notionRun = permissionRun('notion', connectionId, userId);
             // Check for multi-page top-level mode (marker + file IDs)
             if (folderId === 'top-level-mode' && fileIds && fileIds.length > 0) {
                 // Multi-page top-level mode: sync each page with its children
                 logger.debug('Nango', `Syncing ${fileIds.length} top-level Notion pages with children`);
-                const combinedStats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
+                const combinedStats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0, failClosed: 0 };
 
                 for (const pageId of fileIds) {
                     try {
-                        const pageStats = await syncNotionPageWithChildren(connectionId, userId, supabaseAdmin, pageId);
+                        const pageStats = await syncNotionPageWithChildren(connectionId, userId, supabaseAdmin, pageId, notionRun);
                         combinedStats.processed += pageStats.processed;
                         combinedStats.failed += pageStats.failed;
                         combinedStats.skipped += pageStats.skipped;
                         combinedStats.deleted += pageStats.deleted;
+                        combinedStats.failClosed += pageStats.failClosed;
                     } catch (pageError) {
                         logger.error('Nango', `Failed to sync top-level page ${pageId}`, pageError);
                         combinedStats.failed++;
@@ -1257,17 +1435,17 @@ export async function syncDocumentsForConnection(
 
             // Regular subpage mode: sync specific pages without their children
             if (fileIds && fileIds.length > 0) {
-                return await syncNotionPagesByIds(connectionId, userId, supabaseAdmin, fileIds);
+                return await syncNotionPagesByIds(connectionId, userId, supabaseAdmin, fileIds, undefined, notionRun);
             }
 
             // Legacy single top-level page mode (for backwards compatibility)
             if (folderId) {
-                return await syncNotionPageWithChildren(connectionId, userId, supabaseAdmin, folderId);
+                return await syncNotionPageWithChildren(connectionId, userId, supabaseAdmin, folderId, notionRun);
             }
 
             // No selection - return empty stats
             logger.debug('Nango', 'No Notion pages selected for sync');
-            return { processed: 0, failed: 0, skipped: 0, deleted: 0 };
+            return { processed: 0, failed: 0, skipped: 0, deleted: 0, failClosed: 0 };
         }
 
         // Default: Use Nango's listRecords for other providers
@@ -1279,7 +1457,7 @@ export async function syncDocumentsForConnection(
             logger.debug('Nango', `Syncing ${fileIds.length} folders for ${provider}`);
 
             // Collect all files from all folders first
-            const allFiles: { id: string; name: string; path?: string; mime_type?: string; size?: number; modified_at?: string }[] = [];
+            const allFiles: NangoFileRecord[] = [];
             const folderOfFile = new Map<string, string>();
             for (const folderPath of fileIds) {
                 try {
@@ -1297,7 +1475,7 @@ export async function syncDocumentsForConnection(
             // Now process all files using the same logic as single-folder mode
             // (the code below will handle them)
             // We'll use allFiles instead of fetching again
-            const combinedStats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0 };
+            const combinedStats: SyncStats = { processed: 0, failed: 0, skipped: 0, deleted: 0, failClosed: 0 };
 
             // Build set of current file IDs for deletion detection
             const currentFileIds = new Set(allFiles.map(f => f.id));
@@ -1308,19 +1486,27 @@ export async function syncDocumentsForConnection(
             logger.debug('Nango', `${supportedFiles.length} files have supported extensions`);
 
             // Process each file (reusing the same logic pattern)
+            const multiRun = permissionRun(provider, connectionId, userId);
             for (const file of supportedFiles) {
+                let existingDocumentId: string | null = null;
+                let permissionsApplied = false;
+                const permissionSource: PermissionSource = { parentSharedFolderId: file.parent_shared_folder_id ?? null };
                 try {
                     const { data: existing } = await supabaseAdmin
                         .from('nango_sync_records')
-                        .select('id, last_synced_at, metadata')
+                        .select('id, last_synced_at, metadata, document_id')
                         .eq('user_id', userId)
                         .eq('file_id', file.id)
                         .single();
+                    existingDocumentId = typeof existing?.document_id === 'string' ? existing.document_id : null;
 
                     if (existing?.last_synced_at && file.modified_at) {
                         const lastSync = new Date(existing.last_synced_at);
                         const fileModified = new Date(file.modified_at);
                         if (fileModified <= lastSync) {
+                            // D-20: the content skip must not skip the sharing.
+                            permissionsApplied = true;
+                            await syncSourcePermissionsSafely(supabaseAdmin, multiRun, file.id, existingDocumentId, combinedStats, true, permissionSource);
                             combinedStats.skipped++;
                             continue;
                         }
@@ -1347,7 +1533,10 @@ export async function syncDocumentsForConnection(
                         nangoConnectionId: connectionId,
                         nangoFolderId: folderOfFile.get(file.id),
                         mimeType: file.mime_type,
+                        accessKeys: ownerOnlyLabel(userId),
                     });
+                    permissionsApplied = true;
+                    await syncSourcePermissionsForFile(supabaseAdmin, multiRun, file.id, documentId, combinedStats, permissionSource);
 
                     await supabaseAdmin.from('nango_sync_records').update({
                         document_id: documentId,
@@ -1361,6 +1550,9 @@ export async function syncDocumentsForConnection(
                     combinedStats.processed++;
                 } catch (fileError) {
                     logger.error('Nango', `Failed to sync file ${file.name}`, fileError);
+                    if (!permissionsApplied) {
+                        await syncSourcePermissionsSafely(supabaseAdmin, multiRun, file.id, existingDocumentId, combinedStats, false, permissionSource);
+                    }
                     await supabaseAdmin.from('nango_sync_records').update({
                         status: 'failed',
                         error_message: fileError instanceof Error ? fileError.message : 'Unknown error',
@@ -1403,20 +1595,28 @@ export async function syncDocumentsForConnection(
         );
         logger.debug('Nango', `${supportedFiles.length} files have supported extensions`);
 
+        const run = permissionRun(provider, connectionId, userId);
         for (const file of supportedFiles) {
+            let existingDocumentId: string | null = null;
+            let permissionsApplied = false;
+            const permissionSource: PermissionSource = { parentSharedFolderId: file.parent_shared_folder_id ?? null };
             try {
                 // Check if already synced and not modified
                 const { data: existing } = await supabaseAdmin
                     .from('nango_sync_records')
-                    .select('id, last_synced_at, metadata')
+                    .select('id, last_synced_at, metadata, document_id')
                     .eq('user_id', userId)
                     .eq('file_id', file.id)
                     .single();
+                existingDocumentId = typeof existing?.document_id === 'string' ? existing.document_id : null;
 
                 if (existing?.last_synced_at && file.modified_at) {
                     const lastSync = new Date(existing.last_synced_at);
                     const fileModified = new Date(file.modified_at);
                     if (fileModified <= lastSync) {
+                        // D-20: the content skip must not skip the sharing.
+                        permissionsApplied = true;
+                        await syncSourcePermissionsSafely(supabaseAdmin, run, file.id, existingDocumentId, stats, true, permissionSource);
                         stats.skipped++;
                         continue;
                     }
@@ -1458,7 +1658,10 @@ export async function syncDocumentsForConnection(
                     nangoConnectionId: connectionId,
                     nangoFolderId: folderId || 'root',
                     mimeType: file.mime_type,
+                    accessKeys: ownerOnlyLabel(userId),
                 });
+                permissionsApplied = true;
+                await syncSourcePermissionsForFile(supabaseAdmin, run, file.id, documentId, stats, permissionSource);
 
                 // Update sync record as completed
                 await supabaseAdmin
@@ -1477,6 +1680,7 @@ export async function syncDocumentsForConnection(
 
             } catch (fileError) {
                 logger.error('Nango', `Failed to process: ${file.name}`, fileError);
+                if (!permissionsApplied) await syncSourcePermissionsSafely(supabaseAdmin, run, file.id, existingDocumentId, stats, false, permissionSource);
 
                 await supabaseAdmin
                     .from('nango_sync_records')
@@ -1527,7 +1731,7 @@ export async function syncAllUserConnections(userId: string): Promise<SyncStats[
             results.push(stats);
         } catch (error) {
             logger.error('Nango', `Sync failed for ${conn.provider}`, error);
-            results.push({ processed: 0, failed: 1, skipped: 0, deleted: 0 });
+            results.push({ processed: 0, failed: 1, skipped: 0, deleted: 0, failClosed: 0 });
         }
     }
 
