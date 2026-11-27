@@ -382,7 +382,8 @@ describe('POST /api/config/create', () => {
     fs.writeFileSync(envPath(), baseEnv('enforce'));
     const res = await call('POST', '/api/config/create', { template: 'minimal', force: true });
     assert.equal(res.status, 409);
-    assert.equal(res.json.error, 'rag_gate_required');
+    // W-1: the template has no RAG_CONFIG_GATE, so overwriting an enforcing file lowers the gate and needs a typed reason.
+    assert.equal(res.json.error, 'rag_gate_override_required');
     assert.equal(readEnv(), baseEnv('enforce'));
   });
 

@@ -304,26 +304,17 @@ describe('POST /api/config guard (in-app settings)', () => {
     expect(json.ragGate).toEqual({ record_id: db.inserts[0].id, gate_result: 'pass' });
   });
 
-  it('W-1: lowering RAG_CONFIG_GATE in enforce needs an override reason and records it', async () => {
+  it('W-1: the in-app settings route cannot write RAG_CONFIG_GATE at all', async () => {
     process.env.RAG_CONFIG_GATE = 'enforce';
     const env = makeEnvDir(ENV_FILE);
-    const lowered = { RAG_CONFIG_GATE: 'off' };
-    storeCheck(env.dir, { ...parseEnv(ENV_FILE), ...lowered });
     const route = await load<Route>('@/app/api/config/route');
 
-    for (const ragGate of [undefined, { check_id: CHECK_ID }]) {
-      const res = await post(route, { config: lowered, ...(ragGate ? { ragGate } : {}) });
-      expect(res.status).toBe(409);
-      expect((await res.json()).error).toBe('rag_gate_override_required');
-    }
-    expect(writeSpy).not.toHaveBeenCalled();
-    expect(db.inserts).toHaveLength(0);
+    const res = await post(route, { config: { RAG_CONFIG_GATE: 'off' }, ragGate: { override: { reason: REASON } } });
 
-    const res = await post(route, { config: lowered, ragGate: { override: { reason: REASON } } });
-    expect(res.status).toBe(200);
-    expect(env.read()).toContain('RAG_CONFIG_GATE=off');
-    expect(db.inserts).toHaveLength(1);
-    expect(db.inserts[0]).toMatchObject({ changed_keys: ['RAG_CONFIG_GATE'], override_reason: REASON });
+    expect(res.status).toBe(400);
+    expect((await res.json()).rejected).toEqual(['RAG_CONFIG_GATE']);
+    expect(writeSpy).not.toHaveBeenCalled();
+    expect(env.read()).toBe(ENV_FILE);
   });
 
   it('a change of only non-RAG-affecting names is written without a check in enforce mode', async () => {
@@ -434,6 +425,28 @@ describe('unguarded app writers', () => {
     expect([...logo.matchAll(/'(NEXT_PUBLIC_[A-Z_]+)'/g)].map((m) => m[1]).sort()).toEqual(['NEXT_PUBLIC_AI_RESPONSE_LOGO_URL', 'NEXT_PUBLIC_HEADER_LOGO_URL']);
     expect([...favicon.matchAll(/updateEnvFile\('([A-Z_]+)'/g)].map((m) => m[1])).toEqual(['NEXT_PUBLIC_FAVICON_URL']);
     expect([...servers.matchAll(/writeEnvUpdates\(\{\s*([A-Z_]+):/g)].map((m) => m[1])).toEqual(['MCP_CUSTOM_SERVERS']);
+  });
+});
+
+describe('guardAppEnvWrite W-1', () => {
+  it('lowering RAG_CONFIG_GATE in enforce needs an override reason, even with a passed check', async () => {
+    process.env.RAG_CONFIG_GATE = 'enforce';
+    const env = makeEnvDir(`${ENV_FILE}RAG_CONFIG_GATE=enforce\n`);
+    const lowered = { RAG_CONFIG_GATE: 'warn' };
+    storeCheck(env.dir, { ...parseEnv(env.read()), ...lowered });
+    await load<Route>('@/app/api/config/rag-prompt/route');
+    const { guardAppEnvWrite } = await import('@/lib/rag/config-gate/guard');
+
+    for (const ragGate of [undefined, { check_id: CHECK_ID }]) {
+      const refused = await guardAppEnvWrite({ updates: lowered, ragGate, actorUserId: ADMIN_ID, route: 'config', root: env.dir });
+      expect(refused).toMatchObject({ ok: false, status: 409, body: { error: 'rag_gate_override_required' } });
+    }
+    expect(db.inserts).toHaveLength(0);
+
+    // With a reason the guard lets the save through; the app env writer refuses the name (the route answers 400), so no
+    // record is written here. The Config UI server, which can write it, records the reason (config-server-rag-gate-save).
+    const allowed = await guardAppEnvWrite({ updates: lowered, ragGate: { override: { reason: REASON } }, actorUserId: ADMIN_ID, route: 'config', root: env.dir });
+    expect(allowed).toEqual({ ok: true, ragGate: null });
   });
 });
 

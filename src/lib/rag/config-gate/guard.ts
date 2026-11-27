@@ -10,6 +10,8 @@ export const RAG_GATE_REQUIRED_MESSAGE =
   'This change affects RAG answers. Open the Config UI (npm run config), run the setting check there and save once it passes, or save there with a typed reason.';
 
 export const RAG_GATE_INVALID_REASON_MESSAGE = 'An override reason must be 10 to 500 characters.';
+export const RAG_GATE_OVERRIDE_REQUIRED_MESSAGE =
+  'Lowering RAG_CONFIG_GATE while it enforces needs a typed override reason (10 to 500 characters); it is stored in the change record.';
 
 export type AppGuardRoute = 'config' | 'rag-prompt' | 'models';
 
@@ -112,9 +114,11 @@ export async function guardAppEnvWrite(input: GuardAppEnvWriteInput): Promise<Gu
 
     if (decision.kind === 'refuse') {
       console.warn('[Config Gate] app save refused', { route: input.route, error: decision.error });
-      return decision.error === 'invalid_reason'
-        ? refuse(400, { error: 'invalid_reason', message: RAG_GATE_INVALID_REASON_MESSAGE })
-        : required();
+      if (decision.error === 'invalid_reason') return refuse(400, { error: 'invalid_reason', message: RAG_GATE_INVALID_REASON_MESSAGE });
+      if (decision.error === 'rag_gate_override_required') {
+        return refuse(409, { error: 'rag_gate_override_required', message: RAG_GATE_OVERRIDE_REQUIRED_MESSAGE });
+      }
+      return required();
     }
 
     // A write the env writer would refuse anyway leaves no record; the route answers it through its own error path.
