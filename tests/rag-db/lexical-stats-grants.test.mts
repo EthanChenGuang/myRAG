@@ -15,8 +15,9 @@ const LEGACY = 'openai-3-small-1536';
 const ZERO_UUID = '00000000-0000-4000-8000-000000000000';
 const DOC_ID = '00000000-0000-4000-8000-0000000004a1';
 
+// 0932 (train 35, 04.3) appended p_access_keys text[] and p_access_all boolean to the 0904 signature.
 const BM25_SIGNATURE =
-  'rag_bm25_search_chunks(text,text,vector,text[],integer,date,date,text[],uuid[],text[],text[],text[],text,numeric,numeric,text,jsonb,boolean,text[],boolean,date,jsonb,text[],double precision,double precision,integer)';
+  'rag_bm25_search_chunks(text,text,vector,text[],integer,date,date,text[],uuid[],text[],text[],text[],text,numeric,numeric,text,jsonb,boolean,text[],boolean,date,jsonb,text[],double precision,double precision,integer,text[],boolean)';
 const TRIGGER_FUNCTIONS = ['rag_lexstats_chunks_delete()', 'rag_lexstats_chunks_insert()', 'rag_lexstats_chunks_update()'];
 /** The eleven callable functions of the phase: rag_lexical_dl (0900), the eight of 0902 (with the unguarded compaction body), the hook (0903), the search (0904). */
 const RPC_SIGNATURES = [

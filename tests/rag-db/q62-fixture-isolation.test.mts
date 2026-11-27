@@ -33,7 +33,7 @@ interface TraceLine {
 }
 
 interface Q62Fixture extends FixtureDatabase {
-  q62Tenant?: { db: PGlite; tenantKey: string; userId: string | null; filenames: string[] };
+  q62Tenant?: { db: PGlite; tenantKey: string; userId: string | null; documentIds: Map<string, string>; filenames: string[] };
 }
 
 /** A synthetic scoped_compound item on the q62 corpus (neutral content; the real items are written by 06.2-22). */

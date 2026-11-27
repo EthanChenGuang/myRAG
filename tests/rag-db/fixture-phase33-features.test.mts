@@ -111,7 +111,7 @@ async function templatedDocs(db: import('@electric-sql/pglite').PGlite): Promise
         [doc.id],
       )
     ).rows;
-    const templated = fixture.templated as { kind: string; lines: { top: string[]; bottom: string[]; fragment: string }; designations?: string[] };
+    const templated = fixture.templated as unknown as { kind: string; lines: { top: string[]; bottom: string[]; fragment: string }; designations?: string[] };
     const edge = [...templated.lines.top, ...templated.lines.bottom];
     const designations = templated.designations ?? [];
     const code = normalizeIdentifier(String(fixture.attributes.alpha_code));
@@ -191,7 +191,7 @@ async function runCase(caseName: CaseName, mode: Mode): Promise<CaseResult> {
     corpusDir: CORPUS_DIR,
     corpusRange: { start: 0, end: 1 },
     typedFixtureIds,
-    parseFixtureIds: [],
+    parseFixtureIds: [] as string[],
     templated: true,
     templatedFixtureIds: RESTRICTED,
   } as const;
