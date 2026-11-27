@@ -58,6 +58,7 @@ import { useSidebarReducer, SidebarAction } from './sidebar-reducer';
 import { OrganizationSwitcher } from '@/components/organization-switcher';
 import { useOrganizationStore } from '@/lib/stores/organization-store';
 import { isMultiTenant } from '@/lib/deployment-mode';
+import { syncSidebarButtonConfig, type SidebarButtonConfig } from '@/lib/sidebar-button-config';
 import './sidebar.css';
 
 interface SidebarProps {
@@ -1067,45 +1068,18 @@ export function Sidebar({ isOpen, onClose, onNewChat, onSelectChat, userEmail, o
   }, []);
 
   // Initialize sidebar button configuration
-  const [sidebarButtonText, setSidebarButtonText] = useState<string>('myRAG');
-  const [sidebarButtonUrl, setSidebarButtonUrl] = useState<string>('https://myrag.laoxiang.app/');
+  // Hidden until this page load's server answers confirm both values
+  const [sidebarButton, setSidebarButton] = useState<SidebarButtonConfig | null>(null);
 
   useEffect(() => {
-    // Load from localStorage first for quick initial render
-    const savedButtonText = localStorage.getItem('SIDEBAR_BUTTON_TEXT');
-    const savedButtonUrl = localStorage.getItem('SIDEBAR_BUTTON_URL');
+    let cancelled = false;
+    syncSidebarButtonConfig(localStorage, (input) => fetch(input)).then((config) => {
+      if (!cancelled) setSidebarButton(config);
+    });
 
-    if (savedButtonText) setSidebarButtonText(savedButtonText);
-    if (savedButtonUrl) setSidebarButtonUrl(savedButtonUrl);
-
-    // Then fetch latest from server
-    async function fetchSidebarButtonConfig() {
-      try {
-        // Fetch button text
-        const textResponse = await fetch('/api/config/get-env?var=NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT');
-        if (textResponse.ok) {
-          const textData = await textResponse.json();
-          if (textData.value) {
-            setSidebarButtonText(textData.value);
-            localStorage.setItem('SIDEBAR_BUTTON_TEXT', textData.value);
-          }
-        }
-
-        // Fetch button URL
-        const urlResponse = await fetch('/api/config/get-env?var=NEXT_PUBLIC_SIDEBAR_BUTTON_URL');
-        if (urlResponse.ok) {
-          const urlData = await urlResponse.json();
-          if (urlData.value) {
-            setSidebarButtonUrl(urlData.value);
-            localStorage.setItem('SIDEBAR_BUTTON_URL', urlData.value);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching sidebar button config:', error);
-      }
-    }
-
-    fetchSidebarButtonConfig();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Get organization context for workspace-aware fetching
@@ -2550,31 +2524,40 @@ export function Sidebar({ isOpen, onClose, onNewChat, onSelectChat, userEmail, o
                   </motion.div>
 
                   {/* Footer */}
-                  <motion.div
-                    variants={childVariants}
-                    className={cn(
-                      "p-4 border-t",
-                      "border-[#FFE0D0] dark:border-[#2F2F2F]",
-                      theme === 'dark' ? "bg-[#212121]" : "bg-[#FFF1E5]"
-                    )}
-                    style={
-                      isIOSSafari ? {
-                        paddingTop: '20px',
-                        paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px) + 40px)'
-                      } : undefined
-                    }
-                  >
-                    <motion.a
+                  {sidebarButton ? (
+                    <motion.div
                       variants={childVariants}
-                      href={sidebarButtonUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center space-x-2 px-3 py-2 text-sm rounded-lg hover:bg-[#FFE8DC] dark:hover:bg-[#2F2F2F] transition-all duration-200"
+                      className={cn(
+                        "p-4 border-t",
+                        "border-[#FFE0D0] dark:border-[#2F2F2F]",
+                        theme === 'dark' ? "bg-[#212121]" : "bg-[#FFF1E5]"
+                      )}
+                      style={
+                        isIOSSafari ? {
+                          paddingTop: '20px',
+                          paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px) + 40px)'
+                        } : undefined
+                      }
                     >
-                      <ExternalLink className="h-4 w-4" />
-                      <span>{sidebarButtonText}</span>
-                    </motion.a>
-                  </motion.div>
+                      <motion.a
+                        variants={childVariants}
+                        href={sidebarButton.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center space-x-2 px-3 py-2 text-sm rounded-lg hover:bg-[#FFE8DC] dark:hover:bg-[#2F2F2F] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6417]/60"
+                      >
+                        <ExternalLink className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span className="min-w-0 truncate">{sidebarButton.text}</span>
+                      </motion.a>
+                    </motion.div>
+                  ) : isIOSSafari ? (
+                    // Keeps the last chat above the Safari toolbar when there is no footer button
+                    <div
+                      aria-hidden="true"
+                      className={cn("shrink-0", theme === 'dark' ? "bg-[#212121]" : "bg-[#FFF1E5]")}
+                      style={{ height: 'calc(env(safe-area-inset-bottom, 0px) + 40px)' }}
+                    />
+                  ) : null}
                 </motion.div>
               </div>
             </div>

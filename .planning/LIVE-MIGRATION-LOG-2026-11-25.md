@@ -1443,6 +1443,8 @@ Merged with `--no-ff` in phase order; each exec branch carries its SUMMARY. `exe
 | 4 | `1010_attribute_resolver_access.sql` | **DROP:** every overload of `rag_attribute_filter_values` and `rag_attribute_documents` by catalog lookup; re-created with `p_access_keys text[] DEFAULT NULL, p_access_all boolean DEFAULT false`. After 1008. After it `rag_access_readiness()` is ready. |
 | 5 | 0410 r22 delta | Grants only; run last. +10 guarded entries: `rag_scope_centroids_invalidate` and the seven `rag_scope_centroids_on_*` trigger functions (06.2-15 lock fix 03a8e696), the two 1010 signatures. |
 
+Follow-up (orchestrator decision on the access sentinel): `rag_scope_centroids_rebuild` is EXEMPT as a service-role rebuild of derived tenant-level centroids whose output is used only as an in/out scope score. Review whether restricted chunks should shape scope centroids before RAG_SCOPE_GATE and access groups are both on.
+
 Apply the SQL before deploying the train-39 app; the new parameters have defaults. Checked on PGlite, both modes: the train-38 migration set, then the combined file applied twice; `rag_access_readiness()` ready, exactly one overload of each attribute resolver, no anon/authenticated EXECUTE on any function the train adds. The combined file is `sql/train39-live.sql` on `ops/owner-actions`. The delta:
 
 ```sql

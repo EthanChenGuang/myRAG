@@ -317,6 +317,7 @@ export {
   PROMPT_BUDGET_EXCEEDED,
   promptTooLongText,
 } from './context/prompt-budget-route';
+export { defaultQueryContext } from './query/temporal-query-detector';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
 export {

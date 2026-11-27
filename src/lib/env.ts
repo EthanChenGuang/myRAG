@@ -52,8 +52,8 @@ class EnvironmentConfig {
       NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'myRAG',
       NEXT_PUBLIC_SITE_TITLE: process.env.NEXT_PUBLIC_SITE_TITLE || '',
       NEXT_PUBLIC_FAVICON_URL: process.env.NEXT_PUBLIC_FAVICON_URL || '/favicon.ico',
-      NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT: process.env.NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT || 'myRAG',
-      NEXT_PUBLIC_SIDEBAR_BUTTON_URL: process.env.NEXT_PUBLIC_SIDEBAR_BUTTON_URL || 'https://myrag.laoxiang.app/',
+      NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT: process.env.NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT || '',
+      NEXT_PUBLIC_SIDEBAR_BUTTON_URL: process.env.NEXT_PUBLIC_SIDEBAR_BUTTON_URL || '',
 
       // Chat input border customization
       NEXT_PUBLIC_BORDER_WIDTH: process.env.NEXT_PUBLIC_CHAT_BORDER_WIDTH || process.env.NEXT_PUBLIC_BORDER_WIDTH || '2.5',
