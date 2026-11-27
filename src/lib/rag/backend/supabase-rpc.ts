@@ -1,5 +1,5 @@
 import { logger } from '@/lib/logger';
-import { accessRpcArgs, type ScopeAccessFilter } from '../tenant/access';
+import { accessRpcArgs, type ScopeAccessFilter } from '../tenant/access-filter';
 import { assertTenantScope, scopeKey, workspaceRpcArgs, type TenantScope } from '../tenant/scope';
 
 export interface RpcError {

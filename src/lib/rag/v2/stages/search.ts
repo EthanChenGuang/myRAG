@@ -878,6 +878,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           exactIdStage(input.query, scope, {
             client: requireAdminSearchClient(getRagDeps()),
             signal: stageSignal,
+            access,
             limit: pool,
             ...versionScopeArg,
             ...identifierArg,

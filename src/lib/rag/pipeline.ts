@@ -1044,7 +1044,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector, 
       const exact = await runStage(
         spec('exact_id_lookup', 'skip'),
         signal,
-        (stageSignal) => exactIdStage(input.query, scope, { client: requireAdminSearchClient(deps), signal: stageSignal }),
+        (stageSignal) => exactIdStage(input.query, scope, { client: requireAdminSearchClient(deps), signal: stageSignal, access }),
         collector,
         {
           candidatesIn: searched.results.length,

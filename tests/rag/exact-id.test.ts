@@ -188,7 +188,7 @@ describe('exactIdLookup', () => {
     const rpc = routedRpc({ exact: [exactRow('e1')] });
     const found = await exactIdLookup(scope, extractExactIds("x'; DROP TABLE documents; -- 发票 FT-2025-00417 IT99999999990"), {
       client: rpc.client,
-      signal: new AbortController().signal,
+      signal: new AbortController().signal, access: { mode: 'off' },
     });
     expect(found.map((row) => row.chunk_id)).toEqual(['e1']);
     const [call] = rpc.exactCalls();
@@ -207,16 +207,16 @@ describe('exactIdLookup', () => {
 
   it('looks an Italian VAT number up with and without its IT prefix, whichever way it was asked', async () => {
     const bare = routedRpc({});
-    await exactIdLookup(scope, extractExactIds('P.IVA 99999999990'), { client: bare.client, signal: new AbortController().signal });
+    await exactIdLookup(scope, extractExactIds('P.IVA 99999999990'), { client: bare.client, signal: new AbortController().signal, access: { mode: 'off' } });
     expect(bare.exactCalls()[0]?.args.p_tokens).toEqual(['99999999990', 'IT99999999990']);
     const other = routedRpc({});
-    await exactIdLookup(scope, extractExactIds('VAT BE0000000097'), { client: other.client, signal: new AbortController().signal });
+    await exactIdLookup(scope, extractExactIds('VAT BE0000000097'), { client: other.client, signal: new AbortController().signal, access: { mode: 'off' } });
     expect(other.exactCalls()[0]?.args.p_tokens).toEqual(['BE0000000097', 'be0000000097']);
   });
 
   it('sends whole and joined v2 forms for a model number but not code parts', async () => {
     const rpc = routedRpc({});
-    await exactIdLookup(scope, extractExactIds('XR-2000 保修多久'), { client: rpc.client, signal: new AbortController().signal });
+    await exactIdLookup(scope, extractExactIds('XR-2000 保修多久'), { client: rpc.client, signal: new AbortController().signal, access: { mode: 'off' } });
     expect(rpc.exactCalls()[0]?.args.p_tokens).toEqual(['XR-2000', 'xr-2000', 'xr2000']);
     expect(rpc.exactCalls()[0]?.args.p_tokens).not.toContain('xr');
     expect(rpc.exactCalls()[0]?.args.p_tokens).not.toContain('2000');
@@ -233,10 +233,10 @@ describe('exactIdLookup', () => {
 
   it('makes no call for no tokens and throws on a backend error', async () => {
     const quiet = routedRpc({});
-    expect(await exactIdLookup(scope, [], { client: quiet.client, signal: new AbortController().signal })).toEqual([]);
+    expect(await exactIdLookup(scope, [], { client: quiet.client, signal: new AbortController().signal, access: { mode: 'off' } })).toEqual([]);
     expect(quiet.calls).toEqual([]);
     const failing = routedRpc({ exactError: { message: 'boom', code: 'XX000' } });
-    await expect(exactIdLookup(scope, extractExactIds(INVOICE_QUESTION), { client: failing.client, signal: new AbortController().signal })).rejects.toThrow(
+    await expect(exactIdLookup(scope, extractExactIds(INVOICE_QUESTION), { client: failing.client, signal: new AbortController().signal, access: { mode: 'off' } })).rejects.toThrow(
       /rag_exact_id_documents/,
     );
   });
@@ -247,6 +247,7 @@ describe('exactIdLookup', () => {
       exactIdLookup({ kind: 'org', userId: null, organizationId: ORG_ID } as never, extractExactIds(INVOICE_QUESTION), {
         client: rpc.client,
         signal: new AbortController().signal,
+        access: { mode: 'off' },
       }),
     ).rejects.toThrow(/unminted/);
     expect(rpc.calls).toEqual([]);

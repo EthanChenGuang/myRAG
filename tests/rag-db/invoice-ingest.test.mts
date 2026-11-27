@@ -156,7 +156,7 @@ describe('invoice ingestion across two tenants (D-26, D-27, T-03-83)', () => {
   });
 
   test('findInvoices of one tenant never returns the invoice of the other, even for the same supplier tax id', async () => {
-    const deps = { db: () => pgliteRpc(), signal: new AbortController().signal };
+    const deps = { db: () => pgliteRpc(), signal: new AbortController().signal, access: { mode: 'off' } as const };
     const a = await invoicesModule.findInvoices(await scopeOf(TWO_TENANT_IDS.userA), { supplier: TAX_ID }, deps);
     const b = await invoicesModule.findInvoices(await scopeOf(TWO_TENANT_IDS.userB), { supplier: TAX_ID }, deps);
     assert.deepEqual(a.map((hit) => hit.invoiceNumber), ['INV-A-0001']);
@@ -188,7 +188,7 @@ describe('invoice ingestion across two tenants (D-26, D-27, T-03-83)', () => {
     assert.equal(result.status, 'quarantined');
     const [row] = await rows('SELECT status, is_current, invoice_number FROM documents WHERE id = $1', [result.documentId]);
     assert.deepEqual(row, { status: 'quarantined', is_current: false, invoice_number: null });
-    const hits = await invoicesModule.findInvoices(await scopeOf(TWO_TENANT_IDS.userA), {}, { db: () => pgliteRpc(), signal: new AbortController().signal });
+    const hits = await invoicesModule.findInvoices(await scopeOf(TWO_TENANT_IDS.userA), {}, { db: () => pgliteRpc(), signal: new AbortController().signal, access: { mode: 'off' } as const });
     assert.ok(!hits.some((hit) => hit.invoiceNumber === 'INV-A-0002'));
   });
 

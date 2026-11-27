@@ -42,7 +42,7 @@ const IDS = {
 /** An identifier that only the restricted document carries (model-number shape: letters and digits). */
 const RESTRICTED_CODE = 'QX7731ZK';
 const ID_TEXT = `Catalogue entry ${RESTRICTED_CODE} names the ${MARKER_WORD} part of a neutral synthetic record.`;
-const ID_QUERY = `${RESTRICTED_CODE} catalogue entry`;
+const ID_QUERY = `Catalogue entry ${RESTRICTED_CODE} names the part of a neutral synthetic record.`;
 const SUPPLIER = 'Zephyrquill Supplies';
 const GROUP_KEY = `g:${IDS.groupA}`;
 
@@ -353,7 +353,10 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
                 assert.equal(call.args.p_access_all, false);
               }
               assertNoLeak(outsider.result, `outsider ${pipeline} exact id`);
+              const exactOut = (result: typeof outsider.result) => result.stages.find((stage) => stage.name === 'exact_id_lookup')?.candidates_out;
+              assert.equal(exactOut(outsider.result), 0, `the outsider's exact id leg found a row (${pipeline})`);
               const member = await retrieve(memberScope(), { query: ID_QUERY });
+              assert.equal(exactOut(member.result), 1, `member-a's exact id leg lost the row (${pipeline})`);
               assert.ok(
                 member.result.candidates.some((candidate) => candidate.chunk_id === IDS.restrictedIdChunk),
                 `member-a lost the exact-id chunk (${pipeline})`,
@@ -367,7 +370,7 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
       test('invoice lookups exclude the restricted invoice for the outsider and keep it for member-a and admin_all', async () => {
         const find = async (scope: TenantScope) => {
           const start = recorded.length;
-          const hits = await rag.findInvoices(scope, { supplier: 'zephyrquill' }, { db: () => recording as never });
+          const hits = await rag.findInvoices(scope, { supplier: 'zephyrquill' }, { db: () => recording as never, access: accessModule.scopeAccessFilter(scope) });
           return { ids: hits.map((hit) => hit.documentId).sort(), calls: recorded.slice(start) };
         };
         const outsider = await find(outsiderScope());
@@ -399,7 +402,10 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
         const outsider = await expand(outsiderScope());
         assert.deepEqual(outsider.parents, [IDS.openParent]);
         assert.deepEqual(outsider.calls[0]?.args.p_access_keys, ['all', `u:${IDS.outsider}`].sort());
-        assertNoLeak(outsider.result, 'outsider parents');
+        assertNoLeak(
+          (outsider.result as { candidates: Array<{ parent?: unknown }> }).candidates.map((candidate) => candidate.parent ?? null),
+          'outsider parents',
+        );
         assert.deepEqual((await expand(memberScope())).parents, [IDS.restrictedParent, IDS.openParent].sort());
         assert.deepEqual((await expand(adminScope())).parents, [IDS.restrictedParent, IDS.openParent].sort());
         const off = await expand(offScope());

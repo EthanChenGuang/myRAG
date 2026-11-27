@@ -396,6 +396,7 @@ export async function runV2Pipeline(
       } else {
         const context = await runContextStages({
           input,
+          access,
           config,
           profile,
           params,

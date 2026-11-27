@@ -20,7 +20,7 @@ import { countTokens } from '../../ingest/text/tokens';
 import type { RpcClient } from '../../backend/supabase-rpc';
 import type { VersionScope } from '../../backend/types';
 import { versionLabelLine, type VersionLabelInfo } from '../../context/version-label';
-import { accessRpcArgs, scopeAccessFilter } from '../../tenant/access';
+import { accessRpcArgs, type ScopeAccessFilter } from '../../tenant/access-filter';
 import { scopeKey, type TenantScope } from '../../tenant/scope';
 import { expandParents, selectWithParents, type ParentBudgetCandidate, type ParentSelection } from '../../parents/expand';
 import type { RerankSpan } from '../../rerank/types';
@@ -55,6 +55,8 @@ export interface ContextRerankInput {
 
 export interface ContextStagesInput {
   input: RunRetrievalInput;
+  /** D-05, D-11: the access filter runRetrieval computed once; every context read sends it. */
+  access: ScopeAccessFilter;
   config: RagConfig;
   profile: Profile;
   params: RetrievalParams;
@@ -142,11 +144,16 @@ interface ClusterSourceRow {
 }
 
 /** One batched rag_dup_cluster_sources call for the request's clusters (0862, 0933: tenant asserted and access filtered in SQL). */
-async function fetchClusterSources(scope: TenantScope, clusterIds: string[], signal: AbortSignal): Promise<Map<string, AlsoIn[]>> {
+async function fetchClusterSources(
+  scope: TenantScope,
+  clusterIds: string[],
+  signal: AbortSignal,
+  access: ScopeAccessFilter,
+): Promise<Map<string, AlsoIn[]>> {
   const admin = getRagDeps().adminClient() as RpcClient | null;
   if (!admin) throw new Error('[RAG Context] admin client unavailable');
   const { data, error } = await admin
-    .rpc('rag_dup_cluster_sources', { p_tenant_key: scopeKey(scope), p_cluster_ids: clusterIds, p_limit: ALSO_IN_MAX, ...accessRpcArgs(scopeAccessFilter(scope)) })
+    .rpc('rag_dup_cluster_sources', { p_tenant_key: scopeKey(scope), p_cluster_ids: clusterIds, p_limit: ALSO_IN_MAX, ...accessRpcArgs(access) })
     .abortSignal(signal);
   if (error) throw new Error(`[RAG Context] rag_dup_cluster_sources failed (${error.code ?? 'unknown'})`);
   const out = new Map<string, AlsoIn[]>();
@@ -401,7 +408,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     clusterIds.length > 0
       ? (async () => {
           if (!input.scope) throw new Error('[RAG Context] cluster sources need a tenant scope');
-          return fetchClusterSources(input.scope, clusterIds, signal);
+          return fetchClusterSources(input.scope, clusterIds, signal, ctx.access);
         })().then(
           (value) => ({ value }),
           (error: unknown) => ({ error }),
@@ -418,6 +425,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
         scope: input.scope,
         admin: getRagDeps().adminClient() as RpcClient | null,
         signal: stageSignal,
+        access: ctx.access,
         eligible: (child) => !isImageFilename(child.document_filename),
       });
       const selection =

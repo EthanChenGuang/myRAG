@@ -138,7 +138,7 @@ for (const mode of MODES) {
     }
 
     const ids = async (scope: TenantScope, filters: InvoiceFilters = {}): Promise<string[]> => {
-      const hits = await findInvoices(scope, filters, { db: () => pgliteRpc(db), signal });
+      const hits = await findInvoices(scope, filters, { db: () => pgliteRpc(db), signal, access: { mode: 'off' } as const });
       return hits.map((hit) => hit.invoiceNumber ?? '').sort();
     };
 
@@ -239,7 +239,7 @@ for (const mode of MODES) {
       await seed(scopeA, { sourceKey: `order-old-${mode}`, filename: 'order-old.pdf', fields: { invoice_number: 'ORD-OLD', supplier_name: 'Order Test Co', issue_date: '2024-01-05', gross_total: '5.50', currency: 'EUR' } });
       await seed(scopeA, { sourceKey: `order-new-${mode}`, filename: 'order-new.pdf', fields: { invoice_number: 'ORD-NEW', supplier_name: 'Order Test Co', supplier_tax_id: IT_IVA_2, issue_date: '2025-06-05', gross_total: '7.25', currency: 'EUR' } });
 
-      const hits = await findInvoices(scopeA, { supplier: 'Order Test Co' }, { db: () => pgliteRpc(db), signal });
+      const hits = await findInvoices(scopeA, { supplier: 'Order Test Co' }, { db: () => pgliteRpc(db), signal, access: { mode: 'off' } as const });
       assert.deepEqual(
         hits.map((hit) => [hit.invoiceNumber, hit.issueDate, hit.grossTotal, hit.currency, hit.supplierName, hit.supplierTaxId, hit.filename]),
         [
@@ -248,7 +248,7 @@ for (const mode of MODES) {
         ],
       );
       assert.equal(typeof hits[0]?.documentId, 'string');
-      const limited = await findInvoices(scopeA, { supplier: 'Order Test Co', limit: 1 }, { db: () => pgliteRpc(db), signal });
+      const limited = await findInvoices(scopeA, { supplier: 'Order Test Co', limit: 1 }, { db: () => pgliteRpc(db), signal, access: { mode: 'off' } as const });
       assert.deepEqual(limited.map((hit) => hit.invoiceNumber), ['ORD-NEW']);
     });
 
@@ -269,7 +269,7 @@ for (const mode of MODES) {
     test('findInvoices sends the tenant key of the scope and nothing else identifies the tenant', async () => {
       await requireSchema();
       const calls: Array<{ fn: string; args: Record<string, unknown> }> = [];
-      await findInvoices(scopeA, { supplier: 'x' }, { db: () => pgliteRpc(db, calls), signal });
+      await findInvoices(scopeA, { supplier: 'x' }, { db: () => pgliteRpc(db, calls), signal, access: { mode: 'off' } as const });
       assert.equal(calls.length, 1);
       assert.equal(calls[0]?.fn, 'rag_find_invoices');
       assert.equal(calls[0]?.args.p_tenant_key, keyOf(scopeA));
@@ -303,7 +303,7 @@ for (const mode of MODES) {
 
     test('invalid filters are refused before any call is made', async () => {
       const calls: Array<{ fn: string; args: Record<string, unknown> }> = [];
-      const deps = { db: () => pgliteRpc(db, calls), signal };
+      const deps = { db: () => pgliteRpc(db, calls), signal, access: { mode: 'off' } as const };
       const bad: InvoiceFilters[] = [
         { currency: 'euro' },
         { dateRange: { from: '15/03/2025' } },

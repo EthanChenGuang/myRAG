@@ -60,6 +60,7 @@ function run(specs: Spec[], over: Record<string, string> = {}, labeler?: Citatio
     ...(labeler ? { citationLabeler: labeler } : {}),
   };
   const promise = runContextStages({
+    access: { mode: 'off' },
     input,
     config: cfg,
     profile: 'chat',

@@ -6,7 +6,7 @@ import { loadRagConfig, resetRagConfigForTests, type RagConfig } from '@/lib/rag
 import type { FusedHit } from '@/lib/rag/fusion/rrf';
 import type { RerankSpan } from '@/lib/rag/rerank/types';
 import { createTraceCollector } from '@/lib/rag/trace/collector';
-import { mintAccessScope } from '@/lib/rag/tenant/access';
+import { mintAccessScope, scopeAccessFilter } from '@/lib/rag/tenant/access';
 import { mintScope, withAccess } from '@/lib/rag/tenant/scope';
 import type { Profile } from '@/lib/rag/types';
 import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
@@ -76,6 +76,7 @@ function run(
   const collector = createTraceCollector({ profile, tenantKey: 's:default' });
   const params = { ...effectiveRetrievalParams(profile, cfg, null), final_top_k: 20 };
   const promise = runContextStages({
+    access: { mode: 'off' },
     input: { scope, query: 'alpha beta gamma delta', profile, signal: new AbortController().signal },
     config: cfg,
     profile,
@@ -567,6 +568,7 @@ describe('runContextStages cluster sources (D-21)', () => {
       clustered && index === 0 ? { ...row, hit: { ...row.hit, dupClusterId: CLUSTER } } : row,
     );
     const promise = runContextStages({
+      access: { mode: 'off' },
       input: { scope, query: 'kept other', profile: 'chat', signal: new AbortController().signal },
       config: cfg,
       profile: 'chat',
@@ -623,7 +625,10 @@ describe('runContextStages cluster sources (D-21)', () => {
     const keyed = withAccess(scope, mintAccessScope('keys', ['all', group]));
     const { client, calls } = sourcesAdmin(clusterRows);
     setRagDepsForTests({ adminClient: () => client as never });
-    const { promise } = clusterRun(collapse, { input: { scope: keyed, query: 'kept other', profile: 'chat', signal: new AbortController().signal } });
+    const { promise } = clusterRun(collapse, {
+      input: { scope: keyed, query: 'kept other', profile: 'chat', signal: new AbortController().signal },
+      access: scopeAccessFilter(keyed),
+    });
     await promise;
     const sourceCalls = calls.filter((call) => call.fn === 'rag_dup_cluster_sources');
     expect(sourceCalls).toHaveLength(1);

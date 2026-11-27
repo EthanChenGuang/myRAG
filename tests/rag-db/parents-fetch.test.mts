@@ -94,6 +94,7 @@ describe('expand_parents on the two-tenant fixture', () => {
     const collector = collectorModule.createTraceCollector({ profile: 'chat', tenantKey: `u:${scope.userId}` });
     const params = { ...paramsModule.effectiveRetrievalParams('chat', config, null), final_top_k: 20 };
     const out = await contextModule.runContextStages({
+      access: { mode: 'off' },
       input: { scope, query: 'canary phrase', profile: 'chat', signal: new AbortController().signal },
       config,
       profile: 'chat',

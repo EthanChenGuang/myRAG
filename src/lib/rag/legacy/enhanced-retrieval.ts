@@ -1,7 +1,7 @@
 import { logger } from '@/lib/logger';
 import { searchByEmbedding, type RawChunk, type RpcClient } from '../backend/supabase-rpc';
 import { analyzeQuery, validateTemporalMatch, type TemporalQueryContext } from '../query/temporal-query-detector';
-import type { ScopeAccessFilter } from '../tenant/access';
+import type { ScopeAccessFilter } from '../tenant/access-filter';
 import type { TenantScope } from '../tenant/scope';
 import type { Candidate } from '../types';
 
