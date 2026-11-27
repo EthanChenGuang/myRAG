@@ -17,10 +17,12 @@ export interface TenantVocabularyDeps {
 }
 
 const RPC_NAME = 'rag_scope_vocabulary_for';
+const DOC_TYPES_RPC_NAME = 'rag_tenant_doc_types';
 export const TENANT_VOCABULARY_CACHE_TTL_MS = 60 * 1000;
 const CACHE_MAX = 256;
 
 const cache = new Map<string, { values: TenantVocabularyValue[]; fetchedAt: number }>();
+const docTypesCache = new Map<string, { values: string[]; fetchedAt: number }>();
 
 function keyHash(tenantKey: string): string {
   return createHash('sha256').update(tenantKey, 'utf8').digest('hex').slice(0, 12);
@@ -87,8 +89,59 @@ export async function loadTenantVocabulary(
   }
 }
 
-/** Drops one tenant's entry, or every entry when no key is given. */
+function docTypesFrom(data: unknown): string[] {
+  const values: string[] = [];
+  for (const row of rpcRows(data)) {
+    if (typeof row !== 'object' || row === null) continue;
+    const value = (row as Record<string, unknown>).doc_type;
+    if (typeof value === 'string' && value.length > 0 && !values.includes(value)) values.push(value);
+  }
+  return values;
+}
+
+/**
+ * The doc types of the scope's tenant's current, ready documents (0981, D-06): the doc-type vocabulary of sub-question
+ * filters. Same rules as loadTenantVocabulary: admin client, scopeKey as the only tenant input, a 60 s cache per tenant key,
+ * and null (not cached) on a failure, so the sub-question filters simply run without doc types.
+ */
+export async function loadTenantDocTypes(
+  scope: TenantScope,
+  options: { deps?: TenantVocabularyDeps; signal?: AbortSignal } = {},
+): Promise<string[] | null> {
+  const tenantKey = scopeKey(scope);
+  const deps = options.deps ?? defaultDeps();
+  const now = deps.now();
+  const hit = docTypesCache.get(tenantKey);
+  if (hit && now - hit.fetchedAt < TENANT_VOCABULARY_CACHE_TTL_MS) return [...hit.values];
+
+  try {
+    const client = deps.adminClient();
+    if (!client) throw new Error('admin client unavailable');
+    let request = client.rpc(DOC_TYPES_RPC_NAME, { p_tenant_key: tenantKey });
+    if (options.signal) request = request.abortSignal(options.signal);
+    const { data, error } = await request;
+    if (error) throw new Error(error.code ?? 'rpc_error');
+    const values = docTypesFrom(data);
+    if (docTypesCache.size >= CACHE_MAX && !docTypesCache.has(tenantKey)) {
+      const oldest = docTypesCache.keys().next().value;
+      if (oldest !== undefined) docTypesCache.delete(oldest);
+    }
+    docTypesCache.set(tenantKey, { values, fetchedAt: now });
+    return [...values];
+  } catch (error) {
+    const reason = error instanceof Error && /^[A-Za-z0-9_ ]{1,64}$/u.test(error.message) ? error.message : 'error';
+    console.warn('[Query Layer] tenant doc types unavailable; sub-question filters run without them', { tenant: keyHash(tenantKey), reason });
+    return null;
+  }
+}
+
+/** Drops one tenant's entry, or every entry when no key is given (scope vocabulary and doc types). */
 export function resetTenantVocabularyCacheForTests(tenantKey?: string): void {
-  if (tenantKey === undefined) cache.clear();
-  else cache.delete(tenantKey);
+  if (tenantKey === undefined) {
+    cache.clear();
+    docTypesCache.clear();
+  } else {
+    cache.delete(tenantKey);
+    docTypesCache.delete(tenantKey);
+  }
 }

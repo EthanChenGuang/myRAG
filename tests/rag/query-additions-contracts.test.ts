@@ -64,7 +64,11 @@ describe('Phase 6.2 generated contracts (06.2-01, D-29)', () => {
     let checked = 0;
     for (const entry of table.entries) {
       if (entry.output === undefined) continue;
-      expect(byTransform[entry.transform].safeParse(entry.output).success, `${entry.transform} ${JSON.stringify(entry.output)}`).toBe(true);
+      // 06.2-11: a decompose script may use the filters contract (P-18), requested only with RAG_QUERY_SUBQ_FILTERS on.
+      const ok =
+        byTransform[entry.transform].safeParse(entry.output).success ||
+        (entry.transform === 'decompose' && schemaOf('SubQuestionsWithFilters').safeParse(entry.output).success);
+      expect(ok, `${entry.transform} ${JSON.stringify(entry.output)}`).toBe(true);
       checked += 1;
     }
     expect(checked).toBeGreaterThan(0);
