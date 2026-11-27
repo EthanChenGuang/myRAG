@@ -637,3 +637,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   (b) rag_tenant_doc_types may expose doc-type names of restricted documents; this needs an access check.
   (c) The 0967/0974 writers still write NULL access_sets.
 - 21:09Z 04.3-52 launched on ci/merge-train-38. Every other dependent of train 38 (05.2.1-20, 06.2-22/24/25/36) conflicts with the 06.2 and 05.2.1 heads (deps.ts, plan.ts, index.ts, eval baselines). Launched the TRAIN 39 builder on ci/merge-train-38 to merge 05.2.1-17, 06.2-15/17/18/20/21 and quick-attribute-access, plus 03.3-25 and 06.2-27 if done. Those dependents launch on train 39.
+- 21:11Z Walkthrough item 2 (04.2-23 identifier patterns) PASS on EVAL. Owner asked for an improvement: RAG panel results should also show as a toast. Launched quick-rag-panel-toast on ci/merge-train-38 (shared setStatus helper plus showToast with aria-hidden, a UI-SPEC amendment, the design pipeline).
