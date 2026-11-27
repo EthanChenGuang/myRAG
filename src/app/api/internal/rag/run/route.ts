@@ -114,7 +114,12 @@ function toRetrievalOverrides(input: RetrievalOverridesInput | undefined): Retri
   if (input.final_top_k != null) out.finalTopK = input.final_top_k;
   if (input.rrf_k != null) out.rrfK = input.rrf_k;
   if (input.leg_weights != null) {
-    out.legWeights = { dense: input.leg_weights.dense, lexical: input.leg_weights.lexical, exactId: input.leg_weights.exact_id };
+    out.legWeights = {
+      dense: input.leg_weights.dense,
+      lexical: input.leg_weights.lexical,
+      exactId: input.leg_weights.exact_id,
+      ...(input.leg_weights.domain != null ? { domain: input.leg_weights.domain } : {}),
+    };
   }
   if (input.rerank_model != null) out.rerankModel = input.rerank_model;
   if (input.chunking_profile_by_doc_type && Object.keys(input.chunking_profile_by_doc_type).length > 0) {

@@ -51,3 +51,15 @@ describe('eval leg weight override for the domain leg (quick-311, gap 6)', () =>
     expect(evalRetrievalOverrides('chat', { legWeights: { domain: 0.25 } })).toBeUndefined();
   });
 });
+
+describe('effective eval params keep the domain weight (quick-311, gap 6)', () => {
+  it('an eval leg_weights override with domain reaches the effective params; chat ignores it', async () => {
+    const { effectiveRetrievalParams } = await import('@/lib/rag/v2/retrieval-params');
+    const { loadRagConfig } = await import('@/lib/rag/config');
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2' });
+    const overrides = { leg_weights: { dense: 1, lexical: 1, exact_id: 1, domain: 0.25 } };
+    expect(effectiveRetrievalParams('eval', config, overrides).leg_weights?.domain).toBe(0.25);
+    expect(effectiveRetrievalParams('chat', config, overrides).leg_weights?.domain).toBeUndefined();
+    expect(effectiveRetrievalParams('eval', config, { leg_weights: { dense: 1, lexical: 1, exact_id: 1 } }).leg_weights?.domain).toBeUndefined();
+  });
+});
