@@ -916,3 +916,7 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 00:00Z quick-53-gate-monitor DONE exec/quick-53-gate-monitor 47b10449 -> train 41. Covers gap 1 (monitor env), gap 2 (weekly sample), gap 15 (release-gate split, ancestor check, run-bound statuses), gap 3 (per-check enforce: false_answer_rate gates prechunked) and W-1. Archived.
   - OWNER: H-3 GitHub Environment with reviewers; H-2 repo vars/secrets; H-10 false-refusal ceiling. Re-run the gate before promoting.
 - 00:00Z 06.2-42 route B recorded (613a8c60): bge-m3 verdict false, voyage verdict false (reference only). Route A told to run now that the OpenRouter key is saved.
+- 00:01Z 04.1-18 STOPPED at Task 1 (exec/04.1-18). The hypothesis was wrong: 19 of the 21 extra refusals are exact_id rows that the D-28 pool replay excludes; only 1 is the preview.
+  - DECISION on the owner's behalf (design, not a signature): revise D-28 to admit exact_id rows into the legacy_rule pool with the legacy keep rule.
+  - plan-41-18-revise (Fable) is replanning; re-execute after it.
+  - Archived.
