@@ -27,7 +27,9 @@ SIDECAR_TEST_EXTRAS = ("chunking", "preflight", "hidden-text")
 
 TESTS_DIR = ROOT / "tests"
 TSX_GLOB = "tests/*.test.mts"
-TSX_COMMAND_RE = re.compile(r"node\s+--import\s+tsx\s+--test\b(?P<args>[^\n]*)")
+# The shard planner takes the globs and hands its share of the files to node --import tsx --test, so its arguments count too.
+TSX_COMMAND_RE = re.compile(r"(?:node\s+--import\s+tsx\s+--test|node\s+scripts/ci/test-shards\.mjs)\b(?P<args>[^\n)]*)")
+SHARD_PLANNER = "scripts/ci/test-shards.mjs --shard="
 
 TS_JOB_NEEDLES = {
     "ts-vitest": ("npx vitest run",),
@@ -37,6 +39,7 @@ TS_JOB_NEEDLES = {
         "node scripts/check-config.mjs",
         "scripts/check-config.test.mjs",
         "scripts/tests/gen-zod.node-test.mjs",
+        "scripts/tests/test-shards.node-test.mjs",
         "npm run typecheck:new",
         "next typegen",
         "npx tsc --noEmit -p tsconfig.json",
@@ -54,7 +57,8 @@ TS_JOB_NEEDLES = {
     ),
 }
 # job -> the shard flag its test command must take from matrix.shard
-TS_SHARDED = {"ts-vitest": "--shard=", "ts-db": "--test-shard="}
+# ts-db and ts-tsx split by recorded file durations (scripts/ci/test-durations.json); Node's --test-shard splits by file index.
+TS_SHARDED = {"ts-vitest": "--shard=", "ts-db": SHARD_PLANNER, "ts-tsx": SHARD_PLANNER}
 TS_TIMEOUT_MAX = 25
 PR_JOBS = [
     *TS_JOB_NEEDLES,
