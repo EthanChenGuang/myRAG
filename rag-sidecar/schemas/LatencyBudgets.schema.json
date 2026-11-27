@@ -4,6 +4,17 @@
       "additionalProperties": false,
       "description": "D-28, D-61: report-only budgets for the post-stream checks and the guard's per-delta overhead.",
       "properties": {
+        "calc_check": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScorerBudget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "claim_check": {
           "anyOf": [
             {

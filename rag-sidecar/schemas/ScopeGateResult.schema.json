@@ -1,0 +1,61 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "centroid_count": {
+      "minimum": 0,
+      "title": "Centroid Count",
+      "type": "integer"
+    },
+    "label": {
+      "enum": [
+        "in_scope",
+        "out_of_scope",
+        "unsure"
+      ],
+      "title": "Label",
+      "type": "string"
+    },
+    "latency_ms": {
+      "minimum": 0,
+      "title": "Latency Ms",
+      "type": "number"
+    },
+    "negative_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Negative Score"
+    },
+    "reason": {
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "title": "Reason",
+      "type": "string"
+    },
+    "score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Score"
+    }
+  },
+  "required": [
+    "label",
+    "score",
+    "negative_score",
+    "reason",
+    "centroid_count",
+    "latency_ms"
+  ],
+  "title": "ScopeGateResult",
+  "type": "object"
+}

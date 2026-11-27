@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CLAUDE_CALC_TOOL_ELIGIBLE,
   CLAUDE_WEB_SEARCH_ELIGIBLE,
   claudeTurnEligibility,
   preRetrievalCitations,
@@ -39,6 +40,7 @@ const FAILURES: Array<[ClaudeIneligibleReason, (input: ClaudeTurnEligibilityInpu
   ['multi_step', (i) => ({ ...i, facts: { ...i.facts, multiStep: true } })],
   ['web_search', (i) => ({ ...i, facts: { ...i.facts, webSearch: true } })],
   ['attachments', (i) => ({ ...i, facts: { ...i.facts, attachments: true } })],
+  ['calculation', (i) => ({ ...i, facts: { ...i.facts, calculation: true } })],
   ['reasoning_unsupported', (i) => ({ ...i, modelId: 'anthropic/claude-opus-4.5', facts: { ...i.facts, reasoning: true } })],
 ];
 
@@ -68,6 +70,18 @@ describe('claudeTurnEligibility (D-10)', () => {
 
   it('holds webSearch turns ineligible until plan 05-26', () => {
     expect(CLAUDE_WEB_SEARCH_ELIGIBLE).toBe(false);
+  });
+
+  it('holds calculation turns ineligible until the D-10 proof covers tool turns (05.2.1 D-71)', () => {
+    expect(CLAUDE_CALC_TOOL_ELIGIBLE).toBe(false);
+  });
+
+  it('keeps an explicit calculation: false eligible', () => {
+    const input = eligibleInput();
+    expect(claudeTurnEligibility({ ...input, facts: { ...input.facts, calculation: false } })).toEqual({
+      eligible: true,
+      anthropicId: 'claude-sonnet-5-5',
+    });
   });
 });
 
@@ -106,6 +120,12 @@ describe('selectCitationStrategy (D-01)', () => {
     expect(selectCitationStrategy(turn({ aliasCount: 0, config: on }))).toBeNull();
     expect(selectCitationStrategy(turn({ capabilities: { citations: false }, config: on }))).toBeNull();
     expect(selectCitationStrategy(turn({ ragMode: 'bypass', config: on }))).toBeNull();
+  });
+
+  it('a calculation turn takes chunk-alias even when it is otherwise eligible for the Claude path', () => {
+    const input = eligibleInput();
+    const calc = { ...input.facts, calculation: true };
+    expect(selectCitationStrategy(turn({ facts: calc, config: { ...input.config, citations: true } }))).toBe('chunk-alias');
   });
 
   it('never picks claude-citations when the turn facts are absent', () => {
@@ -153,6 +173,15 @@ describe('preRetrievalCitations', () => {
     ).toBe(false);
     expect(
       preRetrievalCitations({ config: { ...base.config, citations: true }, modelId: CLAUDE, capabilities: { citations: true }, ragMode: 'bypass', modelSource: SOURCE }),
+    ).toBe(false);
+    expect(
+      preRetrievalCitations({
+        config: base.config,
+        modelId: CLAUDE,
+        capabilities: { citations: true },
+        facts: { ...base.facts, calculation: true },
+        modelSource: SOURCE,
+      }),
     ).toBe(false);
   });
 });

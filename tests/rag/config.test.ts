@@ -29,9 +29,10 @@ afterEach(() => {
 
 const PHASE42_STAGES = ['table_lookup', 'diversify', 'identifier_resolve', 'identifier_guard'];
 const PHASE33_STAGES = ['attribute_resolve'];
+const PHASE62_STAGES = ['scope_gate'];
 
 function phase4Disabled(config: { disabledStages: ReadonlySet<string> }): string[] {
-  const skip = new Set<string>([...QUERY_LAYER_STAGES, ...PHASE42_STAGES, ...PHASE33_STAGES]);
+  const skip = new Set<string>([...QUERY_LAYER_STAGES, ...PHASE42_STAGES, ...PHASE33_STAGES, ...PHASE62_STAGES]);
   return [...config.disabledStages].filter((name) => !skip.has(name)).sort();
 }
 
@@ -91,6 +92,7 @@ const CHAT_DEFAULTS = {
   identifier_resolve: 1000,
   identifier_guard: 1000,
   attribute_resolve: 1000,
+  scope_gate: 20,
 };
 
 describe('stage tables', () => {
@@ -125,6 +127,7 @@ describe('stage tables', () => {
       'identifier_guard',
       'terminology',
       'attribute_resolve',
+      'scope_gate',
     ]);
   });
 
@@ -148,6 +151,8 @@ describe('stage tables', () => {
     expect(PROFILE_STAGE_DEFAULTS.eval.terminology).toBe(1000);
     expect(PROFILE_STAGE_DEFAULTS.voice.attribute_resolve).toBe(500);
     expect(PROFILE_STAGE_DEFAULTS.eval.attribute_resolve).toBe(1000);
+    expect(PROFILE_STAGE_DEFAULTS.eval.scope_gate).toBe(60000);
+    expect(PROFILE_STAGE_DEFAULTS.voice).not.toHaveProperty('scope_gate');
   });
 });
 
@@ -832,7 +837,7 @@ describe('query layer', () => {
     }
     expect(config.timeouts.chat.condense).toBe(400);
     expect(config.timeouts.embed.condense).toBe(600);
-    expect(config.timeouts.voice).toMatchObject({ condense: 300, query_gate: 50, normalize_dates: 50, translate: 300 });
+    expect(config.timeouts.voice).toMatchObject({ condense: 300, query_gate: 50, normalize_dates: 50, translate: 250 });
     for (const stage of [...QUERY_LAYER_STAGES, 'translate'] as const) expect(config.timeouts.eval[stage]).toBe(60000);
     expect(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_STAGE_TIMEOUTS: 'translate=900' }).timeouts.chat.translate).toBe(900);
   });

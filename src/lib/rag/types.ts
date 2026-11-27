@@ -1,8 +1,8 @@
 import type { ExtractedURL } from '@/lib/url-extractor';
 import type { QueryClassification } from '@/lib/query-classifier';
-import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
+import type { QueryPlan, RagTrace, ScopeGateResult } from '@/lib/rag-eval/contracts.generated';
 import type { QueryParamsOverrides } from './query/query-params';
-import type { BackendId, RetrievalFilterInput } from './backend/types';
+import type { BackendId, RetrievalFilterInput, RetrievalFilters } from './backend/types';
 import type { VoiceResults } from './context/voice';
 import type { QueryFramework, QueryTransformSwitches, SemanticCacheBackend, StageName, StageTimeouts } from './config';
 import type { TemporalQueryContext } from './query/temporal-query-detector';
@@ -164,6 +164,8 @@ export interface ContextBlock {
   versionLabel?: string;
   /** RAG_VERSION_LABELS (D-50): ISO YYYY-MM-DD from effective_from, else the document date; absent without either. */
   effectiveFrom?: string;
+  /** Phase 6.2 D-11: the sub-questions (QueryPlan indexes) whose variants retrieved this block; absent without decomposition. */
+  subQuestionIndexes?: number[];
 }
 
 export interface CitationLabel {
@@ -215,7 +217,7 @@ export interface PackingSummary {
   keptParents: number;
 }
 
-export type QueryVariantKind = 'original' | 'condensed' | 'expanded' | 'hyde' | 'sub_question' | 'translated' | 'terminology';
+export type QueryVariantKind = 'original' | 'condensed' | 'expanded' | 'hyde' | 'sub_question' | 'translated' | 'terminology' | 'history_fallback';
 
 export interface QueryVariant {
   text: string;
@@ -227,6 +229,10 @@ export interface QueryVariant {
   subQuestionIndex?: number;
   /** The text embedded for the dense leg when it differs from text; absent means text. */
   denseText?: string;
+  /** Phase 6.2 D-05: a sub-question's validated narrowing, already intersected with the request filters; absent means the request's. */
+  filters?: RetrievalFilters;
+  /** Phase 6.2 D-05: whether filters narrowed this variant's search. */
+  filterApplied?: boolean;
 }
 
 export interface RetrievalOverrides {
@@ -314,6 +320,12 @@ export interface RunRetrievalInput {
   cacheContext?: RetrievalCacheContext;
   /** D-58: set server-side by the embed route only, never from a request body; a version scope then also needs RAG_EMBED_VERSION_SCOPE. */
   channel?: 'embed';
+  /** Phase 6.2 D-17: the client's UI language code, a late step of the query-language chain; validated where it is used. */
+  uiLanguage?: string;
+  /** Phase 6.2 D-22, D-23: the previous turn's stored standalone query, for the history_fallback variant. */
+  previousStandaloneQuery?: string | null;
+  /** Phase 6.2 D-17, D-22: the previous turn's resolved query language code. */
+  previousTurnLanguage?: string | null;
 }
 
 export type LogOutcomeValue = 'answered' | 'refused_no_context' | 'kb_unavailable' | 'degraded_answer' | 'unknown';
@@ -375,6 +387,12 @@ export interface InjectionSummary {
   items?: InjectionItemRecord[];
 }
 
+/** Why retrieval was skipped without searching: the Phase 6 small-talk gate or the Phase 6.2 scope gate (D-26). */
+export type RetrievalSkipReason = 'small_talk' | 'out_of_scope';
+
+/** Phase 6.2 D-21: speculative retrieval timing and waste, as the generated trace carries it. */
+export type SpeculativeTrace = NonNullable<RagTrace['speculative']>;
+
 export interface RetrievalResult {
   status: RetrievalStatus;
   reason: string;
@@ -417,6 +435,14 @@ export interface RetrievalResult {
   versionConflict?: VersionConflict;
   /** D-86: present only when RetrievalOptions.documentTokenBudget was given and an assembly ran. */
   packing?: PackingSummary;
+  /** Phase 6.2 D-26: set when retrieval was skipped before search (status empty for out_of_scope); absent otherwise. */
+  skipReason?: RetrievalSkipReason;
+  /** Phase 6.2 D-26: the scope gate's label and scores; absent while the stage did not run. */
+  scopeGate?: ScopeGateResult;
+  /** Phase 6.2 D-23: searches counted against the Phase 6 D-08 cap, history_fallback included; absent without the query layer. */
+  searchesCounted?: number;
+  /** Phase 6.2 D-21: absent while RAG_SPECULATIVE_RETRIEVAL is off. */
+  speculative?: SpeculativeTrace;
 }
 
 /** D-31: counts only, never an identifier. */

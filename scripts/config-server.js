@@ -166,7 +166,7 @@ Based on the context provided, offer comprehensive and helpful answers. If speci
 // Default model configurations
 const DEFAULT_OPENAI_MODELS = '[{"id":"gpt-4.1-mini","displayName":"GPT-4.1 Mini","contextLength":1047576},{"id":"gpt-4.1","displayName":"GPT-4.1","contextLength":1047576},{"id":"o3","displayName":"o3","contextLength":200000},{"id":"o4-mini","displayName":"o4 Mini","contextLength":200000}]';
 
-const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true,"contextLength":1000000},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-5-mini","displayName":"GPT-5 Mini","contextLength":400000},{"id":"openai/gpt-5","displayName":"GPT-5","contextLength":400000},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1","contextLength":200000},{"id":"anthropic/claude-opus-5.5","displayName":"Claude Opus 5.5","anthropicId":"claude-opus-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-sonnet-5.5","displayName":"Claude Sonnet 5.5","anthropicId":"claude-sonnet-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-haiku-5.5","displayName":"Claude Haiku 5.5","anthropicId":"claude-haiku-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite","contextLength":1048576},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash","contextLength":1048576},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true,"contextLength":524288},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
+const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true,"contextLength":1000000},{"id":"auto","displayName":"Auto"},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-5-mini","displayName":"GPT-5 Mini","contextLength":400000},{"id":"openai/gpt-5","displayName":"GPT-5","contextLength":400000},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1","contextLength":200000},{"id":"anthropic/claude-opus-5.5","displayName":"Claude Opus 5.5","anthropicId":"claude-opus-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-sonnet-5.5","displayName":"Claude Sonnet 5.5","anthropicId":"claude-sonnet-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-haiku-5.5","displayName":"Claude Haiku 5.5","anthropicId":"claude-haiku-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite","contextLength":1048576},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash","contextLength":1048576},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true,"contextLength":524288},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
 
 // API endpoint to get current .env values. Secret values are never returned; secretsSet lists which ones are set.
 app.get('/api/config', (req, res) => {
@@ -186,6 +186,51 @@ app.get('/api/config', (req, res) => {
   } catch (error) {
     console.error('Error loading configuration:', error);
     res.status(500).json({ error: 'Failed to load configuration' });
+  }
+});
+
+const PIPELINE_MANIFEST_PATH = path.join(__dirname, 'rag', 'env-manifest.json');
+const PIPELINE_ENTRY_FIELDS = ['name', 'group', 'label', 'type', 'options', 'requires', 'default', 'provider', 'help'];
+
+/**
+ * The managed manifest entries for the generated RAG pipeline section (D-14): metadata, the saved non-secret value and,
+ * for a secret, only { state, last4? } from maskConfig. A secret's value and default never leave the server.
+ */
+function buildRagPipelineManifest(manifest, saved) {
+  const { config, secretHints } = security.maskConfig(saved || {});
+  const entries = [];
+  for (const raw of Array.isArray(manifest && manifest.vars) ? manifest.vars : []) {
+    if (!raw || raw.status !== 'managed' || typeof raw.name !== 'string') continue;
+    const entry = {};
+    for (const field of PIPELINE_ENTRY_FIELDS) {
+      if (raw[field] !== undefined) entry[field] = raw[field];
+    }
+    const secret = raw.type === 'secret' || security.isSecretConfigEntry(raw.name, '') || Object.prototype.hasOwnProperty.call(secretHints, raw.name);
+    if (secret) {
+      entry.default = '';
+      entry.secret = secretHints[raw.name] || { state: 'unset' };
+    } else {
+      entry.value = Object.prototype.hasOwnProperty.call(config, raw.name) ? String(config[raw.name]) : null;
+    }
+    entries.push(entry);
+  }
+  return entries;
+}
+
+app.get('/api/rag-pipeline/manifest', (req, res) => {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(PIPELINE_MANIFEST_PATH, 'utf8'));
+    const envPath = path.join(REPO_ROOT, '.env.local');
+    const exists = fs.existsSync(envPath);
+    const saved = exists ? dotenv.parse(fs.readFileSync(envPath, 'utf8')) : {};
+    res.json({
+      success: true,
+      entries: buildRagPipelineManifest(manifest, saved),
+      envModifiedAt: exists ? fs.statSync(envPath).mtime.toISOString() : null,
+    });
+  } catch (error) {
+    console.error('[Config] RAG pipeline manifest could not be read');
+    res.status(500).json({ success: false, error: 'manifest_unavailable' });
   }
 });
 
@@ -230,10 +275,14 @@ app.post('/api/config', async (req, res) => {
     // Filter out invalid environment variable names and template placeholders
     const fullValues = filterValidEnvVars(rawFullValues);
 
-    // The UI never receives secret values, so an empty secret means "unchanged"
-    for (const [name, value] of Object.entries(fullValues)) {
-      if (security.isSecretConfigEntry(name, '') && (value === '' || value === null || value === undefined)) {
-        delete fullValues[name];
+    // The UI never receives secret values: an empty or masked secret field means "unchanged" (D-14)
+    {
+      const savedEnvPath = path.join(REPO_ROOT, '.env.local');
+      const savedValues = fs.existsSync(savedEnvPath) ? dotenv.parse(fs.readFileSync(savedEnvPath, 'utf8')) : {};
+      const merged = security.mergeSecretUpdate(savedValues, fullValues);
+      for (const name of Object.keys(fullValues)) {
+        if (Object.prototype.hasOwnProperty.call(merged, name)) fullValues[name] = merged[name];
+        else delete fullValues[name];
       }
     }
     for (const name of cleared) fullValues[name] = '';
@@ -733,6 +782,18 @@ ${fullValues.RAG_QUERY_DATE_NORMALIZE !== undefined ? `RAG_QUERY_DATE_NORMALIZE=
 ${fullValues.RAG_QUERY_HYDE !== undefined ? `RAG_QUERY_HYDE=${fullValues.RAG_QUERY_HYDE}` : 'RAG_QUERY_HYDE=false'}
 ${fullValues.RAG_QUERY_TRANSLATE_DISABLED_PROFILES !== undefined ? `RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${fullValues.RAG_QUERY_TRANSLATE_DISABLED_PROFILES}` : 'RAG_QUERY_TRANSLATE_DISABLED_PROFILES='}
 ${fullValues.RAG_QUERY_VOICE_TRANSFORMS !== undefined ? `RAG_QUERY_VOICE_TRANSFORMS=${fullValues.RAG_QUERY_VOICE_TRANSFORMS}` : 'RAG_QUERY_VOICE_TRANSFORMS=condense_history,normalize_dates'}
+${fullValues.RAG_QUERY_HISTORY_FALLBACK !== undefined ? `RAG_QUERY_HISTORY_FALLBACK=${fullValues.RAG_QUERY_HISTORY_FALLBACK}` : 'RAG_QUERY_HISTORY_FALLBACK=true'}
+${fullValues.RAG_QUERY_DECOMPOSE_COMPLETENESS !== undefined ? `RAG_QUERY_DECOMPOSE_COMPLETENESS=${fullValues.RAG_QUERY_DECOMPOSE_COMPLETENESS}` : 'RAG_QUERY_DECOMPOSE_COMPLETENESS=true'}
+${fullValues.RAG_QUERY_SUBQ_FILTERS !== undefined ? `RAG_QUERY_SUBQ_FILTERS=${fullValues.RAG_QUERY_SUBQ_FILTERS}` : 'RAG_QUERY_SUBQ_FILTERS=false'}
+${fullValues.RAG_DECOMPOSED_ANSWER !== undefined ? `RAG_DECOMPOSED_ANSWER=${fullValues.RAG_DECOMPOSED_ANSWER}` : 'RAG_DECOMPOSED_ANSWER=true'}
+${fullValues.RAG_WHATSAPP_HISTORY !== undefined ? `RAG_WHATSAPP_HISTORY=${fullValues.RAG_WHATSAPP_HISTORY}` : 'RAG_WHATSAPP_HISTORY=false'}
+${fullValues.RAG_TRANSLATION_GLOSSARY !== undefined ? `RAG_TRANSLATION_GLOSSARY=${fullValues.RAG_TRANSLATION_GLOSSARY}` : 'RAG_TRANSLATION_GLOSSARY=false'}
+${fullValues.RAG_LANGID_SIDECAR !== undefined ? `RAG_LANGID_SIDECAR=${fullValues.RAG_LANGID_SIDECAR}` : 'RAG_LANGID_SIDECAR=false'}
+${fullValues.RAG_SPECULATIVE_RETRIEVAL !== undefined ? `RAG_SPECULATIVE_RETRIEVAL=${fullValues.RAG_SPECULATIVE_RETRIEVAL}` : 'RAG_SPECULATIVE_RETRIEVAL=false'}
+${fullValues.RAG_MODEL_ROUTING !== undefined ? `RAG_MODEL_ROUTING=${fullValues.RAG_MODEL_ROUTING}` : 'RAG_MODEL_ROUTING=off'}
+${fullValues.RAG_ROUTING_FAST_MODEL !== undefined ? `RAG_ROUTING_FAST_MODEL=${fullValues.RAG_ROUTING_FAST_MODEL}` : 'RAG_ROUTING_FAST_MODEL=anthropic/claude-haiku-5.5'}
+${fullValues.RAG_ROUTING_QUALITY_MODEL !== undefined ? `RAG_ROUTING_QUALITY_MODEL=${fullValues.RAG_ROUTING_QUALITY_MODEL}` : 'RAG_ROUTING_QUALITY_MODEL=anthropic/claude-sonnet-5.5'}
+${fullValues.RAG_SCOPE_GATE !== undefined ? `RAG_SCOPE_GATE=${fullValues.RAG_SCOPE_GATE}` : 'RAG_SCOPE_GATE=false'}
 
 # Semantic cache
 ${fullValues.RAG_SEMANTIC_CACHE !== undefined ? `RAG_SEMANTIC_CACHE=${fullValues.RAG_SEMANTIC_CACHE}` : 'RAG_SEMANTIC_CACHE=off'}
@@ -1758,6 +1819,18 @@ RAG_QUERY_DATE_NORMALIZE=${getEnvValue('RAG_QUERY_DATE_NORMALIZE') || 'true'}
 RAG_QUERY_HYDE=${getEnvValue('RAG_QUERY_HYDE') || 'false'}
 RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${getEnvValue('RAG_QUERY_TRANSLATE_DISABLED_PROFILES') || ''}
 RAG_QUERY_VOICE_TRANSFORMS=${getEnvValue('RAG_QUERY_VOICE_TRANSFORMS') || 'condense_history,normalize_dates'}
+RAG_QUERY_HISTORY_FALLBACK=${getEnvValue('RAG_QUERY_HISTORY_FALLBACK') || 'true'}
+RAG_QUERY_DECOMPOSE_COMPLETENESS=${getEnvValue('RAG_QUERY_DECOMPOSE_COMPLETENESS') || 'true'}
+RAG_QUERY_SUBQ_FILTERS=${getEnvValue('RAG_QUERY_SUBQ_FILTERS') || 'false'}
+RAG_DECOMPOSED_ANSWER=${getEnvValue('RAG_DECOMPOSED_ANSWER') || 'true'}
+RAG_WHATSAPP_HISTORY=${getEnvValue('RAG_WHATSAPP_HISTORY') || 'false'}
+RAG_TRANSLATION_GLOSSARY=${getEnvValue('RAG_TRANSLATION_GLOSSARY') || 'false'}
+RAG_LANGID_SIDECAR=${getEnvValue('RAG_LANGID_SIDECAR') || 'false'}
+RAG_SPECULATIVE_RETRIEVAL=${getEnvValue('RAG_SPECULATIVE_RETRIEVAL') || 'false'}
+RAG_MODEL_ROUTING=${getEnvValue('RAG_MODEL_ROUTING') || 'off'}
+RAG_ROUTING_FAST_MODEL=${getEnvValue('RAG_ROUTING_FAST_MODEL') || 'anthropic/claude-haiku-5.5'}
+RAG_ROUTING_QUALITY_MODEL=${getEnvValue('RAG_ROUTING_QUALITY_MODEL') || 'anthropic/claude-sonnet-5.5'}
+RAG_SCOPE_GATE=${getEnvValue('RAG_SCOPE_GATE') || 'false'}
 # Semantic cache
 RAG_SEMANTIC_CACHE=${getEnvValue('RAG_SEMANTIC_CACHE') || 'off'}
 RAG_SEMANTIC_CACHE_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_TTL') || '3600'}
@@ -2289,6 +2362,18 @@ RAG_QUERY_DATE_NORMALIZE=${getEnvValue('RAG_QUERY_DATE_NORMALIZE') || 'true'}
 RAG_QUERY_HYDE=${getEnvValue('RAG_QUERY_HYDE') || 'false'}
 RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${getEnvValue('RAG_QUERY_TRANSLATE_DISABLED_PROFILES') || ''}
 RAG_QUERY_VOICE_TRANSFORMS=${getEnvValue('RAG_QUERY_VOICE_TRANSFORMS') || 'condense_history,normalize_dates'}
+RAG_QUERY_HISTORY_FALLBACK=${getEnvValue('RAG_QUERY_HISTORY_FALLBACK') || 'true'}
+RAG_QUERY_DECOMPOSE_COMPLETENESS=${getEnvValue('RAG_QUERY_DECOMPOSE_COMPLETENESS') || 'true'}
+RAG_QUERY_SUBQ_FILTERS=${getEnvValue('RAG_QUERY_SUBQ_FILTERS') || 'false'}
+RAG_DECOMPOSED_ANSWER=${getEnvValue('RAG_DECOMPOSED_ANSWER') || 'true'}
+RAG_WHATSAPP_HISTORY=${getEnvValue('RAG_WHATSAPP_HISTORY') || 'false'}
+RAG_TRANSLATION_GLOSSARY=${getEnvValue('RAG_TRANSLATION_GLOSSARY') || 'false'}
+RAG_LANGID_SIDECAR=${getEnvValue('RAG_LANGID_SIDECAR') || 'false'}
+RAG_SPECULATIVE_RETRIEVAL=${getEnvValue('RAG_SPECULATIVE_RETRIEVAL') || 'false'}
+RAG_MODEL_ROUTING=${getEnvValue('RAG_MODEL_ROUTING') || 'off'}
+RAG_ROUTING_FAST_MODEL=${getEnvValue('RAG_ROUTING_FAST_MODEL') || 'anthropic/claude-haiku-5.5'}
+RAG_ROUTING_QUALITY_MODEL=${getEnvValue('RAG_ROUTING_QUALITY_MODEL') || 'anthropic/claude-sonnet-5.5'}
+RAG_SCOPE_GATE=${getEnvValue('RAG_SCOPE_GATE') || 'false'}
 # Semantic cache
 RAG_SEMANTIC_CACHE=${getEnvValue('RAG_SEMANTIC_CACHE') || 'off'}
 RAG_SEMANTIC_CACHE_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_TTL') || '3600'}
@@ -5016,4 +5101,4 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings, answerRulesModelFamily };
+module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings, answerRulesModelFamily, buildRagPipelineManifest };

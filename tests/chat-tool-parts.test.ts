@@ -8,6 +8,18 @@ const h = await vi.hoisted(async () => {
   return fakes.createChatRouteHarness();
 });
 
+// Plan 05.2.1-02 adds calcTool to the answer-config reader; until it lands it is read here from the same env name.
+vi.mock('@/lib/rag/generation/answer-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/rag/generation/answer-config')>();
+  return {
+    ...actual,
+    readAnswerConfig: (source: Record<string, string | undefined> = process.env) => ({
+      ...actual.readAnswerConfig(source),
+      calcTool: source.RAG_CALC_TOOL === 'true',
+    }),
+  };
+});
+
 vi.mock('ai', async (importOriginal) => ({
   ...(await importOriginal<typeof import('ai')>()),
   streamText: h.capture.streamText,
@@ -224,6 +236,108 @@ describe('chat route AI SDK v6 tool parts', () => {
     expect(body).toContain('"type":"metadata","usedDocuments":[{"type":"document","id":"doc-image-1","name":"diagram.png","filename":"diagram.png"');
     expect(body.indexOf('"type":"source_images"')).toBeLessThan(body.indexOf('"type":"metadata"'));
     expect(body.indexOf('"type":"metadata"')).toBeLessThan(body.indexOf('"delta":"ok"'));
+  });
+});
+
+describe('chat route server-executed calculate tool (05.2.1-14)', () => {
+  const createdCallIds: string[] = [];
+  const QUESTION = 'What is 3 times 4 for item one?';
+
+  function seedTextDocument() {
+    h.supabase.store.documents = [
+      { id: 'doc-calc-1', filename: 'values.txt', created_at: '2026-01-01T00:00:00.000Z', content: 'Item one has value 12 units.', metadata: {} },
+    ];
+    h.supabase.store.document_chunks = [{ id: 'chunk-calc-1', document_id: 'doc-calc-1', content: 'Item one has value 12 units.', metadata: {} }];
+    h.retrieval.mockResolvedValue(
+      retrievalWith([
+        {
+          chunk_id: 'chunk-calc-1',
+          document_id: 'doc-calc-1',
+          content: 'Item one has value 12 units.',
+          similarity: 0.9,
+          metadata: {},
+          temporal_score: 0,
+          financial_score: 0,
+          final_score: 0.9,
+          match_reason: 'similarity',
+        },
+      ]),
+    );
+  }
+
+  async function calcStepParams() {
+    const { POST } = await loadRoute();
+    await readSse(
+      await POST(
+        chatRequest({
+          messages: [{ role: 'user', content: QUESTION }],
+          data: { ragMode: 'strict', settings: { webSearch: false, model: 'openai/gpt-4.1' } },
+        }),
+      ),
+    );
+    return h.capture.calls[0];
+  }
+
+  beforeEach(() => {
+    h.capture.reset();
+    h.retrieval.mockReset();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    seedTextDocument();
+  });
+
+  afterEach(() => {
+    for (const id of createdCallIds) delete globals.toolApprovalState?.[id];
+    createdCallIds.length = 0;
+    delete process.env.RAG_CALC_TOOL;
+    delete process.env.RAG_TOOL_RESULT_GUARD;
+    vi.restoreAllMocks();
+  });
+
+  it('runs our calculate call without an approval entry and keeps its result', async () => {
+    process.env.RAG_CALC_TOOL = 'true';
+    const params = await calcStepParams();
+    expect(Object.keys(params.tools)).toContain('calculate');
+    createdCallIds.push('call-calc-1', 'call-search-2');
+
+    const output = { status: 'ok', result: '12' };
+    const calc: StepPart = { type: 'tool-result', toolCallId: 'call-calc-1', toolName: 'calculate', output };
+    const search: StepPart = { type: 'tool-result', toolCallId: 'call-search-2', toolName: 'webSearch', output: { results: [] } };
+    await params.onStepFinish({
+      text: '',
+      toolCalls: [toolCall('call-calc-1', 'calculate', { operands: [], steps: [], result: 's1' }), toolCall('call-search-2', 'webSearch', { query: 'x' })],
+      toolResults: [calc, search],
+    });
+
+    expect(calc.output).toBe(output);
+    expect(search.output).toEqual({ results: [] });
+    expect(globals.toolApprovalState['call-calc-1']).toBeUndefined();
+    expect(globals.toolApprovalState['call-search-2']).toBeUndefined();
+  });
+
+  it('sends a tool that only shares the name to approval and clears its output', async () => {
+    const params = await calcStepParams();
+    expect(Object.keys(params.tools)).not.toContain('calculate');
+    createdCallIds.push('call-calc-2');
+
+    const calc: StepPart = { type: 'tool-result', toolCallId: 'call-calc-2', toolName: 'calculate', output: { status: 'ok' } };
+    await params.onStepFinish({ text: '', toolCalls: [toolCall('call-calc-2', 'calculate', {})], toolResults: [calc] });
+
+    expect(calc.output).toBeNull();
+    expect(globals.toolApprovalState['call-calc-2']).toBeDefined();
+    expect(globals.toolApprovalState['call-calc-2'].approved).toBe(false);
+  });
+
+  it('keeps calculate out of the tool-result guard and the tool-result notice', async () => {
+    process.env.RAG_CALC_TOOL = 'true';
+    process.env.RAG_TOOL_RESULT_GUARD = 'tag';
+    const params = await calcStepParams();
+    const { isServerCalculateTool } = await import('@/lib/rag/generation/calc-tool');
+    const { TOOL_RESULT_SENTENCE } = await import('@/lib/rag');
+
+    expect(isServerCalculateTool(params.tools.calculate)).toBe(true);
+    expect(JSON.stringify(params.messages)).not.toContain(TOOL_RESULT_SENTENCE);
   });
 });
 

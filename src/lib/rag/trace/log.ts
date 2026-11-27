@@ -1,6 +1,6 @@
 import type { RefusalRecord } from '../refusal/types';
 import type { RetrievalResult, StageRecord } from '../types';
-import type { TraceCollector } from './collector';
+import type { TraceCollector, TraceLanguages } from './collector';
 import { sanitizeStageCounts } from './collector';
 
 export interface TraceLogSink {
@@ -71,6 +71,20 @@ function timingForLog(collector: TraceCollector): Record<string, unknown> {
   };
 }
 
+/** LANG-10: the codes-only languages block, once the trace was finished with one. */
+function languagesForLog(collector: TraceCollector): { languages?: TraceLanguages } {
+  const block = collector.languages();
+  if (!block) return {};
+  return {
+    languages: {
+      query_language: block.query_language,
+      query_language_confidence: block.query_language_confidence,
+      chunk_languages: block.chunk_languages,
+      answer_language: block.answer_language,
+    },
+  };
+}
+
 export function buildTraceLogPayload(collector: TraceCollector, result: RetrievalResult) {
   return {
     traceId: collector.traceId,
@@ -96,6 +110,7 @@ export function buildTraceLogPayload(collector: TraceCollector, result: Retrieva
     ...(result.refusal ? { refusal: sanitizeRefusalForLog(result.refusal) } : {}),
     ...(result.injection ? { injectionFlagged: result.injection.flagged === true } : {}),
     ...timingForLog(collector),
+    ...languagesForLog(collector),
   };
 }
 

@@ -35,3 +35,32 @@ class SidecarInfo(_Contract):
 
 class SidecarError(_Contract):
     error: str
+
+
+SidecarProbeProvider = Literal["vectara"]
+ProviderTestCode = Literal[
+    "ok",
+    "not_configured",
+    "unauthorized",
+    "timeout",
+    "unreachable",
+    "rate_limited",
+    "provider_error",
+    "bad_response",
+]
+
+
+class ProviderTestRequest(_Contract):
+    """D-15: POST /v1/providers/test; only providers whose keys live in the sidecar."""
+
+    provider: SidecarProbeProvider
+
+
+class ProviderTestResult(_Contract):
+    """D-15: one probe outcome; message is the fixed text for the code, never vendor text, a key or an address."""
+
+    provider: SidecarProbeProvider
+    ok: bool
+    latencyMs: int = Field(ge=0)
+    code: ProviderTestCode
+    message: str

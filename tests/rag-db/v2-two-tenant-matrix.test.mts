@@ -65,6 +65,39 @@ const PATH_ENV: Record<Path, Record<string, string>> = {
   versions: { RAG_VERSION_SCOPE: 'true', RAG_EMBED_VERSION_SCOPE: 'true' },
   dup_cluster: { RAG_DUP_CLUSTERS: 'true', RAG_RESULT_DIVERSITY: 'collapse' },
 };
+/** Phase 4.4 (LEX-02): every scenario runs once under the default lexical scoring and once with the BM25 leg serving it. */
+type Scoring = 'ts_rank_cd' | 'bm25';
+const SCORINGS: Scoring[] = ['ts_rank_cd', 'bm25'];
+const SCORING_ENV: Record<Scoring, Record<string, string>> = { ts_rank_cd: {}, bm25: { RAG_LEXICAL_SCORING: 'bm25' } };
+const BM25_RPC = '/rest/v1/rpc/rag_bm25_search_chunks';
+const BM25_FALLBACK_CODES = /lexical_stats_unavailable|lexical_bm25_failed/;
+
+/** Runs one statement as service_role, as the app and the rag:lexstats command do. */
+async function asServiceRole<T>(db: PGlite, sql: string, params: unknown[] = []): Promise<T[]> {
+  return (await db.transaction(async (tx) => {
+    await tx.exec('SET LOCAL ROLE service_role');
+    return (await tx.query<T>(sql, params)).rows;
+  })) as T[];
+}
+
+/** Enables and rebuilds the lexical statistics of each tenant key, so the BM25 leg serves it (status ready). */
+async function enableLexicalStats(db: PGlite, tenantKeys: readonly string[]): Promise<void> {
+  for (const key of tenantKeys) {
+    await asServiceRole(db, 'SELECT public.rag_lexstats_enable($1)', [key]);
+    await asServiceRole(db, 'SELECT public.rag_lexstats_rebuild($1)', [key]);
+  }
+}
+
+/** Under bm25: the request called the BM25 function and no lexical call fell back to ts_rank_cd. */
+function assertBm25Served(scoring: Scoring, calls: readonly { path: string }[], result: RetrievalResult, where: string): void {
+  if (scoring !== 'bm25') {
+    assert.ok(!calls.some((call) => call.path === BM25_RPC), `${where}: ts_rank_cd makes no BM25 call`);
+    return;
+  }
+  assert.ok(calls.some((call) => call.path === BM25_RPC), `${where}: the BM25 leg was called`);
+  for (const record of result.stages) assert.doesNotMatch(record.detail ?? '', BM25_FALLBACK_CODES, `${where}: stage ${record.name} fell back (${record.detail})`);
+}
+
 const PATH_FILTERS: Partial<Record<Path, import('@/lib/rag').RunRetrievalInput['retrievalFilters']>> = { versions: { versionScope: 'all' } };
 const VOICE_SECRET = crypto.randomBytes(24).toString('hex');
 const OPTIONS = { maxResults: 25, fallbackToLowerThreshold: true };
@@ -222,6 +255,7 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     process.env.MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
     process.env.RAG_VOICE_TOKEN_SECRET = VOICE_SECRET;
     await seedTwoTenantV2Lookups(fixture);
+    await enableLexicalStats(fixture.db, LABELS.map((label) => fixture.seed.tenants[label].scopeKey));
     rag = await import('@/lib/rag');
     scopeModule = await import('@/lib/rag/tenant/scope');
     depsModule = await import('@/lib/rag/deps');
@@ -529,19 +563,23 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     }
   }
 
+  for (const scoring of SCORINGS) {
   for (const profile of PROFILES) {
     for (const label of LABELS) {
       for (const path of PATHS) {
-        test(`${profile} scope ${label}, path ${path}: only the caller's chunks, parents, sources, images and rerank input`, async () => {
-          const where = `${profile}/${label}/${path}`;
+        const scoringName = scoring === 'bm25' ? ', scoring bm25' : '';
+        test(`${profile} scope ${label}, path ${path}${scoringName}: only the caller's chunks, parents, sources, images and rerank input`, async () => {
+          const where = `${profile}/${label}/${path}/${scoring}`;
           const t = tenant(label);
           const scope = await scopeFor(profile, label);
           assert.equal(scopeModule.scopeKey(scope), t.scopeKey);
-          depsModule.setRagDepsForTests({ ragEnv: () => ({ ...allOnEnv, ...PATH_ENV[path] }) });
+          depsModule.setRagDepsForTests({ ragEnv: () => ({ ...allOnEnv, ...PATH_ENV[path], ...SCORING_ENV[scoring] }) });
           configModule.resetRagConfigForTests();
           try {
           const filters = PATH_FILTERS[path];
+          const callsBefore = edge.calls.length;
           const { result, rerank } = await retrieve(scope, profile, QUERY_OF[path](t), filters ? { retrievalFilters: filters } : {});
+          assertBm25Served(scoring, edge.calls.slice(callsBefore), result, where);
 
           assert.ok(['ok', 'degraded'].includes(result.status), `${where}: status ${result.status} (${result.reason})`);
           await assertOwnRows(label, result, where);
@@ -582,6 +620,7 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
         });
       }
     }
+  }
   }
 
   test('the rerank endpoint received the caller text only: each request carries one tenant marker set', async () => {
@@ -886,7 +925,7 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
       {
         transform: 'condense' as const,
         query: LAYER_QUERY.condensed,
-        output: { standalone: 'Which clause does the two tenant isolation canary handbook list first?', unchanged: false },
+        output: { standalone: 'Which clause does the two tenant isolation canary handbook list first?', unchanged: false, language: null },
       },
       { transform: 'expand' as const, query: LAYER_QUERY.expanded, output: { queries: ['two tenant isolation canary phrase clause'] } },
       { transform: 'hyde' as const, query: LAYER_QUERY.hyde, output: { passage: 'Two tenant isolation canary phrase: clause one of the handbook.' } },
@@ -895,7 +934,7 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
         query: LAYER_QUERY.sub_question,
         output: { questions: ['What does the two tenant isolation canary clause say?', 'Which catalogue item carries the canary phrase?'] },
       },
-      { transform: 'translate' as const, query: LAYER_QUERY.translated, output: { target_language: 'it', text: V2_TRANSLATED_TEXT } },
+      { transform: 'translate' as const, query: LAYER_QUERY.translated, output: { target_language: 'it', text: V2_TRANSLATED_TEXT, source_language: null } },
     ],
   };
 
@@ -1004,7 +1043,7 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     const b = tenant('b');
     const question = 'Which clause of the isolation handbook names the canary phrase?';
     const translation = '隔离手册 金丝雀 条款';
-    const table = { version: 1 as const, entries: [{ transform: 'translate' as const, query: question, output: { target_language: 'zh', text: translation } }] };
+    const table = { version: 1 as const, entries: [{ transform: 'translate' as const, query: question, output: { target_language: 'zh', text: translation, source_language: null } }] };
     const saved = await db().query<{ id: string; language: string | null }>(
       'SELECT id::text AS id, language FROM documents WHERE tenant_key = ANY($1::text[])',
       [[a.scopeKey, b.scopeKey]],
@@ -1056,8 +1095,216 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     }
   });
 
+  test('scoring bm25: a member removed from the organization gets no organization scope, and the BM25 leg serves only the personal tenant', async () => {
+    const o = tenant('o');
+    const a = tenant('a');
+    depsModule.setRagDepsForTests({ ragEnv: () => ({ ...allOnEnv, ...SCORING_ENV.bm25 }) });
+    configModule.resetRagConfigForTests();
+    await db().query('DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2', [TWO_TENANT_IDS.orgO, o.userId]);
+    try {
+      const { resolveTenantScope } = await import('@/lib/rag/tenant/resolve-chat');
+      const resolved = await resolveTenantScope({
+        requestedOrganizationId: TWO_TENANT_IDS.orgO,
+        deploymentMode: 'multi-tenant',
+        getUser: async () => ({ id: o.userId }),
+        admin: adminClient,
+        signal: new AbortController().signal,
+      });
+      assert.equal(resolved.ok, false, 'the removed member is refused the organization scope');
+      const callsBefore = edge.calls.length;
+      const { result } = await retrieve(await scopeFor('chat', 'a'), 'chat', V2_EXACT_QUERY);
+      assertBm25Served('bm25', edge.calls.slice(callsBefore), result, 'removed member, personal scope');
+      await assertOwnRows('a', result, 'removed member, personal scope');
+      const keys = await tenantKeys('document_chunks', chunkIdsOf(result));
+      assert.ok(![...keys.values()].includes(o.scopeKey), 'no organization chunk reaches the removed member');
+      assert.equal(scopeModule.scopeKey(await scopeFor('chat', 'a')), a.scopeKey);
+    } finally {
+      await db().query("INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'member')", [TWO_TENANT_IDS.orgO, o.userId]);
+      depsModule.setRagDepsForTests({ ragEnv: () => allOnEnv });
+      configModule.resetRagConfigForTests();
+    }
+  });
+
   test('the fixture edge saw no unsupported request', () => {
     assert.deepEqual(edge.errors, []);
+  });
+});
+
+describe('the BM25 leg reads only the caller statistics: direct calls, score stability under another tenant, delete and version replace', () => {
+  let fixture: TwoTenantV2Database;
+  const db = (): PGlite => fixture.db;
+  const tenant = (label: V2TenantLabel): TwoTenantV2Tenant => fixture.seed.tenants[label];
+
+  interface Bm25Row {
+    chunk_id: string;
+    lexical_score: number;
+  }
+
+  const bm25 = (tenantKey: string, tokens: readonly string[]) =>
+    asServiceRole<Bm25Row>(
+      db(),
+      `SELECT chunk_id::text AS chunk_id, lexical_score
+         FROM public.rag_bm25_search_chunks(p_tenant_key => $1, p_profile_id => $2, p_query_embedding => NULL,
+                                            p_lexical_tokens => $3::text[], p_lexical_limit => 200)
+        WHERE leg = 'lexical' ORDER BY rank`,
+      [tenantKey, V2_LEGACY_EMBEDDING_PROFILE, [...tokens]],
+    );
+
+  /** Folds every staged delta of the tenant, as the purge hook and the scheduled compaction do. */
+  async function compact(tenantKey: string): Promise<void> {
+    for (let round = 0; round < 100; round += 1) {
+      const [row] = await asServiceRole<{ n: string | number }>(db(), 'SELECT public.rag_lexstats_compact($1, 50000) AS n', [tenantKey]);
+      if (Number(row?.n ?? 0) === 0) return;
+    }
+    assert.fail(`compaction of ${tenantKey} did not finish`);
+  }
+
+  async function assertClean(tenantKey: string, where: string): Promise<void> {
+    const [row] = await asServiceRole<{ check: Record<string, unknown> }>(db(), 'SELECT public.rag_lexstats_check($1) AS check', [tenantKey]);
+    assert.equal(row?.check.clean, true, `${where}: ${tenantKey} statistics check ${JSON.stringify(row?.check)}`);
+    assert.equal(Number(row?.check.pending), 0, `${where}: nothing staged after compaction`);
+  }
+
+  async function ownerKeys(ids: readonly string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const rows = await db().query<{ tenant_key: string }>('SELECT DISTINCT tenant_key FROM document_chunks WHERE id = ANY($1::uuid[])', [[...ids]]);
+    return rows.rows.map((row) => row.tenant_key);
+  }
+
+  /** Inserts one current, ready document of the tenant with one chunk per lexical text; triggers stage the deltas. */
+  async function ingest(owner: TwoTenantV2Tenant, texts: readonly string[]): Promise<{ documentId: string; chunkIds: string[] }> {
+    const documentId = crypto.randomUUID();
+    await db().query(
+      `INSERT INTO documents (id, filename, content, metadata, user_id, organization_id, doc_type, language, is_current, status)
+       VALUES ($1, $2, 'neutral sample', '{}'::jsonb, $3::uuid, $4::uuid, 'general', 'en', true, 'ready')`,
+      [documentId, `bm25-matrix-${documentId.slice(0, 8)}.txt`, owner.userId, owner.organizationId],
+    );
+    const chunkIds = texts.map(() => crypto.randomUUID());
+    await db().query(
+      `INSERT INTO document_chunks (id, document_id, content, metadata, chunk_index, lexical_text, language, doc_type, chunk_kind,
+         chunking_profile_id, status, is_current, organization_id)
+       SELECT u.id, $1::uuid, u.txt, '{}'::jsonb, u.ord::int - 1, u.txt, 'en', 'general', 'text', 'legacy', 'ready', true, $4::uuid
+         FROM unnest($2::uuid[], $3::text[]) WITH ORDINALITY AS u(id, txt, ord)`,
+      [documentId, chunkIds, [...texts], owner.organizationId],
+    );
+    assert.deepEqual(await ownerKeys(chunkIds), [owner.scopeKey], 'seeded chunks belong to the owner');
+    return { documentId, chunkIds };
+  }
+
+  let queries: string[][] = [];
+  let ownTexts: string[] = [];
+
+  before(async () => {
+    fixture = await createTwoTenantV2Database();
+    await enableLexicalStats(fixture.db, LABELS.map((label) => fixture.seed.tenants[label].scopeKey));
+    const a = fixture.seed.tenants.a;
+    const lexemes = (
+      await fixture.db.query<{ lexeme: string }>(
+        `SELECT DISTINCT x.lexeme FROM document_chunks c, unnest(tsvector_to_array(c.lexical_tsv)) AS x(lexeme)
+          WHERE c.tenant_key = $1 AND c.is_current AND c.lexical_tsv IS NOT NULL ORDER BY 1`,
+        [a.scopeKey],
+      )
+    ).rows.map((row) => row.lexeme);
+    assert.ok(lexemes.length >= 6, `tenant a has lexemes (${lexemes.length})`);
+    queries = [V2_CANARY_QUERY.toLowerCase().split(/\s+/), lexemes.slice(0, 3), lexemes.slice(-3)];
+    ownTexts = (
+      await fixture.db.query<{ lexical_text: string }>(
+        `SELECT lexical_text FROM document_chunks WHERE tenant_key = $1 AND is_current AND lexical_text IS NOT NULL ORDER BY id LIMIT 5`,
+        [a.scopeKey],
+      )
+    ).rows.map((row) => row.lexical_text);
+    assert.ok(ownTexts.length > 0, 'tenant a has lexical text');
+  });
+
+  after(async () => {
+    await fixture?.db.close();
+  });
+
+  test('every tenant scope gets rows of its own tenant only, for the same shared tokens', async () => {
+    for (const label of LABELS) {
+      const t = tenant(label);
+      let seen = 0;
+      for (const tokens of queries) {
+        const rows = await bm25(t.scopeKey, tokens);
+        seen += rows.length;
+        const keys = await ownerKeys(rows.map((row) => row.chunk_id));
+        assert.ok(keys.every((key) => key === t.scopeKey), `${label}: rows of ${keys.join(', ')}`);
+      }
+      assert.ok(seen > 0, `${label}: its own chunks come back`);
+    }
+  });
+
+  test('a key the scenario forbids returns nothing: another deployment mode, a malformed key, a tenant without ready statistics', async () => {
+    for (const key of ['s:default', 'u:not-a-uuid', 'x:anything', '']) {
+      await assert.rejects(() => bm25(key, queries[0] as string[]), `${key || '(empty)'} is refused`);
+    }
+    const stranger = `u:${crypto.randomUUID()}`;
+    await assert.rejects(
+      () => bm25(stranger, queries[0] as string[]),
+      (error: unknown) => (error as { code?: string }).code === '55000',
+      'a tenant without statistics is not served',
+    );
+  });
+
+  test("tenant a's ids and scores are bit-identical while tenant b ingests 50 chunks of a's tokens, updates 10 and deletes 10", async () => {
+    const a = tenant('a');
+    const b = tenant('b');
+    const snapshot = async () => Promise.all(queries.map((tokens) => bm25(a.scopeKey, tokens)));
+    const baseline = await snapshot();
+    assert.ok(baseline.every((rows) => rows.length > 0), 'every query finds chunks of a');
+    const bBefore = await bm25(b.scopeKey, queries[1] as string[]);
+
+    const texts = Array.from({ length: 50 }, (_, i) => `${ownTexts[i % ownTexts.length]} ${(queries[1] as string[]).join(' ')} w${i}`);
+    const { chunkIds } = await ingest(b, texts);
+    await compact(b.scopeKey);
+    assert.deepEqual(await snapshot(), baseline, 'after b ingests');
+    await assertClean(b.scopeKey, 'after b ingests');
+    const bAfter = await bm25(b.scopeKey, queries[1] as string[]);
+    assert.ok(bAfter.length >= Math.min(200, bBefore.length + 50), "b's own result grows with its writes");
+
+    await db().query(
+      `UPDATE document_chunks SET lexical_text = lexical_text || ' ' || $2 WHERE id = ANY($1::uuid[])`,
+      [chunkIds.slice(0, 10), (queries[2] as string[]).join(' ')],
+    );
+    await compact(b.scopeKey);
+    assert.deepEqual(await snapshot(), baseline, 'after b updates');
+    await assertClean(b.scopeKey, 'after b updates');
+
+    await db().query('DELETE FROM document_chunks WHERE id = ANY($1::uuid[])', [chunkIds.slice(10, 20)]);
+    await compact(b.scopeKey);
+    assert.deepEqual(await snapshot(), baseline, 'after b deletes');
+    await assertClean(b.scopeKey, 'after b deletes');
+    await assertClean(a.scopeKey, 'tenant a untouched');
+  });
+
+  test("after delete and version replace within tenant a, the removed and superseded chunks are gone and b's result does not move", async () => {
+    const a = tenant('a');
+    const b = tenant('b');
+    const tokens = queries[1] as string[];
+    const bBaseline = await bm25(b.scopeKey, tokens);
+
+    const own = await ingest(a, [`${tokens.join(' ')} w7001`, `${tokens.join(' ')} w7002`]);
+    await compact(a.scopeKey);
+    const before = (await bm25(a.scopeKey, tokens)).map((row) => row.chunk_id);
+    assert.ok(own.chunkIds.every((id) => before.includes(id)), 'the new chunks of a are found');
+
+    await db().query('DELETE FROM document_chunks WHERE id = $1', [own.chunkIds[0]]);
+    await compact(a.scopeKey);
+    const afterDelete = (await bm25(a.scopeKey, tokens)).map((row) => row.chunk_id);
+    assert.ok(!afterDelete.includes(own.chunkIds[0] as string), 'the deleted chunk is absent');
+    await assertClean(a.scopeKey, 'after delete');
+
+    await db().query('UPDATE documents SET is_current = false WHERE id = $1', [own.documentId]);
+    await db().query('UPDATE document_chunks SET is_current = false WHERE document_id = $1', [own.documentId]);
+    const replacement = await ingest(a, [`${tokens.join(' ')} w7003`]);
+    await compact(a.scopeKey);
+    const afterReplace = (await bm25(a.scopeKey, tokens)).map((row) => row.chunk_id);
+    assert.ok(!afterReplace.includes(own.chunkIds[1] as string), 'the superseded chunk is absent');
+    assert.ok(afterReplace.includes(replacement.chunkIds[0] as string), 'the replacing version is found');
+    assert.deepEqual(await ownerKeys(afterReplace), [a.scopeKey]);
+    await assertClean(a.scopeKey, 'after version replace');
+
+    assert.deepEqual(await bm25(b.scopeKey, tokens), bBaseline, "b's ids and scores do not move with a's writes");
   });
 });
 
@@ -1085,6 +1332,7 @@ describe('single-tenant deployment accepts only the default tenant key', () => {
     process.env.MYRAG_DEPLOYMENT_MODE = 'single-tenant';
     await seedLookupRows(fixture.db, owner);
     await clusterLookupCopies(fixture.db, [owner]);
+    await enableLexicalStats(fixture.db, ['s:default']);
     rag = await import('@/lib/rag');
     scopeModule = await import('@/lib/rag/tenant/scope');
     depsModule = await import('@/lib/rag/deps');
@@ -1115,16 +1363,19 @@ describe('single-tenant deployment accepts only the default tenant key', () => {
   const run = (scope: TenantScope, query = 'what is the refund policy', extra: Partial<import('@/lib/rag').RunRetrievalInput> = {}) =>
     rag.runRetrieval({ scope, query, profile: 'eval', options: OPTIONS, signal: new AbortController().signal, ...extra });
 
+  for (const scoring of SCORINGS)
   for (const path of LOOKUP_PATHS) {
-    test(`path ${path}: the default tenant gets its own result, a personal and an organization key are refused`, async () => {
-      depsModule.setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', ...PATH_ENV[path] }) });
+    test(`path ${path}${scoring === 'bm25' ? ', scoring bm25' : ''}: the default tenant gets its own result, a personal and an organization key are refused`, async () => {
+      depsModule.setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', ...PATH_ENV[path], ...SCORING_ENV[scoring] }) });
       configModule.resetRagConfigForTests();
       try {
-        const where = `single-tenant/${path}`;
+        const where = `single-tenant/${path}/${scoring}`;
         const filters = PATH_FILTERS[path];
         const extra = filters ? { retrievalFilters: filters } : {};
         const query = QUERY_OF[path]({ markers: owner.markers } as TwoTenantV2Tenant);
+        const callsBefore = edge.calls.length;
         const result = await run(scopeModule.mintScope('single', null, null), query, extra);
+        assertBm25Served(scoring, edge.calls.slice(callsBefore), result, where);
         assert.ok(['ok', 'degraded'].includes(result.status), `${where}: status ${result.status} (${result.reason})`);
         const ids = new Set([...result.candidates.map((row) => row.chunk_id), ...result.kept.map((row) => row.chunk_id)]);
         const keys = await fixture.db.query<{ tenant_key: string }>('SELECT DISTINCT tenant_key FROM document_chunks WHERE id = ANY($1::uuid[])', [[...ids]]);
@@ -1265,6 +1516,21 @@ describe('single-tenant deployment accepts only the default tenant key', () => {
       assertKeyAccepted(entry, 's:default', await callWithKey(fixture.db, entry, 's:default'));
     });
   }
+
+  test('rag_bm25_search_chunks raises for u: and o: keys and serves s:default its own chunks only', async () => {
+    const call = (key: string) =>
+      asServiceRole<{ chunk_id: string }>(
+        fixture.db,
+        `SELECT chunk_id::text AS chunk_id FROM public.rag_bm25_search_chunks(p_tenant_key => $1, p_profile_id => $2, p_query_embedding => NULL,
+           p_lexical_tokens => ARRAY['refund', 'policy'], p_lexical_limit => 50) WHERE leg = 'lexical'`,
+        [key, V2_LEGACY_EMBEDDING_PROFILE],
+      );
+    const own = await call('s:default');
+    assert.ok(own.length > 0, 'the default tenant is served');
+    const keys = await fixture.db.query<{ tenant_key: string }>('SELECT DISTINCT tenant_key FROM document_chunks WHERE id = ANY($1::uuid[])', [own.map((row) => row.chunk_id)]);
+    assert.deepEqual(keys.rows.map((row) => row.tenant_key), ['s:default']);
+    for (const key of [`u:${TWO_TENANT_IDS.userA}`, `o:${TWO_TENANT_IDS.orgO}`]) await assert.rejects(() => call(key), `${key} is refused`);
+  });
 
   test('hybrid_search_chunks raises for u: and o: keys and accepts s:default', async () => {
     const vector = `[${embedText('refund policy').join(',')}]`;

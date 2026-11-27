@@ -22,8 +22,16 @@ export function hashAccessKeys(keys: readonly string[]): string {
   return createHash('sha256').update(sorted.join('\n'), 'utf8').digest('hex');
 }
 
-/** Tenant-internal: only src/lib/rag/tenant resolves a caller's keys; tests may import it. */
-export function mintAccessScope(mode: AccessScopeMode, keys: readonly string[]): AccessScope {
+const HASH_RE = /^[0-9a-f]{64}$/;
+
+/** D-05: admin_all carries no keys; its set hash is this fixed value so it never equals the hash of a key set. */
+export const ACCESS_ADMIN_HASH = createHash('sha256').update('mode:admin_all', 'utf8').digest('hex');
+
+/**
+ * Tenant-internal: only src/lib/rag/tenant resolves a caller's keys; tests may import it. `setHash` overrides the default hash of the
+ * keys (A-05: the resolver hashes the effective keys, a subset of the keys).
+ */
+export function mintAccessScope(mode: AccessScopeMode, keys: readonly string[], options?: { setHash?: string }): AccessScope {
   if (mode !== 'off' && mode !== 'admin_all' && mode !== 'keys') {
     throw new Error('[RAG Access] unknown access mode');
   }
@@ -33,8 +41,10 @@ export function mintAccessScope(mode: AccessScopeMode, keys: readonly string[]):
   }
   if (mode === 'keys' && normalized.length === 0) throw new Error('[RAG Access] keys mode needs at least one key');
   if (mode === 'off' && normalized.length > 0) throw new Error('[RAG Access] off mode takes no keys');
+  if (options?.setHash !== undefined && !HASH_RE.test(options.setHash)) throw new Error('[RAG Access] invalid set hash');
   const frozenKeys = Object.freeze([...normalized].sort());
-  const access = Object.freeze({ mode, keys: frozenKeys, setHash: hashAccessKeys(frozenKeys) }) as unknown as AccessScope;
+  const setHash = options?.setHash ?? hashAccessKeys(frozenKeys);
+  const access = Object.freeze({ mode, keys: frozenKeys, setHash }) as unknown as AccessScope;
   minted.add(access);
   return access;
 }

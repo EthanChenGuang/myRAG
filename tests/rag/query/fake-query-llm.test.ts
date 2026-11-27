@@ -124,18 +124,18 @@ describe('createFakeQueryLlm', () => {
   test('without a matching entry each transform returns its documented default', async () => {
     const llm = createFakeQueryLlm({ table });
     const input = 'a synthetic question with no scripted entry';
-    expect(await llm.generate(req('condense', input))).toEqual({ standalone: input, unchanged: true });
+    expect(await llm.generate(req('condense', input))).toEqual({ standalone: input, unchanged: true, language: null });
     expect(await llm.generate(req('expand', input))).toEqual({ queries: [] });
     expect(await llm.generate(req('decompose', input))).toEqual({ questions: [] });
     expect(await llm.generate(req('hyde', input))).toEqual({ passage: input });
-    expect(await llm.generate(req('translate', input, undefined, 'zh'))).toEqual({ target_language: 'zh', text: '' });
+    expect(await llm.generate(req('translate', input, undefined, 'zh'))).toEqual({ target_language: 'zh', text: '', source_language: null });
   });
 
   test('translate entries key on the target language', async () => {
     const llm = createFakeQueryLlm({ table });
     const q = 'What accuracy does the XR-5100 reference thermometer have?';
     expect(await llm.generate(req('translate', q, undefined, 'it'))).toMatchObject({ target_language: 'it' });
-    expect(await llm.generate(req('translate', q, undefined, 'zh'))).toEqual({ target_language: 'zh', text: '' });
+    expect(await llm.generate(req('translate', q, undefined, 'zh'))).toEqual({ target_language: 'zh', text: '', source_language: null });
   });
 
   test('every scripted output validates against its transform schema and keeps protected codes verbatim', () => {

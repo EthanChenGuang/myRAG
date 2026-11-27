@@ -2,6 +2,7 @@ export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     try {
       const {
+        verifyAccessGroupsStartup,
         verifyActiveEmbeddingProfileAtStartup,
         verifyLanguageSettingsAtStartup,
         verifyLanguagesAgainstEmbeddingProfileAtStartup,
@@ -13,6 +14,7 @@ export async function register(): Promise<void> {
         verifyV2Startup(),
         Promise.resolve().then(() => verifyLanguageSettingsAtStartup()),
         verifyLanguagesAgainstEmbeddingProfileAtStartup(),
+        verifyAccessGroupsStartup(),
       ]);
     } catch {
       // The check logs its own failures; a broken import must not stop the server from starting.

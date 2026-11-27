@@ -77,6 +77,7 @@
     <script src="rag-panels/question-sources.js"></script>
     <script src="rag-panels/monitor.js"></script>
     <script src="rag-panels/rag-ui.js"></script>
+    <script src="rag-panels/rag-pipeline.js"></script>
     <script src="rag-panels/languages.js"></script>
     <script src="rag-panels/ingest-impact.js"></script>
     <script src="rag-panels/upload-approvals.js"></script>
@@ -84,6 +85,7 @@
     <script src="rag-panels/versions-dates.js"></script>
     <script src="rag-panels/translation-targets.js"></script>
     <script src="rag-panels/terminology.js"></script>
+    <script src="rag-panels/glossary.js"></script>
     <script src="rag-panels/doc-types.js"></script>
     <script src="rag-panels/quarantine.js"></script>
     <script src="rag-panels/embedding-profiles.js"></script>
@@ -99,6 +101,7 @@
     <script src="rag-panels/review-labelling.js"></script>
     <script src="rag-panels/review-admin.js"></script>
     <script src="rag-panels/query-layer.js"></script>
+    <script src="rag-panels/query-additions.js"></script>
     <script src="rag-panels/retrieval-tuning-switches.js"></script>
 
     <style>
@@ -6461,74 +6464,27 @@
                                         ignore all uploaded documents and knowledge base content.</span>
                                 </div>
 
-                                <!-- Evaluation & Sidecar -->
+                                <!-- RAG pipeline settings (generated section, plan 07-20) -->
+                                <section id="rag-pipeline-settings" class="mt-6 min-w-0 scroll-mt-4" aria-labelledby="rag-pipeline-title">
+                                    <h3 id="rag-pipeline-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-rag-pipeline-title>RAG pipeline settings</h3>
+                                    <p class="text-sm text-base-content/70 mb-2 max-w-prose" data-rag-pipeline-description></p>
+                                    <p class="text-xs text-base-content/70 mb-4 max-w-prose" data-rag-pipeline-secrets-note></p>
+                                    <div data-rag-pipeline-alert class="mb-4 empty:mb-0"></div>
+                                    <nav data-rag-pipeline-nav class="flex flex-wrap gap-2 mb-4"></nav>
+                                    <div data-rag-pipeline-content class="grid gap-6">Loading settings…</div>
+                                    <div data-rag-pipeline-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                </section>
+
+                                <!-- Prompt-injection defense -->
                                 <div class="card bg-base-200 shadow-md mt-6">
                                     <div class="card-body">
-                                        <h3 class="text-lg font-semibold mb-2">Evaluation &amp; Sidecar</h3>
-                                        <p class="text-base-content/70 mb-4">Settings for the RAG evaluation endpoint
-                                            and the Python sidecar service. Secrets must be at least 32 characters.</p>
+                                        <h3 class="text-lg font-semibold mb-2 text-balance">Prompt-injection detectors</h3>
+                                        <p class="text-base-content/70 mb-4">Read-only summary of the committed rule set and detector settings. The switches are above, under Security.</p>
 
-                                        <div class="form-control mb-4">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="RAG_EVAL_ENDPOINT_ENABLED"
-                                                    class="toggle toggle-primary">
-                                                <span class="label-text">Enable evaluation endpoint</span>
-                                            </label>
-                                            <label class="label">
-                                                <span class="label-text-alt text-warning">The endpoint returns document
-                                                    content. Keep it off in production unless an evaluation run needs
-                                                    it.</span>
-                                            </label>
+                                        <div id="injection-defense-summary" class="rounded-box bg-base-100 p-4 mt-4" aria-live="polite">
+                                            <p class="text-sm text-base-content/70">Loading detector configuration…</p>
                                         </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Evaluation endpoint secret</span>
-                                            </label>
-                                            <div class="flex gap-2">
-                                                <input type="password" id="RAG_EVAL_SECRET"
-                                                    placeholder="At least 32 characters"
-                                                    class="input input-bordered flex-1 w-full">
-                                                <button class="btn btn-square btn-outline"
-                                                    data-for="RAG_EVAL_SECRET">👁️</button>
-                                            </div>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Evaluation allowed scopes</span>
-                                            </label>
-                                            <input type="text" id="RAG_EVAL_ALLOWED_SCOPES"
-                                                placeholder="org:&lt;uuid&gt;,user:&lt;uuid&gt;"
-                                                class="input input-bordered w-full">
-                                            <label class="label">
-                                                <span class="label-text-alt">Multi-tenant only. Comma-separated
-                                                    workspaces the evaluation endpoint may read; empty denies
-                                                    every workspace.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Sidecar URL</span>
-                                            </label>
-                                            <input type="text" id="RAG_SIDECAR_URL"
-                                                placeholder="http://localhost:8000"
-                                                class="input input-bordered w-full">
-                                        </div>
-
-                                        <div class="form-control">
-                                            <label class="label">
-                                                <span class="label-text">Sidecar secret</span>
-                                            </label>
-                                            <div class="flex gap-2">
-                                                <input type="password" id="RAG_SIDECAR_SECRET"
-                                                    placeholder="At least 32 characters"
-                                                    class="input input-bordered flex-1 w-full">
-                                                <button class="btn btn-square btn-outline"
-                                                    data-for="RAG_SIDECAR_SECRET">👁️</button>
-                                            </div>
-                                        </div>
+                                        <div id="injection-defense-events-pointer" class="mt-2 min-w-0"></div>
                                     </div>
                                 </div>
 
@@ -6536,45 +6492,7 @@
                                 <div class="card bg-base-200 shadow-md mt-6">
                                     <div class="card-body">
                                         <h3 class="text-lg font-semibold mb-2">Retrieval pipeline</h3>
-                                        <p class="text-base-content/70 mb-4">Selects the retrieval pipeline and its per-stage controls. Leave the defaults to keep the current behaviour.</p>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="RAG_PIPELINE">
-                                                <span class="label-text">Pipeline</span>
-                                            </label>
-                                            <select id="RAG_PIPELINE" name="RAG_PIPELINE" class="select select-bordered w-full" translate="no"
-                                                aria-describedby="rag-pipeline-help">
-                                                <option value="legacy" selected>legacy</option>
-                                                <option value="v2">v2</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt" id="rag-pipeline-help"><span translate="no">legacy</span> keeps the current retrieval path; <span translate="no">v2</span> uses the Phase 4 staged pipeline (switches below).</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Disabled stages</span>
-                                            </label>
-                                            <input type="text" id="RAG_DISABLED_STAGES"
-                                                placeholder="stage,stage"
-                                                class="input input-bordered w-full">
-                                            <label class="label">
-                                                <span class="label-text-alt">Comma-separated optional stages to skip; empty runs every stage.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Stage timeouts</span>
-                                            </label>
-                                            <input type="text" id="RAG_STAGE_TIMEOUTS"
-                                                placeholder="stage=ms,stage=ms"
-                                                class="input input-bordered w-full">
-                                            <label class="label">
-                                                <span class="label-text-alt">Per-stage time budgets in milliseconds; optional profile.stage=ms prefix (e.g. voice.rerank=200).</span>
-                                            </label>
-                                        </div>
+                                        <p class="text-base-content/70 mb-4">Retrieval switches that keep their own notes. The other settings of this layer are in RAG pipeline settings above.</p>
 
                                         <div class="border border-base-300 rounded-lg p-4 mb-4 space-y-4">
                                             <h4 class="font-semibold text-sm text-balance">Phase 4 retrieval switches (off = current behaviour)</h4>
@@ -6669,10 +6587,6 @@
                                                         <input type="checkbox" id="RAG_REFUSAL_THRESHOLD" name="RAG_REFUSAL_THRESHOLD" class="checkbox checkbox-primary">
                                                         <span class="label-text">Threshold refusal</span>
                                                     </label>
-                                                    <div class="flex flex-wrap items-center gap-x-2 pl-8">
-                                                        <span class="label-text-alt text-base-content/70" data-refusal-pointer-text>Calibration status and warnings are under RAG administration, Refusal calibration.</span>
-                                                        <button type="button" class="btn btn-link btn-xs px-0" data-refusal-pointer>Open refusal calibration</button>
-                                                    </div>
                                                 </div>
                                                 <label class="flex items-center gap-2 cursor-pointer">
                                                     <input type="checkbox" id="RAG_CONTEXT_EDGE_ORDER" name="RAG_CONTEXT_EDGE_ORDER" class="checkbox checkbox-primary">
@@ -6848,199 +6762,14 @@
                                             </div>
                                         </div>
 
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Embedded chat tenant</span>
-                                            </label>
-                                            <input type="text" id="RAG_EMBED_TENANT"
-                                                placeholder="s:default"
-                                                class="input input-bordered w-full">
-                                            <label class="label">
-                                                <span class="label-text-alt">s:default, o:&lt;uuid&gt; or u:&lt;uuid&gt;. Empty means s:default in single-tenant and fails closed in multi-tenant.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Voice token secret</span>
-                                            </label>
-                                            <div class="flex gap-2">
-                                                <input type="password" id="RAG_VOICE_TOKEN_SECRET"
-                                                    placeholder="At least 32 characters"
-                                                    class="input input-bordered flex-1 w-full">
-                                                <button class="btn btn-square btn-outline"
-                                                    data-for="RAG_VOICE_TOKEN_SECRET">👁️</button>
-                                            </div>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Voice token lifetime (seconds)</span>
-                                            </label>
-                                            <input type="text" id="RAG_VOICE_TOKEN_TTL_SECONDS"
-                                                placeholder="3600"
-                                                class="input input-bordered w-full">
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Max concurrent voice rooms</span>
-                                            </label>
-                                            <input type="text" id="VOICE_MAX_ACTIVE_ROOMS"
-                                                placeholder="4"
-                                                class="input input-bordered w-full">
-                                            <label class="label">
-                                                <span class="label-text-alt">Must equal VOICE_AGENT_MAX_SESSIONS on the voice agent</span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Vector backends -->
-                                <div class="card bg-base-200 shadow-md mt-6" id="vector-backends-card">
-                                    <div class="card-body">
-                                        <h3 class="text-lg font-semibold mb-2 text-balance">Vector backends</h3>
-                                        <p class="text-base-content/70 mb-4">Where retrieval runs. Leave both on <span translate="no">pgvector</span> to keep the current behaviour; an external backend applies only with <span translate="no">RAG_PIPELINE=v2</span> and falls back to <span translate="no">pgvector</span> while its index is not ready.</p>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="RAG_RETRIEVAL_BACKEND">
-                                                <span class="label-text">Chat retrieval backend</span>
-                                            </label>
-                                            <select id="RAG_RETRIEVAL_BACKEND" name="RAG_RETRIEVAL_BACKEND" class="select select-bordered w-full" translate="no"
-                                                aria-describedby="rag-retrieval-backend-help">
-                                                <option value="pgvector" selected>pgvector</option>
-                                                <option value="weaviate">weaviate</option>
-                                                <option value="qdrant">qdrant</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt" id="rag-retrieval-backend-help">Backend for chat and embedded chat retrieval.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="RAG_RETRIEVAL_BACKEND_VOICE">
-                                                <span class="label-text">Voice retrieval backend</span>
-                                            </label>
-                                            <select id="RAG_RETRIEVAL_BACKEND_VOICE" name="RAG_RETRIEVAL_BACKEND_VOICE" class="select select-bordered w-full" translate="no"
-                                                aria-describedby="rag-retrieval-backend-voice-help">
-                                                <option value="pgvector" selected>pgvector</option>
-                                                <option value="weaviate">weaviate</option>
-                                                <option value="qdrant">qdrant</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt" id="rag-retrieval-backend-voice-help">Set separately from chat; voice has a lower latency budget.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="RAG_VECTOR_SYNC_SECRET">
-                                                <span class="label-text">Vector sync secret</span>
-                                            </label>
-                                            <div class="flex gap-2">
-                                                <input type="password" id="RAG_VECTOR_SYNC_SECRET" name="RAG_VECTOR_SYNC_SECRET" autocomplete="off"
-                                                    placeholder="At least 32 characters"
-                                                    class="input input-bordered flex-1 w-full">
-                                                <button type="button" class="btn btn-square btn-outline"
-                                                    data-for="RAG_VECTOR_SYNC_SECRET" aria-label="Show or hide vector sync secret">👁️</button>
-                                            </div>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="RAG_VECTOR_SYNC_MAX_LAG_SECONDS">
-                                                <span class="label-text">Max sync lag (seconds)</span>
-                                            </label>
-                                            <input type="text" inputmode="numeric" id="RAG_VECTOR_SYNC_MAX_LAG_SECONDS" name="RAG_VECTOR_SYNC_MAX_LAG_SECONDS" autocomplete="off" spellcheck="false"
-                                                placeholder="300"
-                                                class="input input-bordered w-full">
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="WEAVIATE_URL">
-                                                <span class="label-text">Weaviate URL</span>
-                                            </label>
-                                            <input type="url" id="WEAVIATE_URL" name="WEAVIATE_URL" autocomplete="off" spellcheck="false"
-                                                placeholder="https://weaviate.example.com"
-                                                class="input input-bordered w-full">
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="WEAVIATE_API_KEY">
-                                                <span class="label-text">Weaviate write API key</span>
-                                            </label>
-                                            <div class="flex gap-2">
-                                                <input type="password" id="WEAVIATE_API_KEY" name="WEAVIATE_API_KEY" autocomplete="off"
-                                                    placeholder="Used by sync only"
-                                                    class="input input-bordered flex-1 w-full">
-                                                <button type="button" class="btn btn-square btn-outline"
-                                                    data-for="WEAVIATE_API_KEY" aria-label="Show or hide weaviate write api key">👁️</button>
-                                            </div>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="WEAVIATE_READ_API_KEY">
-                                                <span class="label-text">Weaviate read API key</span>
-                                            </label>
-                                            <div class="flex gap-2">
-                                                <input type="password" id="WEAVIATE_READ_API_KEY" name="WEAVIATE_READ_API_KEY" autocomplete="off"
-                                                    placeholder="Used by retrieval"
-                                                    class="input input-bordered flex-1 w-full">
-                                                <button type="button" class="btn btn-square btn-outline"
-                                                    data-for="WEAVIATE_READ_API_KEY" aria-label="Show or hide weaviate read api key">👁️</button>
-                                            </div>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="QDRANT_URL">
-                                                <span class="label-text">Qdrant URL</span>
-                                            </label>
-                                            <input type="url" id="QDRANT_URL" name="QDRANT_URL" autocomplete="off" spellcheck="false"
-                                                placeholder="https://qdrant.example.com"
-                                                class="input input-bordered w-full">
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="QDRANT_API_KEY">
-                                                <span class="label-text">Qdrant write API key</span>
-                                            </label>
-                                            <div class="flex gap-2">
-                                                <input type="password" id="QDRANT_API_KEY" name="QDRANT_API_KEY" autocomplete="off"
-                                                    placeholder="Used by sync only"
-                                                    class="input input-bordered flex-1 w-full">
-                                                <button type="button" class="btn btn-square btn-outline"
-                                                    data-for="QDRANT_API_KEY" aria-label="Show or hide qdrant write api key">👁️</button>
-                                            </div>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="QDRANT_READ_API_KEY">
-                                                <span class="label-text">Qdrant read API key</span>
-                                            </label>
-                                            <div class="flex gap-2">
-                                                <input type="password" id="QDRANT_READ_API_KEY" name="QDRANT_READ_API_KEY" autocomplete="off"
-                                                    placeholder="Used by retrieval"
-                                                    class="input input-bordered flex-1 w-full">
-                                                <button type="button" class="btn btn-square btn-outline"
-                                                    data-for="QDRANT_READ_API_KEY" aria-label="Show or hide qdrant read api key">👁️</button>
-                                            </div>
-                                        </div>
                                     </div>
                                 </div>
 
                                 <!-- Query layer -->
                                 <div class="card bg-base-200 shadow-md mt-6" id="query-layer-card">
-                                    <div class="card-body">
+                                    <div class="card-body [overflow-wrap:anywhere]">
                                         <h3 class="text-lg font-semibold mb-2 text-balance">Query layer</h3>
-                                        <p class="text-base-content/70 mb-4">Rewrites the question before retrieval and caches answers. Off by default; while the master switch is off, the transform switches below have no effect.</p>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="RAG_QUERY_LAYER" name="RAG_QUERY_LAYER" class="checkbox checkbox-primary" aria-describedby="rag-query-layer-help">
-                                                <span class="label-text">Enable the query layer (<span translate="no">RAG_QUERY_LAYER</span>)</span>
-                                            </label>
-                                            <label class="label pl-8">
-                                                <span class="label-text-alt min-w-0" id="rag-query-layer-help">Off keeps the current retrieval path unchanged.</span>
-                                            </label>
-                                        </div>
+                                        <p class="text-base-content/70 mb-4">Framework, semantic cache and the cache tools. The other settings of this layer are in RAG pipeline settings above.</p>
 
                                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                             <div class="form-control">
@@ -7060,63 +6789,125 @@
 
                                         <div class="border border-base-300 rounded-lg p-4 mb-4 space-y-3">
                                             <h4 class="font-semibold text-sm text-balance">Transforms</h4>
-                                            <div class="form-control">
+                                            <div class="form-control pl-8">
                                                 <label class="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" id="RAG_QUERY_CONDENSE" name="RAG_QUERY_CONDENSE" class="checkbox checkbox-primary" checked>
-                                                    <span class="label-text">Condense follow-up questions (<span translate="no">RAG_QUERY_CONDENSE</span>)</span>
-                                                </label>
-                                            </div>
-                                            <div class="form-control">
-                                                <label class="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" id="RAG_QUERY_EXPAND" name="RAG_QUERY_EXPAND" class="checkbox checkbox-primary" checked>
-                                                    <span class="label-text">Expand with paraphrases (<span translate="no">RAG_QUERY_EXPAND</span>)</span>
-                                                </label>
-                                            </div>
-                                            <div class="form-control">
-                                                <label class="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" id="RAG_QUERY_DECOMPOSE" name="RAG_QUERY_DECOMPOSE" class="checkbox checkbox-primary" checked>
-                                                    <span class="label-text">Decompose compound questions (<span translate="no">RAG_QUERY_DECOMPOSE</span>)</span>
-                                                </label>
-                                            </div>
-                                            <div class="form-control">
-                                                <label class="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" id="RAG_QUERY_TRANSLATE" name="RAG_QUERY_TRANSLATE" class="checkbox checkbox-primary" checked>
-                                                    <span class="label-text">Translate for cross-language search (<span translate="no">RAG_QUERY_TRANSLATE</span>)</span>
-                                                </label>
-                                            </div>
-                                            <div class="form-control">
-                                                <label class="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" id="RAG_QUERY_DATE_NORMALIZE" name="RAG_QUERY_DATE_NORMALIZE" class="checkbox checkbox-primary" checked>
-                                                    <span class="label-text">Normalize relative dates (<span translate="no">RAG_QUERY_DATE_NORMALIZE</span>)</span>
-                                                </label>
-                                            </div>
-                                            <div class="form-control">
-                                                <label class="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" id="RAG_QUERY_HYDE" name="RAG_QUERY_HYDE" class="checkbox checkbox-primary" aria-describedby="rag-query-hyde-help">
-                                                    <span class="label-text">Hypothetical answer (HyDE) variant (<span translate="no">RAG_QUERY_HYDE</span>)</span>
+                                                    <input type="checkbox" id="RAG_QUERY_HISTORY_FALLBACK" name="RAG_QUERY_HISTORY_FALLBACK" class="checkbox checkbox-primary" checked aria-describedby="rag-query-history-fallback-help">
+                                                    <span class="label-text">Keep the previous question when condensing is skipped (<span translate="no">RAG_QUERY_HISTORY_FALLBACK</span>)</span>
                                                 </label>
                                                 <label class="label pl-8">
-                                                    <span class="label-text-alt min-w-0" id="rag-query-hyde-help">HyDE is off by default and is never used in voice.</span>
+                                                    <span class="label-text-alt min-w-0" id="rag-query-history-fallback-help">When a follow-up cannot be condensed in time, retrieval also searches the previous question together with the follow-up. No model call.</span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control pl-8">
+                                                <label class="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" id="RAG_QUERY_DECOMPOSE_COMPLETENESS" name="RAG_QUERY_DECOMPOSE_COMPLETENESS" class="checkbox checkbox-primary" checked aria-describedby="rag-query-decompose-completeness-help">
+                                                    <span class="label-text">Check that sub-questions cover the whole question (<span translate="no">RAG_QUERY_DECOMPOSE_COMPLETENESS</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-query-decompose-completeness-help">Adds a sub-question for any name, date, code or tag the split left out, or keeps the original question when it cannot.</span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control pl-8">
+                                                <label class="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" id="RAG_QUERY_SUBQ_FILTERS" name="RAG_QUERY_SUBQ_FILTERS" class="checkbox checkbox-primary" aria-describedby="rag-query-subq-filters-help">
+                                                    <span class="label-text">Let each sub-question narrow its own search (<span translate="no">RAG_QUERY_SUBQ_FILTERS</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-query-subq-filters-help">A sub-question may be limited by date range, document version, tag, document type or language. A filter can only narrow what the workspace may search; an empty result is searched again without the filter.</span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control pl-8">
+                                                <label class="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" id="RAG_DECOMPOSED_ANSWER" name="RAG_DECOMPOSED_ANSWER" class="checkbox checkbox-primary" checked aria-describedby="rag-decomposed-answer-help">
+                                                    <span class="label-text">Answer each sub-question in its own part (<span translate="no">RAG_DECOMPOSED_ANSWER</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-decomposed-answer-help">Each part cites its own sources. A part the documents do not cover says so.</span>
                                                 </label>
                                             </div>
                                         </div>
 
+
                                         <div class="form-control mb-4">
-                                            <label class="label" for="RAG_QUERY_VOICE_TRANSFORMS"><span class="label-text">Voice transforms</span></label>
-                                            <input type="text" id="RAG_QUERY_VOICE_TRANSFORMS" name="RAG_QUERY_VOICE_TRANSFORMS" placeholder="condense_history,normalize_dates…" autocomplete="off" spellcheck="false" translate="no"
-                                                aria-describedby="rag-query-voice-help" class="input input-bordered w-full">
-                                            <label class="label">
-                                                <span class="label-text-alt min-w-0" id="rag-query-voice-help">allowed: <span translate="no">condense_history</span>, <span translate="no">normalize_dates</span>, <span translate="no">translate</span>; voice always uses the native condense.</span>
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_WHATSAPP_HISTORY" name="RAG_WHATSAPP_HISTORY" class="checkbox checkbox-primary" aria-describedby="rag-whatsapp-history-help">
+                                                <span class="label-text">Send WhatsApp conversation history (<span translate="no">RAG_WHATSAPP_HISTORY</span>)</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0" id="rag-whatsapp-history-help">Sends the last 6 turns of the same sender and session with each WhatsApp message, so follow-up questions keep their context. Off sends only the current message. The reset command clears the history.</span>
                                             </label>
                                         </div>
 
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="RAG_QUERY_TRANSLATE_DISABLED_PROFILES"><span class="label-text">Profiles without translation</span></label>
-                                            <input type="text" id="RAG_QUERY_TRANSLATE_DISABLED_PROFILES" name="RAG_QUERY_TRANSLATE_DISABLED_PROFILES" placeholder="profile_id,profile_id…" autocomplete="off" spellcheck="false" translate="no"
-                                                aria-describedby="rag-query-translate-profiles-help" class="input input-bordered w-full">
-                                            <label class="label">
-                                                <span class="label-text-alt min-w-0" id="rag-query-translate-profiles-help">Comma-separated embedding profiles that skip the translate transform; empty translates for every profile.</span>
-                                            </label>
+
+                                        <div class="border border-base-300 rounded-lg p-4 mb-4 space-y-3">
+                                            <h4 class="font-semibold text-sm text-balance">Languages</h4>
+                                            <p class="label-text-alt min-w-0">No effect while the query layer is off.</p>
+                                            <div class="form-control">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_TRANSLATION_GLOSSARY" name="RAG_TRANSLATION_GLOSSARY" class="checkbox checkbox-primary" aria-describedby="rag-translation-glossary-help">
+                                                    <span class="label-text">Enforce the translation glossary (<span translate="no">RAG_TRANSLATION_GLOSSARY</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-translation-glossary-help">Query translation, document translation and query rewriting keep to the glossary’s required translations. With no entries nothing changes.</span>
+                                                </label>
+                                                <div class="flex flex-wrap items-center gap-x-2 pl-8" data-query-additions-glossary-pointer hidden>
+                                                    <span class="label-text-alt text-base-content/70 min-w-0" data-query-additions-glossary-text>Entries are edited under RAG administration, Terminology, Glossary.</span>
+                                                    <button type="button" class="btn btn-link btn-xs px-0">Open glossary</button>
+                                                </div>
+                                            </div>
+                                            <div class="form-control">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_LANGID_SIDECAR" name="RAG_LANGID_SIDECAR" class="checkbox checkbox-primary" aria-describedby="rag-langid-sidecar-help">
+                                                    <span class="label-text">Use the sidecar language detector for unclear questions (<span translate="no">RAG_LANGID_SIDECAR</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-langid-sidecar-help">Only for short or mixed-script questions the built-in detector is unsure about. Needs the sidecar with its language-detection extra installed. Never used in voice.</span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="border border-base-300 rounded-lg p-4 mb-4 space-y-3">
+                                            <h4 class="font-semibold text-sm text-balance">Speed</h4>
+                                            <p class="label-text-alt min-w-0">No effect while the query layer is off.</p>
+                                            <div class="form-control">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_SPECULATIVE_RETRIEVAL" name="RAG_SPECULATIVE_RETRIEVAL" class="checkbox checkbox-primary" aria-describedby="rag-speculative-retrieval-help">
+                                                    <span class="label-text">Start retrieval while the question is being rewritten (<span translate="no">RAG_SPECULATIVE_RETRIEVAL</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-speculative-retrieval-help">Searches with the original question at the same time as the transforms run. Results are fused the same way; a cache hit cancels the search.</span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control">
+                                                <label class="label" for="RAG_MODEL_ROUTING"><span class="label-text">Model routing for the Auto entry (<span translate="no">RAG_MODEL_ROUTING</span>)</span></label>
+                                                <select id="RAG_MODEL_ROUTING" name="RAG_MODEL_ROUTING" translate="no" autocomplete="off" aria-describedby="rag-model-routing-help" class="select select-bordered w-full max-w-xs">
+                                                    <option value="off" selected>off</option>
+                                                    <option value="auto">auto</option>
+                                                </select>
+                                                <label class="label">
+                                                    <span class="label-text-alt min-w-0" id="rag-model-routing-help"><span translate="no">off</span>: a user who selects Auto gets the quality model. <span translate="no">auto</span>: simple lookups go to the fast model, everything else to the quality model. A model the user selects by name is never replaced.</span>
+                                                </label>
+                                            </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div class="form-control">
+                                                    <label class="label" for="RAG_ROUTING_FAST_MODEL"><span class="label-text">Fast model (<span translate="no">RAG_ROUTING_FAST_MODEL</span>)</span></label>
+                                                    <select id="RAG_ROUTING_FAST_MODEL" name="RAG_ROUTING_FAST_MODEL" translate="no" autocomplete="off" class="select select-bordered w-full">
+                                                        <option value="">Not set</option>
+                                                    </select>
+                                                </div>
+                                                <div class="form-control">
+                                                    <label class="label" for="RAG_ROUTING_QUALITY_MODEL"><span class="label-text">Quality model (<span translate="no">RAG_ROUTING_QUALITY_MODEL</span>)</span></label>
+                                                    <select id="RAG_ROUTING_QUALITY_MODEL" name="RAG_ROUTING_QUALITY_MODEL" translate="no" autocomplete="off" class="select select-bordered w-full">
+                                                        <option value="">Not set</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div id="query-additions-routing-warnings" class="grid gap-2 mt-2 empty:mt-0" role="status" aria-live="polite"></div>
+                                        </div>
+
+                                        <div class="flex flex-wrap items-center gap-x-2 mb-4">
+                                            <span class="label-text-alt text-base-content/70" data-scope-gate-pointer-text>The scope gate switch, its thresholds and out-of-scope examples are under RAG administration, Scope gate.</span>
+                                            <button type="button" class="btn btn-link btn-xs px-0" data-scope-gate-pointer>Open scope gate</button>
                                         </div>
 
                                         <div class="border border-base-300 rounded-lg p-4 space-y-4">
@@ -7190,194 +6981,7 @@
                                 <div class="card bg-base-200 shadow-md mt-6">
                                     <div class="card-body">
                                         <h3 class="text-lg font-semibold mb-2">Ingestion and embedding profiles</h3>
-                                        <p class="text-base-content/70 mb-4">Selects the document ingestion pipeline, parser and embedding provider keys. Leave the defaults to keep the current behaviour; API keys stay on the server.</p>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Ingest pipeline</span>
-                                            </label>
-                                            <select id="RAG_INGEST_PIPELINE" class="select select-bordered w-full">
-                                                <option value="legacy">legacy</option>
-                                                <option value="unified">unified</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt">legacy keeps the current document writers; unified uses the single ingest pipeline.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Document parser</span>
-                                            </label>
-                                            <select id="RAG_PARSER" class="select select-bordered w-full">
-                                                <option value="llamaparse">llamaparse</option>
-                                                <option value="docling">docling</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt">llamaparse is the current parser; docling runs in the sidecar.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Parse wait budget (ms)</span>
-                                            </label>
-                                            <input type="number" min="1000" max="55000" step="1000" placeholder="45000" id="RAG_PARSE_POLL_BUDGET_MS"
-                                                class="input input-bordered w-full">
-                                            <label class="label">
-                                                <span class="label-text-alt">How long one request waits for a sidecar parse job, 1000 to 55000.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Model-assisted document type detection</span>
-                                            </label>
-                                            <select id="RAG_DOC_TYPE_LLM_DETECT" class="select select-bordered w-full">
-                                                <option value="false">false</option>
-                                                <option value="true">true</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt">false uses rules only.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Model-assisted invoice extraction</span>
-                                            </label>
-                                            <select id="RAG_INVOICE_LLM_EXTRACT" class="select select-bordered w-full">
-                                                <option value="false">false</option>
-                                                <option value="true">true</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt">false uses rules only.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Exact identifier lookup</span>
-                                            </label>
-                                            <select id="RAG_EXACT_ID_LOOKUP" class="select select-bordered w-full">
-                                                <option value="false">false</option>
-                                                <option value="true">true</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt">false keeps vector and keyword retrieval only.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">PDF image chunks</span>
-                                            </label>
-                                            <select id="RAG_PDF_IMAGE_CHUNKS" class="select select-bordered w-full">
-                                                <option value="false">false</option>
-                                                <option value="true">true</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt">false keeps text chunks only.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Prompt injection scan</span>
-                                            </label>
-                                            <select id="RAG_INJECTION_SCAN" class="select select-bordered w-full">
-                                                <option value="off">off</option>
-                                                <option value="quarantine">quarantine</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt">quarantine holds suspicious chunks back until an admin releases them.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Embedding profile registry</span>
-                                            </label>
-                                            <select id="RAG_EMBEDDING_PROFILES" class="select select-bordered w-full">
-                                                <option value="off">off</option>
-                                                <option value="on">on</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt">off keeps the single configured embedding model.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="RAG_DOMAIN_EMBEDDINGS">
-                                                <span class="label-text">Domain embeddings</span>
-                                            </label>
-                                            <select id="RAG_DOMAIN_EMBEDDINGS" name="RAG_DOMAIN_EMBEDDINGS" class="select select-bordered w-full" translate="no" aria-describedby="domain-embeddings-help">
-                                                <option value="off">off</option>
-                                                <option value="on">on</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt" id="domain-embeddings-help">Adds a domain embedding leg for document types with an active binding. Needs embedding profiles on.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="RAG_DOMAIN_EMBEDDING_MAX_LEGS">
-                                                <span class="label-text">Domain embedding legs per query</span>
-                                            </label>
-                                            <input type="number" id="RAG_DOMAIN_EMBEDDING_MAX_LEGS" name="RAG_DOMAIN_EMBEDDING_MAX_LEGS" class="input input-bordered w-full" min="0" max="5" step="1" inputmode="numeric" autocomplete="off" placeholder="2…" aria-describedby="domain-embedding-max-legs-help">
-                                            <label class="label">
-                                                <span class="label-text-alt" id="domain-embedding-max-legs-help">0 to 5. 0 keeps bindings without extra search legs.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="RAG_DOMAIN_EMBEDDING_TIMEOUT_MS">
-                                                <span class="label-text">Domain embedding leg timeout (ms)</span>
-                                            </label>
-                                            <input type="number" id="RAG_DOMAIN_EMBEDDING_TIMEOUT_MS" name="RAG_DOMAIN_EMBEDDING_TIMEOUT_MS" class="input input-bordered w-full" min="100" max="5000" step="1" inputmode="numeric" autocomplete="off" placeholder="800…" aria-describedby="domain-embedding-timeout-help">
-                                            <label class="label">
-                                                <span class="label-text-alt" id="domain-embedding-timeout-help">100 to 5000&nbsp;ms. A leg that runs longer is skipped.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="RAG_QWEN_EMBED_PRIMARY">
-                                                <span class="label-text">Qwen embedding primary host</span>
-                                            </label>
-                                            <select id="RAG_QWEN_EMBED_PRIMARY" class="select select-bordered w-full" aria-describedby="qwen-embed-primary-help">
-                                                <option value="deepinfra">deepinfra</option>
-                                                <option value="openrouter">openrouter</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt" id="qwen-embed-primary-help">deepinfra needs the DeepInfra API key; openrouter needs only the OpenRouter API key.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Qwen embedding fallback host</span>
-                                            </label>
-                                            <select id="RAG_QWEN_EMBED_FALLBACK" class="select select-bordered w-full">
-                                                <option value="openrouter">openrouter</option>
-                                                <option value="none">none</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt">Used when the primary host is unavailable: openrouter tries the other host (DeepInfra when OpenRouter is primary and a DeepInfra key is set); none disables it.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="RAG_OPENAI_EMBEDDINGS_VIA">
-                                                <span class="label-text">OpenAI embedding host</span>
-                                            </label>
-                                            <select id="RAG_OPENAI_EMBEDDINGS_VIA" class="select select-bordered w-full" aria-describedby="openai-embeddings-via-help">
-                                                <option value="openai">openai</option>
-                                                <option value="openrouter">openrouter</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt" id="openai-embeddings-via-help">openrouter sends the same embedding model through OpenRouter with the OpenRouter API key (same vectors, no re-embed); the OpenAI Batch API is then unavailable and backfills embed immediately.</span>
-                                            </label>
-                                        </div>
+                                        <p class="text-base-content/70 mb-4">Fine-tuned embedding slots. The other settings of this layer are in RAG pipeline settings above.</p>
 
                                         <section id="rag-finetune-slots" class="mt-6 min-w-0" aria-labelledby="rag-finetune-slots-title">
                                             <h4 id="rag-finetune-slots-title" class="text-md font-semibold mb-2 text-balance">Fine-Tuned Slots</h4>
@@ -7501,233 +7105,6 @@
                                             </fieldset>
                                         </section>
 
-                                        <h4 class="text-md font-semibold mt-6 mb-2">Ingestion</h4>
-                                        <p class="text-sm mb-2" data-ingestion-i18n="settings.movedPointer">Queue and tiered parsing settings are under RAG administration, Ingestion.</p>
-                                        <button type="button" class="btn btn-link btn-sm" id="open-ingestion-settings-link" data-ingestion-i18n="settings.movedOpen">Open Ingestion settings</button>
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Voyage API key</span>
-                                            </label>
-                                            <div class="flex gap-2">
-                                                <input type="password" id="VOYAGE_API_KEY"
-                                                    placeholder=""
-                                                    class="input input-bordered flex-1 w-full">
-                                                <button class="btn btn-square btn-outline"
-                                                    data-for="VOYAGE_API_KEY">👁️</button>
-                                            </div>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Voyage base URL</span>
-                                            </label>
-                                            <input type="text" placeholder="https://api.voyageai.com/v1" id="VOYAGE_BASE_URL"
-                                                class="input input-bordered w-full">
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">DeepInfra API key</span>
-                                            </label>
-                                            <div class="flex gap-2">
-                                                <input type="password" id="DEEPINFRA_API_KEY"
-                                                    placeholder=""
-                                                    class="input input-bordered flex-1 w-full">
-                                                <button class="btn btn-square btn-outline"
-                                                    data-for="DEEPINFRA_API_KEY">👁️</button>
-                                            </div>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">DeepInfra base URL</span>
-                                            </label>
-                                            <input type="text" placeholder="https://api.deepinfra.com/v1/openai" id="DEEPINFRA_BASE_URL"
-                                                class="input input-bordered w-full">
-                                        </div>
-
-                                    </div>
-                                </div>
-
-                                <!-- Langfuse tracing -->
-                                <div class="card bg-base-200 shadow-md mt-6">
-                                    <div class="card-body">
-                                        <h3 class="text-lg font-semibold mb-2">Langfuse tracing</h3>
-                                        <p class="text-base-content/70 mb-4">Optional tracing of retrieval requests. Off by default; the secret key stays on the server.</p>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="LANGFUSE_ENABLED"
-                                                    class="toggle toggle-primary">
-                                                <span class="label-text">Enable Langfuse tracing</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Public key</span>
-                                            </label>
-                                            <input type="text" id="LANGFUSE_PUBLIC_KEY"
-                                                placeholder=""
-                                                class="input input-bordered w-full">
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Secret key</span>
-                                            </label>
-                                            <div class="flex gap-2">
-                                                <input type="password" id="LANGFUSE_SECRET_KEY"
-                                                    placeholder=""
-                                                    class="input input-bordered flex-1 w-full">
-                                                <button class="btn btn-square btn-outline"
-                                                    data-for="LANGFUSE_SECRET_KEY">👁️</button>
-                                            </div>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Base URL</span>
-                                            </label>
-                                            <input type="text" id="LANGFUSE_BASE_URL"
-                                                placeholder="https://cloud.langfuse.com"
-                                                class="input input-bordered w-full">
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Trace sample rate</span>
-                                            </label>
-                                            <input type="text" id="LANGFUSE_SAMPLE_RATE"
-                                                placeholder="0.1"
-                                                class="input input-bordered w-full">
-                                            <label class="label">
-                                                <span class="label-text-alt">Share of requests traced, 0 to 1.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="LANGFUSE_CAPTURE_CONTENT"
-                                                    class="toggle toggle-primary">
-                                                <span class="label-text">Send prompt and answer text</span>
-                                            </label>
-                                            <label class="label">
-                                                <span class="label-text-alt text-warning">When off, only metadata is sent to Langfuse.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label">
-                                                <span class="label-text">Review sample rate</span>
-                                            </label>
-                                            <input type="text" id="LANGFUSE_REVIEW_SAMPLE_RATE"
-                                                placeholder="0"
-                                                class="input input-bordered w-full">
-                                            <label class="label">
-                                                <span class="label-text-alt">Share of traces queued for human review, 0 to 1. Exported text is PII-masked.</span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Citations and groundedness -->
-                                <div class="card bg-base-200 shadow-md mt-6">
-                                    <div class="card-body">
-                                        <h3 class="text-lg font-semibold mb-2 text-balance">Citations and groundedness</h3>
-                                        <p class="text-base-content/70 mb-4">Inline citations, Claude Citations, groundedness scoring and answer feedback. All off by default; with every switch off, chat answers are unchanged.</p>
-
-                                        <div class="form-control mb-2">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="RAG_CITATIONS" name="RAG_CITATIONS" class="checkbox checkbox-primary">
-                                                <span class="label-text">Inline citations on knowledge-base answers</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-2">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="RAG_CLAUDE_CITATIONS" name="RAG_CLAUDE_CITATIONS" class="checkbox checkbox-primary">
-                                                <span class="label-text">Claude Citations through the Anthropic API</span>
-                                            </label>
-                                            <label class="label pl-8">
-                                                <span class="label-text-alt min-w-0 text-base-content/70">Needs an Anthropic API key. Claude models go to the Anthropic API directly; other models keep inline citations.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-2">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="RAG_GROUNDEDNESS" name="RAG_GROUNDEDNESS" class="checkbox checkbox-primary">
-                                                <span class="label-text">Groundedness scoring after the answer</span>
-                                            </label>
-                                            <label class="label pl-8">
-                                                <span class="label-text-alt min-w-0 text-base-content/70">Scored by the sidecar after the stream ends; it does not delay the answer.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-2">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="RAG_GROUNDEDNESS_VECTARA_OPT_IN" name="RAG_GROUNDEDNESS_VECTARA_OPT_IN" class="checkbox checkbox-primary">
-                                                <span class="label-text">Allow the Vectara hosted scorer</span>
-                                            </label>
-                                            <label class="label pl-8">
-                                                <span class="label-text-alt min-w-0 text-base-content/70">Sends the answer and its context to Vectara. Without it, only the local scorer runs.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-2">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK" name="RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK" class="checkbox checkbox-primary">
-                                                <span class="label-text">Multi-tenant Vectara acknowledgement</span>
-                                            </label>
-                                            <label class="label pl-8">
-                                                <span class="label-text-alt min-w-0 text-base-content"><span aria-hidden="true">⚠️</span> Tick this only after the Vectara data-retention terms were recorded in live verification. Without it, multi-tenant deployments never send data to Vectara.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-2">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="RAG_ANSWER_FEEDBACK" name="RAG_ANSWER_FEEDBACK" class="checkbox checkbox-primary">
-                                                <span class="label-text">Answer feedback (thumbs up and down)</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 mb-4">
-                                            <div class="form-control">
-                                                <label class="label" for="RAG_GROUNDEDNESS_TIMEOUT_MS"><span class="label-text">Groundedness timeout (ms)</span></label>
-                                                <input type="number" min="1" max="55000" id="RAG_GROUNDEDNESS_TIMEOUT_MS" placeholder="20000" autocomplete="off" inputmode="numeric"
-                                                    class="input input-bordered w-full">
-                                            </div>
-                                            <div class="form-control">
-                                                <label class="label" for="RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS"><span class="label-text">Groundedness premise cap (tokens)</span></label>
-                                                <input type="number" min="256" max="8000" id="RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS" placeholder="3000" autocomplete="off" inputmode="numeric"
-                                                    class="input input-bordered w-full">
-                                            </div>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="ANTHROPIC_API_KEY">
-                                                <span class="label-text">Anthropic API key</span>
-                                            </label>
-                                            <div class="flex gap-2">
-                                                <input type="password" id="ANTHROPIC_API_KEY" name="ANTHROPIC_API_KEY" placeholder="Empty until configured" autocomplete="off"
-                                                    class="input input-bordered flex-1 w-full">
-                                                <button type="button" class="btn btn-square btn-outline" data-for="ANTHROPIC_API_KEY" aria-label="Show or hide the Anthropic API key">👁️</button>
-                                            </div>
-                                            <label class="label">
-                                                <span class="label-text-alt min-w-0 text-base-content/70">Stays on the server; only its presence is reported.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="ANTHROPIC_BASE_URL">
-                                                <span class="label-text">Anthropic base URL</span>
-                                            </label>
-                                            <input type="text" id="ANTHROPIC_BASE_URL" name="ANTHROPIC_BASE_URL" placeholder="https://api.anthropic.com/v1" autocomplete="off"
-                                                class="input input-bordered w-full">
-                                            <label class="label">
-                                                <span class="label-text-alt min-w-0 text-base-content/70">For tests and recorded streams only. Leave empty to use <code translate="no">https://api.anthropic.com/v1</code>.</span>
-                                            </label>
-                                        </div>
                                     </div>
                                 </div>
 
@@ -7815,123 +7192,6 @@
                                                 <span class="label-text-alt min-w-0 text-base-content/70">Opens the Review queue under RAG administration to granted experts and allows mining. Mining also needs the retrieval log at “IDs, scores and the masked question”. <code translate="no">RAG_DOMAIN_EXPERT_REVIEW</code></span>
                                             </label>
                                         </div>
-                                    </div>
-                                </div>
-
-                                <!-- Prompt-injection defense -->
-                                <div class="card bg-base-200 shadow-md mt-6">
-                                    <div class="card-body">
-                                        <h3 class="text-lg font-semibold mb-2 text-balance">Prompt-injection defense</h3>
-                                        <p class="text-base-content/70 mb-4">Treat retrieved documents and tool results as untrusted data. All off by default; with every switch off, chat answers are unchanged.</p>
-
-                                        <div class="form-control mb-2">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="RAG_CONTEXT_TAGGING" name="RAG_CONTEXT_TAGGING" class="checkbox checkbox-primary">
-                                                <span class="label-text">Tag retrieved context as untrusted documents</span>
-                                            </label>
-                                            <label class="label pl-8">
-                                                <span class="label-text-alt min-w-0 text-base-content/70">Wraps each retrieved chunk in a tagged block and tells the model to ignore instructions inside it.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="RAG_INJECTION_CHECK">
-                                                <span class="label-text">Retrieval-time injection check</span>
-                                            </label>
-                                            <select id="RAG_INJECTION_CHECK" name="RAG_INJECTION_CHECK" class="select select-bordered w-full">
-                                                <option value="off">off</option>
-                                                <option value="flag">flag</option>
-                                                <option value="drop">drop</option>
-                                                <option value="downweight">downweight</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt min-w-0 text-base-content/70"><code translate="no">flag</code> records suspicious chunks; <code translate="no">drop</code> removes them and is the recommended mode; <code translate="no">downweight</code> only lowers their rank and is weaker than drop.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-2">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="RAG_INJECTION_PROMPT_GUARD" name="RAG_INJECTION_PROMPT_GUARD" class="checkbox checkbox-primary">
-                                                <span class="label-text">Prompt Guard 2 detector (sidecar)</span>
-                                            </label>
-                                            <label class="label pl-8">
-                                                <span class="label-text-alt min-w-0 text-base-content/70">Optional model detector in the sidecar; English and Italian only.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-2">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="RAG_INJECTION_LAKERA" name="RAG_INJECTION_LAKERA" class="checkbox checkbox-primary">
-                                                <span class="label-text">Lakera Guard hosted detector</span>
-                                            </label>
-                                            <label class="label pl-8">
-                                                <span class="label-text-alt min-w-0 text-base-content"><span aria-hidden="true">⚠️</span> Sends chunk text to Lakera, a third party. Listed in the vendor inventory (ADM-04).</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-2">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="RAG_INJECTION_LAKERA_MULTI_TENANT_ACK" name="RAG_INJECTION_LAKERA_MULTI_TENANT_ACK" class="checkbox checkbox-primary">
-                                                <span class="label-text">Multi-tenant Lakera acknowledgement</span>
-                                            </label>
-                                            <label class="label pl-8">
-                                                <span class="label-text-alt min-w-0 text-base-content"><span aria-hidden="true">⚠️</span> Tick this only after the Lakera data-retention terms were recorded in live verification. Without it, multi-tenant deployments never send data to Lakera.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="LAKERA_GUARD_API_KEY">
-                                                <span class="label-text">Lakera Guard API key</span>
-                                            </label>
-                                            <div class="flex gap-2">
-                                                <input type="password" id="LAKERA_GUARD_API_KEY" name="LAKERA_GUARD_API_KEY" placeholder="Empty until configured" autocomplete="off"
-                                                    class="input input-bordered flex-1 w-full">
-                                                <button type="button" class="btn btn-square btn-outline" data-for="LAKERA_GUARD_API_KEY" aria-label="Show or hide the Lakera Guard API key">👁️</button>
-                                            </div>
-                                            <label class="label">
-                                                <span class="label-text-alt min-w-0 text-base-content/70">Stays on the server; only its presence is reported.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="LAKERA_GUARD_BASE_URL">
-                                                <span class="label-text">Lakera Guard base URL</span>
-                                            </label>
-                                            <input type="text" id="LAKERA_GUARD_BASE_URL" name="LAKERA_GUARD_BASE_URL" placeholder="https://api.lakera.ai" autocomplete="off" spellcheck="false"
-                                                class="input input-bordered w-full">
-                                            <label class="label">
-                                                <span class="label-text-alt min-w-0 text-base-content/70">Leave empty to use <code translate="no">https://api.lakera.ai</code>. Regional hosts such as the EU one are allowed; HTTPS only.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-4">
-                                            <label class="label" for="RAG_TOOL_RESULT_GUARD">
-                                                <span class="label-text">Tool result guard</span>
-                                            </label>
-                                            <select id="RAG_TOOL_RESULT_GUARD" name="RAG_TOOL_RESULT_GUARD" class="select select-bordered w-full">
-                                                <option value="off">off</option>
-                                                <option value="tag">tag</option>
-                                                <option value="tag_and_flag">tag_and_flag</option>
-                                            </select>
-                                            <label class="label">
-                                                <span class="label-text-alt min-w-0 text-base-content/70"><code translate="no">tag</code> wraps web search and MCP results as untrusted data for the model; <code translate="no">tag_and_flag</code> also runs the injection check on them.</span>
-                                            </label>
-                                        </div>
-
-                                        <div class="form-control mb-2">
-                                            <label class="label cursor-pointer justify-start gap-3">
-                                                <input type="checkbox" id="NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST" name="NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST" class="checkbox checkbox-primary">
-                                                <span class="label-text">Markdown image allowlist in answers</span>
-                                            </label>
-                                            <label class="label pl-8">
-                                                <span class="label-text-alt min-w-0 text-base-content/70">Images from other hosts render as plain links. Inlined at build time, so a change takes effect only after a rebuild.</span>
-                                            </label>
-                                        </div>
-
-                                        <div id="injection-defense-summary" class="rounded-box bg-base-100 p-4 mt-4" aria-live="polite">
-                                            <p class="text-sm text-base-content/70">Loading detector configuration…</p>
-                                        </div>
-                                        <div id="injection-defense-events-pointer" class="mt-2 min-w-0"></div>
                                     </div>
                                 </div>
 
@@ -10676,6 +9936,26 @@
                                         </div>
                                     </section>
 
+                                    <section id="rag-administration-scope-gate" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-scope-gate-title">
+                                        <div class="card-body [overflow-wrap:anywhere]">
+                                            <h3 id="rag-scope-gate-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-rag-i18n="panel.title">Scope gate</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-scope-gate-description data-rag-i18n="panel.description">Skips retrieval for questions that are clearly outside what this knowledge base covers. What is in scope is learned only from the workspace’s own documents, document types and tags; no topic list is built in.</p>
+                                            <div class="form-control mb-4">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_SCOPE_GATE" name="RAG_SCOPE_GATE" class="checkbox checkbox-primary" aria-describedby="rag-scope-gate-help">
+                                                    <span class="label-text" data-rag-i18n="switch.label">Enable the scope gate (<span translate="no">RAG_SCOPE_GATE</span>)</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span class="label-text-alt min-w-0" id="rag-scope-gate-help" data-rag-i18n="switch.help">Off sends every question to retrieval, as today. Voice never uses the scope gate.</span>
+                                                </label>
+                                                <div class="pl-8 text-sm" data-scope-gate-note></div>
+                                            </div>
+                                            <div data-scope-gate-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-scope-gate-content></div>
+                                            <div data-scope-gate-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                        </div>
+                                    </section>
+
                                     <section id="rag-administration-judge" class="card bg-base-200 shadow-md min-w-0 scroll-mt-24" aria-labelledby="rag-judge-cal-title">
                                         <div class="card-body">
                                             <h3 id="rag-judge-cal-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-judge-cal-title>Judge calibration</h3>
@@ -11605,6 +10885,7 @@
             populateFields() {
                 (this.secretsSet || new Set()).forEach((name) => {
                     const secretField = document.getElementById(name);
+                    if (secretField && secretField.closest('#rag-pipeline-settings')) return;
                     if (secretField) {
                         secretField.value = '';
                         secretField.placeholder = 'Configured (hidden). Type a new value to replace it.';
@@ -11622,6 +10903,7 @@
                     // No special handling needed for unified RAG system
 
                     const field = document.getElementById(key);
+                    if (field && field.closest('#rag-pipeline-settings')) return;
                     if (field) {
                         if (field.type === 'checkbox') {
                             field.checked = value === 'true' || value === true;
@@ -11999,6 +11281,7 @@
 
                     this.showSaveIndicator();
                     console.log('Config saved successfully');
+                    document.dispatchEvent(new CustomEvent('rag-config-saved'));
 
                     const shortSecrets = ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY', 'RAG_VECTOR_SYNC_SECRET', 'RAG_MONITOR_WEBHOOK_SECRET'].filter((name) => {
                         const value = this.config[name];
@@ -18803,6 +18086,7 @@ When messaging:
                     ]);
                     const defaultOpenRouterModels = window.configManager?.config?.NEXT_PUBLIC_OPENROUTER_MODELS || JSON.stringify([
                         { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true, contextLength: 1000000 },
+                        { id: 'auto', displayName: 'Auto' },
                         { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
                         { id: 'openai/gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
                         { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1', contextLength: 200000 },
@@ -18847,6 +18131,7 @@ When messaging:
                         ]),
                         openrouterModels: safeJsonParse(defaultOpenRouterModels, [
                             { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true, contextLength: 1000000 },
+                            { id: 'auto', displayName: 'Auto' },
                             { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
                             { id: 'openai/gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
                             { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1', contextLength: 200000 },
@@ -18909,6 +18194,7 @@ When messaging:
                     ],
                     openrouterModels: [
                         { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true, contextLength: 1000000 },
+                        { id: 'auto', displayName: 'Auto' },
                         { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
                         { id: 'openai/gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
                         { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1', contextLength: 200000 },

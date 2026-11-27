@@ -41,6 +41,7 @@ TEXT_PLACEHOLDERS: dict[str, tuple[str, ...]] = {
     "instructions.partial_answer": ("sentinel", "not_covered"),
     "instructions.general_knowledge": ("general_knowledge",),
     "instructions.web_separation": ("from_documents", "from_web"),
+    "instructions.calculation_block": ("open", "close"),
 }
 
 
@@ -130,6 +131,8 @@ class LabelTexts(_TextGroup):
     badge_tooltip_verified: str | None = _text()
     badge_tooltip_possibly_unreliable: str | None = _text()
     badge_tooltip_not_checked: str | None = _text()
+    condensed_question: str | None = _text()
+    earlier_draft: str | None = _text()
 
 
 class InstructionTexts(_TextGroup):
@@ -148,12 +151,34 @@ class InstructionTexts(_TextGroup):
     version: str | None = _text()
     concise: str | None = _text()
     calculation: str | None = _text()
+    calculation_block: str | None = _text()
+
+
+class QueryLayerTexts(_TextGroup):
+    """Phase 6.2 D-11, D-26: optional texts of the decomposed-answer block and the scope gate.
+
+    Not part of TEXT_KEYS or D-04 completeness: a pack without them stays complete and the feature that needs one
+    falls back to its switch-off behaviour.
+    """
+
+    _group: ClassVar[str] = "query_layer"
+
+    decomposed_answer_intro: str | None = _text()
+    decomposed_answer_parts: str | None = _text()
+    decomposed_answer_compare_order: str | None = _text()
+    decomposed_answer_cite_own: str | None = _text()
+    decomposed_answer_block_label: str | None = _text()
+    scope_gate_notice: str | None = _text()
+    scope_gate_prompt_rule: str | None = _text()
 
 
 class LanguageTexts(_Contract):
     notices: NoticeTexts
     labels: LabelTexts
     instructions: InstructionTexts
+    query_layer: QueryLayerTexts | None = Field(
+        default=None, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
+    )
 
 
 _TEXT_GROUPS: tuple[tuple[str, type[_TextGroup]], ...] = (
@@ -189,6 +214,52 @@ class LanguageFixtures(_Contract):
     golden_slices: bool
 
 
+FormatCharacter = Annotated[str, Field(pattern=r"^\D$")]
+IntentTerm = Annotated[str, Field(min_length=1, max_length=24, pattern=r"^[^\s\d](?:\D*[^\s\d])?$")]
+
+
+def _no_digit(value: str) -> str:
+    # The JSON Schema pattern covers ASCII digits in every client; this also refuses other Unicode digits.
+    if any(character.isdigit() for character in value):
+        raise ValueError("must not contain a digit")
+    return value
+
+
+def _unique(values: list[str], name: str) -> list[str]:
+    if len(set(values)) != len(values):
+        raise ValueError(f"{name} must not repeat a value")
+    return values
+
+
+class MagnitudeWord(_Contract):
+    word: str = Field(min_length=1, max_length=24, pattern=r"^[^\s\d](?:\D*[^\s\d])?$")
+    power: int = Field(ge=1, le=12)
+
+    @field_validator("word")
+    @classmethod
+    def _word_has_no_digit(cls, value: str) -> str:
+        return _no_digit(value)
+
+
+class NumberFormat(_Contract):
+    """How numbers are written in this language (Phase 5.2.1 D-74): data the calculation check normalizes with, never code branches."""
+
+    group_separators: list[FormatCharacter] = Field(min_length=1, max_length=4)
+    decimal_marks: list[FormatCharacter] = Field(min_length=1, max_length=2)
+    fullwidth_digits: bool
+    magnitude_words: list[MagnitudeWord] = Field(default=[], max_length=20)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> NumberFormat:
+        _unique(self.group_separators, "group_separators")
+        _unique(self.decimal_marks, "decimal_marks")
+        _unique([entry.word for entry in self.magnitude_words], "magnitude_words")
+        shared = sorted(set(self.group_separators) & set(self.decimal_marks))
+        if shared:
+            raise ValueError(f"a group separator is also a decimal mark: {', '.join(repr(c) for c in shared)}")
+        return self
+
+
 class LanguagePack(_Contract):
     code: str = Field(pattern=r"^[a-z]{2,3}$")
     name: str = Field(min_length=1)
@@ -207,6 +278,8 @@ class LanguagePack(_Contract):
     effective_date_patterns: list[str]
     effective_date_end_patterns: list[str] = Field(default=[])
     version_markers: list[str]
+    number_format: NumberFormat
+    calc_intent_terms: list[IntentTerm] = Field(min_length=1, max_length=40)
     fixtures: LanguageFixtures
     pack_version: int = Field(ge=1)
 
@@ -219,6 +292,14 @@ class LanguagePack(_Contract):
             except re.error as exc:
                 raise ValueError(f"pattern {index} does not compile") from exc
         return patterns
+
+    @field_validator("calc_intent_terms")
+    @classmethod
+    def _intent_terms(cls, terms: list[str]) -> list[str]:
+        for term in terms:
+            _no_digit(term)
+        _unique([term.casefold() for term in terms], "calc_intent_terms")
+        return terms
 
 
 UnitSymbol = Annotated[str, Field(pattern=r"^[^\s\d]{1,8}$")]

@@ -73,7 +73,7 @@ describe('native condense through the v2 query stage', () => {
   });
 
   it('turns a follow-up into the scripted standalone query with the protected code verbatim', async () => {
-    const { fake, prompts } = install([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: false } }]);
+    const { fake, prompts } = install([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: false, language: null } }]);
     const { out, stage } = await run(FOLLOW_UP, { history: HISTORY });
 
     const plan = out.queryLayer?.plan;
@@ -100,7 +100,7 @@ describe('native condense through the v2 query stage', () => {
   });
 
   it('discards a rewrite that loses a protected token and searches the original only', async () => {
-    install([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: LOST_TOKEN, unchanged: false } }]);
+    install([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: LOST_TOKEN, unchanged: false, language: null } }]);
     const { out, stage } = await run(FOLLOW_UP, { history: HISTORY });
 
     const plan = out.queryLayer?.plan;
@@ -112,7 +112,7 @@ describe('native condense through the v2 query stage', () => {
   });
 
   it('passes a standalone question through without calling the query LLM', async () => {
-    const { fake } = install([{ transform: 'condense', query: STANDALONE, output: { standalone: CONDENSED, unchanged: false } }]);
+    const { fake } = install([{ transform: 'condense', query: STANDALONE, output: { standalone: CONDENSED, unchanged: false, language: null } }]);
     const { out, stage } = await run(STANDALONE, { history: HISTORY });
 
     expect(out.queryLayer?.plan?.gate.transforms).not.toContain('condense_history');
@@ -124,7 +124,7 @@ describe('native condense through the v2 query stage', () => {
   });
 
   it('treats an unchanged answer from the model as a pass-through', async () => {
-    install([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: true } }]);
+    install([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: true, language: null } }]);
     const { out, stage } = await run(FOLLOW_UP, { history: HISTORY });
     expect(out.queryLayer?.plan?.standalone).toBe(FOLLOW_UP);
     expect(out.variants).toHaveLength(1);
@@ -140,7 +140,7 @@ describe('native condense through the v2 query stage', () => {
   });
 
   it('skips a 2 s condense at the 600 ms chat timeout and still retrieves the original', async () => {
-    install([{ transform: 'condense', query: FOLLOW_UP, delay_ms: 2000, output: { standalone: CONDENSED, unchanged: false } }]);
+    install([{ transform: 'condense', query: FOLLOW_UP, delay_ms: 2000, output: { standalone: CONDENSED, unchanged: false, language: null } }]);
     const started = Date.now();
     const { out, stage } = await run(FOLLOW_UP, { history: HISTORY, profile: 'chat' });
     const elapsed = Date.now() - started;
@@ -153,7 +153,7 @@ describe('native condense through the v2 query stage', () => {
   });
 
   it('does not run condense when the eval request switches it off', async () => {
-    const { fake } = install([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: false } }]);
+    const { fake } = install([{ transform: 'condense', query: FOLLOW_UP, output: { standalone: CONDENSED, unchanged: false, language: null } }]);
     const collector = createTraceCollector({ profile: 'eval', tenantKey: 's:default' });
     const signal = new AbortController().signal;
     const out = await runQueryStages({

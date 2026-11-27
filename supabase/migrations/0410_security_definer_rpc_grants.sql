@@ -90,6 +90,14 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_access_user_in_tenant(text, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_access_user_in_tenant(text, uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_access_group_members_list(text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_access_group_members_list(text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_access_group_members_list(text, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_access_member_candidates(text, uuid, text, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_access_member_candidates(text, uuid, text, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_access_member_candidates(text, uuid, text, integer) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_activate_embedding_profile(text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_activate_embedding_profile(text, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_activate_embedding_profile(text, text) TO service_role;
@@ -153,6 +161,10 @@ BEGIN
   IF to_regprocedure('public.rag_confirm_supersession(uuid, uuid, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_confirm_supersession(uuid, uuid, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_confirm_supersession(uuid, uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_connector_match_members(text, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_connector_match_members(text, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_connector_match_members(text, text[]) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_create_ingestion_batch(text, text, text, numeric, integer, text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_create_ingestion_batch(text, text, text, numeric, integer, text, text) FROM PUBLIC, anon, authenticated;
@@ -750,6 +762,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_term_list_entries(uuid, text, integer, integer, text, text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text, text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text, text, text, text) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint) TO service_role;
@@ -1000,6 +1016,10 @@ BEGIN
   IF to_regprocedure('public.rag_is_domain_expert(text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_is_domain_expert(text) FROM PUBLIC, anon;
     GRANT EXECUTE ON FUNCTION public.rag_is_domain_expert(text) TO authenticated, service_role;
+  END IF;
+  IF to_regprocedure('public.rag_caller_reads_access_sets(text, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_caller_reads_access_sets(text, jsonb) FROM PUBLIC, anon;
+    GRANT EXECUTE ON FUNCTION public.rag_caller_reads_access_sets(text, jsonb) TO authenticated, service_role;
   END IF;
   IF to_regprocedure('public.rag_ingest_realtime_topic_allowed(text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_ingest_realtime_topic_allowed(text) FROM PUBLIC, anon;

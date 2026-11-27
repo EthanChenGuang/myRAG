@@ -1,5 +1,6 @@
 import { redisvlInvalidationTarget } from '../../cache/emit';
 import { clusterPublishedDocument, dupClustersEnabled } from '../../dedupe/cluster';
+import { afterLexicalWrite } from '../../lexical/stats-hooks';
 import { scheduleAfterResponse } from '../../trace/schedule';
 import { scopeKey } from '../../tenant/scope';
 import { currentUploaderHoldMode, decideUploadApproval } from '../approval/decide';
@@ -135,6 +136,8 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
       const tenantKey = ctx.identity?.tenantKey ?? scopeKey(ctx.input.scope).toLowerCase();
       // Never awaited: post-publish work must not delay or fail the ingest result (D-29, D-41).
       void afterPublish({ documentId: published.documentId, tenantKey });
+      // D-17: under bm25 only, after the version is current; bounded by its own timeout and never failing the ingest.
+      await afterLexicalWrite({ db: () => ctx.deps.db() }, tenantKey);
       return result(ctx, 'ready', published.documentId, published.version);
     }
     default:

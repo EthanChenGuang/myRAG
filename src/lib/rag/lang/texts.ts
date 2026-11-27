@@ -22,6 +22,11 @@ function lookup(key: TextKey, code: string | null): string | null {
   return pack ? packText(pack, key) : null;
 }
 
+/** The languages a registry read tries, in order: the one asked for (null when not a string), RAG_PRIMARY_LANGUAGE, English. */
+export function fallbackLanguages(language: unknown): readonly [string | null, string, string] {
+  return [typeof language === 'string' ? language : null, getLanguageSettings().primary ?? UNCONFIGURED_FALLBACK, UNCONFIGURED_FALLBACK];
+}
+
 /**
  * Phase 5.2 D-08: the only per-language text lookup. A language without a pack, or a pack without the key, falls back to
  * RAG_PRIMARY_LANGUAGE (English while the languages are not configured). Placeholders are named, `{value}`, and every
@@ -29,8 +34,8 @@ function lookup(key: TextKey, code: string | null): string | null {
  */
 export function fixedText(key: TextKey, language: string, params?: TextParams): string {
   if (typeof key !== 'string' || !KNOWN_KEYS.has(key)) throw new Error(`[Language Texts] unknown text key ${String(key)}`);
-  const primary = getLanguageSettings().primary ?? UNCONFIGURED_FALLBACK;
-  const text = lookup(key, typeof language === 'string' ? language : null) ?? lookup(key, primary) ?? lookup(key, UNCONFIGURED_FALLBACK);
+  const [asked, primary, fallback] = fallbackLanguages(language);
+  const text = lookup(key, asked) ?? lookup(key, primary) ?? lookup(key, fallback);
   if (text === null) throw new Error(`[Language Texts] no pack holds ${key}`);
   return text.replace(PLACEHOLDER, (_match, name: string) => {
     if (!params || !Object.prototype.hasOwnProperty.call(params, name)) throw new MissingTextParameterError(key, name);

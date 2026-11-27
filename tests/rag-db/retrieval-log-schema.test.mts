@@ -65,6 +65,8 @@ const ALL_COLUMNS = [
   'feedback_at',
   'source_opened_count',
   'topk_redundancy',
+  // 04.3-13 (0934): the cited documents' access-key arrays, keys only.
+  'access_sets',
   'created_at',
 ].sort();
 
@@ -297,7 +299,8 @@ for (const mode of MODES) {
       const privileges = (
         await db.query<Record<string, boolean>>(
           `SELECT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.rag_retrieval_log'::regclass) AS rls,
-                  (SELECT count(*) = 0 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'rag_retrieval_log') AS no_policy,
+                  (SELECT count(*) = 0 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'rag_retrieval_log'
+                     AND NOT (policyname = 'rag_retrieval_log_access_sets' AND permissive = 'RESTRICTIVE')) AS no_policy,
                   (SELECT coalesce(bool_or(acl.grantee = 0), false) FROM pg_class c, aclexplode(c.relacl) acl
                     WHERE c.oid = 'public.rag_retrieval_log'::regclass) AS public_grant`,
         )

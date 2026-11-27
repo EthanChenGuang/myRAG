@@ -2,10 +2,16 @@ import argparse
 import math
 import random
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 from pydantic import ValidationError
-from rag_sidecar.contracts.baseline import Baseline, NoiseConfig, PairedReport, PairedStat
+from rag_sidecar.contracts.baseline import (
+    Baseline,
+    NoiseConfig,
+    PairedReport,
+    PairedStat,
+)
 from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
 from rag_sidecar.contracts.report import EvalReport, ItemResult
 
@@ -15,8 +21,23 @@ from rag_eval.paths import resolve_cli_path
 SEED = 20261123
 RESAMPLES = 10000
 METRICS = ("recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate")
+# D-10: present only on items with sub_questions, so every other item and report keeps its old metric set.
+SUBQ_METRICS = ("all_evidence_recall_at_5", "all_evidence_recall_at_10", "subq_coverage_at_5", "subq_coverage_at_10")
+GATED_METRICS = (*METRICS, *SUBQ_METRICS)
 EXIT_OK = 0
 EXIT_INVALID = 2
+
+
+def _subq_metrics(item: ItemResult) -> dict[str, float | None]:
+    if not item.subq_total:
+        return {}
+    hit5, hit10 = item.subq_hit_at_5 or 0, item.subq_hit_at_10 or 0
+    return {
+        "all_evidence_recall_at_5": 1.0 if hit5 == item.subq_total else 0.0,
+        "all_evidence_recall_at_10": 1.0 if hit10 == item.subq_total else 0.0,
+        "subq_coverage_at_5": hit5 / item.subq_total,
+        "subq_coverage_at_10": hit10 / item.subq_total,
+    }
 
 
 def item_metrics(item: ItemResult) -> dict[str, float | None]:
@@ -27,6 +48,7 @@ def item_metrics(item: ItemResult) -> dict[str, float | None]:
             "mrr": 1 / item.first_hit_rank if item.first_hit_rank else 0.0,
             "correct_refusal_rate": None,
             "false_refusal_rate": 1.0 if item.refused else 0.0,
+            **_subq_metrics(item),
         }
     return {
         "recall_at_5": None,
@@ -53,13 +75,28 @@ def _baseline_value(runs: list[float | None] | None) -> float | None:
     return math.fsum(present) / len(present)
 
 
+def _resample_means(differences: list[float], seed: int = SEED, resamples: int = RESAMPLES) -> Iterator[float]:
+    """The one paired-bootstrap resampling loop: the interval and the p-value read the same draws (A-10)."""
+    rng = random.Random(seed)
+    n = len(differences)
+    for _ in range(resamples):
+        yield math.fsum(differences[i] for i in rng.choices(range(n), k=n)) / n
+
+
 def _bootstrap_interval(differences: list[float], seed: int = SEED, resamples: int = RESAMPLES) -> tuple[float, float]:
     if all(d == 0 for d in differences):
         return 0.0, 0.0
-    rng = random.Random(seed)
-    n = len(differences)
-    means = sorted(math.fsum(differences[i] for i in rng.choices(range(n), k=n)) / n for _ in range(resamples))
+    means = sorted(_resample_means(differences, seed, resamples))
     return means[math.ceil(resamples * 0.025) - 1], means[math.ceil(resamples * 0.975) - 1]
+
+
+def paired_p_value(differences: list[float], seed: int = SEED, resamples: int = RESAMPLES) -> float | None:
+    """Share of bootstrap resamples whose mean paired difference is at most 0 (one-sided, challenger minus incumbent)."""
+    if not differences:
+        return None
+    if all(d == 0 for d in differences):
+        return 1.0
+    return sum(1 for mean in _resample_means(differences, seed, resamples) if mean <= 0) / resamples
 
 
 def _stat(differences: list[float]) -> PairedStat:
@@ -97,10 +134,11 @@ def paired_report(
         if not is_gated_slice(slice_name, noise):
             continue
         stats: dict[str, PairedStat] = {}
-        for metric in METRICS:
+        measured = {metric for item in members for metric in _subq_metrics(item)}
+        for metric in (*METRICS, *(metric for metric in SUBQ_METRICS if metric in measured)):
             differences: list[float] = []
             for item in members:
-                observed = item_metrics(item)[metric]
+                observed = item_metrics(item).get(metric)
                 recorded = _baseline_value(baseline.items.get(item.item_id, {}).get(metric))
                 if observed is None or recorded is None:
                     continue

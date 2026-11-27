@@ -10,7 +10,7 @@ const ENV_PATH = path.join(REPO_ROOT, '.env.local');
 // Default model configurations
 const DEFAULT_OPENAI_MODELS = '[{"id":"gpt-4.1-mini","displayName":"GPT-4.1 Mini","contextLength":1047576},{"id":"gpt-4.1","displayName":"GPT-4.1","contextLength":1047576},{"id":"o3","displayName":"o3","contextLength":200000},{"id":"o4-mini","displayName":"o4 Mini","contextLength":200000}]';
 
-const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true,"contextLength":1000000},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-4.1-mini","displayName":"GPT-4.1 Mini","contextLength":1047576},{"id":"openai/gpt-4.1","displayName":"GPT-4.1","contextLength":1047576},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1","contextLength":200000},{"id":"anthropic/claude-opus-5.5","displayName":"Claude Opus 5.5","anthropicId":"claude-opus-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-sonnet-5.5","displayName":"Claude Sonnet 5.5","anthropicId":"claude-sonnet-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-haiku-5.5","displayName":"Claude Haiku 5.5","anthropicId":"claude-haiku-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite","contextLength":1048576},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash","contextLength":1048576},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true,"contextLength":524288},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
+const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true,"contextLength":1000000},{"id":"auto","displayName":"Auto"},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-4.1-mini","displayName":"GPT-4.1 Mini","contextLength":1047576},{"id":"openai/gpt-4.1","displayName":"GPT-4.1","contextLength":1047576},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1","contextLength":200000},{"id":"anthropic/claude-opus-5.5","displayName":"Claude Opus 5.5","anthropicId":"claude-opus-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-sonnet-5.5","displayName":"Claude Sonnet 5.5","anthropicId":"claude-sonnet-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-haiku-5.5","displayName":"Claude Haiku 5.5","anthropicId":"claude-haiku-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite","contextLength":1048576},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash","contextLength":1048576},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true,"contextLength":524288},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
 
 // Groq free tier has strict rate limits - only Llama 3.3 70B works reliably with RAG contexts
 // Users with paid Groq tiers can add more models: llama-3.1-8b-instant, mixtral-8x7b-32768, gemma2-9b-it
@@ -600,6 +600,19 @@ RAG_QUERY_DATE_NORMALIZE=true
 RAG_QUERY_HYDE=false
 RAG_QUERY_TRANSLATE_DISABLED_PROFILES=
 RAG_QUERY_VOICE_TRANSFORMS=condense_history,normalize_dates
+# Phase 6.2 query-layer additions; inert while RAG_QUERY_LAYER=false except RAG_WHATSAPP_HISTORY, which applies to the WhatsApp channel
+RAG_QUERY_HISTORY_FALLBACK=true
+RAG_QUERY_DECOMPOSE_COMPLETENESS=true
+RAG_QUERY_SUBQ_FILTERS=false
+RAG_DECOMPOSED_ANSWER=true
+RAG_WHATSAPP_HISTORY=false
+RAG_TRANSLATION_GLOSSARY=false
+RAG_LANGID_SIDECAR=false
+RAG_SPECULATIVE_RETRIEVAL=false
+RAG_MODEL_ROUTING=off
+RAG_ROUTING_FAST_MODEL=anthropic/claude-haiku-5.5
+RAG_ROUTING_QUALITY_MODEL=anthropic/claude-sonnet-5.5
+RAG_SCOPE_GATE=false
 
 # -----------------------------
 # SEMANTIC CACHE

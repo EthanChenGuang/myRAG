@@ -7,8 +7,8 @@
         "band": 0.02,
         "dropped_slices": 0,
         "gain": 0.0,
-        "on": 0.7372881355932204,
-        "reference": 0.7372881355932204
+        "on": 0.7720588235294118,
+        "reference": 0.7720588235294118
       },
       "outcome": "keep_off",
       "reasons": [
@@ -19,11 +19,20 @@
       "decision": "D-23, D-24",
       "name": "refusal_mode_cells",
       "numbers": {
-        "bases_skipped_insufficient_data": 3,
-        "mode_cells_evaluated": 9
+        "bases_skipped_insufficient_data": 1,
+        "mode_cells_evaluated": 15
       },
-      "outcome": "commit",
-      "reasons": []
+      "outcome": "keep",
+      "reasons": [
+        "cohere|fake-quality-v1|it|cross|balanced: not calibrated on dev (no_separation)",
+        "cohere|fake-quality-v1|it|cross|flexible: not calibrated on dev (no_separation)",
+        "cohere|fake-quality-v1|it|cross|strict: base cell has no threshold to compare",
+        "cohere|fake-quality-v1|it|same|balanced: holdout check not passed (failed_holdout)",
+        "cohere|fake-quality-v1|it|same|flexible: holdout check not passed (failed_holdout)",
+        "cohere|fake-quality-v1|zh|same|balanced: not calibrated on dev (no_separation)",
+        "cohere|fake-quality-v1|zh|same|flexible: not calibrated on dev (no_separation)",
+        "cohere|fake-quality-v1|zh|same|strict: base cell has no threshold to compare"
+      ]
     }
   ],
   "gates": [
@@ -67,13 +76,13 @@
       "decision": "D-32",
       "name": "identifier",
       "numbers": {
-        "descriptive.mrr": 0.6096418732782369,
-        "descriptive.mrr.reference": 0.6096418732782369,
-        "descriptive.recall_at_10": 0.6900826446280992,
-        "descriptive.recall_at_10.reference": 0.6900826446280992,
-        "descriptive.recall_at_5": 0.6735537190082644,
-        "descriptive.recall_at_5.reference": 0.6735537190082644,
-        "descriptive_items": 138,
+        "descriptive.mrr": 0.6110275689223058,
+        "descriptive.mrr.reference": 0.6110275689223058,
+        "descriptive.recall_at_10": 0.7180451127819549,
+        "descriptive.recall_at_10.reference": 0.7180451127819549,
+        "descriptive.recall_at_5": 0.7030075187969925,
+        "descriptive.recall_at_5.reference": 0.7030075187969925,
+        "descriptive_items": 159,
         "identifier_precision": 1.0,
         "identifier_precision_n": 12,
         "items": 12,
@@ -132,7 +141,7 @@
   "notes": [
     "Fixture corpus only: every gate, threshold and rule here was committed before any gated run (D-37, pre-registration). Reference runs are single fixture runs, so the noise band against a reference is the noise floor (spread 0), as in phase_compare."
   ],
-  "passed": false,
+  "passed": true,
   "phase": "04.2",
   "report_only": [
     {
@@ -164,18 +173,18 @@
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 38,
+          "n": 48,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 38,
+          "n": 48,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 173,
-          "value": 0.2832369942196532
+          "n": 199,
+          "value": 0.24623115577889448
         },
-        "false_refusal_upper_95": 0.3450058033470244,
+        "false_refusal_upper_95": 0.30164029338037646,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -185,35 +194,35 @@
           "value": 0.4444444444444444
         },
         "k_zero": {
-          "n": 173,
+          "n": 199,
           "value": 48.0
         },
         "mrr": {
-          "n": 173,
-          "value": 0.6030828516377649
+          "n": 199,
+          "value": 0.6398659966499162
         },
         "ndcg_at_context_k": {
-          "n": 173,
-          "value": 0.6062825410801621
+          "n": 199,
+          "value": 0.6465952669763657
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 173,
-          "value": 0.6213872832369942
+          "n": 199,
+          "value": 0.6708542713567839
         },
         "recall_at_5": {
-          "n": 173,
-          "value": 0.6213872832369942
+          "n": 199,
+          "value": 0.6708542713567839
         },
         "topk_redundancy": {
-          "n": 149,
-          "value": 0.6463534675615212
+          "n": 178,
+          "value": 0.6276123595505618
         }
       },
-      "run_config_hash": "17350e6cd947c6d7f86388463d2407568b3e2469a02d45e18c673a91eb528fcd"
+      "run_config_hash": "44165cead4b3354b2becc44ff2b530b0c1f2c5929138e32f6106469fe6f05c1d"
     },
     {
       "env": {
@@ -234,48 +243,48 @@
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 43,
+          "n": 53,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 43,
+          "n": 53,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 207,
-          "value": 0.1642512077294686
+          "n": 233,
+          "value": 0.1459227467811159
         },
-        "false_refusal_upper_95": 0.2125883176141043,
+        "false_refusal_upper_95": 0.18948250540648431,
         "intent_coverage": {
           "n": 9,
           "value": 0.4444444444444444
         },
         "k_zero": {
-          "n": 207,
+          "n": 233,
           "value": 33.0
         },
         "mrr": {
-          "n": 207,
-          "value": 0.6706924315619969
+          "n": 233,
+          "value": 0.6924177396280401
         },
         "ndcg_at_context_k": {
-          "n": 207,
-          "value": 0.6828582400055232
+          "n": 233,
+          "value": 0.7071595019576975
         },
         "recall_at_10": {
-          "n": 207,
-          "value": 0.751207729468599
+          "n": 233,
+          "value": 0.778969957081545
         },
         "recall_at_5": {
-          "n": 207,
-          "value": 0.7415458937198067
+          "n": 233,
+          "value": 0.7703862660944206
         },
         "topk_redundancy": {
-          "n": 204,
-          "value": 0.5373692810457517
+          "n": 233,
+          "value": 0.5322532188841201
         }
       },
-      "run_config_hash": "ac8f87d451531eb377cc154165ed7f48874c9339ae1caa6bfbfb9740f7d8ad30"
+      "run_config_hash": "a48430c9ab66e0d32ece3b5481d0862a79950fa9f0e9212b1201ab3d5e772182"
     },
     {
       "env": {
@@ -294,18 +303,18 @@
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 38,
+          "n": 48,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 38,
+          "n": 48,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 173,
-          "value": 0.2832369942196532
+          "n": 199,
+          "value": 0.24623115577889448
         },
-        "false_refusal_upper_95": 0.3450058033470244,
+        "false_refusal_upper_95": 0.30164029338037646,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -315,35 +324,35 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 173,
+          "n": 199,
           "value": 48.0
         },
         "mrr": {
-          "n": 173,
-          "value": 0.6084778420038536
+          "n": 199,
+          "value": 0.6370184254606365
         },
         "ndcg_at_context_k": {
-          "n": 173,
-          "value": 0.617300125639792
+          "n": 199,
+          "value": 0.650609495064458
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 173,
-          "value": 0.6791907514450867
+          "n": 199,
+          "value": 0.7211055276381909
         },
         "recall_at_5": {
-          "n": 173,
-          "value": 0.6676300578034682
+          "n": 199,
+          "value": 0.7110552763819096
         },
         "topk_redundancy": {
-          "n": 149,
-          "value": 0.1266778523489933
+          "n": 178,
+          "value": 0.12640449438202248
         }
       },
-      "run_config_hash": "bd2514e85db8c03a5f84c63db2169a2460dc3f1aba6f36e4fc6ef50eb894ca72"
+      "run_config_hash": "5db73f8fe8d5adb486b32b07e280ca5d82504712d7958998a3d3970242d9cde2"
     },
     {
       "env": {
@@ -370,18 +379,18 @@
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 38,
+          "n": 48,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 38,
+          "n": 48,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 173,
-          "value": 0.2832369942196532
+          "n": 199,
+          "value": 0.24623115577889448
         },
-        "false_refusal_upper_95": 0.3450058033470244,
+        "false_refusal_upper_95": 0.30164029338037646,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -391,35 +400,35 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 173,
+          "n": 199,
           "value": 48.0
         },
         "mrr": {
-          "n": 173,
-          "value": 0.6084778420038536
+          "n": 199,
+          "value": 0.6370184254606365
         },
         "ndcg_at_context_k": {
-          "n": 173,
-          "value": 0.617300125639792
+          "n": 199,
+          "value": 0.650609495064458
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 173,
-          "value": 0.6791907514450867
+          "n": 199,
+          "value": 0.7211055276381909
         },
         "recall_at_5": {
-          "n": 173,
-          "value": 0.6676300578034682
+          "n": 199,
+          "value": 0.7110552763819096
         },
         "topk_redundancy": {
-          "n": 149,
-          "value": 0.1266778523489933
+          "n": 178,
+          "value": 0.12640449438202248
         }
       },
-      "run_config_hash": "8dccac43f6fc7af682b8e00ba64d7a6a186758cdd3358ebfbc83a3692862ed88"
+      "run_config_hash": "d3c0e87071dd5c87e469ef228d969a24d47c8478ac54bc5bced1281d5e7e1277"
     },
     {
       "env": {
@@ -440,18 +449,18 @@
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 38,
+          "n": 48,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 38,
+          "n": 48,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 173,
-          "value": 0.2832369942196532
+          "n": 199,
+          "value": 0.24623115577889448
         },
-        "false_refusal_upper_95": 0.3450058033470244,
+        "false_refusal_upper_95": 0.30164029338037646,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -461,35 +470,35 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 173,
+          "n": 199,
           "value": 48.0
         },
         "mrr": {
-          "n": 173,
-          "value": 0.6084778420038536
+          "n": 199,
+          "value": 0.6370184254606365
         },
         "ndcg_at_context_k": {
-          "n": 173,
-          "value": 0.617300125639792
+          "n": 199,
+          "value": 0.650609495064458
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 173,
-          "value": 0.6791907514450867
+          "n": 199,
+          "value": 0.7211055276381909
         },
         "recall_at_5": {
-          "n": 173,
-          "value": 0.6676300578034682
+          "n": 199,
+          "value": 0.7110552763819096
         },
         "topk_redundancy": {
-          "n": 149,
-          "value": 0.12770054330457015
+          "n": 178,
+          "value": 0.1272605671482076
         }
       },
-      "run_config_hash": "b581b683b4750d640074780075fdb521faa1f8fb93eeca3a09d716047bc5f1c2"
+      "run_config_hash": "2903b4e3b17fa4d343d121c27f6b4b98bf0c860fe5e07905971e531fc63a3b68"
     },
     {
       "env": {
@@ -510,18 +519,18 @@
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 38,
+          "n": 48,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 38,
+          "n": 48,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 173,
-          "value": 0.2832369942196532
+          "n": 199,
+          "value": 0.24623115577889448
         },
-        "false_refusal_upper_95": 0.3450058033470244,
+        "false_refusal_upper_95": 0.30164029338037646,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -531,35 +540,35 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 173,
+          "n": 199,
           "value": 48.0
         },
         "mrr": {
-          "n": 173,
-          "value": 0.6064134324249931
+          "n": 199,
+          "value": 0.6358518784398182
         },
         "ndcg_at_context_k": {
-          "n": 173,
-          "value": 0.6157286210062828
+          "n": 199,
+          "value": 0.6508285632814862
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 173,
-          "value": 0.6791907514450867
+          "n": 199,
+          "value": 0.7261306532663316
         },
         "recall_at_5": {
-          "n": 173,
-          "value": 0.6734104046242775
+          "n": 199,
+          "value": 0.7160804020100503
         },
         "topk_redundancy": {
-          "n": 149,
-          "value": 0.12770054330457015
+          "n": 178,
+          "value": 0.1272605671482076
         }
       },
-      "run_config_hash": "46bb67866dcc9b56075340d08f26e46ef27b7f51e266f8be17d543a47710e20b"
+      "run_config_hash": "9e2ad503708b3067e6e25d088d7fb1ab96a443815923d54bcad0bfaef74de982"
     },
     {
       "env": {
@@ -580,18 +589,18 @@
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 38,
+          "n": 48,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 38,
+          "n": 48,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 173,
-          "value": 0.18497109826589594
+          "n": 199,
+          "value": 0.16080402010050251
         },
-        "false_refusal_upper_95": 0.24036857098271244,
+        "false_refusal_upper_95": 0.20990377199681784,
         "identifier_precision": {
           "n": 12,
           "value": 1.0
@@ -601,35 +610,35 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 173,
+          "n": 199,
           "value": 31.0
         },
         "mrr": {
-          "n": 173,
-          "value": 0.6932562620423892
+          "n": 199,
+          "value": 0.7107202680067002
         },
         "ndcg_at_context_k": {
-          "n": 173,
-          "value": 0.7035412862707063
+          "n": 199,
+          "value": 0.7255829663667102
         },
         "near_miss_leakage": {
           "n": 12,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 173,
-          "value": 0.7716763005780347
+          "n": 199,
+          "value": 0.8015075376884422
         },
         "recall_at_5": {
-          "n": 173,
-          "value": 0.7601156069364162
+          "n": 199,
+          "value": 0.7914572864321608
         },
         "topk_redundancy": {
-          "n": 164,
-          "value": 0.3133130081300813
+          "n": 192,
+          "value": 0.32621527777777776
         }
       },
-      "run_config_hash": "51c381e27231e18b89ab031c61ec5784f415ba5b596f6dc5bfef4b09c5ba2395"
+      "run_config_hash": "687faee5713643985180a883e578ae1d6c4361c1efe880ad7b488ba14c98fc14"
     },
     {
       "env": {
@@ -649,18 +658,18 @@
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 38,
+          "n": 48,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 38,
+          "n": 48,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 173,
-          "value": 0.2832369942196532
+          "n": 199,
+          "value": 0.24623115577889448
         },
-        "false_refusal_upper_95": 0.3450058033470244,
+        "false_refusal_upper_95": 0.30164029338037646,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -670,35 +679,35 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 173,
+          "n": 199,
           "value": 48.0
         },
         "mrr": {
-          "n": 173,
-          "value": 0.6084778420038536
+          "n": 199,
+          "value": 0.6370184254606365
         },
         "ndcg_at_context_k": {
-          "n": 173,
-          "value": 0.617300125639792
+          "n": 199,
+          "value": 0.650609495064458
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 173,
-          "value": 0.6791907514450867
+          "n": 199,
+          "value": 0.7211055276381909
         },
         "recall_at_5": {
-          "n": 173,
-          "value": 0.6676300578034682
+          "n": 199,
+          "value": 0.7110552763819096
         },
         "topk_redundancy": {
-          "n": 149,
-          "value": 0.1266778523489933
+          "n": 178,
+          "value": 0.12640449438202248
         }
       },
-      "run_config_hash": "4c542c55241a8d4516382d0e485609af318bdf20c9d7539e1e6d26ac5f7cbb3c"
+      "run_config_hash": "c24c3113c85ee081687a7eed5addc51a3db116d2369fc0553ba48b2bec7487ab"
     },
     {
       "env": {
@@ -718,18 +727,18 @@
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 38,
+          "n": 48,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 38,
+          "n": 48,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 173,
-          "value": 0.2832369942196532
+          "n": 199,
+          "value": 0.24623115577889448
         },
-        "false_refusal_upper_95": 0.3450058033470244,
+        "false_refusal_upper_95": 0.30164029338037646,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -739,35 +748,35 @@
           "value": 1.0
         },
         "k_zero": {
-          "n": 173,
+          "n": 199,
           "value": 48.0
         },
         "mrr": {
-          "n": 173,
-          "value": 0.6084778420038536
+          "n": 199,
+          "value": 0.6370184254606365
         },
         "ndcg_at_context_k": {
-          "n": 173,
-          "value": 0.6240085558230499
+          "n": 199,
+          "value": 0.6564414469323153
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 173,
-          "value": 0.6878612716763006
+          "n": 199,
+          "value": 0.7286432160804021
         },
         "recall_at_5": {
-          "n": 173,
-          "value": 0.6763005780346821
+          "n": 199,
+          "value": 0.7185929648241206
         },
         "topk_redundancy": {
-          "n": 149,
-          "value": 0.1266778523489933
+          "n": 178,
+          "value": 0.12640449438202248
         }
       },
-      "run_config_hash": "fab385fa4103411327b006f9be414d5b205564bd069fe50224453f08e43a2113"
+      "run_config_hash": "c864ed9e5b740a3780baf1d755d0c29dd119c2fa85d9431393bc7d3818699530"
     },
     {
       "env": {
@@ -787,18 +796,18 @@
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 38,
+          "n": 48,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 38,
+          "n": 48,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 173,
-          "value": 0.2832369942196532
+          "n": 199,
+          "value": 0.24623115577889448
         },
-        "false_refusal_upper_95": 0.3450058033470244,
+        "false_refusal_upper_95": 0.30164029338037646,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -808,35 +817,35 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 173,
+          "n": 199,
           "value": 48.0
         },
         "mrr": {
-          "n": 173,
-          "value": 0.6116570327552986
+          "n": 199,
+          "value": 0.6397822445561139
         },
         "ndcg_at_context_k": {
-          "n": 173,
-          "value": 0.6196867961442277
+          "n": 199,
+          "value": 0.6526843392718318
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 173,
-          "value": 0.6791907514450867
+          "n": 199,
+          "value": 0.7211055276381909
         },
         "recall_at_5": {
-          "n": 173,
-          "value": 0.6676300578034682
+          "n": 199,
+          "value": 0.7110552763819096
         },
         "topk_redundancy": {
-          "n": 149,
-          "value": 0.1266778523489933
+          "n": 178,
+          "value": 0.12640449438202248
         }
       },
-      "run_config_hash": "5bafb006d90e4725c842b3b664f2688dfde9dc414565e51936cdd42fee748b32"
+      "run_config_hash": "e4a92e5ec75c0305e8579af971599615dd27f6a929455796c252353d27c62d9e"
     },
     {
       "env": {
@@ -856,18 +865,18 @@
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 38,
+          "n": 48,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 38,
+          "n": 48,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 173,
-          "value": 0.2832369942196532
+          "n": 199,
+          "value": 0.24623115577889448
         },
-        "false_refusal_upper_95": 0.3450058033470244,
+        "false_refusal_upper_95": 0.30164029338037646,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -877,35 +886,35 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 173,
+          "n": 199,
           "value": 48.0
         },
         "mrr": {
-          "n": 173,
-          "value": 0.6084778420038536
+          "n": 199,
+          "value": 0.6395309882747069
         },
         "ndcg_at_context_k": {
-          "n": 173,
-          "value": 0.6166807636706872
+          "n": 199,
+          "value": 0.6519256791135707
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 173,
-          "value": 0.6791907514450867
+          "n": 199,
+          "value": 0.7211055276381909
         },
         "recall_at_5": {
-          "n": 173,
-          "value": 0.6676300578034682
+          "n": 199,
+          "value": 0.7110552763819096
         },
         "topk_redundancy": {
-          "n": 149,
-          "value": 0.1266778523489933
+          "n": 178,
+          "value": 0.12640449438202248
         }
       },
-      "run_config_hash": "20c3313beb9758469881b9c31e2d9a48b84bf7e2349e6ca425c307582829348d"
+      "run_config_hash": "045679f1f4d9dafec93595d5fcfc8a9b348a464b39999bb97a32bb8ef43ff99d"
     }
   ],
   "schema_version": 1,

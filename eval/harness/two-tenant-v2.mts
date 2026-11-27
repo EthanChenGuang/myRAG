@@ -286,9 +286,14 @@ export function versionQuery(markers: Pick<V2TenantMarkers, 'supersededVersion'>
   return `What plimset count does ledger revision ${markers.supersededVersion} give?`;
 }
 
+/**
+ * Copy `copy` of the tenant's passage: the tenant marker stays in its slot (the leak checks look for it) and the
+ * next slot carries a per-copy word without digits, so copies differ in a word, not a value token (04.2-32).
+ */
 export function dupPassage(markers: Pick<V2TenantMarkers, 'dupCopy'>, copy: number): string {
   const words = DUP_WORDS.slice();
-  words[DUP_COPY_SLOT] = `${markers.dupCopy}c${copy}`;
+  words[DUP_COPY_SLOT] = markers.dupCopy;
+  words[DUP_COPY_SLOT + 1] = `copy${DUP_SYLLABLES[copy % DUP_SYLLABLES.length]}`;
   return words.join(' ');
 }
 

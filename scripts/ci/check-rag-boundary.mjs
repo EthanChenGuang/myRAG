@@ -115,6 +115,8 @@ const outsideLakeraAdapter = (rel) => rel !== LAKERA_ADAPTER;
 const outsideTenant = (rel) => !rel.startsWith(TENANT_DIR);
 const VECTOR_STORE_DIRS = ['src/lib/rag/backend/weaviate/', 'src/lib/rag/backend/qdrant/', 'src/lib/rag/sync/'];
 const outsideVectorStoreDirs = (rel) => !VECTOR_STORE_DIRS.some((d) => rel.startsWith(d));
+const ACCESS_DIR = 'src/lib/rag/access/';
+const outsideTenantAndAccess = (rel) => !rel.startsWith(TENANT_DIR) && !rel.startsWith(ACCESS_DIR);
 const inVoiceAgent = (rel) => rel.startsWith('voice-agent/src/');
 const isLegacyWriter = (rel, ruleId) => LEGACY_WRITERS.some((w) => w.path === rel && w.rules.includes(ruleId));
 const writerRuleApplies = (ruleId) => (rel) => !rel.startsWith(INGEST_DIR) && !isLegacyWriter(rel, ruleId);
@@ -169,6 +171,25 @@ export const TABLE_LOOKUP_RPCS = [
   'rag_document_versions',
   'rag_dup_cluster_sources',
 ];
+// D-05: a caller's access is resolved only in the tenant module; label, visibility and admin RPCs stay inside src/lib/rag/.
+export const ACCESS_SCOPE_BINDINGS = ['mintAccessScope', 'withAccess'];
+export const ACCESS_RESOLVER_RPCS = [
+  'rag_resolve_access_scope',
+  'rag_access_set_enforced',
+  'rag_access_enforced',
+  'rag_access_readiness',
+  'rag_access_groups_drift',
+  'rag_access_group_by_key',
+];
+export const ACCESS_ADMIN_RPCS = ['rag_set_document_access_groups', 'rag_chunks_visible', 'rag_documents_visible', 'rag_security_event_record', 'rag_access_my_groups', 'rag_access_document_audience'];
+export const ACCESS_ADMIN_RPC_PREFIXES = ['rag_access_group', 'rag_access_member', 'rag_access_documents', 'rag_connector_'];
+const ACCESS_RESOLVER_RPC_RE = new RegExp(String.raw`\.rpc\s*\(\s*(['"\`])(?:${ACCESS_RESOLVER_RPCS.join('|')})\1`, 'g');
+const ACCESS_ADMIN_RPC_RE = new RegExp(
+  String.raw`\.rpc\s*\(\s*(['"\`])(?:(?:${ACCESS_ADMIN_RPCS.join('|')})\1|(?:${ACCESS_ADMIN_RPC_PREFIXES.join('|')}))`,
+  'g',
+);
+const ACCESS_REQUIRE_RE = new RegExp(String.raw`\{[^}]*\b(?:${ACCESS_SCOPE_BINDINGS.join('|')})\b[^}]*\}\s*=\s*(?:await\s+)?(?:require|import)\s*\(`, 'g');
+
 export const TABLE_LOOKUP_MODULE = 'src/lib/rag/retrieval/table-lookup.ts';
 const TABLE_LOOKUP_RPC_RE = new RegExp(String.raw`\.rpc\s*\(\s*(['"\`])(?:${TABLE_LOOKUP_RPCS.join('|')})\1`, 'g');
 const STRING_LITERAL_RE = /'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`/g;
@@ -465,6 +486,34 @@ export const RULES = [
       out.push(...regexMatches(requireRe, text).map((m) => ({ index: m.index, message: 'mintScope via require' })));
       return out;
     },
+  },
+  {
+    id: 'mint-access-scope',
+    description: 'mintAccessScope or withAccess used outside src/lib/rag/tenant/ (resolve access with resolveAccessScope)',
+    appliesTo: outsideTenant,
+    find: (text) => {
+      const out = importMatches(text, ({ spec, clause, kind }) => {
+        if (kind !== 'from') return null;
+        const named = clauseNames(clause).filter((n) => ACCESS_SCOPE_BINDINGS.includes(n));
+        if (named.length > 0) return `${named.join(', ')} from ${spec}`;
+        if (/\*/.test(clause) && /(?:^|\/)tenant\/access(?:-brand)?$/.test(specBase(spec))) return `namespace import of ${spec}`;
+        return null;
+      });
+      out.push(...regexMatches(ACCESS_REQUIRE_RE, text).map((m) => ({ index: m.index, message: 'access scope binding via require' })));
+      return out;
+    },
+  },
+  {
+    id: 'access-rpc',
+    description: 'access resolver or enforcement RPC called outside src/lib/rag/tenant/ and src/lib/rag/access/',
+    appliesTo: outsideTenantAndAccess,
+    find: (text) => regexMatches(ACCESS_RESOLVER_RPC_RE, text),
+  },
+  {
+    id: 'access-admin-rpc',
+    description: 'access label, visibility, security-event or group admin RPC called outside src/lib/rag/',
+    appliesTo: outsideRag,
+    find: (text) => regexMatches(ACCESS_ADMIN_RPC_RE, text),
   },
   {
     id: 'chunk-writer',

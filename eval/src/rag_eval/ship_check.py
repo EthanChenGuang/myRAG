@@ -65,8 +65,8 @@ def slice_reason(slice_name: str) -> str:
 def _differences(baseline: dict[str, ItemResult], members: list[ItemResult], metric: str) -> list[float]:
     differences: list[float] = []
     for item in members:
-        observed = item_metrics(item)[metric]
-        recorded = item_metrics(baseline[item.item_id])[metric]
+        observed = item_metrics(item).get(metric)
+        recorded = item_metrics(baseline[item.item_id]).get(metric)
         if observed is None or recorded is None:
             continue
         differences.append(observed - recorded)

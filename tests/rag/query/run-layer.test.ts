@@ -125,7 +125,7 @@ describe('runQueryLayer: router, parallel group and native transforms', () => {
 
   it('a follow-up with a relative date runs condense, then normalize_dates, and narrows the dates', async () => {
     const condensed = 'What changed in the sample gateway service last year?';
-    const { fake } = install([{ transform: 'condense', query: FOLLOW_UP_DATES, output: { standalone: condensed, unchanged: false } }]);
+    const { fake } = install([{ transform: 'condense', query: FOLLOW_UP_DATES, output: { standalone: condensed, unchanged: false, language: null } }]);
     const { out, stages } = await run(FOLLOW_UP_DATES, { history: HISTORY });
 
     expect(fake.calls).toEqual([{ transform: 'condense', input: FOLLOW_UP_DATES }]);
@@ -142,7 +142,7 @@ describe('runQueryLayer: router, parallel group and native transforms', () => {
   it('with a condensed query and HyDE on, expand gets no budget and makes no call', async () => {
     const condensed = 'gateway service logs';
     const { fake } = install([
-      { transform: 'condense', query: FOLLOW_UP_KEYWORDS, output: { standalone: condensed, unchanged: false } },
+      { transform: 'condense', query: FOLLOW_UP_KEYWORDS, output: { standalone: condensed, unchanged: false, language: null } },
       { transform: 'hyde', query: condensed, output: { passage: 'The gateway service writes logs.' } },
       { transform: 'expand', query: condensed, output: { queries: ['synthetic expansion one', 'synthetic expansion two'] } },
     ]);
@@ -172,7 +172,7 @@ describe('runQueryLayer: router, parallel group and native transforms', () => {
   it('voice runs only condense and normalize_dates, natively, even with the LangChain framework', async () => {
     const condensed = 'Compare the sample gateway service with the alpha module';
     const { fake } = install([
-      { transform: 'condense', query: FOLLOW_UP_COMPARE, output: { standalone: condensed, unchanged: false } },
+      { transform: 'condense', query: FOLLOW_UP_COMPARE, output: { standalone: condensed, unchanged: false, language: null } },
       { transform: 'expand', query: condensed, output: { queries: ['synthetic expansion one'] } },
       { transform: 'decompose', query: condensed, output: { questions: ['synthetic part one', 'synthetic part two'] } },
     ]);

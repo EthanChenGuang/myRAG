@@ -28,8 +28,10 @@ import {
   lexicalScoringHashBlock,
   securityHashComponent,
   answerRulesHashComponent,
+  calcBudgetHashComponent,
   terminologyHashBlock,
   type AnswerRulesHashConfig,
+  type CalcBudgetHashConfig,
   type AttributeFilterHashStage,
   type RetrievalConfigHashQueryLayer,
   type TerminologyHashStage,
@@ -99,8 +101,8 @@ export interface BuildV2ResultInput {
 }
 
 export interface RequestConfigHashInput {
-  /** Phase 5.2 D-58: the answer switches; read from the environment when absent. */
-  answerConfig?: AnswerRulesHashConfig;
+  /** Phase 5.2 D-58 and 5.2.1 D-88: the answer switches; read from the environment when absent. */
+  answerConfig?: AnswerRulesHashConfig & CalcBudgetHashConfig;
   input: RunRetrievalInput;
   config: RagConfig;
   profile: Profile;
@@ -124,6 +126,7 @@ export interface RequestConfigHashInput {
 export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): Promise<string> {
   const { input, config, profile, queryLanguage, security } = ctx;
   const { configHash: thresholdsConfigHash } = loadThresholds();
+  const answerConfig = ctx.answerConfig ?? readAnswerConfig();
   const chunking = await getActiveChunkingProfiles();
   const terminology = terminologyHashBlock(ctx.terminology ?? { enabled: false }, terminologyParams(), terminologyDenseFor(config, profile));
   const attributeStage = ctx.attributeFilter ?? { enabled: false };
@@ -159,7 +162,8 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
       ...(config.monolingual ? { monolingual: true as const } : {}),
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
-    answerRules: answerRulesHashComponent(ctx.answerConfig ?? readAnswerConfig()),
+    answerRules: answerRulesHashComponent(answerConfig),
+    calcBudget: calcBudgetHashComponent(answerConfig),
     tuning: tuningHashComponent(
       config,
       effectiveTuningParams(profile, config, evalTuningOverrides(profile, input.stageOverrides?.retrievalOverrides), { embeddingProfileId: ctx.embeddingProfileId }),

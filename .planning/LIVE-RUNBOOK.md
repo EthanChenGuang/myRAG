@@ -225,6 +225,20 @@ apply 0410_security_definer_rpc_grants.sql
 Both backends ship disabled and nothing is enqueued, so there is no behaviour change. The second 0410 run is my addition: 0410 also lists the ten `rag_vector_sync_*` trigger functions, so running it last is harmless and closes any default grant they received.
 Check: V1 to V4 once more. If a new `NOTIFY` is needed, run `NOTIFY pgrst, 'reload schema';`.
 
+### Block H: Phase 4.4 BM25 lexical statistics (0900 to 0904)
+
+Needs 0401, 0403 and the Phase 4.2 `hybrid_search_chunks` (0856) first; each file stops with 55000 and names what is missing otherwise.
+
+```bash
+apply 0900_lexical_stats_schema.sql 0901_lexical_stats_triggers.sql 0902_lexical_stats_functions.sql \
+      0903_lexical_stats_purge_hook.sql 0904_bm25_search_chunks.sql
+```
+
+Nothing changes until `RAG_LEXICAL_SCORING=bm25`: the triggers stage nothing for a tenant that was never enabled, and nothing calls `rag_bm25_search_chunks`. The files are idempotent and not folded into the setup files. Re-apply rule: after re-running 0904, re-run every later file that redefines `rag_bm25_search_chunks` (Phase 4.3's 0932 adds the access filter); after re-running any older file that redefines `hybrid_search_chunks`, re-run 0904 and those later files too.
+Check: V1 to V4 (the new functions are service_role only; anon and authenticated get 42501).
+
+Build statistics before setting `RAG_LEXICAL_SCORING=bm25` (with `RAG_PIPELINE=v2` and `RAG_LEXICAL_SEARCH=true`): `npm run rag:lexstats -- enable --all`, then `npm run rag:lexstats -- check --all` (exit 0 means every tenant is ready and clean). A tenant without ready statistics is served by `ts_rank_cd` and its trace says `lexical_stats_unavailable`. Optional: `supabase/optional/lexical-stats-schedule.sql` (pg_cron) compacts leftovers every five minutes.
+
 ---
 
 ## 3. Phase 3.1 live checkpoints (03.1-53 and 03.1-54)

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "encoding": "cl100k_base",
+  "default_factor": 1.25,
+  "families": [],
+  "written_by": "default"
+}

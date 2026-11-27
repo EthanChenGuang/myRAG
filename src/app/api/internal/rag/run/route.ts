@@ -68,6 +68,7 @@ import {
   outputGuardTraceSummary,
   residualOutputFindings,
   retrievalBackendTrace,
+  evalTraceLanguages,
 } from '@/lib/rag-eval/trace';
 import {
   evalGroundednessRequest,
@@ -854,6 +855,19 @@ export async function POST(req: NextRequest) {
         ? answerRulesTraceFields(evalAnswerRulesInput({ answerTurn, answer, answerChain, finishReason, serverRefused, mixedVersions, textBlocks, citationSession }))
         : {};
       const backendTrace = retrievalBackendTrace(result.stages);
+      // LANG-10: the same languages block as the production trace; the answer language follows the chat route's rule
+      const languagesField = evalTraceLanguages({
+        collector,
+        result,
+        query,
+        answerLanguage: cacheHit
+          ? (cacheHit.answer.answer_language ?? null)
+          : refusedByModel
+            ? (answerTurn?.answerLanguage ?? null)
+            : answer !== null
+              ? (detectLanguage(answer) ?? null)
+              : null,
+      });
       // D-32: kept chunks carry their identifiers only while the identifier filter ran, so every other trace stays unchanged.
       const keptIdentifiers = identifierTrace
         ? await contentIdentifierNorms(scope, result.kept.map((chunk) => chunk.content), { signal: req.signal })
@@ -912,6 +926,7 @@ export async function POST(req: NextRequest) {
         ...(injection ? { injection } : {}),
         ...(result.versionConflict ? { version_conflict: versionConflictTrace(result.versionConflict, mixedVersions) } : {}),
         answer,
+        ...languagesField,
         citations: citationFields?.citations ?? NO_CITATIONS,
         ...(citationFields
           ? { citation_strategy: citationFields.citation_strategy, invalid_citations: citationFields.invalid_citations }
