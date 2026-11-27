@@ -49,3 +49,13 @@
   - rag_connector_document_access: RLS on, no anon/authenticated SELECT.
   - 0 non-NULL access_sets rows. enforced=false.
 - No existing row was written or rewritten.
+
+## 2026-11-27 ~21:00 UTC: Config UI walkthrough, EVAL fsgaeysipkukqoocgzbx only (session_01X342skiWFj6Vkcw6omyGGS)
+- EVAL write, item 2 (04.2-23 Identifier patterns), all done by the owner in the Config UI under the test admin's own u: tenant (Default workspace):
+  - 1 insert into rag_identifier_patterns (placeholder "Test placeholder letters only", `ZZQ-[A-Z]{3}`);
+  - 2 toggles (disable, enable);
+  - 1 delete of that same row, with the owner present and confirming.
+  - Net zero rows. Five invalid patterns were refused by the server, so nothing was written for them. The sample test writes nothing.
+- No other database write. Local-only changes: OPENAI_API_KEY added to the owner's .env.local (needed by dev startup).
+- Item 1 (04.1.1-13 Terminology): blocked on EVAL. rag_term_list_entries returns PGRST202 because EVAL lacks 0980 (0945 is missing too). Waiting for the owner desk to bring EVAL up to main.
+- Item 3 (04.2-26): deferred until EVAL is current. Plan (orchestrator-approved): placeholder docs in the test admin's own workspace, then a dup-cluster build for that tenant only.
