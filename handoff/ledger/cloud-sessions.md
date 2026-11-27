@@ -546,3 +546,10 @@ HOLD: 04.3-32, 04.3-46 until 04.3-23 SUMMARY is final; 06.3-14/07-37 still wait 
 Pending owner: train36 SQL (owner desk), then ask owner before deploying main 274d0456.
 - 13:40Z 04.3-41 DONE (exec/04.3-41 eb698ced SUMMARY pushed) → session archived; train 38 candidate. 04.3-42 launched: session_01X342si9FhvqgKWK25YyzBC (base exec/04.3-41).
 - 13:39Z owner desk: train36-live.sql APPLIED + verified on prod (owner approved DROPs). r19 stored text has one-line typo in a no-op guard branch (DB state correct). Awaiting user consent to deploy main 274d0456.
+- 13:51Z Prod deploy of main 274d0456 started via Vercel MCP gitSource (user consented): dpl_9EGFrRhYiZMrK7QgzwXjv37Nd2KV. CLI --token proxyinjected is NOT valid in this session -> use mcp__Vercel__create_deployment gitSource {github, EthanChenGuang/myRAG, ref main, sha}.
+- 13:53Z DONE+archived (SUMMARY verified): 07-42 (5206c49d, migration 0741), quick-openrouter-fallback (05ceda38), 04.3-23 (05391508, final), 06.2-12 (27d9f50c), 06.2-06 (3d2f4746), 05.2.1-22 (b9ad0c4a) -> train 38 candidates (+04.3-41).
+  NOTE: 04.3-23 reports the strict test-rag false_refusal is worse on the 04.3 base (overall 0.2832, en 0.3607, zh 0.2830) than on main (en 0.3143). Train 38 has to look at this together with 03.3-25.
+  04.3-09 SUMMARY pushed (af040ffe); waiting for its report before archiving.
+- 13:53Z base branches pushed: base/04.3-32 (23+31), base/04.3-46 (23+22), base/06.2-11 (06+04), base/04.3-15 (09+21). base/04.3-14 conflicts in src/lib/rag/tenant/access.ts, so its executor merges exec/04.3-13 itself.
+  Launched: 04.3-32 session_01X342smUF2tiFLkR5bZfB4p | 04.3-46 session_01X342smWNn4NkQVLRxLXr6Y | 06.2-11 session_01X342shhSS91RYF4oj5pYFw | 04.3-15 session_01X342smQek1mTr6HqawfvHo | 06.2-10 session_01X342smzxFSYdQt22QkfPb9 | 04.3-14 session_01X342shZG3dTaW1rz5NMxYz
+  Still held: 06.3-14, 07-37 (Phase 6.3 close), plus auto=false.
