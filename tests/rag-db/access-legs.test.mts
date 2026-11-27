@@ -32,7 +32,18 @@ const IDS = {
   restrictedChunk: '00000000-0000-4000-8000-00000000b8e1',
   openDoc: '00000000-0000-4000-8000-00000000b8d2',
   openChunk: '00000000-0000-4000-8000-00000000b8e2',
+  restrictedIdDoc: '00000000-0000-4000-8000-00000000b8d3',
+  restrictedIdChunk: '00000000-0000-4000-8000-00000000b8e3',
+  restrictedInvoice: '00000000-0000-4000-8000-00000000b8d4',
+  openInvoice: '00000000-0000-4000-8000-00000000b8d5',
+  restrictedParent: '00000000-0000-4000-8000-00000000b801',
+  openParent: '00000000-0000-4000-8000-00000000b802',
 } as const;
+/** An identifier that only the restricted document carries (model-number shape: letters and digits). */
+const RESTRICTED_CODE = 'QX7731ZK';
+const ID_TEXT = `Catalogue entry ${RESTRICTED_CODE} names the ${MARKER_WORD} part of a neutral synthetic record.`;
+const ID_QUERY = `${RESTRICTED_CODE} catalogue entry`;
+const SUPPLIER = 'Zephyrquill Supplies';
 const GROUP_KEY = `g:${IDS.groupA}`;
 
 const BASE_ENV: Record<string, string> = {
@@ -166,6 +177,42 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
           multi ? [doc.chunkId, doc.docId, doc.text, vec(doc.text), IDS.org] : [doc.chunkId, doc.docId, doc.text, vec(doc.text)],
         );
       }
+      const orgColumn = multi ? ', organization_id' : '';
+      const orgValue = (index: number) => (multi ? `, $${index}` : '');
+      const withOrg = (values: unknown[]) => (multi ? [...values, IDS.org] : values);
+      await db.query(
+        `INSERT INTO documents (id, filename, content, metadata, user_id${orgColumn}, language, access_groups)
+         VALUES ($1, 'quillmarrow-catalogue.md', $2, '{}'::jsonb, $3${orgValue(5)}, 'en', $4::text[])`,
+        withOrg([IDS.restrictedIdDoc, ID_TEXT, IDS.memberA, [GROUP_KEY]]),
+      );
+      await db.query(
+        `INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata${orgColumn})
+         VALUES ($1, $2, $3, $4::vector, 0, '{}'::jsonb${orgValue(5)})`,
+        withOrg([IDS.restrictedIdChunk, IDS.restrictedIdDoc, ID_TEXT, vec(ID_TEXT)]),
+      );
+      for (const invoice of [
+        { id: IDS.restrictedInvoice, number: 'ZQ-RESTRICTED-1', groups: [GROUP_KEY], name: `${MARKER_WORD}-invoice.pdf` },
+        { id: IDS.openInvoice, number: 'ZQ-OPEN-1', groups: ['all'], name: 'open-invoice.pdf' },
+      ]) {
+        await db.query(
+          `INSERT INTO documents (id, filename, content, metadata, user_id${orgColumn}, language, access_groups, doc_type, doc_type_origin,
+             invoice_number, supplier_name, issue_date, gross_total, currency)
+           VALUES ($1, $2, 'Neutral synthetic invoice.', '{}'::jsonb, $3${orgValue(7)}, 'en', $4::text[], 'invoice_receipt', 'picked',
+             $5, $6, '2025-01-15', 100, 'EUR')`,
+          withOrg([invoice.id, invoice.name, IDS.memberA, invoice.groups, invoice.number, SUPPLIER]),
+        );
+      }
+      const tenantKey = multi ? `o:${IDS.org}` : 's:default';
+      for (const parent of [
+        { id: IDS.restrictedParent, docId: IDS.restrictedDoc, text: `Parent section: the ${MARKER_WORD} restricted parent text.` },
+        { id: IDS.openParent, docId: IDS.openDoc, text: 'Parent section: the open parent text for everyone.' },
+      ]) {
+        await db.query(
+          `INSERT INTO document_parents (id, document_id, tenant_key, chunking_profile_id, content, token_count, parent_index)
+           VALUES ($1, $2, $3, 'legacy', $4, 8, 0)`,
+          [parent.id, parent.docId, tenantKey, parent.text],
+        );
+      }
       await runFixtureRelex(db);
 
       if (sharedEdge === null) {
@@ -290,6 +337,95 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
           for (const call of calls) for (const name of ACCESS_ARG_NAMES) assert.ok(!(name in call.args), `${call.fn} sent ${name} while off`);
         });
       });
+    });
+
+    describe('exact id, invoices, parents, media and overview (Task 2)', () => {
+      for (const pipeline of ['legacy', 'v2'] as const) {
+        test(`${pipeline}: an identifier only the restricted document carries returns nothing restricted to the outsider`, async () => {
+          await withPipeline(
+            pipeline,
+            async () => {
+              const outsider = await retrieve(outsiderScope(), { query: ID_QUERY });
+              const exactCalls = outsider.calls.filter((entry) => entry.fn === 'rag_exact_id_documents');
+              assert.ok(exactCalls.length > 0, 'the exact id leg ran');
+              for (const call of exactCalls) {
+                assert.deepEqual(call.args.p_access_keys, ['all', `u:${IDS.outsider}`].sort());
+                assert.equal(call.args.p_access_all, false);
+              }
+              assertNoLeak(outsider.result, `outsider ${pipeline} exact id`);
+              const member = await retrieve(memberScope(), { query: ID_QUERY });
+              assert.ok(
+                member.result.candidates.some((candidate) => candidate.chunk_id === IDS.restrictedIdChunk),
+                `member-a lost the exact-id chunk (${pipeline})`,
+              );
+            },
+            { RAG_EXACT_ID_LOOKUP: 'true' },
+          );
+        });
+      }
+
+      test('invoice lookups exclude the restricted invoice for the outsider and keep it for member-a and admin_all', async () => {
+        const find = async (scope: TenantScope) => {
+          const start = recorded.length;
+          const hits = await rag.findInvoices(scope, { supplier: 'zephyrquill' }, { db: () => recording as never });
+          return { ids: hits.map((hit) => hit.documentId).sort(), calls: recorded.slice(start) };
+        };
+        const outsider = await find(outsiderScope());
+        assert.deepEqual(outsider.ids, [IDS.openInvoice]);
+        assert.deepEqual(outsider.calls[0]?.args.p_access_keys, ['all', `u:${IDS.outsider}`].sort());
+        assert.deepEqual((await find(memberScope())).ids, [IDS.restrictedInvoice, IDS.openInvoice].sort());
+        assert.deepEqual((await find(adminScope())).ids, [IDS.restrictedInvoice, IDS.openInvoice].sort());
+        const off = await find(offScope());
+        assert.deepEqual(off.ids, [IDS.restrictedInvoice, IDS.openInvoice].sort());
+        for (const name of ACCESS_ARG_NAMES) assert.ok(!(name in (off.calls[0]?.args ?? {})), `off sent ${name}`);
+      });
+
+      test('parent expansion never fetches the restricted parent for the outsider, even for an injected child', async () => {
+        const { expandParents } = await import('@/lib/rag/parents/expand');
+        const survivors = [
+          { chunk_id: IDS.restrictedChunk, document_id: IDS.restrictedDoc, parent_id: IDS.restrictedParent },
+          { chunk_id: IDS.openChunk, document_id: IDS.openDoc, parent_id: IDS.openParent },
+        ];
+        const expand = async (scope: TenantScope) => {
+          const start = recorded.length;
+          const access = accessModule.scopeAccessFilter(scope);
+          const result = await expandParents({ survivors, scope, admin: recording as never, signal: new AbortController().signal, access } as never);
+          const parents = (result as { candidates: Array<{ parent?: { id: string } }> }).candidates
+            .map((candidate) => candidate.parent?.id)
+            .filter((value): value is string => typeof value === 'string')
+            .sort();
+          return { parents, calls: recorded.slice(start), result };
+        };
+        const outsider = await expand(outsiderScope());
+        assert.deepEqual(outsider.parents, [IDS.openParent]);
+        assert.deepEqual(outsider.calls[0]?.args.p_access_keys, ['all', `u:${IDS.outsider}`].sort());
+        assertNoLeak(outsider.result, 'outsider parents');
+        assert.deepEqual((await expand(memberScope())).parents, [IDS.restrictedParent, IDS.openParent].sort());
+        assert.deepEqual((await expand(adminScope())).parents, [IDS.restrictedParent, IDS.openParent].sort());
+        const off = await expand(offScope());
+        assert.deepEqual(off.parents, [IDS.restrictedParent, IDS.openParent].sort());
+        for (const name of ACCESS_ARG_NAMES) assert.ok(!(name in (off.calls[0]?.args ?? {})), `off sent ${name}`);
+      });
+
+      for (const pipeline of ['legacy', 'v2'] as const) {
+        for (const [label, extra] of [
+          ['media', { profile: 'media' }],
+          ['overview', { options: { ...OPTIONS, generalOverview: true } }],
+        ] as const) {
+          test(`${pipeline}: the ${label} profile returns no marker to the outsider and the marker to member-a`, async () => {
+            await withPipeline(pipeline, async () => {
+              const outsider = await retrieve(outsiderScope(), extra as RetrieveInput);
+              assert.notEqual(outsider.result.status, 'error', `${label} errored: ${outsider.result.reason}`);
+              assertNoLeak(outsider.result, `outsider ${pipeline} ${label}`);
+              const searches = outsider.calls.filter((call) => LEGACY_SEARCH_RPCS.includes(call.fn));
+              assert.ok(searches.length > 0, 'media and overview always take the legacy search');
+              for (const call of searches) assert.equal(call.args.p_access_all, false);
+              const member = await retrieve(memberScope(), extra as RetrieveInput);
+              assertHasMarker(member.result, `member-a ${pipeline} ${label}`);
+            });
+          });
+        }
+      }
     });
   });
 }
