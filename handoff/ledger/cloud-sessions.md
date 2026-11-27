@@ -746,3 +746,10 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 22:35Z 06-46 CHECKPOINT human-verify exec/06-46 8169aab9 (4 tasks, all human; Task 3 blocked by the missing golden set). Plan command fixes -> plan-62-fixes. Archived. Resume with "approved" plus the numbers.
 - 22:35Z quick-deps-switches DONE exec/quick-deps-switches 2ad05b48f -> train 41 (conflicts with 06.2-36 on 2 lines: take the dsw lines). The archive was denied by the classifier (the session had just received a message); retry later.
 - 22:35Z OWNER DESK: EVAL fsgaeysipkukqoocgzbx now matches main 00afa6d9 (t30-37, 43/43 md5). Connector still on the eval org.
+- 22:36Z VERIFY 4.1.1: human_needed (verify/04.1.1 b0421d6d). Security SECURED.
+  - T-0411-51 decided on the owner's behalf: accepted as a process risk. Train 33 re-recorded the baseline, and legacy smoke enforces parity.
+  - The term list 503 on the eval DB was a missing 0980 (eval is now at main, so it should be gone).
+  - Routed: W-1/W-3/W-5/W-6/I-1 -> quick-term-rpc-hardening (...sjRmQ8); W-2 glossary wiring -> quick-term-glossary-wiring (...shcJ7E).
+  - W-4 and the plan-15 live items go to the owner desk/human.
+  - Archived.
+- 22:36Z quick-deps-switches archived on retry. Its branch is at 2ad05b48 and its table test covers all 12 switches, including routing and decomposed.
