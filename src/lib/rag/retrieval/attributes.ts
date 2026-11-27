@@ -7,6 +7,7 @@ import { lexicalRegistryRules, normalizeLexical } from '../lexical/tokenize';
 import { terminologyParams } from '../terminology/expand';
 import { terminologyMatcherFor } from '../terminology/load';
 import { buildMatcher, termKey, type TermEntry, type TerminologyMatcher } from '../terminology/matcher';
+import { accessRpcArgs, scopeAccessFilter, type ScopeAccessFilter } from '../tenant/access';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { ATTRIBUTE_LEXICON_ROW_CAP, attributeFilterConfig } from './attribute-filter-config';
 
@@ -69,6 +70,8 @@ type TerminologyLoader = typeof terminologyMatcherFor;
 
 export interface AttributeOptions {
   signal?: AbortSignal;
+  /** The request's access filter; absent reads scopeAccessFilter(scope). Both rpcs take it as accessRpcArgs builds it. */
+  access?: ScopeAccessFilter;
   /** Tests: the service-role client, the clock, the config numbers and the terminology loader. */
   client?: RpcClient;
   now?: () => number;
@@ -156,8 +159,19 @@ function makeLexicon(tenantKey: string, values: AttributeLexiconValue[], truncat
   };
 }
 
-async function fetchLexicon(tenantKey: string, options: AttributeOptions): Promise<AttributeLexicon> {
-  let request = serviceClient(options).rpc(VALUES_RPC, { p_tenant_key: tenantKey, p_limit: ATTRIBUTE_LEXICON_ROW_CAP + 1 });
+function accessOf(scope: TenantScope, options: AttributeOptions): ScopeAccessFilter {
+  return options.access ?? scopeAccessFilter(scope);
+}
+
+/** The cache key: the tenant key, then the access mode and, for keys, a hash of the sorted key set (a lexicon is per visible set). */
+function cacheKeyOf(tenantKey: string, access: ScopeAccessFilter): string {
+  if (access.mode !== 'keys') return `${tenantKey}\u0000${access.mode}`;
+  const keys = [...new Set(access.keys)].sort().join('\n');
+  return `${tenantKey}\u0000keys:${crypto.createHash('sha256').update(keys).digest('hex')}`;
+}
+
+async function fetchLexicon(tenantKey: string, access: ScopeAccessFilter, options: AttributeOptions): Promise<AttributeLexicon> {
+  let request = serviceClient(options).rpc(VALUES_RPC, { p_tenant_key: tenantKey, p_limit: ATTRIBUTE_LEXICON_ROW_CAP + 1, ...accessRpcArgs(access) });
   if (options.signal) request = request.abortSignal(options.signal);
   const { data, error } = await request;
   if (error) throw new RetrievalBackendError(VALUES_RPC, error.code ?? null);
@@ -168,22 +182,22 @@ async function fetchLexicon(tenantKey: string, options: AttributeOptions): Promi
   return makeLexicon(tenantKey, truncated ? values.slice(0, ATTRIBUTE_LEXICON_ROW_CAP) : values, truncated);
 }
 
-function cached(tenantKey: string, now: number): CacheEntry | null {
-  const entry = cache.get(tenantKey);
+function cached(cacheKey: string, now: number): CacheEntry | null {
+  const entry = cache.get(cacheKey);
   if (!entry) return null;
   const ttl = entry.lexicon ? ATTRIBUTE_LEXICON_TTL_MS : ATTRIBUTE_LEXICON_FAILURE_TTL_MS;
   if (now - entry.loadedAt >= ttl) {
-    cache.delete(tenantKey);
+    cache.delete(cacheKey);
     return null;
   }
-  cache.delete(tenantKey);
-  cache.set(tenantKey, entry);
+  cache.delete(cacheKey);
+  cache.set(cacheKey, entry);
   return entry;
 }
 
-function store(tenantKey: string, entry: CacheEntry): void {
-  cache.delete(tenantKey);
-  cache.set(tenantKey, entry);
+function store(cacheKey: string, entry: CacheEntry): void {
+  cache.delete(cacheKey);
+  cache.set(cacheKey, entry);
   while (cache.size > ATTRIBUTE_LEXICON_CACHE_MAX) {
     const oldest = cache.keys().next().value;
     if (oldest === undefined) break;
@@ -192,32 +206,40 @@ function store(tenantKey: string, entry: CacheEntry): void {
 }
 
 /**
- * The scope's filterable values and their matcher, cached per tenant key: 256 tenants, 60 s, 10 s after a failed load (D-29). The only tenant
- * input is the minted scope; its key is both the RPC argument and the cache key. A failed load throws (RetrievalBackendError, code only).
+ * The scope's filterable values and their matcher, cached per tenant key and access filter: 256 entries, 60 s, 10 s after a failed load
+ * (D-29). The only tenant input is the minted scope; its key is the RPC argument. The access filter (options.access, else the scope's) goes to
+ * the RPC, so a value only restricted documents carry is not in another caller's lexicon. A failed load throws (RetrievalBackendError, code
+ * only).
  */
 export async function attributeLexiconFor(scope: TenantScope, options: AttributeOptions = {}): Promise<AttributeLexicon> {
   assertTenantScope(scope);
   const tenantKey = scopeKey(scope);
+  const access = accessOf(scope, options);
+  const cacheKey = cacheKeyOf(tenantKey, access);
   const now = (options.now ?? getRagDeps().now)();
-  const hit = cached(tenantKey, now);
+  const hit = cached(cacheKey, now);
   if (hit) {
     if (hit.lexicon) return hit.lexicon;
     throw new RetrievalBackendError(VALUES_RPC, 'cached_failure');
   }
   try {
-    const lexicon = await fetchLexicon(tenantKey, options);
-    store(tenantKey, { loadedAt: now, lexicon });
+    const lexicon = await fetchLexicon(tenantKey, access, options);
+    store(cacheKey, { loadedAt: now, lexicon });
     return lexicon;
   } catch (error) {
-    if (!options.signal?.aborted) store(tenantKey, { loadedAt: now, lexicon: null });
+    if (!options.signal?.aborted) store(cacheKey, { loadedAt: now, lexicon: null });
     throw error;
   }
 }
 
-/** Drops one tenant key's lexicon, or every lexicon; writers of attribute values or definitions call it. */
+/** Drops every lexicon of one tenant key (all access filters), or every lexicon; writers of attribute values or definitions call it. */
 export function invalidateAttributeLexicon(tenantKey: string | 'all'): void {
-  if (tenantKey === 'all') cache.clear();
-  else cache.delete(tenantKey);
+  if (tenantKey === 'all') {
+    cache.clear();
+    return;
+  }
+  const prefix = `${tenantKey}\u0000`;
+  for (const key of [...cache.keys()]) if (key.startsWith(prefix)) cache.delete(key);
 }
 
 export function resetAttributeLexiconForTests(): void {
@@ -277,7 +299,12 @@ async function documentsFor(
   onUnknown: () => AttributeFilterError,
 ): Promise<DocumentsCall> {
   options.signal?.throwIfAborted();
-  let request = serviceClient(options).rpc(DOCUMENTS_RPC, { p_tenant_key: scopeKey(scope), p_filters: filters, p_limit: idCap + 1 });
+  let request = serviceClient(options).rpc(DOCUMENTS_RPC, {
+    p_tenant_key: scopeKey(scope),
+    p_filters: filters,
+    p_limit: idCap + 1,
+    ...accessRpcArgs(accessOf(scope, options)),
+  });
   if (options.signal) request = request.abortSignal(options.signal);
   const { data, error } = await request;
   options.signal?.throwIfAborted();

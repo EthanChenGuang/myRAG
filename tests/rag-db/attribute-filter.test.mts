@@ -391,9 +391,17 @@ for (const mode of ['multi-tenant', 'single-tenant'] as const) {
     });
 
     test('guard: no keys while enforcement is on raises access_scope_required; empty or NULL-holding keys raise access_keys_empty', async () => {
+      const inSavepoint = async <T,>(run: () => Promise<T>): Promise<T> => {
+        await db.exec('SAVEPOINT guard_case');
+        try {
+          return await run();
+        } finally {
+          await db.exec('ROLLBACK TO SAVEPOINT guard_case');
+        }
+      };
       await enforced(async () => {
-        const v = await failure(db, VALUES_ACCESS_SQL, [a.key, 10, null, false]);
-        const d = await failure(db, DOCS_ACCESS_SQL, [a.key, JSON.stringify({ alpha_code: ['open-1'] }), 10, null, false]);
+        const v = await inSavepoint(() => failure(db, VALUES_ACCESS_SQL, [a.key, 10, null, false]));
+        const d = await inSavepoint(() => failure(db, DOCS_ACCESS_SQL, [a.key, JSON.stringify({ alpha_code: ['open-1'] }), 10, null, false]));
         assert.deepEqual([v?.message, v?.code, d?.message, d?.code], ['access_scope_required', '42501', 'access_scope_required', '42501']);
         assert.deepEqual((await values(OUTSIDER_KEYS)).sort(), ['alpha_code=open-1', 'beta_list=shared-v']);
       });
