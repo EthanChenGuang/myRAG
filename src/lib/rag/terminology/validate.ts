@@ -118,8 +118,9 @@ function checkEntry(raw: Partial<TerminologyEntry>, item: Item, enabled: Readonl
   if (isTranslation(item)) {
     if (item.language === ANY) one('invalid_translation', 'A translation pair needs a concrete language, not any.');
     else if (!enabled.has(item.language)) one('invalid_language', `The language ${quote(item.language)} is not enabled.`);
-    if (item.source === null || item.target === null) one('invalid_translation', 'A translation pair needs both a source and a target language.');
-    else if (item.source === item.target) one('invalid_translation', 'The source and target languages of a translation pair must differ.');
+    if (item.target === null) one('target_language_required', 'A translation pair needs a target language.');
+    else if (item.target === item.source || item.target === item.language) one('target_language_same', 'The target language must differ from the source language.');
+    if (item.source === null) one('invalid_translation', 'A translation pair needs a source language.');
     if (item.source !== null && item.language !== ANY && item.language !== item.source) {
       one('invalid_translation', 'The language of a translation pair must equal its source language.');
     }
@@ -128,12 +129,17 @@ function checkEntry(raw: Partial<TerminologyEntry>, item: Item, enabled: Readonl
     if (item.language !== ANY && !enabled.has(item.language)) one('invalid_language', `The language ${quote(item.language)} is not enabled.`);
     if (item.source !== null || item.target !== null) one('invalid_translation', 'Only translation pairs carry source and target languages.');
   }
-  for (const [label, code] of [
-    ['source', item.source],
-    ['target', item.target],
-  ] as const) {
-    if (code !== null && !enabled.has(code)) one('invalid_language', `The ${label} language ${quote(code)} is not enabled.`);
-  }
+  if (item.source !== null && !enabled.has(item.source)) one('invalid_language', `The source language ${quote(item.source)} is not enabled.`);
+  if (item.target !== null && !enabled.has(item.target)) one('target_language_not_enabled', `The target language ${quote(item.target)} is not enabled.`);
+}
+
+/**
+ * 06.2 D-13: the shape every write path gives a translation pair before validation: always one_way, and the source language is the
+ * entry language when the caller names only that. The target is never filled in (D-36). Other kinds are returned unchanged.
+ */
+export function withTranslationDefaults<T extends { kind: string; language: string; mode?: string | null; source_language?: string | null }>(entry: T): T {
+  if (entry.kind !== 'translation') return entry;
+  return { ...entry, mode: 'one_way', source_language: entry.source_language ?? entry.language };
 }
 
 function toItem(raw: Partial<TerminologyEntry>, row: number | null): Item {

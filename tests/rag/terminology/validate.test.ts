@@ -228,7 +228,8 @@ describe('validateEntries: languages and translation pairs (D-24 rules 7 to 9, D
   });
 
   it('rejects a translation language that is not enabled', () => {
-    expect(errors(validateEntries([pair('术语甲乙丙', 'termalpha')], ctx({ enabledLanguages: [L1] })))).toContain('invalid_language');
+    expect(errors(validateEntries([pair('术语甲乙丙', 'termalpha')], ctx({ enabledLanguages: [L1] })))).toEqual(['target_language_not_enabled']);
+    expect(errors(validateEntries([pair('术语甲乙丙', 'termalpha')], ctx({ enabledLanguages: [L2] })))).toContain('invalid_language');
   });
 
   it('keeps translation pairs out of same-language chains and conflicts', () => {
