@@ -275,7 +275,7 @@ describe('speculative original-query retrieval (D-21, P-29)', () => {
   });
 
   it('a condense that brings in another relative time changes the date filter: not adopted, the original is searched again, one wasted search', async () => {
-    const query = 'What changed last week?';
+    const query = 'What changed in it last week?';
     const entries: FakeQueryLlmEntry[] = [
       { transform: 'condense', query, delay_ms: CONDENSE_MS, output: { standalone: 'What changed in the sample gateway yesterday?', unchanged: false, language: null } },
     ];
