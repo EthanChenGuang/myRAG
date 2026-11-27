@@ -1467,7 +1467,8 @@
             color: rgba(255, 255, 255, 0.85);
         }
 
-        [data-theme="dark"] .card-body p {
+        /* Alerts set their own content colour; card body text must not override it */
+        [data-theme="dark"] .card-body p:not(.alert p) {
             color: rgba(255, 255, 255, 0.75);
         }
 
@@ -1715,6 +1716,27 @@
         /* Ensure hidden indicators stay hidden */
         .hidden {
             display: none !important;
+        }
+
+        /* Responsive show utilities paired with .hidden must still win at their breakpoint */
+        @media (min-width: 768px) {
+            .hidden.md\:block {
+                display: block !important;
+            }
+
+            .hidden.md\:table-cell {
+                display: table-cell !important;
+            }
+
+            .hidden.md\:table-header-group {
+                display: table-header-group !important;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .hidden.lg\:table-cell {
+                display: table-cell !important;
+            }
         }
 
         /* Button hover effects */
