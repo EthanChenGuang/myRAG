@@ -56,7 +56,9 @@ function validCitations(value: unknown): CitationRecord[] | undefined {
   const kept: CitationRecord[] = [];
   for (const entry of value) {
     const parsed = CitationRecordSchema.safeParse(entry);
-    if (parsed.success) kept.push(parsed.data);
+    if (!parsed.success) continue;
+    if (parsed.data.quote.length === 0 && parsed.data.withdrawn !== true) continue;
+    kept.push(parsed.data);
   }
   return kept;
 }

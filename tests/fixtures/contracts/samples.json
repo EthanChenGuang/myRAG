@@ -7833,6 +7833,26 @@
         "strategy": "chunk-alias"
       }
     },
+    "CitationRecord:withdrawn": {
+      "model": "CitationRecord",
+      "value": {
+        "alias": "S2",
+        "chunkIds": [
+          "00000000-0000-4000-8000-0000000000c3"
+        ],
+        "documentId": "00000000-0000-4000-8000-0000000000d2",
+        "documentName": "sample-source.md",
+        "documentVersion": null,
+        "n": 2,
+        "page": null,
+        "quote": "",
+        "quoteHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "sectionPath": null,
+        "strategy": "chunk-alias",
+        "withdrawn": true,
+        "withdrawnAt": "2026-01-01T00:00:00Z"
+      }
+    },
     "EvalReport:injection": {
       "model": "EvalReport",
       "value": {

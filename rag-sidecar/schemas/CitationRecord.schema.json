@@ -103,7 +103,6 @@
       "title": "Page"
     },
     "quote": {
-      "minLength": 1,
       "title": "Quote",
       "type": "string"
     },
@@ -133,6 +132,15 @@
         "chunk-alias"
       ],
       "title": "Strategy",
+      "type": "string"
+    },
+    "withdrawn": {
+      "title": "Withdrawn",
+      "type": "boolean"
+    },
+    "withdrawnAt": {
+      "minLength": 1,
+      "title": "Withdrawnat",
       "type": "string"
     }
   },

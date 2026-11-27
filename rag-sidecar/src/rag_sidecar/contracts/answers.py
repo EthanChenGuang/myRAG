@@ -12,7 +12,7 @@ GroundednessLabel = Literal["verified", "possibly_unreliable", "not_checked"]
 FeedbackVote = Literal["helpful", "not_helpful"]
 FeedbackReason = Literal["wrong", "incomplete", "not_from_documents", "bad_citation"]
 AnswerRagMode = Literal["strict", "balanced", "flexible", "bypass"]
-DocumentAvailability = Literal["current", "unavailable"]
+DocumentAvailability = Literal["current", "unavailable", "withdrawn"]
 
 
 class _Contract(BaseModel):
@@ -47,7 +47,7 @@ class CitationRecord(_Contract):
     documentVersion: int | None = None
     page: int | None = None
     sectionPath: list[str] | None = None
-    quote: str = Field(min_length=1)
+    quote: str
     quoteHash: str = Field(pattern=r"^[a-f0-9]{64}$")
     strategy: CitationStrategy
     isCurrent: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=_omit_none_schema)
@@ -56,6 +56,16 @@ class CitationRecord(_Contract):
     alsoIn: list[CitationAlsoIn] | None = Field(
         default=None, exclude_if=_omit_none, json_schema_extra=_omit_none_schema
     )
+    withdrawn: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=_omit_none_schema)
+    withdrawnAt: str | None = Field(
+        default=None, min_length=1, exclude_if=_omit_none, json_schema_extra=_omit_none_schema
+    )
+
+    @model_validator(mode="after")
+    def _quote_unless_withdrawn(self) -> "CitationRecord":
+        if not self.quote and self.withdrawn is not True:
+            raise ValueError("quote must be non-empty unless the citation is withdrawn")
+        return self
 
 
 class AnswerGroundedness(_Contract):

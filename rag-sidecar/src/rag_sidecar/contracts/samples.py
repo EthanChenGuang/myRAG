@@ -1326,6 +1326,24 @@ def _citation_record() -> CitationRecord:
     )
 
 
+_EMPTY_QUOTE_HASH = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+
+def _withdrawn_citation_record() -> CitationRecord:
+    return CitationRecord(
+        n=2,
+        alias="S2",
+        chunkIds=["00000000-0000-4000-8000-0000000000c3"],
+        documentId="00000000-0000-4000-8000-0000000000d2",
+        documentName="sample-source.md",
+        quote="",
+        quoteHash=_EMPTY_QUOTE_HASH,
+        strategy="chunk-alias",
+        withdrawn=True,
+        withdrawnAt="2026-01-01T00:00:00Z",
+    )
+
+
 def _answer_record(*, pending: bool = False) -> AnswerRecord:
     groundedness = (
         AnswerGroundedness(status="pending")
@@ -2556,6 +2574,10 @@ def build_samples() -> dict[str, dict[str, Any]]:
     models = {**_models(), **_feedback_loop_models(), **_phase42_models(), **_terminology_models()}
     samples = {name: model.model_dump(mode="json") for name, model in models.items()}
     variants: dict[str, dict[str, Any]] = {
+        "CitationRecord:withdrawn": {
+            "model": "CitationRecord",
+            "value": _withdrawn_citation_record().model_dump(mode="json"),
+        },
         "AnswerRecord:pending_unlinked": {
             "model": "AnswerRecord",
             "value": _answer_record(pending=True).model_dump(mode="json"),
