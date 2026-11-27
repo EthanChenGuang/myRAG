@@ -194,6 +194,8 @@ from rag_sidecar.contracts.retrieval import (
     VersionRange,
 )
 from rag_sidecar.contracts.samples import build_samples
+from rag_sidecar.contracts.calc import CalcCheck, CalcLimits, CalcRequest, CalcResult, CalcTrace
+from rag_sidecar.contracts.prompt_budget import PromptBudgetConfig, PromptBudgetTrace, TokenizerCalibration
 from rag_sidecar.contracts.golden_lifecycle import GoldenSetManifest
 from rag_sidecar.contracts.quality_gates import AbsoluteGateResult, CompositionResult, QualityGates
 from rag_sidecar.contracts.monitor import (
@@ -473,6 +475,14 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (QueryVectorRow, "serialization"),
     (ChunkVectorRow, "serialization"),
     (VectorFileHeader, "serialization"),
+    (CalcRequest, "validation"),
+    (CalcTrace, "validation"),
+    (CalcLimits, "validation"),
+    (CalcResult, "serialization"),
+    (CalcCheck, "serialization"),
+    (PromptBudgetConfig, "validation"),
+    (TokenizerCalibration, "validation"),
+    (PromptBudgetTrace, "serialization"),
 ]
 
 

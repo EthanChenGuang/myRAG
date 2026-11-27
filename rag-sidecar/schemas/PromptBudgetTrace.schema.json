@@ -1,0 +1,180 @@
+{
+  "$defs": {
+    "PromptBudgetEstimator": {
+      "additionalProperties": false,
+      "properties": {
+        "encoding": {
+          "const": "cl100k_base",
+          "default": "cl100k_base",
+          "title": "Encoding",
+          "type": "string"
+        },
+        "factor": {
+          "minimum": 0.5,
+          "title": "Factor",
+          "type": "number"
+        },
+        "factor_source": {
+          "enum": [
+            "measured",
+            "default"
+          ],
+          "title": "Factor Source",
+          "type": "string"
+        },
+        "family": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Family"
+        }
+      },
+      "required": [
+        "factor",
+        "factor_source"
+      ],
+      "title": "PromptBudgetEstimator",
+      "type": "object"
+    },
+    "PromptBudgetParts": {
+      "additionalProperties": false,
+      "description": "Estimated tokens per prompt part; `reserve` is the answer reserve (the effective output cap).",
+      "properties": {
+        "documents": {
+          "minimum": 0,
+          "title": "Documents",
+          "type": "integer"
+        },
+        "history": {
+          "minimum": 0,
+          "title": "History",
+          "type": "integer"
+        },
+        "question": {
+          "minimum": 0,
+          "title": "Question",
+          "type": "integer"
+        },
+        "reserve": {
+          "minimum": 0,
+          "title": "Reserve",
+          "type": "integer"
+        },
+        "rules": {
+          "minimum": 0,
+          "title": "Rules",
+          "type": "integer"
+        },
+        "system": {
+          "minimum": 0,
+          "title": "System",
+          "type": "integer"
+        },
+        "tools": {
+          "minimum": 0,
+          "title": "Tools",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "system",
+        "rules",
+        "tools",
+        "history",
+        "question",
+        "documents",
+        "reserve"
+      ],
+      "title": "PromptBudgetParts",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "context_length_unknown": {
+      "title": "Context Length Unknown",
+      "type": "boolean"
+    },
+    "dropped_documents": {
+      "minimum": 0,
+      "title": "Dropped Documents",
+      "type": "integer"
+    },
+    "dropped_history_turns": {
+      "minimum": 0,
+      "title": "Dropped History Turns",
+      "type": "integer"
+    },
+    "estimated_raw_total": {
+      "minimum": 0,
+      "title": "Estimated Raw Total",
+      "type": "integer"
+    },
+    "estimator": {
+      "$ref": "#/$defs/PromptBudgetEstimator"
+    },
+    "near_limit": {
+      "title": "Near Limit",
+      "type": "boolean"
+    },
+    "overflow_mode": {
+      "enum": [
+        "truncate",
+        "refine"
+      ],
+      "title": "Overflow Mode",
+      "type": "string"
+    },
+    "parts": {
+      "$ref": "#/$defs/PromptBudgetParts"
+    },
+    "standalone_kept": {
+      "title": "Standalone Kept",
+      "type": "boolean"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "exceeded"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "window": {
+      "minimum": 1,
+      "title": "Window",
+      "type": "integer"
+    },
+    "window_source": {
+      "enum": [
+        "model",
+        "default"
+      ],
+      "title": "Window Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "parts",
+    "estimated_raw_total",
+    "window",
+    "window_source",
+    "context_length_unknown",
+    "estimator",
+    "dropped_documents",
+    "dropped_history_turns",
+    "near_limit",
+    "overflow_mode",
+    "status",
+    "standalone_kept"
+  ],
+  "title": "PromptBudgetTrace",
+  "type": "object"
+}

@@ -3857,6 +3857,206 @@ def _phase52_eval_variants() -> dict[str, Any]:
     }
 
 
+def _calc_request() -> Any:
+    from rag_sidecar.contracts.calc import CalcRequest  # noqa: PLC0415
+
+    def operand(name: str, value: str | None = None, *, values: list[str] | None = None, unit: str | None = "units",
+                alias: str | None = None) -> dict[str, Any]:
+        body: dict[str, Any] = {"name": name, "source": {"kind": "chunk", "alias": alias} if alias else {"kind": "question"}}
+        if value is not None:
+            body["value"] = value
+        if values is not None:
+            body["values"] = values
+        if unit is not None:
+            body["unit"] = unit
+        return body
+
+    return CalcRequest.model_validate(
+        {
+            "operands": [
+                operand("item_a", "12.5"),
+                operand("item_b", "7", alias="S1"),
+                operand("items", values=["3", "8", "5"], alias="S2"),
+                operand("cap", "4", alias="S1"),
+                operand("share", "15", unit="%"),
+                operand("start", "2025-01-10", unit=None),
+                operand("end", "2025-03-01", unit=None),
+            ],
+            "steps": [
+                {"id": "s_add", "op": "add", "args": ["item_a", "item_b"]},
+                {"id": "s_sub", "op": "subtract", "args": ["s_add", "item_b"]},
+                {"id": "s_mul", "op": "multiply", "args": ["s_sub", "item_a"]},
+                {"id": "s_div", "op": "divide", "args": ["s_mul", "item_b"],
+                 "rounding": {"mode": "half_up", "places": 2}},
+                {"id": "s_min", "op": "min", "args": ["item_a", "item_b"]},
+                {"id": "s_max", "op": "max", "args": ["item_a", "item_b"]},
+                {"id": "s_sum", "op": "sum", "args": ["items"]},
+                {"id": "s_cap", "op": "cap_each", "args": ["items", "cap"], "label": "capped items"},
+                {"id": "s_pct", "op": "percentage", "args": ["s_sum", "share"]},
+                {"id": "s_round", "op": "round", "args": ["s_div"], "rounding": {"mode": "half_even", "places": 1}},
+                {"id": "s_days", "op": "date_diff", "args": ["start", "end"], "date_unit": "days", "inclusive": True},
+            ],
+            "result": "s_round",
+        }
+    )
+
+
+def _phase521_models() -> dict[str, Any]:
+    from rag_sidecar.contracts.calc import CalcCheck, CalcLimits, CalcResult, CalcStepResult, CalcTrace  # noqa: PLC0415
+    from rag_sidecar.contracts.prompt_budget import (  # noqa: PLC0415
+        PromptBudgetConfig,
+        PromptBudgetEstimator,
+        PromptBudgetParts,
+        PromptBudgetTrace,
+        TokenizerCalibration,
+        TokenizerFamilyFactor,
+    )
+
+    result = CalcResult(
+        status="ok",
+        value="22.3",
+        unit="units",
+        steps=[
+            CalcStepResult(id="s_add", op="add", inputs=["12.5", "7"], exact="39/2", display="19.5"),
+            CalcStepResult(id="s_round", op="round", inputs=["22.32"], exact="223/10", display="22.3",
+                           display_rounded=True),
+        ],
+    )
+    return {
+        "CalcRequest": _calc_request(),
+        "CalcResult": result,
+        "CalcTrace": CalcTrace(origin="tool", request=_calc_request(), result=result),
+        "CalcCheck": CalcCheck(status="verified", stated="22.3", recomputed="22.3", unit="units",
+                               trace_hash=_HASH_C, origin="tool", stated_span={"start": 10, "end": 14}),
+        "CalcLimits": CalcLimits(version=1, max_operands=50, max_list_items=200, max_steps=30, max_depth=30,
+                                 max_digits=30, max_round_places=20, max_bits=4096),
+        "PromptBudgetConfig": PromptBudgetConfig(
+            version=1, default_window=8192, margin_ratio=0.05, margin_tokens=256, near_limit_ratio=0.9,
+            mcp_tool_reserve=2000, voice_document_budget=1500, voice_system_reserve=800, voice_answer_reserve=300,
+            refine_max_calls=2,
+        ),
+        "TokenizerCalibration": TokenizerCalibration(
+            version=1,
+            default_factor=1.25,
+            families=[
+                TokenizerFamilyFactor(family="family-a", factor=1.08, quantile=0.95, samples=40, source="measured",
+                                      run_ids=["run-0001"], computed_at="2026-11-01T00:00:00Z"),
+                TokenizerFamilyFactor(family="family-b", factor=1.25, quantile=0.95, samples=0, source="default"),
+            ],
+            written_by="rag_eval.calibrate tokenizer",
+        ),
+        "PromptBudgetTrace": PromptBudgetTrace(
+            parts=PromptBudgetParts(system=400, rules=120, tools=300, history=0, question=30, documents=7000,
+                                    reserve=800),
+            estimated_raw_total=8650,
+            window=8192,
+            window_source="default",
+            context_length_unknown=True,
+            estimator=PromptBudgetEstimator(family="family-b", factor=1.25, factor_source="default"),
+            dropped_documents=3,
+            dropped_history_turns=4,
+            near_limit=True,
+            overflow_mode="truncate",
+            status="exceeded",
+            standalone_kept=True,
+        ),
+    }
+
+
+def _phase521_variants() -> dict[str, Any]:
+    from rag_sidecar.contracts.answer_checks import AnswerChecks  # noqa: PLC0415
+    from rag_sidecar.contracts.calc import CalcCheck, CalcResult  # noqa: PLC0415
+
+    models = _phase521_models()
+    corrected = CalcCheck(status="corrected", stated="23", recomputed="22.3", unit="units", trace_hash=_HASH_C,
+                          origin="trailing_block", stated_span={"start": 10, "end": 12})
+    not_verified = CalcCheck(status="not_verified", reason="operand_not_located")
+    span_a = {"document": "document-a.md", "section": "Section 1", "quote": "Item A takes 4 units."}
+    span_b = {"document": "document-a.md", "section": "Section 2", "quote": "Item B takes 5 units."}
+
+    def item(item_id: str, category: str, **fields: Any) -> dict[str, Any]:
+        base: dict[str, Any] = {
+            "id": item_id,
+            "question": "What is the total for item A and item B?",
+            "language": "en",
+            "category": category,
+            "answerable": True,
+            "expected_answer": "The total is 9 units.",
+            "gold_evidence": [span_a, span_b],
+            "review_status": "approved",
+            "provenance": "synthetic_fixture",
+            "split": "dev",
+        }
+        base.update(fields)
+        return GoldenItem.model_validate(base).model_dump(mode="json")
+
+    trace = _trace("The total is 9 units. [S1]").model_dump(mode="json")
+    trace.update(
+        {
+            "calc": [not_verified.model_dump(mode="json")],
+            "calc_observed": {"stated": "9", "steps_listed": True, "tool_used": False, "origin": "trailing_block"},
+            "prompt_budget": models["PromptBudgetTrace"].model_copy(
+                update={"status": "ok", "near_limit": False, "dropped_documents": 0}
+            ).model_dump(mode="json"),
+            "usage": {"input_tokens": 5200, "output_tokens": 64},
+            "answer_error": "context_length_exceeded",
+        }
+    )
+    budget = models["PromptBudgetTrace"]
+    summary = {
+        "parts": budget.parts.model_dump(mode="json"),
+        "window": budget.window,
+        "dropped_documents": budget.dropped_documents,
+        "dropped_history_turns": budget.dropped_history_turns,
+        "near_limit": budget.near_limit,
+        "status": budget.status,
+    }
+    return {
+        "CalcResult:rejected": {
+            "model": "CalcResult",
+            "value": CalcResult(status="rejected", reject_reason="mixed_units").model_dump(mode="json"),
+        },
+        "CalcCheck:corrected": {"model": "CalcCheck", "value": corrected.model_dump(mode="json")},
+        "CalcCheck:not_verified": {"model": "CalcCheck", "value": not_verified.model_dump(mode="json")},
+        "CalcRequest:conversion_operand": {
+            "model": "CalcRequest",
+            "value": {
+                "operands": [
+                    {"name": "amount", "value": "40", "unit": "units", "source": {"kind": "question"}},
+                    {"name": "per_unit", "value": "0.5", "unit_from": "units", "unit_to": "parts",
+                     "source": {"kind": "chunk", "alias": "S3"}},
+                ],
+                "steps": [{"id": "converted", "op": "multiply", "args": ["amount", "per_unit"]}],
+                "result": "converted",
+            },
+        },
+        "AnswerChecks:calc_and_budget": {
+            "model": "AnswerChecks",
+            "value": AnswerChecks.model_validate(
+                {
+                    "calc": corrected.model_dump(mode="json"),
+                    "calc_items": [corrected.model_dump(mode="json"), not_verified.model_dump(mode="json")],
+                    "prompt_budget": summary,
+                }
+            ).model_dump(mode="json"),
+        },
+        "GoldenItem:multi_step_calc": {
+            "model": "GoldenItem",
+            "value": item(
+                "p521-calc-001",
+                "multi_step_calc",
+                calc={"expected_value": "9", "unit": "units", "tolerance": "0", "paraphrase_group": "p521-calc-group-a"},
+            ),
+        },
+        "GoldenItem:context_overflow": {
+            "model": "GoldenItem",
+            "value": item("p521-overflow-001", "context_overflow",
+                          overflow={"kind": "ranked_evidence", "must_keep": [span_a, span_b]}),
+        },
+        "RagTrace:calc_and_budget": {"model": "RagTrace", "value": RagTrace.model_validate(trace).model_dump(mode="json")},
+    }
+
+
 def build_samples() -> dict[str, dict[str, Any]]:
     models = {
         **_models(),
@@ -3867,6 +4067,7 @@ def build_samples() -> dict[str, dict[str, Any]]:
         **_finetune_models(),
         **_phase52_models(),
         **_phase53_models(),
+        **_phase521_models(),
     }
     samples = {name: model.model_dump(mode="json") for name, model in models.items()}
     variants: dict[str, dict[str, Any]] = {
@@ -3999,4 +4200,5 @@ def build_samples() -> dict[str, dict[str, Any]]:
     variants.update(_phase33_variants())
     variants.update(_phase52_variants())
     variants.update(_phase52_eval_variants())
+    variants.update(_phase521_variants())
     return {"samples": samples, "variants": variants}

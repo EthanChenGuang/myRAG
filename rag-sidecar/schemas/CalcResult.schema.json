@@ -1,0 +1,135 @@
+{
+  "$defs": {
+    "CalcStepResult": {
+      "additionalProperties": false,
+      "properties": {
+        "display": {
+          "pattern": "^-?[0-9]{1,30}(\\.[0-9]{1,30})?$",
+          "title": "Display",
+          "type": "string"
+        },
+        "display_rounded": {
+          "default": false,
+          "title": "Display Rounded",
+          "type": "boolean"
+        },
+        "exact": {
+          "pattern": "^-?[0-9]+/[0-9]+$",
+          "title": "Exact",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^(?!(?:constructor|prototype|valueof|tostring|hasownproperty)$)[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "inputs": {
+          "items": {
+            "pattern": "^(-?[0-9]{1,30}(\\.[0-9]{1,30})?|[0-9]{4}-[0-9]{2}-[0-9]{2}|-?[0-9]+/[0-9]+)$",
+            "type": "string"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "op": {
+          "enum": [
+            "add",
+            "subtract",
+            "multiply",
+            "divide",
+            "min",
+            "max",
+            "sum",
+            "cap_each",
+            "percentage",
+            "round",
+            "date_diff"
+          ],
+          "title": "Op",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "op",
+        "exact",
+        "display"
+      ],
+      "title": "CalcStepResult",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "reject_reason": {
+      "anyOf": [
+        {
+          "enum": [
+            "invalid_request",
+            "unsourced_operand",
+            "unknown_source",
+            "unknown_argument",
+            "mixed_units",
+            "limit_exceeded",
+            "division_by_zero",
+            "invalid_value",
+            "invalid_date",
+            "unsupported_source"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reject Reason"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "rejected"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/CalcStepResult"
+      },
+      "title": "Steps",
+      "type": "array"
+    },
+    "unit": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u3040-\\u30FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uAC00-\\uD7AF$\\u00A2-\\u00A5\\u20A0-\\u20CF %/._\\u00B0\\-]{1,32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Unit"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "pattern": "^-?[0-9]{1,30}(\\.[0-9]{1,30})?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Value"
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "title": "CalcResult",
+  "type": "object"
+}
