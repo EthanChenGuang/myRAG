@@ -46,6 +46,8 @@ export interface QueryStagesInput {
   onAttributeFilter?: (stage: AttributeFilterHashStage) => void;
   /** D-14: told the glossary state while RAG_TRANSLATION_GLOSSARY is effective, before semantic_cache builds its key. */
   onGlossary?: (stage: GlossaryHashStage) => void;
+  /** QRY-01, QRY-03: told when a condense or HyDE prompt carried the terminology glossary. */
+  onTerminologyPrompt?: () => void;
 }
 
 export interface QueryStagesOutput {
@@ -368,6 +370,7 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
       ...(ctx.cache ? { cache: ctx.cache } : {}),
       afterTransforms: terminologyStage,
       ...(ctx.onGlossary ? { onGlossary: ctx.onGlossary } : {}),
+      ...(ctx.onTerminologyPrompt ? { onTerminologyPrompt: ctx.onTerminologyPrompt } : {}),
     });
   }
 

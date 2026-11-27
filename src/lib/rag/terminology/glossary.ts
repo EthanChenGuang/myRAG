@@ -5,7 +5,7 @@ import { getRagDeps } from '../deps';
 import type { TenantScope } from '../tenant/scope';
 import type { Profile } from '../types';
 import { expandMatches, terminologyParams } from './expand';
-import { terminologyMatcherFor } from './load';
+import { peekTerminologyMatcher, terminologyMatcherFor } from './load';
 
 /** D-20: the entries that match a text, and the effective dictionary version they come from. */
 export interface TerminologyGlossary {
@@ -21,6 +21,8 @@ export interface TerminologyGlossaryOptions {
   profile?: Profile;
   /** Absent: the configuration from the deps' env. */
   config?: RagConfig;
+  /** Only an already cached dictionary is matched; nothing is loaded (the voice path). */
+  cachedOnly?: boolean;
   /** Tests: the service-role client and the clock, passed through to the loader. */
   client?: RpcClient;
   now?: () => number;
@@ -45,6 +47,10 @@ export async function terminologyGlossary(
   try {
     const config = options.config ?? loadRagConfig(getRagDeps().ragEnv());
     if (!enabled(config) || options.signal?.aborted) return null;
+    if (options.cachedOnly) {
+      const peeked = peekTerminologyMatcher(scope, { minHanChars: terminologyParams().min_han_chars, ...(options.now ? { now: options.now } : {}) });
+      return peeked ? { matches: expandMatches(text, peeked.matcher.match(text), terminologyParams()).matches, version: peeked.dictionary.version } : null;
+    }
     const timeoutMs = options.timeoutMs ?? config.timeouts[options.profile ?? 'chat'].terminology ?? FALLBACK_STAGE_TIMEOUT_MS;
     const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
     const params = terminologyParams();

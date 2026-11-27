@@ -124,6 +124,8 @@ export async function runV2Pipeline(
   let scopeGate: RetrievalResult['scopeGate'];
   // D-21: set by the terminology stage before semantic_cache builds its key; enabled but not reached reads as unavailable.
   let terminologyStage: TerminologyHashStage = spec('terminology', 'skip').enabled ? { enabled: true, version: null } : { enabled: false };
+  // QRY-01, QRY-03: set when a condense or HyDE prompt carried the terminology glossary; only then the block names its prompt version.
+  let terminologyPrompt = false;
   // D-30: set by the attribute stage before semantic_cache builds its key; enabled but not reached reads as skipped.
   let attributeStage: AttributeFilterHashStage =
     config.v2.attributeFilter !== 'off' && spec('attribute_resolve', 'skip').enabled ? { enabled: true, state: ATTRIBUTE_STATE_SKIPPED } : { enabled: false };
@@ -218,7 +220,11 @@ export async function runV2Pipeline(
       stageOverrides: input.stageOverrides,
       cache: cacheSeam,
       onTerminology: (stage) => {
-        terminologyStage = stage;
+        terminologyStage = stage.enabled && terminologyPrompt ? { ...stage, prompt: true } : stage;
+      },
+      onTerminologyPrompt: () => {
+        terminologyPrompt = true;
+        if (terminologyStage.enabled) terminologyStage = { ...terminologyStage, prompt: true };
       },
       onAttributeFilter: (stage) => {
         attributeStage = stage;

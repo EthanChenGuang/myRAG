@@ -13,6 +13,8 @@ import type { PostCheckLimits, PostCheckSkip, PostCheckSkipReason } from './post
 import { getKbLanguageShares, translationTargets, type KbLanguageShares } from './kb-languages';
 import type { GlossaryHashStage } from '../v2/config-hash';
 import { glossarySourceSurfaces, loadTenantGlossary, type TenantGlossary } from './glossary';
+import { HISTORY_MAX_TURNS, terminologyGlossaryEntries, type TerminologyGlossaryEntry } from './prompts/render';
+import { terminologyGlossary } from '../terminology/glossary';
 import type { TranslateSkip } from './llamaindex/translate';
 import { buildHistoryFallbackVariant, previousUserTurn } from './history-fallback';
 import { buildQueryPlan, planToVariants, type SkippedTransform } from './plan';
@@ -101,6 +103,8 @@ export interface QueryLayerInput {
   afterTransforms?: (standalone: string) => Promise<void>;
   /** D-14: told the glossary state for the config hash, before semantic_cache builds its key; never called with the switch off. */
   onGlossary?: (stage: GlossaryHashStage) => void;
+  /** QRY-01, QRY-03: told when a condense or HyDE prompt carries the terminology glossary, before semantic_cache builds its key. */
+  onTerminologyPrompt?: () => void;
 }
 
 const NO_LAYER_OUTCOME: Readonly<QueryLayerOutcome> = Object.freeze({
@@ -676,6 +680,23 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   };
   if (glossaryOn) ctx.onGlossary?.({ enabled: true, version: null });
 
+  // QRY-01, QRY-03 (04.1.1 D-20): the dictionary entries matched in the text a condense or HyDE prompt is about to send, only while
+  // the terminology stage is enabled for the request. Chat and embed load through the per-tenant loader cache the terminology stage
+  // reads later in the same request; voice matches only an already cached dictionary, so it adds no round trip.
+  const terminologyOn = spec('terminology', 'skip').enabled;
+  const terminologyFor = async (text: string, stageSignal: AbortSignal): Promise<{ terminology?: TerminologyGlossaryEntry[] }> => {
+    if (!terminologyOn || !ctx.scope) return {};
+    const found = await terminologyGlossary(ctx.scope, text, { config, profile, signal: stageSignal, cachedOnly: profile === 'voice' });
+    const terminology = terminologyGlossaryEntries(
+      (found?.matches ?? []).map((match) => ({ surface: match.surface, canonical: match.canonical, kind: match.kind })),
+    );
+    if (terminology.length === 0) return {};
+    ctx.onTerminologyPrompt?.();
+    return { terminology };
+  };
+  const condenseText = (): string =>
+    [input.query, ...history.slice(-HISTORY_MAX_TURNS).filter((turn) => turn.role === 'user').map((turn) => turn.content)].join('\n');
+
   let condensed: string | null = null;
   let condenseOk = false;
   let condenseLanguage: string | null = null;
@@ -695,6 +716,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
           language: gate.lang,
           protectedTokens: gate.protectedTokens,
           ...(await glossaryProtectedFor(input.query)),
+          ...(await terminologyFor(condenseText(), stageSignal)),
           limits,
           signal: stageSignal,
         }),
@@ -782,8 +804,8 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
         )
       : null,
     runHyde
-      ? runTransform(transformRun<HydeResult>('hyde', { failed: (value) => callFailed(value.skipped) }), (stageSignal) =>
-          transformer.hyde({ ...base, signal: stageSignal }),
+      ? runTransform(transformRun<HydeResult>('hyde', { failed: (value) => callFailed(value.skipped) }), async (stageSignal) =>
+          transformer.hyde({ ...base, ...(await terminologyFor(standalone, stageSignal)), signal: stageSignal }),
         )
       : null,
     routed.has('decompose')

@@ -2,7 +2,7 @@ import { HypotheticalDocumentSchema } from '@/lib/rag-eval/contracts.generated';
 import type { Lang } from '../rewrite-gate';
 import { checkVariant, DEFAULT_POST_CHECK_LIMITS, type PostCheckLimits, type PostCheckSkip } from '../post-checks';
 import { keepsProtectedTokens } from '../protected';
-import { loadPrompt, renderPrompt } from '../prompts/render';
+import { loadPrompt, renderPrompt, type TerminologyGlossaryEntry } from '../prompts/render';
 import hydeEn from '../prompts/llamaindex.hyde.en.v1.json';
 import hydeIt from '../prompts/llamaindex.hyde.it.v1.json';
 import hydeZh from '../prompts/llamaindex.hyde.zh.v1.json';
@@ -29,6 +29,8 @@ export type HydeInput = {
   signal: AbortSignal;
   deps: NativeDeps;
   limits?: PostCheckLimits;
+  /** QRY-03: dictionary matches in the query (RAG_TERMINOLOGY on), so the passage uses the canonical terms. */
+  terminology?: readonly TerminologyGlossaryEntry[];
 };
 export type HydeResult = { variant: HydeVariant | null; truncated: boolean; skipped: Array<PostCheckSkip | NativeTransformSkip> };
 
@@ -55,7 +57,11 @@ export function capPassage(passage: string, maxChars: number): { text: string; t
 export async function nativeHyde(input: HydeInput): Promise<HydeResult> {
   const { query, language, protectedTokens, signal, deps } = input;
   const { id, file } = HYDE_PROMPTS[language];
-  const prompt = renderPrompt(loadPrompt(id, { [id]: file }), { context_str: query }, { language, maxItems: 1, protectedTokens });
+  const prompt = renderPrompt(
+    loadPrompt(id, { [id]: file }),
+    { context_str: query },
+    { language, maxItems: 1, protectedTokens, ...(input.terminology ? { terminology: input.terminology } : {}) },
+  );
   const call = await callNative(deps, {
     transform: 'hyde',
     schema: HypotheticalDocumentSchema,

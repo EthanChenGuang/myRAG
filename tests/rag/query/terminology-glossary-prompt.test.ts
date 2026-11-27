@@ -236,12 +236,12 @@ describe('runQueryLayer: terminology glossary wiring', () => {
     const off = await run('its logs', HISTORY, {});
     invalidateTerminologyCache('all');
     const on = await run('its logs', HISTORY, { RAG_TERMINOLOGY: 'true' });
-    const line = '{"term":"GWS","canonical":"gateway service","kind":"abbreviation"}';
+    const line = '{"term":"gws","canonical":"gateway service","kind":"abbreviation"}';
     expect(on.condense[0]).toContain(OPEN);
     expect(on.condense[0]).toContain(line);
     expect(on.hyde[0]).toContain(OPEN);
     expect(on.hyde[0]).toContain(line);
-    const addendum = `${renderTerminologyAddendum([ENTRY])}\n\n`;
+    const addendum = `${renderTerminologyAddendum([{ ...ENTRY, surface: 'gws' }])}\n\n`;
     expect(on.condense[0]!.replace(addendum, '')).toBe(off.condense[0]);
     expect(on.hyde[0]!.replace(addendum, '')).toBe(off.hyde[0]);
     expect(on.promptFlags).toBeGreaterThan(0);
