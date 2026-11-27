@@ -366,7 +366,10 @@ export function AudienceField({ state, onChange, groups, language, mode, bulk, i
         const helpId = `${inputId}-help`;
         return (
           <div key={radio.value} className="grid min-w-0 gap-1">
-            <div className="flex items-center gap-2">
+            <label
+              htmlFor={inputId}
+              className={cn('flex w-fit items-center gap-2 text-sm', radio.disabled ? 'text-muted-foreground' : 'cursor-pointer')}
+            >
               <input
                 id={inputId}
                 type="radio"
@@ -375,17 +378,11 @@ export function AudienceField({ state, onChange, groups, language, mode, bulk, i
                 checked={state.choice === radio.value}
                 disabled={radio.disabled}
                 aria-describedby={helpId}
-                className="h-4 w-4 accent-primary"
+                className="h-4 w-4 accent-foreground"
                 onChange={() => dispatch({ type: radio.value })}
               />
-              <label
-                htmlFor={inputId}
-                id={radio.value === 'groups' ? groupsLabelId : undefined}
-                className={cn('text-sm', radio.disabled && 'text-muted-foreground')}
-              >
-                {radio.label}
-              </label>
-            </div>
+              <span id={radio.value === 'groups' ? groupsLabelId : undefined}>{radio.label}</span>
+            </label>
             <p id={helpId} className="pl-6 text-xs text-muted-foreground">
               {radio.help}
             </p>

@@ -297,3 +297,11 @@ describe('UploadQueueRow with the access picker', () => {
     expect(html.indexOf('Remove group: group-a')).toBeLessThan(html.indexOf('Choose who can see'));
   });
 });
+
+describe('number formatting', () => {
+  it('formats counts with Intl.NumberFormat for the UI language', () => {
+    expect(accessGroupText('bulk.selected', 'en', { count: 1200 })).toBe('Selected: 1,200');
+    expect(accessGroupText('bulk.selected', 'it', { count: 1200 })).toBe(`Selezionati: ${new Intl.NumberFormat('it').format(1200)}`);
+    expect(accessGroupText('bulk.selected', 'not a tag!', { count: 1200 })).toBe('Selected: 1,200');
+  });
+});

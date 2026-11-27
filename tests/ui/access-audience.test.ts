@@ -239,3 +239,13 @@ describe('AudienceField markup', () => {
     expect(markup).not.toContain('<img');
   });
 });
+
+describe('AudienceField radios', () => {
+  it('wraps each radio and its text in one label (one hit target) and keeps the accent colour off', () => {
+    const html = renderToStaticMarkup(
+      createElement(AudienceField, { state: initAudienceField([]), onChange: () => undefined, groups: GROUPS, language: 'en', mode: 'org', id: 'f3' }),
+    );
+    expect(html).toMatch(/<label for="f3-everyone"[^>]*><input id="f3-everyone"/);
+    expect(html).not.toContain('accent-primary');
+  });
+});

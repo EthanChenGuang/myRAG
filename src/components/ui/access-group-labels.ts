@@ -570,10 +570,20 @@ export function accessGroupLocaleTable(language: string): Partial<Record<AccessG
   return Object.prototype.hasOwnProperty.call(LABELS, language) ? LABELS[language as AccessGroupLabelLocale] : undefined;
 }
 
-/** Localized string with {placeholders} filled as plain text; an unknown language or a missing key falls back to en. */
+function formatCount(value: number, language: string): string {
+  try {
+    return new Intl.NumberFormat(language).format(value);
+  } catch {
+    return new Intl.NumberFormat('en').format(value);
+  }
+}
+
+/** Localized string with {placeholders} filled as plain text (numbers through Intl.NumberFormat); an unknown language or a missing key falls back to en. */
 export function accessGroupText(key: AccessGroupLabelKey, language: string, vars: Record<string, string | number> = {}): string {
   const template = accessGroupLocaleTable(language)?.[key] ?? EN[key];
-  return template.replace(/\{([a-zA-Z]+)\}/g, (match, name: string) =>
-    Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : match,
-  );
+  return template.replace(/\{([a-zA-Z]+)\}/g, (match, name: string) => {
+    if (!Object.prototype.hasOwnProperty.call(vars, name)) return match;
+    const value = vars[name];
+    return typeof value === 'number' ? formatCount(value, language) : String(value);
+  });
 }
