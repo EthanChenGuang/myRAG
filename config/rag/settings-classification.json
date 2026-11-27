@@ -39,6 +39,11 @@
       "side": "query"
     },
     {
+      "name": "RAG_BGE_M3_VIA",
+      "side": "ingestion",
+      "mechanism": "reembed"
+    },
+    {
       "name": "RAG_CACHE_ENABLED",
       "side": "query"
     },

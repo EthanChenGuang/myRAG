@@ -10390,6 +10390,19 @@
                                                             <code class="font-mono text-xs break-all" translate="no">RAG_BGE_M3_SERVING</code>
                                                         </div>
                                                     </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_BGE_M3_VIA">
+                                                            <span class="label-text" data-rag-i18n="via.title">Hosted API route</span>
+                                                        </label>
+                                                        <select id="RAG_BGE_M3_VIA" name="RAG_BGE_M3_VIA" autocomplete="off" aria-describedby="rag-bge-m3-via-help" class="select select-bordered select-sm w-full">
+                                                            <option value="deepinfra" data-rag-i18n="RAG_BGE_M3_VIA.opt.deepinfra">DeepInfra, as today</option>
+                                                            <option value="openrouter" data-rag-i18n="RAG_BGE_M3_VIA.opt.openrouter">OpenRouter, pinned to DeepInfra</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-bge-m3-via-help"><span data-rag-i18n="via.help">OpenRouter sends the hosted calls with the OpenRouter key and records host openrouter on new vectors. Run npm run rag:embedding -- verify-route bge-m3 before using it with stored vectors.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_BGE_M3_VIA</code>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <!-- rag-phase032-settings:end -->
