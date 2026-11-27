@@ -11,6 +11,8 @@ export interface PgliteAdminOptions {
 }
 
 const IDENTIFIER_RE = /^[a-z_][a-z0-9_]*$/;
+/** The generic RPC names of eval/harness/fake-edge.mts (`GENERIC_RPC_NAME`). */
+const RPC_NAME_RE = /^(?:rag_[a-z0-9_]+|match_chunks_by_profile|hybrid_search_chunks|hybrid_search_translations)$/;
 const DEFAULT_JSON_COLUMNS = ['metadata', 'processing_state'];
 
 function identifier(name: string): string {
@@ -42,9 +44,33 @@ export function createPgliteAdmin(db: PGlite, options: PgliteAdminOptions = {}) 
 
   const admin = {
     queries,
-    rpc(_name: string, _args: Record<string, unknown> = {}) {
+    /**
+     * supabase-js style `rpc(name, args)`: runs `public.<name>(arg => $n, …)` with every value bound as a parameter.
+     * Only the names the fake edge serves generically are accepted, and argument names must be plain identifiers;
+     * anything else is refused before any SQL runs.
+     */
+    rpc(name: string, args: Record<string, unknown> = {}) {
       let signal: AbortSignal | null = null;
-      const call = async (): Promise<Result> => ({ data: null, error: { code: '0A000', message: `rpc not implemented${signal ? '' : ''}` } });
+      const call = async (): Promise<Result> => {
+        const names = Object.keys(args);
+        if (!RPC_NAME_RE.test(name) || !names.every((arg) => IDENTIFIER_RE.test(arg))) {
+          return { data: null, error: { code: 'PGRST202', message: `[pglite-admin] unsupported rpc: ${name}` } };
+        }
+        if (signal?.aborted) return { data: null, error: { code: '20', message: 'AbortError: the rpc was aborted' } };
+        const values = names.map((arg) => {
+          const value = args[arg];
+          return value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date) ? JSON.stringify(value) : value;
+        });
+        const sql = `SELECT * FROM public.${identifier(name)}(${names.map((arg, i) => `${identifier(arg)} => $${i + 1}`).join(', ')})`;
+        queries.push({ sql, params: [...values] });
+        try {
+          const result = await execute(sql, values);
+          return { data: plain(result.rows), error: null };
+        } catch (error) {
+          const code = error && typeof error === 'object' && typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : 'XX000';
+          return { data: null, error: { code, message: error instanceof Error ? error.message : String(error) } };
+        }
+      };
       const builder = {
         abortSignal(next: AbortSignal) {
           signal = next;

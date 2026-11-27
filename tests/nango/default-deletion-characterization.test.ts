@@ -173,7 +173,7 @@ async function replay(c: Case): Promise<Recording> {
   // A complete single-page listing; .bin files are not a supported type, so nothing is ingested.
   listing.files = ['file-a', 'file-b'].map((id) => ({ id, name: `${id}.bin`, mimeType: 'application/octet-stream' }));
 
-  const softDeleteLineage = vi.fn(async (_scope: unknown, lineageId: string) =>
+  const softDeleteLineage = vi.fn(async (_scope: unknown, lineageId: string, _source: string, _options: { signal: AbortSignal }) =>
     failure === 'soft_delete' ? { ok: false, reason: 'unavailable' } : { ok: true, outcome: 'deleted', lineageId, jobId: null },
   );
   const removeDocumentObjects = vi.fn(async () => undefined);
