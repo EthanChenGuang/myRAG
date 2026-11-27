@@ -22,6 +22,8 @@ export interface FakeQueryLlmTable {
   description?: string;
   defaults?: Record<string, string>;
   entries: FakeQueryLlmEntry[];
+  /** Named overlays (plan 06.2-20): applied only on request, each entry replacing the base entry with the same key. */
+  scenarios?: Record<string, { description?: string; entries: FakeQueryLlmEntry[] }>;
 }
 
 export interface FakeQueryLlm extends QueryLlm {
@@ -54,6 +56,18 @@ export function loadFakeQueryLlmTable(path: string = DEFAULT_FAKE_QUERY_LLM_TABL
   const table = JSON.parse(readFileSync(path, 'utf8')) as FakeQueryLlmTable;
   if (table?.version !== 1 || !Array.isArray(table.entries)) throw new Error('[Fake Query LLM] expected version 1 and an entries array');
   return table;
+}
+
+/** The table with one named scenario applied: its entries replace the base entries with the same key, or are added. */
+export function applyFakeQueryLlmScenario(table: FakeQueryLlmTable, name: string): FakeQueryLlmTable {
+  const scenario = table.scenarios?.[name];
+  if (!scenario || !Array.isArray(scenario.entries)) throw new Error(`[Fake Query LLM] unknown scenario ${name}`);
+  const key = (entry: FakeQueryLlmEntry) => keyOf(entry.transform, entry.query, entryTarget(entry));
+  const overlay = new Map(scenario.entries.map((entry) => [key(entry), entry]));
+  const entries = table.entries.map((entry) => overlay.get(key(entry)) ?? entry);
+  const present = new Set(table.entries.map(key));
+  for (const [entryKey, entry] of overlay) if (!present.has(entryKey)) entries.push(entry);
+  return { ...table, entries };
 }
 
 /** Documented defaults when no entry matches: pass-through condense, no variants, no sub-questions, the input as the HyDE passage, no translation. */

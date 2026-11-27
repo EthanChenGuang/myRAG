@@ -897,5 +897,60 @@
         "source_language": null
       }
     }
-  ]
+  ],
+  "scenarios": {
+    "condense_timeout": {
+      "description": "D-23, plan 06.2-20: condense answers after 1500 ms, above the 600 ms chat condense timeout, so the eval run sets stage_timeouts_ms.condense to 600 and condense is skipped with timeout. Entries replace the base entry with the same key while the scenario is applied.",
+      "entries": [
+        {
+          "transform": "condense",
+          "item_id": "en-multi-turn-001",
+          "query": "What accuracy does it have?",
+          "delay_ms": 1500,
+          "output": {
+            "standalone": "What accuracy does the XR-5100 reference thermometer have?",
+            "unchanged": false,
+            "language": null
+          }
+        },
+        {
+          "transform": "condense",
+          "item_id": "zh-multi-turn-001",
+          "query": "它的精度是多少？",
+          "delay_ms": 1500,
+          "output": {
+            "standalone": "GT-500 标准温度计的精度是多少？",
+            "unchanged": false,
+            "language": null
+          }
+        },
+        {
+          "transform": "condense",
+          "item_id": "it-multi-turn-005",
+          "query": "E per gli accessori di consumo?",
+          "delay_ms": 1500,
+          "output": {
+            "standalone": "Per quanti mesi sono coperti in garanzia gli accessori di consumo?",
+            "unchanged": false,
+            "language": null
+          }
+        }
+      ]
+    },
+    "condense_protected_token_lost": {
+      "description": "D-23, plan 06.2-20: condense drops the protected token of the follow-up, so the post-check discards it with protected_token_lost.",
+      "entries": [
+        {
+          "transform": "condense",
+          "item_id": "en-multi-turn-004",
+          "query": "Does that FW-2.8.14 build also support the DL-220?",
+          "output": {
+            "standalone": "Does the XR-4410 firmware build also support the DL-220 data logger?",
+            "unchanged": false,
+            "language": null
+          }
+        }
+      ]
+    }
+  }
 }
