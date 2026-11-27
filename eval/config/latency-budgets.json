@@ -42,6 +42,10 @@
         "query": {
           "p50_ms": 600,
           "p95_ms": 1200
+        },
+        "scope_gate": {
+          "p50_ms": 2,
+          "p95_ms": 5
         }
       },
       "stages": {
@@ -62,6 +66,7 @@
         "injection_check": 400,
         "refusal": 1,
         "rerank": 600,
+        "scope_gate": 5,
         "search": 400,
         "semantic_cache": 150,
         "table_lookup": 60,
@@ -76,6 +81,10 @@
         "query": {
           "p50_ms": 600,
           "p95_ms": 1200
+        },
+        "scope_gate": {
+          "p50_ms": 2,
+          "p95_ms": 5
         }
       },
       "stages": {
@@ -96,6 +105,7 @@
         "injection_check": 400,
         "refusal": 1,
         "rerank": 600,
+        "scope_gate": 5,
         "search": 400,
         "semantic_cache": 150,
         "table_lookup": 60,

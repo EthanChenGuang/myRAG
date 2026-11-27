@@ -246,8 +246,8 @@ describe('committed params and budgets (D-17, D-20, D-29)', () => {
   test('latency-budgets.json carries a report-only scope_gate budget for chat and embed and none for voice', () => {
     const budgets = LatencyBudgetsSchema.parse(JSON.parse(readFileSync(join(process.cwd(), 'eval/config/latency-budgets.json'), 'utf8')));
     for (const profile of ['chat', 'embed'] as const) {
-      expect(budgets.profiles[profile]?.stages.scope_gate).toBe(5);
-      expect(budgets.profiles[profile]?.groups.scope_gate).toEqual({ p50_ms: 2, p95_ms: 5 });
+      expect(budgets.profiles[profile]?.stages?.scope_gate).toBe(5);
+      expect(budgets.profiles[profile]?.groups?.scope_gate).toEqual({ p50_ms: 2, p95_ms: 5 });
     }
     expect(budgets.profiles.voice?.stages).not.toHaveProperty('scope_gate');
   });
