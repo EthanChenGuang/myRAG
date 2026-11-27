@@ -39,6 +39,36 @@ export { getAccessStartupVerdict, syncAccessEnforcementNow, verifyAccessGroupsSt
 export type { AccessStartupStatus, AccessStartupVerdict } from './tenant/access-startup';
 export { createCitationRecheck, recordSecurityEvent, visibleChunkIds, visibleDocumentIds } from './access/visibility';
 export type { SecurityEventInput, VisibilityOptions, VisibilityResult } from './access/visibility';
+export { ACCESS_GROUPS_REASONS, AccessGroupsError, accessReasonOf } from './access/errors';
+export type { AccessGroupsReason, AccessServiceDeps } from './access/errors';
+export {
+  ACCESS_CANDIDATES_MAX,
+  ACCESS_GROUP_KEY_RE,
+  ACCESS_GROUP_NAME_MAX,
+  ACCESS_GROUPS_PAGE_SIZE,
+  addMember,
+  createGroup,
+  deleteGroup,
+  groupImpact,
+  listGroups,
+  listMembers,
+  memberCandidates,
+  myGroups,
+  removeMember,
+  renameGroup,
+} from './access/groups';
+export type {
+  AccessGroup,
+  AccessGroupDeleteResult,
+  AccessGroupImpact,
+  AccessGroupListItem,
+  AccessGroupMember,
+  AccessGroupPage,
+  AccessGroupRef,
+  AccessGroupSource,
+  AccessMemberCandidate,
+  MyAccessGroups,
+} from './access/groups';
 export type {
   AccessIdentity,
   AccessScopeRefusalReason,
