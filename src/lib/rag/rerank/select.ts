@@ -7,8 +7,12 @@ import { createVoyageReranker } from './voyage';
 
 export type ResolveRerankerReason = 'disabled' | 'missing_key' | 'auto_fallback';
 
-/** Profiles that use Cohere under RAG_RERANKER=auto when COHERE_API_KEY is set; the rest take the no-key fallback. */
-export const AUTO_HOSTED_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval', 'voice'];
+/**
+ * Profiles that use Cohere under RAG_RERANKER=auto when COHERE_API_KEY is set; the rest take the no-key fallback.
+ * Voice is left out until the live G7 pass measures its hosted p95 (04.1 verification G-06); RAG_RERANKER=cohere still
+ * reranks voice with the fast tier.
+ */
+export const AUTO_HOSTED_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval'];
 
 /** What RAG_RERANKER=auto runs without a Cohere key (or for a profile outside AUTO_HOSTED_PROFILES). */
 export const AUTO_NO_KEY_FALLBACK: 'local_bm25' | 'none' = 'local_bm25';

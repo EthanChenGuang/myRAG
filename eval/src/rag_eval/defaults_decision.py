@@ -35,6 +35,9 @@ EXIT_INTERNAL = 70
 
 Profile = Literal["chat", "embed", "eval", "voice"]
 PROFILES: tuple[Profile, ...] = ("chat", "embed", "eval", "voice")
+# src/lib/rag/rerank/select.ts AUTO_HOSTED_PROFILES: voice stays off hosted rerank under auto until G7 measures it (G-06).
+CODE_DEFAULT_HOSTED: tuple[Profile, ...] = ("chat", "embed", "eval")
+VOICE_UNMEASURED = "not measured: no live voice p95 for hosted rerank yet (G7 pending)"
 CHAT_TIER_PROFILES: tuple[Profile, ...] = ("chat", "embed", "eval")
 DEFAULT_VARIABLES = ("RAG_PIPELINE", "RAG_LEXICAL_SEARCH", "RAG_RERANKER", "RAG_REFUSAL_THRESHOLD", "RAG_REFUSAL_FLOOR")
 D01_VALUES = {
@@ -218,10 +221,10 @@ def _recorded_ref(path: str, recorded_sha256: str, what: str) -> FileRef:
 
 def _hosted(live: LiveRerankResult) -> tuple[list[Profile], HostedDecision]:
     if live.status == "pending_live":
-        return list(PROFILES), HostedDecision(
+        return list(CODE_DEFAULT_HOSTED), HostedDecision(
             preference=HOSTED_PREFERENCE,
             basis="pending_live",
-            dropped=[],
+            dropped=[DroppedProfile(profile="voice", reason=VOICE_UNMEASURED)],
             notes=[
                 (
                     "G7 not run: the live passes of plan 04.1-08 are an operator action; AUTO_HOSTED_PROFILES keeps its code "
