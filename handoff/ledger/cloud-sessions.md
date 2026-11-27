@@ -901,3 +901,7 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - quick-43-apply-test (G8).
   - Remaining READY items are owner checkpoints (03.3-26, 04.4-15, 06-46). 06.3-14 waits for 07-37.
 - MIGRATION MAP: 0986 doc-types / 0987 scope-access / 0988 review-writers / 0989 NF-1 / 0990 rih / 0991 UF-1.
+- 23:52Z quick-42-fixes DONE exec/quick-42-fixes c50e5550 -> train 41. Covers W-2 (images + Nango hard-delete recompute), W-3 labels, W-4/5/6. Archived.
+  - FINDING: a fresh phase42 gate on t39 FAILs on category:scanned (diversity + identifier); this is pre-existing. -> debug-42-scanned. The W-1 session was told to report it separately.
+  - Reserved quicks dispatched: 261127-idn (neutral id names) and 261127-rbm (new rebuild mechanism for the 3 switches).
+- 23:52Z NF-1: full rag-db suite about halfway, 0 failures; fix f13f6428 pushed.
