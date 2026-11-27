@@ -883,7 +883,7 @@ test('access-admin-rpc: setter, visibility, event and admin RPCs only inside src
     onlyRule({ 'src/lib/rag/access/labels.ts': "await db.rpc('rag_set_document_access_groups', args);\n" }, 'access-admin-rpc'),
     [],
   );
-  for (const name of ['rag_chunks_visible', 'rag_documents_visible', 'rag_security_event_record', 'rag_access_group_create', 'rag_access_member_add', 'rag_access_documents_list', 'rag_connector_map_set']) {
+  for (const name of ['rag_chunks_visible', 'rag_documents_visible', 'rag_security_event_record', 'rag_access_group_create', 'rag_access_member_add', 'rag_access_documents_list', 'rag_connector_map_set', 'rag_access_my_groups', 'rag_access_document_audience']) {
     assert.deepEqual(
       onlyRule({ 'src/app/api/y/route.ts': `await db.rpc(\n  '${name}',\n  args,\n);\n` }, 'access-admin-rpc'),
       ['src/app/api/y/route.ts:access-admin-rpc'],

@@ -90,6 +90,14 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_access_user_in_tenant(text, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_access_user_in_tenant(text, uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_access_group_members_list(text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_access_group_members_list(text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_access_group_members_list(text, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_access_member_candidates(text, uuid, text, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_access_member_candidates(text, uuid, text, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_access_member_candidates(text, uuid, text, integer) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_activate_embedding_profile(text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_activate_embedding_profile(text, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_activate_embedding_profile(text, text) TO service_role;
@@ -153,6 +161,10 @@ BEGIN
   IF to_regprocedure('public.rag_confirm_supersession(uuid, uuid, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_confirm_supersession(uuid, uuid, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_confirm_supersession(uuid, uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_connector_match_members(text, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_connector_match_members(text, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_connector_match_members(text, text[]) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_create_ingestion_batch(text, text, text, numeric, integer, text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_create_ingestion_batch(text, text, text, numeric, integer, text, text) FROM PUBLIC, anon, authenticated;

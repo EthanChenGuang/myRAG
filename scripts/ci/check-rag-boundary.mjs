@@ -181,7 +181,7 @@ export const ACCESS_RESOLVER_RPCS = [
   'rag_access_groups_drift',
   'rag_access_group_by_key',
 ];
-export const ACCESS_ADMIN_RPCS = ['rag_set_document_access_groups', 'rag_chunks_visible', 'rag_documents_visible', 'rag_security_event_record'];
+export const ACCESS_ADMIN_RPCS = ['rag_set_document_access_groups', 'rag_chunks_visible', 'rag_documents_visible', 'rag_security_event_record', 'rag_access_my_groups', 'rag_access_document_audience'];
 export const ACCESS_ADMIN_RPC_PREFIXES = ['rag_access_group', 'rag_access_member', 'rag_access_documents', 'rag_connector_'];
 const ACCESS_RESOLVER_RPC_RE = new RegExp(String.raw`\.rpc\s*\(\s*(['"\`])(?:${ACCESS_RESOLVER_RPCS.join('|')})\1`, 'g');
 const ACCESS_ADMIN_RPC_RE = new RegExp(
