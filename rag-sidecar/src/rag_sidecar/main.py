@@ -92,6 +92,7 @@ def create_app(
     scorers: Mapping[str, Scorer] | None = None,
     injection_scorer: InjectionScorer | None = None,
     cache_service: CacheService | None = None,
+    embedder: object | None = None,
 ) -> FastAPI:
     resolved = settings if settings is not None else load_settings()
     active_converter = converter if converter is not None else default_converter()

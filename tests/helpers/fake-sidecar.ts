@@ -77,6 +77,24 @@ export interface FakeHiddenTextSpec {
   delayMs?: number;
 }
 
+/** One answer of the fake /v1/embed route: an error status, a replacement body, or a delay longer than the caller waits. */
+export interface FakeEmbedSpec {
+  status?: number;
+  error?: string;
+  body?: unknown;
+  delayMs?: number;
+}
+
+/** The revision the fake /v1/embed answers with: the pinned BAAI/bge-m3 revision the sidecar bakes. */
+export const FAKE_BGE_M3_REVISION = '5617a9f61b028005a4858fdac845db406aefb181';
+
+/** A deterministic, deliberately unnormalized 1024-component vector for one text, as the fake /v1/embed returns it. */
+export function fakeEmbedVector(text: string, dims = 1024): number[] {
+  let seed = 7;
+  for (const ch of text) seed = (seed * 33 + ch.codePointAt(0)!) % 999_983;
+  return Array.from({ length: dims }, (_, index) => 2 * Math.cos(seed + index * 0.41) + 0.02);
+}
+
 interface ManifestEntry {
   id: string;
   mime: string;
@@ -132,6 +150,10 @@ export interface FakeSidecar {
   deleted: string[];
   /** Each /v1/hidden-text request: the sha256 and size of the uploaded file and the request part. */
   hiddenTextRequests: FakeSidecarUpload[];
+  /** Each /v1/embed request body as received. */
+  embedRequests: Array<{ model?: unknown; inputs: string[] }>;
+  /** Specs for /v1/embed, used one per request in order; once used up, the default vectors answer. */
+  enqueueEmbed(...specs: FakeEmbedSpec[]): void;
   /** Specs for /v1/hidden-text, used one per request in order; once used up, the recorded report answers. */
   enqueueHiddenText(...specs: FakeHiddenTextSpec[]): void;
   /** Specs are used one per submit, in order; the last one repeats. */
@@ -210,6 +232,8 @@ export async function startFakeSidecar(options: { secret?: string } = {}): Promi
   const specs: FakeSidecarJobSpec[] = [];
   const hiddenTextRequests: FakeSidecarUpload[] = [];
   const hiddenTextSpecs: FakeHiddenTextSpec[] = [];
+  const embedRequests: Array<{ model?: unknown; inputs: string[] }> = [];
+  const embedSpecs: FakeEmbedSpec[] = [];
   const jobs = new Map<string, { spec: FakeSidecarJobSpec; polls: number; expired: boolean; result: Record<string, unknown>; artifacts: Record<string, Buffer> }>();
   let submits = 0;
 
@@ -240,6 +264,26 @@ export async function startFakeSidecar(options: { secret?: string } = {}): Promi
         if (spec.delayMs !== undefined) await new Promise((resolve) => setTimeout(resolve, spec.delayMs));
         if (spec.status !== undefined) return sendJson(response, spec.status, { error: spec.error ?? 'checker_unavailable' });
         return sendJson(response, 200, spec.report ?? recordedHiddenTextReport(sha, String(parsed.mime_type ?? '')));
+      }
+
+      if (request.method === 'POST' && url.pathname === '/v1/embed') {
+        let parsed: { model?: unknown; inputs?: unknown };
+        try {
+          parsed = JSON.parse((await readBody(request)).toString('utf8')) as { model?: unknown; inputs?: unknown };
+        } catch {
+          return sendJson(response, 422, { error: 'invalid_embed_request' });
+        }
+        const inputs = Array.isArray(parsed.inputs) ? parsed.inputs.filter((item): item is string => typeof item === 'string') : [];
+        embedRequests.push({ model: parsed.model, inputs });
+        const spec = embedSpecs.shift() ?? {};
+        if (spec.delayMs !== undefined) await new Promise((resolve) => setTimeout(resolve, spec.delayMs));
+        if (spec.status !== undefined) return sendJson(response, spec.status, { error: spec.error ?? 'model_unavailable' });
+        if (inputs.length === 0 || inputs.length > 32 || parsed.model !== 'BAAI/bge-m3') return sendJson(response, 422, { error: 'invalid_embed_request' });
+        return sendJson(
+          response,
+          200,
+          spec.body ?? { model: 'BAAI/bge-m3', revision: FAKE_BGE_M3_REVISION, dims: 1024, vectors: inputs.map((text) => fakeEmbedVector(text)) },
+        );
       }
 
       if (request.method === 'POST' && url.pathname === '/v1/parse/jobs') {
@@ -320,6 +364,8 @@ export async function startFakeSidecar(options: { secret?: string } = {}): Promi
     uploads,
     deleted,
     hiddenTextRequests,
+    embedRequests,
+    enqueueEmbed: (...next) => void embedSpecs.push(...next),
     enqueueHiddenText: (...next) => void hiddenTextSpecs.push(...next),
     enqueue: (...next) => void specs.push(...next),
     expire(jobId) {

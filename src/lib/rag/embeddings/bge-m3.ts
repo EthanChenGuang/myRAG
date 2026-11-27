@@ -25,8 +25,27 @@ export interface BgeM3Config {
   timeoutMs?: number;
 }
 
+export const BGE_M3_SIDECAR_REVISION = '';
+
+export type EmbeddingSidecarFailure = string;
+
+export class EmbeddingSidecarUnavailableError extends Error {
+  readonly code = 'embedding_sidecar_unavailable';
+  constructor(readonly reason: EmbeddingSidecarFailure) {
+    super(reason);
+  }
+}
+
+export interface BgeM3SidecarConfig {
+  url: string;
+  secret: string;
+  timeoutMs?: number;
+}
+
 export interface BgeM3ProviderOptions {
   config?: () => BgeM3Config;
+  serving?: () => 'hosted' | 'sidecar';
+  sidecar?: () => BgeM3SidecarConfig;
 }
 
 function defaultConfig(): BgeM3Config {
