@@ -1086,7 +1086,7 @@ No 0410 delta: r15 stays current (0978 adds no SECURITY DEFINER function and gra
 
 ## Train 33: 0706, 0900-0902, 0904, 0945, 0976 and 0410 r16 (to apply after train 33 reaches `origin/main`)
 
-Branch `ci/merge-train-33`, built on `ci/merge-train-32` (6087353f, PR #122, merged into main as a3eec5bc) with `origin/main` 76d027af (PR #123, batch input cleanup) merged last. Nothing below has been applied live yet. Production is multi-tenant.
+Branch `ci/merge-train-33`, built on `ci/merge-train-32` (6087353f, PR #122, merged into main as a3eec5bc) with `origin/main` merged last (76d027af, PR #123 batch input cleanup; then 1b543eda, PR #116 train 30 and PR #124 Config UI CSS). Nothing below has been applied live yet. Production is multi-tenant.
 
 ### Merged plans
 All 33 listed branches carry their own SUMMARY and are merged with `--no-ff` in the given order; none skipped.
