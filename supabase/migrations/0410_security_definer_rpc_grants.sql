@@ -64,6 +64,18 @@ BEGIN
     REVOKE ALL ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.match_chunks_by_profile(text, text, integer, halfvec, integer, double precision, boolean, text[], boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.match_chunks_by_profile(text, text, integer, halfvec, integer, double precision, boolean, text[], boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.match_chunks_by_profile(text, text, integer, halfvec, integer, double precision, boolean, text[], boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid, text[], boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid, text[], boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid, text[], boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_find_invoices(text, text, date, date, numeric, numeric, text, integer, text[], boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_find_invoices(text, text, date, date, numeric, numeric, text, integer, text[], boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_find_invoices(text, text, date, date, numeric, numeric, text, integer, text[], boolean) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_access_enforced()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_access_enforced() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_access_enforced() TO service_role;
