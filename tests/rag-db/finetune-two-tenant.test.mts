@@ -164,12 +164,17 @@ interface Observation {
   stages: StageCount[];
 }
 
-/** The corpus load of createFixtureDatabase, on a database whose migrations leave out the fine-tune block. */
+/** The corpus load of createFixtureDatabase, on a database whose migrations leave out the fine-tune block. The setup files fold 0651-0654
+ * (06.1-18), so the reference starts from the frozen pre-Phase-3 setup and applies every other migration in loader order. */
 async function databaseWithoutFinetune(mode: DeploymentMode): Promise<PGlite> {
   const files = migrationFiles(mode);
   const kept = files.filter((file) => !FINETUNE_MIGRATION.test(`/${file}`));
-  assert.ok(files.length - kept.length >= 3, 'migrations 0651-0653 are left out');
-  const { db } = await createEmptyFixtureDatabase({ deploymentMode: mode, migrations: false });
+  assert.equal(files.length - kept.length, 4, 'migrations 0651-0654 are left out');
+  const { db } = await createEmptyFixtureDatabase({
+    deploymentMode: mode,
+    migrations: false,
+    setupSqlPath: `tests/fixtures/sql/pre-phase3-${mode}-setup.sql`,
+  });
   await applyMigrationFiles(db, kept);
   if (mode === 'multi-tenant') await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING', [FIXTURE_USER_ID, 'fixture-user@example.invalid']);
   const corpus = loadCorpus(CORPUS_DIR);
