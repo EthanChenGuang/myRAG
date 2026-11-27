@@ -21,3 +21,8 @@
 - To run the check: deploy baileys-whatsapp/ (Fly.io), set WHATSAPP_PROVIDER, FLYIO_BAILEYS_URL, WHATSAPP_WEBHOOK_URL on Vercel (owner enters FLYIO_API_KEY and WHATSAPP_WEBHOOK_SECRET), redeploy, scan the QR from the app's WhatsApp connect button with a spare number, test from another phone.
 - Asked the owner: set up now (A) or defer (B). Waiting.
 - 2026-11-27: owner chose B. 05.2-15 and 06.2-33 deferred (WhatsApp not provisioned). Nothing changed on prod.
+
+## 2026-11-27 ~15:10 UTC: EVAL (fsgaeysipkukqoocgzbx) local Config UI setup
+- Owner set up the local dev environment (WSL, Node 22, repo at main be569250). The Config UI connects to EVAL, in multi-tenant mode.
+- EVAL write: the owner created one test auth user plus one admin_users row from the Config UI "Setup Primary Admin". The credentials are only in the owner's local .env.local.
+- The walkthroughs were handed to a separate session, session_01X342skiWFj6Vkcw6omyGGS (owner's request).
