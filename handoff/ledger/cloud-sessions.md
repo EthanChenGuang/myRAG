@@ -599,3 +599,5 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   FOLLOW-UP after train 38:
   (a) wire accessSetsFor from the chat route into enqueueReviewItem (04.3-14 is now in train 38);
   (b) rag_review_items_enqueue (0967) and _re_review (0974) still write NULL sets, so their masked query is visible to every expert of the tenant.
+- 15:30Z 03.3-25 pass 3: TPL-07 quantity 1.000 and TPL-01 variant 1.000 now pass. no_other_slice_drop still fails: 1 of 11 cache_near_miss items, RRF margin 0.00007, caused by the D-26 header in the dense text under the fixture embedder.
+  Orchestrator decision (b): keep D-26 and leave the gates as they are. Record the result as a FAIL with its reason. Plan 03.3-26 must compare with and without RAG_ATTRIBUTE_HEADER on real items; if the real run also drops beyond the band, reopen D-26 (header lexical-only). The 03.3-25 executor now finishes Tasks 3 and 4 and writes the SUMMARY.
