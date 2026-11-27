@@ -469,6 +469,36 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_SOURCE_RECONCILE_INTERVAL_DAYS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_SOURCE_RECONCILE_MAX_AGE_DAYS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "NANGO_SHAREPOINT_INTEGRATION_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "NANGO_ONEDRIVE_INTEGRATION_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_EXACT_SCAN_CUTOFF",
       "status": "managed",
       "knownGaps": []
