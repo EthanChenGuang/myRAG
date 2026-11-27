@@ -242,6 +242,6 @@ export function createFakeQdrantClient(): FakeQdrantClient {
 
 /** The request body without the vendor transport fields (wait, ordering, timeout) that the scoped builders never see. */
 export function scopedBodyOf(request: RecordedRequest): Record<string, unknown> {
-  const { wait: _wait, ordering: _ordering, timeout: _timeout, ...rest } = request.body;
-  return rest;
+  const transport = new Set(['wait', 'ordering', 'timeout']);
+  return Object.fromEntries(Object.entries(request.body).filter(([key]) => !transport.has(key)));
 }

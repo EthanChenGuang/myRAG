@@ -140,7 +140,8 @@ describe('qdrant adapter requests', () => {
     expect(request.collection).toBe(COLLECTION);
     expect(() => assertScoped(scopedBodyOf(request), scopeA)).not.toThrow();
     expect(() => assertScoped(scopedBodyOf(request), scopeB)).toThrow(/tenant clause/);
-    const [dense, lexical] = request.body.searches as Array<Record<string, any>>;
+    type Search = { params: { idf: { corpus: { must: unknown[] } } }; filter: { must: unknown[] } };
+    const [dense, lexical] = request.body.searches as Search[];
     expect(dense).toMatchObject({ query: CANARY_VECTOR, using: 'dense', limit: 10, params: { acorn: { enable: true } }, with_payload: false });
     expect(lexical).toMatchObject({ query: { text: 'canary token' }, using: 'lexical_text', limit: 10, with_payload: false });
     expect(lexical.params.idf.corpus.must).toEqual([{ key: 'tenant_key', match: { value: `u:${USER_A}` } }]);
