@@ -1,0 +1,3219 @@
+{
+  "phase": "04.1.1",
+  "plan": "04.1.1-14",
+  "sources": {
+    "eval/config/noise.json": "1b17319b44015551251c8bfc8bd5b2cc067ee02846c74f3e729f050206980426",
+    "eval/config/latency-budgets.json": "698c54d2482fb082e654c0a135458162ddf1d9dc47048123a79cbd70fea04ca4"
+  },
+  "rules": {
+    "colloquial_term": "items whose id holds -colloquial-term- (both splits, report-only per EVAL-14): no Recall@5, Recall@10 or MRR paired mean falls and at least one rises",
+    "other_slices": "gated items without the term items: every overall, language and category slice stays within noise.floor (one run per side, so k x spread is 0) for every noise.metrics metric",
+    "no_answer_term_refusal": "items whose id holds -no_answer-term-: every item refused on exactly when refused off",
+    "latency": "on-run p95 of terminology and search within the chat stage budgets; the pre-generation chat total within total_p50_ms and total_p95_ms",
+    "retrieval_config_hash": "the off and on runs share no retrieval_config_hash"
+  },
+  "pairs": [
+    {
+      "name": "v2-default",
+      "off": {
+        "dir": "eval/out/p4110-14-v2-terminology-off",
+        "run_config_hash": "dc65fd6d1acafb9434624af02ff584cace3f104fb64fb7866757e4093484158a"
+      },
+      "on": {
+        "dir": "eval/out/p4110-14-v2-terminology-on",
+        "run_config_hash": "4bd2ecf2b94e2207f93ccae93a3fa7ecd83056175664fae325e90f7e53ab6485"
+      },
+      "colloquial_term": {
+        "items": 15,
+        "rises": true,
+        "metrics": {
+          "recall_at_5": {
+            "off": 1.0,
+            "on": 1.0,
+            "n": 15,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "recall_at_10": {
+            "off": 1.0,
+            "on": 1.0,
+            "n": 15,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "mrr": {
+            "off": 0.508888888888889,
+            "on": 0.5788888888888889,
+            "n": 15,
+            "n_nonzero": 3,
+            "mean_d": 0.07,
+            "ci_low": 0.0,
+            "ci_high": 0.16999999999999998
+          }
+        }
+      },
+      "other_slices": {
+        "gate_split": "dev",
+        "items": 202,
+        "slices": {
+          "category:ambiguous": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.3333333333333333,
+              "on": 0.3333333333333333,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.5277777777777778,
+              "on": 0.5277777777777778,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.6666666666666666,
+              "on": 0.6666666666666666,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.5,
+              "on": 0.5,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:cache_near_miss": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.36363636363636365,
+              "on": 0.36363636363636365,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.5075757575757576,
+              "on": 0.5075757575757576,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.6363636363636364,
+              "on": 0.6363636363636364,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.6363636363636364,
+              "on": 0.6363636363636364,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:cache_paraphrase": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.2222222222222222,
+              "on": 0.2222222222222222,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.7037037037037037,
+              "on": 0.7037037037037037,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.7777777777777778,
+              "on": 0.7777777777777778,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.7777777777777778,
+              "on": 0.7777777777777778,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:colloquial": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.8,
+              "on": 0.8,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.05,
+              "on": 0.05,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.2,
+              "on": 0.2,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.2,
+              "on": 0.2,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:compound": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.5555555555555556,
+              "on": 0.5555555555555556,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.4444444444444444,
+              "on": 0.4444444444444444,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.4444444444444444,
+              "on": 0.4444444444444444,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.4444444444444444,
+              "on": 0.4444444444444444,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:cross_lingual": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.3333333333333333,
+              "on": 0.3333333333333333,
+              "n": 21,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.42857142857142855,
+              "on": 0.42857142857142855,
+              "n": 21,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.42857142857142855,
+              "on": 0.42857142857142855,
+              "n": 21,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.42857142857142855,
+              "on": 0.42857142857142855,
+              "n": 21,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:duplicate_flood": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:exact_term": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.125,
+              "on": 0.125,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.875,
+              "on": 0.875,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.875,
+              "on": 0.875,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.875,
+              "on": 0.875,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:general": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.10526315789473684,
+              "on": 0.10526315789473684,
+              "n": 19,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.868421052631579,
+              "on": 0.868421052631579,
+              "n": 19,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.8157894736842105,
+              "on": 0.8157894736842105,
+              "n": 19,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.8157894736842105,
+              "on": 0.8157894736842105,
+              "n": 19,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:identifier_near_miss": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.1111111111111111,
+              "on": 0.1111111111111111,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.8888888888888888,
+              "on": 0.8888888888888888,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.8888888888888888,
+              "on": 0.8888888888888888,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.8888888888888888,
+              "on": 0.8888888888888888,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:implicit_condition": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 7,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 7,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 7,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 7,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:injection": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.6,
+              "on": 0.6,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:injection_evasive": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:multi_turn": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.5,
+              "on": 0.5,
+              "n": 16,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.40625,
+              "on": 0.40625,
+              "n": 16,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.5,
+              "on": 0.5,
+              "n": 16,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.4375,
+              "on": 0.4375,
+              "n": 16,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:no_answer": {
+            "correct_refusal_rate": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 37,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:scanned": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 4,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.75,
+              "on": 0.75,
+              "n": 4,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.75,
+              "on": 0.75,
+              "n": 4,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.75,
+              "on": 0.75,
+              "n": 4,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:selective_filter": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.625,
+              "on": 0.625,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.5,
+              "on": 0.5,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.5,
+              "on": 0.5,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.5,
+              "on": 0.5,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:small_talk": {
+            "correct_refusal_rate": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 3,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:table": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.5454545454545454,
+              "on": 0.5454545454545454,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.4090909090909091,
+              "on": 0.4090909090909091,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.45454545454545453,
+              "on": 0.45454545454545453,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.45454545454545453,
+              "on": 0.45454545454545453,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:typo": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.6666666666666666,
+              "on": 0.6666666666666666,
+              "n": 3,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.3333333333333333,
+              "on": 0.3333333333333333,
+              "n": 3,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.3333333333333333,
+              "on": 0.3333333333333333,
+              "n": 3,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.3333333333333333,
+              "on": 0.3333333333333333,
+              "n": 3,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "language:en": {
+            "correct_refusal_rate": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 15,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.38596491228070173,
+              "on": 0.38596491228070173,
+              "n": 57,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.5146198830409356,
+              "on": 0.5146198830409356,
+              "n": 57,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.5701754385964912,
+              "on": 0.5701754385964912,
+              "n": 57,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.5526315789473685,
+              "on": 0.5526315789473685,
+              "n": 57,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "language:it": {
+            "correct_refusal_rate": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 12,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.2222222222222222,
+              "on": 0.2222222222222222,
+              "n": 54,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.6481481481481481,
+              "on": 0.6481481481481481,
+              "n": 54,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.7129629629629629,
+              "on": 0.7129629629629629,
+              "n": 54,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.6944444444444444,
+              "on": 0.6944444444444444,
+              "n": 54,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "language:zh": {
+            "correct_refusal_rate": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 13,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.29411764705882354,
+              "on": 0.29411764705882354,
+              "n": 51,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.696078431372549,
+              "on": 0.696078431372549,
+              "n": 51,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.696078431372549,
+              "on": 0.696078431372549,
+              "n": 51,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.696078431372549,
+              "on": 0.696078431372549,
+              "n": 51,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "overall": {
+            "correct_refusal_rate": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 40,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.30246913580246915,
+              "on": 0.30246913580246915,
+              "n": 162,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.6162551440329218,
+              "on": 0.6162551440329218,
+              "n": 162,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.6574074074074074,
+              "on": 0.6574074074074074,
+              "n": 162,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.6450617283950617,
+              "on": 0.6450617283950617,
+              "n": 162,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          }
+        }
+      },
+      "no_answer_term_refusal": {
+        "items": 3,
+        "off": 1.0,
+        "on": 1.0,
+        "unchanged": true
+      },
+      "latency": {
+        "terminology": {
+          "budget_p95_ms": 5,
+          "on": {
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "n": 308
+          },
+          "off": {
+            "p50_ms": 0.0,
+            "p95_ms": 0.0,
+            "n": 308
+          },
+          "within_budget": true
+        },
+        "search": {
+          "budget_p95_ms": 400,
+          "on": {
+            "p50_ms": 23.0,
+            "p95_ms": 33.0,
+            "n": 308
+          },
+          "off": {
+            "p50_ms": 23.0,
+            "p95_ms": 31.0,
+            "n": 308
+          },
+          "within_budget": true
+        },
+        "total": {
+          "budget_p50_ms": 1000,
+          "budget_p95_ms": 2000,
+          "on": {
+            "p50_ms": 44.0,
+            "p95_ms": 63.0,
+            "n": 209
+          },
+          "off": {
+            "p50_ms": 43.0,
+            "p95_ms": 62.0,
+            "n": 209
+          },
+          "within_budget": true
+        }
+      },
+      "retrieval_config_hash": {
+        "off": [
+          "ef50291781cd2874bdc4542e9b558c1e71ea07aff9e00cb853b75af9dfcfd6ec"
+        ],
+        "on": [
+          "0224e79a22e7e4a396fbd352dd05570c0ac8044ec180321570a7e171c25d34eb"
+        ],
+        "differs": true
+      },
+      "failures": [],
+      "passed": true
+    },
+    {
+      "name": "v2-lexical",
+      "off": {
+        "dir": "eval/out/p4110-14-v2-lexical-terminology-off",
+        "run_config_hash": "97cfb1b9c64adc62c2d11da3b084d626a263817f6a334a3bca1c838bfe24544f"
+      },
+      "on": {
+        "dir": "eval/out/p4110-14-v2-lexical-terminology-on",
+        "run_config_hash": "a280792f1c589a4cb1571dc60bb6969bb2ec160e50b375356a72ddf93a3b2b7f"
+      },
+      "colloquial_term": {
+        "items": 15,
+        "rises": true,
+        "metrics": {
+          "recall_at_5": {
+            "off": 1.0,
+            "on": 1.0,
+            "n": 15,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "recall_at_10": {
+            "off": 1.0,
+            "on": 1.0,
+            "n": 15,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "mrr": {
+            "off": 0.5377777777777778,
+            "on": 0.7388888888888889,
+            "n": 15,
+            "n_nonzero": 8,
+            "mean_d": 0.2011111111111111,
+            "ci_low": 0.08555555555555555,
+            "ci_high": 0.3288888888888889
+          }
+        }
+      },
+      "other_slices": {
+        "gate_split": "dev",
+        "items": 202,
+        "slices": {
+          "category:ambiguous": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.875,
+              "on": 0.875,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:cache_near_miss": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.8666666666666667,
+              "on": 0.8666666666666667,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:cache_paraphrase": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.8888888888888888,
+              "on": 0.8888888888888888,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.8888888888888888,
+              "on": 0.8888888888888888,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.8888888888888888,
+              "on": 0.8888888888888888,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:colloquial": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.47857142857142854,
+              "on": 0.47857142857142854,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.8,
+              "on": 0.8,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.6,
+              "on": 0.6,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:compound": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.9444444444444444,
+              "on": 0.9444444444444444,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.925925925925926,
+              "on": 0.925925925925926,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.8888888888888888,
+              "on": 0.8888888888888888,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:cross_lingual": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.047619047619047616,
+              "on": 0.047619047619047616,
+              "n": 21,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.43537414965986393,
+              "on": 0.43537414965986393,
+              "n": 21,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.47619047619047616,
+              "on": 0.47619047619047616,
+              "n": 21,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.42857142857142855,
+              "on": 0.42857142857142855,
+              "n": 21,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:duplicate_flood": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.75,
+              "on": 0.75,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.75,
+              "on": 0.75,
+              "n": 6,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:exact_term": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:general": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 19,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 19,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.9210526315789473,
+              "on": 0.9210526315789473,
+              "n": 19,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.9210526315789473,
+              "on": 0.9210526315789473,
+              "n": 19,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:identifier_near_miss": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.8888888888888888,
+              "on": 0.8888888888888888,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 9,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:implicit_condition": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 7,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.9285714285714286,
+              "on": 0.9285714285714286,
+              "n": 7,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 7,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 7,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:injection": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.6,
+              "on": 0.6,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:injection_evasive": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 5,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:multi_turn": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 16,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.734375,
+              "on": 0.734375,
+              "n": 16,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.9375,
+              "on": 0.9375,
+              "n": 16,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.9375,
+              "on": 0.9375,
+              "n": 16,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:no_answer": {
+            "correct_refusal_rate": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 37,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:scanned": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 4,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.7916666666666666,
+              "on": 0.7916666666666666,
+              "n": 4,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 4,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.75,
+              "on": 0.75,
+              "n": 4,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:selective_filter": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.375,
+              "on": 0.375,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.8125,
+              "on": 0.8125,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.875,
+              "on": 0.875,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.875,
+              "on": 0.875,
+              "n": 8,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:small_talk": {
+            "correct_refusal_rate": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 3,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:table": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.7272727272727273,
+              "on": 0.7272727272727273,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.9090909090909091,
+              "on": 0.9090909090909091,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.9090909090909091,
+              "on": 0.9090909090909091,
+              "n": 11,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "category:typo": {
+            "correct_refusal_rate": {
+              "off": null,
+              "on": null,
+              "n": 0,
+              "n_nonzero": 0,
+              "mean_d": null,
+              "ci_low": null,
+              "ci_high": null,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0,
+              "on": 0.0,
+              "n": 3,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.8333333333333334,
+              "on": 0.8333333333333334,
+              "n": 3,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 3,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 3,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "language:en": {
+            "correct_refusal_rate": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 15,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.03508771929824561,
+              "on": 0.03508771929824561,
+              "n": 57,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.7875939849624061,
+              "on": 0.7875939849624061,
+              "n": 57,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.8713450292397661,
+              "on": 0.8713450292397661,
+              "n": 57,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.8362573099415205,
+              "on": 0.8362573099415205,
+              "n": 57,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "language:it": {
+            "correct_refusal_rate": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 12,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.018518518518518517,
+              "on": 0.018518518518518517,
+              "n": 54,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.7285714285714285,
+              "on": 0.7285714285714285,
+              "n": 54,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.8333333333333334,
+              "on": 0.8333333333333334,
+              "n": 54,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.8086419753086419,
+              "on": 0.8086419753086419,
+              "n": 54,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "language:zh": {
+            "correct_refusal_rate": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 13,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.0196078431372549,
+              "on": 0.0196078431372549,
+              "n": 51,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.9019607843137255,
+              "on": 0.9019607843137255,
+              "n": 51,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.9346405228758169,
+              "on": 0.9346405228758169,
+              "n": 51,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.9346405228758169,
+              "on": 0.9346405228758169,
+              "n": 51,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          },
+          "overall": {
+            "correct_refusal_rate": {
+              "off": 1.0,
+              "on": 1.0,
+              "n": 40,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "false_refusal_rate": {
+              "off": 0.024691358024691357,
+              "on": 0.024691358024691357,
+              "n": 162,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "lower",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "mrr": {
+              "off": 0.8039241622574956,
+              "on": 0.8039241622574956,
+              "n": 162,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_10": {
+              "off": 0.8786008230452675,
+              "on": 0.8786008230452675,
+              "n": 162,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            },
+            "recall_at_5": {
+              "off": 0.8580246913580247,
+              "on": 0.8580246913580247,
+              "n": 162,
+              "n_nonzero": 0,
+              "mean_d": 0.0,
+              "ci_low": 0.0,
+              "ci_high": 0.0,
+              "direction": "higher",
+              "band": 0.02,
+              "within_noise": true
+            }
+          }
+        }
+      },
+      "no_answer_term_refusal": {
+        "items": 3,
+        "off": 1.0,
+        "on": 1.0,
+        "unchanged": true
+      },
+      "latency": {
+        "terminology": {
+          "budget_p95_ms": 5,
+          "on": {
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "n": 308
+          },
+          "off": {
+            "p50_ms": 0.0,
+            "p95_ms": 0.0,
+            "n": 308
+          },
+          "within_budget": true
+        },
+        "search": {
+          "budget_p95_ms": 400,
+          "on": {
+            "p50_ms": 22.0,
+            "p95_ms": 30.0,
+            "n": 308
+          },
+          "off": {
+            "p50_ms": 23.0,
+            "p95_ms": 32.0,
+            "n": 308
+          },
+          "within_budget": true
+        },
+        "total": {
+          "budget_p50_ms": 1000,
+          "budget_p95_ms": 2000,
+          "on": {
+            "p50_ms": 31.0,
+            "p95_ms": 41.0,
+            "n": 293
+          },
+          "off": {
+            "p50_ms": 31.0,
+            "p95_ms": 44.0,
+            "n": 293
+          },
+          "within_budget": true
+        }
+      },
+      "retrieval_config_hash": {
+        "off": [
+          "e00ee4ffe6f47160a45f2ba4c2e6fa45b0f8759fc93b8e855449f393b7344745"
+        ],
+        "on": [
+          "1add1877facad746e9824a25ffec19489d30cd01d2490d7e023bb358351fa034"
+        ],
+        "differs": true
+      },
+      "failures": [],
+      "passed": true
+    }
+  ],
+  "decision": "stays off",
+  "passed": true
+}
