@@ -582,3 +582,8 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   SECURITY GAP (from 04.3-14): the SQL writers of rag_review_items still write access_sets NULL: rag_mine_failed_queries (0535/0537) and rag_enqueue_review_item (0944). So the restrictive policy from 0934 does not hide new review items. A quick fix (new 09xx migration) is needed BEFORE access enforcement is turned on in prod; enforced=false today. It goes on top of train 38.
   HOLD 04.3-51 and the quick review-access-sets fix: the 04.3-09/14/15 chain conflicts heavily with train 37 (20 files: rag core, trace, contracts, 0410). Resolve it once, in the train 38 build, rather than in every executor. 04.3-48 is already doing the same resolution, so reuse its merge commit in train 38.
 - 15:02Z 04.3-45 DONE (8583bf04) and archived -> train 38. Its model-context-length failure is the train-37 one fixed in b3c73ff4. Operator: browser check on eval with the switch on.
+- 15:05Z User asked: clean up the finished sessions and run more in parallel. All finished sessions were already archived. Launched:
+  - TRAIN 38 builder (cloud) session_01X342smRhzZPcaM7STT8bn7. Base ci/merge-train-37, 22 branches: 04.3-09, 14, 15, 23, 32, 41 to 47, 49; 05.2.1-12, 21, 22; 06.2-06, 10, 11, 12; 07-42; quick-openrouter-fallback. It resolves the 04.3 conflict once and writes train38-live.sql. No PR until #134 merges.
+  - quick-review-access-sets (security gap) session_01X342sj2koRHNmrF8zZkQJp, base ci/merge-train-37.
+  - 04.3-51 session_01X342shUrdxSnQeqwdLP6Sp. Base exec/04.3-14; it merges 04.3-23 itself (index.ts) and, if needed, train-37.
+  Running now (9 + builder): 03.3-25, 04.3-48, 04.3-51, 05.2.1-17, 06.2-14, 06.2-15, 06.2-16, quick-review-access-sets, train-38.
