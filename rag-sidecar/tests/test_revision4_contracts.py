@@ -466,3 +466,12 @@ def test_report_accepts_consistent_report():
 )
 def test_report_rejects_inconsistent_reports(overrides):
     _rejects(RedTeamReport, _report(**overrides))
+
+
+def test_restated_patterns_equal_their_sources():
+    from rag_sidecar.contracts import cache, feedback_loop, language_monitor, monitor
+
+    assert language_monitor.LANGUAGE_CODE_PATTERN == feedback_loop.LANGUAGE_CODE_PATTERN
+    assert language_monitor.TENANT_KEY_PATTERN == cache.TENANT_KEY_PATTERN
+    for name in ("CODE_PATTERN", "SHA256_PATTERN", "DAY_PATTERN", "TIMESTAMP_PATTERN", "TRACE_ID_PATTERN"):
+        assert getattr(language_monitor, name) == getattr(monitor, name), name

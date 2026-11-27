@@ -12,6 +12,7 @@ from rag_sidecar.contracts.answer_checks import (
 )
 from rag_sidecar.contracts.answers import AnswerGroundedness, CitationRecord, CitationStrategy
 from rag_sidecar.contracts.ingest import DocType
+from rag_sidecar.contracts.language_monitor import TraceLanguages
 from rag_sidecar.contracts.omit import omit_default_schema, omit_none_schema
 from rag_sidecar.contracts.query import QueryFramework, QueryParamsOverride, QueryPlan, QueryTransformToggles
 from rag_sidecar.contracts.retrieval import (
@@ -375,6 +376,8 @@ class RagTrace(_Contract):
     finish_reason: FinishReason | None = _optional_field()
     answer_rules_parts: list[AnswerRulePartId] | None = _optional_field()
     notices: list[AnswerNotice] | None = _optional_field()
+    # Phase 7 LANG-10; absent on traces recorded before it.
+    languages: TraceLanguages | None = _optional_field()
 
     @model_validator(mode="after")
     def _phase52_rules(self) -> "RagTrace":
