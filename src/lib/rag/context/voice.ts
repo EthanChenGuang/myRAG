@@ -1,5 +1,8 @@
 import type { ChunkWithScore } from '../rerank/local-hybrid';
 import type { VoiceChunk } from '../voice/keyword-fallback';
+import type { PackingSummary } from '../types';
+import { IMAGE_EXTENSIONS } from './assemble';
+import { packByRank } from './pack';
 import { wrapDocuments, type WrapDoc } from './wrap';
 
 export interface VoiceResult extends ChunkWithScore {
@@ -38,9 +41,45 @@ export function enrichVoiceCandidates(chunks: VoiceChunk[]): ChunkWithScore[] {
     }));
 }
 
-export function assembleVoiceResults(input: { query: string; chunks: ChunkWithScore[]; matchCount: number }): VoiceResults {
+/** The voice results plus, only when a document budget was given, what packing did; callers keep packing off the wire payload. */
+export type VoiceAssembly = VoiceResults & { packing?: PackingSummary };
+
+/**
+ * D-83: the ranked voice chunks packed to the budget in their order, sized as the agent renders them; each position is its own
+ * unit, since voice chunks carry no parent and may share the placeholder id.
+ */
+function packVoiceChunks(chunks: ChunkWithScore[], budget: number): { chunks: ChunkWithScore[]; packing: PackingSummary } {
+  const units = chunks.map((chunk, index) => ({
+    chunk_id: String(index),
+    document_id: chunk.document_id,
+    document_filename: String(chunk.metadata?.filename ?? chunk.metadata?.name ?? ''),
+    content: chunk.content,
+    parent_id: null,
+  }));
+  const packed = packByRank(units, budget, (unit) => untaggedVoiceContext([unit]), { imageExtensions: IMAGE_EXTENSIONS, order: 'input' });
+  const kept = packed.selected.map((unit) => {
+    const chunk = chunks[Number(unit.chunk_id)]!;
+    const content = packed.contentOverrides.get(unit.chunk_id);
+    return content === undefined ? chunk : { ...chunk, content };
+  });
+  return {
+    chunks: kept,
+    packing: { documentBudget: packed.documentBudget, droppedDocuments: packed.droppedDocuments, keptParents: packed.keptParents },
+  };
+}
+
+export function assembleVoiceResults(input: {
+  query: string;
+  chunks: ChunkWithScore[];
+  matchCount: number;
+  /** D-83: absent or null leaves the results exactly as today. */
+  documentTokenBudget?: number | null;
+}): VoiceAssembly {
   const { query, matchCount } = input;
-  const results: VoiceResult[] = input.chunks.slice(0, matchCount).map((c) => ({
+  const top = input.chunks.slice(0, matchCount);
+  const budget = input.documentTokenBudget ?? null;
+  const packedVoice = budget === null ? null : packVoiceChunks(top, budget);
+  const results: VoiceResult[] = (packedVoice?.chunks ?? top).map((c) => ({
     ...c,
     similarity: c.rerankScore || c.similarity,
     image_url: c.metadata?.image_url || null,
@@ -68,7 +107,7 @@ export function assembleVoiceResults(input: { query: string; chunks: ChunkWithSc
     type: r.metadata?.type || 'image/jpeg',
   }));
 
-  return { results, source_images };
+  return packedVoice ? { results, source_images, packing: packedVoice.packing } : { results, source_images };
 }
 
 function voiceSource(result: VoiceResult): string | undefined {

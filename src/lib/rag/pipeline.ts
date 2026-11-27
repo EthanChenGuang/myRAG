@@ -17,8 +17,10 @@ import {
   filterCandidates,
   type AssembleInput,
   type AssembleOutput,
+  IMAGE_EXTENSIONS,
   type FilteredCandidates,
 } from './context/assemble';
+import { documentBudgetOf, packFiltered } from './context/pack';
 import { fetchAssemblyRows, type AssemblyRows } from './context/fetch-rows';
 import { recordAnswerConflict, versionConflictAttributes } from './context/version-conflicts';
 import { readAnswerConfig } from './generation/answer-config';
@@ -84,6 +86,7 @@ import type {
   Candidate,
   InjectionSummary,
   LogOutcome,
+  PackingSummary,
   Profile,
   ReferencedState,
   RetrievalOptions,
@@ -950,6 +953,8 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   let injectionStalled = false;
   let injectionMarks: InjectionMarks | null = null;
   const security = deps.securityConfig();
+  const documentBudget = documentBudgetOf(input.options?.documentTokenBudget);
+  let packing: PackingSummary | undefined;
 
   try {
     referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
@@ -1091,7 +1096,14 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
           const loaded: AssemblyRows = rows ?? (await loadRows(candidates, stageSignal, scopeKey(scope)));
           const applyRelevanceFilter = !postFilter.skipped;
           const state = filtered ?? filterCandidates(assemblyInput(loaded, applyRelevanceFilter));
-          return buildContext(state, assemblyInput(loaded, applyRelevanceFilter));
+          if (documentBudget === null) return buildContext(state, assemblyInput(loaded, applyRelevanceFilter));
+          // D-83, D-95: packed before buildContext, whose labeller then aliases only the kept blocks.
+          const packed = packFiltered(state, candidates, loaded.documents, documentBudget, {
+            isGPTModel: input.options?.isGPTModel ?? false,
+            imageExtensions: IMAGE_EXTENSIONS,
+          });
+          packing = packed.summary;
+          return buildContext(packed.state, { ...assemblyInput(loaded, applyRelevanceFilter), candidates: packed.candidates });
         },
         collector,
         {
@@ -1155,6 +1167,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
     refusalCandidate: assembly.refusalCandidate,
     blocks: assembly.blocks,
     ...(assembly.versionConflict ? { versionConflict: assembly.versionConflict } : {}),
+    ...(packing ? { packing } : {}),
   };
 }
 
@@ -1184,6 +1197,7 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
   let voiceInput = 0;
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
+  let packing: PackingSummary | undefined;
 
   try {
     const embedding = requireValue(
@@ -1262,12 +1276,18 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
     const assembled = await runStage(
       spec('assemble', 'skip'),
       signal,
-      () => assembleVoiceResults({ query, chunks: ranked, matchCount }),
+      () => assembleVoiceResults({ query, chunks: ranked, matchCount, documentTokenBudget: documentBudgetOf(input.options?.documentTokenBudget) }),
       collector,
       { candidatesIn: ranked.length, candidatesOut: (value) => value.results.length },
     );
     voiceInput = ranked.length;
-    voice = assembled.skipped ? { results: [], source_images: [] } : assembled.value;
+    if (assembled.skipped) {
+      voice = { results: [], source_images: [] };
+    } else {
+      const { packing: voicePacking, ...payload } = assembled.value;
+      voice = payload;
+      packing = voicePacking;
+    }
     if (security.contextTagging && !assembled.skipped) {
       const context = voiceContext(voice.results, flaggedForRender);
       if (context !== null) voice = { ...voice, context };
@@ -1300,5 +1320,5 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
       : status === 'empty'
         ? 'no_candidates'
         : injectionReason(records, injectionStalled);
-  return { ...failure(collector, status, reason, null), voice, ...(injection ? { injection } : {}) };
+  return { ...failure(collector, status, reason, null), voice, ...(injection ? { injection } : {}), ...(packing ? { packing } : {}) };
 }

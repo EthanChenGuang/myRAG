@@ -188,6 +188,17 @@ export interface RetrievalOptions {
   embeddingBindings?: Partial<Record<DocType, string>>;
   /** Eval profile only: adds a global-profile leg filtered to this doc type (the comparison's control arm, D-22). */
   domainControlLeg?: DocType;
+  /**
+   * D-83: the document token budget from the prompt-budget planner; absent keeps every assembly as it is. Set server-side only.
+   */
+  documentTokenBudget?: number;
+}
+
+/** D-86: what packing to documentTokenBudget did; present only when the option was given. */
+export interface PackingSummary {
+  documentBudget: number;
+  droppedDocuments: number;
+  keptParents: number;
 }
 
 export type QueryVariantKind = 'original' | 'condensed' | 'expanded' | 'hyde' | 'sub_question' | 'translated' | 'terminology';
@@ -388,6 +399,8 @@ export interface RetrievalResult {
   identifierFilter?: IdentifierFilterSummary;
   /** D-52: version conflicts among the context blocks; absent without one or while RAG_VERSION_LABELS is off. */
   versionConflict?: VersionConflict;
+  /** D-86: present only when RetrievalOptions.documentTokenBudget was given and an assembly ran. */
+  packing?: PackingSummary;
 }
 
 /** D-31: counts only, never an identifier. */
