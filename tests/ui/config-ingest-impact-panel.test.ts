@@ -1,6 +1,6 @@
 import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { blockFrom, FakeDocument } from './helpers/html-fake-dom';
+import { blockFrom, FakeDocument, functionSource } from './helpers/html-fake-dom';
 import {
   buttonByText,
   coverageAnswer,
@@ -323,6 +323,9 @@ function loadSaveConfig(globals: Json, config: Json, savedConfig: Json) {
   };
   context.window = context;
   vm.createContext(context);
+  for (const name of ['ragSettingCheckText', 'ragGateRequiredAnswer', 'ragGuardedSave', 'showRagSaveHeld', 'showRagGateRequiredToast']) {
+    new vm.Script(functionSource(indexHtml, name)).runInContext(context);
+  }
   const manager = vm.runInContext(`({ ${source}, showSaveIndicator() {} })`, context) as Json & { saveConfig: () => Promise<void> };
   manager.config = config;
   manager.savedConfig = savedConfig;

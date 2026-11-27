@@ -502,7 +502,9 @@ function pageContext(globals: Json, answers: Array<{ status: number; body?: unkn
   context.window = context;
   page.dispatchEvent = () => true;
   vm.createContext(context);
-  if (/function ragGuardedSave\(/.test(indexHtml)) new vm.Script(functionSource(indexHtml, 'ragGuardedSave')).runInContext(context);
+  for (const name of ['ragSettingCheckText', 'ragGateRequiredAnswer', 'ragGuardedSave', 'showRagSaveHeld', 'showRagGateRequiredToast']) {
+    if (new RegExp(`function ${name}\\(`).test(indexHtml)) new vm.Script(functionSource(indexHtml, name)).runInContext(context);
+  }
   return { context, calls, toasts, page };
 }
 
@@ -678,7 +680,7 @@ describe('saveRagPrompt() and the model save through the setting check', () => {
     const start = indexHtml.indexOf('const maxRetries = 3;');
     expect(start).toBeGreaterThan(-1);
     const loop = indexHtml.slice(start, indexHtml.indexOf('// Verify save by reading back the data', start));
-    expect(loop).toMatch(/saveSuccess === 'held'\)\s*\{?\s*break;?/);
+    expect(loop).toMatch(/if \(saveSuccess === 'held'\) \{[^}]*\bbreak;\s*\}/);
     expect(loop).toContain('ragSettingCheck.isOpen()');
     const after = indexHtml.slice(start, indexHtml.indexOf('} catch (error) {', indexHtml.indexOf('All save attempts failed', start)));
     expect(after).toMatch(/if \(saveSuccess === 'held'\)/);
