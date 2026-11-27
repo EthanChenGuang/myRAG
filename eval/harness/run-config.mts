@@ -71,6 +71,25 @@ const PHASE6_SWITCH_VALUES: Readonly<Record<string, readonly string[] | null>> =
 };
 
 /**
+ * The twelve Phase 6.2 query-addition switches (D-28). RAG_QUERY_VOICE_TRANSFORMS, which the voice arms set (D-16), is already a
+ * Phase 6 name. The two routing model ids are validated by the app.
+ */
+const PHASE62_SWITCH_VALUES: Readonly<Record<string, readonly string[] | null>> = {
+  RAG_QUERY_DECOMPOSE_COMPLETENESS: BOOLEAN_VALUES,
+  RAG_QUERY_SUBQ_FILTERS: BOOLEAN_VALUES,
+  RAG_DECOMPOSED_ANSWER: BOOLEAN_VALUES,
+  RAG_TRANSLATION_GLOSSARY: BOOLEAN_VALUES,
+  RAG_LANGID_SIDECAR: BOOLEAN_VALUES,
+  RAG_MODEL_ROUTING: ['off', 'auto'],
+  RAG_ROUTING_FAST_MODEL: null,
+  RAG_ROUTING_QUALITY_MODEL: null,
+  RAG_SPECULATIVE_RETRIEVAL: BOOLEAN_VALUES,
+  RAG_QUERY_HISTORY_FALLBACK: BOOLEAN_VALUES,
+  RAG_WHATSAPP_HISTORY: BOOLEAN_VALUES,
+  RAG_SCOPE_GATE: BOOLEAN_VALUES,
+};
+
+/**
  * The fourteen Phase 5.2 answer-rule switches (D-58). The enumerated ones must carry a value the app accepts; the cap is checked
  * separately (off, auto or a positive integer), the judge model and the two uploader numbers are validated by the app.
  */
@@ -113,7 +132,7 @@ export const RUN_CONFIG_CONSTRAINED_VALUES: Readonly<Record<string, readonly str
 
 /**
  * RAG_PIPELINE, the Phase 4 D-23 switch names, the Phase 4.1 refusal floor, the eight Phase 4.2 tuning switches, the value-constrained vendor settings, the five
- * Phase 5.1 SEC switches and the 16 Phase 6 query-layer and semantic-cache names. Every other variable stays out of reach.
+ * Phase 5.1 SEC switches, the 16 Phase 6 query-layer and semantic-cache names and the 12 Phase 6.2 query-addition names. Every other variable stays out of reach.
  */
 export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   'RAG_PIPELINE',
@@ -145,6 +164,7 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   ...Object.keys(RUN_CONFIG_CONSTRAINED_VALUES),
   ...Object.keys(SEC_SWITCH_VALUES),
   ...Object.keys(PHASE6_SWITCH_VALUES),
+  ...Object.keys(PHASE62_SWITCH_VALUES),
   ...Object.keys(PHASE33_SWITCH_VALUES),
   ...Object.keys(PHASE52_SWITCH_VALUES),
   ...Object.keys(PHASE5_SWITCH_VALUES),
@@ -203,6 +223,7 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
   for (const [name, allowed] of Object.entries({
     ...SEC_SWITCH_VALUES,
     ...PHASE6_SWITCH_VALUES,
+    ...PHASE62_SWITCH_VALUES,
     ...PHASE33_SWITCH_VALUES,
     ...PHASE52_SWITCH_VALUES,
     ...PHASE5_SWITCH_VALUES,
