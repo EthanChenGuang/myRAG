@@ -79,9 +79,10 @@ describe('fixedText (D-08)', () => {
   });
 
   it('serves every key in every shipped language', () => {
-    const keys = Object.entries(raw().packs[0].texts).flatMap(([group, texts]) =>
-      Object.keys(texts as Record<string, string>).map((name) => `${group}.${name}`),
-    );
+    // The optional query_layer group (Phase 6.2) is read outside fixedText and is not a fixed-text key.
+    const keys = Object.entries(raw().packs[0].texts)
+      .filter(([group]) => group !== 'query_layer')
+      .flatMap(([group, texts]) => Object.keys(texts as Record<string, string>).map((name) => `${group}.${name}`));
     expect(keys).toHaveLength(42);
     const params = { value: 'V', version: 'N', date: 'D', sentinel: 'S', not_covered: 'C', general_knowledge: 'G', from_documents: 'FD', from_web: 'FW', open: 'O', close: 'C' };
     for (const pack of getLanguageRegistry().packs) {
@@ -95,7 +96,7 @@ describe('fixedText (D-08)', () => {
   });
 
   it('every key has the same placeholders in every language', () => {
-    const placeholders = (text: string) => [...text.matchAll(/\{([A-Za-z_]+)\}/g)].map((m) => m[1]).sort();
+    const placeholders = (text: string | null) => [...(text ?? '').matchAll(/\{([A-Za-z_]+)\}/g)].map((m) => m[1]).sort();
     const [first, ...rest] = raw().packs;
     for (const [group, texts] of Object.entries(first.texts as Record<string, Record<string, string>>)) {
       for (const [name, text] of Object.entries(texts)) {

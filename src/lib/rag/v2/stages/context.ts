@@ -33,6 +33,7 @@ import type { SecurityConfig } from '../../security/config';
 import { injectionItems, releasedRulesFromRows, uploadersFromRows, type InjectionMarks } from '../../security/injection-check';
 import type { TraceCollector } from '../../trace/collector';
 import { topkRedundancy } from '../diversify';
+import { subQuestionsOf } from '../subq-coverage';
 import type {
   AlsoIn,
   Candidate,
@@ -41,6 +42,7 @@ import type {
   KeptBy,
   PackingSummary,
   Profile,
+  QueryVariant,
   ReferencedState,
   RunRetrievalInput,
   StageOverrides,
@@ -78,6 +80,8 @@ export interface ContextStagesInput {
   tableRows?: ReadonlyMap<string, TableRowAttachment>;
   /** D-31, D-51: balanced and flexible only, a missing identifier: the localized suggestion line appended after the passages. */
   identifierSuggestionLine?: string;
+  /** 06.2 D-11: the variant list the search stage received (list ids `dense:i` / `lexical:i` index into it). */
+  variants?: readonly QueryVariant[];
 }
 
 /** D-13: the assemble stage detail when the version lookup failed and the labels were skipped. */
@@ -699,12 +703,15 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
   // Labelling is the last context step: it renders the final selection once more, in the same order, with the labels.
   const labeler = input.citationLabeler;
   const line = ctx.identifierSuggestionLine ?? '';
+  const provenance = (assembly: AssembleOutput<Candidate>) => withSubQuestionIndexes(assembly, topHits, ctx.variants);
   if (!labeler) {
-    return { assembly: withSuggestionLine(withAlsoIn(withVersionFields(final.output, versionInfo)), line), candidates, ...injectionOut, ...packingOut };
+    return { assembly: provenance(withSuggestionLine(withAlsoIn(withVersionFields(final.output, versionInfo)), line)), candidates, ...injectionOut, ...packingOut };
   }
   const labelled = render(final.selected, base.groupOrder, { runs: base.blockRuns, chunkIds: base.blockChunkIds, labeler });
   return {
-    assembly: withSuggestionLine(withAlsoIn(withVersionFields({ ...final.output, context: labelled.context, blocks: labelled.blocks }, versionInfo)), line),
+    assembly: provenance(
+      withSuggestionLine(withAlsoIn(withVersionFields({ ...final.output, context: labelled.context, blocks: labelled.blocks }, versionInfo)), line),
+    ),
     candidates,
     ...injectionOut,
     ...packingOut,
@@ -720,6 +727,30 @@ function packingSummary(
   const all = new Set(units.map(packUnitKey));
   const kept = new Set(selected.map(packUnitKey).filter((key) => all.has(key)));
   return { documentBudget, droppedDocuments: all.size - kept.size, keptParents: kept.size };
+}
+
+/**
+ * 06.2 D-11: each block's sub-questions through fusion provenance (chunk → list ids → searched variant → subQuestionIndex).
+ * Without a sub-question variant the assembly is returned as is; with one every block gets a (possibly empty) sorted list.
+ */
+function withSubQuestionIndexes(
+  assembly: AssembleOutput<Candidate>,
+  hits: readonly FusedHit[],
+  variants: readonly QueryVariant[] | undefined,
+): AssembleOutput<Candidate> {
+  if (!variants || !variants.some((variant) => variant.subQuestionIndex !== undefined)) return assembly;
+  const rowById = new Map(hits.map((row) => [row.hit.chunkId, row]));
+  return {
+    ...assembly,
+    blocks: assembly.blocks.map((block) => {
+      const found = new Set<number>();
+      for (const chunkId of block.chunkIds) {
+        const row = rowById.get(chunkId);
+        if (row) for (const index of subQuestionsOf(row, variants)) found.add(index);
+      }
+      return { ...block, subQuestionIndexes: [...found].sort((a, b) => a - b) };
+    }),
+  };
 }
 
 /** D-31, D-51: the suggestion line goes after the passages, outside any document block; an empty line changes nothing. */

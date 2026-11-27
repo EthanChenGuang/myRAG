@@ -6574,6 +6574,15 @@
           "not_confirmed": "文档未证实",
           "prompt_too_long": "这个问题太长，无法回答。请缩短后重新发送。",
           "uncited": "未注明来源"
+        },
+        "query_layer": {
+          "decomposed_answer_block_label": "回答结构",
+          "decomposed_answer_cite_own": "每个部分后面的方括号列出了属于该部分的块。每一段只引用为该部分列出的块。",
+          "decomposed_answer_compare_order": "在每个被比较的时期或对象各自成段之后，先加一段说明它们之间的差异，再加一段说明这些差异对问题中提到的范围的影响。",
+          "decomposed_answer_intro": "这个问题包含几个部分，列在下面。",
+          "decomposed_answer_parts": "按列出的顺序分别回答每个部分，每个部分单独成段，并在段首写出该部分的编号。如果某个部分后面带有引号中的短语，说明上下文中没有支持该部分的内容：在该部分只写出这个短语。",
+          "scope_gate_notice": null,
+          "scope_gate_prompt_rule": null
         }
       },
       "version_markers": [
@@ -6752,6 +6761,15 @@
               "not_confirmed": "文档未证实",
               "prompt_too_long": "这个问题太长，无法回答。请缩短后重新发送。",
               "uncited": "未注明来源"
+            },
+            "query_layer": {
+              "decomposed_answer_block_label": "回答结构",
+              "decomposed_answer_cite_own": "每个部分后面的方括号列出了属于该部分的块。每一段只引用为该部分列出的块。",
+              "decomposed_answer_compare_order": "在每个被比较的时期或对象各自成段之后，先加一段说明它们之间的差异，再加一段说明这些差异对问题中提到的范围的影响。",
+              "decomposed_answer_intro": "这个问题包含几个部分，列在下面。",
+              "decomposed_answer_parts": "按列出的顺序分别回答每个部分，每个部分单独成段，并在段首写出该部分的编号。如果某个部分后面带有引号中的短语，说明上下文中没有支持该部分的内容：在该部分只写出这个短语。",
+              "scope_gate_notice": null,
+              "scope_gate_prompt_rule": null
             }
           },
           "version_markers": [
@@ -7004,6 +7022,15 @@
               "not_confirmed": "Not confirmed by the documents",
               "prompt_too_long": "This question is too long to answer. Shorten it and send it again.",
               "uncited": "No source cited"
+            },
+            "query_layer": {
+              "decomposed_answer_block_label": "Answer structure",
+              "decomposed_answer_cite_own": "The brackets after each part list the blocks that belong to it. In each section, cite only the blocks listed for that part.",
+              "decomposed_answer_compare_order": "After the sections for each compared period or item, add one section on the differences between them, then one on what those differences mean for the scope named in the question.",
+              "decomposed_answer_intro": "The question has several parts, listed below.",
+              "decomposed_answer_parts": "Answer each part in its own section, in the order listed, and start each section with the number of its part. A part followed by a quoted phrase has no supporting context: in its section, write only that phrase.",
+              "scope_gate_notice": null,
+              "scope_gate_prompt_rule": null
             }
           },
           "version_markers": [
@@ -7271,6 +7298,15 @@
               "not_confirmed": "Non confermato dai documenti",
               "prompt_too_long": "Questa domanda è troppo lunga per ricevere risposta. Accorciala e inviala di nuovo.",
               "uncited": "Nessuna fonte citata"
+            },
+            "query_layer": {
+              "decomposed_answer_block_label": "Struttura della risposta",
+              "decomposed_answer_cite_own": "Le parentesi quadre dopo ogni parte elencano i blocchi che le appartengono. In ogni sezione cita solo i blocchi elencati per quella parte.",
+              "decomposed_answer_compare_order": "Dopo le sezioni per ciascun periodo o elemento confrontato, aggiungi una sezione sulle differenze tra loro e poi una su cosa significano queste differenze per l'ambito indicato nella domanda.",
+              "decomposed_answer_intro": "La domanda ha più parti, elencate qui sotto.",
+              "decomposed_answer_parts": "Rispondi a ogni parte in una sezione separata, nell'ordine indicato, e inizia ogni sezione con il numero della sua parte. Se una parte è seguita da una frase tra virgolette, il contesto non la copre: nella sua sezione scrivi solo quella frase.",
+              "scope_gate_notice": null,
+              "scope_gate_prompt_rule": null
             }
           },
           "version_markers": [
@@ -20568,6 +20604,15 @@
                 "not_confirmed": "文档未证实",
                 "prompt_too_long": "这个问题太长，无法回答。请缩短后重新发送。",
                 "uncited": "未注明来源"
+              },
+              "query_layer": {
+                "decomposed_answer_block_label": "回答结构",
+                "decomposed_answer_cite_own": "每个部分后面的方括号列出了属于该部分的块。每一段只引用为该部分列出的块。",
+                "decomposed_answer_compare_order": "在每个被比较的时期或对象各自成段之后，先加一段说明它们之间的差异，再加一段说明这些差异对问题中提到的范围的影响。",
+                "decomposed_answer_intro": "这个问题包含几个部分，列在下面。",
+                "decomposed_answer_parts": "按列出的顺序分别回答每个部分，每个部分单独成段，并在段首写出该部分的编号。如果某个部分后面带有引号中的短语，说明上下文中没有支持该部分的内容：在该部分只写出这个短语。",
+                "scope_gate_notice": null,
+                "scope_gate_prompt_rule": null
               }
             },
             "version_markers": [
@@ -20820,6 +20865,15 @@
                 "not_confirmed": "Not confirmed by the documents",
                 "prompt_too_long": "This question is too long to answer. Shorten it and send it again.",
                 "uncited": "No source cited"
+              },
+              "query_layer": {
+                "decomposed_answer_block_label": "Answer structure",
+                "decomposed_answer_cite_own": "The brackets after each part list the blocks that belong to it. In each section, cite only the blocks listed for that part.",
+                "decomposed_answer_compare_order": "After the sections for each compared period or item, add one section on the differences between them, then one on what those differences mean for the scope named in the question.",
+                "decomposed_answer_intro": "The question has several parts, listed below.",
+                "decomposed_answer_parts": "Answer each part in its own section, in the order listed, and start each section with the number of its part. A part followed by a quoted phrase has no supporting context: in its section, write only that phrase.",
+                "scope_gate_notice": null,
+                "scope_gate_prompt_rule": null
               }
             },
             "version_markers": [
@@ -21087,6 +21141,15 @@
                 "not_confirmed": "Non confermato dai documenti",
                 "prompt_too_long": "Questa domanda è troppo lunga per ricevere risposta. Accorciala e inviala di nuovo.",
                 "uncited": "Nessuna fonte citata"
+              },
+              "query_layer": {
+                "decomposed_answer_block_label": "Struttura della risposta",
+                "decomposed_answer_cite_own": "Le parentesi quadre dopo ogni parte elencano i blocchi che le appartengono. In ogni sezione cita solo i blocchi elencati per quella parte.",
+                "decomposed_answer_compare_order": "Dopo le sezioni per ciascun periodo o elemento confrontato, aggiungi una sezione sulle differenze tra loro e poi una su cosa significano queste differenze per l'ambito indicato nella domanda.",
+                "decomposed_answer_intro": "La domanda ha più parti, elencate qui sotto.",
+                "decomposed_answer_parts": "Rispondi a ogni parte in una sezione separata, nell'ordine indicato, e inizia ogni sezione con il numero della sua parte. Se una parte è seguita da una frase tra virgolette, il contesto non la copre: nella sua sezione scrivi solo quella frase.",
+                "scope_gate_notice": null,
+                "scope_gate_prompt_rule": null
               }
             },
             "version_markers": [
