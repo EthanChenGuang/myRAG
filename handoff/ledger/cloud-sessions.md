@@ -726,3 +726,9 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 22:22Z 06.3-14 STOPPED correctly and was archived: it needs 07-37's source-recheck pieces. Dependency order is 06.3-07 (train 40) + 06.3-15 -> 07-37 -> 06.3-14. Run 46073301932 on PR #135 finished red again; the t38 builder was asked to fix everything in one push.
 - 22:24Z quick-state-sync DONE (3b29fd7c; ROADMAP and STATE synced; 704 on main, 42 train-only, 10 exec-only, 77 not done) and archived -> train 40. Launched quick-deps-switches to wire every 06.2 switch in deps.ts and fix the 12 check-config violations; 06.2-32's files_modified does not list deps.ts.
 - 22:26Z Self-check. The t38 builder has fixed ts-db 2/10 and 5/10 locally (61fce5fe) and is running the full local rag-db before pushing. Executors 05.2.1-20, 06.2-25 and 06.2-36 are idle while their suites run. 9 phase verifiers, 06.3-04, 06.3-15, 06.2-22, 06.2-23, t40 and quick-deps-switches are running.
+- 22:28Z User asked to clean up and launch more. All completed sessions were already archived.
+  Launched:
+  - Human-checkpoint plans, run up to the checkpoint. Each writes <P>-CHECKPOINT.md with exact owner steps and does NOT write a SUMMARY until the human results are in: 04.4-15, 06-46, 03.3-26.
+  - Phase verifiers: 4.4, 3.3, 3.1.1, 5.2.
+  Respected HOLD: 04.3-53/54, 05.2-39/40, 05.3-49/50, 06.2-13/19/33.
+  Waiting on predecessors: 05.2.1-25, 06.3-24/25, 07-32/33/50.
