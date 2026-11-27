@@ -9,10 +9,10 @@ export const ROUTE_MIN_COSINE = 0.999;
 
 /** Fixed probe texts; changing them changes the reference file a comparison needs. */
 export const ROUTE_PROBE_TEXTS: readonly string[] = [
-  'What is the notice period for terminating the service agreement?',
-  'Invoice INV-2024-0317 lists a net amount of 1,250.00 and a tax rate of 19 percent.',
-  'The pump must be inspected every 500 operating hours or once a year, whichever comes first.',
-  'Employees may carry over at most five unused vacation days into the next calendar year.',
+  'Which shape is placed to the left of the red circle?',
+  'Record 4711 was written at step 12 with a measured value of 0.35 and a weight of 19.',
+  'The second section repeats the definition from the first section in shorter words.',
+  'Each item in the list has a short title, a numeric code and one line of plain text.',
 ];
 
 export interface RouteReferenceEntry {
