@@ -789,3 +789,12 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - G2 (systemPromptHash) was unowned; added to quick-62-hash-bench.
   - Train note: plan-62-fixes must merge before the 06.2-26/41/42 executions reach a train.
 - 22:46Z plan-62-fixes follow-ups A (32 now confirm-only) and B (06-46 cmd fixes) pushed; DONE. Route exec/plan-62-fixes to train 41 (it must come before 06.2-41/42/26). Archived.
+- 22:48Z SELF-CHECK:
+  - 24 sessions running. No 429s, no permission blocks.
+  - Idle sessions waiting on background suites: auto-model, 5.3 verify, 3.2 verify, 06.2-25, train-39. Do not archive.
+  - PR #135 still red on b5caad8d (pr-smoke, ts-db 2/5); the train-38 fix is not pushed yet.
+  - PR #136 CI running.
+  - Early security flags from the in-flight verifiers, to route when their final reports arrive:
+    - 5.3 T-05.3-391: the release-gate status can be spoofed by any GITHUB_TOKEN workflow, and the dispatch path runs an arbitrary sha with secrets.
+    - 3.2 UF-1: authenticated users can INSERT documents/chunks directly via PostgREST (status defaults to ready), bypassing approval and the scans. This is on main.
+    - 3.2 UF-3: hybrid_search_translations has no access predicate.
