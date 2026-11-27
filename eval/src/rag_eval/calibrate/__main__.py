@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -158,13 +159,42 @@ def _cache(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _run_dir(path: Path) -> Path:
+    return path if path.is_absolute() or path.exists() else resolve_cli_path(path)
+
+
 def _tokenizer(args: argparse.Namespace) -> int:
+    out = resolve_cli_path(args.out)
+    try:
+        result = tokenizer.run_tokenizer_calibration(
+            [_run_dir(path) for path in args.runs],
+            out,
+            quantile=args.quantile,
+            min_samples=args.min_samples,
+            write=not args.dry_run,
+        )
+    except (tokenizer.CalibrationError, OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    fitted = " ".join(f"{cell.family}={cell.factor:.4f}(n={cell.samples})" for cell in result.fitted) or "no family measured"
+    under = " ".join(f"{family}(n={count})" for family, count in sorted(result.under_sampled.items()))
+    skipped = " ".join(f"{reason}={count}" for reason, count in sorted(result.skipped.items()))
+    print(f"tokenizer calibration (q={args.quantile}, min {args.min_samples}): {fitted}")
+    if under:
+        print(f"below the sample minimum, not measured: {under}")
+    if skipped:
+        print(f"skipped traces: {skipped}")
+    if args.dry_run:
+        print("dry run, nothing written; fitted cells:")
+        print(json.dumps([cell.model_dump(mode="json") for cell in result.fitted], indent=2))
+    else:
+        print(f"wrote {out}")
     return EXIT_OK
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="rag_eval.calibrate", description="myRAG refusal, groundedness, duplicate-cluster and semantic-cache calibration"
+        prog="rag_eval.calibrate", description="myRAG refusal, groundedness, duplicate-cluster, semantic-cache and tokenizer calibration"
     )
     commands = parser.add_subparsers(dest="command", required=True)
     cmd = commands.add_parser("refusal", help="fit per-cell refusal thresholds on dev, check once on the frozen holdout")
@@ -243,11 +273,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     cmd.set_defaults(handler=_cache)
     cmd = commands.add_parser("tokenizer", help="fit per-family token estimate factors from recorded eval runs")
-    cmd.add_argument("--runs", required=True, nargs="+", type=Path)
-    cmd.add_argument("--out", type=Path)
-    cmd.add_argument("--quantile", type=float, default=0.95)
-    cmd.add_argument("--min-samples", type=int, default=20)
-    cmd.add_argument("--dry-run", action="store_true")
+    cmd.add_argument("--runs", required=True, nargs="+", type=Path, help="one or more eval run output directories (traces.jsonl)")
+    cmd.add_argument(
+        "--out", type=Path, default=tokenizer.CALIBRATION_PATH, help="calibration file (default eval/config/tokenizer-calibration.json)"
+    )
+    cmd.add_argument("--quantile", type=float, default=tokenizer.DEFAULT_QUANTILE, help="quantile of reported/estimated ratios")
+    cmd.add_argument(
+        "--min-samples", type=int, default=tokenizer.DEFAULT_MIN_SAMPLES, help="families with fewer samples are not measured"
+    )
+    cmd.add_argument("--dry-run", action="store_true", help="print the fitted cells without writing")
     cmd.set_defaults(handler=_tokenizer)
     args = parser.parse_args(argv)
     return args.handler(args)
