@@ -79,8 +79,51 @@ export async function guardChannelReply(input: ChannelReplyGuardInput): Promise<
 
   let text = result.text;
   if (mode === 'enforce' && result.summary.credential_warned > 0) {
-    text += renderNoticeAsText(emitNotice('credential_request_warning', { language }));
+    // The chat stream's guard (05.2-13) already appends the warning on the whatsapp channel; it is added once
+    const warning = emitNotice('credential_request_warning', { language });
+    if (!text.includes(warning.text)) text += renderNoticeAsText(warning);
   }
   if (hasFindings(result.summary)) await recordFindings(result.summary, input);
   return { text, linkPreviewOff: true };
+}
+
+export interface SummaryGuardInput {
+  text: string;
+  /** The user's own request of this turn. */
+  userMessage: unknown;
+  channel: 'approve';
+}
+
+/**
+ * D-35: the whole-text guard for model-written text outside the chat stream (the approve route's summary), with the chat mode.
+ * The policy is the allowlist, the site host and the user's request; this path issues no server URLs. Off returns the text.
+ * A finding is logged as one [RAG Security] line with counts and rule ids only.
+ */
+export function guardSummaryText(input: SummaryGuardInput): string {
+  const mode = readAnswerConfig().outputGuard;
+  if (mode === 'off' || typeof input.text !== 'string') return input.text;
+  const language = languageVariablesUnset() ? '' : getLanguageSettings().primary ?? '';
+  const { text, summary } = guardWholeText(input.text, {
+    mode,
+    links: createOutputLinkPolicy({
+      allowlistValue: process.env.RAG_OUTPUT_LINK_ALLOWLIST ?? env.RAG_OUTPUT_LINK_ALLOWLIST,
+      siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? env.NEXT_PUBLIC_SITE_URL,
+      userMessage: typeof input.userMessage === 'string' ? input.userMessage : '',
+    }),
+    placeholder: fixedText('notices.link_removed', language),
+    language,
+  });
+  if (hasFindings(summary)) {
+    console.warn('[RAG Security] Output guard findings', {
+      channel: input.channel,
+      mode: summary.mode,
+      linksChecked: summary.links_checked,
+      linksRemoved: summary.links_removed,
+      credentialBlocked: summary.credential_blocked,
+      credentialWarned: summary.credential_warned,
+      ruleIds: summary.rule_ids,
+      rulesVersion: summary.rules_version,
+    });
+  }
+  return text;
 }

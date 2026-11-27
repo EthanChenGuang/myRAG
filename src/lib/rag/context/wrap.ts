@@ -1,4 +1,5 @@
-import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
+import type { ExtractedURL } from '@/lib/url-extractor';
+import { formatGuardedLinks } from '../security/link-section';
 import type { ContextBlock } from '../types';
 
 /** Every tag name the wrappers emit; content may never open or close one of them. */
@@ -194,7 +195,7 @@ export function docsFromBlocks(blocks: readonly ContextBlock[], opts: DocsFromBl
     if (opts.flaggedChunkIds && block.chunkIds.some((chunkId) => opts.flaggedChunkIds!.has(chunkId))) doc.flagged = true;
     docs.push(doc);
   });
-  const links = typeof opts.links === 'string' ? opts.links : opts.links ? formatURLsForContext([...opts.links]) : '';
+  const links = typeof opts.links === 'string' ? opts.links : opts.links ? formatGuardedLinks([...opts.links]) : '';
   if (links.trim()) docs.push({ id: 'links', kind: 'links', text: links });
   return docs;
 }
