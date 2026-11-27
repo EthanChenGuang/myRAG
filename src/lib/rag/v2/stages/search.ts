@@ -64,6 +64,7 @@ import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 import type { SearchDelegate } from '../../query/port-types';
 import { effectiveVersionScope } from '../../query/filters';
 import type { AttributeSearchInput } from './query';
+import type { SpeculativeHandle, SpeculativeSearchOutcome } from '../../query/speculative';
 
 export interface SearchStagesInput {
   input: RunRetrievalInput;
@@ -99,6 +100,53 @@ export interface SearchStagesInput {
   access?: ScopeAccessFilter;
   /** Phase 6.2 D-08, P-10: the query layer's max_searches; set only while the layer runs, and then searchesCounted is reported. */
   maxSearches?: number;
+  /** Phase 6.2 D-21: the original's speculative search; adopted for the original variant only when the request is equal. */
+  speculative?: SpeculativeHandle;
+}
+
+/**
+ * Phase 6.2 D-21, P-29: speculation applies only where the original's request can be rebuilt before the search stage: pgvector,
+ * the current versions, no identifier filter and the default lexical scoring. Elsewhere no speculation starts.
+ */
+export function speculativeSearchApplies(config: RagConfig, input: RunRetrievalInput): boolean {
+  const profile = input.profile;
+  if (profile !== 'chat' && profile !== 'embed' && profile !== 'eval') return false;
+  if (!config.queryAdditions.effective.speculativeRetrieval || config.v2.identifierFilter) return false;
+  if (lexicalScoringArg(config).lexicalScoring) return false;
+  if (effectiveVersionScope(config, profile, input.retrievalFilters?.versionScope, input.channel).scope !== 'current') return false;
+  return resolveRetrievalBackend(profile, config, input.stageOverrides?.retrievalOverrides).choice === 'pgvector';
+}
+
+/** D-21: the original variant's search request exactly as runRound builds it for the first round, sent before the stage runs. */
+export async function runSpeculativeSearch(args: {
+  input: RunRetrievalInput;
+  scope: TenantScope;
+  config: RagConfig;
+  params: RetrievalParams;
+  access: ScopeAccessFilter;
+  lexical?: QueryLexicalOptions;
+  variant: QueryVariant;
+  embedding: QueryEmbedding;
+  filters: RetrievalFilters;
+  signal: AbortSignal;
+}): Promise<SpeculativeSearchOutcome> {
+  const { input, config } = args;
+  const profile = input.profile;
+  const resolved = resolveRetrievalBackend(profile, config, input.stageOverrides?.retrievalOverrides);
+  const chunkingOverride = evalChunkingOverride(profile, input.stageOverrides?.retrievalOverrides);
+  const request = variantSearchRequest({
+    scope: args.scope,
+    variant: args.variant,
+    embedding: args.embedding,
+    filters: args.filters,
+    pool: args.params.candidate_pool_size,
+    lexicalEnabled: config.v2.lexicalSearch && getV2StartupVerdict().icuAvailable,
+    signal: args.signal,
+    chunkingProfileOverride: chunkingOverride,
+    ...(args.lexical?.options ? { lexicalOptions: args.lexical.options } : {}),
+    access: args.access,
+  });
+  return { legs: await resolved.backend.search(request), request };
 }
 
 /** The request's query-side lexical options and what they were built from. */
@@ -771,23 +819,31 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       const translationPending = runTranslations(stageSignal, roundFilters);
       const softPending = runSoftLeg(stageSignal, roundFilters);
       softPending.catch(() => undefined);
-      const searchVariant = (variant: QueryVariant, index: number, variantFilters: RetrievalFilters) =>
-        backend.search(
-          variantSearchRequest({
-            scope,
-            variant,
-            embedding: ctx.variantEmbeddings?.[index] ?? embedding,
-            filters: variantFilters,
-            pool,
-            lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
-            signal: stageSignal,
-            chunkingProfileOverride: chunkingOverride,
-            ...versionScopeArg,
-            ...identifierArg,
-            ...lexicalOptionsArg,
-            access,
-          }),
-        );
+      // D-21, P-29: only the first round's unfiltered original may take the speculative legs, and only on an equal request.
+      const speculativeIndex =
+        ctx.speculative && roundFilters === filters && !identifiersNorm && !historyScope && !scoring && route.backend === resolved.backend && !externalChoice
+          ? variants.findIndex((variant) => variant.kind === 'original')
+          : -1;
+      const searchVariant = (variant: QueryVariant, index: number, variantFilters: RetrievalFilters) => {
+        const request = variantSearchRequest({
+          scope,
+          variant,
+          embedding: ctx.variantEmbeddings?.[index] ?? embedding,
+          filters: variantFilters,
+          pool,
+          lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
+          signal: stageSignal,
+          chunkingProfileOverride: chunkingOverride,
+          ...versionScopeArg,
+          ...identifierArg,
+          ...lexicalOptionsArg,
+          access,
+        });
+        if (ctx.speculative && index === speculativeIndex && variantFilters === roundFilters) {
+          return ctx.speculative.take(request).then((legs) => legs ?? backend.search(request));
+        }
+        return backend.search(request);
+      };
       // D-08: a filtered sub-question searches its narrowed filter; every other variant the round's shared filters, unchanged.
       const variantFilters = variants.map((variant) => applyVariantFilters(roundFilters, variant));
       const [term, ...legsByVariant] = (await Promise.all([

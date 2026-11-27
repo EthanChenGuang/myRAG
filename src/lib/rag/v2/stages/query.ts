@@ -15,6 +15,7 @@ import type { TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, QueryVariantKind, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
 import type { QueryLayerOutcome, SemanticCacheSeam } from '../../query/run-layer';
+import type { SpeculativeSeam } from '../../query/speculative';
 import type { QueryLanguage } from '../../refusal/gate';
 import type { TerminologyMatch } from '@/lib/rag-eval/contracts.generated';
 import { expandMatches, substituteCanonicals, terminologyParams } from '../../terminology/expand';
@@ -46,6 +47,8 @@ export interface QueryStagesInput {
   onAttributeFilter?: (stage: AttributeFilterHashStage) => void;
   /** D-14: told the glossary state while RAG_TRANSLATION_GLOSSARY is effective, before semantic_cache builds its key. */
   onGlossary?: (stage: GlossaryHashStage) => void;
+  /** Phase 6.2 D-21: lent to the query layer only while speculative retrieval can apply. */
+  speculative?: SpeculativeSeam;
 }
 
 export interface QueryStagesOutput {
@@ -368,6 +371,22 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
       ...(ctx.cache ? { cache: ctx.cache } : {}),
       afterTransforms: terminologyStage,
       ...(ctx.onGlossary ? { onGlossary: ctx.onGlossary } : {}),
+      // D-21: the filters the search stage will send before the attribute stage has run; adoption checks they did not change.
+      ...(ctx.speculative
+        ? {
+            speculative: {
+              ...ctx.speculative,
+              filtersFor: (range) => {
+                const built = buildRetrievalFilters({
+                  explicit: input.retrievalFilters,
+                  referencedDocumentIds: referencedDocumentIds(referenced),
+                  ...(config.effectiveDates ? { effectiveOn: effectiveOnFor(config, getRagDeps().now()) } : {}),
+                });
+                return range ? mergeLayerDateRange(built, range) : built;
+              },
+            },
+          }
+        : {}),
     });
   }
 
