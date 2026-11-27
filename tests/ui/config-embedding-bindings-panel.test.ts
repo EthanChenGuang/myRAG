@@ -328,3 +328,181 @@ describe('embedding bindings panel in the page', () => {
     expect(text(root.querySelector('[data-rag-bindings-status]'))).toContain('Binding created');
   });
 });
+
+describe('UI review fixes (03.1.1-UI-REVIEW, quick 261127-cuf)', () => {
+  const classes = (el: FakeElement | null) => (el?.className ?? '').split(/\s+/).filter(Boolean);
+
+  it('BLOCKER 1: below md every row stacks into labelled lines; no fixed min width on Scope below md', async () => {
+    const { root } = mountPanel(() => ({ ok: true, status: 200, body: listBody() }));
+    await flush();
+    const table = root.querySelector('[data-rag-bindings-list] table')!;
+    expect(classes(table.querySelector('thead'))).toEqual(expect.arrayContaining(['sr-only', 'md:not-sr-only']));
+    const rows = table.querySelectorAll('tbody tr').filter((tr) => tr.querySelector('th'));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const tr of rows) {
+      expect(classes(tr)).toEqual(expect.arrayContaining(['flex', 'flex-col', 'md:table-row']));
+      const cells = [...tr.children];
+      for (const cell of cells) expect(classes(cell)).toEqual(expect.arrayContaining(['block', 'md:table-cell']));
+      expect(classes(cells[0])).not.toContain('min-w-40');
+      const labels = tr.querySelectorAll('[data-rag-bindings-cell-label]').map((el) => el.textContent);
+      expect(labels).toEqual(['Profile', 'Status', 'Complete', 'Evidence']);
+      for (const label of tr.querySelectorAll('[data-rag-bindings-cell-label]')) expect(classes(label)).toContain('md:hidden');
+    }
+    expect(text(root.querySelector('[data-rag-bindings-list]'))).not.toMatch(/break-all/);
+    expect(root.querySelectorAll('[data-rag-bindings-list] .break-all')).toEqual([]);
+  });
+
+  it('WARNING 2: the form secondary button says Close form', async () => {
+    const { BINDINGS_COPY } = view();
+    expect(BINDINGS_COPY['form.cancel']).toBe('Close form');
+    const { root } = mountPanel(() => ({ ok: true, status: 200, body: listBody() }));
+    await flush();
+    root.querySelector('[data-rag-bindings-new]')!.click();
+    expect(root.querySelectorAll('#rag-bindings-form button').map((b) => b.textContent)).toContain('Close form');
+  });
+
+  it('WARNING 3: Create binding is disabled while the chosen type has no scoped profile', async () => {
+    const body = listBody({ doc_types: [TYPE_A, TYPE_B, 'doc_type_c'] });
+    const { root } = mountPanel(() => ({ ok: true, status: 200, body }));
+    await flush();
+    root.querySelector('[data-rag-bindings-new]')!.click();
+    const docSelect = root.querySelector('#rag-bindings-form-doctype')!;
+    docSelect.value = 'doc_type_c';
+    docSelect.dispatch('change');
+    const submit = root.querySelectorAll('#rag-bindings-form button').find((b) => b.textContent === 'Create binding')!;
+    expect(submit.getAttribute('disabled')).not.toBeNull();
+    docSelect.value = TYPE_B;
+    docSelect.dispatch('change');
+    const again = root.querySelectorAll('#rag-bindings-form button').find((b) => b.textContent === 'Create binding')!;
+    expect(again.getAttribute('disabled')).toBeNull();
+  });
+
+  it('WARNING 4: a stale row without a baseline never reads "recorded against None"', async () => {
+    const body = listBody({ bindings: [binding(ACTIVE, { status: 'active', stale: true, has_evidence: true, baseline_global_profile: null })] });
+    const { root } = mountPanel(() => ({ ok: true, status: 200, body }));
+    await flush();
+    const list = text(root.querySelector('[data-rag-bindings-list]'));
+    expect(list).not.toContain('recorded against None');
+    expect(list).toContain('Its evidence has no recorded baseline');
+  });
+
+  it('WARNING 5: form.profile.none matches the UI-SPEC copy table', () => {
+    const { BINDINGS_COPY } = view();
+    const spec = fs.readFileSync(path.resolve(import.meta.dirname, '../../.planning/phases/03.1.1-domain-embedding-model-candidates-and-per-doc-type-model-sel/03.1.1-UI-SPEC.md'), 'utf8');
+    for (const key of ['form.profile.none', 'form.cancel', 'hint.staleNoBaseline', 'error.unconfirmedRegistry']) {
+      const row = spec.split('\n').find((line) => line.startsWith('| `' + key + '` |'));
+      expect(row, key).toBeTruthy();
+      expect(row!.split(' | ')[1]).toBe(BINDINGS_COPY[key]);
+    }
+  });
+
+  it('WARNING 6: a proxy error when the main app is down shows the error alert with Try again', async () => {
+    let down = true;
+    const { root, calls } = mountPanel(() =>
+      down
+        ? { ok: false, status: 500, body: { error: 'Unable to connect to main myRAG app at http://127.0.0.1:3000.' }, message: 'Unable to connect to main myRAG app at http://127.0.0.1:3000.' }
+        : { ok: true, status: 200, body: listBody() },
+    );
+    await flush();
+    const alert = root.querySelector('[data-rag-bindings-alert] .alert-error');
+    expect(text(alert)).toContain('Unable to connect to main myRAG app');
+    expect(text(root.querySelector('[data-rag-bindings-status]'))).toBe('');
+    down = false;
+    root.querySelectorAll('[data-rag-bindings-alert] button').find((b) => b.textContent === 'Try again')!.click();
+    await flush();
+    expect(calls).toHaveLength(2);
+    expect(root.querySelector('[data-rag-bindings-alert] .alert')).toBeNull();
+  });
+
+  it('WARNING 7: with no scoped profile and no binding the sentence shows once', async () => {
+    const body = listBody({ bindings: [], profiles: [{ id: 'global-a-2048', provider: 'p', model: 'model-a', dims: 2048, status: 'active', doc_types: null }] });
+    const { root } = mountPanel(() => ({ ok: true, status: 200, body }));
+    await flush();
+    expect(text(root).split('No embedding profile is scoped to a document type').length - 1).toBe(1);
+  });
+
+  it('WARNING 8: the switch-off note is a quiet bordered note, not a filled info alert', async () => {
+    const { root } = mountPanel(() => ({ ok: true, status: 200, body: listBody({ switch: 'off' }) }));
+    await flush();
+    const note = root.querySelector('[data-rag-bindings-off-note]')!;
+    expect(classes(note)).not.toContain('alert-info');
+    expect(classes(note)).toEqual(expect.arrayContaining(['border', 'border-info/40', 'bg-base-100']));
+    expect(text(note)).toContain('Bindings are stored but not used');
+  });
+
+  it('WARNINGS 9-11: gated Activate keeps an outline, Retire is outlined and does not wrap, the CLI hint is left aligned', async () => {
+    const { root } = mountPanel(() => ({ ok: true, status: 200, body: listBody() }));
+    await flush();
+    const activate = button(root, `activate:${STAGED}`);
+    expect(classes(activate)).toEqual(expect.arrayContaining(['btn-outline', 'disabled:border-base-content/40', 'disabled:text-base-content/70', 'disabled:bg-transparent']));
+    expect(classes(activate)).not.toContain('btn-primary');
+    const retire = button(root, `retire:${STAGED}`);
+    expect(classes(retire)).toEqual(expect.arrayContaining(['btn-outline', 'whitespace-nowrap']));
+    expect(classes(retire.parentElement)).toContain('md:flex-nowrap');
+    const hint = root.querySelector(`#${activate.getAttribute('aria-describedby')}`)!;
+    expect(classes(hint)).toContain('text-left');
+    expect(classes(hint)).not.toContain('text-right');
+    expect(classes(hint)).not.toContain('ml-auto');
+  });
+
+  it('WARNING 12: the missing-chunks warning icon aligns to the first line', async () => {
+    const { root } = mountPanel(() => ({ ok: true, status: 200, body: listBody() }));
+    await flush();
+    const icon = root.querySelectorAll('[data-rag-bindings-list] .bi-exclamation-triangle-fill').find((el) => text(el.parentElement).includes('chunks missing'))!;
+    expect(classes(icon.parentElement)).toContain('items-start');
+    expect(classes(icon.parentElement)).not.toContain('items-center');
+  });
+
+  it('WARNING 13: a 401 on create closes the form state, so a reload does not reopen a stale form', async () => {
+    let post401 = true;
+    const { root } = mountPanel((call) => (call.method === 'POST' && post401 ? { ok: false, status: 401, body: {} } : { ok: true, status: 200, body: listBody() }));
+    await flush();
+    root.querySelector('[data-rag-bindings-new]')!.click();
+    const docSelect = root.querySelector('#rag-bindings-form-doctype')!;
+    docSelect.value = TYPE_B;
+    docSelect.dispatch('change');
+    const profile = root.querySelector('#rag-bindings-form-profile')!;
+    profile.value = 'scoped-c-1024';
+    profile.dispatch('change');
+    root.querySelector('#rag-bindings-form form')!.dispatch('submit');
+    await flush();
+    expect(text(root.querySelector('[data-rag-bindings-alert]'))).toContain('sign in (401)');
+    post401 = false;
+    root.querySelectorAll('[data-rag-bindings-alert] button').find((b) => b.textContent === 'Reload panel')!.click();
+    await flush();
+    expect(root.querySelector('#rag-bindings-form')).toBeNull();
+    expect(root.querySelector('[data-rag-bindings-new]')!.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('WARNING 14: a 503 mutation followed by a 503 reload shows one message', async () => {
+    let registryUp = true;
+    const { root } = mountPanel((call) => {
+      if (call.method === 'POST') {
+        registryUp = false;
+        return { ok: false, status: 503, body: { success: false, error: 'embedding_registry_unavailable' } };
+      }
+      return registryUp ? { ok: true, status: 200, body: listBody() } : { ok: false, status: 503, body: { success: false } };
+    });
+    await flush();
+    button(root, `stage:${FREE}`).click();
+    await flush();
+    await flush();
+    const status = text(root.querySelector('[data-rag-bindings-status]'));
+    const alert = text(root.querySelector('[data-rag-bindings-alert]'));
+    expect(status).toBe('');
+    expect(alert).toContain('The server did not confirm the change');
+    expect(alert).toContain('The embedding registry can’t be reached');
+    expect(root.querySelectorAll('[data-rag-bindings-alert] .alert')).toHaveLength(1);
+  });
+
+  it('15: mono ids carry an explicit size and wrap with break-words; the state block spaces by gap, not stacked margins', async () => {
+    const { root } = mountPanel(() => ({ ok: true, status: 200, body: listBody({ switch: 'off' }) }));
+    await flush();
+    for (const el of root.querySelectorAll('[translate="no"]').filter((node) => classes(node).includes('font-mono'))) {
+      expect(classes(el).some((c) => /^text-(xs|sm)$/.test(c)), el.className).toBe(true);
+    }
+    const state = root.querySelector('[data-rag-bindings-state]')!;
+    expect(classes(state.children[0])).toEqual(expect.arrayContaining(['flex', 'flex-col', 'gap-2']));
+    expect(state.querySelectorAll('.mt-2')).toEqual([]);
+  });
+});
