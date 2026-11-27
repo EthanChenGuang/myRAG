@@ -226,3 +226,135 @@ def test_new_items_take_the_frozen_split(calc_items, overflow_items):
     manifest = load_manifest(MANIFEST_PATH)
     for item in [*calc_items, *overflow_items]:
         assert manifest.get(item.id) == item.split == assign_split(item.id), item.id
+
+
+# Fake scripts (Task 2, D-78): fake behaviour is data; the requests compute the items' expected values.
+
+
+def _number(text):
+    return Fraction(text)
+
+
+def _evaluate(request):
+    """A small exact reference for the operations the scripts use (D-67, D-68): Fraction and civil-day arithmetic."""
+    values = {}
+    for operand in request.operands:
+        if operand.values is not None:
+            values[operand.name] = [_number(value) for value in operand.values]
+        elif re.fullmatch(r"\d{4}-\d{2}-\d{2}", operand.value):
+            values[operand.name] = date.fromisoformat(operand.value)
+        else:
+            values[operand.name] = _number(operand.value)
+    for step in request.steps:
+        args = [values[name] for name in step.args]
+        if step.op == "add":
+            result = sum(args, Fraction(0))
+        elif step.op == "subtract":
+            result = args[0] - args[1]
+        elif step.op == "multiply":
+            result = Fraction(1)
+            for arg in args:
+                result *= arg
+        elif step.op == "min":
+            result = min(args)
+        elif step.op == "max":
+            result = max(args)
+        elif step.op == "sum":
+            result = sum(args[0], Fraction(0))
+        elif step.op == "cap_each":
+            result = [min(value, args[1]) for value in args[0]]
+        elif step.op == "percentage":
+            result = args[0] * args[1] / 100
+        elif step.op == "date_diff":
+            assert step.date_unit == "days"
+            result = Fraction((args[1] - args[0]).days + (1 if step.inclusive else 0))
+        else:
+            raise AssertionError(f"operation not used by the scripts: {step.op}")
+        values[step.id] = result
+    return values[request.result]
+
+
+def _canonical_numbers(text, language):
+    """Numbers written in the text, as Fractions; Italian writes a decimal comma (D-74 number_format)."""
+    found = set()
+    for raw in NUMBER_RE.findall(text):
+        canonical = raw.replace(",", ".") if language == "it" else raw.replace(",", "")
+        found.add(Fraction(canonical))
+    return found
+
+
+@pytest.fixture(scope="module")
+def scripts():
+    assert SCRIPTS_PATH.is_file(), SCRIPTS_PATH
+    return json.loads(SCRIPTS_PATH.read_text(encoding="utf-8"))
+
+
+def _block_text(documents, span):
+    doc = documents[span["document"]]
+    (chunk,) = [chunk for chunk in doc.chunks if chunk.section == span["section"]]
+    assert _fold(span["quote"]) in _fold(chunk.text), span["quote"]
+    return chunk.text
+
+
+def test_every_paraphrase_group_has_exactly_one_script_naming_its_items(scripts, calc_items):
+    assert scripts["schema_version"] == 1
+    by_group = collections.defaultdict(list)
+    for item in calc_items:
+        by_group[item.calc.paraphrase_group].append(item)
+    groups = {entry["paraphrase_group"]: entry for entry in scripts["groups"]}
+    assert len(groups) == len(scripts["groups"])
+    assert set(groups) == set(by_group)
+    for group, entry in groups.items():
+        members = by_group[group]
+        assert entry["items"] == [item.id for item in members], group
+        assert entry["questions"] == [item.question for item in members], group
+        assert {entry["language"]} == {item.language for item in members}, group
+        assert entry["expected_value"] == members[0].calc.expected_value and entry["unit"] == members[0].calc.unit, group
+        assert f"calc_shape:{entry['rule_shape']}" in members[0].tags, group
+
+
+def test_scripted_requests_are_valid_and_compute_the_expected_value(scripts, documents, calc_items):
+    gold = {item.id: item.gold_evidence for item in calc_items}
+    for entry in scripts["groups"]:
+        request = CalcRequest.model_validate(entry["request"])
+        assert _evaluate(request) == Fraction(entry["expected_value"]), entry["paraphrase_group"]
+        aliases = {operand.source.alias for operand in request.operands if operand.source.kind == "chunk"}
+        assert aliases and aliases <= set(entry["blocks"]), entry["paraphrase_group"]
+        for alias, span in entry["blocks"].items():
+            assert any(span == g.model_dump(exclude_none=True) for item_id in entry["items"] for g in gold[item_id])
+            block_numbers = _canonical_numbers(_block_text(documents, span), entry["language"])
+            for operand in request.operands:
+                if operand.source.kind == "chunk" and operand.source.alias == alias:
+                    assert Fraction(operand.value) in block_numbers, (entry["paraphrase_group"], operand.name)
+        for operand in request.operands:
+            if operand.source.kind != "question":
+                continue
+            for question in entry["questions"]:
+                written = operand.values if operand.values is not None else [operand.value]
+                for value in written:
+                    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+                        assert value in question, (entry["paraphrase_group"], value)
+                    else:
+                        assert Fraction(value) in _canonical_numbers(question, entry["language"]), (entry["paraphrase_group"], value)
+
+
+def test_rule_skipping_and_missing_operand_scripts_are_wrong_in_the_scripted_way(scripts, documents):
+    for entry in scripts["groups"]:
+        group = entry["paraphrase_group"]
+        request = CalcRequest.model_validate(entry["request"])
+        skip = entry["skip_rule"]
+        assert Fraction(skip["stated_value"]) != Fraction(entry["expected_value"]), group
+        assert skip["how"].strip(), group
+        missing = entry["missing_operand"]
+        (operand,) = [operand for operand in request.operands if operand.name == missing["operand"]]
+        assert operand.source.kind == "chunk", group
+        block_numbers = _canonical_numbers(_block_text(documents, entry["blocks"][operand.source.alias]), entry["language"])
+        assert Fraction(missing["cited_value"]) not in block_numbers, group
+        assert Fraction(missing["cited_value"]) != Fraction(operand.value), group
+        swapped = entry["request"] | {
+            "operands": [
+                (raw | {"value": missing["cited_value"]}) if raw["name"] == missing["operand"] else raw
+                for raw in entry["request"]["operands"]
+            ]
+        }
+        assert _evaluate(CalcRequest.model_validate(swapped)) != Fraction(entry["expected_value"]), group
