@@ -96,7 +96,7 @@ describe('fixedText (D-08)', () => {
   });
 
   it('every key has the same placeholders in every language', () => {
-    const placeholders = (text: string) => [...text.matchAll(/\{([A-Za-z_]+)\}/g)].map((m) => m[1]).sort();
+    const placeholders = (text: string | null) => [...(text ?? '').matchAll(/\{([A-Za-z_]+)\}/g)].map((m) => m[1]).sort();
     const [first, ...rest] = raw().packs;
     for (const [group, texts] of Object.entries(first.texts as Record<string, Record<string, string>>)) {
       for (const [name, text] of Object.entries(texts)) {
