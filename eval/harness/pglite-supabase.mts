@@ -45,6 +45,8 @@ export interface FixtureDatabase {
   seededChunkingProfiles?: string[];
   /** Ingest mode with table_split items: the isolated tenants of the long-table documents; the caller closes their databases. */
   tableSplitTenants?: import('./table-split.mts').TableSplitTenant[];
+  /** With q62 items: the isolated tenant of the Phase 6.2 documents (q62-fixtures.mts); the caller closes its database. */
+  q62Tenant?: import('./q62-fixtures.mts').Q62Tenant;
   /**
    * Ingest mode only: the golden id of every corpus document (the prechunked derivation from its path) to the id of the document the
    * build wrote from the same file, so item filters name the documents ingest mode actually wrote.
@@ -234,6 +236,8 @@ export async function prechunkedWriter(
   db: PGlite,
   deploymentMode: DeploymentMode,
   latestVersions?: ReadonlyMap<string, number>,
+  /** Multi-tenant only: the user that owns the rows (default the fixture user; the q62 tenant passes its own). */
+  ownerUserId: string = FIXTURE_USER_ID,
 ): Promise<(doc: CorpusDocument) => Promise<void>> {
   const multiTenant = deploymentMode === 'multi-tenant';
   // A setup from before Phase 3 (the frozen pre-Phase-3 files, migrations:false) has no doc_type columns; 0301 and 0304 add them as 'general' on upgrade.
@@ -279,7 +283,7 @@ export async function prechunkedWriter(
         }),
         'jsonb',
       ],
-      ...(multiTenant ? [['user_id', FIXTURE_USER_ID] satisfies InsertColumn] : []),
+      ...(multiTenant ? [['user_id', ownerUserId] satisfies InsertColumn] : []),
       ...(documentsDocType ? [['doc_type', doc.docType] satisfies InsertColumn] : []),
       ...lineageColumns,
       ...versionColumns,
@@ -529,6 +533,8 @@ export async function createFixtureDatabase(options: {
   ingestEnv?: Record<string, string>;
   /** D-27: dictionary rows written after the corpus load, in either fixture mode. */
   terminologySeed?: readonly TerminologySeedRow[];
+  /** Also load the Phase 6.2 documents into their isolated tenant (q62-fixtures.mts), in either fixture mode. */
+  q62?: boolean;
 }): Promise<FixtureDatabase> {
   const { deploymentMode, corpusDir } = options;
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
@@ -553,11 +559,13 @@ export async function createFixtureDatabase(options: {
       ...(options.tableSplit ? { tableSplit: true } : {}),
       ...(options.tableSplit && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
       ...(options.ingestEnv ? { ingestEnv: options.ingestEnv } : {}),
+      ...(options.q62 ? { q62: true } : {}),
     });
     if (options.terminologySeed?.length) {
       try {
         await seedTerminology(built.db, options.terminologySeed);
       } catch (error) {
+        await built.q62Tenant?.db.close().catch(() => undefined);
         await built.db.close().catch(() => undefined);
         throw error;
       }
@@ -587,5 +595,23 @@ export async function createFixtureDatabase(options: {
     throw error;
   }
 
-  return { db, fixtureUserId: FIXTURE_USER_ID, corpusSha256: corpus.corpusSha256, sqlSha256 };
+  if (!options.q62) return { db, fixtureUserId: FIXTURE_USER_ID, corpusSha256: corpus.corpusSha256, sqlSha256 };
+  try {
+    const { loadQ62PrechunkedTenant, q62CorpusParts } = await import('./q62-fixtures.mts');
+    const q62Tenant = await loadQ62PrechunkedTenant({
+      deploymentMode,
+      createDatabase: () => createEmptyFixtureDatabase(options),
+      prechunkedWriter,
+      latestLineageVersions,
+      supersedeFixtureLineages,
+      runFixtureRelex,
+      seedTerminology,
+    });
+    const hash = crypto.createHash('sha256').update(corpus.corpusSha256);
+    for (const part of q62CorpusParts()) hash.update(Buffer.from([0])).update(part);
+    return { db, fixtureUserId: FIXTURE_USER_ID, corpusSha256: hash.digest('hex'), sqlSha256, q62Tenant };
+  } catch (error) {
+    await db.close().catch(() => undefined);
+    throw error;
+  }
 }

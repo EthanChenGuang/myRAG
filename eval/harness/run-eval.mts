@@ -14,6 +14,7 @@ import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
 import { ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.mts';
 import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTableSplitTenant, type TableSplitTenant } from './table-split.mts';
+import { closeQ62Tenant, isQ62Item, Q62_USER_ID, withQ62Tenant, type Q62Tenant } from './q62-fixtures.mts';
 import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
@@ -123,6 +124,8 @@ export interface InProcessEval {
   fixtureDb: import('@electric-sql/pglite').PGlite;
   /** Set when the session was prepared for table_split items (ingest mode only). */
   tableSplitTenants?: TableSplitTenant[];
+  /** Set when the session was prepared for q62 items (either fixture mode). */
+  q62Tenant?: Q62Tenant;
   /** Ingest mode only: golden corpus document id to the id of the document the build wrote from the same file. */
   ingestDocumentIds?: ReadonlyMap<string, string>;
   fixtureUserId: string;
@@ -371,6 +374,8 @@ export async function prepareInProcessEval(options: {
   tableSplit?: boolean;
   /** Ingest mode: the doc type the table_split documents are loaded with (RunEvalOptions.tableSplitDocType). */
   tableSplitDocType?: string;
+  /** Also load the isolated q62 tenant of the Phase 6.2 documents (q62-fixtures.mts), in either fixture mode. */
+  q62?: boolean;
   /** Ingest mode: ingestion switches for the fixture build, also recorded in the retrieval env (RunEvalOptions.ingestBuildEnv). */
   ingestBuildEnv?: Record<string, string>;
   /** The run's requests set options.query_layer=true (D-38); with the env overlay it decides the fake query LLM install (D-39). */
@@ -398,6 +403,8 @@ export async function prepareInProcessEval(options: {
   if (tableSplit && (fixtureMode !== 'ingest' || ingestRouting)) {
     throw new Error('[Eval Harness] table_split items run only in the inline ingest fixture mode');
   }
+  const q62 = options.q62 === true;
+  if (q62 && ingestRouting) throw new Error('[Eval Harness] q62 items do not run under --routing');
   const existingSecret = process.env.RAG_EVAL_SECRET ?? '';
   const secret = existingSecret.length >= 32 ? existingSecret : crypto.randomBytes(24).toString('hex');
   const evalEnv = {
@@ -405,6 +412,7 @@ export async function prepareInProcessEval(options: {
     RAG_EVAL_ALLOWED_SCOPES: [
       `user:${FIXTURE_USER_ID}`,
       ...(tableSplit && deploymentMode === 'multi-tenant' ? [`user:${TABLE_SPLIT_USER_ID}`] : []),
+      ...(q62 && deploymentMode === 'multi-tenant' ? [`user:${Q62_USER_ID}`] : []),
       ...allowedScopes,
     ].join(','),
     ...(embeddingProfileId ? { RAG_EMBEDDING_PROFILES: 'on' } : {}),
@@ -425,10 +433,18 @@ export async function prepareInProcessEval(options: {
       ...(tableSplit && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
       ...(options.ingestBuildEnv ? { ingestEnv: options.ingestBuildEnv } : {}),
       ...(terminologySeed.length ? { terminologySeed } : {}),
+      ...(q62 ? { q62: true } : {}),
     }));
   if (tableSplit && !fixture.tableSplitTenants) {
     if (!ingestFixture) await fixture.db.close().catch(() => undefined);
     throw new Error('[Eval Harness] the ingest fixture was built without the table_split tenants');
+  }
+  if (q62 && !fixture.q62Tenant) {
+    if (!ingestFixture) {
+      await closeTableSplitTenants(fixture.tableSplitTenants);
+      await fixture.db.close().catch(() => undefined);
+    }
+    throw new Error('[Eval Harness] the fixture was built without the q62 tenant');
   }
   let edge: FakeEdge | undefined;
   try {
@@ -469,8 +485,19 @@ export async function prepareInProcessEval(options: {
     try {
       const { fixtureAdminClient } = await import('./ingest-fakes.mts');
       await seedFixtureFeatures(fixture, { deploymentMode, admin: fixtureAdminClient(startedEdge.url) });
+      // The q62 tenant gets the same rebuilds while the edge serves it (D-31 a: the switches act on both tenants alike).
+      const q62Tenant = fixture.q62Tenant;
+      if (q62Tenant) {
+        await withQ62Tenant(startedEdge, fixture.db, q62Tenant, () =>
+          seedFixtureFeatures(
+            { db: q62Tenant.db, fixtureUserId: Q62_USER_ID, sqlSha256: {} },
+            { deploymentMode, admin: fixtureAdminClient(startedEdge.url) },
+          ),
+        );
+      }
     } catch (error) {
       if (ownsEdge) await startedEdge.close().catch(() => undefined);
+      await closeQ62Tenant(fixture.q62Tenant);
       await fixture.db.close().catch(() => undefined);
       throw error;
     }
@@ -517,6 +544,7 @@ export async function prepareInProcessEval(options: {
     edge: startedEdge,
     fixtureDb: fixture.db,
     ...(fixture.tableSplitTenants ? { tableSplitTenants: fixture.tableSplitTenants } : {}),
+    ...(fixture.q62Tenant ? { q62Tenant: fixture.q62Tenant } : {}),
     ...(fixtureMode === 'ingest' ? { ingestDocumentIds: new Map(Object.entries(fixture.ingestDocumentIds ?? {})) } : {}),
     fixtureUserId: fixture.fixtureUserId,
     corpusSha256: fixture.corpusSha256,
@@ -529,6 +557,7 @@ export async function prepareInProcessEval(options: {
       if (ownsEdge) await startedEdge.close();
       if (ownsDb) {
         await closeTableSplitTenants(fixture.tableSplitTenants);
+        await closeQ62Tenant(fixture.q62Tenant);
         await fixture.db.close().catch(() => undefined);
       }
     },
@@ -704,7 +733,11 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const allItems = readGolden(goldenPath);
   // table_split items need the isolated tenants of the inline ingest fixture mode; every other run leaves them out.
   const tableSplitRunnable = !baseUrl && fixtureMode === 'ingest' && !ingestRouting;
-  const items = selectGolden(allItems, goldenFilter).filter((item) => tableSplitRunnable || !isTableSplitItem(item));
+  // q62 items need the isolated q62 tenant, which in-process runs load in either fixture mode (not --base-url, not --routing).
+  const q62Runnable = !baseUrl && !ingestRouting;
+  const items = selectGolden(allItems, goldenFilter).filter(
+    (item) => (tableSplitRunnable || !isTableSplitItem(item)) && (q62Runnable || isTableSplitItem(item) || !isQ62Item(item)),
+  );
   const routed = partitionIngestModeItems(items);
   if (items.length === 0) {
     throw new Error(`[Eval Harness] no golden items with review_status in [${goldenFilter.review_statuses.join(', ')}] in ${goldenPath}`);
@@ -764,6 +797,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           ...(ingestRouting ? { ingestRouting } : {}),
           ...(routed.tableSplit.length > 0 ? { tableSplit: true } : {}),
           ...(routed.tableSplit.length > 0 && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
+          ...(routed.q62.length > 0 ? { q62: true } : {}),
           ...(options.ingestBuildEnv ? { ingestBuildEnv: options.ingestBuildEnv } : {}),
           ...((runConfig && Object.keys(runConfig.env).length > 0) || envOverlay
             ? { envOverrides: { ...(runConfig?.env ?? {}), ...(envOverlay ?? {}) } }
@@ -857,14 +891,20 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     if (routed.tableSplit.length > 0 && !tableTenants) {
       throw new Error('[Eval Harness] table_split items need an ingest session prepared with the table_split tenants');
     }
-    // Ingest mode routes by category: the other items first, exactly as before, then each table_split item against its tenant.
-    for (const item of cachePairs ? [] : [...routed.main, ...routed.tableSplit]) {
+    const q62Tenant = routed.q62.length > 0 ? inProcess?.q62Tenant : undefined;
+    if (routed.q62.length > 0 && !q62Tenant) throw new Error('[Eval Harness] q62 items need a session prepared with the q62 tenant');
+    // Routing by category: the other items first, exactly as before, then each table_split item against its tenant, then the q62 items
+    // (scoped_compound, glossary, version_compare, tagged off_domain) against the q62 tenant.
+    for (const item of cachePairs ? [] : [...routed.main, ...routed.tableSplit, ...routed.q62]) {
+      const routedQ62 = !isTableSplitItem(item) && isQ62Item(item);
       // Ingest mode: filter ids name the documents the build wrote; the table_split tenants have no map, so their filters fail closed.
       const documentIds =
         fixtureMode === 'ingest'
           ? isTableSplitItem(item)
             ? NO_INGEST_DOCUMENT_IDS
-            : (inProcess?.ingestDocumentIds ?? NO_INGEST_DOCUMENT_IDS)
+            : routedQ62
+              ? (q62Tenant?.documentIds ?? NO_INGEST_DOCUMENT_IDS)
+              : (inProcess?.ingestDocumentIds ?? NO_INGEST_DOCUMENT_IDS)
           : undefined;
       const options = itemRequestOptions(requestOptions, item, documentIds);
       if (inProcess && deploymentMode === 'multi-tenant' && !options.user_id) {
@@ -873,6 +913,11 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       // In multi-tenant mode the table_split documents belong to their own fixture user: its tenant key is the request's scope.
       if (inProcess && deploymentMode === 'multi-tenant' && isTableSplitItem(item)) {
         options.user_id = TABLE_SPLIT_USER_ID;
+        options.organization_id = null;
+      }
+      // The q62 documents also belong to their own fixture user in multi-tenant mode.
+      if (inProcess && deploymentMode === 'multi-tenant' && routedQ62) {
+        options.user_id = Q62_USER_ID;
         options.organization_id = null;
       }
       const stubAnswer = stubInjectionAnswers && answersItemForInjectionMetrics(tier, item);
@@ -891,7 +936,9 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       const { status, body } =
         tableTenants && inProcess && isTableSplitItem(item)
           ? await withTableSplitTenant(inProcess.edge, inProcess.fixtureDb, tableTenants, item, () => send(payload))
-          : await send(payload);
+          : q62Tenant && inProcess && routedQ62
+            ? await withQ62Tenant(inProcess.edge, inProcess.fixtureDb, q62Tenant, () => send(payload))
+            : await send(payload);
       if (status !== 200) {
         const detail = body && typeof body === 'object' && 'error' in body ? String((body as { error: unknown }).error) : 'no error body';
         throw new Error(`[Eval Harness] item ${item.id}: route returned ${status} (${detail})`);
