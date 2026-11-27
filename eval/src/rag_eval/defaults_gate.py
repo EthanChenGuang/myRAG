@@ -21,6 +21,7 @@ from rag_sidecar.contracts.report import EvalReport, MetricValue, SliceMetrics
 
 from rag_eval.bounds import upper_bound
 from rag_eval.gate import evaluate_gate
+from rag_eval.paired import SUBQ_METRICS
 from rag_eval.paths import repo_relative, resolve_cli_path
 
 EXIT_PASS = 0
@@ -1008,8 +1009,10 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
     if problems:
         return _stale(problems)
     noise = NoiseConfig.model_validate_json(noise_path.read_text(encoding="utf-8"))
-    if dict(noise.metrics) != dict(criteria.gated_metrics):
-        return _stale([f"gated_metrics {dict(criteria.gated_metrics)} differ from the noise config's {dict(noise.metrics)}"])
+    # The Phase 6.2 D-10 sub-question metrics postdate these pre-registered criteria and are left out of the match.
+    noise_metrics = {metric: direction for metric, direction in noise.metrics.items() if metric not in SUBQ_METRICS}
+    if noise_metrics != dict(criteria.gated_metrics):
+        return _stale([f"gated_metrics {dict(criteria.gated_metrics)} differ from the noise config's {noise_metrics}"])
     baselines = {mode: Baseline.model_validate_json(path.read_text(encoding="utf-8")) for mode, path in baseline_paths.items()}
     budgets_path = resolve_cli_path(criteria.latency_budgets_path)
     budgets = LatencyBudgets.model_validate_json(budgets_path.read_text(encoding="utf-8"))

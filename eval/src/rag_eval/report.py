@@ -707,6 +707,12 @@ def _bound_cell(value: float | None) -> str:
 
 NDCG_LABEL = "nDCG@k"
 K_ZERO_LABEL = "k = 0"
+_SUBQ_COLUMNS = (
+    ("All-evidence@5", "all_evidence_recall_at_5"),
+    ("All-evidence@10", "all_evidence_recall_at_10"),
+    ("Sub-q coverage@5", "subq_coverage_at_5"),
+    ("Sub-q coverage@10", "subq_coverage_at_10"),
+)
 
 
 def _k_zero_cell(metric: MetricValue | None) -> str:
@@ -718,6 +724,9 @@ def _table(first_column: str, rows: dict[str, SliceMetrics]) -> list[str]:
     with_ndcg = any(metrics.ndcg_at_context_k is not None for metrics in rows.values())
     if with_ndcg:
         labels += [NDCG_LABEL, K_ZERO_LABEL]
+    with_subq = any(metrics.subq_coverage_at_10 is not None for metrics in rows.values())
+    if with_subq:
+        labels += [label for label, _ in _SUBQ_COLUMNS]
     header = "| " + " | ".join([first_column, *labels]) + " |"
     divider = "|" + "|".join(["---"] * (len(labels) + 1)) + "|"
     lines = [header, divider]
@@ -727,6 +736,8 @@ def _table(first_column: str, rows: dict[str, SliceMetrics]) -> list[str]:
         if with_ndcg:
             cells.append(_optional_cell(metrics.ndcg_at_context_k))
             cells.append(_k_zero_cell(metrics.k_zero))
+        if with_subq:
+            cells.extend(_optional_cell(getattr(metrics, field)) for _, field in _SUBQ_COLUMNS)
         lines.append("| " + " | ".join([name, *cells]) + " |")
     return lines
 
