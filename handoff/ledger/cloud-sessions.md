@@ -594,3 +594,8 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 15:19Z self-check. Running: 04.3-48, 04.3-51, 05.2.1-17, 06.2-14, 06.2-15, 03.3-25, quick-review-access-sets (0984), train-38 (22/22 merged, gates next). No new READY. Waiting on the owner desk for train 37 SQL.
 - 15:22Z 06.2-14 DONE (9899e46b) and archived; added to train 38. Decision on config-hash-query: register shared.subq-filters.v1 through SWITCH_GATED_PROMPT_IDS, gated on RAG_QUERY_SUBQ_FILTERS, so the default and off hashes stay unchanged (sent to the train-38 builder). 06.2-17 launched from exec/06.2-14.
 - 15:24Z 04.3-48 DONE (99f39d11) and archived. Its train-37 merge 4f9b141d is the reference conflict resolution; added to train 38 and sent to the builder.
+- 15:26Z quick-review-access-sets DONE (28c84c0e, migration 0984) and archived -> train 38.
+  Apply order: after 0950, apply 0984, then re-run 0410. Re-running 0944 or 0950 later means 0984 must be re-run.
+  FOLLOW-UP after train 38:
+  (a) wire accessSetsFor from the chat route into enqueueReviewItem (04.3-14 is now in train 38);
+  (b) rag_review_items_enqueue (0967) and _re_review (0974) still write NULL sets, so their masked query is visible to every expert of the tenant.
