@@ -302,7 +302,7 @@ describe('POST /api/rag/admin/golden/re-review (D-50)', () => {
     expect(logs.join('\n')).not.toContain('synthetic note');
   });
 
-  it('sends the golden item ids, so with access groups enforced the item carries its evidence document label set (0986)', async () => {
+  it('sends the golden item ids, so with access groups enforced the item carries its evidence document label set (0988)', async () => {
     const route = await loadReReview();
     guard.session = { id: ADMIN };
     const group = `g:${crypto.randomUUID()}`;

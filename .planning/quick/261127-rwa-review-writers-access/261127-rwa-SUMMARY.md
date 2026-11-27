@@ -4,12 +4,12 @@ slug: review-writers-access
 branch: exec/quick-review-writers-access
 base: origin/ci/merge-train-39
 status: complete
-migration: 0986
+migration: 0988
 requirements: [SEC-13]
 decisions: [D-25, A-06]
 ---
 
-# Quick 261127-rwa: the Phase 5.3 review writers carry access_sets (0986)
+# Quick 261127-rwa: the Phase 5.3 review writers carry access_sets (0988)
 
 ## Problem
 0984 fixed `rag_mine_failed_queries` and `rag_enqueue_review_item`, but `rag_review_items_enqueue` (0967) and
@@ -18,8 +18,9 @@ decisions: [D-25, A-06]
 representative, pilot, drift-fill, historical or re-review item, even one that came from a document outside their access groups.
 
 ## Change
-- Migration number: 0986 (next free after 0984; 0982–0985 and 1010 were taken on origin). It was reserved and pushed first (4aa52236b).
-- `supabase/migrations/0986_review_items_writers_access_sets.sql` (one common file for both modes, idempotent, not folded):
+- Migration number: 0988 (was 0986) (next free after 0984; 0982–0985 and 1010 were taken on origin). It was reserved and pushed first (4aa52236b).
+- Train 40 renumber (orchestrator decision): quick-doc-types-access also claimed 0986 and was pushed first (29f7d86a), so it keeps 0986; 0987 (quick-scope-access) and 0989 (NF-1 hotfix) are taken, and this migration became 0988_review_items_writers_access_sets.sql with its header, NOTICE tags, 0410 comment, test and golden-evidence comments updated. The commit list below keeps the old number as it was written.
+- `supabase/migrations/0988_review_items_writers_access_sets.sql` (one common file for both modes, idempotent, not folded):
   - `rag_review_items_enqueue(text, text, jsonb)`: for each row, the access sets are the caller's `access_sets` merged with
     the row's sources, through `rag_review_access_sets()` (0984). The sources are the row's `document_ids` and, for its
     `retrieval_log_id`, the log row's `access_sets` (only while `rag_access_enforced()`) plus the documents among the log's
@@ -54,14 +55,14 @@ every expert of the tenant. That is the same as 0984's rule for sourceless items
 items from non-admin experts.
 
 ## Apply order
-After 0967, 0974 and 0984 (and 0950 / 0944, which 0984 already follows), apply 0986, then re-run 0410.
-Re-running 0967 or 0974 later restores their old bodies: re-run 0986 after them.
+After 0967, 0974 and 0984 (and 0950 / 0944, which 0984 already follows), apply 0988, then re-run 0410.
+Re-running 0967 or 0974 later restores their old bodies: re-run 0988 after them.
 
 ## DROP section
 None. No signature changed, so nothing is dropped (CREATE OR REPLACE on the same argument lists).
 
 ## Operator actions (eval project first, never production first)
-1. On the **eval** Supabase project: apply `0986_review_items_writers_access_sets.sql`, then re-run `0410_security_definer_rpc_grants.sql`.
+1. On the **eval** Supabase project: apply `0988_review_items_writers_access_sets.sql`, then re-run `0410_security_definer_rpc_grants.sql`.
 2. Verify:
    - `SELECT has_function_privilege('authenticated', 'public.rag_review_items_enqueue(text,text,jsonb)'::regprocedure, 'EXECUTE')`
      returns false; do the same check for `rag_review_items_enqueue_re_review(text,jsonb)`.

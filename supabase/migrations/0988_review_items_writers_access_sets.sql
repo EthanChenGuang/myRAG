@@ -1,4 +1,4 @@
--- 0986: the Phase 5.3 review-queue writers carry access_sets (Phase 4.3 follow-up to 0984; SEC-13, D-25, A-06).
+-- 0988: the Phase 5.3 review-queue writers carry access_sets (Phase 4.3 follow-up to 0984; SEC-13, D-25, A-06).
 -- Gap closed: rag_review_items_enqueue (0967) and rag_review_items_enqueue_re_review (0974) wrote rag_review_items.access_sets as
 -- NULL, so 0934's restrictive policy rag_review_items_access_sets never hid such an item, and every expert of the tenant could read
 -- its masked query even when it came from a document outside the expert's access groups.
@@ -12,7 +12,7 @@
 -- which adds the documents' access_groups only while access is enforced. With access off and no access_sets key in a row the stored
 -- value is NULL, exactly as before.
 -- While access is enforced at apply time, items still without access_sets that have a retrieval log row get their sets from it.
--- Each writer is rebuilt only where its Phase 5.3 file already created it (no-op otherwise, so 0986 never owns a 5.3 function).
+-- Each writer is rebuilt only where its Phase 5.3 file already created it (no-op otherwise, so 0988 never owns a 5.3 function).
 -- One common file: nothing differs by deployment mode. Not folded into the setup files. Idempotent. No signature changes, so no DROP.
 -- Apply after 0967, 0974 and 0984; re-running 0967 or 0974 later restores the old bodies, so re-run this file after them.
 
@@ -21,7 +21,7 @@ BEGIN;
 DO $do$
 BEGIN
   IF pg_catalog.to_regclass('public.rag_review_items') IS NULL OR pg_catalog.to_regclass('public.rag_review_item_strata') IS NULL THEN
-    RAISE NOTICE '[0986] rag_review_items or rag_review_item_strata is missing; rag_review_items_enqueue skipped';
+    RAISE NOTICE '[0988] rag_review_items or rag_review_item_strata is missing; rag_review_items_enqueue skipped';
     RETURN;
   END IF;
 
@@ -148,7 +148,7 @@ $do$;
 DO $do_re_review$
 BEGIN
   IF pg_catalog.to_regprocedure('public.rag_review_items_enqueue_re_review(text, jsonb)') IS NULL THEN
-    RAISE NOTICE '[0986] rag_review_items_enqueue_re_review is missing (apply 0974 first); skipped';
+    RAISE NOTICE '[0988] rag_review_items_enqueue_re_review is missing (apply 0974 first); skipped';
     RETURN;
   END IF;
 

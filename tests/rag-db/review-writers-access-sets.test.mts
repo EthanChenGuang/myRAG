@@ -8,14 +8,14 @@ import type { PGlite } from '@electric-sql/pglite';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { assertNoClientCallableRagFunctions } from '../helpers/rag-client-grants.ts';
 
-// 0986: the Phase 5.3 review-queue writers rag_review_items_enqueue (0967) and rag_review_items_enqueue_re_review (0974) carry
+// 0988: the Phase 5.3 review-queue writers rag_review_items_enqueue (0967) and rag_review_items_enqueue_re_review (0974) carry
 // access_sets, so 0934's restrictive policy rag_review_items_access_sets hides an item from an expert outside the source document's
 // access group. With access off both write access_sets NULL, as before. Neutral synthetic data only.
 
 type Row = Record<string, unknown>;
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const MIGRATION = 'supabase/migrations/0986_review_items_writers_access_sets.sql';
+const MIGRATION = 'supabase/migrations/0988_review_items_writers_access_sets.sql';
 const GRANTS_MIGRATION = 'supabase/migrations/0410_security_definer_rpc_grants.sql';
 const ENQUEUE = 'rag_review_items_enqueue(text, text, jsonb)';
 const RE_REVIEW = 'rag_review_items_enqueue_re_review(text, jsonb)';
@@ -283,7 +283,7 @@ for (const mode of MODES) {
     });
 
     describe('backfill, catalog and grants', () => {
-      test('re-applying 0986 with access on backfills a NULL item from its retrieval log row', async () => {
+      test('re-applying 0988 with access on backfills a NULL item from its retrieval log row', async () => {
         const logId = await insertLog({ candidates: [candidate(restrictedDoc, restrictedChunk)] });
         const q = question();
         await db.query('INSERT INTO rag_review_items (tenant_key, retrieval_log_id, query_masked, query_fingerprint, reasons, mining_window) VALUES ($1, $2, $3, $4, $5, $6)', [
@@ -326,7 +326,7 @@ for (const mode of MODES) {
         await assertNoClientCallableRagFunctions(db);
       });
 
-      test('re-running 0986 is idempotent; re-running 0967 and 0974 then 0986 restores the access-aware writers', async () => {
+      test('re-running 0988 is idempotent; re-running 0967 and 0974 then 0988 restores the access-aware writers', async () => {
         const sql = fs.readFileSync(path.join(REPO_ROOT, MIGRATION), 'utf8');
         await db.exec(sql);
         await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0967_rag_review_item_strata.sql'), 'utf8'));

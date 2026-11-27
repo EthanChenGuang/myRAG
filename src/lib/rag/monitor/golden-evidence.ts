@@ -21,7 +21,7 @@ export const MAX_QUOTE_CHARS = 4000;
 export const MAX_DOCUMENT_NAME_CHARS = 500;
 export const MAX_REGISTER_ROWS = 20000;
 export const MAX_RE_REVIEW_ITEMS = 100;
-/** 0986 accepts at most 50 golden item ids per re-review row. */
+/** 0988 accepts at most 50 golden item ids per re-review row. */
 const MAX_ITEM_IDS_PER_ROW = 50;
 const MAX_MASKED_QUERY = 2000;
 const PAGE_SIZE = 1000;
@@ -235,7 +235,7 @@ export function weekStart(now: Date): string {
   return day.toISOString();
 }
 
-/** A golden question to re-review; itemId names its golden item so 0986 can read the item's evidence documents' access groups. */
+/** A golden question to re-review; itemId names its golden item so 0988 can read the item's evidence documents' access groups. */
 export type ReReviewQuestion = string | { question: string; itemId?: string | null };
 
 /**
