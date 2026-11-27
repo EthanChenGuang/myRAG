@@ -826,3 +826,14 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - Gaps 4/5 (validate-phase, ui-review) -> verify/03.1.1-audits.
   - Plan 15 Task 1 (real Voyage calls) and Task 3 (live comparison) are owner items.
   - Archived.
+- 22:57Z VERIFY 4.4: PASS_WITH_GAPS (verify/04.4). Security threats_open 3; all are live controls in 04.4-15.
+  - G1 (duplicate_flood gate (b) fail): orchestrator chose option B (report-only diagnostic; no spec change). Routed with G2 (stale gate rerun) and the docs fix -> quick-44-gate-diag.
+  - G3 LEX-05 (Phase 7 adapters) -> plan-07-lex05 (Fable).
+  - G4 purge inventory -> told 06.3-19's executor.
+  - G5 (real-PG timings) and G6 -> 04.4-15 (owner).
+  - Archived.
+- 22:57Z quick-review-items-hardening (261127-rih) DONE exec/quick-review-items-hardening, mig 0990.
+  - Covers G5 (fill-owner trigger), G6, G8, G9 and G3.
+  - Must train right after review-writers (0988). Apply order: 0984 -> 0986 -> 0988 -> 0990 -> 0410.
+  - Archived.
+- MIGRATION MAP: 0986 doc-types; 0987 scope-access; 0988 review-writers (renamed in t40); 0989 NF-1; 0990 review-items-hardening.
