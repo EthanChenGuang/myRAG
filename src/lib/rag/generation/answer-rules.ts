@@ -30,8 +30,8 @@ export interface AnswerRulesInput {
   webSearchOffered: boolean;
   /** D-32; set from the output-cap rules by plan 05.2-10. */
   capApplies: boolean;
-  /** D-70; set by Phase 5.2.1. */
-  calcOffered: boolean;
+  /** Phase 5.2.1 D-70, D-72: part 6, set only when the calculation is offered; tool or trailing-block mode. */
+  calculation?: { mode: 'tool' | 'trailing_block' } | null;
   contextTagging: boolean;
 }
 
