@@ -38,6 +38,15 @@ import {
   settleQueuedRow,
 } from "@/components/ui/ingest-document-rows"
 import { UploadQueueRow } from "@/components/ui/upload-queue-row"
+import {
+  ACCESS_UNTOUCHED,
+  accessFormValue,
+  accessPickerVisible,
+  isGroupNotAllowed,
+  type AccessPickerValue,
+} from "@/components/ui/access-group-picker"
+import { accessGroupText } from "@/components/ui/access-group-labels"
+import { useAccessGroupsStore } from "@/lib/stores/access-groups-store"
 import type { ReplaceCandidate } from "@/components/ui/replaces-picker"
 import {
   UPLOAD_REPLACES_OFF,
@@ -290,6 +299,8 @@ export function DocumentDashboard({
   const [fileScopes, setFileScopes] = React.useState<Record<string, string[]>>({})
   const [fileReplaces, setFileReplaces] = React.useState<Record<string, ReplaceCandidate>>({})
   const [tagError, setTagError] = React.useState<string | null>(null)
+  const [fileAccess, setFileAccess] = React.useState<Record<string, AccessPickerValue>>({})
+  const [accessErrors, setAccessErrors] = React.useState<Record<string, string>>({})
   const [defaultsReload, setDefaultsReload] = React.useState(0)
   const [isTabSwitching, setIsTabSwitching] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
@@ -343,7 +354,11 @@ export function DocumentDashboard({
   // Get current workspace context for multi-tenant document uploads
   const { currentOrganization, isPersonalMode } = useOrganizationStore(
     useShallow((s) => ({ currentOrganization: s.currentOrganization, isPersonalMode: s.isPersonalMode })),
-  );
+  )
+  const { accessMine, loadAccessGroups } = useAccessGroupsStore(
+    useShallow((s) => ({ accessMine: s.mine, loadAccessGroups: s.load })),
+  )
+  const accessPickerShown = accessPickerVisible(accessMine);
 
   // Track visibility of the dashboard so we can ignore bogus ResizeObserver events
   const [isVisible, setIsVisible] = React.useState(true)
@@ -513,6 +528,11 @@ export function DocumentDashboard({
       cancelled = true
     }
   }, [docTypeDefaultsKey, defaultsReload, currentOrganization?.id, isPersonalMode])
+
+  React.useEffect(() => {
+    if (!docTypeDefaultsKey) return
+    void loadAccessGroups(isMultiTenant() && !isPersonalMode && currentOrganization ? currentOrganization.id : null)
+  }, [docTypeDefaultsKey, defaultsReload, currentOrganization, isPersonalMode, loadAccessGroups])
 
   React.useEffect(() => {
     if (!docTypePickerEnabled) return
@@ -759,6 +779,8 @@ export function DocumentDashboard({
         })
         setFileScopes((scopes) => withoutKey(scopes, removed.name))
         setFileReplaces((choices) => withoutKey(choices, removed.name))
+        setFileAccess((choices) => withoutKey(choices, removed.name))
+        setAccessErrors((errors) => withoutKey(errors, removed.name))
       }
       return prev.filter((_, i) => i !== index)
     })
@@ -814,6 +836,9 @@ export function DocumentDashboard({
     // Set processing state
     setIsProcessing(true);
 
+    // Files the server refused for their access choice stay in the queue with the row message (UI-SPEC 6.2.3)
+    const refusedForAccess = new Set<string>();
+
     // Process documents sequentially (one by one)
     for (const doc of newDocs) {
       const file = files.find(f => f.name === doc.name);
@@ -835,6 +860,7 @@ export function DocumentDashboard({
           docType: pickedType,
           scopes: uploadTags.enabled ? fileScopes[file.name] ?? [] : [],
           replacesDocumentId: uploadReplaces.enabled ? fileReplaces[file.name]?.id ?? null : null,
+          access: accessPickerShown ? accessFormValue(fileAccess[file.name]) : null,
         });
         if (organizationId) {
           console.log('[DocumentDashboard] Added organization_id to formData:', organizationId);
@@ -850,6 +876,13 @@ export function DocumentDashboard({
         const result = await response.json();
 
         if (!response.ok) {
+          if (accessPickerShown && isGroupNotAllowed(response.status, result)) {
+            refusedForAccess.add(file.name);
+            setAccessErrors((prev) => ({ ...prev, [file.name]: accessGroupText('error.groupNotAllowed', language) }));
+            setStoredDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+            setDefaultsReload((n) => n + 1);
+            continue;
+          }
           if (response.status === 400 && result?.error === 'unknown_scope_value') {
             setTagError(uploadErrorMessage(response.status, result, language));
             setDefaultsReload((n) => n + 1);
@@ -975,10 +1008,23 @@ export function DocumentDashboard({
 
     // All documents processed, clean up
     setIsProcessing(false);
-    setFiles([]);
-    setFileDocTypes({});
-    setFileScopes({});
-    setFileReplaces({});
+    if (refusedForAccess.size > 0) {
+      const keep = <T,>(map: Record<string, T>) =>
+        Object.fromEntries(Object.entries(map).filter(([name]) => refusedForAccess.has(name))) as Record<string, T>;
+      setFiles(files.filter((f) => refusedForAccess.has(f.name)));
+      setFileDocTypes(keep);
+      setFileScopes(keep);
+      setFileReplaces(keep);
+      setFileAccess(keep);
+      setActiveTab("upload");
+    } else {
+      setFiles([]);
+      setFileDocTypes({});
+      setFileScopes({});
+      setFileReplaces({});
+      setFileAccess({});
+      setAccessErrors({});
+    }
 
     // Check if any documents failed
     const failedCount = storedDocuments.filter(doc =>
@@ -988,7 +1034,7 @@ export function DocumentDashboard({
     if (failedCount > 0) {
       console.warn(`${failedCount} document(s) failed to process.`);
     }
-  }, [files, fileDocTypes, docTypePickerEnabled, tenantDocTypeDefault, onProcessingStart, onProcessingComplete, onProcessingError, setActiveTab, storedDocuments, currentOrganization?.id, isPersonalMode, workspaceQuery, language, uploadTags.enabled, uploadReplaces.enabled, fileScopes, fileReplaces]);
+  }, [files, fileDocTypes, docTypePickerEnabled, tenantDocTypeDefault, onProcessingStart, onProcessingComplete, onProcessingError, setActiveTab, storedDocuments, currentOrganization?.id, isPersonalMode, workspaceQuery, language, uploadTags.enabled, uploadReplaces.enabled, fileScopes, fileReplaces, accessPickerShown, fileAccess]);
 
   // Create a function to handle tab switching with better visual feedback
   const handleTabChange = (tab: string) => {
@@ -1558,6 +1604,19 @@ export function DocumentDashboard({
                                             setFileReplaces((prev) =>
                                               value ? { ...prev, [file.name]: value } : withoutKey(prev, file.name)
                                             ),
+                                        }
+                                      : null
+                                  }
+                                  access={
+                                    accessPickerShown
+                                      ? {
+                                          groups: accessMine.assignableGroups,
+                                          value: fileAccess[file.name] ?? ACCESS_UNTOUCHED,
+                                          error: accessErrors[file.name] ?? null,
+                                          onChange: (value) => {
+                                            setAccessErrors((prev) => withoutKey(prev, file.name))
+                                            setFileAccess((prev) => ({ ...prev, [file.name]: value }))
+                                          },
                                         }
                                       : null
                                   }

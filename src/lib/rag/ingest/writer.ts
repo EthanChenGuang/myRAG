@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { RpcClient } from '../backend/supabase-rpc';
+import { setUploadAccess as setAccessLabel } from '../access/documents';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { HASH_NORMALIZATION_VERSION } from './hash';
 import type { ChunkKind, DocTypeOrigin, IngestSource } from './types';
@@ -276,6 +277,12 @@ export interface IngestWriter {
   /** Records chunks that have no vector for a profile; returns how many rows were written. */
   recordBackfillGap(args: BackfillGapArgs): Promise<number>;
   markFailed(documentId: string, reason: string): Promise<void>;
+  /**
+   * D-16: writes the upload's access label on this version's lineage through the one label setter (actor kind system, reason upload),
+   * after begin and before any chunk or publish. uploaderId null (a backfill run) records no actor. A fake writer without it cannot
+   * carry a label, so a labelled upload fails closed instead of publishing as everyone.
+   */
+  setUploadAccess?(documentId: string, keys: readonly string[], uploaderId: string | null): Promise<void>;
   /**
    * The link targets an admin reviewed when releasing an earlier version of this document's lineage (metadata.quarantine.released_targets,
    * D-35), sorted; empty for a first version. Never another lineage's or another tenant's.
@@ -619,6 +626,10 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
         p_tenant_key: identity().tenantKey,
       });
       return integer(row, 'gaps_recorded') ?? 0;
+    },
+
+    async setUploadAccess(documentId, keys, uploaderId) {
+      await setAccessLabel(scope, documentId, keys, uploaderId, { db: () => db, signal });
     },
 
     async markFailed(documentId, reason) {

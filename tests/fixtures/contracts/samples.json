@@ -5615,6 +5615,7 @@
       "run_after": null,
       "runner": null,
       "settings": {
+        "access_keys": null,
         "approval": null,
         "carry_table_header": false,
         "cloud_allowed": true,
@@ -5800,6 +5801,7 @@
       "recall_at_10": 0.8
     },
     "JobSettingsSnapshot": {
+      "access_keys": null,
       "approval": null,
       "carry_table_header": false,
       "cloud_allowed": true,
