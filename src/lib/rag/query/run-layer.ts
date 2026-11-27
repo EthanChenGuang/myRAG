@@ -46,6 +46,8 @@ import { checkBypassReason, type CacheRetrievalOptions, type TurnFacts } from '.
 import { resolveHitSources } from '../cache/sources';
 import { cacheAccessKeyPart } from '../cache/access-key';
 import { effectiveCacheThreshold } from '../cache/threshold';
+import { systemPromptHashWithBlocks } from '../cache/keys';
+import { decomposedAnswerTemplate } from '../generation/decomposed-answer';
 import type { CacheHit, CacheKeyParts, CacheTicket, EntryProfile } from '../cache/types';
 import { resolveFinalResultCount } from '../config';
 import { effectiveVersionScope } from './filters';
@@ -358,6 +360,8 @@ interface CacheStageInput {
   historyLength: number;
   condenseOk: boolean;
   framework: CacheKeyParts['queryFramework'];
+  /** The final plan's sub-question count (06.2 G2: the decomposed-answer block applies from two). */
+  subQuestionCount: number;
   spec: StageSpec;
   embedSpec: StageSpec;
 }
@@ -379,6 +383,17 @@ function lookupDetail(lookup: CacheLookup): string {
   if (lookup.kind === 'hit') return `hit distance=${lookup.hit.distance.toFixed(4)}`;
   return lookup.kind === 'unresolved' ? 'miss citations_unresolved' : 'miss';
 }
+
+/**
+ * 06.2 G2: the caller's systemPromptHash, with the decomposed-answer block template folded in only when the entry point passes
+ * the block, RAG_DECOMPOSED_ANSWER is effective and the plan has the sub-questions that make the block non-empty.
+ */
+function promptHashForKey(context: RetrievalCacheContextLike, switchOn: boolean, subQuestionCount: number, lang: Lang): string {
+  const decomposed = context.decomposedAnswer === true && switchOn ? decomposedAnswerTemplate(subQuestionCount, lang) : null;
+  return systemPromptHashWithBlocks(context.systemPromptHash, { decomposedAnswer: decomposed });
+}
+
+type RetrievalCacheContextLike = Pick<NonNullable<QueryLayerInput['input']['cacheContext']>, 'systemPromptHash' | 'decomposedAnswer'>;
 
 /**
  * D-05/D-32/D-33/D-36: the cache lookup after the parallel group. Bypass rules run before anything is embedded or checked;
@@ -468,7 +483,7 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
     retrievalConfigHash,
     queryFramework: args.framework,
     entryProfile,
-    systemPromptHash: context.systemPromptHash,
+    systemPromptHash: promptHashForKey(context, ctx.config.queryAdditions.effective.decomposedAnswer, args.subQuestionCount, gate.lang),
   };
   const embeddingProfileId = embedding.profile?.id ?? LEGACY_PROFILE.id;
   const ticket: CacheTicket = { key, embeddingProfileId, standalone: args.standalone, vector: embedding.vector, turn: facts };
@@ -927,6 +942,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     historyLength: history.length,
     condenseOk,
     framework: transformer.framework,
+    subQuestionCount: plan.sub_questions?.length ?? 0,
     spec: cacheSpec,
     embedSpec: spec('embed', 'throw'),
   });

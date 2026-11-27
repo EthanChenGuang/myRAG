@@ -60,6 +60,19 @@ export function uncoveredSubQuestions(count: number, blocks: readonly Decomposed
   return Array.from({ length: Math.max(0, count) }, (_, index) => index).filter((index) => !covered.has(index));
 }
 
+/**
+ * 06.2 G2: the fixed texts buildDecomposedAnswerBlock uses for a plan of `count` sub-questions in `language`, joined in one
+ * string, or null when it would return null for every input of that plan (fewer than two sub-questions, no pack). The semantic
+ * cache folds it into systemPromptHash, so a text change in the language pack also gives a new key.
+ */
+export function decomposedAnswerTemplate(count: number, language: string | null): string | null {
+  if (count < 2) return null;
+  const resolved = resolvePack(language);
+  if (!resolved) return null;
+  const { code, pack, texts } = resolved;
+  return [code, texts.label, texts.intro, texts.parts, texts.citeOwn, texts.compareOrder, fixedText('labels.not_covered', code), pack.list_separator].join('\u0000');
+}
+
 /** A sub-question is data: one line, whitespace collapsed. */
 function dataLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
