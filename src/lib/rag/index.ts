@@ -168,6 +168,7 @@ export type { ResolveVoiceScopeInput, VoiceScopeResult } from './tenant/voice';
 export { assembleContext } from './context/assemble';
 export type { AssembleInput, AssembleOutput, AssemblyCandidate, AssemblyDocumentRow } from './context/assemble';
 export { fetchAssemblyRows } from './context/fetch-rows';
+export { detectMixedVersions, versionConflictTrace, type VersionConflict } from './context/version-conflicts';
 export type { AssemblyRows } from './context/fetch-rows';
 export type {
   CitationLabel,
