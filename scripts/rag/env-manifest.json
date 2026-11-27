@@ -1702,6 +1702,90 @@
       "knownGaps": [],
       "description": "Weekly representative sample of real questions into the review queue; needs masked_query logging and expert review.",
       "ragAffecting": false
+    },
+    {
+      "name": "RAG_QUERY_HISTORY_FALLBACK",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Adds a history_fallback variant (previous question plus follow-up) when condense was skipped; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_QUERY_DECOMPOSE_COMPLETENESS",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Checks that decomposed sub-questions cover every protected token of the question; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_QUERY_SUBQ_FILTERS",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Lets each sub-question narrow its own search with filters that can only narrow the tenant scope; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_DECOMPOSED_ANSWER",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Answers a decomposed question in one part per sub-question, each with its own citations; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_TRANSLATION_GLOSSARY",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Enforces the translation glossary in query translation, document translation and rewriting; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_LANGID_SIDECAR",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Asks the sidecar language detector about short or mixed-script questions the built-in detector is unsure of; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_MODEL_ROUTING",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Routing for the Auto model entry: off sends Auto to the quality model, auto routes simple lookups to the fast model; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_ROUTING_FAST_MODEL",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Fast model id for Auto routing; must be listed in the OpenRouter model list and not be auto",
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_ROUTING_QUALITY_MODEL",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Quality model id for Auto routing; must be listed in the OpenRouter model list and not be auto",
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_SPECULATIVE_RETRIEVAL",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Starts embedding and search of the original question while the transforms run; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_WHATSAPP_HISTORY",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Sends recent turns of the same WhatsApp sender and session with each message; applies to the WhatsApp channel itself",
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_SCOPE_GATE",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Skips retrieval for questions clearly outside the workspace's own documents; inert while RAG_QUERY_LAYER=false",
+      "ragAffecting": true
     }
   ]
 }
