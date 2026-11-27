@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { countContextTokens, type RenderEstimate } from '@/lib/rag/context/budget';
-import { documentBudgetOf, packByRank, type PackCandidate } from '@/lib/rag/context/pack';
+import { buildContext, filterCandidates, IMAGE_EXTENSIONS, type AssembleInput } from '@/lib/rag/context/assemble';
+import { documentBudgetOf, packByRank, packFiltered, type PackCandidate } from '@/lib/rag/context/pack';
+import { assembleVoiceResults, untaggedVoiceContext } from '@/lib/rag/context/voice';
+import { createCitationLabeler } from '@/lib/rag/generation/citations/blocks';
 
 const BODY = 'neutral sample sentence for packing checks. '.repeat(8);
 const UNIT = countContextTokens(BODY);
@@ -71,5 +74,77 @@ describe('documentBudgetOf', () => {
     expect(documentBudgetOf('100')).toBeNull();
     expect(documentBudgetOf(-5)).toBe(0);
     expect(documentBudgetOf(120.7)).toBe(120);
+  });
+});
+
+describe('packFiltered (legacy assembly, D-83 / D-95)', () => {
+  const SAMPLE = 'neutral legacy sentence for packing. '.repeat(10);
+  const documents = new Map(
+    ['x', 'y', 'z'].map((id) => [`doc-${id}`, { id: `doc-${id}`, filename: `${id}.txt`, content: SAMPLE, created_at: null }]),
+  );
+  const candidates = [
+    { chunk_id: 'x1', document_id: 'doc-x', content: `x1 ${SAMPLE}`, similarity: 0.7 },
+    { chunk_id: 'y1', document_id: 'doc-y', content: `y1 ${SAMPLE}`, similarity: 0.95 },
+    { chunk_id: 'z1', document_id: 'doc-z', content: `z1 ${SAMPLE}`, similarity: 0.8 },
+  ];
+  const input: AssembleInput<(typeof candidates)[number]> = {
+    queryText: 'neutral legacy',
+    candidates,
+    documents,
+    chunkMetadata: new Map(),
+    referenced: null,
+    isGPTModel: false,
+    ragMode: 'strict',
+    webSearchEnabled: false,
+    applyRelevanceFilter: true,
+    citationLabeler: createCitationLabeler(),
+  };
+  const one = countContextTokens(`\n--- Document: y.txt (1 relevant chunks) ---\n\ny1 ${SAMPLE}`);
+
+  it('keeps the highest-similarity chunks, drops the rest from sources, and the labeller never sees a dropped block', () => {
+    const state = filterCandidates(input);
+    expect(state.relevantChunks).toHaveLength(3);
+    const packed = packFiltered(state, candidates, documents, one * 2 + 2, { isGPTModel: false, imageExtensions: IMAGE_EXTENSIONS });
+    expect(packed.state.relevantChunks.map((chunk) => chunk.chunk_id)).toEqual(['y1', 'z1']);
+    expect(packed.state.usedDocuments.map((doc) => doc.id).sort()).toEqual(['doc-y', 'doc-z']);
+    expect(packed.summary).toEqual({ documentBudget: one * 2 + 2, droppedDocuments: 1, keptParents: 2 });
+
+    const out = buildContext(packed.state, { ...input, candidates: packed.candidates });
+    expect(out.context).not.toContain('x1 neutral');
+    const aliased = out.blocks.filter((block) => block.alias !== null);
+    expect(aliased.flatMap((block) => block.chunkIds).sort()).toEqual(['y1', 'z1']);
+    expect(out.kept.map((row) => row.chunk_id)).toEqual(['y1', 'z1']);
+  });
+
+  it('leaves the assembly byte-identical with a budget that fits everything', () => {
+    const state = filterCandidates(input);
+    const plain = buildContext(state, input);
+    const packed = packFiltered(state, candidates, documents, 1_000_000, { isGPTModel: false, imageExtensions: IMAGE_EXTENSIONS });
+    expect(buildContext(packed.state, { ...input, candidates: packed.candidates })).toEqual(plain);
+    expect(packed.summary.droppedDocuments).toBe(0);
+  });
+});
+
+describe('assembleVoiceResults with documentTokenBudget', () => {
+  const SAMPLE = 'neutral voice sentence for packing. '.repeat(10);
+  const chunks = ['v1', 'v2', 'v3'].map((id, index) => ({
+    chunk_id: id,
+    document_id: `doc-${id}`,
+    content: `${id} ${SAMPLE}`,
+    similarity: 0.9 - index * 0.1,
+    metadata: {},
+  }));
+  const one = countContextTokens(untaggedVoiceContext([chunks[0]!]));
+
+  it('is unchanged without a budget', () => {
+    const plain = assembleVoiceResults({ query: 'neutral voice', chunks, matchCount: 3 });
+    expect(assembleVoiceResults({ query: 'neutral voice', chunks, matchCount: 3, documentTokenBudget: null })).toEqual(plain);
+    expect('packing' in plain).toBe(false);
+  });
+
+  it('keeps the results in their order up to the budget', () => {
+    const out = assembleVoiceResults({ query: 'neutral voice', chunks: [...chunks].reverse(), matchCount: 3, documentTokenBudget: one * 2 + 2 });
+    expect(out.results.map((row) => row.chunk_id)).toEqual(['v3', 'v2']);
+    expect(out.packing).toEqual({ documentBudget: one * 2 + 2, droppedDocuments: 1, keptParents: 2 });
   });
 });
