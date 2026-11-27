@@ -662,3 +662,23 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 21:41Z Train-39 builder declined the 13 audit branches because they would add more than an hour. Train 39 = 05.2.1-17, 06.2-15/17/18/20/21, quick-attribute-access, plus 06.2-27 and quick-rag-panel-toast; sql/train39-live.sql is at b5270e37. Launched the TRAIN 40 builder on ci/merge-train-39 for the 13 audit branches; 06.3 has heavy conflicts (up to 30 files).
 - 21:42Z Owner UI request: make the composer comet line thinner and subtler. Launched quick-composer-comet on train 38 (frontend pipeline plus screenshots). The owner desk is catching EVAL up: t30-32 done, t33 running (option A connector presumably granted).
 - 21:50Z Eval catch-up PAUSED after t34 by the owner, to save usage; eval is consistent through t34, and t35-37 remain. The Supabase connector currently points at the EVAL org, so the owner must switch it back to prod before the train-38 prod SQL.
+- 21:55Z PAUSE ALL (owner request: the 5h limit was nearly used up). A PAUSE message (priority now: push WIP plus .continue-here, then stop) went to:
+  - 03.3-25 session_01X342sisfrVRS5ucDYn9zJM
+  - train-38 builder session_01X342smRhzZPcaM7STT8bn7 (fixing PR #135 CI)
+  - train-39 builder session_01X342siuAuKLH9wD3wctfZi
+  - train-40 builder session_01X342siWcL7ySiUsax3UVUx
+  - quick-sidebar-hide session_01X342sityjPAdN7TAVUKshd
+  - quick-it-refusal-locale session_01X342shNbM6H8FLDFtcyJ5g
+  - quick-composer-comet session_01X342smWYTKodPzR1VS6G3a
+  - 05.2.1-20 session_01X342skyCJC61RwqFMVE6iA
+  - 06.2-22 session_01X342si1y9d6kxtPqeezSDM
+  - 06.2-24 session_01X342sksLKwFrTzHbF1HG7E
+  - 06.2-25 session_01X342smJg58e4rvyQhwwDuG
+  - 06.2-36 session_01X342sk7pgf5cUPYEzTjBwp
+  - 06.2-39 session_01X342siPkL5Q4yMnZ2ndJgr
+  - quick-review-writers-access session_01X342smetEyjLKyC7oJtCAc
+  - quick-doc-types-access session_01X342skHQQ4zUehWoynnq6C
+  - walkthrough desk session_01X342skiWFj6Vkcw6omyGGS
+  - owner desk session_01X342smENMnyrGEa4FK53eB
+  The self-check trigger was deleted. RESUME: when the user says so, send each of these sessions "resume from .continue-here".
+  Then: PR #135 must go green, merge, the owner switches the connector back to prod, train38-live.sql is applied, the user is asked about deploying.
