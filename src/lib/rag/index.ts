@@ -226,9 +226,11 @@ export {
   type TextsSource,
 } from './generation/answer-turn';
 export { guardChannelReply, guardSummaryText, guardVoiceTranscript } from './security/channel-reply-guard';
+export { applyAnswerPipelineToText, type AnswerTextPipelineResult } from './generation/answer-transforms';
+export { buildSentenceRecords } from './generation/sentences-record';
 export { formatGuardedLinks, linkUsageInstructions } from './security/link-section';
 export type { ChannelReplyGuardInput, ChannelReplyGuardResult, SummaryGuardInput, VoiceTranscriptMessage } from './security/channel-reply-guard';
-export { recordOutputGuardEvents } from './security/security-events';
+export { attributeSourceChunks, recordOutputGuardEvents } from './security/security-events';
 export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource } from './lang/answer-language';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';

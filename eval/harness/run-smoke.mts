@@ -67,6 +67,7 @@ async function main(): Promise<number> {
       answers: { type: 'boolean', default: false },
       'no-answers': { type: 'boolean', default: false },
       'env-overlay': { type: 'string' },
+      'rag-mode': { type: 'string' },
     },
     strict: true,
   });
@@ -87,6 +88,13 @@ async function main(): Promise<number> {
   const goldenManifestFlag = values['golden-manifest']?.trim();
   if (goldenManifestFlag !== undefined && goldenManifestFlag === '') {
     console.error('[Eval Harness] --golden-manifest must not be empty');
+    return 2;
+  }
+
+  // D-34: the output-cap sweep runs each mode; every other run keeps the default strict.
+  const ragMode = values['rag-mode'];
+  if (ragMode !== undefined && ragMode !== 'strict' && ragMode !== 'balanced') {
+    console.error('[Eval Harness] --rag-mode must be strict or balanced');
     return 2;
   }
 
@@ -271,6 +279,7 @@ async function main(): Promise<number> {
     ...(values['cache-pairs'] ? { cachePairs: true } : {}),
     ...(values['allow-live-cache'] ? { allowLiveCache: true } : {}),
     ...(answers ? { answers: true } : {}),
+    ...(ragMode ? { ragMode } : {}),
     ...(envOverlay && Object.keys(envOverlay.env).length > 0 ? { envOverlay: envOverlay.env } : {}),
   });
 

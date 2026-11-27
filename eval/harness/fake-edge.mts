@@ -113,6 +113,9 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     'version',
     'doc_type',
     'version_label',
+    // Phase 5.2 D-49, D-50: the version-label reads (fetchAssemblyRows, fetchVersionColumns) while RAG_VERSION_LABELS is on.
+    'doc_date',
+    'effective_from',
   ],
   document_chunks: ['id', 'document_id', 'content', 'metadata', 'created_at', 'organization_id', 'chunk_index', 'is_current', 'status', 'tenant_key', 'version', 'doc_type'],
   organization_members: ['id', 'organization_id', 'user_id', 'role', 'created_at'],
@@ -122,6 +125,8 @@ const TABLE_COLUMNS: Record<string, string[]> = {
   // The admin guard (isAdminUser) and the terminology admin versions read (D-05).
   admin_users: ['id'],
   rag_term_layers: ['layer_key', 'version', 'entries_sha256'],
+  // Phase 5.2 D-52: the batched supersession read of fetchVersionPairs (RAG_VERSION_LABELS on, tenant key known).
+  rag_supersession_candidates: ['document_id', 'candidate_document_id', 'status'],
 };
 
 type FilterOperator = 'eq' | 'in' | 'is.null';
@@ -144,6 +149,7 @@ const TABLE_FILTERS: Record<string, Record<string, FilterOperator[]>> = {
   rag_parse_tier_overrides: { doc_type: ['eq'] },
   admin_users: { id: ['eq'] },
   rag_term_layers: { layer_key: ['eq'] },
+  rag_supersession_candidates: { tenant_key: ['eq'], document_id: ['in'], candidate_document_id: ['in'], status: ['in'] },
 };
 
 /** Value type of a filtered column; a column that is not listed holds a uuid. */
@@ -155,6 +161,9 @@ const FILTER_VALUE_TYPES: Record<string, 'boolean' | 'integer' | 'text'> = {
   doc_type: 'text',
   layer_key: 'text',
 };
+/** Text columns whose in-list holds fixed status words, not uuids. */
+const TEXT_IN_COLUMNS: ReadonlySet<string> = new Set(['status']);
+const STATUS_WORD_RE = /^[a-z][a-z_]{0,31}$/;
 const BOOLEAN_FILTER_RE = /^(true|false)$/;
 const INTEGER_FILTER_RE = /^-?\d{1,9}$/;
 
@@ -657,8 +666,13 @@ function createHandlers(
         const inner = raw.slice(4, -1);
         const list = inner === '' ? [] : inner.split(',').map((item) => item.trim());
         if (list.length > MAX_IN_VALUES) throw new Rejection(400, `${column} in-list is limited to ${MAX_IN_VALUES} values`);
-        if (!list.every((item) => UUID_RE.test(item))) throw new Rejection(400, `${column} in-list must contain only uuids`);
-        where.push(list.length === 0 ? 'FALSE' : `"${column}" IN (${list.map((item) => bind(item, '::uuid')).join(', ')})`);
+        if (TEXT_IN_COLUMNS.has(column)) {
+          if (!list.every((item) => STATUS_WORD_RE.test(item))) throw new Rejection(400, `${column} in-list must contain only status words`);
+          where.push(list.length === 0 ? 'FALSE' : `"${column}" IN (${list.map((item) => bind(item)).join(', ')})`);
+        } else {
+          if (!list.every((item) => UUID_RE.test(item))) throw new Rejection(400, `${column} in-list must contain only uuids`);
+          where.push(list.length === 0 ? 'FALSE' : `"${column}" IN (${list.map((item) => bind(item, '::uuid')).join(', ')})`);
+        }
       } else {
         throw new Rejection(400, `unsupported operator on ${column}: ${raw.split('.')[0]}`);
       }
