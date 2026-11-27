@@ -193,7 +193,7 @@ describe('finishTrace', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0].startsWith('[RAG Trace]')).toBe(true);
     const payload = parseLine(lines[0]);
-    expect(Object.keys(payload).sort()).toEqual(['profile', 'reason', 'stages', 'status', 'tenantKey', 'traceId']);
+    expect(Object.keys(payload).sort()).toEqual(['languages', 'profile', 'reason', 'stages', 'status', 'tenantKey', 'traceId']);
     expect(payload.refusal).toBeUndefined();
     expect(payload).toMatchObject({
       traceId: collector.traceId,
