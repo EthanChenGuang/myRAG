@@ -153,6 +153,8 @@ jobs:
           node --test scripts/tests/check-settings-classification.node-test.mjs
       - name: Config check and type-check self-tests
         run: node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs scripts/tests/check-node-runtime.node-test.mjs scripts/tests/config-server-security.node-test.mjs
+      - name: Release gate, promotion and branch protection script self-tests
+        run: node --test scripts/tests/post-release-status.node-test.mjs scripts/tests/promote-production.node-test.mjs scripts/tests/check-branch-protection.node-test.mjs
       - name: Zod generator self-test
         run: node --test scripts/tests/gen-zod.node-test.mjs
       - name: New-code type-check
