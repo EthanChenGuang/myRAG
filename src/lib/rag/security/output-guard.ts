@@ -379,10 +379,17 @@ function credentialBlockedText(policy: OutputGuardPolicy): string {
 
 const WHITESPACE = /\s/u;
 
-/** One code point through the shared normaliser; whitespace becomes a single space. */
+const NORM_CHAR_CACHE_LIMIT = 4096;
+const normCharCache = new Map<string, string>();
+
+/** One code point through the shared normaliser; whitespace becomes a single space. Pure per code point, so memoized. */
 function normChar(char: string): string {
-  if (WHITESPACE.test(char)) return ' ';
-  return normalise(char, '');
+  const cached = normCharCache.get(char);
+  if (cached !== undefined) return cached;
+  const n = WHITESPACE.test(char) ? ' ' : normalise(char, '');
+  if (normCharCache.size >= NORM_CHAR_CACHE_LIMIT) normCharCache.clear();
+  normCharCache.set(char, n);
+  return n;
 }
 
 function lastChar(text: string): string {
@@ -393,6 +400,8 @@ interface TermIndex {
   terms: readonly string[];
   firstChars: ReadonlySet<string>;
   maxLength: number;
+  /** The terms per first character, in `terms` order, and the longest of them. */
+  byFirst: ReadonlyMap<string, { terms: readonly string[]; maxLength: number }>;
 }
 
 const termIndexCache = new WeakMap<readonly CompiledCredentialRule[], TermIndex>();
@@ -401,10 +410,18 @@ function termIndexOf(rules: readonly CompiledCredentialRule[]): TermIndex {
   let index = termIndexCache.get(rules);
   if (!index) {
     const terms = [...new Set(rules.flatMap((rule) => [...rule.request, ...rule.secret]))];
+    const byFirst = new Map<string, { terms: string[]; maxLength: number }>();
+    for (const term of terms) {
+      const entry = byFirst.get(term[0] as string) ?? { terms: [], maxLength: 0 };
+      entry.terms.push(term);
+      entry.maxLength = Math.max(entry.maxLength, term.length);
+      byFirst.set(term[0] as string, entry);
+    }
     index = {
       terms,
       firstChars: new Set(terms.map((term) => term[0] as string)),
       maxLength: terms.reduce((max, term) => Math.max(max, term.length), 0),
+      byFirst,
     };
     termIndexCache.set(rules, index);
   }
@@ -419,18 +436,22 @@ function termStartAt(text: string, i: number, prevNorm: string, final: boolean, 
   const firstPoint = String.fromCodePoint(text.codePointAt(i) as number);
   const first = normChar(firstPoint);
   if (first === '' || first === ' ' || !index.firstChars.has(first[0] as string)) return 'no';
+  // Only the terms with this first character can decide the result, so the look-ahead stops at the longest of them plus
+  // one boundary character, or as soon as it is no longer a prefix of any of them: every comparison below is then decided.
+  const candidates = index.byFirst.get(first[0] as string) as { terms: readonly string[]; maxLength: number };
   let normalised = '';
   let j = i;
-  while (j < text.length && normalised.length <= index.maxLength) {
+  while (j < text.length && normalised.length <= candidates.maxLength) {
     const point = String.fromCodePoint(text.codePointAt(j) as number);
     const n = normChar(point);
     if (!(n === ' ' && normalised.endsWith(' '))) normalised += n;
     j += point.length;
+    if (normalised !== '' && !candidates.terms.some((term) => term.startsWith(normalised))) break;
   }
   const exhausted = j >= text.length && !final;
   const prevWord = isWordChar(lastChar(prevNorm));
   let maybe = false;
-  for (const term of index.terms) {
+  for (const term of candidates.terms) {
     if (term[0] !== normalised[0]) continue;
     if (prevWord && isWordChar(term[0])) continue;
     if (normalised.startsWith(term)) {
