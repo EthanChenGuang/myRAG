@@ -1,9 +1,10 @@
 import { isCanonicalTenantKey, weaviateCollectionName, weaviateTenantName } from '../tenant-key';
 import { weaviateConfigure as configure } from './client';
 import { mapWeaviateError } from './errors';
+import { WEAVIATE_INDEX } from '../index-params';
 import type { WeaviateClientLike } from './types';
 
-export const WEAVIATE_LEXICAL_MODE = 'bm25_whitespace';
+export const WEAVIATE_LEXICAL_MODE = WEAVIATE_INDEX.lexicalMode;
 export const WEAVIATE_LEXICAL_PROPERTY = 'lexical_text';
 
 /** D-03 filter and bookkeeping properties; exact-match text (field tokenisation), never searchable. */
@@ -43,8 +44,8 @@ export function weaviateCollectionSpec(profileId: string, dims: number): Record<
     multiTenancy: configure.multiTenancy({ enabled: true, autoTenantCreation: false, autoTenantActivation: false }),
     vectorizers: configure.vectors.selfProvided({
       vectorIndexConfig: configure.vectorIndex.hnsw({
-        maxConnections: 64,
-        efConstruction: 200,
+        maxConnections: WEAVIATE_INDEX.m,
+        efConstruction: WEAVIATE_INDEX.efConstruction,
         distanceMetric: 'cosine',
         filterStrategy: 'acorn',
         quantizer: configure.vectorIndex.quantizer.none(),

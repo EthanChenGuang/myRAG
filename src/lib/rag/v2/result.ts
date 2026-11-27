@@ -1,3 +1,5 @@
+import { selectedBackendId } from '../backend/factory';
+import { backendIndexParams } from '../backend/index-params';
 import { getRetrievalBackend } from '../backend/registry';
 import { CORE_STAGES, QUERY_LAYER_STAGES, effectiveLexicalVersion, terminologyDenseFor, type RagConfig } from '../config';
 import { getActiveChunkingProfiles } from '../chunking/active';
@@ -119,8 +121,12 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
   const attributeFilter = attributeStage.enabled
     ? attributeFilterHashBlock(attributeStage, config.v2.attributeFilter, attributeFilterConfig())
     : undefined;
+  // D-24: the configured backend of this entry point; pgvector keeps the registry id and no index block, so its hash is unchanged.
+  const backendChoice = selectedBackendId(profile, config, input.stageOverrides?.retrievalOverrides);
+  const backendIndex = backendIndexParams(backendChoice, ctx.embeddingProfileId);
   return computeRetrievalConfigHash({
-    backendId: getRetrievalBackend().id,
+    backendId: backendIndex ? backendChoice : getRetrievalBackend().id,
+    ...(backendIndex ? { backendIndex } : {}),
     embeddingProfileId: ctx.embeddingProfileId,
     lexicalVersion: effectiveLexicalVersion(config),
     rerankTextVersion: RERANK_TEXT_VERSION,
