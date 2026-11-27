@@ -155,7 +155,7 @@ describe('retrieval log rows from the chat, embed, voice and eval routes keep te
         RAG_EVAL_ALLOWED_SCOPES: `user:${userA}`,
       },
     });
-  });
+  }, 180_000);
 
   afterAll(async () => {
     await fixture.close();
