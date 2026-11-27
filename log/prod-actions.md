@@ -59,3 +59,15 @@
 - No other database write. Local-only changes: OPENAI_API_KEY added to the owner's .env.local (needed by dev startup).
 - Item 1 (04.1.1-13 Terminology): blocked on EVAL. rag_term_list_entries returns PGRST202 because EVAL lacks 0980 (0945 is missing too). Waiting for the owner desk to bring EVAL up to main.
 - Item 3 (04.2-26): deferred until EVAL is current. Plan (orchestrator-approved): placeholder docs in the test admin's own workspace, then a dup-cluster build for that tenant only.
+
+## 2026-11-27 ~21:50 UTC: EVAL (fsgaeysipkukqoocgzbx) catch-up to main 00afa6d9, PAUSED after train 34 (owner approved "同意，执行吧"; paused by owner to save usage)
+- Before: eval was at train 29. Source: sql/train30..37-live.sql, every migration section identical to origin/main 00afa6d9.
+- Applied (apply_migration, names eval_trainNN_<file>):
+  - train30: 0969, 1006, r14
+  - train31: 0944, 0972, 0973, 0974, 0975, 0977, 1009, r15
+  - train32: 0978
+  - train33: 0706, 0900, 0901, 0902, 0904, 0945, 0976, r16
+  - train34: 0708, 0709, 0740, 0920, 0920.multi-tenant, r17
+- Three train-31 calls were dropped by a worker restart and re-applied after checking schema_migrations; nothing ran twice.
+- Remaining: train35 (0921, 0922, 0930, 0932, r18), train36, train37. After those: md5 fidelity check, verify, then tell the walkthrough desk.
+- The Supabase connector is temporarily authorized to the eval org (ChenGuang's Org). Switch it back to the prod org afterwards.
