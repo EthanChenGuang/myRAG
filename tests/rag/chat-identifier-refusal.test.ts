@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { chatRequest, installChatPipeline, readSse } from '../helpers/chat-route-fakes';
 import { systemTextOf } from '../helpers/route-fixture';
+import { withLanguagesUnset } from '../helpers/language-env';
+import { fixedText } from '@/lib/rag/lang/texts';
 import { identifierSuggestionMessage, knowledgeBaseUnavailableMessage, noKnowledgeBaseResponse } from '@/lib/rag/generation/messages';
 
 const SECRET = 'b'.repeat(48);
@@ -142,13 +144,26 @@ describe('identifier not found in the routes (04.2-36, D-31, D-51)', () => {
     vi.resetModules();
   });
 
-  it.each(['en', 'es', 'zh', 'it'])('chat strict (%s): the refusal text followed by the suggestion sentence, no model call', async (language) => {
-    const { POST } = await loadRoute<{ POST: Post }>('@/app/api/chat/route');
-    const body = await readSse(await POST(ask('strict', language)));
+  it.each(['en', 'es', 'zh', 'it'])('chat strict (%s, languages unset): the refusal text followed by the suggestion sentence, no model call', async (language) => {
+    const body = await withLanguagesUnset(async () => {
+      const { POST } = await loadRoute<{ POST: Post }>('@/app/api/chat/route');
+      return readSse(await POST(ask('strict', language)));
+    });
     const expected = `${noKnowledgeBaseResponse(language)}\n\n${identifierSuggestionMessage(language, SUGGESTIONS)}`;
     expect(textOf(body)).toBe(expected);
     expect(h.capture.streamText).not.toHaveBeenCalled();
     expect(body).not.toContain('"type":"source');
+  });
+
+  it.each([
+    { ui: 'zh', expected: 'zh' },
+    { ui: 'it', expected: 'it' },
+    { ui: 'es', expected: 'en' },
+  ])('chat strict with zh, en and it enabled ($ui UI): registry refusal and suggestion in $expected, never a disabled language', async ({ ui, expected }) => {
+    const { POST } = await loadRoute<{ POST: Post }>('@/app/api/chat/route');
+    const body = await readSse(await POST(ask('strict', ui)));
+    expect(textOf(body)).toBe(`${fixedText('notices.no_information', expected)}\n\n${identifierSuggestionMessage(expected, SUGGESTIONS)}`);
+    expect(h.capture.streamText).not.toHaveBeenCalled();
   });
 
   it('chat strict: identifier_not_found without suggestions streams only the existing text', async () => {
