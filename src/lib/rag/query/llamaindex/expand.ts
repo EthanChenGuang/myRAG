@@ -12,6 +12,8 @@ export type ExpandInput = {
   query: string;
   language: Lang;
   protectedTokens: readonly string[];
+  /** D-14: glossary source terms in the query (RAG_TRANSLATION_GLOSSARY effective); each variant must keep them verbatim. */
+  glossaryProtected?: readonly string[];
   /** The D-08 LLM-variant budget left for expansion; the original is retrieved separately and never counted. */
   maxItems: number;
   signal: AbortSignal;
@@ -47,14 +49,14 @@ export async function nativeExpand(input: ExpandInput): Promise<ExpandResult> {
   return finishExpand(input, call.value.queries);
 }
 
-export type FinishExpandInput = Pick<ExpandInput, 'query' | 'language' | 'protectedTokens' | 'maxItems' | 'limits'>;
+export type FinishExpandInput = Pick<ExpandInput, 'query' | 'language' | 'protectedTokens' | 'glossaryProtected' | 'maxItems' | 'limits'>;
 
 /**
  * Keeps, in order, the generated queries that are not the original or a repeat and pass the shared post-checks, up to
  * maxItems; shared by both frameworks (D-02).
  */
 export function finishExpand(input: FinishExpandInput, queries: readonly string[]): ExpandResult {
-  const { query, language, protectedTokens } = input;
+  const { query, language, protectedTokens, glossaryProtected } = input;
   const maxItems = Math.max(0, Math.floor(input.maxItems));
   const limits = input.limits ?? DEFAULT_POST_CHECK_LIMITS;
   const variants: ExpandedVariant[] = [];
@@ -66,7 +68,7 @@ export function finishExpand(input: FinishExpandInput, queries: readonly string[
       overCap += 1;
       return;
     }
-    const checked = checkVariant({ kind: 'expand', text, input: query, protectedTokens }, limits);
+    const checked = checkVariant({ kind: 'expand', text, input: query, protectedTokens, ...(glossaryProtected ? { glossaryProtected } : {}) }, limits);
     if (!checked.ok) {
       skipped.push({ ...checked.skip, index });
       return;

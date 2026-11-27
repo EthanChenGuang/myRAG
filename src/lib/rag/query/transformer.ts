@@ -145,7 +145,8 @@ export function getQueryTransformer(framework: QueryFramework = 'llamaindex'): Q
  * deps, so it imports no post-check module and its results have exactly the native shapes.
  */
 export interface QueryTransformFinishers {
-  condense(input: Pick<CondenseInput, 'query' | 'protectedTokens' | 'limits'>, output: CondensedQuery): CondenseResult;
+  /** D-14: condense, expand and decompose inputs may carry glossaryProtected, which the finishers check with the protected tokens. */
+  condense(input: Pick<CondenseInput, 'query' | 'protectedTokens' | 'glossaryProtected' | 'limits'>, output: CondensedQuery): CondenseResult;
   expand(input: FinishExpandInput, queries: readonly string[]): ExpandResult;
   hyde(input: FinishHydeInput, passage: string): HydeResult;
   /** Validates the raw SubQuestions output (wire bound) and applies the D-15 cut and checks. */

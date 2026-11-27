@@ -904,7 +904,8 @@
     },
     {
       "name": "RAG_TRANSLATION_GLOSSARY",
-      "side": "query"
+      "side": "both",
+      "mechanism": "retranslate"
     },
     {
       "name": "RAG_UPLOADER_ALERT_THRESHOLD",

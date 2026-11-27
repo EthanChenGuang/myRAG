@@ -85,7 +85,9 @@ function skipOrThrow(error: unknown, signal: AbortSignal, transform: 'expand' | 
  * contextualize prompt and expand runs MultiQueryRetriever.fromLLM, both over a CaptureRetriever that only records the
  * query text; hyde is a native port of LangChain's websearch HyDE template; decompose uses LangChain's decomposition
  * prompt with structured SubQuestions; translate uses the shared translate prompt. No call carries a scope, tenant key or
- * filter (D-18): the inputs are query text, history, language and protected tokens only.
+ * filter (D-18): the inputs are query text, history, language and protected tokens only. The glossary source terms
+ * (glossaryProtected, D-14) are never sent to the model: they reach the shared finishers inside the input, so a rewrite that
+ * drops one is discarded exactly as on the native path.
  */
 export function createLangChainTransformer(options: CreateLangChainTransformerOptions): QueryTransformer {
   const { finish } = options.deps;

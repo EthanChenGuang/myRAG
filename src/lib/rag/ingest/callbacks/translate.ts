@@ -63,7 +63,13 @@ export async function handleTranslateCallback(jobId: string, body: TranslateCall
       return answer(workerId, { outcome: 'retry', reason: result.reason });
     }
     finishTranslationTrace({ tenantKey: job.tenant_key, documentId: job.document_id, translated: result.translated, gaps: result.gaps });
-    const progress = { translated: result.translated, gaps: result.gaps, remaining: result.remaining };
+    // D-14: glossary rejections (also counted in gaps) are on the job only while the glossary switch is effective.
+    const progress = {
+      translated: result.translated,
+      gaps: result.gaps,
+      remaining: result.remaining,
+      ...(result.glossaryRejected !== undefined ? { glossary_rejected: result.glossaryRejected } : {}),
+    };
     if (result.remaining === 0) return await finish(job, workerId, progress, timingMs, options.signal);
     if (result.stopped === 'time_budget') {
       await advanceJob({ jobId, worker: workerId, stage: 'embed', status: 'embedding', stageState: progress, timingMs }, { signal: options.signal });

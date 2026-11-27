@@ -75,6 +75,8 @@ export type DecomposeInput = {
   query: string;
   language: Lang;
   protectedTokens: readonly string[];
+  /** D-14: glossary source terms in the query (RAG_TRANSLATION_GLOSSARY effective); the kept sub-questions together must keep them. */
+  glossaryProtected?: readonly string[];
   signal: AbortSignal;
   deps: NativeDeps;
   limits?: PostCheckLimits;
@@ -96,7 +98,10 @@ export type DecomposeResult = {
   filterTrace?: SubQuestionFilterTraceEntry[];
 };
 
-export type FinishDecomposeInput = Pick<DecomposeInput, 'query' | 'language' | 'protectedTokens' | 'limits' | 'requiredTerms' | 'subqFilters'>;
+export type FinishDecomposeInput = Pick<
+  DecomposeInput,
+  'query' | 'language' | 'protectedTokens' | 'glossaryProtected' | 'limits' | 'requiredTerms' | 'subqFilters'
+>;
 
 /** The addendum the decomposer prompt ends with while the switch is effective (both frameworks, D-07). */
 export function subqFilterAddendum(context: SubqFilterContext): string {
@@ -123,7 +128,12 @@ function proposedSpecs(output: unknown): ProposedSpec[] | null {
 
 /** A completeness failure falls back to today's D-15 result, recorded as a decompose skip with reason error. */
 function postCheck(input: FinishDecomposeInput, questions: readonly string[], limits: PostCheckLimits): CompletenessCheck {
-  const sub = { questions, input: input.query, protectedTokens: input.protectedTokens };
+  const sub = {
+    questions,
+    input: input.query,
+    protectedTokens: input.protectedTokens,
+    ...(input.glossaryProtected ? { glossaryProtected: input.glossaryProtected } : {}),
+  };
   if (!input.requiredTerms) return checkSubQuestions(sub, limits);
   try {
     return checkSubQuestionsWithCompleteness(sub, limits, input.requiredTerms);
