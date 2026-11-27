@@ -29,7 +29,7 @@ function accessGroupsOn(): boolean {
   return loadRagConfig(getRagDeps().ragEnv()).accessGroups === 'on';
 }
 
-/** D-09: whether RAG_DOC_ACCESS_GROUPS is on, for a route that would otherwise look up an identity it does not need while off. */
+/** D-09: true while RAG_DOC_ACCESS_GROUPS is on; routes and read paths outside retrieval use it to skip access work while the switch is off. */
 export function accessGroupsEnabled(): boolean {
   return accessGroupsOn();
 }

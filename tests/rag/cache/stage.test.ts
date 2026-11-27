@@ -13,7 +13,8 @@ import { setRagDepsForTests } from '@/lib/rag/deps';
 import { LEGACY_PROFILE } from '@/lib/rag/embeddings/active-profile';
 import type { QueryEmbedding } from '@/lib/rag/embeddings/query-embedding';
 import { runQueryLayer, type QueryLayerOutcome } from '@/lib/rag/query/run-layer';
-import { scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
+import { mintAccessScope } from '@/lib/rag/tenant/access';
+import { scopeKey, withAccess, type TenantScope } from '@/lib/rag/tenant/scope';
 import { createTraceCollector } from '@/lib/rag/trace/collector';
 import type { DocumentRefsInput, Profile, RetrievalCacheContext, RetrievalOptions, RetrievalResult, StageOverrides } from '@/lib/rag/types';
 import { resetV2StartupForTests, verifyV2Startup } from '@/lib/rag/v2/startup';
@@ -115,6 +116,7 @@ async function runLayer(cache: SemanticCache | null, run: LayerRun = {}, admin?:
     queryLlm: () => fake,
     semanticCache: () => cache,
     ...(admin ? { adminClient: () => admin as never } : {}),
+    ...(run.env?.RAG_DOC_ACCESS_GROUPS ? { ragEnv: () => env(run.env) } : {}),
   });
   const profile = run.profile ?? 'chat';
   const scope = run.scope ?? SCOPE_SINGLE;
@@ -176,6 +178,7 @@ describe('semantic_cache stage in the query layer (D-05, D-32, D-33, D-36)', () 
     expect(check.standalone).toBe(QUESTION);
     expect(computeCacheKeyHash(check)).toBe(
       computeCacheKeyHash({
+        accessGroupSetHash: 'off',
         answerLanguage: 'en',
         ragMode: 'strict',
         generatorModel: CONTEXT.generatorModel,
@@ -193,6 +196,20 @@ describe('semantic_cache stage in the query layer (D-05, D-32, D-33, D-36)', () 
     expect(out.cacheTicket?.key.entryProfile).toBe('chat');
     expect(out.cacheTicket && 'scope' in out.cacheTicket).toBe(false);
     expect(out.precomputed).toMatchObject({ text: QUESTION, embedding: { vector: VECTOR } });
+  });
+
+  it('04.3-12: the key carries the caller access set hash; an unresolved scope with the switch on skips the cache unchecked', async () => {
+    const keyed = withAccess(SCOPE_SINGLE, mintAccessScope('keys', ['all', 'g:00000000-0000-4000-8000-0000000000f1']));
+    const memory = memoryCache();
+    await runLayer(memory.cache, { scope: keyed, env: { RAG_DOC_ACCESS_GROUPS: 'on' } });
+    expect(memory.checks).toHaveLength(1);
+    expect(memory.checks[0]!.accessGroupSetHash).toBe(keyed.access!.setHash);
+
+    const unresolved = memoryCache();
+    const { out, record } = await runLayer(unresolved.cache, { env: { RAG_DOC_ACCESS_GROUPS: 'on' } });
+    expect(unresolved.checks).toHaveLength(0);
+    expect(record).toMatchObject({ status: 'skipped', detail: 'key_unavailable' });
+    expect(out.cacheTicket ?? null).toBeNull();
   });
 
   it('a protected-token query records bypass protected_tokens, never embeds or checks and gets no ticket', async () => {

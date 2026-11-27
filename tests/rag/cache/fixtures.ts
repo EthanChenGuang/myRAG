@@ -25,6 +25,7 @@ export function cacheQuery(overrides: Partial<CacheQuery> = {}): CacheQuery {
     standalone: 'what does the placeholder section describe',
     vector: [1, 0, 0, 0],
     embeddingProfileId: 'p1',
+    accessGroupSetHash: 'off',
     answerLanguage: 'en',
     ragMode: 'strict',
     generatorModel: 'provider/model-a',

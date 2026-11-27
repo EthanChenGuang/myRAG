@@ -137,32 +137,89 @@ function toReviewItem(row: Row, answerMasked: string | null): ReviewItem | null 
   return parsed.data;
 }
 
+/**
+ * D-25, A-06 (04.3-13): with access groups on, a review item whose access_sets the caller does not cover is hidden from the caller's SSR
+ * read by the restrictive policy rag_review_items_access_sets. An expert of the item's tenant still learns that the item exists: the
+ * server reader adds it with its content masked (no query, candidates, label or answer). Experts are confirmed with the caller's own
+ * rag_is_domain_expert call; the admin client only reads rows of those tenants that carry access_sets.
+ */
+export interface MaskedReviewOptions {
+  admin: Client;
+  userId: string;
+}
+
+function maskReviewItem(item: ReviewItem): ReviewItem {
+  return { ...item, query_masked: null, candidates: [], label: null, answer_masked: null };
+}
+
+async function expertTenants(ssr: Client, admin: Client, userId: string): Promise<string[]> {
+  const candidates = new Set<string>(['s:default']);
+  const { data, error } = await admin.from('rag_domain_experts').select('tenant_key').eq('user_id', userId);
+  if (error) throw new Error('review_expert_read_failed');
+  for (const row of (data ?? []) as Row[]) if (typeof row.tenant_key === 'string') candidates.add(row.tenant_key);
+  const tenants: string[] = [];
+  for (const tenantKey of candidates) {
+    const { data: expert, error: expertError } = await ssr.rpc('rag_is_domain_expert', { p_tenant_key: tenantKey });
+    if (expertError) throw new Error('review_expert_check_failed');
+    if (expert === true) tenants.push(tenantKey);
+  }
+  return tenants;
+}
+
+function rowOrder(a: Row, b: Row): number {
+  const left = String(a.mined_at ?? '');
+  const right = String(b.mined_at ?? '');
+  if (left !== right) return Date.parse(right) - Date.parse(left) || (left < right ? 1 : -1);
+  return String(a.id) < String(b.id) ? 1 : String(a.id) > String(b.id) ? -1 : 0;
+}
+
 export type ListReviewItemsResult =
   | { ok: true; items: ReviewItem[]; next_cursor: string | null }
   | { ok: false; reason: 'invalid_cursor' };
 
 /** Newest first by (mined_at, id); the opaque cursor is the last returned pair. Reads with the caller's SSR client only. */
-export async function listReviewItems(ssr: Client, query: ReviewListQuery): Promise<ListReviewItemsResult> {
-  let builder = ssr.from('rag_review_items').select(ITEM_COLUMNS.join(','));
-  if (query.status) builder = builder.eq('status', query.status);
-  if (query.reason) builder = builder.contains('reasons', [query.reason]);
-  if (query.language) builder = builder.eq('query_language', query.language);
-  if (query.cursor) {
-    const cursor = decodeCursor(query.cursor);
-    if (!cursor) return { ok: false, reason: 'invalid_cursor' };
-    builder = builder.or(`mined_at.lt."${cursor.minedAt}",and(mined_at.eq."${cursor.minedAt}",id.lt.${cursor.id})`);
-  }
-  const { data, error } = await builder
+export async function listReviewItems(ssr: Client, query: ReviewListQuery, masked?: MaskedReviewOptions): Promise<ListReviewItemsResult> {
+  const cursor = query.cursor ? decodeCursor(query.cursor) : null;
+  if (query.cursor && !cursor) return { ok: false, reason: 'invalid_cursor' };
+  const filtered = (client: Client) => {
+    let builder = client.from('rag_review_items').select(ITEM_COLUMNS.join(','));
+    if (query.status) builder = builder.eq('status', query.status);
+    if (query.reason) builder = builder.contains('reasons', [query.reason]);
+    if (query.language) builder = builder.eq('query_language', query.language);
+    if (cursor) builder = builder.or(`mined_at.lt."${cursor.minedAt}",and(mined_at.eq."${cursor.minedAt}",id.lt.${cursor.id})`);
+    return builder;
+  };
+  const { data, error } = await filtered(ssr)
     .order('mined_at', { ascending: false })
     .order('id', { ascending: false })
     .limit(REVIEW_PAGE_SIZE + 1);
   if (error) throw new Error('review_items_read_failed');
-  const rows = ((data ?? []) as unknown as Row[]).slice(0, REVIEW_PAGE_SIZE + 1);
+  let rows = ((data ?? []) as unknown as Row[]).slice(0, REVIEW_PAGE_SIZE + 1);
+  const hidden = new Set<string>();
+  if (masked) {
+    const tenants = await expertTenants(ssr, masked.admin, masked.userId);
+    if (tenants.length > 0) {
+      const { data: extra, error: extraError } = await filtered(masked.admin)
+        .in('tenant_key', tenants)
+        .not('access_sets', 'is', null)
+        .order('mined_at', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(REVIEW_PAGE_SIZE + 1);
+      if (extraError) throw new Error('review_items_read_failed');
+      const seen = new Set(rows.map((row) => String(row.id)));
+      for (const row of (extra ?? []) as unknown as Row[]) {
+        if (seen.has(String(row.id))) continue;
+        hidden.add(String(row.id));
+        rows.push(row);
+      }
+      rows = rows.sort(rowOrder).slice(0, REVIEW_PAGE_SIZE + 1);
+    }
+  }
   const page = rows.slice(0, REVIEW_PAGE_SIZE);
   const items: ReviewItem[] = [];
   for (const row of page) {
     const item = toReviewItem(row, null);
-    if (item) items.push(item);
+    if (item) items.push(hidden.has(String(row.id)) ? maskReviewItem(item) : item);
   }
   const last = page[page.length - 1];
   const next_cursor =
@@ -231,9 +288,25 @@ export async function linkedAnswer(admin: Client, item: Row): Promise<string | n
 
 export type GetReviewItemResult = { ok: true; item: ReviewItem } | { ok: false; reason: 'not_found' | 'invalid_item' };
 
-export async function getReviewItem(ssr: Client, admin: Client, id: string): Promise<GetReviewItemResult> {
+export async function getReviewItem(ssr: Client, admin: Client, id: string, masked?: MaskedReviewOptions): Promise<GetReviewItemResult> {
   const row = await readVisibleItem(ssr, id);
-  if (!row) return { ok: false, reason: 'not_found' };
+  if (!row) {
+    if (!masked || !isReviewItemId(id)) return { ok: false, reason: 'not_found' };
+    const { data, error } = await masked.admin
+      .from('rag_review_items')
+      .select(ITEM_COLUMNS.join(','))
+      .eq('id', id.toLowerCase())
+      .not('access_sets', 'is', null)
+      .maybeSingle();
+    if (error) throw new Error('review_item_read_failed');
+    const hiddenRow = (data as unknown as Row | null) ?? null;
+    if (!hiddenRow || typeof hiddenRow.tenant_key !== 'string') return { ok: false, reason: 'not_found' };
+    const { data: expert, error: expertError } = await ssr.rpc('rag_is_domain_expert', { p_tenant_key: hiddenRow.tenant_key });
+    if (expertError) throw new Error('review_expert_check_failed');
+    if (expert !== true) return { ok: false, reason: 'not_found' };
+    const item = toReviewItem(hiddenRow, null);
+    return item ? { ok: true, item: maskReviewItem(item) } : { ok: false, reason: 'invalid_item' };
+  }
   let answer: string | null = null;
   try {
     answer = await linkedAnswer(admin, row);

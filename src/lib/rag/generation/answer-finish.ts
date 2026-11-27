@@ -62,6 +62,8 @@ export interface AnswerFinishInput {
   textsSource?: TextsSource;
   /** D-16: a sentinel refusal; treated like the server-side refusal (not scored). */
   refusedByModel?: boolean;
+  /** Phase 4.3 (D-25, A-06): the access-key arrays of the cited documents; set only while access groups are on (plan 14 computes it). */
+  accessSets?: string[][] | null;
 }
 
 export interface AnswerPendingContext {
@@ -437,6 +439,7 @@ async function finishAnswer(input: AnswerFinishInput, deps: AnswerFinishDeps): P
     groundedness,
     ...(checks ? { checks } : {}),
     ...(input.textsSource !== undefined ? { textsSource: input.textsSource } : {}),
+    ...(input.accessSets ? { accessSets: input.accessSets } : {}),
   });
   if (!inserted) return null;
   if (groundedness.status !== 'pending') return groundedness;

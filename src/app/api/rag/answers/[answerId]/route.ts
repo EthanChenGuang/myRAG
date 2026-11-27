@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { createClient } from '@/lib/supabase/server';
 import { readOwnedAnswerRecord } from '@/lib/answers/store';
-import { answerFeedbackEnabled, citedDocumentIds, documentStatuses, toAnswerRecord } from '@/lib/answers/read';
+import { answerFeedbackEnabled, answerReaderVisibility, citedDocumentIds, readerDocumentStatuses, toAnswerRecord } from '@/lib/answers/read';
 import { AnswerRecordSchema } from '@/lib/rag-eval/contracts.generated';
 
 export const runtime = 'nodejs';
@@ -38,7 +38,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ an
   try {
     const row = await readOwnedAnswerRecord(supabase, { id: parsed.data.answerId, userId });
     if (!row) return NextResponse.json(NOT_FOUND, { status: 404 });
-    const documents = await documentStatuses(supabase, citedDocumentIds(row));
+    const documents = await readerDocumentStatuses(supabase, citedDocumentIds(row), await answerReaderVisibility(row, userId));
     const body = AnswerRecordSchema.safeParse(toAnswerRecord(row, new Date(), documents, { feedbackEnabled: answerFeedbackEnabled() }));
     if (!body.success) {
       console.error('[RAG Answers] stored record failed the contract', { issues: body.error.errors.length });

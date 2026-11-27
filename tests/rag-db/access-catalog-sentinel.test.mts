@@ -42,6 +42,7 @@ const FILTERED_COMMON = [
   'rag_identifier_resolve',
   'rag_identifier_candidates',
   'rag_dup_cluster_sources',
+  'rag_cache_check',
 ];
 
 const FILTERED: Record<DeploymentMode, string[]> = {

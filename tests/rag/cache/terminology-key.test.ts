@@ -46,6 +46,7 @@ const CONTEXT: RetrievalCacheContext = {
 };
 
 const KEY_BASE: Omit<CacheKeyParts, 'retrievalConfigHash'> = {
+  accessGroupSetHash: 'off',
   answerLanguage: 'en',
   ragMode: 'strict',
   generatorModel: 'provider/model-a',
