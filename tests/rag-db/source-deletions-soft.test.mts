@@ -85,11 +85,10 @@ describe('applySourceDeletions in soft mode (D-03, D-08)', () => {
       scope,
       source: 'nango',
       sourceKey: fileId,
-      sourceFileId: fileId,
-      sourceConnectionId: connectionId,
       text: markdown(body),
       filename: `${fileId}.md`,
       mimeType: 'text/markdown',
+      options: { origin: { sourceProvider: 'google-drive', sourceFileId: fileId, sourceConnectionId: connectionId } },
       signal: new AbortController().signal,
     });
     assert.equal(ready.status, 'ready');

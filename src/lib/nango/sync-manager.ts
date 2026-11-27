@@ -3,22 +3,23 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { nangoPipeline, processDocumentWithMetadata } from './document-adapter';
 import { fetchFileContent } from './file-fetcher';
 import { notionWorkspaceId, syncSourcePermissions, type PermissionSyncSummary } from './permission-sync';
+import {
+    DELETION_BATCH_SIZE,
+    deleteNangoLineages,
+    orphanUsesSoftDelete,
+    softDeleteNangoLineages,
+} from './source-deletions';
 import { PROVIDER_CONFIG, type NangoFileRecord, type SupportedProvider, type SyncStats } from './types';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import {
     nangoOwnerScope,
-    queueConfigFromProcessEnv,
-    removeDocumentObjects,
     scopeKey,
-    softDeleteLineage,
     type ConnectorProvider,
-    type DocumentObjectRow,
 } from '@/lib/rag';
 
 const SUPPORTED_EXTENSIONS = (env.NANGO_SUPPORTED_FILE_TYPES || 'pdf,doc,docx,txt,md').split(',');
 const MAX_FILES_PER_SYNC = parseInt(env.NANGO_MAX_FILES_PER_SYNC || '100');
-const DELETION_BATCH_SIZE = 50; // Process deletions in batches to avoid timeouts
 
 // Google Drive MIME types that we can process
 const GOOGLE_DRIVE_SUPPORTED_MIMETYPES = [
@@ -241,107 +242,6 @@ async function fetchGoogleDriveFiles(
     }
     logger.error('Nango', `Google Drive listing stopped after ${MAX_LISTING_PAGES} pages`);
     return { files, complete: false };
-}
-
-function orphanUsesSoftDelete(): boolean {
-    if (nangoPipeline() !== 'unified') return false;
-    try {
-        return queueConfigFromProcessEnv().ingestAsync;
-    } catch {
-        return false;
-    }
-}
-
-async function collectNangoLineageIds(
-    supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
-    tenantKey: string,
-    connectionId: string,
-    fileId: string
-): Promise<string[]> {
-    const lineageIds = new Set<string>();
-    for (const column of ['source_key', 'source_file_id'] as const) {
-        const { data, error } = await supabaseAdmin
-            .from('documents')
-            .select('id, lineage_id')
-            .eq('tenant_key', tenantKey)
-            .eq('source', 'nango')
-            .eq('source_connection_id', connectionId)
-            .eq(column, fileId);
-        if (error) throw error;
-        for (const row of (data ?? []) as Array<{ id: string; lineage_id: string | null }>) {
-            lineageIds.add(row.lineage_id ?? row.id);
-        }
-    }
-    return Array.from(lineageIds);
-}
-
-async function softDeleteNangoLineages(
-    supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
-    tenantKey: string,
-    connectionId: string,
-    fileId: string,
-    userId: string
-): Promise<boolean> {
-    try {
-        const lineages = await collectNangoLineageIds(supabaseAdmin, tenantKey, connectionId, fileId);
-        if (lineages.length === 0) return true;
-        const owner = nangoOwnerScope({ ownerUserId: userId });
-        if (!owner.ok) return false;
-        const signal = AbortSignal.timeout(120_000);
-        for (const lineageId of lineages) {
-            const result = await softDeleteLineage(owner.scope, lineageId, 'nango', { signal });
-            if (!result.ok) return false;
-        }
-        return true;
-    } catch (error) {
-        logger.error('Nango', `Failed to soft-delete the lineage of ${fileId}`, error);
-        return false;
-    }
-}
-
-/**
- * Delete every version of the files a source no longer has, inside one tenant. A file is found by its identity
- * (the provider file id of this connection), never by the document id a sync record holds: that id can name another
- * lineage when ingest reported a duplicate of an older, unrelated document. Returns false when a delete failed, so
- * the caller keeps the sync record and the next sync retries.
- */
-async function deleteNangoLineages(
-    supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
-    tenantKey: string,
-    connectionId: string,
-    fileId: string
-): Promise<boolean> {
-    try {
-        const lineages = await collectNangoLineageIds(supabaseAdmin, tenantKey, connectionId, fileId);
-        if (lineages.length === 0) return true;
-        const { data: versions, error: versionsError } = await supabaseAdmin
-            .from('documents')
-            .select('id, version, lineage_id, original_path, processing_state')
-            .in('lineage_id', lineages)
-            .eq('tenant_key', tenantKey)
-            .eq('source', 'nango');
-        if (versionsError) throw versionsError;
-        const versionRows = (versions ?? []) as DocumentObjectRow[];
-        const versionIds = versionRows.map((version) => version.id);
-
-        if (versionIds.length > 0) {
-            const { error: chunksError } = await supabaseAdmin.from('document_chunks').delete().in('document_id', versionIds);
-            if (chunksError) throw chunksError;
-        }
-        const { error: documentsError } = await supabaseAdmin
-            .from('documents')
-            .delete()
-            .in('lineage_id', lineages)
-            .eq('tenant_key', tenantKey)
-            .eq('source', 'nango');
-        if (documentsError) throw documentsError;
-        // Best effort and after the rows: the originals and parse files of the removed versions leave the private bucket.
-        await removeDocumentObjects({ tenantKey, rows: versionRows });
-        return true;
-    } catch (error) {
-        logger.error('Nango', `Failed to delete the lineage of ${fileId}`, error);
-        return false;
-    }
 }
 
 /**
