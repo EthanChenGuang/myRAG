@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import type { RagConfig } from '../config';
-import { accessRpcArgs, sameAccessFilter, scopeAccessFilter } from '../tenant/access';
+import { accessRpcArgs, sameAccessFilter, scopeAccessFilter, type ScopeAccessFilter } from '../tenant/access';
+import { getV2StartupVerdict } from '../v2/startup';
 import { assertTenantScope, scopeKey } from '../tenant/scope';
 import {
   EmbeddingProfileMismatchError,
@@ -24,6 +25,8 @@ import type {
 export interface PgvectorBackendDeps {
   adminClient: () => RpcClient | SupabaseClient | null;
   getConfig: () => RagConfig;
+  /** The pgvector version from the startup verdict; null while unknown. */
+  pgvectorVersion?: () => string | null;
 }
 
 interface HybridRow {
@@ -114,7 +117,43 @@ function mapRow(row: HybridRow): RankedHit {
   };
 }
 
-function splitLegs(rows: HybridRow[]): BackendLegs {
+/** D-13, A-09: the floor of the exact-scan cutoff for a restricted caller. */
+export const ACCESS_EXACT_SCAN_CUTOFF = 1000;
+
+export interface DenseScanArgs {
+  iterativeScan: RagConfig['v2']['iterativeScan'];
+  exactScanCutoff: number;
+  /** Set for a keys filter: the values it sent, recorded on the leg meta and never in the config hash. */
+  forced?: { accessExactCutoff: number; accessIterativeScan: RagConfig['v2']['iterativeScan'] };
+}
+
+function versionAtLeast(version: string, required: string): boolean {
+  const left = version.split('.').map((part) => Number.parseInt(part, 10));
+  const right = required.split('.').map((part) => Number.parseInt(part, 10));
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const a = Number.isFinite(left[index]) ? left[index]! : 0;
+    const b = Number.isFinite(right[index]) ? right[index]! : 0;
+    if (a !== b) return a > b;
+  }
+  return true;
+}
+
+/**
+ * A-09 (fixed rule): a keys filter raises the exact-scan cutoff to at least 1000 and, when the configured iterative scan is off and
+ * pgvector is 0.8.0 or newer, asks for relaxed_order. off and admin_all send the configured values.
+ */
+export function denseScanArgs(access: ScopeAccessFilter, config: RagConfig, pgvectorVersion: string | null): DenseScanArgs {
+  const configured = { iterativeScan: config.v2.iterativeScan, exactScanCutoff: config.v2.exactScanCutoff };
+  if (access.mode !== 'keys') return configured;
+  const exactScanCutoff = Math.max(configured.exactScanCutoff, ACCESS_EXACT_SCAN_CUTOFF);
+  const iterativeScan =
+    configured.iterativeScan === 'off' && pgvectorVersion !== null && versionAtLeast(pgvectorVersion, '0.8.0')
+      ? 'relaxed_order'
+      : configured.iterativeScan;
+  return { iterativeScan, exactScanCutoff, forced: { accessExactCutoff: exactScanCutoff, accessIterativeScan: iterativeScan } };
+}
+
+function splitLegs(rows: HybridRow[], forced?: DenseScanArgs['forced']): BackendLegs {
   const dense: RankedHit[] = [];
   const lexical: RankedHit[] = [];
   let denseMode: BackendLegsMeta['denseMode'] = null;
@@ -127,6 +166,7 @@ function splitLegs(rows: HybridRow[]): BackendLegs {
       lexical.push(hit);
     }
   }
+  if (forced) return { dense, lexical, meta: { denseMode, ...forced } };
   return { dense, lexical, meta: denseMode ? { denseMode } : undefined };
 }
 
@@ -139,7 +179,7 @@ function scopeArgs(filters: BackendSearchRequest['filters']): Record<string, unk
   };
 }
 
-function buildRpcArgs(req: BackendSearchRequest, config: RagConfig): Record<string, unknown> {
+function buildRpcArgs(req: BackendSearchRequest, config: RagConfig, scan: DenseScanArgs): Record<string, unknown> {
   const filters = req.filters;
   return {
     p_tenant_key: scopeKey(req.scope),
@@ -154,8 +194,8 @@ function buildRpcArgs(req: BackendSearchRequest, config: RagConfig): Record<stri
     p_document_ids: nullIfEmpty(filters.documentIds),
     p_doc_types: nullIfEmpty(filters.docTypes),
     p_languages: nullIfEmpty(filters.languages),
-    p_iterative_scan: config.v2.iterativeScan,
-    p_exact_scan_cutoff: config.v2.exactScanCutoff,
+    p_iterative_scan: scan.iterativeScan,
+    p_exact_scan_cutoff: scan.exactScanCutoff,
     p_lexical_languages: nullIfEmpty(req.lexicalLanguages ?? undefined),
     p_supplier: filters.invoice?.supplier ?? null,
     p_amount_min: filters.invoice?.amountMin ?? null,
@@ -287,7 +327,9 @@ export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBacke
       if (!client) throw new RetrievalBackendError('hybrid_search_chunks', 'admin_unavailable');
       const config = deps.getConfig();
       const rpcClient = client as RpcClient;
-      const response = await rpcClient.rpc('hybrid_search_chunks', buildRpcArgs(req, config)).abortSignal(req.signal);
+      const version = deps.pgvectorVersion ? deps.pgvectorVersion() : getV2StartupVerdict().pgvectorVersion;
+      const scan = denseScanArgs(req.access, config, version);
+      const response = await rpcClient.rpc('hybrid_search_chunks', buildRpcArgs(req, config, scan)).abortSignal(req.signal);
       req.signal.throwIfAborted();
       if (response.error) {
         if (response.error.message.includes('embedding_profile_mismatch')) {
@@ -296,7 +338,7 @@ export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBacke
         logger.error('Document Search', 'hybrid_search_chunks failed', { rpc: 'hybrid_search_chunks', code: response.error.code ?? null });
         throw new RetrievalBackendError('hybrid_search_chunks', response.error.code ?? null);
       }
-      return splitLegs((response.data ?? []) as HybridRow[]);
+      return splitLegs((response.data ?? []) as HybridRow[], scan.forced);
     },
     async searchTranslations(req: BackendTranslationSearchRequest): Promise<TranslationHit[]> {
       assertTenantScope(req.scope);

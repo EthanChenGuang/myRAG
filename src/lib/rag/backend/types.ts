@@ -97,6 +97,9 @@ export interface BackendLegsMeta {
   denseMode: 'ann' | 'exact' | null;
   /** External backends (D-10): store ids that failed re-validation in this request. */
   tenantValidationDropped?: number;
+  /** D-13, A-09: the exact-scan cutoff and iterative scan a keys access filter sent; absent when the configured values were sent. */
+  accessExactCutoff?: number;
+  accessIterativeScan?: 'off' | 'relaxed_order' | 'strict_order';
 }
 
 export interface BackendLegs {
