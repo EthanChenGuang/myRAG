@@ -743,6 +743,26 @@ export type { VectorSyncAccessResult } from './sync/auth';
 export { runVectorSyncSlice } from './sync/slice';
 export type { RunVectorSyncSliceOptions, VectorSyncMode } from './sync/slice';
 export type { RpcClient } from './backend/supabase-rpc';
-export { buildVectorSyncStores, defaultStoreFactories, isVectorSyncTarget, readEnabledTargets, readVectorSyncStatus, VECTOR_SYNC_TARGETS } from './sync/targets';
-export type { VectorStoreFactories, VectorSyncTargetStatus } from './sync/targets';
+export {
+  buildVectorSyncStores,
+  defaultStoreFactories,
+  isVectorSyncTarget,
+  listVectorSyncTargets,
+  readEnabledTargets,
+  readVectorSyncStatus,
+  setVectorSyncTarget,
+  VECTOR_SYNC_TARGETS,
+} from './sync/targets';
+export type { SetVectorSyncTargetResult, VectorStoreFactories, VectorSyncTargetFlag, VectorSyncTargetStatus } from './sync/targets';
+export { resolveVectorSyncAdminRpc } from './sync/admin-rpc';
+export { computeIndexCompat, envLoadedAt, INDEX_COMPAT_STORE_TIMEOUT_MS, readIndexCompat } from './backend/index-compat';
+export type {
+  IndexCompatBackend,
+  IndexCompatCode,
+  IndexCompatInput,
+  IndexCompatReport,
+  IndexCompatView,
+  IndexCompatWarning,
+  ProfileStateCounts,
+} from './backend/index-compat';
 export type { VectorStore, VectorSyncTarget } from './sync/stores/types';
