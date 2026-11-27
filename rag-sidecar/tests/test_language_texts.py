@@ -45,6 +45,8 @@ LABEL_KEYS = (
     "badge_tooltip_verified",
     "badge_tooltip_possibly_unreliable",
     "badge_tooltip_not_checked",
+    "condensed_question",
+    "earlier_draft",
 )
 INSTRUCTION_KEYS = (
     "citation",
@@ -60,6 +62,7 @@ INSTRUCTION_KEYS = (
     "version",
     "concise",
     "calculation",
+    "calculation_block",
 )
 ALL_KEYS = (
     [f"notices.{key}" for key in NOTICE_KEYS]
@@ -77,6 +80,7 @@ EXPECTED_PLACEHOLDERS = {
     "instructions.web_separation": {"from_documents", "from_web"},
     "instructions.relevance_open": {"general_knowledge"},
     "instructions.general_knowledge": {"general_knowledge"},
+    "instructions.calculation_block": {"open", "close"},
 }
 PLACEHOLDER_RE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
@@ -160,6 +164,8 @@ def test_each_text_uses_exactly_its_declared_placeholders(code):
         ("notices.calc_corrected", "The result is {value} and {extra}."),
         ("notices.link_removed", "(link {value} removed)"),
         ("instructions.partial_answer", "Write {sentinel} only."),
+        ("instructions.calculation_block", "Write the block between {open} and the end."),
+        ("instructions.calculation_block", "Write the block at the end."),
     ],
 )
 @pytest.mark.parametrize("code", ["zh", "en", "it"])
@@ -198,3 +204,97 @@ def test_the_label_instructions_ask_for_bold_labels_on_their_own_line():
 def test_the_registry_still_loads_and_the_sidecar_copy_is_identical():
     LanguageRegistry.model_validate(_raw())
     assert SIDECAR_COPY.read_bytes() == REGISTRY_PATH.read_bytes()
+
+
+# --- Phase 5.2.1 D-74, D-70: number format and computation-intent lexicon per pack
+
+
+@pytest.mark.parametrize("field", ["number_format", "calc_intent_terms"])
+def test_a_pack_without_number_format_or_intent_terms_fails(field):
+    raw = _pack("en")
+    del raw[field]
+    with pytest.raises(ValidationError, match=field):
+        LanguagePack.model_validate(raw)
+
+
+@pytest.mark.parametrize("code", ["zh", "en", "it"])
+def test_every_shipped_pack_has_a_number_format_and_intent_terms(code):
+    pack = next(entry for entry in load_language_registry().packs if entry.code == code)
+    fmt = pack.number_format
+    assert fmt.group_separators and fmt.decimal_marks and fmt.magnitude_words
+    assert not set(fmt.group_separators) & set(fmt.decimal_marks)
+    assert all(1 <= entry.power <= 12 for entry in fmt.magnitude_words)
+    assert 1 <= len(pack.calc_intent_terms) <= 40
+
+
+def test_the_shipped_number_formats_follow_each_language_convention():
+    by_code = {pack.code: pack.number_format for pack in load_language_registry().packs}
+    assert by_code["en"].decimal_marks == ["."] and "," in by_code["en"].group_separators
+    assert by_code["it"].decimal_marks == [","] and "." in by_code["it"].group_separators
+    assert by_code["zh"].fullwidth_digits is True
+    assert by_code["en"].fullwidth_digits is False and by_code["it"].fullwidth_digits is False
+    powers = {code: {entry.word: entry.power for entry in fmt.magnitude_words} for code, fmt in by_code.items()}
+    assert powers["en"] == {"thousand": 3, "million": 6, "billion": 9}
+    assert powers["it"] == {"mila": 3, "milione": 6, "milioni": 6, "miliardo": 9, "miliardi": 9}
+    assert powers["zh"] == {"千": 3, "万": 4, "亿": 8}
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"group_separators": [".", ","], "decimal_marks": ["."]}, "group"),
+        ({"group_separators": [",", " ", "'", "_", "."]}, "group_separators"),
+        ({"magnitude_words": [{"word": "w", "power": 13}]}, "power"),
+        ({"magnitude_words": [{"word": "w", "power": 0}]}, "power"),
+        ({"decimal_marks": []}, "decimal_marks"),
+        ({"group_separators": ["5"]}, "group_separators"),
+        ({"magnitude_words": [{"word": "w", "power": 3}, {"word": "w", "power": 6}]}, "magnitude"),
+    ],
+)
+def test_number_format_rejects_bad_values(change, message):
+    raw = _pack("en")
+    raw["number_format"] = {**raw["number_format"], **change}
+    with pytest.raises(ValidationError, match=message):
+        LanguagePack.model_validate(raw)
+
+
+@pytest.mark.parametrize(
+    ("terms", "message"),
+    [
+        (["t"] * 0 + [f"term{chr(97 + i % 26)}{chr(97 + i // 26)}" for i in range(41)], "calc_intent_terms"),
+        (["x" * 25], "calc_intent_terms"),
+        (["top 3"], "calc_intent_terms"),
+        (["第３"], "calc_intent_terms"),
+        ([], "calc_intent_terms"),
+        (["sum", "sum"], "calc_intent_terms"),
+        ([" sum"], "calc_intent_terms"),
+    ],
+)
+def test_calc_intent_terms_rejects_bad_values(terms, message):
+    raw = _pack("en")
+    raw["calc_intent_terms"] = terms
+    with pytest.raises(ValidationError, match=message):
+        LanguagePack.model_validate(raw)
+
+
+def test_the_calculation_block_instruction_carries_both_tags_in_every_language():
+    for code in ("zh", "en", "it"):
+        text = _pack(code)["texts"]["instructions"]["calculation_block"]
+        assert text.index("{open}") < text.index("{close}"), code
+        assert "JSON" in text, code
+
+
+def test_the_calculation_instruction_asks_for_tool_steps_citations_and_fact_precedence():
+    en = _pack("en")["texts"]["instructions"]["calculation"]
+    for phrase in ("calculate tool", "mentally", "each item", "before the total", "cite", "fact tool"):
+        assert phrase in en, phrase
+    for code in ("zh", "it"):
+        assert "calculate" in _pack(code)["texts"]["instructions"]["calculation"], code
+
+
+def test_intent_terms_and_texts_hold_no_digit_or_example_number():
+    for pack in _raw()["packs"]:
+        for term in pack["calc_intent_terms"]:
+            assert not re.search(r"\d", term), f"{pack['code']}: {term}"
+        for key in ("calculation", "calculation_block"):
+            assert not re.search(r"\d", pack["texts"]["instructions"][key]), f"{pack['code']}: {key}"
