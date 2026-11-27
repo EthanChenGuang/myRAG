@@ -456,6 +456,8 @@ export interface CalcReviewEnqueueInput {
   traceId?: string | null;
   /** Ghost chats store and enqueue nothing (D-23). */
   ghost: boolean;
+  /** Phase 4.3 (D-25, A-06): the source documents' access-key arrays while access groups are on; passed to the enqueue as given. */
+  accessSets?: readonly (readonly string[])[] | null;
 }
 
 export interface CalcReviewEnqueueDeps {
@@ -481,6 +483,7 @@ export function scheduleCalcReviewEnqueue(input: CalcReviewEnqueueInput, deps: P
           documentIds: input.documentIds,
           detector: 'calc_check',
           traceId: input.traceId ?? null,
+          ...(input.accessSets ? { accessSets: input.accessSets } : {}),
         });
       }
     });

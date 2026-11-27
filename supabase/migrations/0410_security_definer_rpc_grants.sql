@@ -964,6 +964,15 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_find_invoices(text, text, date, date, numeric, numeric, text, integer, text[], boolean) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_find_invoices(text, text, date, date, numeric, numeric, text, integer, text[], boolean) TO service_role;
   END IF;
+  -- Phase 4.3 follow-up, migration 0984: review-queue access sets (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_review_access_sets(text, jsonb, uuid[], boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_review_access_sets(text, jsonb, uuid[], boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_review_access_sets(text, jsonb, uuid[], boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_enqueue_review_item(text, text, jsonb, jsonb, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb, jsonb) TO service_role;
+  END IF;
 END
 $service_role_only$;
 
