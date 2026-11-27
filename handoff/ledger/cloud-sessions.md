@@ -837,3 +837,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - Must train right after review-writers (0988). Apply order: 0984 -> 0986 -> 0988 -> 0990 -> 0410.
   - Archived.
 - MIGRATION MAP: 0986 doc-types; 0987 scope-access; 0988 review-writers (renamed in t40); 0989 NF-1; 0990 review-items-hardening.
+- 22:58Z 06.3-19 DONE exec/06.3-19 c70b959eb. Migration 0728 adds the purge store inventory and the foreign-store purge (depends on 06.3-15). The session is still running on the 4.4 G4 lexical-stats follow-up; do not archive yet. Eval-only apply order: 0726 -> 0727 -> 0728 -> 0410. NOT to prod before 06.3-20. New rule for later phases: every new doc/chunk-referencing table needs a rag_purge_store_inventory row.
