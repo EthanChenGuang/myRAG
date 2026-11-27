@@ -32,6 +32,7 @@ export function OrganizationSwitcher() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsOrgId, setSettingsOrgId] = useState<string | null>(null);
   const [settingsOrgName, setSettingsOrgName] = useState<string>('');
+  const [settingsOrgPersonal, setSettingsOrgPersonal] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
   const { organization: current, setCurrentOrganization } = useCurrentOrganization();
@@ -81,6 +82,7 @@ export function OrganizationSwitcher() {
     e.stopPropagation();
     setSettingsOrgId(orgId);
     setSettingsOrgName(orgName);
+    setSettingsOrgPersonal(personal.some((org) => org.id === orgId));
     setIsSettingsOpen(true);
     setIsOpen(false);
   };
@@ -337,10 +339,12 @@ export function OrganizationSwitcher() {
             setIsSettingsOpen(false);
             setSettingsOrgId(null);
             setSettingsOrgName('');
+            setSettingsOrgPersonal(false);
           }}
           organizationId={settingsOrgId}
           organizationName={settingsOrgName}
           userRole={(current?.user_role || 'member') as 'owner' | 'admin' | 'member' | 'viewer'}
+          isPersonal={settingsOrgPersonal}
         />
       )}
     </div>

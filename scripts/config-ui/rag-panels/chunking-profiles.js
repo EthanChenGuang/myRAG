@@ -1314,6 +1314,13 @@ function chunkingRowKey(docType, id) {
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // Panel
 
+const CHUNKING_PROFILES_PANEL_STATUS =
+  typeof ragPanelSetStatus === 'function'
+    ? ragPanelSetStatus
+    : typeof require !== 'undefined'
+      ? require('./panel-status.js').ragPanelSetStatus
+      : null;
+
 class ChunkingProfilesPanel {
   constructor(root, deps) {
     const d = deps || {};
@@ -1528,14 +1535,18 @@ class ChunkingProfilesPanel {
     this.setStatus(mapped, true);
   }
 
-  setStatus(message, isError) {
-    const host = this.hosts.status;
-    if (!host) return;
-    host.replaceChildren();
-    host.classList.toggle('text-error', Boolean(isError));
-    if (isError) host.appendChild(chunkingIcon('bi-exclamation-circle', 'mr-1'));
-    if (typeof message === 'string') host.appendChild(document.createTextNode(message));
-    else chunkingAppendMessage(host, message);
+  setStatus(message, isError, options) {
+    const render = () => {
+      const host = this.hosts.status;
+      if (!host) return;
+      host.replaceChildren();
+      host.classList.toggle('text-error', Boolean(isError));
+      if (isError) host.appendChild(chunkingIcon('bi-exclamation-circle', 'mr-1'));
+      if (typeof message === 'string') host.appendChild(document.createTextNode(message));
+      else chunkingAppendMessage(host, message);
+    };
+    if (CHUNKING_PROFILES_PANEL_STATUS) CHUNKING_PROFILES_PANEL_STATUS(this.hosts.status, render, isError, options);
+    else render();
   }
 
   focusStatus() {
@@ -2187,7 +2198,7 @@ class ChunkingProfilesPanel {
         message.segments.push({ text: ' ' }, ...finding.segments);
         message.text += ' ' + finding.text;
       }
-      this.setStatus(message);
+      this.setStatus(message, false, { toast: true });
       if (this.pendingFocus && !this.focusKey(this.pendingFocus)) this.focusStatus();
       this.pendingFocus = null;
       return;
@@ -2360,7 +2371,7 @@ class ChunkingProfilesPanel {
     }
     if (note) this.rowNotes.set(b.key, note);
     await this.loadList(false);
-    this.setStatus(message, isError);
+    this.setStatus(message, isError, { toast: outcome.outcome === 'completed' });
     this.focusStatus();
   }
 
@@ -2451,7 +2462,7 @@ class ChunkingProfilesPanel {
       message = mapped;
     }
     await this.loadList(false);
-    this.setStatus(message, isError);
+    this.setStatus(message, isError, { toast: Boolean(result.ok) });
     if (!this.focusKey(focusKey)) this.focusStatus();
   }
 

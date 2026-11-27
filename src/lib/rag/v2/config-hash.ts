@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import rawOutputCaps from '../../../../eval/config/output-caps.json';
+import glossaryPrompt from '../query/prompts/shared.glossary.v1.json';
 import type { AnswerConfig } from '../generation/answer-config';
 import { calcLimitsVersion } from '../calc/limits';
 import { promptBudgetConfigVersion, tokenizerCalibrationVersion } from '../context/prompt-budget-config';
@@ -29,6 +30,8 @@ export interface RetrievalConfigHashSwitches {
   rerankTierVoice: RerankTier;
   /** D-03: present only for a single-language deployment, so a multilingual hash is unchanged. */
   monolingual?: true;
+  /** D-19: present only while RAG_SOURCE_RECHECK is on, so the hash with the switch off is unchanged. */
+  sourceRecheck?: true;
 }
 
 /** The prompt-injection defense configuration a result was built under (D-18). */
@@ -218,6 +221,19 @@ export type TerminologyHashStage = { enabled: false } | { enabled: true; version
 
 export const TERMINOLOGY_UNAVAILABLE = 'terminology:unavailable';
 
+/** D-14 (XLG-05): the tenant glossary a request translated with; present only while RAG_TRANSLATION_GLOSSARY is effective. */
+export interface RetrievalConfigHashGlossary {
+  /** The TERM version the glossary was read at; GLOSSARY_UNAVAILABLE when it was not loaded for the request. */
+  version: string;
+  /** The shared.glossary addendum version (its prompt file is not in the query-layer prompt list, so the off-hash keeps its value). */
+  prompt_version: number;
+}
+
+/** The glossary as the hash sees it: switch off for the request, or on with the version it was read at (null: not loaded). */
+export type GlossaryHashStage = { enabled: false } | { enabled: true; version: string | null };
+
+export const GLOSSARY_UNAVAILABLE = 'glossary:unavailable';
+
 /** D-30: the attribute filter a request was retrieved with; present only while the attribute_resolve stage is enabled for the request. */
 export interface RetrievalConfigHashAttributeFilter {
   mode: Exclude<AttributeFilterMode, 'off'>;
@@ -270,6 +286,8 @@ export interface RetrievalConfigHashInput {
   attributeFilter?: RetrievalConfigHashAttributeFilter | null;
   /** D-08: present only while BM25 is the effective lexical scoring (lexicalScoringHashBlock). */
   lexicalScoring?: RetrievalConfigHashLexicalScoring | null;
+  /** D-14: present only while RAG_TRANSLATION_GLOSSARY is effective for the request (glossaryHashBlock). */
+  glossary?: RetrievalConfigHashGlossary | null;
 }
 
 export interface RetrievalConfigHashLexicalScoring {
@@ -367,10 +385,16 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     ...(input.terminology ? { terminology: input.terminology } : {}),
     ...(input.attributeFilter ? { attribute_filter: input.attributeFilter } : {}),
     ...(input.lexicalScoring ? { lexical_scoring: input.lexicalScoring } : {}),
+    ...(input.glossary ? { glossary: input.glossary } : {}),
   };
 }
 
 export function computeRetrievalConfigHash(input: RetrievalConfigHashInput): string {
   const payload = buildPayload(input);
   return createHash('sha256').update(canonicalJson(payload), 'utf8').digest('hex');
+}
+/** D-14, research F-5: the only builder of the glossary block. Undefined while the switch is off, so the hash keeps its value. */
+export function glossaryHashBlock(stage: GlossaryHashStage): RetrievalConfigHashGlossary | undefined {
+  if (!stage.enabled) return undefined;
+  return { version: stage.version ?? GLOSSARY_UNAVAILABLE, prompt_version: glossaryPrompt.version };
 }

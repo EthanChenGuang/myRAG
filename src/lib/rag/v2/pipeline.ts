@@ -7,7 +7,7 @@ import { getRagDeps } from '../deps';
 import { LEGACY_PROFILE } from '../embeddings/active-profile';
 import { classifyProfileFailure, type QueryEmbedding } from '../embeddings/query-embedding';
 import { assembleVoiceResults, voiceContext, type VoiceResults } from '../context/voice';
-import { validResultCount, warnInjectionCheckDisabled } from '../config';
+import { scopeGateEnabledFor, validResultCount, warnInjectionCheckDisabled } from '../config';
 import { downweightOrder, failure, injectionDropped, requireValue, runInjectionStage, runStage, stageSpec, StageError } from '../pipeline';
 import { injectionItems, releasedRulesFromRows } from '../security/injection-check';
 import { scopeAccessFilter, type ScopeAccessFilter } from '../tenant/access';
@@ -31,17 +31,19 @@ import {
   type BindingEmbed,
   type BindingLegsPlan,
 } from './stages/binding-legs';
-import { buildCacheHitResult, buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks, requestRetrievalConfigHash } from './result';
+import { buildCacheHitResult, buildOutOfScopeResult, buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks, requestRetrievalConfigHash } from './result';
 import { buildRetrievalFilters, effectiveOnFor } from '../query/filters';
 import { queryLanguage as detectQueryLanguage } from '../query/language';
 import { effectiveQueryLayerConfig, queryLayerOverrides } from '../query/layer-config';
 import { effectiveQueryParams } from '../query/query-params';
 import { queryLayerHashComponent } from '../query/hash-part';
-import { ATTRIBUTE_STATE_SKIPPED, type AttributeFilterHashStage, type RetrievalConfigHashQueryLayer, type TerminologyHashStage } from './config-hash';
+import { ATTRIBUTE_STATE_SKIPPED, type AttributeFilterHashStage, type GlossaryHashStage, type RetrievalConfigHashQueryLayer, type TerminologyHashStage } from './config-hash';
 import { hasTranslationWork, planTranslationLegs, translationHashFields, type TranslationLegsPlan } from './translation-legs';
 import type { SemanticCacheSeam } from '../query/run-layer';
 import { variantDenseTexts } from '../query/variants';
+import type { VariantFilterRetry } from './port';
 import { identifierSuggestionMessage } from '../generation/messages';
+import { logScopeGateProblem, runScopeGateStage, scopeGateFailOpen } from '../scope/stage';
 
 export const V2_PROFILES = ['chat', 'embed', 'eval', 'voice'] as const;
 
@@ -74,7 +76,9 @@ function precomputedVectors(entry: { text: string; embedding: QueryEmbedding } |
 // Static imports: a cold dynamic import here stalled the first request after a transform timeout until the embed stage timed out.
 function queryLayerHashFor(input: RunRetrievalInput, config: ReturnType<typeof loadRagConfig>, profile: Profile): RetrievalConfigHashQueryLayer {
   const overrides = queryLayerOverrides(profile, input.stageOverrides);
-  return queryLayerHashComponent(effectiveQueryLayerConfig(config.queryLayer, overrides), effectiveQueryParams(profile, overrides?.queryParams));
+  return queryLayerHashComponent(effectiveQueryLayerConfig(config.queryLayer, overrides), effectiveQueryParams(profile, overrides?.queryParams), {
+    subqFilters: config.queryAdditions.effective.subqFilters,
+  });
 }
 
 export async function runV2Pipeline(
@@ -112,15 +116,20 @@ export async function runV2Pipeline(
   let packing: RetrievalResult['packing'];
   let bindingPlan: BindingLegsPlan | null = null;
   let queryPlan: RetrievalResult['queryPlan'] | null = null;
+  let searchesCounted: number | undefined;
   let layerTranslate = false;
   let effectiveOn: string | undefined;
   let queryLayerHash: RetrievalConfigHashQueryLayer | undefined;
   let cacheTicket: RetrievalResult['cacheTicket'];
+  let scopeGate: RetrievalResult['scopeGate'];
   // D-21: set by the terminology stage before semantic_cache builds its key; enabled but not reached reads as unavailable.
   let terminologyStage: TerminologyHashStage = spec('terminology', 'skip').enabled ? { enabled: true, version: null } : { enabled: false };
   // D-30: set by the attribute stage before semantic_cache builds its key; enabled but not reached reads as skipped.
   let attributeStage: AttributeFilterHashStage =
     config.v2.attributeFilter !== 'off' && spec('attribute_resolve', 'skip').enabled ? { enabled: true, state: ATTRIBUTE_STATE_SKIPPED } : { enabled: false };
+  // D-14: set by the query layer before semantic_cache builds its key, only while RAG_TRANSLATION_GLOSSARY is effective.
+  let glossaryStage: GlossaryHashStage = { enabled: false };
+  let sourceRecheck: RetrievalResult['sourceRecheck'];
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
@@ -194,6 +203,7 @@ export async function runV2Pipeline(
         terminology: terminologyStage,
         ...(await lexicalStampFor()),
         attributeFilter: attributeStage,
+        glossary: glossaryStage,
       }),
   };
 
@@ -201,6 +211,7 @@ export async function runV2Pipeline(
     const query = await runQueryStages({
       input,
       scope,
+      access,
       config,
       profile,
       signal,
@@ -212,6 +223,9 @@ export async function runV2Pipeline(
       },
       onAttributeFilter: (stage) => {
         attributeStage = stage;
+      },
+      onGlossary: (stage) => {
+        glossaryStage = stage;
       },
     });
     queryContext = query.queryContext;
@@ -274,6 +288,38 @@ export async function runV2Pipeline(
       'embed',
     );
     embedding = variantEmbeddings[0]!;
+
+    // D-26: scores the embeddings already made against the tenant's cached centroids; only out_of_scope skips search, rank and context.
+    if (scopeGateEnabledFor(config, profile)) {
+      const gateSpec = spec('scope_gate', 'skip');
+      if (gateSpec.enabled) {
+        const embeddingProfileId = embedding.profile?.id ?? LEGACY_PROFILE.id;
+        const gate = await runStage(
+          gateSpec,
+          signal,
+          () =>
+            runScopeGateStage({
+              scope,
+              embeddingProfileId,
+              ragMode: input.options?.ragMode ?? 'strict',
+              variants: query.variants,
+              embeddings: variantEmbeddings,
+              queryPlan: queryPlan ?? null,
+            }),
+          collector,
+          { detail: (value) => value.label },
+        );
+        if (gate.skipped) {
+          logScopeGateProblem(gate.reason);
+          scopeGate = scopeGateFailOpen(gate.reason === 'timeout' ? 'timeout' : 'failed');
+        } else {
+          scopeGate = gate.value;
+        }
+        if (scopeGate.label === 'out_of_scope') {
+          return buildOutOfScopeResult({ collector, queryContext, queryLanguage, queryPlan: queryPlan ?? null, scopeGate, ...(cacheTicket ? { cacheTicket } : {}) });
+        }
+      }
+    }
     translationPlan = await planTranslations(embedding.profile?.id ?? LEGACY_PROFILE.id);
     if (lexicalSwitchOn) queryLexical = await resolveQueryLexical();
 
@@ -308,7 +354,17 @@ export async function runV2Pipeline(
       ...(queryLexical ? { lexical: queryLexical } : {}),
       ...(query.attributes ? { attributes: query.attributes } : {}),
       access,
+      // Phase 6.2 D-08, P-10: the layer's cap on searches; filter retries stay within it.
+      ...(query.queryLayer
+        ? {
+            maxSearches: effectiveQueryParams(profile, profile === 'eval' ? input.stageOverrides?.queryLayer?.queryParams : undefined)
+              .max_searches,
+          }
+        : {}),
     });
+    searchesCounted = search.searchesCounted;
+    sourceRecheck = search.sourceRecheck;
+    if (queryPlan && search.filterRetries) queryPlan = withFilterRetries(queryPlan, search.filterRetries);
 
     // D-31, D-51: strict with no asked identifier in the tenant answers nothing; rank and context are not run for it.
     const searchIdentifiers = search.identifiers;
@@ -418,6 +474,7 @@ export async function runV2Pipeline(
       } else {
         const context = await runContextStages({
           input,
+          access,
           config,
           profile,
           params,
@@ -489,7 +546,7 @@ export async function runV2Pipeline(
     throw error;
   }
 
-  return buildV2Result({
+  const result = await buildV2Result({
     input,
     config,
     profile,
@@ -510,6 +567,7 @@ export async function runV2Pipeline(
     ...(bindingPlan ? { bindingHash: bindingHashFields(bindingPlan) } : {}),
     ...(translationPlan ? { translationHash: translationHashFields(translationPlan, params) } : {}),
     queryPlan,
+    ...(searchesCounted !== undefined ? { searchesCounted } : {}),
     ...(layerTranslate ? { layerTranslate } : {}),
     ...(effectiveOn ? { effectiveOn } : {}),
     ...(queryLayerHash ? { queryLayerHash } : {}),
@@ -519,7 +577,23 @@ export async function runV2Pipeline(
     ...(identifierRefusal ? { identifierRefusal } : {}),
     ...(queryLexical ? { lexicalStamp: queryLexical.stamp } : {}),
     attributeFilter: attributeStage,
+    glossary: glossaryStage,
+    ...(sourceRecheck ? { sourceRecheck } : {}),
   });
+  return scopeGate ? { ...result, scopeGate } : result;
+}
+
+/** Phase 6.2 D-08: the search stage's retry outcome on each filtered sub-question's filter_trace entry. */
+function withFilterRetries(plan: NonNullable<RetrievalResult['queryPlan']>, retries: readonly VariantFilterRetry[]): NonNullable<RetrievalResult['queryPlan']> {
+  if (!plan.filter_trace) return plan;
+  const byIndex = new Map(retries.map((entry) => [entry.subQuestionIndex, entry]));
+  return {
+    ...plan,
+    filter_trace: plan.filter_trace.map((entry) => {
+      const outcome = byIndex.get(entry.index);
+      return outcome ? { ...entry, retried: outcome.retried, retry_skipped_cap: outcome.retrySkippedCap } : entry;
+    }),
+  };
 }
 
 export function isV2RetrievalProfile(profile: Profile): boolean {

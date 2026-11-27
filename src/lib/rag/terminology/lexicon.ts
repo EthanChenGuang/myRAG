@@ -8,7 +8,7 @@ import {
 } from '@/lib/rag-eval/contracts.generated';
 import { normalizeLexical } from '../lexical/tokenize';
 import { scopeKey, type TenantScope } from '../tenant/scope';
-import { loadEffectiveDictionary, type EffectiveDictionary } from './load';
+import { loadEffectiveDictionary, type EffectiveDictionary, type LoadOptions } from './load';
 import type { TermEntry } from './matcher';
 
 export type { TerminologyLexicon, TerminologyLexiconTerm, TerminologyTranslationPair };
@@ -181,13 +181,18 @@ function remember(key: string, entry: MemoEntry): void {
 
 /**
  * D-33: the tenant's effective dictionary as normalized terms and (with includeTranslations) translation pairs. The only tenant input is
- * the minted scope; the plan-05 loader sends its key to rag_term_effective on the service-role client. Reads no switch.
+ * the minted scope; the plan-05 loader sends its key to rag_term_effective on the service-role client. Reads no switch. `load` passes
+ * a signal (and, in tests, the client and clock) through to the loader.
  */
-export async function getTerminologyLexicon(scope: TenantScope, opts: TerminologyLexiconOptions = {}): Promise<TerminologyLexicon> {
+export async function getTerminologyLexicon(
+  scope: TenantScope,
+  opts: TerminologyLexiconOptions = {},
+  load: Pick<LoadOptions, 'signal' | 'client' | 'now'> = {},
+): Promise<TerminologyLexicon> {
   const tenantKey = scopeKey(scope);
   let dictionary: EffectiveDictionary;
   try {
-    dictionary = await loadEffectiveDictionary(scope);
+    dictionary = await loadEffectiveDictionary(scope, load);
   } catch (error) {
     throw new TerminologyUnavailableError('the effective dictionary could not be loaded', { cause: error });
   }

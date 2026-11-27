@@ -15,6 +15,8 @@ export interface CondenseInput {
   history: readonly HistoryTurn[];
   language: Lang;
   protectedTokens: readonly string[];
+  /** D-14: glossary source terms in the query (RAG_TRANSLATION_GLOSSARY effective); the rewrite must keep them verbatim. */
+  glossaryProtected?: readonly string[];
   limits?: PostCheckLimits;
   signal: AbortSignal;
 }
@@ -25,6 +27,8 @@ export interface CondenseResult {
   passThrough: boolean;
   /** Set when the rewrite was discarded (the original is used); never carries query text. */
   skip: PostCheckSkip | null;
+  /** D-17: the language the model reported for the standalone query; absent when it reported none. */
+  reportedLanguage?: NonNullable<CondensedQuery['language']>;
 }
 
 /** QRY-01: the LlamaIndex condense-question method, native, with the shared suffix and the D-15 post-checks. */
@@ -41,8 +45,19 @@ export async function llamaindexCondense(input: CondenseInput): Promise<Condense
 }
 
 /** The D-15 post-checks on a CondensedQuery; shared by both frameworks so their results have one shape (D-02). */
-export function finishCondense(input: Pick<CondenseInput, 'query' | 'protectedTokens' | 'limits'>, output: CondensedQuery): CondenseResult {
+export function finishCondense(
+  input: Pick<CondenseInput, 'query' | 'protectedTokens' | 'glossaryProtected' | 'limits'>,
+  output: CondensedQuery,
+): CondenseResult {
   const text = output.unchanged ? input.query : output.standalone;
-  const checked = checkCondensed({ text, input: input.query, protectedTokens: input.protectedTokens }, input.limits ?? DEFAULT_POST_CHECK_LIMITS);
-  return { standalone: checked.text, passThrough: checked.passThrough, skip: checked.skip };
+  const checked = checkCondensed(
+    { text, input: input.query, protectedTokens: input.protectedTokens, ...(input.glossaryProtected ? { glossaryProtected: input.glossaryProtected } : {}) },
+    input.limits ?? DEFAULT_POST_CHECK_LIMITS,
+  );
+  return {
+    standalone: checked.text,
+    passThrough: checked.passThrough,
+    skip: checked.skip,
+    ...(output.language ? { reportedLanguage: output.language } : {}),
+  };
 }

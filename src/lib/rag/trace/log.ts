@@ -85,6 +85,21 @@ function languagesForLog(collector: TraceCollector): { languages?: TraceLanguage
   };
 }
 
+const ACCESS_MODES: ReadonlySet<string> = new Set(['admin_all', 'keys']);
+const SET_HASH_PREFIX = /^[0-9a-f]{8}/;
+
+/** D-25: the access mode, an 8-character prefix of the set hash and the violation count; never keys or group names. Empty while off. */
+function accessForLog(collector: TraceCollector): Record<string, unknown> {
+  const access = typeof collector.access === 'function' ? collector.access() : null;
+  if (!access || !ACCESS_MODES.has(access.mode)) return {};
+  const prefix = SET_HASH_PREFIX.exec(access.setHash)?.[0] ?? null;
+  return {
+    access_mode: access.mode,
+    access_set: prefix,
+    access_violations: Number.isInteger(access.violations) && access.violations >= 0 ? access.violations : 0,
+  };
+}
+
 export function buildTraceLogPayload(collector: TraceCollector, result: RetrievalResult) {
   return {
     traceId: collector.traceId,
@@ -111,6 +126,7 @@ export function buildTraceLogPayload(collector: TraceCollector, result: Retrieva
     ...(result.injection ? { injectionFlagged: result.injection.flagged === true } : {}),
     ...timingForLog(collector),
     ...languagesForLog(collector),
+    ...accessForLog(collector),
   };
 }
 

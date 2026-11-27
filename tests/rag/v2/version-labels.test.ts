@@ -145,6 +145,7 @@ async function runContext(options: { versionScope?: VersionScope; labeler?: Cita
     ...(options.labeler ? { citationLabeler: options.labeler } : {}),
   };
   const out = await runContextStages({
+    access: { mode: 'off' },
     input,
     config: cfg,
     profile: 'chat',

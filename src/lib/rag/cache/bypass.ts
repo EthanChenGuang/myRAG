@@ -2,7 +2,7 @@ import { extractProtectedTokens } from '../query/protected';
 import lexicon from '../query/rewrite-gate.lexicon.json';
 import { matchRelativeTime, type GateResult } from '../query/rewrite-gate';
 import type { VersionScope } from '../backend/types';
-import type { Profile, RagMode, RetrievalOptions, RetrievalStatus } from '../types';
+import type { Profile, RagMode, RetrievalOptions, RetrievalSkipReason, RetrievalStatus } from '../types';
 import type { GroundednessLabel } from './types';
 
 export type CheckBypassReason =
@@ -26,7 +26,8 @@ export type StoreOnlyBypassReason =
   | 'retrieval_status'
   | 'unreliable'
   | 'embed_check_only'
-  | 'empty_answer';
+  | 'empty_answer'
+  | 'out_of_scope';
 
 export type BypassReason = CheckBypassReason | StoreOnlyBypassReason;
 
@@ -51,6 +52,8 @@ export interface TurnFacts {
   defaultMaxResults: number;
   /** D-14, D-47: the effective version scope; anything but current (or absent) is neither checked nor stored. */
   versionScope?: VersionScope;
+  /** Phase 6.2 D-26: set by the pipeline after the check when retrieval was skipped; an out_of_scope turn is never stored. */
+  skipReason?: RetrievalSkipReason;
 }
 
 export interface StoreTurnFacts extends TurnFacts {
@@ -149,6 +152,7 @@ export function checkBypassReason(facts: TurnFacts): CheckBypassReason | null {
 
 function storeRules(facts: StoreTurnFacts): StoreOnlyBypassReason | null {
   if (typeof facts.chatId === 'string' && facts.chatId.startsWith('ghost-')) return 'ghost_chat';
+  if (facts.skipReason === 'out_of_scope') return 'out_of_scope';
   if (!(facts.historyLength === 0) || normalizeQuery(facts.rawQuery) !== normalizeQuery(facts.standalone)) {
     return 'history_dependent';
   }

@@ -316,6 +316,13 @@ const BINDINGS_ACTION_CLASS = {
 
 // -- panel ----------------------------------------------------------------------------------------------------------------------------------
 
+const EMBEDDING_BINDINGS_PANEL_STATUS =
+  typeof ragPanelSetStatus === 'function'
+    ? ragPanelSetStatus
+    : typeof require !== 'undefined'
+      ? require('./panel-status.js').ragPanelSetStatus
+      : null;
+
 class EmbeddingBindingsPanel {
   constructor() {
     this.root = null;
@@ -354,14 +361,18 @@ class EmbeddingBindingsPanel {
     return { profile: row.profile_id, type: this.typeName(row.doc_type), scope: this.scopeName(row.tenant_key) };
   }
 
-  setStatus(text, isError) {
-    if (!this.statusEl) return;
-    this.statusEl.replaceChildren();
-    if (text) {
-      if (isError) this.statusEl.appendChild(bindingsIcon('bi-exclamation-circle', 'mr-1'));
-      this.statusEl.appendChild(document.createTextNode(text));
-    }
-    this.statusEl.classList.toggle('text-error', Boolean(isError));
+  setStatus(text, isError, options) {
+    const render = () => {
+      if (!this.statusEl) return;
+      this.statusEl.replaceChildren();
+      if (text) {
+        if (isError) this.statusEl.appendChild(bindingsIcon('bi-exclamation-circle', 'mr-1'));
+        this.statusEl.appendChild(document.createTextNode(text));
+      }
+      this.statusEl.classList.toggle('text-error', Boolean(isError));
+    };
+    if (EMBEDDING_BINDINGS_PANEL_STATUS) EMBEDDING_BINDINGS_PANEL_STATUS(this.statusEl, render, isError, options);
+    else render();
   }
 
   focusStatus() {
@@ -746,7 +757,7 @@ class EmbeddingBindingsPanel {
     const message = this.statusEl ? this.statusEl.textContent : '';
     const isError = this.statusEl ? this.statusEl.classList.contains('text-error') : false;
     await this.load();
-    this.setStatus(message, isError);
+    this.setStatus(message, isError, { toast: Boolean(result.ok) });
     this.focusStatus();
   }
 
@@ -975,7 +986,7 @@ class EmbeddingBindingsPanel {
       const text = created ? bindingsText('result.created', values) : bindingsText('result.exists', { status: (result.body && result.body.status) || '' });
       this.closeForm();
       await this.load();
-      this.setStatus(text, false);
+      this.setStatus(text, false, { toast: true });
       this.focusStatus();
       return;
     }

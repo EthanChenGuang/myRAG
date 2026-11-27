@@ -26,7 +26,7 @@ import {
   type CitationStrategyId,
   type ClaudeTurnFacts,
 } from './strategy';
-import { aliasParserTransform } from './transforms';
+import { aliasParserTransform, finishGateTransform } from './transforms';
 
 export interface CitationCapabilities {
   citations: boolean;
@@ -46,6 +46,21 @@ export interface CitationSessionInput {
   contextTagging?: boolean;
   /** D-20 RAG_CITATION_PER_SENTENCE (already off when citations are off); read from the environment when absent. */
   perSentence?: boolean;
+  /**
+   * D-26: the post-generation access recheck; resolves to the visible ids among the chunk ids of the attached blocks and rejects when
+   * the check cannot run (every citation is then dropped). Absent means no access recheck transform, and the stream is unchanged.
+   */
+  recheck?: (chunkIds: readonly string[]) => Promise<ReadonlySet<string>>;
+}
+
+/** D-26: the outcome of the access recheck, ids only. */
+export interface CitationAccessCheck {
+  /** Citations dropped because they named a chunk or document the caller may not see, or because the check failed. */
+  violations: number;
+  failed: boolean;
+  /** Chunk and document ids of the dropped citations (a failed check drops every citation, so it lists them all). */
+  chunkIds: string[];
+  documentIds: string[];
 }
 
 export interface ClaudeStartInput {
@@ -67,6 +82,8 @@ export interface CitationFinishMetadata {
   citations?: CitationRecord[];
   citationStrategy?: CitationStrategyId;
   invalidCitations?: number;
+  /** D-26: set only when the access recheck dropped at least one citation; nothing in the answer text marks it (UI-SPEC decision 14). */
+  accessViolations?: number;
 }
 
 export interface HistoryMessage {
@@ -93,8 +110,8 @@ export interface CitationSession {
   /** Removes markers from earlier assistant turns; aliases belong to the request that made them. */
   stripHistory<T extends HistoryMessage>(messages: T[]): T[];
   transforms(): Array<StreamTextTransform<ToolSet>>;
-  /** A non-streamed chunk-alias answer: parses the whole text once, as the stream transform would. */
-  ingestFullText(text: string): void;
+  /** A non-streamed chunk-alias answer: parses the whole text once, as the stream transform would, then awaits the access recheck. */
+  ingestFullText(text: string): Promise<void>;
   finishMetadata(): CitationFinishMetadata;
   /** The validated records with full quotes, for the answer record; null when no strategy is active. */
   fullRecords(): { citations: CitationRecord[]; invalidCitations: number } | null;
@@ -103,6 +120,10 @@ export interface CitationSession {
   aliases(): ReadonlySet<string>;
   /** D-33: markers cut in half at a text-part end or at the stream end; dropped, never guessed. */
   truncatedMarkers(): number;
+  /** D-26: runs the access recheck once (no-op without `recheck`); never rejects. */
+  settleAccessCheck(): Promise<void>;
+  /** D-26: null without `recheck` or without an active strategy. */
+  accessCheck(): CitationAccessCheck | null;
 }
 
 const CitationListSchema = z.array(CitationRecordSchema);
@@ -144,6 +165,53 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
   let full: CitationRecord[] = [];
   let answer = '';
   let truncated = 0;
+  let accessRun: Promise<void> | null = null;
+  let accessState: 'pending' | 'done' | 'failed' = 'pending';
+  let deniedChunks: ReadonlySet<string> = new Set();
+  let deniedDocuments: ReadonlySet<string> = new Set();
+
+  const recheck = input.recheck;
+
+  const settleAccess = (): Promise<void> => {
+    if (!recheck) return Promise.resolve();
+    if (accessRun) return accessRun;
+    const blocks = aliasMap?.ordered ?? [];
+    accessRun = (async () => {
+      const asked = [...new Set(blocks.flatMap((block) => block.chunkIds).map((id) => id.toLowerCase()))];
+      try {
+        const visible = asked.length === 0 ? new Set<string>() : await recheck(asked);
+        const seen = new Set([...visible].map((id) => id.toLowerCase()));
+        const chunks = new Set(asked.filter((id) => !seen.has(id)));
+        const documents = new Set<string>();
+        for (const block of blocks) {
+          if (block.chunkIds.some((id) => chunks.has(id.toLowerCase()))) documents.add(block.documentId.toLowerCase());
+        }
+        deniedChunks = chunks;
+        deniedDocuments = documents;
+        accessState = 'done';
+      } catch {
+        accessState = 'failed';
+        console.warn('[RAG Access] citation recheck failed; every citation dropped', { blocks: blocks.length });
+      }
+    })();
+    return accessRun;
+  };
+
+  const deniedRecord = (record: CitationRecord): boolean => {
+    if (!recheck) return false;
+    if (accessState !== 'done') return true;
+    return deniedDocuments.has(record.documentId.toLowerCase()) || record.chunkIds.some((id) => deniedChunks.has(id.toLowerCase()));
+  };
+
+  const accessFiltered = <T extends { citations: CitationRecord[]; invalidCitations: number }>(
+    result: T,
+  ): { citations: CitationRecord[]; invalidCitations: number; dropped: CitationRecord[] } => {
+    if (!recheck) return { citations: result.citations, invalidCitations: result.invalidCitations, dropped: [] };
+    const kept: CitationRecord[] = [];
+    const dropped: CitationRecord[] = [];
+    for (const record of result.citations) (deniedRecord(record) ? dropped : kept).push(record);
+    return { citations: kept.map((record, index) => ({ ...record, n: index + 1 })), invalidCitations: result.invalidCitations, dropped };
+  };
 
   const claudeBasePrompt = (basePrompt: string): string => {
     const tagging = input.contextTagging ?? readSecurityConfig().contextTagging;
@@ -261,7 +329,9 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
         ...(typeof start.outputCap === 'number' ? { outputCap: start.outputCap } : {}),
         abortSignal: start.abortSignal,
         onError: start.onError,
-        ...(start.extraTransforms && start.extraTransforms.length > 0 ? { extraTransforms: start.extraTransforms } : {}),
+        ...(recheck || (start.extraTransforms && start.extraTransforms.length > 0)
+          ? { extraTransforms: [...(recheck ? [finishGateTransform(settleAccess)] : []), ...(start.extraTransforms ?? [])] }
+          : {}),
       });
       return claude;
     },
@@ -287,6 +357,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
       if (strategy !== 'chunk-alias' || !parser) return [];
       const active = parser;
       return [
+        ...(recheck ? [finishGateTransform(settleAccess)] : []),
         aliasParserTransform({
           feed(textId, delta) {
             answer += delta;
@@ -302,7 +373,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
         }),
       ];
     },
-    ingestFullText(text) {
+    async ingestFullText(text) {
       if (strategy !== 'chunk-alias' || !parser || finished) return;
       answer += text;
       if (!failed) {
@@ -314,16 +385,23 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
         }
       }
       finalize();
+      if (recheck) await settleAccess();
     },
     finishMetadata() {
       if (!strategy) return {};
-      const result = finalize() ?? { citations: [], invalidCitations: 0 };
-      return { citations: result.citations, citationStrategy: strategy, invalidCitations: result.invalidCitations };
+      const result = accessFiltered(finalize() ?? { citations: [], invalidCitations: 0 });
+      return {
+        citations: result.citations,
+        citationStrategy: strategy,
+        invalidCitations: result.invalidCitations,
+        ...(result.dropped.length > 0 ? { accessViolations: result.dropped.length } : {}),
+      };
     },
     fullRecords() {
       if (!strategy) return null;
       const result = finalize() ?? { citations: [], invalidCitations: 0 };
-      return { citations: result.citations.length === 0 ? [] : full, invalidCitations: result.invalidCitations };
+      if (result.citations.length === 0) return { citations: [], invalidCitations: result.invalidCitations };
+      return { citations: accessFiltered({ citations: full, invalidCitations: result.invalidCitations }).citations, invalidCitations: result.invalidCitations };
     },
     answerText() {
       return answer;
@@ -335,6 +413,19 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
       if (!strategy || strategy !== 'chunk-alias') return 0;
       finalize();
       return truncated;
+    },
+    settleAccessCheck() {
+      return settleAccess();
+    },
+    accessCheck() {
+      if (!recheck || !strategy) return null;
+      const dropped = accessFiltered(finalize() ?? { citations: [], invalidCitations: 0 }).dropped;
+      return {
+        violations: dropped.length,
+        failed: accessState !== 'done',
+        chunkIds: [...new Set(dropped.flatMap((record) => record.chunkIds))],
+        documentIds: [...new Set(dropped.map((record) => record.documentId))],
+      };
     },
   };
 }

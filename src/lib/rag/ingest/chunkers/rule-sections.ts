@@ -136,7 +136,7 @@ export function scanRuleSections(markdown: string, rules: ResolvedSectionRules |
   const eventAt = new Map(events.map((event, index) => [event.lineIndex, index]));
 
   const sections: RuleSection[] = [{ path: [], lines: [], heading: null, variantIndex: null, variantLabel: null }];
-  let stack: Array<{ level: number; name: string }> = [];
+  let stack: Array<{ level: number; label: string; restart: boolean }> = [];
   let variant: RuleVariant | null = null;
 
   lines.forEach((line, lineIndex) => {
@@ -154,10 +154,12 @@ export function scanRuleSections(markdown: string, rules: ResolvedSectionRules |
     event.variantIndex = variant?.index ?? null;
     if (event.skippedAsToc) return;
     while (stack.length > 0 && (stack[stack.length - 1]?.level ?? 0) >= event.level) stack.pop();
-    stack.push({ level: event.level, name: event.name });
-    const names = stack.map((entry) => entry.name);
+    // Path elements are the heading lines as written (the hit name is a rule key, not document text); a variant's restart heading is
+    // already its label, so it is not repeated (TPL-01).
+    stack.push({ level: event.level, label: labelOf(event.text), restart: event.restart });
+    const labels = stack.filter((entry) => variant === null || !entry.restart).map((entry) => entry.label);
     sections.push({
-      path: variant === null ? names : [variant.label, ...names],
+      path: variant === null ? labels : [variant.label, ...labels],
       lines: [],
       heading: eventIndex,
       variantIndex: variant?.index ?? null,

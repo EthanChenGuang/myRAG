@@ -54,6 +54,7 @@ export function queuedInputRecordOf(input: IngestInput, ctx: StageContext): Queu
     ...(input.scopes && input.scopes.length > 0 ? { scopes: [...input.scopes] } : {}),
     ...(input.attributes !== undefined ? { attributes: input.attributes } : {}),
     ...(input.replacesDocumentId ? { replacesDocumentId: input.replacesDocumentId } : {}),
+    ...(input.accessKeys && input.accessKeys.length > 0 ? { accessKeys: [...input.accessKeys] } : {}),
     ...(input.options !== undefined ? { options: input.options } : {}),
     ...(input.typeChange !== undefined ? { typeChange: input.typeChange } : {}),
     // What the earlier stages decided and the ledger has no column for; the position (lastCompleted) is the ledger's own.

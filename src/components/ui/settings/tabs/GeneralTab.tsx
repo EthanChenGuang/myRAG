@@ -11,6 +11,8 @@ import { playNotificationSound } from '@/lib/audio-utils';
 import { DebouncedSelect, MemoizedSelectItem } from '../components/DebouncedSelect';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
+import { MyAccessGroups } from '@/components/ui/my-access-groups';
+import { isMultiTenant } from '@/lib/deployment-mode';
 
 // Custom comparison function for memo optimization
 const areEqual = (prevProps: any, nextProps: any) => {
@@ -280,6 +282,8 @@ export const GeneralTab = memo(function GeneralTab() {
             </div>
           )}
         </div>
+
+        {!isMultiTenant() && <MyAccessGroups organizationId={null} singleTenant variant="section" />}
 
         {/* Custom Background - last section, no border-b, extra bottom margin for safe area */}
         <div className="pb-6">

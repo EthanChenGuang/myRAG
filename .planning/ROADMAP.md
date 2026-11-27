@@ -179,44 +179,44 @@ Plans:
 **Plans**: 49 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Add the Phase 3 schema foundation as ordered, idempotent, additive migrations (wave 1)
-- [ ] 03-02-PLAN.md — Define every new Phase 3 contract once in Pydantic and generate the Zod side (project constraint, Phase 1… (wave 1)
-- [ ] 03-03-PLAN.md — Add every new Phase 3 environment variable to the five config locations with defaults that keep today's… (wave 1)
-- [ ] 03-04-PLAN.md — Extend the Phase 2 boundary check (02-20, D-14) with the Phase 3 single-writer rule (wave 1)
-- [ ] 03-05-PLAN.md — Install the Python packages Phase 3 needs (Docling and RapidOCR for parsing, tiktoken for the shared… (wave 1)
-- [ ] 03-06-PLAN.md — Build the small, pure text functions every later ingest stage depends on (wave 1)
-- [ ] 03-07-PLAN.md — Add the server-side scope resolvers the write paths need beyond the delivered chat resolver (wave 1)
-- [ ] 03-08-PLAN.md — Implement the switchable embedding providers (wave 2)
-- [ ] 03-09-PLAN.md — Create the side-by-side embedding storage (wave 2)
-- [ ] 03-10-PLAN.md — Build the ingest writer as SQL functions (research Pattern 2) (wave 2)
-- [ ] 03-11-PLAN.md — Add the cross_lingual golden category (XLG-02, D-41) in the Phase 2 D-25 order (wave 2)
-- [ ] 03-12-PLAN.md — Give the sidecar the async parse job API of D-20 (as amended by F-4) with a converter seam, so plan 03-15… (wave 2)
-- [ ] 03-13-PLAN.md — TRACER for Phase 3: wire one Markdown upload through every layer the phase touches to retrieval, and pin its duplicate and failure… (wave 3)
-- [ ] 03-13b-PLAN.md — Complete the ingest() the tracer proved: the remaining five D-02 stages, deadline, state and resume, the ingestion… (wave 4)
-- [ ] 03-14-PLAN.md — Implement the deterministic invoice extractor in the sidecar (wave 3)
-- [ ] 03-15-PLAN.md — Implement the Docling side of DATA-05 (wave 3)
-- [ ] 03-16-PLAN.md — Prove and complete the dedup and versioning semantics of D-09, D-10 and D-11 through the real ingest()… (wave 5)
-- [ ] 03-17-PLAN.md — Store each version's original file and parse output in a private, tenant-scoped bucket (wave 5)
-- [ ] 03-18-PLAN.md — Re-home today's chunk metadata enrichment (temporal and financial entities from storeDocument) as… (wave 5)
-- [ ] 03-19-PLAN.md — Add the clause-aware legal chunker (CHK-02, D-25), the table-aware chunker that repeats headers on the… (wave 5)
-- [ ] 03-20-PLAN.md — Scan ingested documents for prompt-injection phrasing in zh, en and it with rules stored as data, and… (wave 5)
-- [ ] 03-21-PLAN.md — Add the deployment-level active-profile pointer read path (wave 5)
-- [ ] 03-22-PLAN.md — Implement document-type resolution (wave 5)
-- [ ] 03-23-PLAN.md — Move the scraper write path behind ingest() under RAG_INGEST_PIPELINE=unified (wave 5)
-- [ ] 03-24-PLAN.md — Move the "save AI answer to the knowledge base" write path behind ingest() under unified, with the scope… (wave 5)
-- [ ] 03-25-PLAN.md — Create the typed ingestion fixtures (wave 4)
-- [ ] 03-26-PLAN.md — Derive the query embedding model from the active profile and search that profile's vectors, with… (wave 6)
-- [ ] 03-27-PLAN.md — Implement the switchable parser with its fallback chain (wave 6)
-- [ ] 03-28-PLAN.md — Make ingestion write every profile that must stay complete (wave 6)
-- [ ] 03-29-PLAN.md — Ingest invoices as structured data (wave 6)
-- [ ] 03-30-PLAN.md — Teach the document list, delete and status readers about versions (wave 6)
-- [ ] 03-31-PLAN.md — Route chat and Config UI knowledge-base uploads through ingest() under unified (wave 7)
-- [ ] 03-32-PLAN.md — Move image uploads behind ingest() under unified (wave 7)
-- [ ] 03-33-PLAN.md — Move Nango sync ingestion behind ingest() under unified (wave 7)
-- [ ] 03-34-PLAN.md — Expose ingestion status and resume over authenticated, scope-checked routes (wave 7)
-- [ ] 03-35-PLAN.md — Add the optional exact_id_lookup retrieval stage (wave 7)
-- [ ] 03-36-PLAN.md — Build the re-embed job (wave 7)
-- [ ] 03-37-PLAN.md — Give admins release and delete for quarantined documents (wave 7)
+- [x] 03-01-PLAN.md — Add the Phase 3 schema foundation as ordered, idempotent, additive migrations (wave 1)
+- [x] 03-02-PLAN.md — Define every new Phase 3 contract once in Pydantic and generate the Zod side (project constraint, Phase 1… (wave 1)
+- [x] 03-03-PLAN.md — Add every new Phase 3 environment variable to the five config locations with defaults that keep today's… (wave 1)
+- [x] 03-04-PLAN.md — Extend the Phase 2 boundary check (02-20, D-14) with the Phase 3 single-writer rule (wave 1)
+- [x] 03-05-PLAN.md — Install the Python packages Phase 3 needs (Docling and RapidOCR for parsing, tiktoken for the shared… (wave 1)
+- [x] 03-06-PLAN.md — Build the small, pure text functions every later ingest stage depends on (wave 1)
+- [x] 03-07-PLAN.md — Add the server-side scope resolvers the write paths need beyond the delivered chat resolver (wave 1)
+- [x] 03-08-PLAN.md — Implement the switchable embedding providers (wave 2)
+- [x] 03-09-PLAN.md — Create the side-by-side embedding storage (wave 2)
+- [x] 03-10-PLAN.md — Build the ingest writer as SQL functions (research Pattern 2) (wave 2)
+- [x] 03-11-PLAN.md — Add the cross_lingual golden category (XLG-02, D-41) in the Phase 2 D-25 order (wave 2)
+- [x] 03-12-PLAN.md — Give the sidecar the async parse job API of D-20 (as amended by F-4) with a converter seam, so plan 03-15… (wave 2)
+- [x] 03-13-PLAN.md — TRACER for Phase 3: wire one Markdown upload through every layer the phase touches to retrieval, and pin its duplicate and failure… (wave 3)
+- [x] 03-13b-PLAN.md — Complete the ingest() the tracer proved: the remaining five D-02 stages, deadline, state and resume, the ingestion… (wave 4)
+- [x] 03-14-PLAN.md — Implement the deterministic invoice extractor in the sidecar (wave 3)
+- [x] 03-15-PLAN.md — Implement the Docling side of DATA-05 (wave 3)
+- [x] 03-16-PLAN.md — Prove and complete the dedup and versioning semantics of D-09, D-10 and D-11 through the real ingest()… (wave 5)
+- [x] 03-17-PLAN.md — Store each version's original file and parse output in a private, tenant-scoped bucket (wave 5)
+- [x] 03-18-PLAN.md — Re-home today's chunk metadata enrichment (temporal and financial entities from storeDocument) as… (wave 5)
+- [x] 03-19-PLAN.md — Add the clause-aware legal chunker (CHK-02, D-25), the table-aware chunker that repeats headers on the… (wave 5)
+- [x] 03-20-PLAN.md — Scan ingested documents for prompt-injection phrasing in zh, en and it with rules stored as data, and… (wave 5)
+- [x] 03-21-PLAN.md — Add the deployment-level active-profile pointer read path (wave 5)
+- [x] 03-22-PLAN.md — Implement document-type resolution (wave 5)
+- [x] 03-23-PLAN.md — Move the scraper write path behind ingest() under RAG_INGEST_PIPELINE=unified (wave 5)
+- [x] 03-24-PLAN.md — Move the "save AI answer to the knowledge base" write path behind ingest() under unified, with the scope… (wave 5)
+- [x] 03-25-PLAN.md — Create the typed ingestion fixtures (wave 4)
+- [x] 03-26-PLAN.md — Derive the query embedding model from the active profile and search that profile's vectors, with… (wave 6)
+- [x] 03-27-PLAN.md — Implement the switchable parser with its fallback chain (wave 6)
+- [x] 03-28-PLAN.md — Make ingestion write every profile that must stay complete (wave 6)
+- [x] 03-29-PLAN.md — Ingest invoices as structured data (wave 6)
+- [x] 03-30-PLAN.md — Teach the document list, delete and status readers about versions (wave 6)
+- [x] 03-31-PLAN.md — Route chat and Config UI knowledge-base uploads through ingest() under unified (wave 7)
+- [x] 03-32-PLAN.md — Move image uploads behind ingest() under unified (wave 7)
+- [x] 03-33-PLAN.md — Move Nango sync ingestion behind ingest() under unified (wave 7)
+- [x] 03-34-PLAN.md — Expose ingestion status and resume over authenticated, scope-checked routes (wave 7)
+- [x] 03-35-PLAN.md — Add the optional exact_id_lookup retrieval stage (wave 7)
+- [x] 03-36-PLAN.md — Build the re-embed job (wave 7)
+- [x] 03-37-PLAN.md — Give admins release and delete for quarantined documents (wave 7)
 - [x] 03-38-PLAN.md — Turn images inside PDFs into captioned, page-numbered image chunks of the same document (wave 8)
 - [x] 03-39-PLAN.md — Expose the doc-type defaults (wave 8)
 - [x] 03-40-PLAN.md — Expose the embedding-profile pointer flip and its rollback through the CLI and authenticated admin routes (wave 8)
@@ -227,7 +227,7 @@ Plans:
 - [x] 03-45-PLAN.md — Make the eval harness able to measure any embedding profile (wave 9)
 - [x] 03-46-PLAN.md — Compare embedding profiles on the golden set per language and per cross-lingual pair (wave 10)
 - [x] 03-47-PLAN.md — Close Phase 3 (wave 11)
-- [ ] 03-48-PLAN.md — Run the Phase 3 live verification items from the ROADMAP as explicit human checkpoints (the orchestrator… (wave 12)
+- [x] 03-48-PLAN.md — Run the Phase 3 live verification items from the ROADMAP as explicit human checkpoints (the orchestrator… (wave 12)
 **UI hint**: yes
 
 ### Phase 3.1: Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED)
@@ -260,33 +260,33 @@ Plans:
 
 Plans:
 **Wave 1**
-- [ ] 03.1.1-01-PLAN.md — Model catalog, model-aware Voyage provider and registry lookup, per-model prices (wave 1)
-- [ ] 03.1.1-02-PLAN.md — Binding evidence, comparison and eval-override contracts in Pydantic with generated Zod (wave 1)
-- [ ] 03.1.1-03-PLAN.md — `RAG_DOMAIN_EMBEDDINGS`, `_MAX_LEGS`, `_TIMEOUT_MS` in every config location (wave 1)
-- [ ] 03.1.1-04-PLAN.md — Migration 0440: profile scope, bindings table, guard, scoped profiles and HNSW indexes (wave 1)
-- [ ] 03.1.1-11-PLAN.md — Synthetic zh/en/it legal and financial fixture pack with golden items (wave 1)
+- [x] 03.1.1-01-PLAN.md — Model catalog, model-aware Voyage provider and registry lookup, per-model prices (wave 1)
+- [x] 03.1.1-02-PLAN.md — Binding evidence, comparison and eval-override contracts in Pydantic with generated Zod (wave 1)
+- [x] 03.1.1-03-PLAN.md — `RAG_DOMAIN_EMBEDDINGS`, `_MAX_LEGS`, `_TIMEOUT_MS` in every config location (wave 1)
+- [x] 03.1.1-04-PLAN.md — Migration 0440: profile scope, bindings table, guard, scoped profiles and HNSW indexes (wave 1)
+- [x] 03.1.1-11-PLAN.md — Synthetic zh/en/it legal and financial fixture pack with golden items (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 03.1.1-05-PLAN.md — Migration 0441: binding lifecycle, activation gate, rollback and deactivate (wave 2)
-- [ ] 03.1.1-16-PLAN.md — Every provider lookup uses the profile's model (split from 01) (wave 2)
+- [x] 03.1.1-05-PLAN.md — Migration 0441: binding lifecycle, activation gate, rollback and deactivate (wave 2)
+- [x] 03.1.1-16-PLAN.md — Every provider lookup uses the profile's model (split from 01) (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 03.1.1-06-PLAN.md — Migration 0442: re-embed scoped to doc types and tied to a backfilling binding (wave 3)
-- [ ] 03.1.1-07-PLAN.md — Cached tenant-aware binding read, binding operations and CLI (wave 3)
+- [x] 03.1.1-06-PLAN.md — Migration 0442: re-embed scoped to doc types and tied to a backfilling binding (wave 3)
+- [x] 03.1.1-07-PLAN.md — Cached tenant-aware binding read, binding operations and CLI (wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 03.1.1-08-PLAN.md — Ingest and rechunk write binding profiles for bound doc types (wave 4)
-- [ ] 03.1.1-09-PLAN.md — Binding legs in v2 search with RRF, score separation, degrade and two-tenant proof (wave 4)
-- [ ] 03.1.1-13-PLAN.md — Admin routes and Config UI bindings panel (UI-SPEC via /gsd-ui-phase first) (wave 4)
+- [x] 03.1.1-08-PLAN.md — Ingest and rechunk write binding profiles for bound doc types (wave 4)
+- [x] 03.1.1-09-PLAN.md — Binding legs in v2 search with RRF, score separation, degrade and two-tenant proof (wave 4)
+- [x] 03.1.1-13-PLAN.md — Admin routes and Config UI bindings panel (UI-SPEC via /gsd-ui-phase first) (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 03.1.1-10-PLAN.md — Eval route overrides for bindings and the control leg (wave 5)
+- [x] 03.1.1-10-PLAN.md — Eval route overrides for bindings and the control leg (wave 5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 03.1.1-12-PLAN.md — Reproducible per-doc-type comparison harness, decision rule and domain baseline (wave 6)
+- [x] 03.1.1-12-PLAN.md — Reproducible per-doc-type comparison harness, decision rule and domain baseline (wave 6)
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 03.1.1-14-PLAN.md — Off parity, fold migrations, fixture comparison record, AGENTS.md (wave 7)
+- [x] 03.1.1-14-PLAN.md — Off parity, fold migrations, fixture comparison record, AGENTS.md (wave 7)
 
 **Wave 8** *(blocked on Wave 7 completion)*
 - [ ] 03.1.1-15-PLAN.md — Live verification as human checkpoints (wave 8)
@@ -355,50 +355,50 @@ Plans:
 **Live verification**: Calibrate thresholds and sweep pool size and top-k with real Cohere and Voyage keys on the real golden set's dev split, then check them on the holdout split; compare Voyage `rerank-3` with `rerank-2.5` on the zh and it slices; apply the hybrid SQL migration to the real Supabase project and confirm Chinese lexical behavior there.
 **Plans**: 2/45 plans executed (04-01..04-45) — see `phases/04-hybrid-retrieval-reranking-calibrated-refusal/04-PLAN-INDEX.md`
 - [x] 04-01-PLAN.md
-- [ ] 04-02-PLAN.md
+- [x] 04-02-PLAN.md
 - [x] 04-03-PLAN.md
-- [ ] 04-04-PLAN.md
-- [ ] 04-05-PLAN.md
-- [ ] 04-06-PLAN.md
-- [ ] 04-07-PLAN.md
-- [ ] 04-08-PLAN.md
-- [ ] 04-09-PLAN.md
-- [ ] 04-10-PLAN.md
-- [ ] 04-11-PLAN.md
-- [ ] 04-12-PLAN.md
-- [ ] 04-13-PLAN.md
-- [ ] 04-14-PLAN.md
-- [ ] 04-15-PLAN.md
-- [ ] 04-16-PLAN.md
-- [ ] 04-17-PLAN.md
-- [ ] 04-18-PLAN.md
-- [ ] 04-19-PLAN.md
-- [ ] 04-20-PLAN.md
-- [ ] 04-21-PLAN.md
-- [ ] 04-22-PLAN.md
-- [ ] 04-23-PLAN.md
-- [ ] 04-24-PLAN.md
-- [ ] 04-25-PLAN.md
-- [ ] 04-26-PLAN.md
-- [ ] 04-27-PLAN.md
-- [ ] 04-28-PLAN.md
-- [ ] 04-29-PLAN.md
-- [ ] 04-30-PLAN.md
-- [ ] 04-31-PLAN.md
-- [ ] 04-32-PLAN.md
-- [ ] 04-33-PLAN.md
-- [ ] 04-34-PLAN.md
-- [ ] 04-35-PLAN.md
-- [ ] 04-36-PLAN.md
-- [ ] 04-37-PLAN.md
-- [ ] 04-38-PLAN.md
-- [ ] 04-39-PLAN.md
-- [ ] 04-40-PLAN.md
-- [ ] 04-41-PLAN.md
-- [ ] 04-42-PLAN.md
-- [ ] 04-43-PLAN.md
-- [ ] 04-44-PLAN.md
-- [ ] 04-45-PLAN.md
+- [x] 04-04-PLAN.md
+- [x] 04-05-PLAN.md
+- [x] 04-06-PLAN.md
+- [x] 04-07-PLAN.md
+- [x] 04-08-PLAN.md
+- [x] 04-09-PLAN.md
+- [x] 04-10-PLAN.md
+- [x] 04-11-PLAN.md
+- [x] 04-12-PLAN.md
+- [x] 04-13-PLAN.md
+- [x] 04-14-PLAN.md
+- [x] 04-15-PLAN.md
+- [x] 04-16-PLAN.md
+- [x] 04-17-PLAN.md
+- [x] 04-18-PLAN.md
+- [x] 04-19-PLAN.md
+- [x] 04-20-PLAN.md
+- [x] 04-21-PLAN.md
+- [x] 04-22-PLAN.md
+- [x] 04-23-PLAN.md
+- [x] 04-24-PLAN.md
+- [x] 04-25-PLAN.md
+- [x] 04-26-PLAN.md
+- [x] 04-27-PLAN.md
+- [x] 04-28-PLAN.md
+- [x] 04-29-PLAN.md
+- [x] 04-30-PLAN.md
+- [x] 04-31-PLAN.md
+- [x] 04-32-PLAN.md
+- [x] 04-33-PLAN.md
+- [x] 04-34-PLAN.md
+- [x] 04-35-PLAN.md
+- [x] 04-36-PLAN.md
+- [x] 04-37-PLAN.md
+- [x] 04-38-PLAN.md
+- [x] 04-39-PLAN.md
+- [x] 04-40-PLAN.md
+- [x] 04-41-PLAN.md
+- [x] 04-42-PLAN.md
+- [x] 04-43-PLAN.md
+- [x] 04-44-PLAN.md
+- [x] 04-45-PLAN.md
 
 ### Phase 4.1: Hybrid retrieval and rerank on by default, proven by eval (INSERTED)
 
@@ -418,23 +418,23 @@ Plans:
 **Plans**: 17 plans in 10 waves (gap closure 2026-11-25: 04.1-14 to 04.1-17) — see `phases/04.1-hybrid-retrieval-and-rerank-on-by-default-proven-by-eval/04.1-PLAN-INDEX.md`
 
 Plans:
-- [ ] 04.1-01-PLAN.md — Legacy-rule refusal floor behind RAG_REFUSAL_FLOOR, shared keep predicate, legacy byte-identical (wave 1)
-- [ ] 04.1-02-PLAN.md — Mirror RAG_REFUSAL_FLOOR and the auto value in every config location and the eval pin, defaults unchanged (wave 1)
-- [ ] 04.1-06-PLAN.md — Run configs with placeholder-only key overlay, defaults gate tool, pre-registered criteria with the tool-derived floor (wave 1)
-- [ ] 04.1-03-PLAN.md — RAG_RERANKER=auto: Cohere with key, local fallback otherwise, never degraded, hashes as resolved provider (wave 2)
-- [ ] 04.1-04-PLAN.md — Implicit-default resolver: a missing Phase 4 function (retrieval, ingest dual write) or unchosen languages serve legacy, explicit v2 unchanged (wave 3)
-- [ ] 04.1-05-PLAN.md — Pin legacy characterization; characterize the new defaults with AGENTS §14 assertions (wave 3)
-- [ ] 04.1-08-PLAN.md — Capped live Cohere and Voyage quality and latency on the fixture, report-only (wave 3)
-- [ ] 04.1-07-PLAN.md — Run the gate on both fixture modes with and without cells, record the retrieval-defaults decision (wave 4)
-- [ ] 04.1-13-PLAN.md — Connect the Phase 3.2 language reader to the resolver, prove the three language cases, characterize unset languages (wave 4; needs the Phase 3.2 LANG-01 implementation on trunk)
-- [ ] 04.1-14-PLAN.md — Gap closure: legacy_rule judges the legacy pool with the legacy keep floors; CONTEXT D-28 (wave 5)
-- [ ] 04.1-16-PLAN.md — Gap closure: deterministic ingest mode, selective-filter ids mapped to ingested documents (wave 5)
-- [ ] 04.1-15-PLAN.md — Gap closure: degrade and max_results on the v2 eval path, CI negative controls effective under v2 (wave 6)
-- [ ] 04.1-17-PLAN.md — Gap closure: re-run the unchanged pre-registered gate and rebuild the decision record (wave 7)
-- [ ] 04.1-09-PLAN.md — Flip the defaults in every location once the decision says flip and is current; templates keep the pipeline implicit (wave 8; needs 04.1-17 status flip and Phase 3.2 complete)
-- [ ] 04.1-10-PLAN.md — Legacy baselines, re-recorded default baselines, legacy all-zero CI tiers (wave 9)
-- [ ] 04.1-11-PLAN.md — AGENTS.md and deployment guide: defaults, auto data flow, upgrade steps, switch back (wave 9)
-- [ ] 04.1-12-PLAN.md — Implicit defaults on every entry point, two tenants, un-migrated database, unchosen languages, CI-equivalent run (wave 10)
+- [x] 04.1-01-PLAN.md — Legacy-rule refusal floor behind RAG_REFUSAL_FLOOR, shared keep predicate, legacy byte-identical (wave 1)
+- [x] 04.1-02-PLAN.md — Mirror RAG_REFUSAL_FLOOR and the auto value in every config location and the eval pin, defaults unchanged (wave 1)
+- [x] 04.1-06-PLAN.md — Run configs with placeholder-only key overlay, defaults gate tool, pre-registered criteria with the tool-derived floor (wave 1)
+- [x] 04.1-03-PLAN.md — RAG_RERANKER=auto: Cohere with key, local fallback otherwise, never degraded, hashes as resolved provider (wave 2)
+- [x] 04.1-04-PLAN.md — Implicit-default resolver: a missing Phase 4 function (retrieval, ingest dual write) or unchosen languages serve legacy, explicit v2 unchanged (wave 3)
+- [x] 04.1-05-PLAN.md — Pin legacy characterization; characterize the new defaults with AGENTS §14 assertions (wave 3)
+- [x] 04.1-08-PLAN.md — Capped live Cohere and Voyage quality and latency on the fixture, report-only (wave 3)
+- [x] 04.1-07-PLAN.md — Run the gate on both fixture modes with and without cells, record the retrieval-defaults decision (wave 4)
+- [x] 04.1-13-PLAN.md — Connect the Phase 3.2 language reader to the resolver, prove the three language cases, characterize unset languages (wave 4; needs the Phase 3.2 LANG-01 implementation on trunk)
+- [x] 04.1-14-PLAN.md — Gap closure: legacy_rule judges the legacy pool with the legacy keep floors; CONTEXT D-28 (wave 5)
+- [x] 04.1-16-PLAN.md — Gap closure: deterministic ingest mode, selective-filter ids mapped to ingested documents (wave 5)
+- [x] 04.1-15-PLAN.md — Gap closure: degrade and max_results on the v2 eval path, CI negative controls effective under v2 (wave 6)
+- [x] 04.1-17-PLAN.md — Gap closure: re-run the unchanged pre-registered gate and rebuild the decision record (wave 7)
+- [x] 04.1-09-PLAN.md — Flip the defaults in every location once the decision says flip and is current; templates keep the pipeline implicit (wave 8; needs 04.1-17 status flip and Phase 3.2 complete)
+- [x] 04.1-10-PLAN.md — Legacy baselines, re-recorded default baselines, legacy all-zero CI tiers (wave 9)
+- [x] 04.1-11-PLAN.md — AGENTS.md and deployment guide: defaults, auto data flow, upgrade steps, switch back (wave 9)
+- [x] 04.1-12-PLAN.md — Implicit defaults on every entry point, two tenants, un-migrated database, unchosen languages, CI-equivalent run (wave 10)
 
 **Cross-phase notes for the roadmap**:
 - Phase 4 D-28's last sentence ("the shipped defaults stay off until the Phase 7 regression") is superseded for `RAG_PIPELINE`, `RAG_LEXICAL_SEARCH`, `RAG_RERANKER`, `RAG_REFUSAL_THRESHOLD` and `RAG_REFUSAL_FLOOR` by the product owner's decision of 2026-11-24; Phase 4 itself still closes with the defaults off (04-42 unchanged).
@@ -466,24 +466,24 @@ Plans:
 **UI hint**: yes (plan 13 requires `/gsd-ui-phase 04.1.1` first)
 
 Plans:
-- [ ] 04.1.1-01-PLAN.md — Terminology Pydantic contracts (translation pairs, read contract, stage name) and generated Zod (wave 1)
-- [ ] 04.1.1-02-PLAN.md — Three switches in the five config places and the manifest; `terminology` stage and its budgets; run-config allowlist (wave 1)
-- [ ] 04.1.1-03-PLAN.md — 0471 tables, RLS, append-only audit, translation-pair checks, `rag_term_effective` with a two-tenant test (wave 1)
-- [ ] 04.1.1-04-PLAN.md — 0472 actor-checked, versioned, audited writers, suppression and atomic import (wave 2)
-- [ ] 04.1.1-05-PLAN.md — TRACER: seeded dictionary → terminology stage on the standalone query → `term:0` list → RRF; caps, per-tenant cache (wave 2)
-- [ ] 04.1.1-06-PLAN.md — Multi-script and identifier matching with property tests; validator with language and translation-pair rules (wave 3)
-- [ ] 04.1.1-07-PLAN.md — Dense terminology variant counted against the variant and search caps (never voice); glossary helper for Phase 6 prompts (wave 3)
-- [ ] 04.1.1-16-PLAN.md — Config-hash block and semantic-cache key, off-identity, multi-tenant end-to-end retrieval case (wave 3)
-- [ ] 04.1.1-17-PLAN.md — Stable read API `getTerminologyLexicon`, contract lock, boundary rule, two-tenant test (wave 3)
-- [ ] 04.1.1-08-PLAN.md — 0473 miss log (self-expiring), candidates, tenant df, decisions; opt-in masked miss recording (wave 4)
-- [ ] 04.1.1-09-PLAN.md — Admin service and CRUD/versions/audit routes, translation pairs and enabled languages; two-tenant route matrix (wave 4)
-- [ ] 04.1.1-10-PLAN.md — Synthetic documents and fixture dictionary, colloquial-term golden items, run configs, zero-diff re-baselines (wave 4)
-- [ ] 04.1.1-18-PLAN.md — Bounded rerank-input reservation for expansion-only hits, proven with full lists at several caps (wave 4)
-- [ ] 04.1.1-11-PLAN.md — CSV import/export with translation columns and dry run, expansion preview (wave 5)
-- [ ] 04.1.1-12-PLAN.md — Miner CLI and candidate review routes; two-tenant mining matrix (wave 6)
-- [ ] 04.1.1-13-PLAN.md — Config UI Terminology panel after UI-SPEC, translation pairs included (wave 7, autonomous: false)
-- [ ] 04.1.1-14-PLAN.md — CLOSING: fold migrations, default-identity gates, on/off comparison, AGENTS.md (wave 8)
-- [ ] 04.1.1-15-PLAN.md — Live verification (wave 9, autonomous: false)
+- [x] 04.1.1-01-PLAN.md — Terminology Pydantic contracts (translation pairs, read contract, stage name) and generated Zod (wave 1)
+- [x] 04.1.1-02-PLAN.md — Three switches in the five config places and the manifest; `terminology` stage and its budgets; run-config allowlist (wave 1)
+- [x] 04.1.1-03-PLAN.md — 0471 tables, RLS, append-only audit, translation-pair checks, `rag_term_effective` with a two-tenant test (wave 1)
+- [x] 04.1.1-04-PLAN.md — 0472 actor-checked, versioned, audited writers, suppression and atomic import (wave 2)
+- [x] 04.1.1-05-PLAN.md — TRACER: seeded dictionary → terminology stage on the standalone query → `term:0` list → RRF; caps, per-tenant cache (wave 2)
+- [x] 04.1.1-06-PLAN.md — Multi-script and identifier matching with property tests; validator with language and translation-pair rules (wave 3)
+- [x] 04.1.1-07-PLAN.md — Dense terminology variant counted against the variant and search caps (never voice); glossary helper for Phase 6 prompts (wave 3)
+- [x] 04.1.1-16-PLAN.md — Config-hash block and semantic-cache key, off-identity, multi-tenant end-to-end retrieval case (wave 3)
+- [x] 04.1.1-17-PLAN.md — Stable read API `getTerminologyLexicon`, contract lock, boundary rule, two-tenant test (wave 3)
+- [x] 04.1.1-08-PLAN.md — 0473 miss log (self-expiring), candidates, tenant df, decisions; opt-in masked miss recording (wave 4)
+- [x] 04.1.1-09-PLAN.md — Admin service and CRUD/versions/audit routes, translation pairs and enabled languages; two-tenant route matrix (wave 4)
+- [x] 04.1.1-10-PLAN.md — Synthetic documents and fixture dictionary, colloquial-term golden items, run configs, zero-diff re-baselines (wave 4)
+- [x] 04.1.1-18-PLAN.md — Bounded rerank-input reservation for expansion-only hits, proven with full lists at several caps (wave 4)
+- [x] 04.1.1-11-PLAN.md — CSV import/export with translation columns and dry run, expansion preview (wave 5)
+- [x] 04.1.1-12-PLAN.md — Miner CLI and candidate review routes; two-tenant mining matrix (wave 6)
+- [x] 04.1.1-13-PLAN.md — Config UI Terminology panel after UI-SPEC, translation pairs included (wave 7, autonomous: false)
+- [x] 04.1.1-14-PLAN.md — CLOSING: fold migrations, default-identity gates, on/off comparison, AGENTS.md (wave 8)
+- [x] 04.1.1-15-PLAN.md — Live verification (wave 9, autonomous: false)
 
 ### Phase 4.2: Retrieval Tuning Additions (INSERTED)
 **Goal**: Retrieval keeps the smallest rerank pool that works, matches company terms as single words, can answer questions about earlier policy versions, and its time to first token is gated
@@ -557,31 +557,31 @@ Plans:
 **Plans**: 25 plans in 7 waves (05.1-01..05.1-25); closing plan 05.1-22 — plan index `phases/05.1-prompt-injection-defense/05.1-PLAN-INDEX.md`, validation contract `05.1-VALIDATION.md`
 
 Plans:
-- [ ] 05.1-01-PLAN.md — Six named indirect zh/en/it rules in the shared Phase 3 rule file (zh >= 7, en >= 8, it >= 6, >= 22), injection-rules.ts re-export with a content-derived version, clean-corpus zero-false-positive test (wave 1)
-- [ ] 05.1-02-PLAN.md — wrapDocuments, tag and attribute escaping with look-alikes and tag characters, fixed notice and reminder, Claude replacement builder, 20,000-case property test (wave 1)
-- [ ] 05.1-03-PLAN.md — Pydantic classify request/response and detector-config contracts with generated Zod, and the committed detector config file (wave 1)
-- [ ] 05.1-04-PLAN.md — Nine switches and keys in the five config places and the manifest, Prompt-injection defense card, call-time security config reader (wave 1)
-- [ ] 05.1-05-PLAN.md — SEC-05 design document for critical facts via tools; WhatsApp link-preview follow-up in the backlog (wave 1)
-- [ ] 05.1-06-PLAN.md — TRACER: tagged, rule-checked context for one web-chat request on the legacy graph; flag, drop and downweight; status precedence and strict refusal (wave 2)
-- [ ] 05.1-07-PLAN.md — Sidecar POST /v1/injection/classify with windowing and a fake scorer; app-side Prompt Guard client (wave 2)
-- [ ] 05.1-08-PLAN.md — Lakera adapter on recorded shapes with the full lakeraAllowed gate, detector config loader, tenant-keyed verdict cache, lakera-http boundary rule (wave 2)
-- [ ] 05.1-09-PLAN.md — Synthetic zh/en/it injection and evasive fixture documents, prechunked in ingest mode, both baselines re-recorded with zero change (wave 3)
-- [ ] 05.1-10-PLAN.md — exposure_rate, attack_success_rate, detector false-positive rates and the absolute-zero gate kind (wave 3)
-- [ ] 05.1-11-PLAN.md — Markdown image allowlist renderer behind its own switch (wave 2)
-- [ ] 05.1-12-PLAN.md — Detector configuration summary in the Prompt-injection defense card (wave 2)
-- [ ] 05.1-13-PLAN.md — Overview, voice and media graphs; overview and voice context wrapping; scoped released rule ids with a two-tenant test; trace counts and log redaction (wave 3)
-- [ ] 05.1-14-PLAN.md — v2: check after expand_parents with the scoped released-rule read and a v2 two-tenant test, downweight ordering, wrapping after compression, retrievalConfigHash with Lakera's effective state, eval effective config (wave 4)
-- [ ] 05.1-15-PLAN.md — Tool-result guard for webSearch, MCP and the approve-route summariser; YOLO suspension on all three consumer paths; injectionFlagged (wave 3)
-- [ ] 05.1-16-PLAN.md — Notice on the Claude Citations path; citation-instruction sentinel; raw quotes and premises (wave 3)
-- [ ] 05.1-17-PLAN.md — Injection and evasive golden items (4 and 2 per language) and the prechunked re-baseline (wave 4)
-- [ ] 05.1-18-PLAN.md — Prompt Guard license, gated access, build-token and pin approval; promptguard extra in pyproject; orchestrator-only lock and sync (wave 3, autonomous: false)
-- [ ] 05.1-19-PLAN.md — Eval route injection record, SEC run configs, all-off zero proof, CI absolute-zero step, nightly matrix, injection_check budgets (wave 5)
-- [ ] 05.1-20-PLAN.md — Voice-rag context field and voice agent preference; chat, embed and eval entry points, sentinel and source_images (wave 4)
-- [ ] 05.1-21-PLAN.md — Prompt Guard and Lakera inside injection_check: Lakera zero-request gate table and route-level multi-tenant case, language gate, warm cache, inner deadline, fault injection, two-tenant cache test (wave 5)
-- [ ] 05.1-22-PLAN.md — CLOSING PLAN: phase comparison (all-off equals baseline; recommended passes absolute-zero and category noise), AGENTS.md, full gates (wave 6)
-- [ ] 05.1-23-PLAN.md — Live verification: Lakera account, key, region and retention; Lakera live through the stage on synthetic chunks; Prompt Guard image; latency and live attack success (wave 7, autonomous: false)
-- [ ] 05.1-24-PLAN.md — Golden attack field and injection categories, eval run, trace and report contract changes with regenerated Zod (wave 2)
-- [ ] 05.1-25-PLAN.md — Prompt Guard scorer, bake step and promptguard image target on the orchestrator-locked environment (wave 4)
+- [x] 05.1-01-PLAN.md — Six named indirect zh/en/it rules in the shared Phase 3 rule file (zh >= 7, en >= 8, it >= 6, >= 22), injection-rules.ts re-export with a content-derived version, clean-corpus zero-false-positive test (wave 1)
+- [x] 05.1-02-PLAN.md — wrapDocuments, tag and attribute escaping with look-alikes and tag characters, fixed notice and reminder, Claude replacement builder, 20,000-case property test (wave 1)
+- [x] 05.1-03-PLAN.md — Pydantic classify request/response and detector-config contracts with generated Zod, and the committed detector config file (wave 1)
+- [x] 05.1-04-PLAN.md — Nine switches and keys in the five config places and the manifest, Prompt-injection defense card, call-time security config reader (wave 1)
+- [x] 05.1-05-PLAN.md — SEC-05 design document for critical facts via tools; WhatsApp link-preview follow-up in the backlog (wave 1)
+- [x] 05.1-06-PLAN.md — TRACER: tagged, rule-checked context for one web-chat request on the legacy graph; flag, drop and downweight; status precedence and strict refusal (wave 2)
+- [x] 05.1-07-PLAN.md — Sidecar POST /v1/injection/classify with windowing and a fake scorer; app-side Prompt Guard client (wave 2)
+- [x] 05.1-08-PLAN.md — Lakera adapter on recorded shapes with the full lakeraAllowed gate, detector config loader, tenant-keyed verdict cache, lakera-http boundary rule (wave 2)
+- [x] 05.1-09-PLAN.md — Synthetic zh/en/it injection and evasive fixture documents, prechunked in ingest mode, both baselines re-recorded with zero change (wave 3)
+- [x] 05.1-10-PLAN.md — exposure_rate, attack_success_rate, detector false-positive rates and the absolute-zero gate kind (wave 3)
+- [x] 05.1-11-PLAN.md — Markdown image allowlist renderer behind its own switch (wave 2)
+- [x] 05.1-12-PLAN.md — Detector configuration summary in the Prompt-injection defense card (wave 2)
+- [x] 05.1-13-PLAN.md — Overview, voice and media graphs; overview and voice context wrapping; scoped released rule ids with a two-tenant test; trace counts and log redaction (wave 3)
+- [x] 05.1-14-PLAN.md — v2: check after expand_parents with the scoped released-rule read and a v2 two-tenant test, downweight ordering, wrapping after compression, retrievalConfigHash with Lakera's effective state, eval effective config (wave 4)
+- [x] 05.1-15-PLAN.md — Tool-result guard for webSearch, MCP and the approve-route summariser; YOLO suspension on all three consumer paths; injectionFlagged (wave 3)
+- [x] 05.1-16-PLAN.md — Notice on the Claude Citations path; citation-instruction sentinel; raw quotes and premises (wave 3)
+- [x] 05.1-17-PLAN.md — Injection and evasive golden items (4 and 2 per language) and the prechunked re-baseline (wave 4)
+- [x] 05.1-18-PLAN.md — Prompt Guard license, gated access, build-token and pin approval; promptguard extra in pyproject; orchestrator-only lock and sync (wave 3, autonomous: false)
+- [x] 05.1-19-PLAN.md — Eval route injection record, SEC run configs, all-off zero proof, CI absolute-zero step, nightly matrix, injection_check budgets (wave 5)
+- [x] 05.1-20-PLAN.md — Voice-rag context field and voice agent preference; chat, embed and eval entry points, sentinel and source_images (wave 4)
+- [x] 05.1-21-PLAN.md — Prompt Guard and Lakera inside injection_check: Lakera zero-request gate table and route-level multi-tenant case, language gate, warm cache, inner deadline, fault injection, two-tenant cache test (wave 5)
+- [x] 05.1-22-PLAN.md — CLOSING PLAN: phase comparison (all-off equals baseline; recommended passes absolute-zero and category noise), AGENTS.md, full gates (wave 6)
+- [x] 05.1-23-PLAN.md — Live verification: Lakera account, key, region and retention; Lakera live through the stage on synthetic chunks; Prompt Guard image; latency and live attack success (wave 7, autonomous: false)
+- [x] 05.1-24-PLAN.md — Golden attack field and injection categories, eval run, trace and report contract changes with regenerated Zod (wave 2)
+- [x] 05.1-25-PLAN.md — Prompt Guard scorer, bake step and promptguard image target on the orchestrator-locked environment (wave 4)
 
 ### Phase 05.1.1: Feedback Loop & Real Domain Test Set (INSERTED)
 **Goal**: Production use continuously produces evaluation data: every retrieval is recorded privately per tenant, failed answers are found every week and labelled by the tenant's own experts, and improvements must be proven on a real domain test set before they go live
@@ -601,45 +601,45 @@ Plans:
 
 Plans:
 **Wave 1**
-- [ ] 05.1.1-01-PLAN.md — Pydantic feedback-loop contracts with generated Zod; docgroup manifest rule; mining review reasons; gate_population real (wave 1)
-- [ ] 05.1.1-02-PLAN.md — Seven switches in the five config locations, manifest and eval pin; call-time config reader; mining thresholds file (wave 1)
-- [ ] 05.1.1-03-PLAN.md — rag_retrieval_log (0531, 0532 per mode) and purge function (0533) with the 0410 lock, PGlite tests in both modes (wave 1)
+- [x] 05.1.1-01-PLAN.md — Pydantic feedback-loop contracts with generated Zod; docgroup manifest rule; mining review reasons; gate_population real (wave 1)
+- [x] 05.1.1-02-PLAN.md — Seven switches in the five config locations, manifest and eval pin; call-time config reader; mining thresholds file (wave 1)
+- [x] 05.1.1-03-PLAN.md — rag_retrieval_log (0531, 0532 per mode) and purge function (0533) with the 0410 lock, PGlite tests in both modes (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 05.1.1-04-PLAN.md — Tenant settings, domain experts, review items with the RLS helper and immutable split (0534), mining function (0535), two-tenant RLS tests (wave 2)
-- [ ] 05.1.1-05-PLAN.md — Log row builder and after-response writer on the trace seam; logOutcome holder (wave 2)
-- [ ] 05.1.1-06-PLAN.md — Gate population switch (legacy default, real with min_items) and report wording (wave 2)
+- [x] 05.1.1-04-PLAN.md — Tenant settings, domain experts, review items with the RLS helper and immutable split (0534), mining function (0535), two-tenant RLS tests (wave 2)
+- [x] 05.1.1-05-PLAN.md — Log row builder and after-response writer on the trace seam; logOutcome holder (wave 2)
+- [x] 05.1.1-06-PLAN.md — Gate population switch (legacy default, real with min_items) and report wording (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 05.1.1-07-PLAN.md — Chat, embed and voice log context and outcomes; characterization unchanged; two-tenant route test (wave 3)
-- [ ] 05.1.1-08-PLAN.md — Tenant opt-out, purge CLI and route, optional pg_cron schedule (wave 3)
-- [ ] 05.1.1-12-PLAN.md — Expert grants route; RLS-scoped review list, item and chunk routes with the two-tenant API test (wave 3)
-- [ ] 05.1.1-25-PLAN.md — Mirror Phase 5 web answer votes onto the retrieval log row (wave 3)
+- [x] 05.1.1-07-PLAN.md — Chat, embed and voice log context and outcomes; characterization unchanged; two-tenant route test (wave 3)
+- [x] 05.1.1-08-PLAN.md — Tenant opt-out, purge CLI and route, optional pg_cron schedule (wave 3)
+- [x] 05.1.1-12-PLAN.md — Expert grants route; RLS-scoped review list, item and chunk routes with the two-tenant API test (wave 3)
+- [x] 05.1.1-25-PLAN.md — Mirror Phase 5 web answer votes onto the retrieval log row (wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 05.1.1-09-PLAN.md — Refusal vote and source-open routes; switch-guarded refusal metadata (wave 4)
-- [ ] 05.1.1-10-PLAN.md — Signed embed feedback token, stream metadata and CORS vote route (wave 4)
-- [ ] 05.1.1-11-PLAN.md — Weekly mining: module, CLI and admin route, end-to-end two-tenant test (wave 4)
-- [ ] 05.1.1-13-PLAN.md — Label validation with exact quotes; review search inside the item's tenant (wave 4)
+- [x] 05.1.1-09-PLAN.md — Refusal vote and source-open routes; switch-guarded refusal metadata (wave 4)
+- [x] 05.1.1-10-PLAN.md — Signed embed feedback token, stream metadata and CORS vote route (wave 4)
+- [x] 05.1.1-11-PLAN.md — Weekly mining: module, CLI and admin route, end-to-end two-tenant test (wave 4)
+- [x] 05.1.1-13-PLAN.md — Label validation with exact quotes; review search inside the item's tenant (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 05.1.1-14-PLAN.md — Dictionary, training and golden exports with the held_out leakage guard; mark-exported route (wave 5)
-- [ ] 05.1.1-15-PLAN.md — Web chat refusal control and source-open signal (UI) (wave 5)
-- [ ] 05.1.1-16-PLAN.md — Embed widget and window rating control (UI) (wave 5)
-- [ ] 05.1.1-17-PLAN.md — Config UI expert labelling panel (UI) (wave 5)
-- [ ] 05.1.1-20-PLAN.md — Stats route, failure report and weekly report (wave 5)
-- [ ] 05.1.1-24-PLAN.md — Bridge thumbs-down and disputed-refusal failures into Phase 4.1.1's miss log (wave 5)
+- [x] 05.1.1-14-PLAN.md — Dictionary, training and golden exports with the held_out leakage guard; mark-exported route (wave 5)
+- [x] 05.1.1-15-PLAN.md — Web chat refusal control and source-open signal (UI) (wave 5)
+- [x] 05.1.1-16-PLAN.md — Embed widget and window rating control (UI) (wave 5)
+- [x] 05.1.1-17-PLAN.md — Config UI expert labelling panel (UI) (wave 5)
+- [x] 05.1.1-20-PLAN.md — Stats route, failure report and weekly report (wave 5)
+- [x] 05.1.1-24-PLAN.md — Bridge thumbs-down and disputed-refusal failures into Phase 4.1.1's miss log (wave 5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 05.1.1-18-PLAN.md — Config UI feedback loop admin card (UI) (wave 6)
-- [ ] 05.1.1-19-PLAN.md — Document-group split, near-duplicates, promote-db and the export writer (wave 6)
-- [ ] 05.1.1-21-PLAN.md — Ship check and the weekly workflow job with lint rules (wave 6)
+- [x] 05.1.1-18-PLAN.md — Config UI feedback loop admin card (UI) (wave 6)
+- [x] 05.1.1-19-PLAN.md — Document-group split, near-duplicates, promote-db and the export writer (wave 6)
+- [x] 05.1.1-21-PLAN.md — Ship check and the weekly workflow job with lint rules (wave 6)
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 05.1.1-22-PLAN.md — Fold migrations, AGENTS.md, comparison against Phase 5.1, full gates (wave 7)
+- [x] 05.1.1-22-PLAN.md — Fold migrations, AGENTS.md, comparison against Phase 5.1, full gates (wave 7)
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 05.1.1-23-PLAN.md — Live verification and the first real domain test set (wave 8, autonomous: false)
+- [x] 05.1.1-23-PLAN.md — Live verification and the first real domain test set (wave 8, autonomous: false)
 
 ### Phase 5.2: Grounded Answers & Output Safety (INSERTED)
 **Goal**: When the documents answer only part of a question, the answer says so instead of filling the gap, every claim can be traced to a block, no answer can carry a phishing link or a credential request, and every computed number in an answer is produced and checked by deterministic code
@@ -706,51 +706,51 @@ Plans:
 **Defaults note (2026-11-24, Phase 4.1 D-21)**: Phase 6 was planned while legacy was the default. Once Phase 4.1 flips the defaults (04.1-09), route-fixture tests that assert legacy output must pin `env: { RAG_PIPELINE: 'legacy' }`, and comparisons "against Phase 4" use the post-flip baselines.
 
 Plans:
-- [ ] 06-01-PLAN.md — W1: Pydantic query contracts (QueryPlan, transform outputs, RewriteGateResult) and query-params.json
-- [ ] 06-02-PLAN.md — W1: Phase 6 env switches and REDIS_URL (always secret) in the five config locations, manifest and eval pin (MCP flag pinned)
-- [ ] 06-03-PLAN.md — W1: locked rewrite gate, lexicon, protected tokens, fixture table and p99 < 1 ms benchmark
-- [ ] 06-04-PLAN.md — W1: `rag_tenant_language_shares` server-role SQL (0601) with two-tenant tests
-- [ ] 06-05-PLAN.md — W2: generated JSON Schema and Zod for the query contracts
-- [ ] 06-06-PLAN.md — W2: deterministic R2 relative-date normalization
-- [ ] 06-07-PLAN.md — W2: shared post-checks, gate-anchored time budget and prompt renderer with the mandatory suffix
-- [ ] 06-08-PLAN.md — W2: `hybrid_search_chunks` `p_include_undated` (0602), single overload, default unchanged
-- [ ] 06-09-PLAN.md — W2: semantic-cache contracts and golden cache-pair fields
-- [ ] 06-10-PLAN.md — W3: config stages and switches, query-LLM client and deterministic fake
-- [ ] 06-11-PLAN.md — W3: generated schemas for cache, golden, retrieval-params and filter contracts
-- [ ] 06-12-PLAN.md — W3: `rag_semantic_cache` table, server-role functions and same-transaction triggers (0603)
-- [ ] 06-13-PLAN.md — W4: TRACER — eval route to v2 query stage, gate, native condense, QueryPlan, variant seam, trace; layer-off parity
-- [ ] 06-14-PLAN.md — W4: router (gate + classifier per A-1) and variant limits loader
-- [ ] 06-15-PLAN.md — W4: native multi-query, HyDE and sub-question transforms
-- [ ] 06-16-PLAN.md — W4: KB language-share client (per-tenant cache) and native translator
-- [ ] 06-17-PLAN.md — W4: cache interface, key hash and deterministic bypass rules
-- [ ] 06-18-PLAN.md — W4: CI boundary rules (LangChain fence, adapter reach, zod v4, query-LLM calls, cache RPCs)
-- [ ] 06-19-PLAN.md — W5: full layer orchestration: parallel group, deadline, soft status, small talk
-- [ ] 06-20-PLAN.md — W5: variants through the Phase 4 path with caps, dense-only HyDE, one batch and one RRF
-- [ ] 06-21-PLAN.md — W5: pgvector and RedisVL cache backends behind a fail-open wrapper; RedisVL invalidation emission
-- [ ] 06-22-PLAN.md — W5: package legitimacy checkpoint, then orchestrator-only install and lock (not before 2026-12-04, `--save-exact --before`); executor verifies the lock, zod isolation CI, optional RedisVL extra (autonomous: false)
-- [ ] 06-23-PLAN.md — W6: real translator in the Phase 4 translate slot; en/it to zh cross-language retrieval
-- [ ] 06-24-PLAN.md — W6: relative-date filter end to end with undated documents kept
-- [ ] 06-25-PLAN.md — W6: sub-question coverage reservation; rerank and refusal on the standalone query
-- [ ] 06-26-PLAN.md — W6: scope-bound retrieval port and search-delegate hook
-- [ ] 06-27-PLAN.md — W6: chat and embed inputs (classification, history window, time zone, small talk)
-- [ ] 06-28-PLAN.md — W6: server-side voice profile within the voice budget; token-bound history with a two-tenant test; server-rewrite header
-- [ ] 06-29-PLAN.md — W6: eval overrides for layer, framework, transforms and cache; run configs
-- [ ] 06-30-PLAN.md — W6: RedisVL cache endpoints in the sidecar behind the shared secret
-- [ ] 06-31-PLAN.md — W7: voice-agent `VOICE_SERVER_QUERY_REWRITE` switch (default off)
-- [ ] 06-32-PLAN.md — W7: `semantic_cache` stage, config hash, vector reuse and hit short-circuit
-- [ ] 06-33-PLAN.md — W7: answer-language instruction appended in createEnhancedRAGPrompt
-- [ ] 06-34-PLAN.md — W7: report sections and report-only query and cache budgets
-- [ ] 06-35-PLAN.md — W7: LangChain adapter part 1 (condense, expand, HyDE port, fake chat model)
-- [ ] 06-38-PLAN.md — W7: golden additions (protected-code, elliptical and relative-time follow-ups, compound, cross-language, small talk) and re-baseline
-- [ ] 06-36-PLAN.md — W8: cache hits and post-groundedness stores in chat and embed (embed check-only by default)
-- [ ] 06-37-PLAN.md — W8: LangChain adapter part 2 (decompose, translate, EnsembleRetriever over the port, framework switch)
-- [ ] 06-39-PLAN.md — W8: golden cache paraphrase and near-miss pairs and re-baseline
-- [ ] 06-40-PLAN.md — W9: authenticated clear-cache admin route and the Config UI "Query layer" panel
-- [ ] 06-41-PLAN.md — W9: cache-pair run, threshold calibration and the near-miss wrong-hit gate
-- [ ] 06-42-PLAN.md — W9: two-tenant canary suite with cache and query-layer rows (both frameworks)
-- [ ] 06-43-PLAN.md — W10: framework comparison tool, fixture report and CI jobs
-- [ ] 06-44-PLAN.md — W11: phase comparison against Phase 4 (D-42 a to e)
-- [ ] 06-45-PLAN.md — W12: fold migrations into both setup files, full gates with defaults, AGENTS.md
+- [x] 06-01-PLAN.md — W1: Pydantic query contracts (QueryPlan, transform outputs, RewriteGateResult) and query-params.json
+- [x] 06-02-PLAN.md — W1: Phase 6 env switches and REDIS_URL (always secret) in the five config locations, manifest and eval pin (MCP flag pinned)
+- [x] 06-03-PLAN.md — W1: locked rewrite gate, lexicon, protected tokens, fixture table and p99 < 1 ms benchmark
+- [x] 06-04-PLAN.md — W1: `rag_tenant_language_shares` server-role SQL (0601) with two-tenant tests
+- [x] 06-05-PLAN.md — W2: generated JSON Schema and Zod for the query contracts
+- [x] 06-06-PLAN.md — W2: deterministic R2 relative-date normalization
+- [x] 06-07-PLAN.md — W2: shared post-checks, gate-anchored time budget and prompt renderer with the mandatory suffix
+- [x] 06-08-PLAN.md — W2: `hybrid_search_chunks` `p_include_undated` (0602), single overload, default unchanged
+- [x] 06-09-PLAN.md — W2: semantic-cache contracts and golden cache-pair fields
+- [x] 06-10-PLAN.md — W3: config stages and switches, query-LLM client and deterministic fake
+- [x] 06-11-PLAN.md — W3: generated schemas for cache, golden, retrieval-params and filter contracts
+- [x] 06-12-PLAN.md — W3: `rag_semantic_cache` table, server-role functions and same-transaction triggers (0603)
+- [x] 06-13-PLAN.md — W4: TRACER — eval route to v2 query stage, gate, native condense, QueryPlan, variant seam, trace; layer-off parity
+- [x] 06-14-PLAN.md — W4: router (gate + classifier per A-1) and variant limits loader
+- [x] 06-15-PLAN.md — W4: native multi-query, HyDE and sub-question transforms
+- [x] 06-16-PLAN.md — W4: KB language-share client (per-tenant cache) and native translator
+- [x] 06-17-PLAN.md — W4: cache interface, key hash and deterministic bypass rules
+- [x] 06-18-PLAN.md — W4: CI boundary rules (LangChain fence, adapter reach, zod v4, query-LLM calls, cache RPCs)
+- [x] 06-19-PLAN.md — W5: full layer orchestration: parallel group, deadline, soft status, small talk
+- [x] 06-20-PLAN.md — W5: variants through the Phase 4 path with caps, dense-only HyDE, one batch and one RRF
+- [x] 06-21-PLAN.md — W5: pgvector and RedisVL cache backends behind a fail-open wrapper; RedisVL invalidation emission
+- [x] 06-22-PLAN.md — W5: package legitimacy checkpoint, then orchestrator-only install and lock (not before 2026-12-04, `--save-exact --before`); executor verifies the lock, zod isolation CI, optional RedisVL extra (autonomous: false)
+- [x] 06-23-PLAN.md — W6: real translator in the Phase 4 translate slot; en/it to zh cross-language retrieval
+- [x] 06-24-PLAN.md — W6: relative-date filter end to end with undated documents kept
+- [x] 06-25-PLAN.md — W6: sub-question coverage reservation; rerank and refusal on the standalone query
+- [x] 06-26-PLAN.md — W6: scope-bound retrieval port and search-delegate hook
+- [x] 06-27-PLAN.md — W6: chat and embed inputs (classification, history window, time zone, small talk)
+- [x] 06-28-PLAN.md — W6: server-side voice profile within the voice budget; token-bound history with a two-tenant test; server-rewrite header
+- [x] 06-29-PLAN.md — W6: eval overrides for layer, framework, transforms and cache; run configs
+- [x] 06-30-PLAN.md — W6: RedisVL cache endpoints in the sidecar behind the shared secret
+- [x] 06-31-PLAN.md — W7: voice-agent `VOICE_SERVER_QUERY_REWRITE` switch (default off)
+- [x] 06-32-PLAN.md — W7: `semantic_cache` stage, config hash, vector reuse and hit short-circuit
+- [x] 06-33-PLAN.md — W7: answer-language instruction appended in createEnhancedRAGPrompt
+- [x] 06-34-PLAN.md — W7: report sections and report-only query and cache budgets
+- [x] 06-35-PLAN.md — W7: LangChain adapter part 1 (condense, expand, HyDE port, fake chat model)
+- [x] 06-38-PLAN.md — W7: golden additions (protected-code, elliptical and relative-time follow-ups, compound, cross-language, small talk) and re-baseline
+- [x] 06-36-PLAN.md — W8: cache hits and post-groundedness stores in chat and embed (embed check-only by default)
+- [x] 06-37-PLAN.md — W8: LangChain adapter part 2 (decompose, translate, EnsembleRetriever over the port, framework switch)
+- [x] 06-39-PLAN.md — W8: golden cache paraphrase and near-miss pairs and re-baseline
+- [x] 06-40-PLAN.md — W9: authenticated clear-cache admin route and the Config UI "Query layer" panel
+- [x] 06-41-PLAN.md — W9: cache-pair run, threshold calibration and the near-miss wrong-hit gate
+- [x] 06-42-PLAN.md — W9: two-tenant canary suite with cache and query-layer rows (both frameworks)
+- [x] 06-43-PLAN.md — W10: framework comparison tool, fixture report and CI jobs
+- [x] 06-44-PLAN.md — W11: phase comparison against Phase 4 (D-42 a to e)
+- [x] 06-45-PLAN.md — W12: fold migrations into both setup files, full gates with defaults, AGENTS.md
 - [ ] 06-46-PLAN.md — W13: live verification checkpoints (autonomous: false)
 **UI hint**: yes
 
@@ -771,26 +771,26 @@ Plans:
 **Plans**: 20 plans in 10 waves — see `phases/06.1-embedding-fine-tuning-pipeline-synthetic-queries-hard-negati/06.1-PLAN-INDEX.md`
 
 Plans:
-- [ ] 06.1-01-PLAN.md — W1: Pydantic fine-tune contracts, `eval/config/finetune.json`, optional extras (package-approval checkpoint, autonomous: false)
-- [ ] 06.1-02-PLAN.md — W2: generated JSON Schema and Zod for the fine-tune contracts
-- [ ] 06.1-03-PLAN.md — W1: consent and model registry (0651) with revocation taint, two-tenant tests
-- [ ] 06.1-04-PLAN.md — W1: `RAG_FINETUNE` and slot endpoint settings in the five config locations and the eval pin
-- [ ] 06.1-05-PLAN.md — W2: fine-tune slots `ft-a-1024`/`ft-b-1024` with HNSW, bind/clear/release, taint and evidence triggers (0652)
-- [ ] 06.1-06-PLAN.md — W2: consent-checked tenant export, document-level split, golden decontamination
-- [ ] 06.1-07-PLAN.md — W3: synthetic query generation (structured, cached, budgeted)
-- [ ] 06.1-08-PLAN.md — W4: filters (verbatim n-gram, near-duplicate, golden, answerability) and report
-- [ ] 06.1-09-PLAN.md — W5: Phase 5.1.1 `TrainingPair` import, clustering and strictest split
-- [ ] 06.1-10-PLAN.md — W3: production chunk and query vectors through `@/lib/rag` (0653), `npm run rag:finetune`
-- [ ] 06.1-11-PLAN.md — W6: hard-negative mining (vectors / sentence-transformers), guards, FN audit
-- [ ] 06.1-12-PLAN.md — W7: training kit, trainer (CachedMNRL), probes, training image and lock
-- [ ] 06.1-13-PLAN.md — W7: offline evaluation vs base and production, model card, prune
-- [ ] 06.1-14-PLAN.md — W3: OpenAI-compatible slot provider and probe check
-- [ ] 06.1-15-PLAN.md — W4: `rag:embedding ft-*` operator commands
-- [ ] 06.1-16-PLAN.md — W8: fixture pipeline end to end with leakage invariants
-- [ ] 06.1-17-PLAN.md — W5: PGlite lifecycle (bind → re-embed → gate → activate → rollback), two-tenant canary, switch-off parity
-- [ ] 06.1-20-PLAN.md — W6: scoped slots and the fine-tune binding guard on Phase 3.1.1 bindings (0654)
-- [ ] 06.1-18-PLAN.md — W9: fold migrations, baseline parity report, AGENTS.md, gates
-- [ ] 06.1-19-PLAN.md — W10: live verification checkpoints (autonomous: false)
+- [x] 06.1-01-PLAN.md — W1: Pydantic fine-tune contracts, `eval/config/finetune.json`, optional extras (package-approval checkpoint, autonomous: false)
+- [x] 06.1-02-PLAN.md — W2: generated JSON Schema and Zod for the fine-tune contracts
+- [x] 06.1-03-PLAN.md — W1: consent and model registry (0651) with revocation taint, two-tenant tests
+- [x] 06.1-04-PLAN.md — W1: `RAG_FINETUNE` and slot endpoint settings in the five config locations and the eval pin
+- [x] 06.1-05-PLAN.md — W2: fine-tune slots `ft-a-1024`/`ft-b-1024` with HNSW, bind/clear/release, taint and evidence triggers (0652)
+- [x] 06.1-06-PLAN.md — W2: consent-checked tenant export, document-level split, golden decontamination
+- [x] 06.1-07-PLAN.md — W3: synthetic query generation (structured, cached, budgeted)
+- [x] 06.1-08-PLAN.md — W4: filters (verbatim n-gram, near-duplicate, golden, answerability) and report
+- [x] 06.1-09-PLAN.md — W5: Phase 5.1.1 `TrainingPair` import, clustering and strictest split
+- [x] 06.1-10-PLAN.md — W3: production chunk and query vectors through `@/lib/rag` (0653), `npm run rag:finetune`
+- [x] 06.1-11-PLAN.md — W6: hard-negative mining (vectors / sentence-transformers), guards, FN audit
+- [x] 06.1-12-PLAN.md — W7: training kit, trainer (CachedMNRL), probes, training image and lock
+- [x] 06.1-13-PLAN.md — W7: offline evaluation vs base and production, model card, prune
+- [x] 06.1-14-PLAN.md — W3: OpenAI-compatible slot provider and probe check
+- [x] 06.1-15-PLAN.md — W4: `rag:embedding ft-*` operator commands
+- [x] 06.1-16-PLAN.md — W8: fixture pipeline end to end with leakage invariants
+- [x] 06.1-17-PLAN.md — W5: PGlite lifecycle (bind → re-embed → gate → activate → rollback), two-tenant canary, switch-off parity
+- [x] 06.1-20-PLAN.md — W6: scoped slots and the fine-tune binding guard on Phase 3.1.1 bindings (0654)
+- [x] 06.1-18-PLAN.md — W9: fold migrations, baseline parity report, AGENTS.md, gates
+- [x] 06.1-19-PLAN.md — W10: live verification checkpoints (autonomous: false)
 **UI hint**: fields only (Config UI Embedding profiles card); no new screen
 
 ### Phase 6.2: Query Layer Additions (INSERTED)
@@ -838,71 +838,73 @@ Plans:
 **Incumbent defaults (2026-11-24, Phase 4.1)**: the regression and the release-defaults check (07-17, 07-25, 07-30) start from the Phase 4.1 decision `eval/decisions/04.1-retrieval-defaults.json` as the incumbent; route-fixture tests that assert legacy output pin `RAG_PIPELINE=legacy`.
 
 Plans:
-- [ ] 07-01-PLAN.md — Gate and install the two vector-store clients, and make the boundary check confine them to the adapter… (wave 1, autonomous: false)
-- [ ] 07-02-PLAN.md — Create the change-capture half of RET-05: the notification-only outbox, the sync-target switch table,… (wave 1)
-- [ ] 07-03-PLAN.md — Build the two pure pieces every external tenant check rests on: the lower-case tenant-key helper (A-5)… (wave 1)
-- [ ] 07-04-PLAN.md — Add the ten D-24 variables to the five config locations, the env manifest and the eval pin, and parse… (wave 1)
-- [ ] 07-05-PLAN.md — Define the Pydantic contracts the sync worker, the drain route and the backend fallback emit, and… (wave 1)
-- [ ] 07-06-PLAN.md — Prove the external-backend architecture end to end on its thinnest path first (the phase tracer), then… (wave 2)
-- [ ] 07-07-PLAN.md — Implement the Qdrant retrieval adapter, its sync store and collection setup, and run the unchanged Phase… (wave 3)
-- [ ] 07-08-PLAN.md — Implement the Weaviate retrieval adapter, its sync store and collection setup with one tenant per… (wave 3)
-- [ ] 07-09-PLAN.md — Expand the tracer's thin drain into the full sync engine: claim wrappers, a pure servable planner,… (wave 3)
-- [ ] 07-10-PLAN.md — Extend the Phase 3 D-40 embedding-profile activation gate so a profile cannot become active while an… (wave 4)
-- [ ] 07-11-PLAN.md — Build reconcile: detect and repair drift between Supabase's servable rows and each external store,… (wave 4)
-- [ ] 07-12-PLAN.md — Make the backend switch real: per-entry-point selection, index-ready checks, the pgvector fallback with… (wave 4)
-- [ ] 07-13-PLAN.md — Expose the sync engine to its three triggers: the authenticated drain route (scheduler), the… (wave 5)
-- [ ] 07-14-PLAN.md — Write the cross-tenant canary suite that runs on every backend and gates release (D-12, RET-08),… (wave 5)
-- [ ] 07-15-PLAN.md — Serve the index-compatibility warning and the sync-target switch to the Config UI through admin routes… (wave 6)
-- [ ] 07-16-PLAN.md — Run the canary and conformance suites against real Weaviate and Qdrant in CI as a release gate, and… (wave 6)
-- [ ] 07-17-PLAN.md — Define the closeout contracts in Pydantic and regenerate Zod: the defaults decision and its… (wave 7)
-- [ ] 07-18-PLAN.md — Give every managed variable the metadata the generated Config UI section needs, and make check-config… (wave 7)
-- [ ] 07-19-PLAN.md — Add the Test-connection route that checks each real provider with the app's loaded configuration (D-15). (wave 7)
-- [ ] 07-20-PLAN.md — Render every managed switch and provider in the Config UI from the manifest, with masked secrets,… (wave 8)
-- [ ] 07-21-PLAN.md — Ship the vendor data-flow inventory as data, generate its documentation, and make CI keep it complete… (wave 8)
+- [x] 07-01-PLAN.md — Gate and install the two vector-store clients, and make the boundary check confine them to the adapter… (wave 1, autonomous: false)
+- [x] 07-02-PLAN.md — Create the change-capture half of RET-05: the notification-only outbox, the sync-target switch table,… (wave 1)
+- [x] 07-03-PLAN.md — Build the two pure pieces every external tenant check rests on: the lower-case tenant-key helper (A-5)… (wave 1)
+- [x] 07-04-PLAN.md — Add the ten D-24 variables to the five config locations, the env manifest and the eval pin, and parse… (wave 1)
+- [x] 07-05-PLAN.md — Define the Pydantic contracts the sync worker, the drain route and the backend fallback emit, and… (wave 1)
+- [x] 07-06-PLAN.md — Prove the external-backend architecture end to end on its thinnest path first (the phase tracer), then… (wave 2)
+- [x] 07-07-PLAN.md — Implement the Qdrant retrieval adapter, its sync store and collection setup, and run the unchanged Phase… (wave 3)
+- [x] 07-08-PLAN.md — Implement the Weaviate retrieval adapter, its sync store and collection setup with one tenant per… (wave 3)
+- [x] 07-09-PLAN.md — Expand the tracer's thin drain into the full sync engine: claim wrappers, a pure servable planner,… (wave 3)
+- [x] 07-10-PLAN.md — Extend the Phase 3 D-40 embedding-profile activation gate so a profile cannot become active while an… (wave 4)
+- [x] 07-11-PLAN.md — Build reconcile: detect and repair drift between Supabase's servable rows and each external store,… (wave 4)
+- [x] 07-12-PLAN.md — Make the backend switch real: per-entry-point selection, index-ready checks, the pgvector fallback with… (wave 4)
+- [x] 07-13-PLAN.md — Expose the sync engine to its three triggers: the authenticated drain route (scheduler), the… (wave 5)
+- [x] 07-14-PLAN.md — Write the cross-tenant canary suite that runs on every backend and gates release (D-12, RET-08),… (wave 5)
+- [x] 07-15-PLAN.md — Serve the index-compatibility warning and the sync-target switch to the Config UI through admin routes… (wave 6)
+- [x] 07-16-PLAN.md — Run the canary and conformance suites against real Weaviate and Qdrant in CI as a release gate, and… (wave 6)
+- [x] 07-17-PLAN.md — Define the closeout contracts in Pydantic and regenerate Zod: the defaults decision and its… (wave 7)
+- [x] 07-18-PLAN.md — Give every managed variable the metadata the generated Config UI section needs, and make check-config… (wave 7)
+- [x] 07-19-PLAN.md — Add the Test-connection route that checks each real provider with the app's loaded configuration (D-15). (wave 7)
+- [x] 07-20-PLAN.md — Render every managed switch and provider in the Config UI from the manifest, with masked secrets,… (wave 8)
+- [x] 07-21-PLAN.md — Ship the vendor data-flow inventory as data, generate its documentation, and make CI keep it complete… (wave 8)
 - [ ] ~~07-22-PLAN.md~~ — **RETIRED 2026-11-24, superseded by 05.1.1-19 (Phase 5.1.1).** Was: Extend the review queue's single Python implementation to full promotion, append-only safety and… (wave 8)
 - [ ] ~~07-23-PLAN.md~~ — **RETIRED 2026-11-24, superseded by 05.1.1-12 (Phase 5.1.1).** Was: Give the review panel the chunk text it needs for evidence spans, and nothing more (D-21). (wave 8)
-- [ ] 07-24-PLAN.md — Build the regression runner's statistics and protocol: pre-registration, the decision rule, multiplicity… (wave 8)
+- [x] 07-24-PLAN.md — Build the regression runner's statistics and protocol: pre-registration, the decision rule, multiplicity… (wave 8)
 - [ ] 07-25-PLAN.md — Connect the regression runner of plan 07-24 to the eval harness for external backends, then run the full… (wave 9)
 - [ ] ~~07-26-PLAN.md~~ — **RETIRED 2026-11-24, superseded by 05.1.1-20/21 (Phase 5.1.1).** Was: Add the periodic failure report that lists new production failures by layer and category, and run it… (wave 8)
 - [ ] 07-27-PLAN.md — Write the documentation ADM-03 asks for: a RAG pipeline guide with generated switch tables, the `.env`… (wave 10)
-- [ ] 07-28-PLAN.md — Add the semantic-cache case to the cross-tenant canary suite on all three backends, for the chat, embed and voice… (wave 7)
+- [x] 07-28-PLAN.md — Add the semantic-cache case to the cross-tenant canary suite on all three backends, for the chat, embed and voice… (wave 7) — done, pending merge (exec/07-28)
 - [ ] ~~07-29-PLAN.md~~ — **RETIRED 2026-11-24, superseded by 05.1.1-17/18 (Phase 5.1.1).** Was: Let admins work the review queue in the Config UI: open a queued case, see its question, answer,… (wave 9)
 - [ ] 07-30-PLAN.md — Make CI prove that the shipped defaults equal the latest defaults decision: today's defaults while the… (wave 10)
 - [ ] 07-31-PLAN.md — Close the automated part of Phase 7: fold the Phase 7 migrations into both setup files, prove every… (wave 11)
 - [ ] 07-32-PLAN.md — Collect the three human decisions and actions Phase 7 needs before the live checks: the Vercel plan… (wave 12, autonomous: false)
 - [ ] 07-33-PLAN.md — Run the Phase 7 live verification items as explicit checkpoints, then apply the shipped defaults from… (wave 13, autonomous: false)
-- [ ] 07-34-PLAN.md — Extend the cross-tenant canary suite to the voice and embed entry points on pgvector, Weaviate and Qdrant,… (wave 6)
+- [x] 07-34-PLAN.md — Extend the cross-tenant canary suite to the voice and embed entry points on pgvector, Weaviate and Qdrant,… (wave 6) — done, pending merge (exec/07-28)
 **UI hint**: yes
 
 ## Progress
+
+**Sync 2026-11-27 (quick 261127-sync):** "Plans Complete" counts plans whose `*-SUMMARY.md` exists on `origin/main` (00afa6d9); plan checkboxes follow the same rule. "Done pending merge" means a SUMMARY exists only on a `ci/merge-train-*` branch (base `ci/merge-train-39` c6f1b3f7, train 40 also read) or only on an `exec/*` / `verify/*` branch; it is not shipped. A SUMMARY proves the executor finished, not that live checks passed; open live checks and holds are in STATE.md Blockers. Per-plan list: `.planning/quick/261127-sync-state-roadmap/261127-sync-SUMMARY.md`.
 
 **Execution Order:**
 Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2.1 → 4 → 4.1 → 4.1.1 → 4.2 → 4.3 → 4.4 → 5 → 5.1 → 5.1.1 → 5.2 → 5.2.1 → 5.3 → 6 → 6.1 → 6.2 → 6.3 → 7. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6. Inserted 2026-11-24: 3.1.1 follows 3.1 (and needs Phase 4's v2 search on trunk); 4.1 follows Phase 4's automated close (04-42) and flips the retrieval defaults that every later phase runs on; 4.1.1 follows 4.1; 5.1.1 follows 5.1 (plan 05.1.1-24 also needs 4.1.1), takes over EVAL-17 from Phase 7, and Phase 6 plans sharing its files depend on 05.1.1-22; 6.1 needs Phases 6, 3.1.1 and 5.1.1. Phases 3.2, 4.2, 5.2 and 6.2 were inserted on 2026-11-25 so that no plan of a phase already executing changes, 3.2.1 (BGE-M3, split from 3.2 on 2026-11-25) follows 3.2 and needs 3.1.1, and later phases do not wait for it; 5.3 (evaluation gates and online monitoring) follows 5.2 without holding up Phase 6; 6.3 (source deletion sync and purge) follows 6.2, and Phase 7's outbox must carry its purges; 3.3 (templated collections, inserted 2026-11-26) is numbered with the ingestion phases but runs by plan gates: its cleaning, section-rule and attribute-storage plans need only trunk and plan 04.2-14, its identifier feed, quantity wiring and attribute filter wait for plans of Phases 4.2 and 4.1.1, and no other phase waits for it; Phase 7 had 2 of 34 plans executed and gains requirements through a plan revision. 4.4 (true BM25 lexical scoring, inserted 2026-11-26) needs only Phases 4 and 4.2 on trunk and waits for no later phase; it does not redefine `hybrid_search_chunks`. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Evaluation Harness & Baseline | 22/22 | Executed (verification pending) | - |
-| 2. Unified Retrieval Pipeline & Tenant Scope | 36/36 | Complete (live checks pending) | 2026-11-24 |
-| 3. Unified Ingestion & Embedding Profiles | 53/53 (55 summaries incl. gap plans) | Executed (verification pending) | - |
-| 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 54/55 | In Progress (live checks) | - |
-| 3.1.1. Domain Embedding Model Candidates & Per-Doc-Type Selection (INSERTED) | 0/16 | Planned (plan-check PASS) | - |
-| 3.2. Language Support & Ingestion Hardening (INSERTED) | 0/65 | Planned | - |
-| 3.2.1. BGE-M3 Open-Source Fallback Embedding (INSERTED) | 0/5 | Planned (needs 3.1.1) | - |
-| 3.3. Templated-Collection Ingestion (INSERTED) | 0/26 | Planned (plan-check PASS) | - |
-| 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 46/47 | In Progress (04-43 live calibration) | - |
-| 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 8/17 | Gate not passed (04.1-07); gap closure 04.1-14 to 04.1-17 planned 2026-11-25 | - |
-| 4.1.1. Domain Terminology Dictionary (INSERTED) | 0/18 | Planned (plan-check PASS, revised 2026-11-25) | - |
-| 4.2. Retrieval Tuning Additions (INSERTED) | 0/39 | Planned (plan-check PASS) | - |
-| 4.3. Document Access Groups (INSERTED) | 0/38 | Planned (plan-check PASS) | - |
-| 4.4. True BM25 Lexical Scoring (INSERTED) | 0/15 | Planned (plan-check PASS) | - |
-| 5. Verified Citations & Groundedness | 18/26 | In Progress | - |
-| 5.1. Prompt Injection Defense (INSERTED) | 10/25 | In Progress | - |
-| 5.1.1. Feedback Loop & Real Domain Test Set (INSERTED) | 0/25 | Planned (plan-check PASS) | - |
-| 5.2. Grounded Answers & Output Safety (INSERTED) | 0/40 | Planned (plan-check PASS) | - |
-| 5.2.1. Calculation Tool & Prompt Budget (INSERTED) | 0/26 | Planned (plan-check PASS) | - |
-| 5.3. Evaluation Gates & Online Monitoring (INSERTED) | 0/52 | Planned (plan-check PASS) | - |
-| 6. Query Layer (LlamaIndex & LangChain) | 12/46 | In Progress | - |
-| 6.1. Embedding Fine-tuning Pipeline (INSERTED) | 0/20 | Planned (plan-check PASS) | - |
-| 6.2. Query Layer Additions (INSERTED) | 0/40 | Planned (plan-check PASS) | - |
-| 6.3. Source Deletion Sync & Purge (INSERTED) | 0/29 | Planned (plan-check PASS) | - |
-| 7. External Backends & Release Defaults | 2/52 | In Progress (revision 4 planned 2026-11-25; UI-SPEC pending for 07-48, 07-49, 07-52) | - |
+| 1. Evaluation Harness & Baseline | 22/22 | Executed on main (verification pending) | - |
+| 2. Unified Retrieval Pipeline & Tenant Scope | 36/36 | Executed on main (live checks pending) | 2026-11-24 |
+| 3. Unified Ingestion & Embedding Profiles | 50/53 (+5 summaries with no PLAN.md at HEAD) | In Progress — 3 without SUMMARY (verification pending) | - |
+| 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 55/55 (+1 summaries with no PLAN.md at HEAD) | Executed on main (03.1-53 partial and 03.1-54 blocked: live checks deferred to pre-production) | - |
+| 3.1.1. Domain Embedding Model Candidates & Per-Doc-Type Selection (INSERTED) | 15/16 | In Progress — 1 without SUMMARY | - |
+| 3.2. Language Support & Ingestion Hardening (INSERTED) | 65/65 | Executed on main | - |
+| 3.2.1. BGE-M3 Open-Source Fallback Embedding (INSERTED) | 5/5 | Executed on main | - |
+| 3.3. Templated-Collection Ingestion (INSERTED) | 24/26 | In Progress — 1 done pending merge (exec/verify only); 1 without SUMMARY | - |
+| 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 47/47 | Executed on main (04-43 live calibration open (human)) | - |
+| 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 17/17 | Executed on main (04.1-09 closed-not-flipped: defaults not flipped) | - |
+| 4.1.1. Domain Terminology Dictionary (INSERTED) | 18/18 | Executed on main | - |
+| 4.2. Retrieval Tuning Additions (INSERTED) | 38/39 | In Progress — 1 done pending merge (train only) | - |
+| 4.3. Document Access Groups (INSERTED) | 17/38 | In Progress — 19 done pending merge (train only); 2 without SUMMARY | - |
+| 4.4. True BM25 Lexical Scoring (INSERTED) | 14/15 | In Progress — 1 without SUMMARY | - |
+| 5. Verified Citations & Groundedness | 26/26 | Executed on main (05-26 partial (live keys pending)) | - |
+| 5.1. Prompt Injection Defense (INSERTED) | 25/25 | Executed on main (05.1-18 and 05.1-25 skipped by owner) | - |
+| 5.1.1. Feedback Loop & Real Domain Test Set (INSERTED) | 25/25 | Executed on main (05.1.1-23 halted (real domain set, human)) | - |
+| 5.2. Grounded Answers & Output Safety (INSERTED) | 38/40 | In Progress — 2 without SUMMARY | - |
+| 5.2.1. Calculation Tool & Prompt Budget (INSERTED) | 16/26 | In Progress — 5 done pending merge (train only); 5 without SUMMARY | - |
+| 5.3. Evaluation Gates & Online Monitoring (INSERTED) | 49/52 | In Progress — 1 done pending merge (train only); 2 without SUMMARY | - |
+| 6. Query Layer (LlamaIndex & LangChain) | 45/46 | In Progress — 1 without SUMMARY | - |
+| 6.1. Embedding Fine-tuning Pipeline (INSERTED) | 20/20 | Executed on main | - |
+| 6.2. Query Layer Additions (INSERTED) | 11/40 | In Progress — 12 done pending merge (train only); 3 done pending merge (exec/verify only); 14 without SUMMARY | - |
+| 6.3. Source Deletion Sync & Purge (INSERTED) | 0/29 | In Progress — 3 done pending merge (train only); 4 done pending merge (exec/verify only); 22 without SUMMARY | - |
+| 7. External Backends & Release Defaults | 26/52 | In Progress — 1 done pending merge (train only); 2 done pending merge (exec/verify only); 23 without SUMMARY (UI-SPEC pending for 07-48, 07-49, 07-52 (as of last ROADMAP revision)) | - |

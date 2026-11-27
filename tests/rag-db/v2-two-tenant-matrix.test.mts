@@ -677,6 +677,7 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
       ranks: { 'dense:0': index + 1 },
     }));
     const out = await contextModule.runContextStages({
+      access: { mode: 'off' },
       input: { scope, query: V2_CANARY_QUERY, profile: 'chat', signal: new AbortController().signal },
       config,
       profile: 'chat',

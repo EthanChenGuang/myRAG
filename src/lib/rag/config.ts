@@ -35,6 +35,7 @@ export const OPTIONAL_STAGES = [
   'terminology',
   'attribute_resolve',
   'scope_gate',
+  'source_recheck',
 ] as const;
 
 /** Phase 6 query-layer stages (D-05); translate is the shared Phase 4 slot and is not listed here. */
@@ -81,6 +82,7 @@ const V2_STANDARD: StageTimeouts = {
   identifier_resolve: 1000,
   identifier_guard: 1000,
   attribute_resolve: 1000,
+  source_recheck: 1000,
 };
 
 const V2_VOICE: StageTimeouts = {
@@ -97,6 +99,7 @@ const V2_VOICE: StageTimeouts = {
   identifier_resolve: 500,
   identifier_guard: 300,
   attribute_resolve: 500,
+  source_recheck: 300,
 };
 
 const V2_EVAL: StageTimeouts = {
@@ -215,6 +218,8 @@ export interface LexicalScoringConfig {
 }
 export const LEXICAL_SCORING_DEFAULTS: Readonly<LexicalScoringConfig> = Object.freeze({ mode: 'ts_rank_cd', k1: 1.2, b: 0.75 });
 export type BgeM3Serving = 'hosted' | 'sidecar';
+/** Which OpenAI-compatible host answers hosted BGE-M3 calls; openrouter pins its upstream to DeepInfra. */
+export type BgeM3Via = 'deepinfra' | 'openrouter';
 
 export interface RetrievalParamsOverride {
   candidate_pool_size?: number;
@@ -366,6 +371,7 @@ export interface RagEnvInput {
   RAG_DISABLED_STAGES?: string;
   RAG_STAGE_TIMEOUTS?: string;
   RAG_EXACT_ID_LOOKUP?: string;
+  RAG_SOURCE_RECHECK?: string;
   RAG_LEXICAL_SEARCH?: string;
   RAG_RERANKER?: string;
   RAG_RERANK_TIER_CHAT?: string;
@@ -409,6 +415,7 @@ export interface RagEnvInput {
   RAG_SCOPE_TAGS?: string;
   RAG_DOC_TRANSLATION?: string;
   RAG_BGE_M3_SERVING?: string;
+  RAG_BGE_M3_VIA?: string;
   RAG_OUTPUT_LINK_ALLOWLIST?: string;
   RAG_EMBEDDING_PROFILES?: string;
   RAG_DOMAIN_EMBEDDINGS?: string;
@@ -473,6 +480,8 @@ export interface RagConfig {
   operatorDisabledStages?: ReadonlySet<StageName>;
   timeouts: Record<Profile, StageTimeouts>;
   exactIdLookup: boolean;
+  /** D-19: recheck candidates against Supabase after fusion and before rerank (RAG_SOURCE_RECHECK); off enters no stage. */
+  sourceRecheck: boolean;
   v2: V2Config;
   effectiveDates: boolean;
   scopeTags: boolean;
@@ -480,6 +489,7 @@ export interface RagConfig {
   docAttributes: boolean;
   docTranslation: 'off' | 'on';
   bgeM3Serving: BgeM3Serving;
+  bgeM3Via: BgeM3Via;
   /** Raw comma-separated domains; the output link filter parses it. */
   outputLinkAllowlist: string;
   queryLayer: QueryLayerConfig;
@@ -1266,6 +1276,7 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_DISABLED_STAGES ?? '',
     env.RAG_STAGE_TIMEOUTS ?? '',
     env.RAG_EXACT_ID_LOOKUP ?? '',
+    env.RAG_SOURCE_RECHECK ?? '',
     env.RAG_LEXICAL_SEARCH ?? '',
     env.RAG_RERANKER ?? '',
     env.RAG_RERANK_TIER_CHAT ?? '',
@@ -1307,6 +1318,7 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_SCOPE_TAGS ?? '',
     env.RAG_DOC_TRANSLATION ?? '',
     env.RAG_BGE_M3_SERVING ?? '',
+    env.RAG_BGE_M3_VIA ?? '',
     env.RAG_DOC_ACCESS_GROUPS ?? '',
     (env.RAG_EMBED_ACCESS_GROUP ?? '').trim(),
     env.RAG_OUTPUT_LINK_ALLOWLIST ?? '',
@@ -1446,12 +1458,14 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     operatorDisabledStages,
     timeouts,
     exactIdLookup,
+    sourceRecheck: parseNamedFlag('RAG_SOURCE_RECHECK', env.RAG_SOURCE_RECHECK, warnings),
     v2,
     effectiveDates: parseNamedFlag('RAG_EFFECTIVE_DATES', env.RAG_EFFECTIVE_DATES, warnings),
     scopeTags: parseNamedFlag('RAG_SCOPE_TAGS', env.RAG_SCOPE_TAGS, warnings),
     docAttributes,
     docTranslation: parseNamedChoice('RAG_DOC_TRANSLATION', env.RAG_DOC_TRANSLATION, ['off', 'on'], 'off', warnings),
     bgeM3Serving: parseNamedChoice('RAG_BGE_M3_SERVING', env.RAG_BGE_M3_SERVING, ['hosted', 'sidecar'], 'hosted', warnings),
+    bgeM3Via: parseNamedChoice('RAG_BGE_M3_VIA', env.RAG_BGE_M3_VIA, ['deepinfra', 'openrouter'], 'deepinfra', warnings),
     outputLinkAllowlist: (env.RAG_OUTPUT_LINK_ALLOWLIST ?? '').trim(),
     queryLayer,
     queryAdditions,

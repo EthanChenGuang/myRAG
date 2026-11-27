@@ -643,7 +643,7 @@ describe('chunk stage with section rules (plan 03.3-12)', () => {
     expect(ctx.identity!.profile.chunker.kind).toBe('rule_sections');
     expect(identity.profile.chunker.kind).toBe(getProcessingProfile('general').chunker.kind);
     expect(ctx.identity!.profile.id).toBe(identity.profile.id);
-    expect(ctx.work.chunks.every((chunk) => chunk.section_path[0] === 'Unit' && chunk.page_start === null)).toBe(true);
+    expect(ctx.work.chunks.every((chunk) => chunk.section_path[0] === HEADER && chunk.page_start === null)).toBe(true);
     expect(setFields).toHaveBeenCalledWith('doc-1', { metadata: { section_rules: { rule_set_id: RULE_SET_ID, version: 2, satisfied: true, counts: { headings: 4, variants: 0, skipped: 0 } } } });
     expect(ctx.state.chunkPrep?.sectionRules?.ruleSetId).toBe(RULE_SET_ID);
     expect(ctx.state.chunkPrep?.boilerplate).toBeUndefined();

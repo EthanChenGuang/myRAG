@@ -15,6 +15,7 @@ vi.mock('@/lib/rag', async (importOriginal) => {
   return {
     ...actual,
     resolveVoiceScope: async () => ({ ok: true, scope: { kind: 'single', userId: null, organizationId: null } }),
+    resolveAccessScope: async ({ scope }: { scope: unknown }) => ({ ok: true, scope }),
     runRetrieval: async () => {
       if (state.throwDuringRetrieval) throw new Error('relation "document_chunks" secret-detail does not exist');
       return {

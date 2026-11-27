@@ -3,7 +3,7 @@ import { normalizeIdentifier } from '../ids/normalize';
 import { splitAtIdentifiers, type IdentifierSplit } from '../ids/shapes';
 import { parseLanguageRegistry } from '../lang/registry';
 import { DICT_TOKEN_PREFIX, STEM_TOKEN_PREFIX, type LexicalOptions } from './options';
-import { buildQuantityUnits, quantityTokens, type QuantityUnits } from './quantity';
+import { buildQuantityUnits, quantityMatches, type QuantityUnits } from './quantity';
 import rules from './rules.json';
 import { stemItalian } from './stem-it';
 
@@ -289,11 +289,29 @@ function quantityUnitsFor(quantity: LexicalOptions['quantity']): QuantityUnits |
   return units;
 }
 
-/** D-31: quantity tokens of the normalised whole text; empty unless the option is on. */
-function quantityTokensFor(normalized: string, options: LexicalOptions | undefined): string[] {
+const COMPANION_SYMBOL = /^[\p{L}\p{N}]+$/u;
+
+/**
+ * D-31: quantity tokens of the normalised whole text, then companions; empty unless the option is on.
+ * Companions are the first reading's number and the unit symbol where the natural tokens lack them, so a glued or
+ * comma spelling ("52,61kwh") also carries the tokens a spaced, dotted spelling ("52.61 kwh") produces (plan 03.3-25).
+ */
+function quantityTokensFor(normalized: string, options: LexicalOptions | undefined, natural: readonly string[]): string[] {
   const units = quantityUnitsFor(options?.quantity);
   if (!units) return [];
-  return quantityTokens(normalized, units).filter(acceptsToken);
+  const matches = quantityMatches(normalized, units);
+  const tokens = matches.flatMap((match) => match.tokens).filter(acceptsToken);
+  const present = new Set(natural);
+  const companions: string[] = [];
+  for (const match of matches) {
+    const forms = COMPANION_SYMBOL.test(match.symbol) ? [match.number, match.symbol] : [match.number];
+    for (const form of forms) {
+      if (present.has(form) || !acceptsToken(form)) continue;
+      present.add(form);
+      companions.push(form);
+    }
+  }
+  return [...tokens, ...companions];
 }
 
 function stemmerFor(options: LexicalOptions | undefined): ((word: string) => string) | null {
@@ -314,7 +332,7 @@ export function lexicalTokens(text: string, options?: LexicalOptions): string[] 
   if (text === '') return [];
   const normalized = normalize(text);
   const tokens = tokenizeNormalized(normalized, contextFor(text, options, true));
-  const additive = [...dictionaryTokens(normalized, options), ...quantityTokensFor(normalized, options)];
+  const additive = [...dictionaryTokens(normalized, options), ...quantityTokensFor(normalized, options, tokens)];
   return additive.length === 0 ? tokens : [...tokens, ...additive];
 }
 
@@ -333,7 +351,7 @@ export function queryLexicalTokens(text: string, options?: LexicalOptions): stri
   const additive = [
     ...dictionaryTokens(normalized, options),
     ...(ctx?.identifiers ?? []),
-    ...quantityTokensFor(normalized, options),
+    ...quantityTokensFor(normalized, options, natural),
     ...(ctx?.additive ?? []),
   ];
   for (const token of additive) {

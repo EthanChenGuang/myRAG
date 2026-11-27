@@ -16,8 +16,8 @@ const SIGNATURES = [
   'public.rag_identifier_pattern_create(text, text, text, text, boolean, uuid)',
   'public.rag_identifier_pattern_update(text, uuid, text, text, text, boolean)',
   'public.rag_identifier_pattern_delete(text, uuid)',
-  'public.rag_identifier_resolve(text, text[])',
-  'public.rag_identifier_candidates(text, text, integer)',
+  'public.rag_identifier_resolve(text, text[], text[], boolean)',
+  'public.rag_identifier_candidates(text, text, integer, text[], boolean)',
 ];
 
 interface PatternRow {

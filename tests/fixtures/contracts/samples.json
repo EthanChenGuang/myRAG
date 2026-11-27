@@ -6238,6 +6238,7 @@
       "run_after": null,
       "runner": null,
       "settings": {
+        "access_keys": null,
         "approval": null,
         "carry_table_header": false,
         "cloud_allowed": true,
@@ -6423,6 +6424,7 @@
       "recall_at_10": 0.8
     },
     "JobSettingsSnapshot": {
+      "access_keys": null,
       "approval": null,
       "carry_table_header": false,
       "cloud_allowed": true,
@@ -17276,6 +17278,10 @@
       "version": 1,
       "written_by": "rag_eval.calibrate tokenizer"
     },
+    "TraceAccess": {
+      "mode": "keys",
+      "violations": 1
+    },
     "TrainingNegative": {
       "chunk_id": "chunk-0003",
       "confirmed": false,
@@ -18149,6 +18155,26 @@
           "Annual leave"
         ],
         "strategy": "chunk-alias"
+      }
+    },
+    "CitationRecord:withdrawn": {
+      "model": "CitationRecord",
+      "value": {
+        "alias": "S2",
+        "chunkIds": [
+          "00000000-0000-4000-8000-0000000000c3"
+        ],
+        "documentId": "00000000-0000-4000-8000-0000000000d2",
+        "documentName": "sample-source.md",
+        "documentVersion": null,
+        "n": 2,
+        "page": null,
+        "quote": "",
+        "quoteHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "sectionPath": null,
+        "strategy": "chunk-alias",
+        "withdrawn": true,
+        "withdrawnAt": "2026-01-01T00:00:00Z"
       }
     },
     "CondensedQuery:language": {
@@ -23932,6 +23958,7 @@
           "generation": "ok",
           "search": "ok"
         },
+        "stale_index_drop": 2,
         "used_documents": [
           {
             "document_id": "doc-001",

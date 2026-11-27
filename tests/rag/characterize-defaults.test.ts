@@ -6,6 +6,7 @@ import type { PGlite } from '@electric-sql/pglite';
 import { env } from '@/lib/env';
 import { knowledgeBaseUnavailableMessage, noKnowledgeBaseResponse } from '@/lib/rag/generation/messages';
 import { LANGUAGES_NOT_CONFIGURED } from '@/lib/rag/lang/resolve';
+import { fixedText } from '@/lib/rag/lang/texts';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { mintVoiceToken } from '@/lib/rag/tenant/voice-token';
 import { loadPinnedEvalEnv } from '../../eval/harness/eval-env.mts';
@@ -98,7 +99,11 @@ const IMAGE_QUESTION = 'Which aisles hold thermal probes according to the floor 
 const IMAGE_URL = 'https://example.com/fixtures/warehouse-floorplan.png';
 const UNAVAILABLE_EN = 'The knowledge base is temporarily unavailable';
 const NOT_AVAILABLE = 'Information Not Available';
-const LOCALIZED_NOT_AVAILABLE = ['es', 'en'].map((language) => noKnowledgeBaseResponse(language).split('\n')[0]!.replace(/^# /, ''));
+// Legacy en/es titles, plus the registry titles a configured language set renders (refusal language among the enabled languages)
+const LOCALIZED_NOT_AVAILABLE = [
+  ...['es', 'en'].map((language) => noKnowledgeBaseResponse(language)),
+  ...['zh', 'it'].map((language) => fixedText('notices.no_information', language)),
+].map((text) => text.split('\n')[0]!.replace(/^# /, ''));
 const VOICE_INTENT_QUERIES = [
   'show me the warehouse floorplan image',
   'warehouse floorplan picture',
@@ -323,7 +328,8 @@ describe('defaults characterization (Phase 4.1 D-01 set, explicit)', () => {
     const actual = await collectChat(fixture);
     expect(actual).toHaveLength(readGolden().length * 2);
     expectCharacterization('chat-v2-default', actual);
-  });
+    // Two model kinds over the whole golden set (413 questions after plan 05.2.1-12) outrun the 60 s default.
+  }, 180_000);
 
   it('embed: same system prompt for every fixture question', async () => {
     const errorsBefore = fixture.edge.errors.length;

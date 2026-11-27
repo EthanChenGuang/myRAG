@@ -109,6 +109,17 @@ describe('nango document adapter, legacy pipeline', () => {
     expect(ingest).not.toHaveBeenCalled();
   });
 
+  it('writes the connector owner-only label in the legacy INSERT metadata, and nothing without one (D-20)', async () => {
+    processDocument.mockResolvedValue('doc-legacy');
+    const { processDocumentWithMetadata } = await loadAdapter();
+
+    await processDocumentWithMetadata('Report.pdf', Buffer.from('x'), { ...baseOptions, accessKeys: [`u:${OWNER_A}`] });
+    await processDocumentWithMetadata('Report.pdf', Buffer.from('x'), baseOptions);
+
+    expect(processDocument.mock.calls[0][2]).toMatchObject({ access_groups: [`u:${OWNER_A}`] });
+    expect(processDocument.mock.calls[1][2]).not.toHaveProperty('access_groups');
+  });
+
   it('stays legacy when the ingest configuration cannot be read', async () => {
     state.pipeline = 'unified';
     state.configThrows = true;
@@ -152,6 +163,16 @@ describe('nango document adapter, unified pipeline', () => {
     });
     expect(input.file).toBe(buffer);
     expect(input.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('passes the connector owner-only label as accessKeys, and none without one (D-20)', async () => {
+    const { processDocumentWithMetadata } = await loadAdapter();
+
+    await processDocumentWithMetadata('Report.pdf', Buffer.from('x'), { ...baseOptions, accessKeys: [`u:${OWNER_A}`] });
+    await processDocumentWithMetadata('Report.pdf', Buffer.from('x'), baseOptions);
+
+    expect(ingestInput(0).accessKeys).toEqual([`u:${OWNER_A}`]);
+    expect(ingestInput(1)).not.toHaveProperty('accessKeys');
   });
 
   it('single-tenant: ingests in the s:default scope', async () => {
@@ -467,6 +488,8 @@ describe('nango sync manager, legacy pipeline', () => {
       source_provider: 'google-drive',
       source_file_id: 'f1',
       source_connection_id: CONNECTION,
+      // D-20: written owner-only in the INSERT; the sharing step maps it right after.
+      access_groups: [`u:${OWNER_A}`],
     });
     expect(memory.tables.nango_sync_records[0]).toMatchObject({ user_id: OWNER_A, file_id: 'f1', document_id: 'doc-legacy-1', status: 'completed' });
     expect(JSON.stringify(memory.ops)).not.toMatch(/tenant_key|lineage_id/);
@@ -533,6 +556,7 @@ describe('nango sync manager, call sites under the unified pipeline', () => {
       nangoConnectionId: CONNECTION,
       nangoFolderId: FOLDER,
       mimeType: 'application/pdf',
+      accessKeys: [`u:${OWNER_A}`],
     });
     expect(memory.tables.nango_sync_records[0]).toMatchObject({ document_id: 'doc-f1', status: 'completed' });
   });

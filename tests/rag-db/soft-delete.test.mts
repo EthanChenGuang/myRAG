@@ -159,7 +159,7 @@ describe('soft delete lineage (D-27)', () => {
       [{ chunk_id: chunkIds[0] as string, document_id: ready.documentId as string }] as unknown as Parameters<
         typeof fetchRows.fetchAssemblyRows
       >[0],
-      { adminClient: admin, signal: new AbortController().signal },
+      { access: { mode: 'off' }, adminClient: admin, signal: new AbortController().signal },
     );
     assert.ok(assembled.chunkMetadata.has(chunkIds[0] as string));
     const chunk = await admin.from('document_chunks').select('content').eq('id', chunkIds[0] as string);

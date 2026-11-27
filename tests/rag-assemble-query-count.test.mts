@@ -81,7 +81,7 @@ describe('assembly lookups use a fixed number of queries', () => {
       const candidates = await seedCandidates(fixture, count);
       edge.calls.length = 0;
 
-      const rows = await fetchAssemblyRows(candidates, { adminClient, signal: new AbortController().signal });
+      const rows = await fetchAssemblyRows(candidates, { access: { mode: 'off' }, adminClient, signal: new AbortController().signal });
       const result = assembleContext({
         queryText: 'synthetic',
         candidates,

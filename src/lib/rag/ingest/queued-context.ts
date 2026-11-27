@@ -42,6 +42,11 @@ const RecordSchema = z.object({
   scopes: z.array(z.string().max(80)).max(20).optional(),
   attributes: QueuedAttributesSchema.optional(),
   replacesDocumentId: z.string().uuid().optional(),
+  accessKeys: z
+    .array(z.string().regex(/^(all|[gu]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/))
+    .min(1)
+    .max(50)
+    .optional(),
   options: z.record(z.unknown()).optional(),
   typeChange: z.record(z.unknown()).optional(),
   state: z.record(z.unknown()),
@@ -61,6 +66,8 @@ export interface QueuedInputRecord {
   attributes?: IngestAttributeValues;
   /** The document the upload replaces (D-41), for the publish of a queued run. */
   replacesDocumentId?: string;
+  /** The upload's access label (D-16), already on the version at enqueue; a version the progressive final begin starts gets it again. */
+  accessKeys?: string[];
   options?: IngestOptions;
   typeChange?: TypeChangeState;
   /** The state slices identify and the earlier stages produced; the ledger's stage_state is laid over it. */
@@ -187,6 +194,7 @@ export async function buildQueuedContext(input: BuildQueuedContextInput): Promis
     ...(record.scopes && record.scopes.length > 0 ? { scopes: record.scopes } : {}),
     ...(record.attributes !== undefined ? { attributes: record.attributes } : {}),
     ...(record.replacesDocumentId ? { replacesDocumentId: record.replacesDocumentId } : {}),
+    ...(record.accessKeys ? { accessKeys: record.accessKeys } : {}),
     ...(record.options !== undefined ? { options: record.options } : {}),
     ...(state.typeChange ? { typeChange: state.typeChange } : {}),
     signal,

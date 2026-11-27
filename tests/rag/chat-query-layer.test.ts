@@ -4,6 +4,7 @@ import { buildHistoryWindow } from '@/lib/rag/query/history';
 import type { RunRetrievalInput } from '@/lib/rag/types';
 import { chatRequest, emptyRetrieval, installChatPipeline, readSse } from '../helpers/chat-route-fakes';
 import { systemTextOf } from '../helpers/route-fixture';
+import { fixedText } from '@/lib/rag/lang/texts';
 
 const h = await vi.hoisted(async () => {
   const fakes = await import('../helpers/chat-route-fakes');
@@ -150,7 +151,8 @@ describe('chat route query-layer inputs (D-09, D-11, D-16)', () => {
     );
     const body = await readSse(response);
 
-    expect(body).toContain('Information Not Available');
+    // The refusal speaks the question's language among the enabled languages (zh here)
+    expect(body).toContain(JSON.stringify(fixedText('notices.no_information', 'zh')).slice(1, 40));
     expect(h.capture.streamText).not.toHaveBeenCalled();
     expect(spies.classifyQuery).toHaveBeenCalledTimes(1);
   });

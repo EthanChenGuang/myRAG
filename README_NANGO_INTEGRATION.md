@@ -539,6 +539,7 @@ node scripts/diagnose-nango-oauth.js
 In Permissions tab:
 ✓ files.metadata.read
 ✓ files.content.read
+✓ sharing.read        (document access groups permission sync)
 Submit
 ```
 
@@ -560,9 +561,19 @@ App secret = OAuth Client Secret
 1. https://app.nango.dev/integrations
 2. Create "dropbox" integration
 3. Paste App key and App secret
-4. Scopes: files.metadata.read files.content.read
+4. Scopes: files.metadata.read files.content.read sharing.read
 5. Save
 ```
+
+#### Permission sync scopes (document access groups)
+
+With `RAG_DOC_ACCESS_GROUPS=on`, connector sync maps each file's sharing to access groups:
+
+- **Google Drive**: no new scope; `drive.readonly` (as above) already returns file permissions.
+- **Dropbox**: needs `sharing.read` (`/2/sharing/list_file_members`, `/2/sharing/list_folder_members`). Add it in the Dropbox App Console (Permissions tab) and in the Nango Dropbox integration's scopes.
+- **Notion**: no new scope; map the workspace principal to a group in the Config UI Access groups panel.
+
+Existing Dropbox connections must be re-authorized (reconnected) after the scope is added: a token carries only the scopes granted when it was authorized. Until then every Dropbox file of that connection answers `missing_scope` and its documents stay owner-only (owner and admins); the sync record's `metadata.access.sourceError` shows `missing_scope`. In multi-tenant mode connector documents stay in the owner's personal workspace, so the mapping changes no visibility there.
 
 ---
 

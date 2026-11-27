@@ -43,3 +43,23 @@ export function aliasParserTransform(sink: AliasParserSink): StreamTextTransform
       },
     });
 }
+
+/**
+ * D-26: holds the finish part until `beforeFinish` settles, so the synchronous messageMetadata callback on that part sees its result.
+ * A rejection is swallowed here: the caller records the failure and the stream is never blocked by it.
+ */
+export function finishGateTransform(beforeFinish: () => Promise<void>): StreamTextTransform<ToolSet> {
+  return () =>
+    new TransformStream({
+      async transform(part, controller) {
+        if (part.type === 'finish') {
+          try {
+            await beforeFinish();
+          } catch {
+            // recorded by the caller
+          }
+        }
+        controller.enqueue(part);
+      },
+    });
+}

@@ -88,8 +88,13 @@ export function resetEvalScoreCalibration(): void {
   evalScoreCalibration = null;
 }
 
-export function evalFloorCalibration(profile: string): Record<string, number> | null {
-  return profile === 'eval' ? evalScoreCalibration : null;
+/**
+ * Phase 6.2 D-16: the eval route's voice entry (evalEntry, set only by that route) reads the same harness-installed calibration, so
+ * the voice arm is measured on the fixture floor; the calibration is null outside the harness, so production is unchanged.
+ */
+export function evalFloorCalibration(profile: string, options: { evalEntry?: boolean } = {}): Record<string, number> | null {
+  if (profile === 'eval') return evalScoreCalibration;
+  return profile === 'voice' && options.evalEntry === true ? evalScoreCalibration : null;
 }
 
 /** Refusal when the legacy pool holds no candidate at all: what legacy answers for an empty search. */

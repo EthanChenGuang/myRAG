@@ -70,6 +70,7 @@
     <script src="document-processing/document-manager.js"></script>
     <script src="document-processing/status-monitor.js"></script>
     <script src="document-processing/process-documents.js"></script>
+    <script src="rag-panels/panel-status.js"></script>
     <script src="rag-panels/rag-fetch.js"></script>
     <script src="rag-panels/gates-ui.js"></script>
     <script src="rag-panels/judge-calibration.js"></script>
@@ -81,6 +82,7 @@
     <script src="rag-panels/languages.js"></script>
     <script src="rag-panels/ingest-impact.js"></script>
     <script src="rag-panels/upload-approvals.js"></script>
+    <script src="rag-panels/access-groups.js"></script>
     <script src="rag-panels/scope-tags.js"></script>
     <script src="rag-panels/versions-dates.js"></script>
     <script src="rag-panels/translation-targets.js"></script>
@@ -4535,7 +4537,7 @@
                                                     <span class="label-text">Logo Text</span>
                                                 </label>
                                                 <input type="text" id="NEXT_PUBLIC_HEADER_LOGO_TEXT"
-                                                    placeholder="myRAG" class="input input-bordered w-full">
+                                                    placeholder="Docs" class="input input-bordered w-full">
                                             </div>
 
                                             <div class="form-control hidden" id="headerLogoUrlGroup">
@@ -4564,7 +4566,8 @@
                                     <div class="card-body">
                                         <h3 class="text-lg font-semibold mb-4">Sidebar Button</h3>
                                         <p class="text-base-content/70 mb-4">Configure the text and URL for the button
-                                            that appears at the bottom of the sidebar.</p>
+                                            that appears at the bottom of the sidebar. The button shows only when both
+                                            are set; leave either empty to hide it.</p>
 
                                         <div class="space-y-4">
                                             <!-- Button Text -->
@@ -4573,9 +4576,9 @@
                                                     <span class="label-text">Button Text</span>
                                                 </label>
                                                 <input type="text" id="NEXT_PUBLIC_SIDEBAR_BUTTON_TEXT"
-                                                    placeholder="myRAG" class="input input-bordered w-full">
+                                                    placeholder="Docs" class="input input-bordered w-full">
                                                 <div class="text-sm text-base-content/70 mt-2">
-                                                    This text will appear on the button at the bottom of the sidebar.
+                                                    This text will appear on the button at the bottom of the sidebar. Leave empty to hide the button.
                                                 </div>
                                             </div>
 
@@ -4585,10 +4588,10 @@
                                                     <span class="label-text">Button URL</span>
                                                 </label>
                                                 <input type="url" id="NEXT_PUBLIC_SIDEBAR_BUTTON_URL"
-                                                    placeholder="https://myrag.laoxiang.app/"
+                                                    placeholder="https://docs.example.com/"
                                                     class="input input-bordered w-full">
                                                 <div class="text-sm text-base-content/70 mt-2">
-                                                    The URL that the sidebar button will link to. Opens in a new tab.
+                                                    The URL that the sidebar button will link to, as a full https:// address. Opens in a new tab. Leave empty to hide the button.
                                                 </div>
                                             </div>
                                         </div>
@@ -9128,7 +9131,7 @@
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
                                 <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG Administration</h2>
-                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, tags, versions and translation, the embedding and chunking profiles, identifier patterns, check settings before they apply, and follow monitoring alerts, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
+                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, access groups, tags, versions and translation, source sync and purge records, the embedding and chunking profiles, identifier patterns, check settings before they apply, and follow monitoring alerts, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
 
                                 <div class="grid gap-6">
                                     <section id="rag-administration-languages" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-languages-title">
@@ -9650,6 +9653,19 @@
                                                             <code class="font-mono text-xs break-all" translate="no">RAG_BGE_M3_SERVING</code>
                                                         </div>
                                                     </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_BGE_M3_VIA">
+                                                            <span class="label-text" data-rag-i18n="via.title">Hosted API route</span>
+                                                        </label>
+                                                        <select id="RAG_BGE_M3_VIA" name="RAG_BGE_M3_VIA" autocomplete="off" aria-describedby="rag-bge-m3-via-help" class="select select-bordered select-sm w-full">
+                                                            <option value="deepinfra" data-rag-i18n="RAG_BGE_M3_VIA.opt.deepinfra">DeepInfra, as today</option>
+                                                            <option value="openrouter" data-rag-i18n="RAG_BGE_M3_VIA.opt.openrouter">OpenRouter, pinned to DeepInfra</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-bge-m3-via-help"><span data-rag-i18n="via.help">OpenRouter sends the hosted calls with the OpenRouter key and records host openrouter on new vectors. Run npm run rag:embedding -- verify-route bge-m3 before using it with stored vectors.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_BGE_M3_VIA</code>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <!-- rag-phase032-settings:end -->
@@ -9809,6 +9825,17 @@
                                     </section>
                                     <!-- rag-upload-approvals:end -->
 
+                                    <!-- rag-access-groups:start -->
+                                    <section id="rag-administration-access" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-access-groups-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-access-groups-title" class="text-lg font-semibold mb-2 text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-access-groups-title>Access groups</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-access-groups-description>Limit documents to groups of members. A restricted document is found, quoted and cited only for members of its groups and for admins. Groups, Documents and Connector mapping follow the workspace chosen under Document Processing.</p>
+                                            <div data-access-groups-alert class="flex flex-col gap-2 mb-4 empty:mb-0"></div>
+                                            <div data-access-groups-content></div>
+                                            <div data-access-groups-status class="text-sm mt-4" role="status" aria-live="polite" tabindex="-1"></div>
+                                        </div>
+                                    </section>
+                                    <!-- rag-access-groups:end -->
                                     <!-- rag-security-events:start -->
                                     <section id="rag-administration-security-events" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-security-events-title">
                                         <div class="card-body">
@@ -9859,6 +9886,54 @@
                                         </div>
                                     </section>
                                     <!-- rag-translation-targets:end -->
+
+                                    <!-- rag-source-sync:start -->
+                                    <section id="rag-administration-source-sync" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-source-sync-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-source-sync-title" class="text-lg font-semibold mb-2 text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-source-sync-title>Source sync</h3>
+                                            <p class="text-sm text-base-content/70 max-w-prose mb-4" data-source-sync-description>Keeps the knowledge base in step with connected sources. A full reconcile lists every file at a source and removes documents whose file is gone. For each connection, choose what a deletion at the source does here.</p>
+                                            <div data-source-sync-alert class="flex flex-col gap-2 mb-4 empty:mb-0"></div>
+                                            <div data-source-sync-content></div>
+                                            <!-- rag-source-sync-settings:start -->
+                                            <div id="rag-source-sync-settings" data-source-sync-settings>
+                                                <div class="form-control mb-4 max-w-md">
+                                                    <label class="label" for="RAG_SOURCE_RECONCILE_INTERVAL_DAYS">
+                                                        <span class="label-text">Full reconcile interval (days)</span>
+                                                    </label>
+                                                    <input type="number" id="RAG_SOURCE_RECONCILE_INTERVAL_DAYS" name="RAG_SOURCE_RECONCILE_INTERVAL_DAYS" min="1" step="1" placeholder="7" inputmode="numeric" autocomplete="off" translate="no" aria-describedby="RAG_SOURCE_RECONCILE_INTERVAL_DAYS-help" class="input input-bordered w-full">
+                                                    <label class="label">
+                                                        <span id="RAG_SOURCE_RECONCILE_INTERVAL_DAYS-help" class="label-text-alt text-base-content/70">How often the scheduled job reconciles each connection. The job runs only when a scheduler or <code translate="no">npm run rag:source-reconcile</code> starts it.</span>
+                                                    </label>
+                                                </div>
+                                                <div class="form-control mb-4 max-w-md">
+                                                    <label class="label" for="RAG_SOURCE_RECONCILE_MAX_AGE_DAYS">
+                                                        <span class="label-text">Reconcile age limit (days)</span>
+                                                    </label>
+                                                    <input type="number" id="RAG_SOURCE_RECONCILE_MAX_AGE_DAYS" name="RAG_SOURCE_RECONCILE_MAX_AGE_DAYS" min="1" step="1" placeholder="7" inputmode="numeric" autocomplete="off" translate="no" aria-describedby="RAG_SOURCE_RECONCILE_MAX_AGE_DAYS-help" class="input input-bordered w-full">
+                                                    <label class="label">
+                                                        <span id="RAG_SOURCE_RECONCILE_MAX_AGE_DAYS-help" class="label-text-alt text-base-content/70">A connection without a completed full reconcile for longer than this is marked Overdue.</span>
+                                                    </label>
+                                                </div>
+                                                <div class="form-control mb-4 max-w-md">
+                                                    <label class="label" for="RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE">
+                                                        <span class="label-text">Pause above this share of documents</span>
+                                                    </label>
+                                                    <input type="number" id="RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE" name="RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE" min="0.05" max="1" step="0.05" placeholder="0.3" inputmode="decimal" autocomplete="off" translate="no" aria-describedby="RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE-help" class="input input-bordered w-full">
+                                                    <label class="label">
+                                                        <span id="RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE-help" class="label-text-alt text-base-content/70">0.3 means 30%. A full listing that would remove more than this share of a connection's documents pauses for confirmation. At 1 the pause never applies. Deletions the source reports file by file are not paused.</span>
+                                                    </label>
+                                                </div>
+                                                <p class="text-xs text-base-content/70">Saved with Save All Changes at the top of the page.</p>
+                                                <div class="flex flex-wrap items-center gap-x-2">
+                                                    <span class="text-xs text-base-content/70">The source recheck at retrieval (<code translate="no">RAG_SOURCE_RECHECK</code>) is under RAG Modes.</span>
+                                                    <button type="button" class="btn btn-link btn-xs px-0" data-source-sync-open-rag-modes>Open RAG Modes</button>
+                                                </div>
+                                            </div>
+                                            <!-- rag-source-sync-settings:end -->
+                                            <div data-source-sync-status class="text-sm mt-4" role="status" aria-live="polite" tabindex="-1"></div>
+                                        </div>
+                                    </section>
+                                    <!-- rag-source-sync:end -->
 
                                     <!-- rag-terminology:start -->
                                     <section id="rag-administration-terminology" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-terminology-title">
@@ -10329,6 +10404,44 @@
                                         </div>
                                     </div>
 
+                                    <!-- SharePoint and OneDrive -->
+                                    <div class="card bg-base-200 shadow-md">
+                                        <div class="card-body">
+                                            <h3 class="card-title text-lg mb-4">SharePoint and OneDrive</h3>
+                                            <div class="space-y-4">
+                                                <div class="flex items-center justify-between gap-4">
+                                                    <div class="min-w-0">
+                                                        <label for="NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED" class="font-semibold cursor-pointer">Enable SharePoint and OneDrive</label>
+                                                        <p id="NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED-help" class="text-sm text-base-content/70">Lets admins connect SharePoint Online sites and OneDrive for Business libraries. Off leaves every connector as it is.</p>
+                                                    </div>
+                                                    <input type="checkbox" id="NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED" name="NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED" aria-describedby="NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED-help" class="toggle toggle-primary">
+                                                </div>
+
+                                                <div class="form-control w-full">
+                                                    <label class="label" for="NANGO_SHAREPOINT_INTEGRATION_KEY">
+                                                        <span class="label-text font-semibold">SharePoint integration key</span>
+                                                    </label>
+                                                    <input type="text" id="NANGO_SHAREPOINT_INTEGRATION_KEY" name="NANGO_SHAREPOINT_INTEGRATION_KEY" placeholder="sharepoint-online" autocomplete="off" spellcheck="false" translate="no" aria-describedby="NANGO_SHAREPOINT_INTEGRATION_KEY-help" class="input input-bordered w-full">
+                                                    <label class="label">
+                                                        <span id="NANGO_SHAREPOINT_INTEGRATION_KEY-help" class="label-text-alt">The integration id set for this provider in the Nango dashboard. Leave empty to use the default.</span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="form-control w-full">
+                                                    <label class="label" for="NANGO_ONEDRIVE_INTEGRATION_KEY">
+                                                        <span class="label-text font-semibold">OneDrive integration key</span>
+                                                    </label>
+                                                    <input type="text" id="NANGO_ONEDRIVE_INTEGRATION_KEY" name="NANGO_ONEDRIVE_INTEGRATION_KEY" placeholder="one-drive" autocomplete="off" spellcheck="false" translate="no" aria-describedby="NANGO_ONEDRIVE_INTEGRATION_KEY-help" class="input input-bordered w-full">
+                                                    <label class="label">
+                                                        <span id="NANGO_ONEDRIVE_INTEGRATION_KEY-help" class="label-text-alt">The integration id set for this provider in the Nango dashboard. Leave empty to use the default.</span>
+                                                    </label>
+                                                </div>
+
+                                                <p class="text-xs text-base-content/70">Saved with Save All Changes at the top of the page, not with Save Changes below.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <!-- Nango Sync Configuration -->
                                     <div class="card bg-base-200 shadow-md">
                                         <div class="card-body">
@@ -10716,14 +10829,14 @@
 
     <!-- Toast notification -->
     <div id="toast" class="toast toast-top toast-end hidden" style="z-index: 1100;">
-        <div class="alert alert-info">
+        <div class="alert alert-info whitespace-normal break-words max-w-[min(28rem,calc(100vw-2rem))]">
             <span id="toastMessage"></span>
         </div>
     </div>
 
     <script>
         // Toast notification function - needs to be available globally
-        function showToast(message, type = 'info') {
+        function showToast(message, type = 'info', options = {}) {
             const toast = document.getElementById('toast');
             const toastMessage = document.getElementById('toastMessage');
 
@@ -10734,6 +10847,9 @@
 
             // Update message
             toastMessage.textContent = message;
+            // A panel's echo of its own status region: hidden so screen readers announce it once
+            if (options && options.ariaHidden) toast.setAttribute('aria-hidden', 'true');
+            else toast.removeAttribute('aria-hidden');
 
             // Update alert type
             const alert = toast.querySelector('.alert');
@@ -10747,8 +10863,9 @@
             // Show toast
             toast.classList.remove('hidden');
 
-            // Auto-hide after 3 seconds
-            setTimeout(() => {
+            // Auto-hide after 3 seconds; a newer toast restarts the timer
+            clearTimeout(showToast.hideTimer);
+            showToast.hideTimer = setTimeout(() => {
                 toast.classList.add('hidden');
             }, 3000);
         }
@@ -11255,6 +11372,7 @@
                     this.hasChanges = false;
                     this.savedConfig = { ...this.config };
                     if (typeof window.gatesUiMountBanner === 'function') window.gatesUiMountBanner(this.savedConfig);
+                    document.dispatchEvent(new CustomEvent('rag:config-saved', { detail: { config: { ...this.savedConfig } } }));
 
                     // Update indicators to show success
                     if (desktopIndicator) {
@@ -14659,12 +14777,17 @@
             async refreshUploadPickerDefaults() {
                 if (typeof window.fetchUploadPickerDefault !== 'function') return;
                 const orgId = this.workspaces.isMultiTenant ? this.workspaces.currentSelection : null;
+                const accessOptions = window.AccessGroupsQueueControls
+                    ? window.AccessGroupsQueueControls.load(orgId).catch(() => null)
+                    : Promise.resolve(null);
                 const defaults = await window.fetchUploadPickerDefault(orgId);
+                this.uploadPicker.access = await accessOptions;
                 if (defaults.error) {
                     this.uploadPicker.enabled = false;
                     this.uploadPicker.tags = null;
                     this.uploadPicker.replaces = null;
                     this.uploadPicker.loaded = true;
+                    if (this.uploadPicker.access && this.uploadPicker.access.shown) this.updateQueueDisplay();
                     return;
                 }
                 this.uploadPicker.enabled = Boolean(defaults.enabled);
@@ -14917,9 +15040,9 @@
                 try {
                     let formData;
                     if (this.uploadPicker.enabled && typeof window.buildUploadForm === 'function') {
-                        formData = window.buildUploadForm(fileItem.file, fileItem.docType || this.uploadPicker.defaultType, true);
+                        formData = window.buildUploadForm(fileItem.file, fileItem.docType || this.uploadPicker.defaultType, true, fileItem, this.uploadPicker);
                     } else if (typeof window.buildUploadForm === 'function') {
-                        formData = window.buildUploadForm(fileItem.file, fileItem.docType, false);
+                        formData = window.buildUploadForm(fileItem.file, fileItem.docType, false, fileItem, this.uploadPicker);
                     } else {
                         formData = new FormData();
                         formData.append('file', fileItem.file);
@@ -15023,6 +15146,13 @@
                         if (queueControlError) {
                             if (errorMessage === 'unknown_scope_value') this.refreshUploadPickerDefaults();
                             errorMessage = queueControlError;
+                        }
+                        const accessControlError = window.AccessGroupsQueueControls
+                            ? window.AccessGroupsQueueControls.uploadErrorText(errorMessage, this.monitorUiLocale())
+                            : null;
+                        if (accessControlError) {
+                            this.refreshUploadPickerDefaults();
+                            errorMessage = accessControlError;
                         }
 
                         if (response.status === 401 && this.workspaces.isMultiTenant) {
@@ -15133,6 +15263,9 @@
                             organizationId: this.workspaces.isMultiTenant ? this.workspaces.currentSelection : null,
                         });
                     }
+                    if (window.AccessGroupsQueueControls) {
+                        window.AccessGroupsQueueControls.mount(queueItems, this.queue, this.uploadPicker);
+                    }
                 }
             }
 
@@ -15162,7 +15295,7 @@
                        </select>`
                     : '';
                 const picker = this.uploadPicker || {};
-                const extrasWanted = Boolean((picker.tags && picker.tags.enabled === true) || (picker.replaces && picker.replaces.enabled === true));
+                const extrasWanted = Boolean((picker.tags && picker.tags.enabled === true) || (picker.replaces && picker.replaces.enabled === true) || (picker.access && picker.access.shown === true));
                 const queueExtras = extrasWanted
                     ? `<div data-queue-extras="${this.escapeHtml(String(item.id))}" class="flex flex-wrap items-center gap-2 mt-2"></div>`
                     : '';

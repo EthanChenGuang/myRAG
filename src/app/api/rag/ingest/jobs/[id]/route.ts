@@ -4,6 +4,7 @@ import { z } from 'zod/v3';
 import { requireSessionUser } from '@/lib/session-auth';
 import { getJobForScope, IngestLedgerError, resolveTenantScope } from '@/lib/rag';
 import type { IngestionJob } from '@/lib/rag-eval/contracts.generated';
+import { ingestDocumentAccess } from '../../_lib/access';
 
 export const runtime = 'nodejs';
 
@@ -78,6 +79,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const job = await getJobForScope(tenant.scope, parsedId.data.id.toLowerCase(), { signal: request.signal });
     if (!job) return fail(404, 'Job not found');
+    // D-15: a job of a document the caller may not see reads like an unknown job.
+    if (typeof job.document_id === 'string') {
+      const visibility = await ingestDocumentAccess(tenant.scope, session.user.id, job.document_id.toLowerCase(), request.signal);
+      if (visibility === 'hidden') return fail(404, 'Job not found');
+      if (visibility === 'unavailable') return fail(503, 'Job status unavailable');
+    }
     return NextResponse.json(jobStatusBody(job), { status: 200, headers: NO_STORE });
   } catch (error) {
     console.error('[RAG Ingest] job status lookup failed', {

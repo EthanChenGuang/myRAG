@@ -30,9 +30,11 @@ import {
   answerRulesHashComponent,
   calcBudgetHashComponent,
   terminologyHashBlock,
+  glossaryHashBlock,
   type AnswerRulesHashConfig,
   type CalcBudgetHashConfig,
   type AttributeFilterHashStage,
+  type GlossaryHashStage,
   type RetrievalConfigHashQueryLayer,
   type TerminologyHashStage,
 } from './config-hash';
@@ -45,7 +47,7 @@ import type { TranslationHashField } from './translation-legs';
 import type { AssembleOutput } from '../context/assemble';
 import { recordAnswerConflict } from '../context/version-conflicts';
 import { scopeKey } from '../tenant/scope';
-import type { QueryPlan, RetrievalParams } from '@/lib/rag-eval/contracts.generated';
+import type { QueryPlan, RetrievalParams, ScopeGateResult } from '@/lib/rag-eval/contracts.generated';
 import type { LexicalStamp } from '../lexical/resolve-options';
 import type { SearchIdentifiers } from './stages/search';
 
@@ -80,6 +82,8 @@ export interface BuildV2ResultInput {
   translationHash?: TranslationHashField;
   /** The query layer's plan; absent while the layer is off, so the result stays identical to Phase 4. */
   queryPlan?: QueryPlan | null;
+  /** Phase 6.2 P-10: searches counted against max_searches; set only while the layer ran the search stage. */
+  searchesCounted?: number;
   /** True when the query layer served the translate stage (D-24): its record is then soft like the other layer stages. */
   layerTranslate?: boolean;
   /** D-44: the effective date the search used; absent while RAG_EFFECTIVE_DATES is off. */
@@ -98,6 +102,10 @@ export interface BuildV2ResultInput {
   lexicalStamp?: LexicalStamp;
   /** D-30: how the attribute_resolve stage ended; absent reads as disabled. */
   attributeFilter?: AttributeFilterHashStage;
+  /** D-14: the glossary state; absent reads as switch off. */
+  glossary?: GlossaryHashStage;
+  /** D-46: the source_recheck marker from the search stages; absent when the stage did not run or did not complete. */
+  sourceRecheck?: { checked: number; dropped: number };
 }
 
 export interface RequestConfigHashInput {
@@ -120,6 +128,8 @@ export interface RequestConfigHashInput {
   lexicalStamp?: LexicalStamp;
   /** D-30: how the attribute_resolve stage ended; absent reads as disabled, so the hash is the value before the filter. */
   attributeFilter?: AttributeFilterHashStage;
+  /** D-14: the glossary state; absent reads as switch off, so the hash keeps its value. */
+  glossary?: GlossaryHashStage;
 }
 
 /** The request's retrieval-config hash; the result and the semantic-cache key both use it, so they never disagree. */
@@ -160,6 +170,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
       rerankTierChat: config.v2.rerankTier.chat,
       rerankTierVoice: config.v2.rerankTier.voice,
       ...(config.monolingual ? { monolingual: true as const } : {}),
+      ...(config.sourceRecheck ? { sourceRecheck: true as const } : {}),
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
     answerRules: answerRulesHashComponent(answerConfig),
@@ -176,6 +187,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
     ...(terminology ? { terminology } : {}),
     ...(attributeFilter ? { attributeFilter } : {}),
     lexicalScoring: lexicalScoringHashBlock(config),
+    glossary: glossaryHashBlock(ctx.glossary ?? { enabled: false }),
   });
 }
 
@@ -204,7 +216,8 @@ const CORE_STAGE_NAMES: ReadonlySet<string> = new Set(CORE_STAGES);
  * transform cannot turn a legitimate empty answer into a degraded one. The records themselves stay in the trace.
  */
 export function statusRecords(records: readonly StageRecord[], survivors: number, layerTranslate = false): StageRecord[] {
-  const withoutCache = records.filter((record) => record.name !== 'semantic_cache');
+  // Phase 6.2 D-26: like semantic_cache, a scope_gate failure is unsure and never changes the status.
+  const withoutCache = records.filter((record) => record.name !== 'semantic_cache' && record.name !== 'scope_gate');
   if (survivors > 0) return withoutCache;
   const core = records.filter((record) => CORE_STAGE_NAMES.has(record.name));
   const coreOk = core.length > 0 && core.every((record) => record.status === 'ok');
@@ -227,6 +240,32 @@ export function buildSmallTalkResult(ctx: {
     ...(ctx.profile === 'voice' ? { voice: { results: [], source_images: [] } } : {}),
     refusal: null,
     queryLanguage: ctx.queryLanguage,
+  };
+}
+
+/**
+ * Phase 6.2 D-26: the scope gate labelled the query out_of_scope, so search, rank and context did not run. empty with skip reason
+ * out_of_scope: strict answers "information not available" (or calls webSearch), the others answer without knowledge-base context.
+ * The cache ticket is kept for the trace and marked so the store bypasses the turn.
+ */
+export function buildOutOfScopeResult(ctx: {
+  collector: TraceCollector;
+  queryContext: TemporalQueryContext | null;
+  queryLanguage: string | null;
+  queryPlan: QueryPlan | null;
+  scopeGate: ScopeGateResult;
+  cacheTicket?: CacheTicket;
+}): RetrievalResult {
+  const base = failure(ctx.collector, 'empty', 'out_of_scope', ctx.queryContext);
+  return {
+    ...base,
+    ...(ctx.queryPlan ? { queryPlan: ctx.queryPlan } : {}),
+    ...(ctx.cacheTicket ? { cacheTicket: { ...ctx.cacheTicket, turn: { ...ctx.cacheTicket.turn, skipReason: 'out_of_scope' as const } } } : {}),
+    refusal: null,
+    refusalCandidate: true,
+    queryLanguage: ctx.queryLanguage,
+    skipReason: 'out_of_scope',
+    scopeGate: ctx.scopeGate,
   };
 }
 
@@ -345,6 +384,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(ctx.terminology ? { terminology: ctx.terminology } : {}),
     ...(ctx.lexicalStamp ? { lexicalStamp: ctx.lexicalStamp } : {}),
     ...(ctx.attributeFilter ? { attributeFilter: ctx.attributeFilter } : {}),
+    ...(ctx.glossary ? { glossary: ctx.glossary } : {}),
   });
 
   const base = {
@@ -362,8 +402,10 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(identifiers?.notFound ? { identifierSuggestions: [...identifiers.suggestions] } : {}),
     ...(injection ? { injection } : {}),
     ...(queryPlan ? { queryPlan } : {}),
+    ...(ctx.searchesCounted !== undefined ? { searchesCounted: ctx.searchesCounted } : {}),
     ...(ctx.cacheTicket && profile !== 'voice' ? { cacheTicket: ctx.cacheTicket } : {}),
     ...(ctx.packing ? { packing: ctx.packing } : {}),
+    ...(ctx.sourceRecheck ? { sourceRecheck: ctx.sourceRecheck } : {}),
   };
 
   let result: RetrievalResult;

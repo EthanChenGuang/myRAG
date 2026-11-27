@@ -42,12 +42,35 @@ import {
   ScopeFilterError,
   readFeedbackLoopConfig,
   resolveEmbedScope,
+  bodyNamesAccessGroups,
+  embedAccessGroup,
+  resolveAccessScope,
   runRetrieval,
   scopeKey,
   type LogContext,
   type RetrievalFilterInput,
   type RetrievalResult,
   type TraceCollector,
+  createCitationLabeler,
+  createCalcCheckSink,
+  createCalcTraceHolder,
+  mayOfferCalc,
+  scheduleCalcReviewEnqueue,
+  shouldOfferCalcTool,
+  type CalcCheckSink,
+  answerReserveTokens,
+  assertQuestionLast,
+  currentDocumentTokenTarget,
+  decideOutputCap,
+  finalizePromptBudget,
+  modelContextLength,
+  modelFamily,
+  OPENROUTER_COMPRESSION_OFF,
+  planPromptBudget,
+  PROMPT_BUDGET_EXCEEDED,
+  promptTooLongText,
+  type BudgetMessage,
+  type PromptBudgetPlan,
 } from '@/lib/rag';
 
 // Use Node.js runtime instead of Edge
@@ -83,6 +106,7 @@ const embedChatSchema = z.object({
 const embedTimeZoneSchema = z.string().max(64).optional();
 
 const FALLBACK_EMBED_MODEL = 'openai/gpt-4o-mini';
+const EMBED_MAX_OUTPUT_TOKENS = 2000;
 
 function defaultEmbedModel(): string {
   return process.env.NEXT_PUBLIC_EMBED_MODEL || env.NEXT_PUBLIC_EMBED_MODEL || FALLBACK_EMBED_MODEL;
@@ -166,6 +190,46 @@ function knowledgeBaseUnavailableResponse(request: NextRequest, answerTurn: Answ
     },
   });
   return createUIMessageStreamResponse({ stream: timeFirstText(stream, collector ?? null), headers: CORS_HEADERS });
+}
+
+/** Phase 5.2.1 D-84: the structured prompt_budget_exceeded error, in-band in embed's existing error rendering; never a partial prompt. */
+function promptBudgetExceededResponse(request: NextRequest, answerTurn: AnswerTurn, collector?: TraceCollector | null) {
+  const errorText = promptTooLongText(answerTurn.answerLanguage, preferredLanguage(request));
+  console.warn('[Prompt Budget]', { code: PROMPT_BUDGET_EXCEEDED, channel: 'embed' });
+  const stream = createUIMessageStream({
+    execute: async ({ writer }) => {
+      writer.write({ type: 'error', errorText });
+    },
+  });
+  return createUIMessageStreamResponse({ stream: timeFirstText(stream, collector ?? null), headers: CORS_HEADERS });
+}
+
+/** D-86: the prompt-budget summary as a span on the request trace, token counts and flags only. */
+function recordPromptBudgetSpan(
+  collector: TraceCollector,
+  trace: PromptBudgetPlan['trace'],
+  action: string,
+  startedAt: number,
+): void {
+  collector.record({
+    name: 'prompt_budget',
+    status: trace.status === 'ok' ? 'ok' : 'error',
+    startedAt,
+    endedAt: collector.now(),
+    counts: {
+      ...trace.parts,
+      estimated_raw_total: trace.estimated_raw_total,
+      dropped_history_turns: trace.dropped_history_turns,
+      dropped_documents: trace.dropped_documents,
+    },
+    attributes: {
+      window: trace.window,
+      window_source: trace.window_source,
+      near_limit: trace.near_limit,
+      overflow_mode: trace.overflow_mode,
+      action,
+    },
+  });
 }
 
 /** D-25: observes the first answer text delta for the turn's collector; without one the stream is returned as is. */
@@ -299,6 +363,8 @@ export async function POST(request: NextRequest) {
 
     // The workspace check reads the raw body because schema parsing strips unknown keys
     const body = await request.json();
+    // D-06: groups never come from the body; a claim is ignored and logged once per request
+    if (bodyNamesAccessGroups(body)) console.warn('[RAG Access] body_group_claim_ignored', { route: 'embed' });
     console.log('EMBED API: Request body:', { messagesCount: body?.messages?.length, model: body?.model });
     const answerTurn = embedAnswerTurn(body, request);
 
@@ -344,6 +410,14 @@ export async function POST(request: NextRequest) {
       console.error('[Document Search] Embed knowledge base unavailable:', { status: embedScope.status, reason: embedScope.reason });
       return knowledgeBaseUnavailableResponse(request, answerTurn);
     }
+    // D-07: visitors get keys all unless RAG_EMBED_ACCESS_GROUP names an existing group of the embed tenant. A refusal keeps the scope
+    // unresolved, so retrieval fails closed with status error and the unavailable response below applies (D-10).
+    const embedAccess = await resolveAccessScope({
+      scope: embedScope.scope,
+      identity: { kind: 'embed', groupKey: embedAccessGroup() },
+      signal: request.signal,
+    });
+    const ragScope = embedAccess.ok ? embedAccess.scope : embedScope.scope;
 
     const streamHeaders = (): Record<string, string> => ({
       'Content-Type': 'text/plain; charset=utf-8',
@@ -387,6 +461,57 @@ export async function POST(request: NextRequest) {
     const lastUserMessage = userMessages[userMessages.length - 1];
     const queryText = lastUserMessage?.content || '';
 
+    // Phase 5.2.1 D-65, D-66, D-72: embed offers no tools; a turn that may get the calculation labels its blocks for the trailing block
+    const calcMayBeOffered =
+      answerTurn.config.calcTool && queryText.trim().length > 0 && mayOfferCalc(queryText, answerTurn.answerLanguage);
+    const calcLabeler = calcMayBeOffered ? createCitationLabeler() : undefined;
+
+    // Phase 5.2.1 D-79, D-80, D-82: one plan before retrieval; embed always truncates (D-85: refine is chat only)
+    const budgetOn = answerTurn.config.promptBudget && queryText.trim().length > 0;
+    const budgetStartedAt = Date.now();
+    const budgetHistory: BudgetMessage[] = budgetOn
+      ? messages.slice(0, messages.lastIndexOf(lastUserMessage)).map((message) => ({ role: message.role, content: message.content }))
+      : [];
+    const budgetSystem = budgetOn ? createEnhancedRAGPrompt(embedTemplate(), '', 'strict') : '';
+    const planBudget = (answerReserve: number, documentTarget: number): PromptBudgetPlan =>
+      planPromptBudget({
+        window: modelContextLength(model),
+        family: modelFamily(model),
+        parts: {
+          system: budgetSystem,
+          rules: answerTurn.composeSystemPrompt('', {
+            mode: 'balanced',
+            webSearchOffered: false,
+            ...(calcMayBeOffered ? { calculation: { mode: 'trailing_block' as const } } : {}),
+          }),
+          tools: '',
+          question: queryText,
+        },
+        history: budgetHistory,
+        answerReserve,
+        documentTarget,
+        ...(answerTurn.answerLanguage ? { answerLanguage: answerTurn.answerLanguage } : {}),
+        overflowMode: 'truncate',
+      });
+    // D-31, D-80: the reserve the Phase 5.2 cap gives on a knowledge turn; it is checked again once the cap is decided
+    const plannedReserve =
+      budgetOn && answerTurn.config.maxOutputTokens.kind !== 'off'
+        ? answerReserveTokens({
+            decision: decideOutputCap({
+              config: answerTurn.config,
+              mode: 'balanced',
+              knowledgeContext: true,
+              userMaxTokens: false,
+              reasoning: false,
+              approvalContinuation: false,
+              channel: 'embed',
+            }),
+            modelLimit: EMBED_MAX_OUTPUT_TOKENS,
+          })
+        : EMBED_MAX_OUTPUT_TOKENS;
+    let budgetPlan: PromptBudgetPlan | null = budgetOn ? planBudget(plannedReserve, currentDocumentTokenTarget()) : null;
+    if (budgetPlan?.status === 'exceeded') return promptBudgetExceededResponse(request, answerTurn);
+
     let context = '';
     let smallTalkTurn = false;
     let answerLanguage: AnswerLanguageOptions | undefined;
@@ -415,7 +540,7 @@ export async function POST(request: NextRequest) {
         : undefined;
       const collector = createTraceCollector({ profile: 'embed', tenantKey: scopeKey(embedScope.scope) });
       const result = await runRetrieval({
-        scope: embedScope.scope,
+        scope: ragScope,
         query: queryText,
         profile: 'embed',
         channel: 'embed',
@@ -425,10 +550,12 @@ export async function POST(request: NextRequest) {
           isGPTModel,
           ragMode: 'balanced',
           webSearchEnabled: false,
+          ...(budgetPlan ? { documentTokenBudget: budgetPlan.documentBudget } : {}),
         },
         signal: request.signal,
         trace: collector,
         ...(retrievalFilters ? { retrievalFilters } : {}),
+        ...(calcLabeler ? { citationLabeler: calcLabeler } : {}),
         ...queryLayerInputs,
         ...(cacheContext ? { cacheContext } : {}),
       });
@@ -500,6 +627,24 @@ export async function POST(request: NextRequest) {
 
     const systemPrompt = embedTemplate();
 
+    // D-70, D-72: offered on a knowledge turn whose question or blocks carry the signal; always the trailing block on embed
+    let calcOffered = false;
+    if (calcMayBeOffered && !smallTalkTurn && context.length > 0 && retrievalResult) {
+      const decision = shouldOfferCalcTool({
+        question: queryText,
+        blockTexts: (retrievalResult.blocks ?? []).filter((block) => !block.isImage).map((block) => block.text),
+        language: answerTurn.answerLanguage,
+      });
+      if (decision.offer) {
+        calcOffered = true;
+        console.log('[Calc]', { offered: true, mode: 'trailing_block', channel: 'embed', reason: decision.reason });
+      }
+    }
+    const calcHolder = calcOffered ? createCalcTraceHolder() : null;
+    // D-73: RAG_CALC_CHECK checks the answer at the end of a stream that offered the calculation
+    const calcCheckSink: CalcCheckSink | null = calcOffered && answerTurn.config.calcCheck ? createCalcCheckSink() : null;
+    const calcEvidenceBlocks = calcCheckSink ? (retrievalResult?.blocks ?? []).filter((block) => !block.isImage && block.alias) : [];
+
     // Phase 5.2 D-30: decided once before the composer; embed sends no own limit, no reasoning and no tool approval
     if (answerTurn.config.maxOutputTokens.kind !== 'off') {
       answerTurn.decideOutputCap({
@@ -521,15 +666,23 @@ export async function POST(request: NextRequest) {
 
     // Use the same logic as main chat: if context exists, use enhanced prompt
     // This enforces strict RAG-only behavior preventing answers outside knowledge base
+    // D-86: the composed answer-rule block, measured on its own by the prompt budget
+    let builtRules = '';
+    const composeWithRules = (prompt: string): string => {
+      const composed = answerTurn.composeSystemPrompt(prompt, {
+        mode: 'balanced',
+        webSearchOffered: false,
+        ...(calcOffered ? { calculation: { mode: 'trailing_block' as const } } : {}),
+      });
+      if (composed.startsWith(prompt)) builtRules = composed.slice(prompt.length);
+      return composed;
+    };
     const finalSystemPrompt = smallTalkTurn
       ? createEnhancedRAGPrompt(systemPrompt, '', 'bypass')
       : context.length > 0
         ? appendHistoryNotEvidence(
             // Phase 5.2 D-07, D-92: the strict wrapper stays; the answer rules follow the balanced retrieval mode
-            answerTurn.composeSystemPrompt(createEnhancedRAGPrompt(systemPrompt, context, 'strict', answerLanguage), {
-              mode: 'balanced',
-              webSearchOffered: false,
-            }),
+            composeWithRules(createEnhancedRAGPrompt(systemPrompt, context, 'strict', answerLanguage)),
             historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE),
           )
         : systemPrompt.replace('{{context}}', context);
@@ -537,10 +690,44 @@ export async function POST(request: NextRequest) {
     console.log('[EMBED RAG] Final system prompt preview (first 300 chars):', finalSystemPrompt.substring(0, 300));
     console.log('[EMBED RAG] Using enhanced RAG prompt:', context.length > 0);
 
-    const messagesForModel: ModelMessage[] = [
+    let messagesForModel: ModelMessage[] = [
       { role: 'system', content: finalSystemPrompt },
       ...messages.map((message): ModelMessage => ({ role: message.role, content: message.content })),
     ];
+
+    if (budgetPlan) {
+      const collector = pendingTrace?.collector ?? null;
+      // D-80: a cap that did not apply after retrieval leaves the fixed limit, so the plan is made again with it
+      const reserve = answerTurn.maxOutputTokens(EMBED_MAX_OUTPUT_TOKENS);
+      if (reserve > plannedReserve) {
+        budgetPlan = planBudget(reserve, 0);
+        if (budgetPlan.status === 'exceeded') {
+          if (collector) recordPromptBudgetSpan(collector, budgetPlan.trace, 'exceeded', budgetStartedAt);
+          finishPendingTrace();
+          return promptBudgetExceededResponse(request, answerTurn, collector);
+        }
+      }
+      const buildMessages = (kept: readonly BudgetMessage[]): ModelMessage[] => [
+        { role: 'system', content: finalSystemPrompt },
+        ...kept.map((message): ModelMessage => ({ role: message.role as 'user' | 'assistant', content: message.content as string })),
+        { role: 'user', content: queryText },
+      ];
+      const documents = smallTalkTurn ? '' : context;
+      let builtSystem = documents ? finalSystemPrompt.replace(documents, () => '') : finalSystemPrompt;
+      if (builtRules) builtSystem = builtSystem.replace(builtRules, () => '');
+      const finalized = finalizePromptBudget(budgetPlan, {
+        builtParts: { system: builtSystem, rules: builtRules, documents },
+        droppedDocuments: retrievalResult?.packing?.droppedDocuments ?? 0,
+      });
+      if (collector) recordPromptBudgetSpan(collector, finalized.trace, finalized.action, budgetStartedAt);
+      if (finalized.status === 'exceeded') {
+        finishPendingTrace();
+        return promptBudgetExceededResponse(request, answerTurn, collector);
+      }
+      // D-82: kept turns oldest-first trimmed, the question last
+      messagesForModel = buildMessages(finalized.keptHistory);
+      assertQuestionLast(messagesForModel as BudgetMessage[], queryText);
+    }
 
     // Stream the response using OpenRouter (SAME AS MAIN CHAT API)
     console.log('EMBED API: Calling streamText with model:', model);
@@ -580,7 +767,22 @@ export async function POST(request: NextRequest) {
         trace: () => timingCollector,
       };
       // Empty with every Phase 5.2 switch off, so no transform is passed (as today)
-      const answerTransforms = answerTurn.transforms([], { guard: guardSources });
+      const answerTransforms = answerTurn.transforms([], {
+        guard: guardSources,
+        // D-72: embed renders no citations, so the block markers the calculation needs are removed from the visible text
+        ...(calcHolder ? { calcBlock: { onTrace: calcHolder.recordBlock, stripMarkers: true } } : {}),
+        ...(calcHolder && calcCheckSink
+          ? {
+              calcCheck: {
+                holder: calcHolder,
+                blocks: calcEvidenceBlocks.map((block) => ({ alias: block.alias ?? '', text: block.text })),
+                question: queryText,
+                offered: true,
+                sink: calcCheckSink,
+              },
+            }
+          : {}),
+      });
       await awaitPreGenerationDelay();
       timingCollector?.markGenerationStart();
       const result = await streamText({
@@ -588,11 +790,40 @@ export async function POST(request: NextRequest) {
         messages: messagesForModel,
         temperature: 0.1, // Use same temperature as main chat
         // D-30: min(2000, cap) when the cap applies; 2000 otherwise
-        maxOutputTokens: answerTurn.maxOutputTokens(2000),
+        maxOutputTokens: answerTurn.maxOutputTokens(EMBED_MAX_OUTPUT_TOKENS),
+        // D-84, RESEARCH Pitfall B3: no provider-side truncation while the budget is on
+        ...(budgetPlan ? { providerOptions: { openrouter: { plugins: [{ ...OPENROUTER_COMPRESSION_OFF }] } } } : {}),
         ...(answerTransforms.length > 0 ? { experimental_transform: answerTransforms } : {}),
         // Don't include tools for embed API to keep it simple
         onFinish: (event) => {
           pendingTrace?.collector.setReviewContent({ answer: event.text ?? '' });
+          const calcRun = calcCheckSink?.result() ?? null;
+          if (calcRun && pendingTrace) {
+            // D-75, D-61: the calculation check as its own span, status counts and duration only
+            const traceCollector = pendingTrace.collector;
+            const endedAt = traceCollector.now();
+            const counts: Record<string, number> = { calc_checks: calcRun.checks.length };
+            for (const check of calcRun.checks) counts[`calc_${check.status}`] = (counts[`calc_${check.status}`] ?? 0) + 1;
+            traceCollector.record({
+              name: 'calc_check',
+              status: calcRun.checks.some((check) => check.reason === 'check_error') ? 'error' : 'ok',
+              startedAt: endedAt - calcRun.durationMs,
+              endedAt,
+              counts,
+              attributes: { duration_ms: calcRun.durationMs },
+            });
+          }
+          if (calcRun && calcRun.reviewReasons.length > 0) {
+            // D-55: embed has no answer record, so its calculation reasons go to the review queue directly
+            scheduleCalcReviewEnqueue({
+              tenantKey: scopeKey(embedScope.scope),
+              reasons: calcRun.reviewReasons,
+              sourceChunkIds: [...new Set(calcEvidenceBlocks.flatMap((block) => block.chunkIds))],
+              documentIds: [...new Set(calcEvidenceBlocks.map((block) => block.documentId))],
+              traceId: pendingTrace?.collector.traceId ?? null,
+              ghost: false,
+            });
+          }
           const logOutcome = logContext ? pendingTrace?.result.logOutcome : undefined;
           if (logOutcome) logOutcome.answerLanguage = detectLanguage(event.text ?? '');
           finishPendingTrace();

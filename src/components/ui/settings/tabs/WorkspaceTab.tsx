@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { isMultiTenant as checkMultiTenant } from '@/lib/deployment-mode';
+import { MyAccessGroups } from '@/components/ui/my-access-groups';
 
 // Custom comparison function for memo optimization
 const areEqual = (prevProps: any, nextProps: any) => {
@@ -312,6 +313,10 @@ export const WorkspaceTab = memo(function WorkspaceTab() {
             {currentOrganization.user_role || t('member')}
           </span>
         </div>
+
+        {!currentOrganization.is_personal && (
+          <MyAccessGroups organizationId={currentOrganization.id} singleTenant={false} />
+        )}
 
         {/* Info about personal projects */}
         {currentOrganization.is_personal && (

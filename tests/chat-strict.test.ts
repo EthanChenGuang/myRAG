@@ -7,6 +7,7 @@ import { resetActiveChunkingProfilesForTests } from '@/lib/rag/chunking/active';
 import { adminWithRpc, fakeAssemblyAdmin, fakeEmbedder, fakeRpcClient } from './rag/helpers/pipeline-fakes';
 import { chatRequest, installChatPipeline, emptyRetrieval, readSse, retrievalWith } from './helpers/chat-route-fakes';
 import { systemTextOf } from './helpers/route-fixture';
+import { withLanguagesUnset } from './helpers/language-env';
 import { knowledgeBaseUnavailableMessage } from '@/lib/rag';
 
 const h = await vi.hoisted(async () => {
@@ -133,17 +134,36 @@ describe('chat route strict mode with no knowledge-base context', () => {
     expect(h.capture.streamText).toHaveBeenCalled();
   });
 
-  it('answers in Spanish when the request language is es', async () => {
-    const { POST } = await loadRoute();
-    const response = await POST(
-      chatRequest({
-        messages: [{ role: 'user', content: 'What is the refund policy for annual plans?' }],
-        data: { ragMode: 'strict', settings: { webSearch: false, language: 'es' } },
-      }),
-    );
-    const body = await readSse(response);
+  it('answers in Spanish when the request language is es and the languages are unset (legacy texts)', async () => {
+    const body = await withLanguagesUnset(async () => {
+      const { POST } = await loadRoute();
+      return readSse(
+        await POST(
+          chatRequest({
+            messages: [{ role: 'user', content: 'What is the refund policy for annual plans?' }],
+            data: { ragMode: 'strict', settings: { webSearch: false, language: 'es' } },
+          }),
+        ),
+      );
+    });
 
     expect(body).toContain('Información no disponible');
+    expect(h.capture.streamText).not.toHaveBeenCalled();
+  });
+
+  it('with zh, en and it enabled an es UI never gets Spanish: the English question gets the English refusal', async () => {
+    const { POST } = await loadRoute();
+    const body = await readSse(
+      await POST(
+        chatRequest({
+          messages: [{ role: 'user', content: 'What is the refund policy for annual plans?' }],
+          data: { ragMode: 'strict', settings: { webSearch: false, language: 'es' } },
+        }),
+      ),
+    );
+
+    expect(body).toContain('Information Not Available');
+    expect(body).not.toContain('Información no disponible');
     expect(h.capture.streamText).not.toHaveBeenCalled();
   });
 
@@ -159,10 +179,14 @@ describe('chat route strict mode with no knowledge-base context', () => {
         data: { ragMode: 'strict', settings: { webSearch: false, language }, capabilities: { citations: true } },
       });
     try {
-      process.env.RAG_CITATIONS = 'false';
-      const offBody = await readSse(await (await loadRoute()).POST(request()));
-      process.env.RAG_CITATIONS = 'true';
-      const onBody = await readSse(await (await loadRoute()).POST(request()));
+      // Legacy texts (languages unset), where the es UI still selects the Spanish refusal
+      const [offBody, onBody] = await withLanguagesUnset(async () => {
+        process.env.RAG_CITATIONS = 'false';
+        const off = await readSse(await (await loadRoute()).POST(request()));
+        process.env.RAG_CITATIONS = 'true';
+        const on = await readSse(await (await loadRoute()).POST(request()));
+        return [off, on];
+      });
 
       expect(onBody).toContain(snippet);
       expect(onBody).toBe(offBody);

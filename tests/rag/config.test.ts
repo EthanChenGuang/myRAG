@@ -93,6 +93,7 @@ const CHAT_DEFAULTS = {
   identifier_guard: 1000,
   attribute_resolve: 1000,
   scope_gate: 20,
+  source_recheck: 1000,
 };
 
 describe('stage tables', () => {
@@ -128,6 +129,7 @@ describe('stage tables', () => {
       'terminology',
       'attribute_resolve',
       'scope_gate',
+      'source_recheck',
     ]);
   });
 
@@ -153,6 +155,36 @@ describe('stage tables', () => {
     expect(PROFILE_STAGE_DEFAULTS.eval.attribute_resolve).toBe(1000);
     expect(PROFILE_STAGE_DEFAULTS.eval.scope_gate).toBe(60000);
     expect(PROFILE_STAGE_DEFAULTS.voice).not.toHaveProperty('scope_gate');
+    expect(PROFILE_STAGE_DEFAULTS.voice.source_recheck).toBe(300);
+    expect(PROFILE_STAGE_DEFAULTS.eval.source_recheck).toBe(1000);
+  });
+});
+
+describe('RAG_SOURCE_RECHECK switch (D-19)', () => {
+  test('unset gives false with no warning', () => {
+    const config = loadRagConfig({});
+    expect(config.sourceRecheck).toBe(false);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('true and TRUE give true; false gives false', () => {
+    expect(loadRagConfig({ RAG_SOURCE_RECHECK: 'true' }).sourceRecheck).toBe(true);
+    expect(loadRagConfig({ RAG_SOURCE_RECHECK: 'TRUE' }).sourceRecheck).toBe(true);
+    expect(loadRagConfig({ RAG_SOURCE_RECHECK: 'false' }).sourceRecheck).toBe(false);
+  });
+
+  test('an unsupported value such as yes gives false and exactly one config warning', () => {
+    const config = loadRagConfig({ RAG_SOURCE_RECHECK: 'yes' });
+    expect(config.sourceRecheck).toBe(false);
+    const warnings = configWarnings().filter((line) => line.includes('RAG_SOURCE_RECHECK'));
+    expect(warnings).toHaveLength(1);
+  });
+
+  test('the switch does not disable or add any stage, and the memo key separates on and off', () => {
+    const off = loadRagConfig({ RAG_SOURCE_RECHECK: 'false' });
+    const on = loadRagConfig({ RAG_SOURCE_RECHECK: 'true' });
+    expect(on).not.toBe(off);
+    expect([...on.disabledStages]).toEqual([...off.disabledStages]);
   });
 });
 

@@ -14,7 +14,7 @@ export { queryTurnInputs, ragTurnMetadataFromPlan } from './query/turn-metadata'
 export type { QueryTurnInputs, RagTurnMetadata } from './query/turn-metadata';
 export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
-export { currentAttributeFilterMode, currentLexicalVersion } from './deps';
+export { currentAttributeFilterMode, currentContextTokenBudget, currentLexicalVersion } from './deps';
 export { createTraceCollector } from './trace/collector';
 export type { TraceCollector, StageEntry } from './trace/collector';
 export { isTraceId } from './trace/collector';
@@ -30,17 +30,18 @@ export type { EvalScopeInput, EvalScopeOutcome } from './tenant/eval';
 export type { TenantScope } from './tenant/scope';
 export {
   ACCESS_ADMIN_HASH,
+  accessGroupsEnabled,
   accessScopeTiming,
   accessTableFilter,
   bodyNamesAccessGroups,
+  embedAccessGroup,
   resolveAccessScope,
   uploadAccessKeys,
 } from './tenant/access';
 export { scopeAccessFilter } from './tenant/access';
-export { accessGroupsEnabled } from './tenant/access';
 export { getAccessStartupVerdict, syncAccessEnforcementNow, verifyAccessGroupsStartup } from './tenant/access-startup';
 export type { AccessStartupStatus, AccessStartupVerdict } from './tenant/access-startup';
-export { createCitationRecheck, recordSecurityEvent, visibleChunkIds, visibleDocumentIds } from './access/visibility';
+export { createCitationRecheck, recordSecurityEvent, scheduleSecurityEvent, visibleChunkIds, visibleDocumentIds } from './access/visibility';
 export type { SecurityEventInput, VisibilityOptions, VisibilityResult } from './access/visibility';
 export { ACCESS_GROUPS_REASONS, AccessGroupsError, accessReasonOf } from './access/errors';
 export type { AccessGroupsReason, AccessServiceDeps } from './access/errors';
@@ -91,6 +92,14 @@ export type {
   SetDocumentsAccessResult,
   UploadAccessOutcome,
 } from './access/documents';
+export {
+  UPLOAD_ACCESS_FIELD,
+  UPLOAD_ACCESS_MAX_GROUPS,
+  accessKeysForGroupKeys,
+  checkUploadAccess,
+  parseUploadAccessField,
+} from './access/upload';
+export type { CheckUploadAccessInput, GroupKeysResult, ParsedUploadAccessField, UploadAccessCheck, UploadAccessField } from './access/upload';
 export { accessStatus, runAccessDrift, syncAccessStatus } from './access/status';
 export type { AccessDriftRow, AccessEmbedGroupStatus, AccessStatus, AccessStatusDeps } from './access/status';
 export {
@@ -123,6 +132,7 @@ export type {
   SharingRuleOutcome,
   SharingRuleRow,
 } from './access/connector';
+export { UNKNOWN_ACCESS_SET, accessSetsFor } from './access/sets';
 export type {
   AccessIdentity,
   AccessScopeRefusalReason,
@@ -290,6 +300,24 @@ export type {
 } from './types';
 export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
 export { untaggedVoiceContext } from './context/voice';
+export {
+  assertQuestionLast,
+  finalizePromptBudget,
+  groupHistoryTurns,
+  planPromptBudget,
+  PromptOrderError,
+  type BudgetMessage,
+  type FinalizeResult,
+  type PromptBudgetPlan,
+} from './context/prompt-budget';
+export { modelContextLength, modelFamily } from './context/model-window';
+export {
+  currentDocumentTokenTarget,
+  OPENROUTER_COMPRESSION_OFF,
+  PROMPT_BUDGET_EXCEEDED,
+  promptTooLongText,
+} from './context/prompt-budget-route';
+export { defaultQueryContext } from './query/temporal-query-detector';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
 export {
@@ -310,6 +338,8 @@ export {
   noInformationText,
   noKnowledgeBaseResponse,
   noKnowledgeBaseResponseLanguage,
+  refusalTextTurn,
+  type RefusalLanguageInput,
 } from './generation/messages';
 export { readAnswerConfig, type AnswerConfig } from './generation/answer-config';
 export {
@@ -351,7 +381,6 @@ export {
   CALC_REQUEST_JSON_SCHEMA,
   type VoiceCalcSource,
 } from './calc/voice-sources';
-export { planPromptBudget } from './context/prompt-budget';
 export { promptBudgetConfig } from './context/prompt-budget-config';
 export { fixedText } from './lang/texts';
 export { identifierSuggestionMessage } from './generation/messages';
@@ -368,6 +397,7 @@ export { createCitationSession } from './generation/citations/session';
 export type {
   CitationCapabilities,
   CitationFinishMetadata,
+  CitationAccessCheck,
   CitationSession,
   CitationSessionInput,
   ClaudeStartInput,
@@ -390,6 +420,7 @@ export { modelBlocksTools, turnCanUseTools } from './generation/tool-capability'
 export { mayOfferCalc, shouldOfferCalcTool } from './calc/signal';
 export { createCalcTraceHolder } from './calc/trace-holder';
 export type { CalcTraceHolder } from './calc/trace-holder';
+export { observeCalc, type CalcObserved } from './calc/observe';
 export { CLAUDE_FIRST_TOKEN_TIMEOUT_MS, errorStatusOf, fallbackReasonFor, firstTokenGate } from './generation/citations/fallback';
 export type { FallbackReason, FirstTokenGateResult } from './generation/citations/fallback';
 export type {
@@ -903,3 +934,28 @@ export type {
   ProfileStateCounts,
 } from './backend/index-compat';
 export type { VectorStore, VectorSyncTarget } from './sync/stores/types';
+// Phase 5.2.1 plan 21: the prompt budget on the chat route (its runtime exports are listed with plan 22's above)
+export type { PromptBudgetTrace } from '@/lib/rag-eval/contracts.generated';
+export { getCentroidSnapshot, invalidateCentroidCache, refreshCentroidSnapshot, SCOPE_CENTROID_CACHE_TTL_MS } from './scope/centroids';
+export type { CentroidSnapshot, ScopeCentroid, ScopeGroupKind } from './scope/centroids';
+export { rebuildScopeCentroids, ScopeRebuildError } from './scope/build';
+export type { ScopeRebuildCounts, ScopeRebuildOptions, ScopeRebuildResult } from './scope/build';
+export {
+  addScopeExample,
+  deleteScopeExample,
+  listScopeExamples,
+  scopeGateStatus,
+  startScopeRebuild,
+  SCOPE_EXAMPLE_LIMIT,
+  SCOPE_EXAMPLE_MAX_CHARS,
+} from './scope/admin';
+export type {
+  AddScopeExampleCode,
+  AddScopeExampleResult,
+  DeleteScopeExampleResult,
+  ListScopeExamplesResult,
+  ScopeExample,
+  ScopeGateStatus,
+  ScopeGateStatusResult,
+  StartScopeRebuildResult,
+} from './scope/admin';

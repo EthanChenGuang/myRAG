@@ -268,3 +268,35 @@ describe('feedback-loop contracts (Phase 5.1.1)', () => {
     expect(schemas.BaselineSchema?.safeParse({ ...fixture.samples.Baseline, gate_population: 'real' }).success).toBe(true);
   });
 });
+
+describe('RagTrace stale_index_drop (Phase 6.3, D-19, D-38)', () => {
+  const trace = (): Record<string, unknown> => ({ ...fixture.variants['RagTrace:answer_null'].value });
+
+  it('a trace without stale_index_drop parses and gains no key', () => {
+    const result = schemaFor('RagTrace').safeParse(trace());
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty('stale_index_drop');
+  });
+
+  it('accepts 0 and 3', () => {
+    for (const value of [0, 3]) {
+      expect(schemaFor('RagTrace').safeParse({ ...trace(), stale_index_drop: value }).success).toBe(true);
+    }
+  });
+
+  it('rejects -1 and 1.5', () => {
+    for (const value of [-1, 1.5]) {
+      expect(schemaFor('RagTrace').safeParse({ ...trace(), stale_index_drop: value }).success).toBe(false);
+    }
+  });
+
+  it('one committed RagTrace sample carries a non-zero count', () => {
+    const traces = [
+      fixture.samples.RagTrace,
+      ...Object.values(fixture.variants)
+        .filter((variant) => variant.model === 'RagTrace')
+        .map((variant) => variant.value),
+    ];
+    expect(traces.some((value) => typeof value.stale_index_drop === 'number' && value.stale_index_drop > 0)).toBe(true);
+  });
+});

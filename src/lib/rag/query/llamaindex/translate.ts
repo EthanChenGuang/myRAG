@@ -1,15 +1,17 @@
 import { QueryTranslationSchema } from '@/lib/rag-eval/contracts.generated';
 import { getRagDeps, type RagDeps } from '../../deps';
+import { enforceGlossary, requiredTranslations, type TenantGlossary } from '../glossary';
 import { QueryLlmError } from '../llm';
 import { checkVariant, DEFAULT_POST_CHECK_LIMITS, type PostCheckLimits, type PostCheckSkipReason } from '../post-checks';
-import { LANGUAGE_NAMES, loadPrompt, renderTemplate } from '../prompts/render';
+import { LANGUAGE_NAMES, loadPrompt, renderGlossaryAddendum, renderTemplate } from '../prompts/render';
 import type { Lang } from '../rewrite-gate';
 
-export type TranslateSkipReason = PostCheckSkipReason | 'invalid_output' | 'unavailable' | 'aborted' | 'error';
+export type TranslateSkipReason = PostCheckSkipReason | 'glossary_term_lost' | 'invalid_output' | 'unavailable' | 'aborted' | 'error';
 /** Names the target and the reason only; never query or output text. */
 export type TranslateSkip = { kind: 'translate'; target: Lang; reason: TranslateSkipReason };
 export type TranslatedVariant = { kind: 'translated'; language: Lang; text: string };
-export type NativeTranslateResult = { variants: TranslatedVariant[]; skipped: TranslateSkip[] };
+/** `sourceLanguage` (D-17): the first source language a valid output reported; absent when none did. */
+export type NativeTranslateResult = { variants: TranslatedVariant[]; skipped: TranslateSkip[]; sourceLanguage?: Lang };
 
 export interface NativeTranslateInput {
   query: string;
@@ -22,6 +24,8 @@ export interface NativeTranslateInput {
   /** QueryParams.max_translations; never above the D-08 cap of 2. */
   maxItems?: number;
   limits?: PostCheckLimits;
+  /** D-14: the request tenant's glossary while RAG_TRANSLATION_GLOSSARY is effective; absent or null changes nothing. */
+  glossary?: TenantGlossary | null;
   deps?: Pick<RagDeps, 'queryLlm'>;
 }
 
@@ -69,26 +73,29 @@ export function translateRequests(input: TranslateRequestInput): TranslateReques
   const prompt = loadPrompt(PROMPT_ID);
   const tokens = input.protectedTokens.length > 0 ? escapeQueryTags(JSON.stringify(input.protectedTokens)) : 'none';
   const query = escapeQueryTags(input.query);
-  return targets.map((target) => ({
-    target,
-    system: SYSTEM,
-    prompt: renderTemplate(prompt, {
+  return targets.map((target) => {
+    const base = renderTemplate(prompt, {
       target_language: LANGUAGE_NAMES[target],
       protected_tokens: tokens,
       target_code: target,
       query,
-    }),
-  }));
+    });
+    // D-14: the required pairs for this target only; none (or no glossary) leaves the Phase 6 prompt byte for byte.
+    const addendum = renderGlossaryAddendum(requiredTranslations(input.query, input.language, target, input.glossary));
+    return { target, system: SYSTEM, prompt: addendum ? `${base}\n\n${addendum}` : base };
+  });
 }
 
 /**
  * The post-check step after the translate calls, shared by both frameworks (D-02): each output must parse as
- * QueryTranslation for its target and pass the D-15 checks; anything else is a recorded skip. Order follows the calls.
+ * QueryTranslation for its target, keep the glossary's required terms (D-14) and pass the D-15 checks; anything else is a
+ * recorded skip. Order follows the calls.
  */
 export function finishTranslate(input: TranslateRequestInput, outcomes: readonly TranslateCallOutcome[]): NativeTranslateResult {
   const limits = input.limits ?? DEFAULT_POST_CHECK_LIMITS;
   const variants: TranslatedVariant[] = [];
   const skipped: TranslateSkip[] = [];
+  let sourceLanguage: Lang | null = null;
   for (const outcome of outcomes) {
     const { target } = outcome;
     const skip = (reason: TranslateSkipReason) => skipped.push({ kind: 'translate', target, reason });
@@ -101,11 +108,19 @@ export function finishTranslate(input: TranslateRequestInput, outcomes: readonly
       skip('invalid_output');
       continue;
     }
-    const checked = checkVariant({ kind: 'translate', text: parsed.data.text, input: input.query, protectedTokens: input.protectedTokens }, limits);
+    sourceLanguage ??= parsed.data.source_language ?? null;
+    // D-14: a missing required term is corrected once from its untranslated source surface, else the translation is dropped.
+    const required = requiredTranslations(input.query, input.language, target, input.glossary);
+    const enforced = required.length > 0 ? enforceGlossary(parsed.data.text, required) : { status: 'ok' as const, text: parsed.data.text };
+    if (enforced.status === 'lost') {
+      skip('glossary_term_lost');
+      continue;
+    }
+    const checked = checkVariant({ kind: 'translate', text: enforced.text, input: input.query, protectedTokens: input.protectedTokens }, limits);
     if (!checked.ok) skip(checked.skip.reason);
     else variants.push({ kind: 'translated', language: target, text: checked.text });
   }
-  return { variants, skipped };
+  return { variants, skipped, ...(sourceLanguage ? { sourceLanguage } : {}) };
 }
 
 /**

@@ -222,7 +222,7 @@ describe('SQL functions that read the tables for anon and authenticated (single-
     }
   });
 
-  test('the invoker search functions granted to anon and authenticated return no quarantined chunk', async () => {
+  test('the invoker search functions return no quarantined chunk and are service_role only', async () => {
     const fixture = await build('single-tenant');
     try {
       const { db } = fixture;
@@ -231,14 +231,25 @@ describe('SQL functions that read the tables for anon and authenticated (single-
         ['authenticated', USER_B],
       ] as const) {
         await asRole(db, role, user, async () => {
-          const keyword = (await db.query<Row>("SELECT * FROM search_chunks_by_keywords('zzquarword zzdrift zzquarcurrent zzreadyword', 20)")).rows;
-          const text = JSON.stringify(keyword);
-          assert.ok(text.includes('zzreadyword'), `${role}: the ready chunk is found`);
-          for (const word of ['zzquarword', 'zzdrift', 'zzquarcurrent']) assert.ok(!text.includes(word), `${role}: ${word}`);
-          const byVector = JSON.stringify((await db.query<Row>(`SELECT * FROM match_document_chunks('${ZERO_VECTOR}'::vector, 0::double precision, 50)`)).rows);
-          for (const word of ['zzquarword', 'zzdrift', 'zzquarcurrent']) assert.ok(!byVector.includes(word), `${role}: vector search ${word}`);
+          // 0930: search_chunks_by_keywords and match_document_chunks are service_role only.
+          await assert.rejects(db.query("SELECT * FROM search_chunks_by_keywords('zzreadyword', 20)"), /permission denied/i, `${role}: keyword search`);
+          // 0930: match_document_chunks takes the access arguments and is service_role only (A-04).
+          await assert.rejects(
+            db.query(`SELECT * FROM match_document_chunks('${ZERO_VECTOR}'::vector, 0::double precision, 50)`),
+            /permission denied/i,
+            `${role}: match_document_chunks is not client-callable`,
+          );
         });
       }
+      await asRole(db, 'service_role', null, async () => {
+        const keyword = (await db.query<Row>("SELECT * FROM search_chunks_by_keywords('zzquarword zzdrift zzquarcurrent zzreadyword', 20)")).rows;
+        const text = JSON.stringify(keyword);
+        assert.ok(text.includes('zzreadyword'), 'service_role: the ready chunk is found');
+        // The bodies check the chunk's own status (0306); the drifted-copy row was hidden from clients by RLS only, and clients can no longer call.
+        for (const word of ['zzquarword', 'zzquarcurrent']) assert.ok(!text.includes(word), `service_role: ${word}`);
+        const byVector = JSON.stringify((await db.query<Row>(`SELECT * FROM match_document_chunks('${ZERO_VECTOR}'::vector, 0::double precision, 50)`)).rows);
+        for (const word of ['zzquarword', 'zzquarcurrent']) assert.ok(!byVector.includes(word), `service_role: vector search ${word}`);
+      });
     } finally {
       await fixture.db.close();
     }

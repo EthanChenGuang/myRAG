@@ -297,6 +297,13 @@ class TraceIdentifier(_Contract):
     suggestions: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(default_factory=list, max_length=3)
 
 
+class TraceAccess(_Contract):
+    """D-09, D-26: the access mode the run retrieved under and the citations the access recheck dropped; absent while access is off."""
+
+    mode: Literal["off", "admin_all", "keys"]
+    violations: int = Field(default=0, ge=0)
+
+
 class TraceAttributeFilter(_Contract):
     """Phase 3.3 D-29, D-30, F-25: attribute filter counts and flags; never an attribute key or value."""
 
@@ -339,6 +346,10 @@ class TraceCalcObserved(_Contract):
     origin: CalcOrigin | None = None
 
 
+# D-75: the review reasons the calculation check gives an eval answer (the chat path records them on the answer record).
+CalcReviewReason = Literal["calc_mismatch", "calc_unverified"]
+
+
 class TraceUsage(_Contract):
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
@@ -367,6 +378,9 @@ class RagTrace(_Contract):
     refusal: TraceRefusal | None = None
     retrieval_config_hash: str | None = None
     context_tokens: int | None = Field(default=None, ge=0)
+    stale_index_drop: int | None = Field(
+        default=None, ge=0, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
     stage_counts: dict[str, dict[str, float]] = Field(default_factory=dict)
     answer: str | None = None
     citations: list[CitationRecord]
@@ -414,6 +428,7 @@ class RagTrace(_Contract):
     # Phase 5.2.1 (D-77, D-86); absent on traces recorded before it.
     calc: list[CalcCheck] | None = _optional_field()
     calc_observed: TraceCalcObserved | None = _optional_field()
+    review_reasons: list[CalcReviewReason] | None = _optional_field()
     prompt_budget: PromptBudgetTrace | None = _optional_field()
     usage: TraceUsage | None = _optional_field()
     answer_error: AnswerErrorCode | None = _optional_field()
@@ -425,6 +440,8 @@ class RagTrace(_Contract):
     searches_counted: int | None = _optional_field(ge=0)
     # Phase 7 LANG-10; absent on traces recorded before it.
     languages: TraceLanguages | None = _optional_field()
+    # Phase 4.3 (D-25, A-06); absent on traces recorded before it.
+    access: TraceAccess | None = _optional_field()
 
     @model_validator(mode="after")
     def _phase52_rules(self) -> "RagTrace":

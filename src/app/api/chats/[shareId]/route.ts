@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { accessGroupsEnabled } from '@/lib/rag';
+import { canViewShared, sharedViewerId } from '@/lib/chat-share-access';
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,12 +24,13 @@ export async function GET(request: NextRequest) {
     // Fetch the shared chat
     const { data: chat, error } = await supabase
       .from('chats')
-      .select('title, messages, created_at, updated_at')
+      .select(accessGroupsEnabled() ? 'id, title, messages, created_at, updated_at' : 'title, messages, created_at, updated_at')
       .eq('share_id', shareId)
       .eq('shared', true)
       .single();
 
-    if (error || !chat) {
+    // D-27: a viewer who may not see every cited document gets the same answer as for an unknown share id.
+    if (error || !chat || !(await canViewShared(chat, () => sharedViewerId({ headers: request.headers })))) {
       return NextResponse.json(
         { error: 'Chat not found' },
         { status: 404 }

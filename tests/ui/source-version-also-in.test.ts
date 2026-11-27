@@ -200,7 +200,8 @@ describe('field plumbing', () => {
 
   test('a record without the fields adds none of them', () => {
     const [entry] = citationDisplayEntries([record(1, 'doc-a', { documentVersion: null }) as never], {});
-    expect(Object.keys(entry).sort()).toEqual(['documentName', 'linkDocumentId', 'n', 'page', 'quote', 'sectionPath', 'unavailable']);
+    // withdrawn and withdrawnAt are always present since 06.3-06 (D-36); no version or also-in field is added.
+    expect(Object.keys(entry).sort()).toEqual(['documentName', 'linkDocumentId', 'n', 'page', 'quote', 'sectionPath', 'unavailable', 'withdrawn', 'withdrawnAt']);
   });
 });
 

@@ -1,6 +1,8 @@
 import { z } from 'zod/v3';
 import type { Lang } from '../rewrite-gate';
 import llamaindexCondense from './llamaindex.condense.v1.json';
+import sharedGlossary from './shared.glossary.v1.json';
+import sharedSubqFilters from './shared.subq-filters.v1.json';
 import sharedSuffix from './shared.suffix.v1.json';
 import sharedTranslate from './shared.translate.v1.json';
 
@@ -11,6 +13,8 @@ export const HISTORY_MAX_TURNS = 6;
 export const HISTORY_TURN_MAX_CHARS = 1000;
 
 const SUFFIX_ID = 'shared.suffix';
+const SUBQ_FILTERS_ID = 'shared.subq-filters';
+const GLOSSARY_ID = 'shared.glossary';
 const HISTORY_PLACEHOLDER = 'history';
 const PLACEHOLDER = /\{\{([a-z_][a-z0-9_]*)\}\}/gu;
 const DELIMITER = /<\s*\/?\s*conversation\b[^>]*>/giu;
@@ -41,6 +45,8 @@ export const PROMPT_REGISTRY: Readonly<Record<string, unknown>> = Object.freeze(
   [SUFFIX_ID]: sharedSuffix,
   'llamaindex.condense': llamaindexCondense,
   'shared.translate': sharedTranslate,
+  [SUBQ_FILTERS_ID]: sharedSubqFilters,
+  [GLOSSARY_ID]: sharedGlossary,
 });
 
 function templatePlaceholders(template: string): Set<string> {
@@ -138,4 +144,70 @@ export function renderTemplate(prompt: PromptFile, vars: Readonly<Record<string,
     if (values[name] === undefined) throw new Error(`[Query Prompts] "${prompt.id}" is missing a value for "${name}"`);
   }
   return fill(prompt.template, values);
+}
+
+/** The tenant data the sub-question filter addendum lists (D-07): slugs and codes only, never labels or aliases. */
+export type SubqFilterPromptVocabulary = {
+  fields: readonly string[];
+  scopes: ReadonlyArray<{ dimension: string; slug: string }>;
+  docTypes: readonly string[];
+  languages: readonly string[];
+  /** subq_filter_vocab_cap: at most this many values per dimension and list. */
+  cap: number;
+};
+
+const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+const DIMENSION = /^[a-z][a-z0-9_]{0,63}$/u;
+const CODE = /^[a-z][a-z0-9_-]{0,63}$/u;
+
+function capped(values: readonly string[], pattern: RegExp, cap: number): string[] {
+  const out: string[] = [];
+  for (const value of values) {
+    if (out.length >= cap) break;
+    if (value.length <= 64 && pattern.test(value) && !out.includes(value)) out.push(value);
+  }
+  return out;
+}
+
+/**
+ * D-07, P-18: the versioned addendum (shared.subq-filters.v1) appended to the decomposer prompt in both frameworks while
+ * RAG_QUERY_SUBQ_FILTERS is effective. It lists the allowed field names and the request tenant's own scope slugs, doc types
+ * and enabled languages as JSON, at most `cap` per dimension; a value that is not a plain slug or code is left out, so admin
+ * text never reaches the prompt as anything but a slug.
+ */
+export function renderSubqFilterAddendum(vocabulary: SubqFilterPromptVocabulary): string {
+  const cap = Math.max(1, Math.floor(vocabulary.cap));
+  const byDimension: Record<string, string[]> = {};
+  for (const { dimension, slug } of vocabulary.scopes) {
+    if (!DIMENSION.test(dimension)) continue;
+    const values = (byDimension[dimension] ??= []);
+    if (values.length < cap && slug.length <= 64 && SLUG.test(slug) && !values.includes(slug)) values.push(slug);
+  }
+  for (const dimension of Object.keys(byDimension)) if (byDimension[dimension]!.length === 0) delete byDimension[dimension];
+  return renderTemplate(loadPrompt(SUBQ_FILTERS_ID), {
+    fields: vocabulary.fields.join(', '),
+    scopes: JSON.stringify(byDimension),
+    doc_types: JSON.stringify(capped(vocabulary.docTypes, CODE, cap)),
+    languages: JSON.stringify(capped(vocabulary.languages, CODE, cap)),
+  });
+}
+
+/** One required pair as the glossary addendum lists it (D-14): the source surfaces and the translation they must become. */
+export type GlossaryPromptPair = { sources: readonly string[]; target: string };
+
+const GLOSSARY_TAG = /<\s*\/?\s*(?:glossary|query)\b[^>]*>/giu;
+
+function escapeGlossaryTags(text: string): string {
+  return text.replace(GLOSSARY_TAG, (match) => match.replace(/</gu, '&lt;').replace(/>/gu, '&gt;'));
+}
+
+/**
+ * D-14, T-06.2-38: the versioned addendum (shared.glossary.v1) appended to the translate prompt when the query holds glossary
+ * source terms. Each pair is one JSON line inside the glossary block, with glossary and query tags escaped, so an admin-written
+ * term reaches the prompt only as data. Empty string for no pairs.
+ */
+export function renderGlossaryAddendum(pairs: readonly GlossaryPromptPair[]): string {
+  if (pairs.length === 0) return '';
+  const lines = pairs.map((pair) => escapeGlossaryTags(JSON.stringify({ source: [...pair.sources], translation: pair.target })));
+  return renderTemplate(loadPrompt(GLOSSARY_ID), { pairs: lines.join('\n') });
 }
