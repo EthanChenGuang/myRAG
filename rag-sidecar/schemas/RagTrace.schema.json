@@ -2878,6 +2878,17 @@
       ],
       "default": null
     },
+    "review_reasons": {
+      "items": {
+        "enum": [
+          "calc_mismatch",
+          "calc_unverified"
+        ],
+        "type": "string"
+      },
+      "title": "Review Reasons",
+      "type": "array"
+    },
     "schema_version": {
       "const": 1,
       "default": 1,
