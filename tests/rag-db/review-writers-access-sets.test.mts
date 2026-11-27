@@ -215,9 +215,9 @@ for (const mode of MODES) {
         assert.equal((await rows(db, 'SELECT id FROM rag_review_items')).length, 0);
       });
 
-      test('a row without any source stays NULL and visible to every expert', async () => {
+      test("a row without any source stores '[]' while access is enforced (0990) and is visible to every expert", async () => {
         const id = await enqueue(queueRow());
-        assert.equal(await setsOf(id), null);
+        assert.deepEqual(await setsOf(id), []);
         assert.equal(await visibleTo(OUTSIDER, id), true);
       });
 
