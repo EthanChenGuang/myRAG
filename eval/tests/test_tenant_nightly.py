@@ -37,32 +37,54 @@ def _request(request_id: str, tenant: str) -> dict:
 
 class App:
     def __init__(self, requests=None, close_status=None):
-        self.claimable = requests if requests is not None else [_request(REQ_A, TENANT_A), _request(REQ_B, TENANT_B)]
+        self.claimable = (
+            requests
+            if requests is not None
+            else [_request(REQ_A, TENANT_A), _request(REQ_B, TENANT_B)]
+        )
         self.close_status = close_status or {}
         self.calls: list[httpx.Request] = []
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.calls.append(request)
         assert request.headers["Authorization"] == f"Bearer {TOKEN}"
-        if request.method == "POST" and request.url.path == "/api/rag/admin/eval-run-requests":
+        if (
+            request.method == "POST"
+            and request.url.path == "/api/rag/admin/eval-run-requests"
+        ):
             return httpx.Response(200, json={"requests": self.claimable})
-        if request.method == "PATCH" and request.url.path.startswith("/api/rag/admin/eval-run-requests/"):
+        if request.method == "PATCH" and request.url.path.startswith(
+            "/api/rag/admin/eval-run-requests/"
+        ):
             request_id = request.url.path.rsplit("/", 1)[1]
             status = self.close_status.get(request_id, 200)
-            return httpx.Response(status, json={"request": {"id": request_id}} if status == 200 else {"error": "not_running"})
+            return httpx.Response(
+                status,
+                json={"request": {"id": request_id}}
+                if status == 200
+                else {"error": "not_running"},
+            )
         return httpx.Response(404)
 
     def claims(self) -> list[dict]:
         return [json.loads(r.content) for r in self.calls if r.method == "POST"]
 
     def closes(self) -> dict[str, dict]:
-        return {r.url.path.rsplit("/", 1)[1]: json.loads(r.content) for r in self.calls if r.method == "PATCH"}
+        return {
+            r.url.path.rsplit("/", 1)[1]: json.loads(r.content)
+            for r in self.calls
+            if r.method == "PATCH"
+        }
 
 
-def _outcome(absolute=("passed", None), floors=("passed", None), failed=()) -> NightlyOutcome:
+def _outcome(
+    absolute=("passed", None), floors=("passed", None), failed=()
+) -> NightlyOutcome:
     return NightlyOutcome(
         parts=(
-            ReleaseGatePart(part="nightly_absolute", result=absolute[0], reason=absolute[1]),
+            ReleaseGatePart(
+                part="nightly_absolute", result=absolute[0], reason=absolute[1]
+            ),
             ReleaseGatePart(part="judge_floors", result=floors[0], reason=floors[1]),
         ),
         counts={"items": 12, "failed_checks": len(failed)},
@@ -83,7 +105,11 @@ def env(tmp_path, monkeypatch):
     domain_a.mkdir(parents=True)
     (domain_a / "golden.jsonl").write_text("{}\n", encoding="utf-8")
     app = App()
-    monkeypatch.setattr(tenant_nightly, "_http_client", lambda: httpx.Client(transport=httpx.MockTransport(app.handler)))
+    monkeypatch.setattr(
+        tenant_nightly,
+        "_http_client",
+        lambda: httpx.Client(transport=httpx.MockTransport(app.handler)),
+    )
     state = {"outcome": _outcome(), "calls": []}
 
     def fake_nightly(golden, out_dir, **kwargs):
@@ -105,7 +131,9 @@ def test_without_base_url_prints_a_notice_and_sends_nothing(env, capsys):
     assert env["app"].calls == []
 
 
-def test_without_admin_token_prints_a_notice_and_sends_nothing(env, monkeypatch, capsys):
+def test_without_admin_token_prints_a_notice_and_sends_nothing(
+    env, monkeypatch, capsys
+):
     monkeypatch.delenv("RAG_ADMIN_BEARER")
     assert _drain() == 0
     assert "::notice::" in capsys.readouterr().out
@@ -116,7 +144,14 @@ def test_drain_closes_done_and_no_real_set(env):
     assert _drain() == 0
     assert env["app"].claims() == [{"action": "claim", "limit": 5}]
     closes = env["app"].closes()
-    assert closes[REQ_A] == {"status": "done", "result_summary": {"result": "pass", "failed_checks": [], "counts": {"items": 12, "failed_checks": 0}}}
+    assert closes[REQ_A] == {
+        "status": "done",
+        "result_summary": {
+            "result": "pass",
+            "failed_checks": [],
+            "counts": {"items": 12, "failed_checks": 0},
+        },
+    }
     assert closes[REQ_B] == {"status": "skipped", "skip_reason": "no_real_set"}
     assert len(env["state"]["calls"]) == 1
     call = env["state"]["calls"][0]
@@ -127,7 +162,10 @@ def test_drain_closes_done_and_no_real_set(env):
 
 
 def test_failed_absolute_gate_closes_done_with_result_fail(env):
-    env["state"]["outcome"] = _outcome(absolute=("failed", "false_answer_rate_exceeded"), failed=["false_answer_rate_exceeded"])
+    env["state"]["outcome"] = _outcome(
+        absolute=("failed", "false_answer_rate_exceeded"),
+        failed=["false_answer_rate_exceeded"],
+    )
     assert _drain() == 0
     summary = env["app"].closes()[REQ_A]
     assert summary["status"] == "done"
@@ -136,13 +174,23 @@ def test_failed_absolute_gate_closes_done_with_result_fail(env):
 
 
 def test_judge_keys_missing_closes_skipped(env):
-    env["state"]["outcome"] = _outcome(absolute=("skipped", "judge_keys_missing"), floors=("skipped", "judge_keys_missing"))
+    env["state"]["outcome"] = _outcome(
+        absolute=("skipped", "judge_keys_missing"),
+        floors=("skipped", "judge_keys_missing"),
+    )
     _drain()
-    assert env["app"].closes()[REQ_A] == {"status": "skipped", "skip_reason": "judge_keys_missing"}
+    assert env["app"].closes()[REQ_A] == {
+        "status": "skipped",
+        "skip_reason": "judge_keys_missing",
+    }
 
 
 def test_internal_error_closes_failed(env):
-    env["state"]["outcome"] = _outcome(absolute=("failed", "internal_error"), floors=("failed", "internal_error"), failed=["internal_error"])
+    env["state"]["outcome"] = _outcome(
+        absolute=("failed", "internal_error"),
+        floors=("failed", "internal_error"),
+        failed=["internal_error"],
+    )
     _drain()
     summary = env["app"].closes()[REQ_A]
     assert summary["status"] == "failed"
@@ -174,13 +222,20 @@ def test_rejected_claim_prints_a_notice(env, capsys, monkeypatch):
     def denied(request):
         return httpx.Response(401, json={"error": "Unauthorized"})
 
-    monkeypatch.setattr(tenant_nightly, "_http_client", lambda: httpx.Client(transport=httpx.MockTransport(denied)))
+    monkeypatch.setattr(
+        tenant_nightly,
+        "_http_client",
+        lambda: httpx.Client(transport=httpx.MockTransport(denied)),
+    )
     assert _drain() == 0
     assert "::notice::" in capsys.readouterr().out
 
 
 def test_invalid_claimed_rows_are_dropped(env):
-    env["app"].claimable = [_request("not-a-uuid", TENANT_A), _request(REQ_B, "tenant-without-pattern")]
+    env["app"].claimable = [
+        _request("not-a-uuid", TENANT_A),
+        _request(REQ_B, "tenant-without-pattern"),
+    ]
     assert _drain() == 0
     assert env["app"].closes() == {}
     assert env["state"]["calls"] == []
