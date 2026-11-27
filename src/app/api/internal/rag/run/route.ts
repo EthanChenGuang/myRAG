@@ -214,13 +214,21 @@ function toStageOverrides(options: RagRunRequest['options']): StageOverrides | u
   };
 }
 
-type RefusalReason = 'no_relevant_context' | 'below_threshold' | 'below_similarity_floor' | 'injection_filtered' | typeof IDENTIFIER_NOT_FOUND;
+type RefusalReason =
+  | 'no_relevant_context'
+  | 'below_threshold'
+  | 'below_similarity_floor'
+  | 'injection_filtered'
+  | 'out_of_scope'
+  | typeof IDENTIFIER_NOT_FOUND;
 
 function refusalReasonOf(result: RetrievalResult, refused: boolean): RefusalReason | null {
   if (!refused) return null;
   // D-09, A-3: the check dropped everything that would have reached the generator.
   if (result.status === 'empty' && result.reason === 'injection_filtered') return 'injection_filtered';
   if (result.status === 'empty' && result.reason === IDENTIFIER_NOT_FOUND) return IDENTIFIER_NOT_FOUND;
+  // Phase 6.2 D-26: the scope gate skipped retrieval.
+  if (result.status === 'empty' && result.skipReason === 'out_of_scope') return 'out_of_scope';
   const record = result.refusal;
   if (record?.decision === 'refuse') {
     const reason: string = record.reason;
@@ -923,6 +931,10 @@ export async function POST(req: NextRequest) {
         ...(v2Result && backendTrace ? { retrieval_backend: backendTrace } : {}),
         ...(v2Result ? (attributeFilterTrace(result.stages, currentAttributeFilterMode()) ?? {}) : {}),
         ...(Object.keys(stageCounts).length > 0 ? { stage_counts: stageCounts } : {}),
+        // Phase 6.2 D-26, D-21, D-23: scores, timings and counts only, each absent while its stage did not run.
+        ...(result.scopeGate ? { scope_gate: result.scopeGate } : {}),
+        ...(result.searchesCounted !== undefined ? { searches_counted: result.searchesCounted } : {}),
+        ...(result.speculative ? { speculative: result.speculative } : {}),
         ...(injection ? { injection } : {}),
         ...(result.versionConflict ? { version_conflict: versionConflictTrace(result.versionConflict, mixedVersions) } : {}),
         answer,
