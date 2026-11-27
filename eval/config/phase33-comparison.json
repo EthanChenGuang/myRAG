@@ -1,0 +1,319 @@
+{
+  "schema_version": 2,
+  "phase": "03.3",
+  "noise": "eval/config/noise.json",
+  "baselines": {
+    "prechunked": "eval/baselines/fixture-baseline.json",
+    "ingest": "eval/baselines/fixture-ingest-baseline.json"
+  },
+  "runs": [
+    {
+      "name": "tpl-all-off-prechunked",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/tpl-all-off.json",
+      "checks": [
+        "gate",
+        "paired_all_zero",
+        "retrieval_unchanged",
+        "no_slice_drop"
+      ]
+    },
+    {
+      "name": "tpl-all-off-ingest",
+      "fixture_mode": "ingest",
+      "base": "eval/config/runs/tpl-all-off.json",
+      "checks": [
+        "gate",
+        "paired_all_zero",
+        "retrieval_unchanged",
+        "no_slice_drop"
+      ]
+    },
+    {
+      "name": "tpl-v2-off-prechunked",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/tpl-v2-off.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-v2-off-ingest",
+      "fixture_mode": "ingest",
+      "base": "eval/config/runs/tpl-v2-off.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-recommended-prechunked",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/tpl-recommended.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-recommended-ingest",
+      "fixture_mode": "ingest",
+      "base": "eval/config/runs/tpl-recommended.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-boilerplate-prechunked",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/tpl-only-boilerplate.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-boilerplate-ingest",
+      "fixture_mode": "ingest",
+      "base": "eval/config/runs/tpl-only-boilerplate.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-section-rules-prechunked",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/tpl-only-section-rules.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-section-rules-ingest",
+      "fixture_mode": "ingest",
+      "base": "eval/config/runs/tpl-only-section-rules.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-attributes-prechunked",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/tpl-only-attributes.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-attributes-ingest",
+      "fixture_mode": "ingest",
+      "base": "eval/config/runs/tpl-only-attributes.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-header-prechunked",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/tpl-only-header.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-header-ingest",
+      "fixture_mode": "ingest",
+      "base": "eval/config/runs/tpl-only-header.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-filter-hard-prechunked",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/tpl-only-filter-hard.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-filter-hard-ingest",
+      "fixture_mode": "ingest",
+      "base": "eval/config/runs/tpl-only-filter-hard.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-filter-soft-prechunked",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/tpl-only-filter-soft.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-filter-soft-ingest",
+      "fixture_mode": "ingest",
+      "base": "eval/config/runs/tpl-only-filter-soft.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-quantity-prechunked",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/tpl-only-quantity.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-quantity-ingest",
+      "fixture_mode": "ingest",
+      "base": "eval/config/runs/tpl-only-quantity.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-identifier-feed-prechunked",
+      "fixture_mode": "prechunked",
+      "base": "eval/config/runs/tpl-only-identifier-feed.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-only-identifier-feed-ingest",
+      "fixture_mode": "ingest",
+      "base": "eval/config/runs/tpl-only-identifier-feed.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    }
+  ],
+  "fixture_note": "Fixture corpus only: the templated collection (plan 03.3-20) loads only in ingest mode, so the templated-collection gates read the ingest runs; prechunked runs show the switches leave the pre-existing corpus alone. Live templated collections are operator actions.",
+  "notes": [
+    "Phase 3.3 (D-36, TPL-09): tpl-all-off sets the six Phase 3.3 switches at their defaults and must equal the committed baseline of its mode (gate, paired_all_zero, retrieval_unchanged, no_slice_drop).",
+    "Every other run is report_only here. Both committed baselines are legacy-pipeline baselines, and an ingestion switch changes corpus_sha256 by design, so comparing a v2 or feature run with them would report a data mismatch, not a result. The feature runs are gated by python -m rag_eval.phase33_gate evaluate --spec eval/config/phase33-gates.json, which compares tpl-recommended with the v2 reference tpl-v2-off of the same mode, aligned on the corpus hash.",
+    "The six switches default to off in src/lib/env.ts; the runs set them for the app under test only. RAG_CITATIONS=true with --citations lets the named-document gate read the cited document."
+  ]
+}

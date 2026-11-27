@@ -1,0 +1,12 @@
+{
+  "name": "tpl-all-off",
+  "env": {
+    "RAG_SECTION_RULES": "off",
+    "RAG_PAGE_BOILERPLATE": "off",
+    "RAG_DOC_ATTRIBUTES": "false",
+    "RAG_ATTRIBUTE_HEADER": "false",
+    "RAG_ATTRIBUTE_FILTER": "off",
+    "RAG_LEXICAL_QUANTITY": "false"
+  },
+  "overrides": null
+}
