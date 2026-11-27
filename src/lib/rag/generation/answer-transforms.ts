@@ -8,6 +8,9 @@ import type { AnswerConfig } from './answer-config';
 import { calcBlockTransform, extractCalcBlocks, type CalcBlockExtraction, type CalcBlockOptions } from './calc-block';
 import { guardWholeText, type OutputGuardLinkSummary, type OutputGuardPolicy } from '../security/output-guard';
 import { outputGuardTransform, type OutputGuardTransformOptions } from '../security/output-guard-stream';
+import type { CalcCheck } from '@/lib/rag-eval/contracts.generated';
+import type { CalcBlock, CalcReviewReason } from '../calc/check-step';
+import type { CalcTraceHolder } from '../calc/trace-holder';
 
 type Transform = StreamTextTransform<ToolSet>;
 
@@ -18,8 +21,48 @@ export interface AnswerTransformParts {
   calcBlock?: Transform | CalcBlockOptions | null;
   /** The output guard (05.2-13); see guardSlot. */
   guard?: Transform | null;
+  /** Phase 5.2.1 D-73: the calculation check at the final finish-step, after the guard and before the notices; absent: no slot. */
+  calcCheck?: CalcCheckSlotInput | null;
   /** The notice transform and the collector, in that order; always last (RESEARCH Pitfall 22). */
   noticeCollector?: readonly Transform[] | null;
+}
+
+/** What one calculation check of an answer produced (D-75); numbers, statuses and the duration only. */
+export interface CalcCheckRun {
+  checks: CalcCheck[];
+  primary: CalcCheck | null;
+  reviewReasons: CalcReviewReason[];
+  durationMs: number;
+}
+
+export interface CalcCheckSink {
+  record(run: CalcCheckRun): void;
+  /** Null while the check has not run on this turn. */
+  result(): CalcCheckRun | null;
+}
+
+export function createCalcCheckSink(): CalcCheckSink {
+  let stored: CalcCheckRun | null = null;
+  return {
+    record(run) {
+      stored = run;
+    },
+    result: () => stored,
+  };
+}
+
+export interface CalcCheckSlotInput {
+  holder: Pick<CalcTraceHolder, 'traces' | 'invalid' | 'markToolCall'>;
+  blocks: readonly CalcBlock[];
+  question: string;
+  answerLanguage: string;
+  /** Whether the tool or the block instruction was offered on this turn. */
+  offered: boolean;
+  sink: CalcCheckSink;
+  /** The collector's notice list (D-11); the notice stage after this slot renders what it receives. */
+  addNotice: (notice: AnswerNotice) => void;
+  /** The model text the check reads; defaults to the calculation block's raw text, else the text seen at this slot. */
+  rawText?: () => string;
 }
 
 /**
