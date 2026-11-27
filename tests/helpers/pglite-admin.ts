@@ -42,6 +42,18 @@ export function createPgliteAdmin(db: PGlite, options: PgliteAdminOptions = {}) 
 
   const admin = {
     queries,
+    rpc(_name: string, _args: Record<string, unknown> = {}) {
+      let signal: AbortSignal | null = null;
+      const call = async (): Promise<Result> => ({ data: null, error: { code: '0A000', message: `rpc not implemented${signal ? '' : ''}` } });
+      const builder = {
+        abortSignal(next: AbortSignal) {
+          signal = next;
+          return builder;
+        },
+        then: (onFulfilled: (value: Result) => unknown, onRejected?: (reason: unknown) => unknown) => call().then(onFulfilled, onRejected),
+      };
+      return builder;
+    },
     storage: {
       from: () => ({ remove: async () => ({ error: null }) }),
     },
