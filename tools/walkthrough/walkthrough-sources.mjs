@@ -23,6 +23,7 @@ const SWITCHES = {
   RAG_INGEST_PIPELINE: 'unified',
   RAG_INGEST_ASYNC: 'off',
   RAG_UPLOAD_APPROVAL: 'off',
+  RAG_CITATIONS: 'true',
 };
 
 function readEnv(file) {
@@ -169,10 +170,17 @@ async function ask(question, label) {
   const input = page.locator('textarea[placeholder="Ask anything"]:visible, input[placeholder="Ask anything"]:visible').first();
   await input.fill(question);
   await input.press('Enter');
-  const sources = page.getByRole('button', { name: 'Show sources' }).last();
-  await sources.waitFor({ timeout: 180000 });
-  await page.waitForTimeout(3000);
-  await sources.click();
+  const opener = page.locator('[data-citation-chip], [data-sources-toggle="true"]').first();
+  try {
+    await opener.waitFor({ timeout: 120000 });
+  } catch {
+    await snap(label + '-no-sources');
+    const body = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
+    const i = body.indexOf(question.slice(0, 30));
+    throw new Error('No citation chip or Sources toggle appeared. Page after the question: ' + body.slice(i + question.length, i + question.length + 200));
+  }
+  await page.waitForTimeout(4000);
+  await opener.click();
   await page.getByRole('heading', { name: 'Sources', exact: true }).waitFor({ timeout: 15000 });
   await page.waitForTimeout(1500);
   await snap(label);
