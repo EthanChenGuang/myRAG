@@ -367,6 +367,12 @@ export type {
   ScoreAnswerGroundednessInput,
 } from './generation/groundedness';
 export { claudeTurnEligibility, preRetrievalCitations, selectCitationStrategy } from './generation/citations/strategy';
+export { buildAliasMap, createCitationLabeler } from './generation/citations/blocks';
+export { buildCalculateTool, CALCULATE_TOOL_NAME, isServerCalculateTool } from './generation/calc-tool';
+export { modelBlocksTools, turnCanUseTools } from './generation/tool-capability';
+export { mayOfferCalc, shouldOfferCalcTool } from './calc/signal';
+export { createCalcTraceHolder } from './calc/trace-holder';
+export type { CalcTraceHolder } from './calc/trace-holder';
 export { CLAUDE_FIRST_TOKEN_TIMEOUT_MS, errorStatusOf, fallbackReasonFor, firstTokenGate } from './generation/citations/fallback';
 export type { FallbackReason, FirstTokenGateResult } from './generation/citations/fallback';
 export type {

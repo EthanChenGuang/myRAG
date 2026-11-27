@@ -16,6 +16,16 @@ import {
   CLAUDE_FIRST_TOKEN_TIMEOUT_MS,
   buildHistoryWindow,
   createCitationSession,
+  buildAliasMap,
+  buildCalculateTool,
+  CALCULATE_TOOL_NAME,
+  createCalcTraceHolder,
+  createCitationLabeler,
+  isServerCalculateTool,
+  mayOfferCalc,
+  modelBlocksTools,
+  shouldOfferCalcTool,
+  turnCanUseTools,
   createEnhancedRAGPrompt,
   answerLanguageOptions,
   appendAnswerLanguage,
@@ -66,6 +76,8 @@ import {
   type RetrievalResult,
   type TenantScope,
   type TraceCollector,
+  type CitationLabeler,
+  type ClaudeTurnFacts,
 } from '@/lib/rag';
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
@@ -101,7 +113,12 @@ interface StepToolCall {
 }
 
 // Tool results that are evidence the answer may rely on; anything else (MCP) skips groundedness
-const ANSWER_EVIDENCE_TOOLS = new Set(['webSearch', 'useDocument']);
+const ANSWER_EVIDENCE_TOOLS = new Set(['webSearch', 'useDocument', CALCULATE_TOOL_NAME]);
+
+// Phase 5.2.1 D-65: RAG_CALC_TOOL, read from the one answer-config reader once plan 05.2.1-02 adds the field; false before
+function calcToolSwitchOn(config: object): boolean {
+  return (config as { readonly calcTool?: unknown }).calcTool === true;
+}
 
 interface StepToolResult {
   type: string;
@@ -1995,6 +2012,14 @@ IMPORTANT:
       env.NEXT_PUBLIC_REASONING_ENABLED === 'true' &&
       reasoningSettings?.enabled !== false &&
       Boolean(reasoningSettings?.enabled || reasoningSettings?.effort || reasoningSettings?.maxOutputTokens);
+    // The session reads these facts when it picks the strategy after retrieval; `calculation` is set there (05.2.1 D-71)
+    const citationFacts: ClaudeTurnFacts = {
+      mcp: useMcpForRequest || lastAssistantHasToolCall(rawMessages),
+      multiStep: isHandlingMultiStep,
+      webSearch: webSearchEnabled,
+      reasoning: reasoningRequested,
+      attachments: hasAttachedImage,
+    };
     const citationSession = createCitationSession({
       capabilities: citationCapabilities,
       ragMode,
@@ -2002,14 +2027,16 @@ IMPORTANT:
       language: registryAnswerLanguage ?? userLanguage,
       ...(registryAnswerLanguage ? { textsSource: answerTurn.textsSource } : {}),
       config: generationConfig,
-      facts: {
-        mcp: useMcpForRequest || lastAssistantHasToolCall(rawMessages),
-        multiStep: isHandlingMultiStep,
-        webSearch: webSearchEnabled,
-        reasoning: reasoningRequested,
-        attachments: hasAttachedImage,
-      },
+      facts: citationFacts,
     });
+    // Phase 5.2.1 D-65, D-66: a turn that may get the calculation labels its blocks, so chunk operands can name an alias
+    const calcQuestion = getLastUserText(rawMessages);
+    const calcMayBeOffered =
+      calcToolSwitchOn(answerTurn.config) && ragMode !== 'bypass' && mayOfferCalc(calcQuestion, answerTurn.answerLanguage);
+    const retrievalLabeler: CitationLabeler | undefined =
+      citationSession.labeler ?? (calcMayBeOffered ? createCitationLabeler() : undefined);
+    const calcHolder = createCalcTraceHolder();
+    let calcOffer: { mode: 'tool' | 'trailing_block'; aliases: ReadonlySet<string>; stripMarkers: boolean } | null = null;
 
     // Only web-chat answers of a signed-in user outside ghost chats get an answerId and a record
     let answerUserId: string | null = null;
@@ -2255,7 +2282,7 @@ Context:
           signal: req.signal,
           trace: collector,
           ...(retrievalFilters ? { retrievalFilters } : {}),
-          ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
+          ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
           ...queryLayerInputs,
           ...(cacheContext ? { cacheContext } : {}),
         });
@@ -2286,7 +2313,7 @@ Context:
           options: { generalOverview: true },
           signal: req.signal,
           trace: collector,
-          ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
+          ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
           ...queryLayerInputs,
           ...(cacheContext ? { cacheContext } : {}),
         });
@@ -2574,7 +2601,38 @@ Context:
       return createUIMessageStreamResponse({ stream: timeFirstText(stream) });
     }
 
-    citationSession.attach(retrievalFailed || effectiveDisableRAG || smallTalkTurn ? null : retrievalResult);
+    const knowledgeContextAttached = !(retrievalFailed || effectiveDisableRAG || smallTalkTurn);
+    // Phase 5.2.1 D-70, D-72: offered on a knowledge turn whose question or blocks carry the signal; the mode follows the tool rule
+    let calcMode: 'tool' | 'trailing_block' | null = null;
+    if (calcMayBeOffered && knowledgeContextAttached && context.length > 0) {
+      const decision = shouldOfferCalcTool({
+        question: calcQuestion,
+        blockTexts: (retrievalResult?.blocks ?? []).filter((block) => !block.isImage).map((block) => block.text),
+        language: answerTurn.answerLanguage,
+      });
+      if (decision.offer) {
+        calcMode = turnCanUseTools({ provider: AI_PROVIDER, modelId: model }) ? 'tool' : 'trailing_block';
+        citationFacts.calculation = true;
+        console.log('[Calc]', { offered: true, mode: calcMode, reason: decision.reason });
+      }
+    }
+
+    citationSession.attach(knowledgeContextAttached ? retrievalResult : null);
+
+    if (calcMode) {
+      let aliases: ReadonlySet<string> = new Set<string>();
+      if (citationSession.strategy) {
+        aliases = citationSession.aliases();
+      } else {
+        try {
+          aliases = buildAliasMap(retrievalResult?.blocks, retrievalResult?.usedDocuments).aliases;
+        } catch {
+          console.warn('[Calc]', { offered: true, aliases: 'unavailable' });
+        }
+      }
+      // No strategy renders citations on this turn, so the block markers the calculation needs are removed from the visible text
+      calcOffer = { mode: calcMode, aliases, stripMarkers: citationSession.strategy === null };
+    }
 
     const resolvedSystemPrompt = await resolveRagSystemPrompt();
     let ragSystemPrompt = resolvedSystemPrompt.ragSystemPrompt;
@@ -2631,6 +2689,7 @@ Context:
       const answerRuleOptions = {
         mode: ragMode,
         webSearchOffered: SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY),
+        ...(calcOffer ? { calculation: { mode: calcOffer.mode } } : {}),
       };
       const historyNotEvidence = ragMode !== 'bypass' && historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE);
       systemPrompt = appendHistoryNotEvidence(
@@ -3599,6 +3658,15 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         }
       }
 
+      // Phase 5.2.1 D-65: our calculate tool, never over a tool of the same name (T-05.2.1-28)
+      if (calcOffer?.mode === 'tool') {
+        if (Object.prototype.hasOwnProperty.call(allTools, CALCULATE_TOOL_NAME)) {
+          console.log('[Calc]', { origin: 'tool', offered: false, reason: 'name_collision' });
+        } else {
+          allTools[CALCULATE_TOOL_NAME] = buildCalculateTool({ aliases: calcOffer.aliases, holder: calcHolder });
+        }
+      }
+
       const toolResultGuard = readSecurityConfig().toolResultGuard;
       const flaggedToolResults = new Set<string>();
       if (toolResultGuard !== 'off') {
@@ -3612,7 +3680,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           console.warn('[RAG Security] Tool result flagged; passed on escaped', { tool: toolName, ruleIds, traceId: collector?.traceId ?? null });
         };
         for (const toolName of Object.keys(allTools)) {
-          if (toolName === 'useDocument') continue;
+          if (toolName === 'useDocument' || isServerCalculateTool(allTools[toolName])) continue;
           allTools[toolName] = withToolResultGuard(allTools[toolName], toolName, toolResultGuard, recordToolResultFlag);
         }
       }
@@ -3802,11 +3870,12 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       }
 
       // Special handling for Claude Sonnet 4
-      const isClaudeSonnet4 = safeModelId.includes('claude-sonnet-4') ||
-        safeModelId.includes('claude-4-sonnet') ||
-        safeModelId.includes('anthropic/claude-sonnet-4');
+      const isClaudeSonnet4 = modelBlocksTools(safeModelId);
 
-      const resultToolsReachModel = SUPPORTS_TOOLS && !isClaudeSonnet4 && Object.keys(allTools).some((toolName) => toolName !== 'useDocument');
+      const resultToolsReachModel =
+        SUPPORTS_TOOLS &&
+        !isClaudeSonnet4 &&
+        Object.keys(allTools).some((toolName) => toolName !== 'useDocument' && !isServerCalculateTool(allTools[toolName]));
       if (toolResultGuard !== 'off' && resultToolsReachModel) {
         const contextIndex = messagesForModel.findIndex((message) => message.id === systemContextMessage.id);
         if (contextIndex >= 0) {
@@ -3952,16 +4021,30 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           webSearchOffered: SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY),
           aliases: () => citationSession.aliases(),
           guard: outputGuardSources,
+          // Phase 5.2.1 D-72: the trailing block in block mode; in tool mode only the marker stripping, when it is needed
+          ...(calcOffer?.mode === 'trailing_block'
+            ? { calcBlock: { onTrace: calcHolder.recordBlock, stripMarkers: calcOffer.stripMarkers } }
+            : calcOffer?.stripMarkers
+              ? { calcBlock: { stripMarkers: true } }
+              : {}),
         });
         return citationTransforms.length > 0 ? { experimental_transform: citationTransforms } : {};
       };
+
+      // D-65, Pitfall C1: tools that run on the server without approval; calculate only as our own tool object
+      const isServerExecutedTool = (toolName: string | undefined): boolean =>
+        toolName === 'webSearch' ||
+        toolName === 'query_documents' ||
+        (toolName === CALCULATE_TOOL_NAME && isServerCalculateTool(allTools[toolName]));
+      const isAnswerEvidenceTool = (toolName: string): boolean =>
+        toolName === CALCULATE_TOOL_NAME ? isServerExecutedTool(toolName) : ANSWER_EVIDENCE_TOOLS.has(toolName);
 
       const startOpenRouterStream = () => streamText({
         ...streamParams,
         ...citationTransformParams(),
         onStepFinish: async (params: { text?: string; toolCalls?: StepToolCall[]; toolResults?: StepToolResult[] }) => {
           let { text, toolCalls = [] as StepToolCall[], toolResults = [] as StepToolResult[] } = params;
-          if (Array.isArray(toolResults) && toolResults.some((item) => typeof item?.toolName === 'string' && !ANSWER_EVIDENCE_TOOLS.has(item.toolName))) {
+          if (Array.isArray(toolResults) && toolResults.some((item) => typeof item?.toolName === 'string' && !isAnswerEvidenceTool(item.toolName))) {
             answerToolOutputUsed = true;
           }
 
@@ -4163,7 +4246,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             console.log('API ROUTE: Clearing auto-generated results to force explicit approval');
             toolResults.forEach(result => {
               // Clear all tool results except document sources and safe tools which don't need approval
-              if (result && result.toolName !== 'query_documents' && result.toolName !== 'webSearch') {
+              if (result && !isServerExecutedTool(result.toolName)) {
                 console.log(`API ROUTE: Clearing result for ${result.toolName} to force explicit approval`);
                 // Set result to null to prevent auto-execution
                 result.output = null;
@@ -4179,7 +4262,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             // Check if we already have a result for this tool call
             // This happens for tools that execute immediately (like webSearch or query_documents)
             const existingResult = toolResults.find(r => r.toolCallId === call.toolCallId);
-            const isAllowedTool = call.toolName === 'webSearch' || call.toolName === 'query_documents';
+            const isAllowedTool = isServerExecutedTool(call.toolName);
             const hasResultPayload = existingResult?.output !== undefined;
 
             // If we have a result AND it's an allowed tool, we treat it as already approved/executed

@@ -4,6 +4,7 @@ import * as answerRules from '@/lib/rag/generation/answer-rules';
 import { readAnswerConfig } from '@/lib/rag/generation/answer-config';
 import { fixedText } from '@/lib/rag/lang/texts';
 import { NO_ANSWER_SENTINEL } from '@/lib/rag/generation/sentinel';
+import { CALC_BLOCK_CLOSE, CALC_BLOCK_OPEN } from '@/lib/rag/calc/block-tag';
 
 const POLICY_EXPORTS = ['OUTPUT_POLICY_NOTICE', 'OUTPUT_POLICY_NOTICE_UNTAGGED'] as const;
 
@@ -68,7 +69,6 @@ function input(overrides: Partial<Input> & { env?: Record<string, string> } = {}
     channel: 'web',
     webSearchOffered: false,
     capApplies: false,
-    calcOffered: false,
     contextTagging: false,
     ...rest,
   };
@@ -205,8 +205,47 @@ describe('composeAnswerRules order and per-mode parts (D-05, D-07, D-13 to D-15)
     expect(text).toBe(`${PROMPT}\n\n[rule:output_policy]\n${wrap.OUTPUT_POLICY_NOTICE}`);
   });
 
-  it('the calculation slot stays empty while calcOffered is false', () => {
+  it('the calculation slot stays empty without the calculation field', () => {
     expect(ids(input({ env: EVERYTHING }))).not.toContain('calculation');
+    expect(ids(input({ env: EVERYTHING, calculation: null }))).not.toContain('calculation');
+  });
+
+  it('calculation mode tool places instructions.calculation sixth: after version, before concise (D-05, D-70)', () => {
+    const value = input({ env: EVERYTHING, webSearchOffered: true, capApplies: true, calculation: { mode: 'tool' } });
+    expect(ids(value)).toEqual(['relevance', 'partial_answer', 'web_separation', 'version', 'calculation', 'concise', 'output_policy']);
+    const text = answerRules.composeAnswerRules(value);
+    expect(text).toContain(`[rule:version]\n${fixedText('instructions.version', 'en')}\n\n[rule:calculation]\n${fixedText('instructions.calculation', 'en')}\n\n[rule:concise]`);
+  });
+
+  it('calculation mode trailing_block places instructions.calculation_block with the block tags (D-72)', () => {
+    const value = input({ env: EVERYTHING, capApplies: true, calculation: { mode: 'trailing_block' } });
+    expect(ids(value)).toEqual(['relevance', 'partial_answer', 'version', 'calculation', 'concise', 'output_policy']);
+    const block = fixedText('instructions.calculation_block', 'en', { open: CALC_BLOCK_OPEN, close: CALC_BLOCK_CLOSE });
+    expect(block).toContain(CALC_BLOCK_OPEN);
+    expect(block).toContain(CALC_BLOCK_CLOSE);
+    expect(answerRules.composeAnswerRules(value)).toContain(`[rule:calculation]\n${block}\n\n[rule:concise]`);
+  });
+
+  it('the calculation part alone follows the prompt and is localized in the answer language', () => {
+    for (const language of ['en', 'zh', 'it']) {
+      expect(answerRules.composeAnswerRules(input({ language, calculation: { mode: 'tool' } }))).toBe(
+        `${PROMPT}\n\n[rule:calculation]\n${fixedText('instructions.calculation', language)}`,
+      );
+      expect(answerRules.composeAnswerRules(input({ language, mode: 'balanced', calculation: { mode: 'trailing_block' } }))).toBe(
+        `${PROMPT}\n\n[rule:calculation]\n${fixedText('instructions.calculation_block', language, { open: CALC_BLOCK_OPEN, close: CALC_BLOCK_CLOSE })}`,
+      );
+    }
+  });
+
+  it('the voice channel takes the tool mode only; the trailing block adds nothing on voice', () => {
+    expect(ids(input({ channel: 'voice', calculation: { mode: 'tool' } }))).toEqual(['calculation']);
+    expect(answerRules.composeAnswerRules(input({ channel: 'voice', calculation: { mode: 'trailing_block' } }))).toBe(PROMPT);
+  });
+
+  it('bypass mode composes no calculation part', () => {
+    for (const mode of ['tool', 'trailing_block'] as const) {
+      expect(answerRules.composeAnswerRules(input({ mode: 'bypass', calculation: { mode } }))).toBe(PROMPT);
+    }
   });
 
   it('every part starts with its ASCII rule id line', () => {

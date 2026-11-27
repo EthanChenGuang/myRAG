@@ -84,7 +84,9 @@
           "badge_not_checked": "未核验",
           "badge_tooltip_verified": "自动检查认为这条回答有你的文档支持。",
           "badge_tooltip_possibly_unreliable": "自动检查发现这条回答的部分内容可能没有文档支持。",
-          "badge_tooltip_not_checked": "这条回答无法与你的文档进行核对。"
+          "badge_tooltip_not_checked": "这条回答无法与你的文档进行核对。",
+          "condensed_question": "先前对话（已压缩）",
+          "earlier_draft": "基于先前证据的草稿"
         },
         "instructions": {
           "citation": "请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
@@ -99,7 +101,8 @@
           "web_separation": "把文档中的内容和网络上的内容分成两个独立部分。第一部分以 **{from_documents}** 开头，第二部分以 **{from_web}** 开头，每个标签单独占一行并使用粗体。",
           "version": "当不同来源对同一事项给出不同的数值时，采用生效日期最新的来源；没有日期时采用版本最高的来源，并在回答中写明它的版本。不要把两个数值作为可选项并列。只有当问题询问过去的情况或变化时，才提及旧版本。",
           "concise": "先给出答案，再只补充问题所需的支撑细节。保留所有引用。",
-          "calculation": "当回答需要计算时，不要心算。从问题和所引用的段落中取出操作数和规则，传给 calculate 工具，并在总计之前列出每一项的计算步骤。事实工具返回的数值优先于文档中的数值。"
+          "calculation": "当回答需要计算时，不要心算。从问题和所引用的段落中取出操作数和规则，传给 calculate 工具，并在总计之前列出每一项的计算步骤。注明每个操作数所来自段落的引用。事实工具提供了数值时，使用该数值，而不是文档中的数值。",
+          "calculation_block": "如果没有可用的 calculate 工具，仍要在正文中列出每一项的计算步骤和总计。然后在回答的最末尾、所有正文之后，把你本应传给 calculate 工具的同一份输入（操作数及其来源、规则和每一步）写成一个 JSON 对象，放在 {open} 和 {close} 之间。{close} 之后不要再写任何内容。"
         }
       },
       "groundedness": "hhem_2_3",
@@ -115,6 +118,58 @@
         "第[一二三四五六七八九十百\\d]+版",
         "修订(?:版|稿)?",
         "[vV]\\d+(?:\\.\\d+)*"
+      ],
+      "number_format": {
+        "group_separators": [
+          ","
+        ],
+        "decimal_marks": [
+          "."
+        ],
+        "fullwidth_digits": true,
+        "magnitude_words": [
+          {
+            "word": "千",
+            "power": 3
+          },
+          {
+            "word": "万",
+            "power": 4
+          },
+          {
+            "word": "亿",
+            "power": 8
+          }
+        ]
+      },
+      "calc_intent_terms": [
+        "总共",
+        "一共",
+        "合计",
+        "总计",
+        "总和",
+        "相加",
+        "加上",
+        "减去",
+        "乘以",
+        "除以",
+        "差额",
+        "相差",
+        "剩余",
+        "剩下",
+        "还剩",
+        "百分之",
+        "百分比",
+        "比例",
+        "平均",
+        "多少",
+        "几个",
+        "每",
+        "每个",
+        "之间",
+        "多出",
+        "少于",
+        "计算"
       ],
       "fixtures": {
         "corpus": true,
@@ -278,7 +333,9 @@
           "badge_not_checked": "Not Checked",
           "badge_tooltip_verified": "An automatic check found this answer supported by your documents.",
           "badge_tooltip_possibly_unreliable": "An automatic check found parts of this answer that your documents may not support.",
-          "badge_tooltip_not_checked": "This answer could not be checked against your documents."
+          "badge_tooltip_not_checked": "This answer could not be checked against your documents.",
+          "condensed_question": "Earlier conversation, condensed",
+          "earlier_draft": "Draft from earlier evidence"
         },
         "instructions": {
           "citation": "Cite the sources you use with [S<number>] markers taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
@@ -293,7 +350,8 @@
           "web_separation": "Keep what the documents say and what the web says in two separate parts. Start the first part with **{from_documents}** and the second with **{from_web}**, each label alone on its own line, in bold.",
           "version": "When sources give different values for the same thing, use the source with the latest effective date, or the highest version when dates are missing, and name its version in the answer. Do not present the two values as alternatives. Mention an older version only when the question asks about the past or about changes.",
           "concise": "Give the answer first, then only the supporting detail the question needs. Keep every citation.",
-          "calculation": "When the answer needs a calculation, do not compute it mentally. Take the operands and the rule from the question and the cited passages, pass them to the calculate tool, and list each item’s step before the total. A value returned by a fact tool takes precedence over a value from the documents."
+          "calculation": "When the answer needs a calculation, do not compute it mentally. Take the operands and the rule from the question and the cited passages, pass them to the calculate tool, and list each item’s step before the total. Cite the passages the operands come from. When a fact tool supplies a value, use it instead of the value from the documents.",
+          "calculation_block": "If the calculate tool is not available, still list each item’s step and the total in the text. Then, at the very end of the answer and after all text, write the same input you would give the calculate tool (the operands with their sources, the rule and each step) as one JSON object between {open} and {close}. Write nothing after {close}."
         }
       },
       "groundedness": "hhem_2_1_open",
@@ -311,6 +369,60 @@
         "\\brev\\.\\s*\\d*",
         "\\brevised\\b",
         "\\b\\d+(?:st|nd|rd|th)\\s+edition\\b"
+      ],
+      "number_format": {
+        "group_separators": [
+          ",",
+          " "
+        ],
+        "decimal_marks": [
+          "."
+        ],
+        "fullwidth_digits": false,
+        "magnitude_words": [
+          {
+            "word": "thousand",
+            "power": 3
+          },
+          {
+            "word": "million",
+            "power": 6
+          },
+          {
+            "word": "billion",
+            "power": 9
+          }
+        ]
+      },
+      "calc_intent_terms": [
+        "total",
+        "in total",
+        "sum",
+        "add up",
+        "altogether",
+        "combined",
+        "difference",
+        "minus",
+        "plus",
+        "times",
+        "multiplied by",
+        "divided by",
+        "remainder",
+        "remaining",
+        "left over",
+        "percent",
+        "percentage",
+        "ratio",
+        "average",
+        "how much",
+        "how many",
+        "per",
+        "each",
+        "between",
+        "more than",
+        "less than",
+        "calculate",
+        "compute"
       ],
       "fixtures": {
         "corpus": true,
@@ -478,7 +590,9 @@
           "badge_not_checked": "Non verificata",
           "badge_tooltip_verified": "Un controllo automatico ha trovato questa risposta supportata dai tuoi documenti.",
           "badge_tooltip_possibly_unreliable": "Un controllo automatico ha trovato parti di questa risposta che i tuoi documenti potrebbero non supportare.",
-          "badge_tooltip_not_checked": "Non è stato possibile verificare questa risposta sui tuoi documenti."
+          "badge_tooltip_not_checked": "Non è stato possibile verificare questa risposta sui tuoi documenti.",
+          "condensed_question": "Conversazione precedente, condensata",
+          "earlier_draft": "Bozza da prove precedenti"
         },
         "instructions": {
           "citation": "Cita le fonti che usi con i marcatori [S<numero>] presi solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
@@ -493,7 +607,8 @@
           "web_separation": "Tieni ciò che dicono i documenti e ciò che dice il web in due parti separate. Inizia la prima parte con **{from_documents}** e la seconda con **{from_web}**, ogni etichetta da sola su una riga, in grassetto.",
           "version": "Quando le fonti danno valori diversi per la stessa cosa, usa la fonte con la data di entrata in vigore più recente, o la versione più alta se mancano le date, e indica la sua versione nella risposta. Non presentare i due valori come alternative. Cita una versione precedente solo quando la domanda riguarda il passato o le modifiche.",
           "concise": "Dai prima la risposta, poi solo i dettagli di supporto che servono alla domanda. Mantieni tutte le citazioni.",
-          "calculation": "Quando la risposta richiede un calcolo, non farlo a mente. Prendi gli operandi e la regola dalla domanda e dai passaggi citati, passali allo strumento calculate ed elenca il passaggio di ogni voce prima del totale. Un valore restituito da uno strumento di fatti prevale su un valore dei documenti."
+          "calculation": "Quando la risposta richiede un calcolo, non farlo a mente. Prendi gli operandi e la regola dalla domanda e dai passaggi citati, passali allo strumento calculate ed elenca il passaggio di ogni voce prima del totale. Cita i passaggi da cui provengono gli operandi. Quando uno strumento di fatti fornisce un valore, usa quello invece del valore dei documenti.",
+          "calculation_block": "Se lo strumento calculate non è disponibile, elenca comunque nel testo il passaggio di ogni voce e il totale. Poi, alla fine della risposta e dopo tutto il testo, scrivi lo stesso input che daresti allo strumento calculate (gli operandi con la loro fonte, la regola e ogni passaggio) come un unico oggetto JSON tra {open} e {close}. Non scrivere nulla dopo {close}."
         }
       },
       "groundedness": "none",
@@ -513,6 +628,69 @@
         "\\b\\d+[ªa]?\\s+edizione\\b",
         "\\bedizione\\b",
         "\\brevisione\\b"
+      ],
+      "number_format": {
+        "group_separators": [
+          ".",
+          " "
+        ],
+        "decimal_marks": [
+          ","
+        ],
+        "fullwidth_digits": false,
+        "magnitude_words": [
+          {
+            "word": "mila",
+            "power": 3
+          },
+          {
+            "word": "milione",
+            "power": 6
+          },
+          {
+            "word": "milioni",
+            "power": 6
+          },
+          {
+            "word": "miliardo",
+            "power": 9
+          },
+          {
+            "word": "miliardi",
+            "power": 9
+          }
+        ]
+      },
+      "calc_intent_terms": [
+        "totale",
+        "in totale",
+        "somma",
+        "sommare",
+        "complessivamente",
+        "differenza",
+        "meno",
+        "più",
+        "per",
+        "moltiplicato",
+        "diviso",
+        "resto",
+        "rimanente",
+        "rimane",
+        "percento",
+        "percentuale",
+        "rapporto",
+        "media",
+        "quanto",
+        "quanta",
+        "quanti",
+        "quante",
+        "ciascuno",
+        "ciascuna",
+        "ogni",
+        "tra",
+        "fra",
+        "calcolare",
+        "calcola"
       ],
       "fixtures": {
         "corpus": true,
