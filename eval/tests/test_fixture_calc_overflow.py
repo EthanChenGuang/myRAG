@@ -358,3 +358,72 @@ def test_rule_skipping_and_missing_operand_scripts_are_wrong_in_the_scripted_way
             ]
         }
         assert _evaluate(CalcRequest.model_validate(swapped)) != Fraction(entry["expected_value"]), group
+
+
+# Parity and re-baseline (Task 3; Phase 2 D-25, 05.2 D-54, D-62): the baselines recorded before this plan are kept as
+# eval/baselines/history/*.pre-05.2.1-12.json; every pre-existing item and every slice holding no new item is unchanged.
+
+BASELINES = REPO_ROOT / "eval/baselines"
+PRE_PREFIX = "pre-05.2.1-12"
+# Item count and sha256 over the sorted, newline-joined item ids of each baseline before plan 05.2.1-12.
+PRE_ITEM_SETS = {
+    "fixture-baseline": (356, "8db17f757861f85c25bf6f004db4769fea880a6640163e8d651e94bc58d45a93"),
+    "fixture-ingest-baseline": (417, "420d666468ab60772988089fe0983f907ff2f34a07a83b817d609c2201251acf"),
+}
+NEW_CATEGORY_SLICES = ("category:multi_step_calc", "category:context_overflow")
+# Slices that also hold new items; their pre-existing items are compared one by one.
+MIXED_SLICES = ("overall", "language:en", "language:it", "language:zh")
+
+
+def _baseline(path):
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _previous(name):
+    return _baseline(BASELINES / "history" / f"{name}.{PRE_PREFIX}.json")
+
+
+def test_parity_the_pre_05_2_1_12_baselines_hold_the_pinned_item_sets():
+    import hashlib
+
+    for name, (count, digest) in PRE_ITEM_SETS.items():
+        items = _previous(name)["items"]
+        assert len(items) == count, name
+        assert hashlib.sha256("\n".join(sorted(items)).encode("utf-8")).hexdigest() == digest, name
+
+
+def test_existing_golden_lines_are_unchanged_the_file_only_grows():
+    import hashlib
+
+    previous = _previous("fixture-baseline")
+    count = PRE_ITEM_SETS["fixture-baseline"][0]
+    lines = GOLDEN_PATH.read_bytes().split(b"\n")
+    prefix = b"".join(line + b"\n" for line in lines[:count])
+    assert hashlib.sha256(prefix).hexdigest() == previous["golden_sha256"]
+    added = [json.loads(line) for line in lines[count:] if line.strip()]
+    assert added and {row["category"] for row in added} == {"multi_step_calc", "context_overflow"}
+
+
+@pytest.mark.parametrize("name", sorted(PRE_ITEM_SETS))
+def test_rebaseline_pre_existing_items_and_slices_equal_the_previous_baseline(name):
+    previous = _previous(name)
+    current = _baseline(BASELINES / f"{name}.json")
+    assert len(current["runs"]) >= 3
+    assert {run["run_id"] for run in current["runs"]}.isdisjoint({run["run_id"] for run in previous["runs"]}), "not re-recorded"
+    assert current["corpus_sha256"] != previous["corpus_sha256"] and current["golden_sha256"] != previous["golden_sha256"]
+    assert {item_id: current["items"][item_id] for item_id in previous["items"]} == previous["items"], name
+    for slice_name, metrics in previous["slices"].items():
+        if slice_name in MIXED_SLICES:
+            continue
+        before = {metric: stat["runs"] for metric, stat in metrics.items()}
+        after = {metric: stat["runs"] for metric, stat in current["slices"][slice_name].items()}
+        assert after == before, (name, slice_name)
+    assert all(stat["spread"] == 0.0 for stats in current["slices"].values() for stat in stats.values()), name
+
+
+@pytest.mark.parametrize("name", sorted(PRE_ITEM_SETS))
+def test_rebaseline_holds_the_new_items_and_their_category_slices(name, calc_items, overflow_items):
+    current = _baseline(BASELINES / f"{name}.json")
+    assert {item.id for item in [*calc_items, *overflow_items]} <= set(current["items"]), name
+    for slice_name in NEW_CATEGORY_SLICES:
+        assert slice_name in current["slices"], (name, slice_name)
