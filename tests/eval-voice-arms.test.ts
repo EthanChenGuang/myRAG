@@ -24,6 +24,16 @@ describe('voice cross-language arms (Phase 6.2 D-16)', () => {
     expect(Object.keys(rawOn).sort()).toEqual(Object.keys(rawOff).sort());
   });
 
+  test('the committed voice baseline was recorded from the no-translate arm and carries every language pair slice', () => {
+    const baseline = JSON.parse(readFileSync(join(__dirname, '..', 'eval', 'baselines', 'fixture-voice-baseline.json'), 'utf8')) as {
+      request_options: Record<string, unknown>;
+      slices: Record<string, unknown>;
+    };
+    expect(baseline.request_options.entry_profile).toBe('voice');
+    const pairs = Object.keys(baseline.slices).filter((name) => name.startsWith('pair:')).sort();
+    expect(pairs).toEqual(['pair:en->it', 'pair:en->zh', 'pair:it->en', 'pair:it->zh', 'pair:zh->en', 'pair:zh->it']);
+  });
+
   test('entry_profile accepts eval and voice only; eval is the default and is not recorded', () => {
     expect(parseRunConfig({ name: 'plain', env: {} }, 'test').entryProfile).toBeUndefined();
     expect(parseRunConfig({ name: 'explicit-eval', env: {}, entry_profile: 'eval' }, 'test').entryProfile).toBeUndefined();
