@@ -8,7 +8,6 @@ export const MAX_FOLLOWUPS = 5;
 const RULE_LINE = /^ {0,3}---\s*$/;
 const FOLLOWUP_LINE = /^\s*(?:↳|->|→)\s+(\S.*?)\s*$/;
 const FENCE_LINE = /^ {0,3}(```|~~~)/;
-const INLINE_ARROW = /\s+(?:↳|→)\s+/;
 
 function insideFence(lines: readonly string[], end: number): boolean {
   let open: string | null = null;
@@ -39,8 +38,7 @@ export function splitFollowups(text: string): FollowupSplit {
     if (line.trim() === '') continue;
     const m = FOLLOWUP_LINE.exec(line);
     if (!m) break;
-    const questions = m[1].split(INLINE_ARROW).map((q) => q.trim()).filter(Boolean);
-    followups.unshift(...questions);
+    followups.unshift(m[1]);
     if (followups.length > MAX_FOLLOWUPS) return unchanged;
   }
 
@@ -48,29 +46,4 @@ export function splitFollowups(text: string): FollowupSplit {
   if (insideFence(lines, i)) return unchanged;
 
   return { body: lines.slice(0, i).join('\n').trimEnd(), followups };
-}
-
-/**
- * Puts every follow-up line (`↳ `, `-> `, `→ `) outside code fences in its own markdown paragraph,
- * so lines separated by a single newline are not joined into one paragraph when the tail is
- * rendered as markdown (while streaming, or when it cannot be split off).
- */
-export function separateFollowupLines(text: string): string {
-  if (!text || !/(?:↳|->|→)/.test(text)) return text;
-  const lines = text.split('\n');
-  const out: string[] = [];
-  let fence: string | null = null;
-  for (const line of lines) {
-    const f = FENCE_LINE.exec(line);
-    if (f) {
-      if (fence === null) fence = f[1];
-      else if (f[1] === fence) fence = null;
-    }
-    if (fence === null && !f && FOLLOWUP_LINE.test(line)) {
-      const prev = out[out.length - 1];
-      if (prev !== undefined && prev.trim() !== '') out.push('');
-    }
-    out.push(line);
-  }
-  return out.join('\n');
 }

@@ -1111,23 +1111,10 @@ export function DocumentDashboard({
     await updateDocumentUrl(doc.id, url.trim());
   };
 
-  const nestedPopperOpenAtPressRef = React.useRef(false)
-
   // Add handler for clicks outside the dialog
   React.useEffect(() => {
-    // An open nested popper (e.g. the per-file type Select) disables pointer events on the page,
-    // so the press lands on whatever sits under the dialog. Record whether one was open when the
-    // press started: that press only dismisses the popper, never the dialog.
-    const recordNestedPopper = () => {
-      nestedPopperOpenAtPressRef.current = document.querySelector('[data-radix-popper-content-wrapper]') !== null
-    }
-
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-
-      if (nestedPopperOpenAtPressRef.current) {
-        return;
-      }
 
       // Don't close if clicking inside a nested dialog (e.g., FolderPicker)
       if (target.closest('[role="dialog"]') && !dialogRef.current?.contains(target)) {
@@ -1148,19 +1135,14 @@ export function DocumentDashboard({
       }
     };
 
-    let listenTimer: ReturnType<typeof setTimeout> | undefined
     if (open) {
-      document.addEventListener('pointerdown', recordNestedPopper, true);
       // Add slight delay to avoid immediate closing
-      listenTimer = setTimeout(() => {
+      setTimeout(() => {
         document.addEventListener('mousedown', handleClickOutside);
       }, 100);
     }
 
     return () => {
-      clearTimeout(listenTimer);
-      document.removeEventListener('pointerdown', recordNestedPopper, true);
-      nestedPopperOpenAtPressRef.current = false;
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [open]);
@@ -1339,13 +1321,7 @@ export function DocumentDashboard({
       <DialogContent
         ref={dialogRef}
         className="max-w-[calc(100vw-1rem)] sm:max-w-[800px] max-h-[85vh] w-full flex flex-col bg-[#FFF1E5] dark:bg-[#212121] rounded-xl document-dialog mx-auto"
-        onPointerDownOutside={(event) => {
-          if (nestedPopperOpenAtPressRef.current) {
-            event.preventDefault()
-            return
-          }
-          setOpen(false)
-        }}
+        onPointerDownOutside={() => setOpen(false)}
         onEscapeKeyDown={() => setOpen(false)}
       >
         <div className="relative w-full h-full flex flex-col">

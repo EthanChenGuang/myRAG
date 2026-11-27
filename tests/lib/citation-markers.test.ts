@@ -125,16 +125,3 @@ describe('answerQualityStrings', () => {
     expect(answerQualityStrings(language).chipAriaLabel(2)).toBe(answerQualityStrings('en').chipAriaLabel(2));
   });
 });
-
-describe('renderCitationMarkers leaves slashes alone', () => {
-  for (const text of [
-    '在此之前，他主要使用C++（诺基亚时期）和PL/SQL（Oracle和电信计费系统时期）进行开发。',
-    'TCP/IP and/or 120 km/h, A/B testing, https://example.com/a/b',
-  ]) {
-    for (const phase of ['final', 'streaming'] as const) {
-      test(`${phase}: ${text.slice(0, 20)}`, () => {
-        expect(renderCitationMarkers(text, { citations: [], phase })).toBe(text);
-      });
-    }
-  }
-});

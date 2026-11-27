@@ -1788,15 +1788,15 @@ export default function Home() {
           createdAt: new Date()
         };
 
-        // No setState inside the updater: React runs it lazily at render, after the
-        // end-of-stream setIsStreaming(false), which then left the composer stuck in "stop".
         const commitStreamingMessage = () => {
-          setStreamingMessage(streamingMessage as StreamingMessage);
-          setMessages(prevMessages => prevMessages.map(msg =>
-            msg.id === thinkingMessage.id || msg.id === streamingMessage.id
-              ? { ...streamingMessage }
-              : msg
-          ));
+          setMessages(prevMessages => prevMessages.map(msg => {
+            if (msg.id === thinkingMessage.id || msg.id === streamingMessage.id) {
+              setIsStreaming(true);
+              setStreamingMessage(streamingMessage as StreamingMessage);
+              return { ...streamingMessage };
+            }
+            return msg;
+          }));
         };
 
 

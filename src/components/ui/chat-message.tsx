@@ -82,7 +82,7 @@ import { pickRefusalMetadata, type RefusalFeedbackValue } from '@/lib/chat/answe
 import { registerMessageTrace, setSourcesMessage, shouldShowRefusalControl } from '@/lib/chat/refusal-feedback-client'
 import { useGhostModeStore } from '@/lib/ghost-mode-store'
 import { imageLinkHref, isAllowedImageUrl } from '@/lib/safe-image-hosts'
-import { separateFollowupLines, splitFollowups } from '@/lib/chat/followups'
+import { splitFollowups } from '@/lib/chat/followups'
 import { answerQualityStrings } from '@/translations/answer-quality'
 import { RelatedQuestions } from './related-questions'
 import { ThinkingIndicator } from './thinking-indicator'
@@ -199,6 +199,25 @@ interface ToolCall {
 }
 
 // Function to highlight document mentions in text
+function highlightDocumentMentions(text: string) {
+  if (!text) return '';
+
+  // Regex to match /mentions, potentially with backslashes
+  const mentionRegex = /\/\\?([^\\]+?)\\?(?=\s|$|\.|\,|\;|\:|\!|\?)/g;
+
+  // Replace mentions with styled spans, removing any backslashes
+  const formattedText = text.replace(mentionRegex, (match, docName) => {
+    // Clean the document name by removing any backslashes
+    const cleanedDocName = docName.replace(/\\/g, '');
+
+    return `<span class="inline-flex items-center leading-none">
+      <span class="text-[#FF6417] dark:text-[#FF8A4D] font-medium align-baseline leading-none">${cleanedDocName}</span>
+    </span>`;
+  });
+
+  return formattedText;
+}
+
 // Function to check if text contains our special approval format
 function isApprovalRequiredFormat(text: string): boolean {
   if (!text || typeof text !== 'string') return false;
@@ -2684,7 +2703,7 @@ const TextPartRenderer = React.memo(({
         "mt-2"
       )}
     >
-      {separateFollowupLines(typeof displayText === 'string' ? displayText : String(displayText))}
+      {typeof displayText === 'string' ? displayText : String(displayText)}
     </Markdown>
   );
 });
@@ -4016,9 +4035,19 @@ ChatMessage = function ({
     li: ({ children }) => (
       <li className="ml-2 text-gray-700 dark:text-gray-300">{children}</li>
     ),
-    p: ({ children }) => (
-      <p className="break-words text-gray-700 dark:text-gray-300 mb-4 last:mb-0">{children}</p>
-    ),
+    p: ({ children }) => {
+      // If children contains a string that might have @mentions
+      if (typeof children === 'string') {
+        const formattedText = highlightDocumentMentions(children);
+        return <p
+          className="break-words text-gray-700 dark:text-gray-300 mb-4 last:mb-0"
+          dangerouslySetInnerHTML={{ __html: formattedText }}
+        />;
+      }
+
+      // Otherwise use normal paragraph rendering
+      return <p className="break-words text-gray-700 dark:text-gray-300 mb-4 last:mb-0">{children}</p>;
+    },
     a: ({ href, children }) => {
       const citeAlias = markerCitations ? citeAliasFromHref(href) : null;
       if (citeAlias && citationMessageId) {
@@ -5166,7 +5195,17 @@ ChatMessage = function ({
                         ? message.content.find(part => part.type === 'text')?.text || ''
                         : messageContent.text || '';
 
-                      return (
+                      return textContent && textContent.includes('@') ? (
+                        <div
+                          className={cn(
+                            "react-markdown prose dark:prose-invert max-w-none",
+                            textSizeClasses[textSize].base,
+                            fontClasses[fontFamily] || '',
+                            "prose-p:my-0 leading-normal"
+                          )}
+                          dangerouslySetInnerHTML={{ __html: highlightDocumentMentions(textContent) }}
+                        />
+                      ) : (
                         <div className={cn(
                           "break-words text-gray-700 dark:text-gray-300",
                           textSizeClasses[textSize].base,

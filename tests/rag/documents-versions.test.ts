@@ -2,8 +2,7 @@ import { NextRequest } from 'next/server';
 import type { PGlite } from '@electric-sql/pglite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyMigrations } from '../../eval/harness/migrations.mts';
-import { createFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
-import { CORPUS_DIR } from '../helpers/route-fixture';
+import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { createPgliteAdmin } from '../helpers/pglite-admin';
 
 const USER_A = '00000000-0000-4000-8000-0000000000a1';
@@ -102,10 +101,9 @@ async function ids(db: PGlite, table: 'documents' | 'document_chunks'): Promise<
 }
 
 async function createDb(mode: DeploymentMode, seedBeforeMigrations?: (db: PGlite) => Promise<void>): Promise<PGlite> {
-  const fixture = await createFixtureDatabase({ deploymentMode: mode, corpusDir: CORPUS_DIR, migrations: false });
-  const { db } = fixture;
-  await db.query('DELETE FROM document_chunks');
-  await db.query('DELETE FROM documents');
+  // Every row is seeded by the test, so the database starts empty instead of loading the fixture corpus and deleting it
+  // (loading it took about 40 s per test in CI once the corpus grew with 04.2-37 and 05.2-28).
+  const { db } = await createEmptyFixtureDatabase({ deploymentMode: mode, migrations: false });
   if (mode === 'multi-tenant') {
     await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2), ($3, $4)', [USER_A, 'a@example.invalid', USER_B, 'b@example.invalid']);
     await db.query('INSERT INTO organizations (id, name, slug, owner_id, is_personal) VALUES ($1, $2, $3, $4, false)', [ORG_X, 'Org X', 'org-x', USER_A]);

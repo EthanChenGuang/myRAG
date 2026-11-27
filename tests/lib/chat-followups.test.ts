@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { separateFollowupLines, splitFollowups } from '@/lib/chat/followups';
+import { splitFollowups } from '@/lib/chat/followups';
 
 const BODY = 'The answer text.\n\n**Source:** Doc-A.pdf';
 
@@ -67,37 +67,5 @@ describe('splitFollowups', () => {
   test('ignores an arrow line with no question text', () => {
     const text = `${BODY}\n\n---\n↳ \n`;
     expect(splitFollowups(text)).toEqual({ body: text, followups: [] });
-  });
-});
-
-describe('splitFollowups inline arrows', () => {
-  test('splits several ↳ questions written on one line', () => {
-    const text = `${BODY}\n\n---\n↳ First question? ↳ Second question? → Third question?`;
-    expect(splitFollowups(text)).toEqual({ body: BODY, followups: ['First question?', 'Second question?', 'Third question?'] });
-  });
-
-  test('still rejects more than 5 questions after inline splitting', () => {
-    const six = Array.from({ length: 6 }, (_, i) => `↳ Question ${i + 1}?`).join(' ');
-    const text = `${BODY}\n\n---\n${six}`;
-    expect(splitFollowups(text)).toEqual({ body: text, followups: [] });
-  });
-});
-
-describe('separateFollowupLines', () => {
-  test('puts single-newline follow-up lines in their own paragraphs', () => {
-    const text = `${BODY}\n\n---\n↳ First?\n↳ Second?\n→ Third?`;
-    expect(separateFollowupLines(text)).toBe(`${BODY}\n\n---\n\n↳ First?\n\n↳ Second?\n\n→ Third?`);
-  });
-
-  test('leaves blank-line separated follow-ups unchanged', () => {
-    const text = `${BODY}\n\n---\n\n↳ First?\n\n↳ Second?`;
-    expect(separateFollowupLines(text)).toBe(text);
-  });
-
-  test('does not touch arrow lines inside code fences or text without arrows', () => {
-    const fenced = 'Example:\n\n```\nx\n-> y\n↳ z\n```';
-    expect(separateFollowupLines(fenced)).toBe(fenced);
-    expect(separateFollowupLines(BODY)).toBe(BODY);
-    expect(separateFollowupLines('')).toBe('');
   });
 });
