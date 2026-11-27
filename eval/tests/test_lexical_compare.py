@@ -14,11 +14,11 @@ from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.golden import GoldenItem
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_report_runner import _manifest, _trace  # noqa: E402
+from test_report_runner import _manifest, _trace
 
-from rag_eval.golden_io import write_golden  # noqa: E402
-from rag_eval.harness_runner import HarnessRun, golden_for_splits  # noqa: E402
-from rag_eval.lexical_compare import (  # noqa: E402
+from rag_eval.golden_io import write_golden
+from rag_eval.harness_runner import HarnessRun, golden_for_splits
+from rag_eval.lexical_compare import (
     JSON_NAME,
     LEGS_DIR,
     LEGS_FILE,

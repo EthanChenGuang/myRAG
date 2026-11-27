@@ -24,7 +24,7 @@ import math
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any, Literal
 
@@ -33,7 +33,12 @@ from rag_sidecar.contracts.eval_run import RagTrace, RunManifest
 from rag_sidecar.contracts.golden import GoldenItem, GoldSpan
 
 from rag_eval.golden_io import load_golden
-from rag_eval.harness_runner import HarnessError, HarnessRun, golden_for_splits, run_harness
+from rag_eval.harness_runner import (
+    HarnessError,
+    HarnessRun,
+    golden_for_splits,
+    run_harness,
+)
 from rag_eval.matching import chunk_matches_span
 from rag_eval.paired import RESAMPLES, SEED, _bootstrap_interval
 from rag_eval.paths import REPO_ROOT, repo_relative, resolve_cli_path
@@ -381,8 +386,8 @@ def build_comparison(
     pairs: list[PairResult] = []
     for baseline, candidate in arm_pairs(list(by_label.values())):
 
-        def diffs(members: list[GoldenItem], metric: str) -> list[float]:
-            return [scores[candidate.label][i.id][metric] - scores[baseline.label][i.id][metric] for i in members]
+        def diffs(members: list[GoldenItem], metric: str, base: str = baseline.label, cand: str = candidate.label) -> list[float]:
+            return [scores[cand][i.id][metric] - scores[base][i.id][metric] for i in members]
 
         pairs.append(
             PairResult(

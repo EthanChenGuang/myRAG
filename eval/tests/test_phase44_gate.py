@@ -14,12 +14,12 @@ from rag_sidecar.contracts.golden import GoldenItem
 from rag_sidecar.contracts.latency import LatencyBudgets
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_report_runner import _manifest, _trace  # noqa: E402
+from test_report_runner import _manifest, _trace
 
-from rag_eval import phase44_gate  # noqa: E402
-from rag_eval.golden_io import write_golden  # noqa: E402
-from rag_eval.metrics import score_items  # noqa: E402
-from rag_eval.phase44_gate import (  # noqa: E402
+from rag_eval import phase44_gate
+from rag_eval.golden_io import write_golden
+from rag_eval.metrics import score_items
+from rag_eval.phase44_gate import (
     OFF_ENV,
     OVERLAP_FILE,
     OverlapReport,
@@ -32,9 +32,9 @@ from rag_eval.phase44_gate import (  # noqa: E402
     run_config_for,
     run_phase44_gates,
 )
-from rag_eval.phase_compare import HARNESS_DIR, ComparisonError, RunOutput  # noqa: E402
-from rag_eval.profile_compare import baseline_from_report  # noqa: E402
-from rag_eval.report import build_report  # noqa: E402
+from rag_eval.phase_compare import HARNESS_DIR, ComparisonError, RunOutput
+from rag_eval.profile_compare import baseline_from_report
+from rag_eval.report import build_report
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SPEC_PATH = REPO_ROOT / "eval" / "config" / "phase44-comparison.json"

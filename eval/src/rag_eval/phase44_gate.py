@@ -499,8 +499,10 @@ def render_markdown(result: Phase44Gates) -> str:
     lines = [
         f"# Phase {result.phase} gates",
         "",
-        f"Verdict: **{'PASS' if result.passed else 'FAIL'}** over {', '.join(result.selected)}. "
-        f"Noise band: max({result.noise_k:g} x spread, {result.noise_floor:g}).",
+        (
+            f"Verdict: **{'PASS' if result.passed else 'FAIL'}** over {', '.join(result.selected)}. "
+            f"Noise band: max({result.noise_k:g} x spread, {result.noise_floor:g})."
+        ),
         "",
         "| Gate | Decision | Verdict | Offenders |",
         "| --- | --- | --- | --- |",
