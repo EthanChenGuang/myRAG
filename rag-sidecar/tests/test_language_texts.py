@@ -100,7 +100,8 @@ def test_the_three_text_groups_exist_with_exactly_the_decided_keys():
         assert model is not None, f"{name} is missing"
         assert tuple(model.model_fields) == keys
     texts = registry_module.LanguagePack.model_fields["texts"].annotation
-    assert tuple(texts.model_fields) == ("notices", "labels", "instructions")
+    assert tuple(texts.model_fields) == ("notices", "labels", "instructions", "query_layer")
+    assert texts.model_fields["query_layer"].default is None
 
 
 def test_text_keys_and_placeholders_are_declared_once():

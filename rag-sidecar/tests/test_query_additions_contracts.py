@@ -493,3 +493,11 @@ def test_language_pack_query_layer_texts_are_optional():
     assert texts.model_validate({"scope_gate_notice": "Outside the documents."}).scope_gate_notice
     assert _rejects(texts, {"scope_gate_notice": ""})
     assert _rejects(texts, {"scope_gate_notice": "Outside {topic}."})
+
+
+def test_sub_question_date_range_round_trips_with_the_from_key():
+    sub_filter = _symbol("query", "SubQuestionFilter")
+    raw = {"date_range": {"from": "2025-01-01", "to": "2025-06-30"}, "scopes": None, "doc_types": None, "languages": None}
+    dumped = sub_filter.model_validate(raw).model_dump(mode="json")
+    assert dumped["date_range"] == {"from": "2025-01-01", "to": "2025-06-30"}
+    assert sub_filter.model_validate(dumped) == sub_filter.model_validate(raw)

@@ -150,10 +150,31 @@ class InstructionTexts(_TextGroup):
     calculation: str | None = _text()
 
 
+class QueryLayerTexts(_TextGroup):
+    """Phase 6.2 D-11, D-26: optional texts of the decomposed-answer block and the scope gate.
+
+    Not part of TEXT_KEYS or D-04 completeness: a pack without them stays complete and the feature that needs one
+    falls back to its switch-off behaviour.
+    """
+
+    _group: ClassVar[str] = "query_layer"
+
+    decomposed_answer_intro: str | None = _text()
+    decomposed_answer_parts: str | None = _text()
+    decomposed_answer_compare_order: str | None = _text()
+    decomposed_answer_cite_own: str | None = _text()
+    decomposed_answer_block_label: str | None = _text()
+    scope_gate_notice: str | None = _text()
+    scope_gate_prompt_rule: str | None = _text()
+
+
 class LanguageTexts(_Contract):
     notices: NoticeTexts
     labels: LabelTexts
     instructions: InstructionTexts
+    query_layer: QueryLayerTexts | None = Field(
+        default=None, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
+    )
 
 
 _TEXT_GROUPS: tuple[tuple[str, type[_TextGroup]], ...] = (
