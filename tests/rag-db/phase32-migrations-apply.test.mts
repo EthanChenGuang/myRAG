@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles, migrationFiles } from '../../eval/harness/migrations.mts';
+import { allowListEntryFor } from '../helpers/security-definer-allow-list';
 
 /**
  * Phase 3.2 migration block 0801-0810 (plan 03.2-65, D-48). Later live Phase 3.2 files (0812-0820) redefine a few block functions
@@ -298,7 +299,10 @@ for (const mode of MODES) {
           'search_path is empty',
         );
         assert.deepEqual(
-          fns.rows.filter((row) => row.public_exec || row.anon || row.authenticated).map((row) => row.signature),
+          // The allow-listed RLS helpers (0926, Phase 4.3) are the only client-callable functions from 0801 on.
+          fns.rows
+            .filter((row) => row.public_exec || ((row.anon || row.authenticated) && allowListEntryFor(row.signature) === undefined))
+            .map((row) => row.signature),
           [],
           'no execute for PUBLIC, anon or authenticated',
         );
