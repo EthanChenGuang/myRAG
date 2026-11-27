@@ -910,6 +910,39 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_security_uploader_in_tenant(text, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_security_uploader_in_tenant(text, uuid) TO service_role;
   END IF;
+  -- 0983 (Phase 6.2, 06.2-15): scope-gate invalidation helper and trigger functions, service_role only.
+  IF to_regprocedure('public.rag_scope_centroids_invalidate(text[], text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_invalidate(text[], text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_invalidate(text[], text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_centroids_on_documents_insert()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_documents_insert() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_documents_insert() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_centroids_on_documents_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_documents_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_documents_update() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_centroids_on_documents_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_documents_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_documents_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_centroids_on_chunks_insert()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_chunks_insert() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_chunks_insert() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_centroids_on_chunks_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_chunks_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_chunks_update() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_centroids_on_chunks_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_chunks_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_chunks_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_centroids_on_chunk_embeddings_change()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_chunk_embeddings_change() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_chunk_embeddings_change() TO service_role;
+  END IF;
 END
 $service_role_only$;
 
