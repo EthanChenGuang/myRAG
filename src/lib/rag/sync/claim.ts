@@ -36,26 +36,41 @@ async function call(rpc: RpcClient, fn: string, args: Record<string, unknown>): 
   return rpcRows(response.data);
 }
 
+/**
+ * The value of a scalar RPC answer: PostgREST sends the bare value, the PGlite edge one row keyed by the function name. Both read
+ * the same; anything else is undefined.
+ */
+export function scalarValue(rows: unknown[], fn: string): unknown {
+  const first = rows[0];
+  if (first !== null && typeof first === 'object' && !Array.isArray(first)) return (first as Record<string, unknown>)[fn];
+  return first;
+}
+
+/** A scalar count; a missing or non-numeric answer counts as 0. */
+export function scalarCount(rows: unknown[], fn: string): number {
+  const value = Number(scalarValue(rows, fn) ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
 export async function claimBatch(rpc: RpcClient, opts: { limit: number; leaseSeconds: number }): Promise<OutboxRow[]> {
   return (await call(rpc, 'rag_vector_sync_claim', { p_limit: opts.limit, p_lease_seconds: opts.leaseSeconds })) as OutboxRow[];
 }
 
 export async function completeRows(rpc: RpcClient, ids: Array<number | string>): Promise<number> {
   if (ids.length === 0) return 0;
-  const [count] = await call(rpc, 'rag_vector_sync_complete', { p_ids: ids });
-  return Number(count ?? 0);
+  return scalarCount(await call(rpc, 'rag_vector_sync_complete', { p_ids: ids }), 'rag_vector_sync_complete');
 }
 
 /** Codes only (D-04): the SQL side replaces anything that is not a code; the wrapper caps the length. Returns pending, dead or null. */
 export async function failRow(rpc: RpcClient, id: number | string, code: string): Promise<string | null> {
   const safe = (code || 'unknown').slice(0, MAX_ERROR_CODE);
-  const [state] = await call(rpc, 'rag_vector_sync_fail', { p_id: id, p_error: safe });
+  const state = scalarValue(await call(rpc, 'rag_vector_sync_fail', { p_id: id, p_error: safe }), 'rag_vector_sync_fail');
   return typeof state === 'string' ? state : null;
 }
 
 /** A-12: stores a paging cursor and hands the row back without counting the attempt. */
 export async function checkpointRow(rpc: RpcClient, id: number | string, cursor: string): Promise<boolean> {
-  const [found] = await call(rpc, 'rag_vector_sync_checkpoint', { p_id: id, p_cursor: cursor });
+  const found = scalarValue(await call(rpc, 'rag_vector_sync_checkpoint', { p_id: id, p_cursor: cursor }), 'rag_vector_sync_checkpoint');
   return found === true;
 }
 
