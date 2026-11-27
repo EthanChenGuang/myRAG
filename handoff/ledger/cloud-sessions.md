@@ -706,3 +706,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   Still held:
   - 06.3-14: needs 06.3-07 and 06.3-27, which arrive with train 40.
   - 07-37: blocked earlier by its own check; retry after train 40.
+- 22:11Z DONE and archived: quick-composer-comet (f33859bd; one 1px cool comet, pauses on focus, hidden under reduced-motion) and 06.2-39 (12d8a66e; query-additions compare tool). Both go to train 40/41.
