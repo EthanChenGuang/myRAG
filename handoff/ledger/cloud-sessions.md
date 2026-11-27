@@ -765,3 +765,16 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - (3) Consent given: comet as a standalone PR, then deploy a Medical preview from main. PR #136 (fix/composer-comet 5051b057, cherry-picked from main, front end only) is open and subscribed. Next: CI green -> merge -> deploy myrag-medical-eval from the main sha, preview only.
   - (2) The owner will top up DeepInfra.
   - (1) Recommendation given: the owner confirms the HF bge-m3 commit 5617a9f6 personally (~2 min).
+- 22:40Z 05.2.1-20 DONE exec/05.2.1-20 2ae169ac -> train 41. Follow-ups (route packingBudget and the framing estimate) -> quick-packing-budget-routes (...smiCBg). Archived.
+- 22:40Z VERIFY 4.1: human_needed (verify/04.1 94e4284d). Security SECURED.
+  - Decisions on the owner's behalf: accept not_flipped (D-29); keep the stricter G2 floor as a deviation; countersign the 3 accepted risks.
+  - Code gaps -> quick-41-gate-hardening (...skJQv6). G-03 is critical for Phase 7.
+  - Docs, the plan fixes and a new follow-up plan for ingest over-refusal -> plan-41-fixes (Fable, ...sifQRd).
+  - Archived.
+- 22:40Z VERIFY 5.1.1: PASS_WITH_GAPS (verify/05.1.1 ea26afd72).
+  - G1/G4 (the writers write NULL access_sets) are covered by 0984 in t38 and by review-writers (now 0988) in t40.
+  - G5 privacy, G6, G8, G9 and G3 -> quick-review-items-hardening (...si2xS2, from exec/quick-review-writers-access, mig >=0990).
+  - G7 -> added to quick-access-derived-stores.
+  - G2 live -> owner.
+  - Archived.
+- RULE: keep RAG_DOC_ACCESS_GROUPS off everywhere until the 4.3 and 5.1.1 fixes have merged and secure-phase reports SECURED.
