@@ -893,3 +893,91 @@ describe('Labels and mount', () => {
     expect(page.tab('uploaders').textContent).toBe('Autori');
   });
 });
+
+describe('index.html wiring (UI-SPEC 6.11, 6.13.1)', () => {
+  it('has the banner host directly after the language banner, above every tab', () => {
+    expect(indexHtml.match(/id="rag-security-alert-banner"/g)).toHaveLength(1);
+    const language = indexHtml.indexOf('<div id="rag-language-banner"></div>');
+    const banner = indexHtml.indexOf('<div id="rag-security-alert-banner"></div>');
+    expect(banner).toBeGreaterThan(language);
+    expect(indexHtml.slice(language, banner)).toMatch(/^<div id="rag-language-banner"><\/div>\s*$/);
+    expect(banner).toBeLessThan(indexHtml.indexOf('class="tab-content"'));
+  });
+
+  it('mounts the panel section after Upload approvals in RAG administration', () => {
+    const section = indexHtml.indexOf('<section id="rag-administration-security-events"');
+    expect(section).toBeGreaterThan(indexHtml.indexOf('<!-- rag-upload-approvals:end -->'));
+    expect(section).toBeLessThan(indexHtml.indexOf('<section id="rag-administration-scopes"'));
+    expect(section).toBeGreaterThan(indexHtml.indexOf('<div class="tab-content" id="rag-administration">'));
+    for (const hook of ['data-security-events-content', 'data-security-events-alert', 'data-security-events-status', 'id="rag-security-events-title"']) {
+      expect(SECURITY_EVENTS_SKELETON).toContain(hook);
+    }
+    expect(SECURITY_EVENTS_SKELETON).toMatch(/<h3 id="rag-security-events-title"[^>]*tabindex="-1"/);
+  });
+
+  it('loads the script once, after rag-ui.js and answer-rules.js', () => {
+    expect(indexHtml.match(/rag-panels\/security-events\.js/g)).toHaveLength(1);
+    const script = indexHtml.indexOf('<script src="rag-panels/security-events.js"></script>');
+    expect(script).toBeGreaterThan(indexHtml.indexOf('<script src="rag-panels/rag-ui.js"></script>'));
+    expect(script).toBe(indexHtml.indexOf('<script src="rag-panels/answer-rules.js"></script>') + '<script src="rag-panels/answer-rules.js"></script>\n    '.length);
+  });
+});
+
+describe('Prompt-injection defense card: pointer to Security events (UI-SPEC 6.14, 12.5)', () => {
+  function loadCard(locale: string, withPanel: boolean) {
+    const doc = new FakeDocument();
+    const opened: unknown[] = [];
+    if (withPanel) {
+      const section = doc.createElement('section');
+      section.id = 'rag-administration-security-events';
+      doc.body.appendChild(section);
+    }
+    const host = doc.createElement('div');
+    host.id = 'injection-defense-events-pointer';
+    doc.body.appendChild(host);
+    const summary = doc.createElement('div');
+    summary.id = 'injection-defense-summary';
+    doc.body.appendChild(summary);
+    const context: Json = {
+      document: doc,
+      console: { log() {}, error() {}, warn() {} },
+      navigator: { language: locale },
+      fetch: async () => ({ ok: false, status: 503, json: async () => ({}) }),
+      openSecurityEvents: async (options: unknown) => {
+        opened.push(options);
+      },
+    };
+    context.window = context;
+    context.globalThis = context;
+    vm.createContext(context);
+    new vm.Script(fs.readFileSync(path.join(configUiDir, 'rag-panels/injection-defense.js'), 'utf8')).runInContext(context);
+    return { doc, host, context, opened };
+  }
+
+  it('shows the pointer line with Open security events, which opens the Events view', async () => {
+    const { doc, host, opened } = loadCard('en-US', true);
+    doc.dispatch('DOMContentLoaded');
+    await flush();
+    expect(host.textContent).toBe('Detections are listed with their uploaders in RAG administration, Security events. Open security events');
+    const button = host.querySelector('[data-injection-open-events]')!;
+    expect(button.className).toContain('btn-link');
+    button.click();
+    expect(opened).toEqual([{ tab: 'events' }]);
+  });
+
+  it('is in the browser language and absent when the panel is not on the page', async () => {
+    const zh = loadCard('zh-CN', true);
+    zh.doc.dispatch('DOMContentLoaded');
+    expect(zh.host.textContent).toContain('检测结果及其上传者列在“RAG 管理”的“安全事件”中。');
+    const none = loadCard('en-US', false);
+    none.doc.dispatch('DOMContentLoaded');
+    expect(none.host.textContent).toBe('');
+  });
+
+  it('index.html places the pointer host under the detector summary', () => {
+    const summary = indexHtml.indexOf('id="injection-defense-summary"');
+    const pointer = indexHtml.indexOf('id="injection-defense-events-pointer"');
+    expect(pointer).toBeGreaterThan(summary);
+    expect(pointer).toBeLessThan(indexHtml.indexOf('<!-- Answer rules and output safety -->'));
+  });
+});
