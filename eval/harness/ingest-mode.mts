@@ -15,6 +15,7 @@ import {
 import { applyFixtureProcessEnv } from './process-env.mts';
 import { RunConfigError } from './run-config.mts';
 import { isTableSplitItem, loadTableSplitTenants, tableSplitCorpusParts, type TableSplitTenant } from './table-split.mts';
+import { isTemplatedItem, loadTemplatedFixtures, type TemplatedFixture } from './templated-fixtures.mts';
 import type { ChunkingProfile } from '../../src/lib/rag-eval/contracts.generated.ts';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { IngestInput } from '@/lib/rag/ingest/types';
@@ -142,8 +143,12 @@ export function ingestModeGoldenPaths(): string[] {
  * How ingest mode routes golden items by category: table_split items run against their isolated tenants (table-split.mts) after
  * every other item, so the other items run exactly as they did before the table documents existed (research Pitfall 10).
  */
-export function partitionIngestModeItems<T extends { category: string }>(items: T[]): { main: T[]; tableSplit: T[] } {
-  return { main: items.filter((item) => !isTableSplitItem(item)), tableSplit: items.filter((item) => isTableSplitItem(item)) };
+export function partitionIngestModeItems<T extends { category: string }>(items: T[]): { main: T[]; tableSplit: T[]; templated: T[] } {
+  return {
+    main: items.filter((item) => !isTableSplitItem(item)),
+    tableSplit: items.filter((item) => isTableSplitItem(item)),
+    templated: items.filter((item) => isTemplatedItem(item)),
+  };
 }
 
 /**
@@ -178,12 +183,14 @@ function ingestCorpusSha256(
   tableSplit = false,
   tableSplitDocType?: string,
   ingestEnv?: Record<string, string>,
+  templated: TemplatedFixture[] = [],
 ): string {
   const hash = crypto.createHash('sha256').update('fixture-mode:ingest').update(Buffer.from([0])).update(corpusSha256);
   for (const fixture of parseFixtures) hash.update(Buffer.from([0])).update(`parse:${fixture.filename}:${fixture.sha256}`);
   if (routing) hash.update(Buffer.from([0])).update(`routing:${routing.routing}:${routing.forceTier ?? 'none'}`);
   if (tableSplit) for (const part of tableSplitCorpusParts()) hash.update(Buffer.from([0])).update(part);
   if (tableSplit && tableSplitDocType) hash.update(Buffer.from([0])).update(`table_split_doc_type:${tableSplitDocType}`);
+  for (const fixture of templated) hash.update(Buffer.from([0])).update(`templated:${fixture.file_name}:${fixture.file_sha256}`);
   for (const name of Object.keys(ingestEnv ?? {}).sort()) hash.update(Buffer.from([0])).update(`ingest_env:${name}=${ingestEnv?.[name]}`);
   return hash.digest('hex');
 }
@@ -414,6 +421,13 @@ export async function buildIngestFixtureDatabase(options: {
   tableSplitDocType?: string;
   /** Ingestion switches layered over INGEST_MODE_FEATURE_ENV (eval checks only, for example RAG_TABLE_HEADER_REPEAT=always). */
   ingestEnv?: Record<string, string>;
+  /**
+   * After the typed and parse fixtures, ingest the templated collection (templated-fixtures.mts, plan 03.3-20) into the fixture tenant.
+   * Inline ingest() in one pass only; without it no templated document is loaded and the corpus hash is unchanged.
+   */
+  templated?: boolean;
+  /** With templated: only these templated fixture ids (a restricted build for tests). */
+  templatedFixtureIds?: string[];
 }): Promise<
   FixtureDatabase & { buildState: IngestFixtureBuildState; routingSummary?: IngestRoutingSummary; tableSplitTenants?: TableSplitTenant[] }
 > {
@@ -422,6 +436,11 @@ export async function buildIngestFixtureDatabase(options: {
   if (tableSplit && routing) throw new Error('[Ingest Mode] the table_split tenants are loaded by inline ingest(); drop them under --routing');
   if (tableSplit && (options.continueFrom || options.onAfterCorpusSlice || options.splitAtCorpusIndex !== undefined)) {
     throw new Error('[Ingest Mode] the table_split tenants are loaded only by a build in one pass');
+  }
+  const templated = options.templated === true;
+  if (templated && routing) throw new Error('[Ingest Mode] the templated collection is loaded by inline ingest(); drop its items under --routing');
+  if (templated && (options.continueFrom || options.onAfterCorpusSlice || options.splitAtCorpusIndex !== undefined)) {
+    throw new Error('[Ingest Mode] the templated collection is loaded only by a build in one pass');
   }
   if (routing && (options.continueFrom || options.onAfterCorpusSlice || options.splitAtCorpusIndex !== undefined)) {
     throw new Error('[Ingest Mode] --routing builds the whole database in one pass');
@@ -450,7 +469,19 @@ export async function buildIngestFixtureDatabase(options: {
   const parseFixtures = includeTyped
     ? allParseFixtures.filter((fixture) => !fixture.typedTwin && (parseWanted === null || parseWanted.has(fixture.id)))
     : [];
-  const corpusSha256 = ingestCorpusSha256(corpus.corpusSha256, includeTyped ? allParseFixtures : [], routing, tableSplit, options.tableSplitDocType, options.ingestEnv);
+  const templatedWanted = options.templatedFixtureIds ? new Set(options.templatedFixtureIds) : null;
+  const templatedFixtures = templated
+    ? loadTemplatedFixtures().fixtures.filter((fixture) => templatedWanted === null || templatedWanted.has(fixture.id))
+    : [];
+  const corpusSha256 = ingestCorpusSha256(
+    corpus.corpusSha256,
+    includeTyped ? allParseFixtures : [],
+    routing,
+    tableSplit,
+    options.tableSplitDocType,
+    options.ingestEnv,
+    templatedFixtures,
+  );
   const parseById = new Map(allParseFixtures.map((fixture) => [fixture.id, fixture]));
 
   const createIngestDatabase = async (): Promise<EmptyFixtureDatabase> => {
@@ -571,6 +602,24 @@ export async function buildIngestFixtureDatabase(options: {
         },
       }));
 
+    const templatedWork = (): IngestWork[] =>
+      templatedFixtures.map((fixture) => ({
+        label: `templated fixture ${fixture.id}`,
+        expected: 'ready',
+        recordedSha: fixture.file_sha256,
+        pageCount: fixture.templated.page_count,
+        input: {
+          scope: tenant,
+          source: 'config_upload',
+          sourceKey: buildSourceKey('config_upload', { filename: fixture.file_name }),
+          file: new Uint8Array(fs.readFileSync(fixture.path)),
+          filename: fixture.file_name,
+          mimeType: 'application/pdf',
+          docType: fixture.doc_type as import('@/lib/rag/ingest/profiles/load').DocType,
+          signal: new AbortController().signal,
+        },
+      }));
+
     let run: (item: IngestWork) => Promise<string | null> = async (item) => {
       const result = await ingest(item.input);
       if (result.status !== item.expected) {
@@ -628,6 +677,7 @@ export async function buildIngestFixtureDatabase(options: {
       for (const item of typedWork()) await run(item);
       for (const item of parseWork()) await run(item);
     }
+    for (const item of templated ? templatedWork() : []) await run(item);
     routingSummary = queuedSummary?.();
     if (routing?.ledgerOut && routingSummary) {
       fs.mkdirSync(path.dirname(routing.ledgerOut), { recursive: true });

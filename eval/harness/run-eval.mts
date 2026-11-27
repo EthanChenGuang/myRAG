@@ -14,6 +14,7 @@ import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
 import { ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.mts';
 import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTableSplitTenant, type TableSplitTenant } from './table-split.mts';
+import { isTemplatedItem } from './templated-fixtures.mts';
 import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
@@ -369,6 +370,8 @@ export async function prepareInProcessEval(options: {
   chunkingProfiles?: import('../../src/lib/rag-eval/contracts.generated.ts').ChunkingProfile[];
   /** Ingest mode: also load the isolated table_split tenants (table-split.mts). */
   tableSplit?: boolean;
+  /** Ingest mode: also ingest the templated collection into the fixture tenant (templated-fixtures.mts). */
+  templated?: boolean;
   /** Ingest mode: the doc type the table_split documents are loaded with (RunEvalOptions.tableSplitDocType). */
   tableSplitDocType?: string;
   /** Ingest mode: ingestion switches for the fixture build, also recorded in the retrieval env (RunEvalOptions.ingestBuildEnv). */
@@ -398,6 +401,10 @@ export async function prepareInProcessEval(options: {
   if (tableSplit && (fixtureMode !== 'ingest' || ingestRouting)) {
     throw new Error('[Eval Harness] table_split items run only in the inline ingest fixture mode');
   }
+  const templated = options.templated === true;
+  if (templated && (fixtureMode !== 'ingest' || ingestRouting)) {
+    throw new Error('[Eval Harness] templated_collection items run only in the inline ingest fixture mode');
+  }
   const existingSecret = process.env.RAG_EVAL_SECRET ?? '';
   const secret = existingSecret.length >= 32 ? existingSecret : crypto.randomBytes(24).toString('hex');
   const evalEnv = {
@@ -423,6 +430,7 @@ export async function prepareInProcessEval(options: {
       ...(ingestRouting ? { ingestRouting } : {}),
       ...(tableSplit ? { tableSplit: true } : {}),
       ...(tableSplit && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
+      ...(templated ? { templated: true } : {}),
       ...(options.ingestBuildEnv ? { ingestEnv: options.ingestBuildEnv } : {}),
       ...(terminologySeed.length ? { terminologySeed } : {}),
     }));
@@ -704,7 +712,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const allItems = readGolden(goldenPath);
   // table_split items need the isolated tenants of the inline ingest fixture mode; every other run leaves them out.
   const tableSplitRunnable = !baseUrl && fixtureMode === 'ingest' && !ingestRouting;
-  const items = selectGolden(allItems, goldenFilter).filter((item) => tableSplitRunnable || !isTableSplitItem(item));
+  // templated_collection items need the collection, which only the inline ingest fixture mode loads.
+  const items = selectGolden(allItems, goldenFilter).filter(
+    (item) => tableSplitRunnable || (!isTableSplitItem(item) && !isTemplatedItem(item)),
+  );
   const routed = partitionIngestModeItems(items);
   if (items.length === 0) {
     throw new Error(`[Eval Harness] no golden items with review_status in [${goldenFilter.review_statuses.join(', ')}] in ${goldenPath}`);
@@ -764,6 +775,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           ...(ingestRouting ? { ingestRouting } : {}),
           ...(routed.tableSplit.length > 0 ? { tableSplit: true } : {}),
           ...(routed.tableSplit.length > 0 && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
+          ...(routed.templated.length > 0 ? { templated: true } : {}),
           ...(options.ingestBuildEnv ? { ingestBuildEnv: options.ingestBuildEnv } : {}),
           ...((runConfig && Object.keys(runConfig.env).length > 0) || envOverlay
             ? { envOverrides: { ...(runConfig?.env ?? {}), ...(envOverlay ?? {}) } }

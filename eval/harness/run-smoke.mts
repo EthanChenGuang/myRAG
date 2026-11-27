@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { ingestModeGoldenPaths, mergeGoldenFiles, parseIngestRoutingFlags } from './ingest-mode.mts';
 import { dropTableSplitItems } from './table-split.mts';
+import { dropTemplatedItems } from './templated-fixtures.mts';
 import { runEval, type EvalRequestOptions } from './run-eval.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, loadRunConfig, RunConfigError } from './run-config.mts';
 import { loadEnvOverlay, OverlayError, writeOverlayReport, type EnvOverlay } from './env-overlay.mts';
@@ -257,8 +258,14 @@ async function main(): Promise<number> {
   const goldenFiles = values.golden !== undefined ? [path.resolve(values.golden)] : defaultGolden.map((file) => path.resolve(REPO_ROOT, file));
   const mergedGolden = mergeGoldenFiles(goldenFiles, path.join(outDir, 'golden.merged.jsonl'));
   // table_split items run only against the isolated tenants of the inline ingest mode; other runs score without them.
+  // templated_collection items likewise run only in the inline ingest mode, which loads the templated collection for them.
   const goldenPath =
-    fixtureMode === 'ingest' && !ingestRouting ? mergedGolden : dropTableSplitItems(mergedGolden, path.join(outDir, 'golden.no-table-split.jsonl'));
+    fixtureMode === 'ingest' && !ingestRouting
+      ? mergedGolden
+      : dropTemplatedItems(
+          dropTableSplitItems(mergedGolden, path.join(outDir, 'golden.no-table-split.jsonl')),
+          path.join(outDir, 'golden.no-templated.jsonl'),
+        );
   if (runPython('rag_sidecar.contracts.validate', ['--model', 'GoldenItem', '--jsonl', goldenPath]) !== 0) {
     console.error('[Eval Harness] golden file failed Pydantic validation; nothing was run');
     return 2;
