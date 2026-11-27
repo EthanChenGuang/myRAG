@@ -757,6 +757,15 @@ export {
 export type { SetVectorSyncTargetResult, VectorStoreFactories, VectorSyncTargetFlag, VectorSyncTargetStatus } from './sync/targets';
 export { resolveVectorSyncAdminRpc } from './sync/admin-rpc';
 export { computeIndexCompat, envLoadedAt, INDEX_COMPAT_STORE_TIMEOUT_MS, readIndexCompat } from './backend/index-compat';
+export {
+  isProviderId,
+  PROVIDER_IDS,
+  PROVIDER_PROBE_CODES,
+  PROVIDER_PROBE_MESSAGES,
+  PROVIDER_PROBE_TIMEOUT_MS,
+  runProviderProbe,
+} from './admin/provider-probes';
+export type { ProviderId, ProviderProbeCode, ProviderProbeDeps, ProviderProbeResult, RunProviderProbeOptions } from './admin/provider-probes';
 export type {
   IndexCompatBackend,
   IndexCompatCode,
