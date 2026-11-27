@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AnswerRecordRow } from './store';
 
-export type DocumentAvailability = 'current' | 'unavailable';
+export type DocumentAvailability = 'current' | 'unavailable' | 'withdrawn';
 
 /** A record still pending this long after creation is reported as not_checked/expired (D-15). */
 export const ANSWER_PENDING_EXPIRY_MS = 120_000;
@@ -35,6 +35,17 @@ export function citedDocumentIds(row: Pick<AnswerRecordRow, 'citations'>): strin
   return [...ids];
 }
 
+/** The document ids that one of the record's citation snapshots marks withdrawn (D-36): the server record decides. */
+export function withdrawnDocumentIds(row: Pick<AnswerRecordRow, 'citations'>): Set<string> {
+  const ids = new Set<string>();
+  if (!Array.isArray(row.citations)) return ids;
+  for (const citation of row.citations) {
+    const value = objectOr(citation);
+    if (value?.withdrawn === true && typeof value.documentId === 'string' && value.documentId.length > 0) ids.add(value.documentId);
+  }
+  return ids;
+}
+
 function groundednessAt(stored: unknown, createdAtMs: number, now: Date): Record<string, unknown> {
   const value = objectOr(stored);
   const status = value?.status ?? 'pending';
@@ -56,6 +67,9 @@ export function toAnswerRecord(
 ): Record<string, unknown> {
   const createdAt = isoOf(row.created_at);
   const cited = citedDocumentIds(row);
+  const withdrawn = withdrawnDocumentIds(row);
+  const availability = (id: string): DocumentAvailability =>
+    withdrawn.has(id) ? 'withdrawn' : documents[id] === 'current' ? 'current' : 'unavailable';
   return {
     answerId: row.id,
     chatId: row.chat_id,
@@ -68,7 +82,7 @@ export function toAnswerRecord(
     citations: Array.isArray(row.citations) ? row.citations : [],
     groundedness: groundednessAt(row.groundedness, createdAt ? Date.parse(createdAt) : Number.NaN, now),
     feedback: row.feedback ?? null,
-    documents: Object.fromEntries(cited.map((id) => [id, documents[id] === 'current' ? 'current' : 'unavailable'])),
+    documents: Object.fromEntries(cited.map((id) => [id, availability(id)])),
     feedbackEnabled: options.feedbackEnabled,
     createdAt,
     updatedAt: isoOf(row.updated_at),
