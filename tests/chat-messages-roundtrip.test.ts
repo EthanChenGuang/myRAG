@@ -379,7 +379,7 @@ describe('Phase 5.2 answer metadata persistence (D-11, D-23)', () => {
 });
 
 describe('standalone-query metadata (D-22, P-12)', () => {
-  const RAG = { standaloneQuery: 'Which option controls the import format?', queryLanguage: 'en' };
+  const RAG = { standaloneQuery: 'Which option controls the import format?', queryLanguage: 'en' as const };
   const user = (id: string, content: string, metadata?: Record<string, unknown>): ExtendedMessage => ({
     id,
     role: 'user',

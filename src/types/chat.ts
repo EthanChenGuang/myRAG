@@ -8,7 +8,14 @@ import {
   isDataUIPart,
   isToolUIPart,
 } from 'ai';
-import { pickAnswerMetadata, pickRefusalMetadata, type AnswerMessageMetadata, type RefusalMessageMetadata } from '@/lib/chat/answer-metadata';
+import {
+  pickAnswerMetadata,
+  pickRagTurnMetadata,
+  pickRefusalMetadata,
+  type AnswerMessageMetadata,
+  type RagTurnMetadata,
+  type RefusalMessageMetadata,
+} from '@/lib/chat/answer-metadata';
 import type { SourceProvenance } from '@/components/providers/sources-provider';
 
 type AppDataTypes = {
@@ -167,6 +174,8 @@ export interface APIMessage {
   content: string | ContentPart[];
   name?: string;
   attachments?: Attachment[];
+  /** Phase 6.2 D-22: user messages only; the server validates it and reads it as history text. */
+  metadata?: { rag?: RagTurnMetadata };
 }
 
 export interface DBMessage {
@@ -176,7 +185,7 @@ export interface DBMessage {
   name?: string;
   createdAt?: Date;
   attachments?: Attachment[];
-  metadata?: { ragTraceId?: string } & AnswerMessageMetadata & RefusalMessageMetadata;
+  metadata?: { ragTraceId?: string; rag?: RagTurnMetadata } & AnswerMessageMetadata & RefusalMessageMetadata;
 }
 
 interface AppMessageMetadata {
@@ -188,6 +197,7 @@ interface AppMessageMetadata {
 }
 
 export function toAPIMessage(message: ExtendedMessage): APIMessage {
+  const rag = message.role === 'user' ? pickRagTurnMetadata(message.metadata?.rag) : undefined;
   return {
     role: message.role,
     content: message.content,
@@ -195,7 +205,30 @@ export function toAPIMessage(message: ExtendedMessage): APIMessage {
     ...(message.attachments && message.attachments.length > 0
       ? { attachments: message.attachments }
       : {}),
+    ...(rag ? { metadata: { rag } } : {}),
   };
+}
+
+/** D-22, P-12: the turn's rag for the user message at `index`: its answer's streamed value, else the value stored on it. */
+function turnRagAt(messages: ReadonlyArray<{ role: string; metadata?: Record<string, unknown> }>, index: number): RagTurnMetadata | undefined {
+  let answered: RagTurnMetadata | undefined;
+  for (let j = index + 1; j < messages.length && messages[j].role !== 'user'; j += 1) {
+    if (messages[j].role !== 'assistant') continue;
+    answered = pickRagTurnMetadata(messages[j].metadata?.rag) ?? answered;
+  }
+  return answered ?? pickRagTurnMetadata(messages[index].metadata?.rag);
+}
+
+/** D-22: request messages with `metadata.rag` on each user message whose turn has one; every other message is passed through as built. */
+export function withStandaloneQueryMetadata<T extends object>(
+  source: ReadonlyArray<{ role: string; metadata?: Record<string, unknown> }>,
+  built: T[],
+): Array<T & { metadata?: { rag: RagTurnMetadata } }> {
+  return built.map((message, index) => {
+    if (source[index]?.role !== 'user') return message;
+    const rag = turnRagAt(source, index);
+    return rag ? { ...message, metadata: { rag } } : message;
+  });
 }
 
 export function toMessage(message: ExtendedMessage): UIMessage<AppMessageMetadata, AppDataTypes> {
@@ -218,14 +251,28 @@ function ragTraceIdOf(metadata: Record<string, unknown> | undefined): string | u
 
 function persistedMetadataOf(metadata: Record<string, unknown> | undefined): DBMessage['metadata'] | undefined {
   const ragTraceId = ragTraceIdOf(metadata);
+  const rag = pickRagTurnMetadata(metadata?.rag);
   const answer = { ...pickAnswerMetadata(metadata), ...pickRefusalMetadata(metadata) };
-  if (!ragTraceId && Object.keys(answer).length === 0) return undefined;
-  return { ...(ragTraceId ? { ragTraceId } : {}), ...answer };
+  if (!ragTraceId && !rag && Object.keys(answer).length === 0) return undefined;
+  return { ...(ragTraceId ? { ragTraceId } : {}), ...(rag ? { rag } : {}), ...answer };
+}
+
+/** D-22: the stored rag lives on the user message of its turn, so it moves off the assistant message. */
+function turnPersistedMetadata(messages: ExtendedMessage[], index: number): DBMessage['metadata'] | undefined {
+  const metadata = persistedMetadataOf(messages[index].metadata);
+  const role = messages[index].role;
+  if (role === 'user') {
+    const rag = turnRagAt(messages, index);
+    return rag ? { ...(metadata ?? {}), rag } : metadata;
+  }
+  if (role !== 'assistant' || !metadata?.rag) return metadata;
+  const { rag: _moved, ...rest } = metadata;
+  return Object.keys(rest).length > 0 ? rest : undefined;
 }
 
 export function toDBMessages(messages: ExtendedMessage[]): DBMessage[] {
-  return messages.map((msg) => {
-    const metadata = persistedMetadataOf(msg.metadata);
+  return messages.map((msg, index) => {
+    const metadata = turnPersistedMetadata(messages, index);
     return {
       id: msg.id,
       role: msg.role === 'system' ? 'data' : (msg.role as 'user' | 'assistant' | 'data'),
