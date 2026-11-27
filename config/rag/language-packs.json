@@ -100,6 +100,13 @@
           "version": "当不同来源对同一事项给出不同的数值时，采用生效日期最新的来源；没有日期时采用版本最高的来源，并在回答中写明它的版本。不要把两个数值作为可选项并列。只有当问题询问过去的情况或变化时，才提及旧版本。",
           "concise": "先给出答案，再只补充问题所需的支撑细节。保留所有引用。",
           "calculation": "当回答需要计算时，不要心算。从问题和所引用的段落中取出操作数和规则，传给 calculate 工具，并在总计之前列出每一项的计算步骤。事实工具返回的数值优先于文档中的数值。"
+        },
+        "query_layer": {
+          "decomposed_answer_block_label": "回答结构",
+          "decomposed_answer_intro": "这个问题包含几个部分，列在下面。",
+          "decomposed_answer_parts": "按列出的顺序分别回答每个部分，每个部分单独成段，并在段首写出该部分的编号。如果某个部分后面带有引号中的短语，说明上下文中没有支持该部分的内容：在该部分只写出这个短语。",
+          "decomposed_answer_cite_own": "每个部分后面的方括号列出了属于该部分的块。每一段只引用为该部分列出的块。",
+          "decomposed_answer_compare_order": "在每个被比较的时期或对象各自成段之后，先加一段说明它们之间的差异，再加一段说明这些差异对问题中提到的范围的影响。"
         }
       },
       "groundedness": "hhem_2_3",
@@ -294,6 +301,13 @@
           "version": "When sources give different values for the same thing, use the source with the latest effective date, or the highest version when dates are missing, and name its version in the answer. Do not present the two values as alternatives. Mention an older version only when the question asks about the past or about changes.",
           "concise": "Give the answer first, then only the supporting detail the question needs. Keep every citation.",
           "calculation": "When the answer needs a calculation, do not compute it mentally. Take the operands and the rule from the question and the cited passages, pass them to the calculate tool, and list each item’s step before the total. A value returned by a fact tool takes precedence over a value from the documents."
+        },
+        "query_layer": {
+          "decomposed_answer_block_label": "Answer structure",
+          "decomposed_answer_intro": "The question has several parts, listed below.",
+          "decomposed_answer_parts": "Answer each part in its own section, in the order listed, and start each section with the number of its part. A part followed by a quoted phrase has no supporting context: in its section, write only that phrase.",
+          "decomposed_answer_cite_own": "The brackets after each part list the blocks that belong to it. In each section, cite only the blocks listed for that part.",
+          "decomposed_answer_compare_order": "After the sections for each compared period or item, add one section on the differences between them, then one on what those differences mean for the scope named in the question."
         }
       },
       "groundedness": "hhem_2_1_open",
@@ -494,6 +508,13 @@
           "version": "Quando le fonti danno valori diversi per la stessa cosa, usa la fonte con la data di entrata in vigore più recente, o la versione più alta se mancano le date, e indica la sua versione nella risposta. Non presentare i due valori come alternative. Cita una versione precedente solo quando la domanda riguarda il passato o le modifiche.",
           "concise": "Dai prima la risposta, poi solo i dettagli di supporto che servono alla domanda. Mantieni tutte le citazioni.",
           "calculation": "Quando la risposta richiede un calcolo, non farlo a mente. Prendi gli operandi e la regola dalla domanda e dai passaggi citati, passali allo strumento calculate ed elenca il passaggio di ogni voce prima del totale. Un valore restituito da uno strumento di fatti prevale su un valore dei documenti."
+        },
+        "query_layer": {
+          "decomposed_answer_block_label": "Struttura della risposta",
+          "decomposed_answer_intro": "La domanda ha più parti, elencate qui sotto.",
+          "decomposed_answer_parts": "Rispondi a ogni parte in una sezione separata, nell'ordine indicato, e inizia ogni sezione con il numero della sua parte. Se una parte è seguita da una frase tra virgolette, il contesto non la copre: nella sua sezione scrivi solo quella frase.",
+          "decomposed_answer_cite_own": "Le parentesi quadre dopo ogni parte elencano i blocchi che le appartengono. In ogni sezione cita solo i blocchi elencati per quella parte.",
+          "decomposed_answer_compare_order": "Dopo le sezioni per ciascun periodo o elemento confrontato, aggiungi una sezione sulle differenze tra loro e poi una su cosa significano queste differenze per l'ambito indicato nella domanda."
         }
       },
       "groundedness": "none",
