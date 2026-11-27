@@ -104,7 +104,7 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
     throw error;
   }
   if (result.sectionOutline) ctx.state.sectionOutline = { outlineId: result.sectionOutline.outline_id, version: result.sectionOutline.version };
-  else delete ctx.state.sectionOutline;
+  else if (ctx.state) delete ctx.state.sectionOutline;
 
   const { chunks: drafts, warnings } = result;
   for (const warning of warnings) {
