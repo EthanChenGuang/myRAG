@@ -37,6 +37,10 @@ TERM_ITEMS_PER_LANGUAGE_04_1_1_10 = COLLOQUIAL_TERM_PER_LANGUAGE_04_1_1_10 + NO_
 # Plan 05.2-29: four partial_answer, stale_version and off_topic_context items and four link-injection
 # injection_evasive items per language; test_golden_phase52.py checks them.
 PHASE52_PER_LANGUAGE_05_2_29 = 16
+# Plan 05.2.1-12: fifteen multi_step_calc and four context_overflow items per language (test_fixture_calc_overflow.py).
+MULTI_STEP_CALC_PER_LANGUAGE_05_2_1_12 = 15
+CONTEXT_OVERFLOW_PER_LANGUAGE_05_2_1_12 = 4
+PHASE521_PER_LANGUAGE_05_2_1_12 = MULTI_STEP_CALC_PER_LANGUAGE_05_2_1_12 + CONTEXT_OVERFLOW_PER_LANGUAGE_05_2_1_12
 TERM_ITEM_ID = re.compile(r"^[a-z]+-(colloquial|no_answer)-term-\d{3}$")
 PHASE6_RELATIVE_TIME_TAG = "phase6_relative_time"
 # Plan 04.2-37 (tag phase42): per language three duplicate_flood, four identifier_near_miss, two no_answer (asked
@@ -52,6 +56,8 @@ IMPLICIT_CONDITION_PER_LANGUAGE_05_3_15 = 4
 NO_ANSWER_ADDED_BY_PLAN_05_3_15 = {"zh": 4, "en": 5, "it": 4}
 # Plan 05.3-15 documents per language: access-rules and instrument-catalog.
 PHASE53_DOCUMENTS_05_3_15 = 2
+# Plan 05.2.1-12 documents per language: calc-rules and long-reference; test_fixture_calc_overflow.py checks them.
+PHASE521_DOCUMENTS_05_2_1_12 = 2
 PER_LANGUAGE_CATEGORY = {
     "general": 7,
     "multi_turn": 9,
@@ -74,6 +80,8 @@ PER_LANGUAGE_CATEGORY = {
     "stale_version": 4,
     "off_topic_context": 4,
     "implicit_condition": IMPLICIT_CONDITION_PER_LANGUAGE_05_3_15,
+    "multi_step_calc": MULTI_STEP_CALC_PER_LANGUAGE_05_2_1_12,
+    "context_overflow": CONTEXT_OVERFLOW_PER_LANGUAGE_05_2_1_12,
 }
 PER_LANGUAGE_CATEGORY_OVERRIDES = {
     ("en", "cross_lingual"): 13,
@@ -99,15 +107,19 @@ def test_corpus_has_nineteen_documents_per_language():
     """Thirteen documents plus the sec-topics and sec-attacks pair per language from plan 05.1-09, one
     synthetic-terms document per language from plan 04.1.1-10, the four Phase 5.2 documents per language
     (p52-answers, p52-rules-v1, p52-rules-v2, sec-links) from plan 05.2-28, whose sec-links topic sections plan 05.2-29
-    moved into sec-link-topics, the Phase 4.2 documents of plan 04.2-37, and the access-rules and instrument-catalog
-    pair per language from plan 05.3-15."""
+    moved into sec-link-topics, the Phase 4.2 documents of plan 04.2-37, the access-rules and instrument-catalog
+    pair per language from plan 05.3-15, and the calc-rules and long-reference pair per language from plan 05.2.1-12."""
     documents = load_corpus(CORPUS_DIR)
     counts = collections.Counter(doc.language for doc in documents)
     assert len(documents) == (
-        19 + len(LANGUAGES) + 5 * len(LANGUAGES) + sum(PHASE42_DOCUMENTS_04_2_37.values()) + PHASE53_DOCUMENTS_05_3_15 * len(LANGUAGES)
+        19
+        + len(LANGUAGES)
+        + 5 * len(LANGUAGES)
+        + sum(PHASE42_DOCUMENTS_04_2_37.values())
+        + (PHASE53_DOCUMENTS_05_3_15 + PHASE521_DOCUMENTS_05_2_1_12) * len(LANGUAGES)
     )
     assert (counts["zh"], counts["en"], counts["it"]) == tuple(
-        base + PHASE42_DOCUMENTS_04_2_37[language] + PHASE53_DOCUMENTS_05_3_15
+        base + PHASE42_DOCUMENTS_04_2_37[language] + PHASE53_DOCUMENTS_05_3_15 + PHASE521_DOCUMENTS_05_2_1_12
         for language, base in (("zh", 12), ("en", 13), ("it", 12))
     )
 
@@ -126,6 +138,7 @@ def test_single_language_items_forty_per_language(items):
         + CACHE_PAIRS_PER_LANGUAGE_06_39
         + TERM_ITEMS_PER_LANGUAGE_04_1_1_10
         + PHASE52_PER_LANGUAGE_05_2_29
+        + PHASE521_PER_LANGUAGE_05_2_1_12
     )
     phase42 = sum(PHASE42_PER_LANGUAGE_04_2_37.values())
     phase53 = IMPLICIT_CONDITION_PER_LANGUAGE_05_3_15 * len(LANGUAGES) + sum(NO_ANSWER_ADDED_BY_PLAN_05_3_15.values())
@@ -149,6 +162,7 @@ def test_twenty_six_cross_lingual_items_at_least_four_per_pair(items):
         + CACHE_PAIRS_PER_LANGUAGE_06_39
         + TERM_ITEMS_PER_LANGUAGE_04_1_1_10
         + PHASE52_PER_LANGUAGE_05_2_29
+        + PHASE521_PER_LANGUAGE_05_2_1_12
     )
     phase42 = sum(PHASE42_PER_LANGUAGE_04_2_37.values())
     phase53 = IMPLICIT_CONDITION_PER_LANGUAGE_05_3_15 * len(LANGUAGES) + sum(NO_ANSWER_ADDED_BY_PLAN_05_3_15.values())

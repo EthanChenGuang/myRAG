@@ -81,8 +81,9 @@ describe('fixture corpus loaders', () => {
     expect(dump.status, dump.stderr).toBe(0);
     const python = JSON.parse(dump.stdout) as DumpDocument[];
 
-    // 37 documents plus the 109 Phase 4.2 documents of plan 04.2-37 (90 of them generated from three templates) and the six 05.3-15 documents.
-    expect(loaded.documents).toHaveLength(37 + 109 + 6);
+    // 37 documents plus the 109 Phase 4.2 documents of plan 04.2-37 (90 of them generated from three templates), the six 05.3-15
+    // documents and the six 05.2.1-12 documents.
+    expect(loaded.documents).toHaveLength(37 + 109 + 6 + 6);
     const fromTs = loaded.documents.map((doc) => ({
       relpath: doc.relpath,
       filename: doc.filename,

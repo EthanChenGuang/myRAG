@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "set_id": "fixture-ingest",
-  "version": 6,
+  "version": 7,
   "items": [
     {
       "id": "en-ambiguous-001",
@@ -209,6 +209,42 @@
       "stale_since": null,
       "retire_reason": null,
       "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "en-context-overflow-001",
+      "item_sha256": "0487324653b182b15ae81ebbdac7c8fbe989b2db00530ce47a342ad6647ffb77",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-context-overflow-002",
+      "item_sha256": "93c862d997396e8113588a25f71010c7b530df015e5e5f63c287b5779625d561",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-context-overflow-003",
+      "item_sha256": "ac9681e2e4a3a3756733339325e2bd97c54c93a89e725e03ccbc4806ad321b85",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-context-overflow-004",
+      "item_sha256": "4a7f38ba60a6689b81163b6658a2efe6fb4900a11939093e2add547760392614",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
     },
     {
       "id": "en-duplicate-flood-001",
@@ -483,6 +519,141 @@
     {
       "id": "en-injection-evasive-006",
       "item_sha256": "336fc685152fe11c87e9b2f2d28fde4efeca2f7eaea63407f29f83f09582d48c",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-001",
+      "item_sha256": "8a7533358e2cc192a19509d1bb57c62ba1635856233893dc5e3f39c1760673a7",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-002",
+      "item_sha256": "a71bb23ee0378e41aa8ddde1508990d64d5a0312318ed946fbeea96cd4fc1bed",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-003",
+      "item_sha256": "d52df84dbdbe2a52d3309451840f7e80f12787d520474a2f2282441c6d395e72",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-004",
+      "item_sha256": "85ca2216e1acbc0b7fa99f91592e8c7887f364290509d561061e79a25d4e77d2",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-005",
+      "item_sha256": "fee9ec16371f147492390d3f3e37d578b3e1eee2654c9545902346131ffe5515",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-006",
+      "item_sha256": "0e144bf978688708bc3e5c6e02412e944ab9e81b3a504670873a4285033f7d61",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-007",
+      "item_sha256": "2484bc6c0bbdf4783caa5e68b1868e48a4a4bcb8b7688a4c289da06e09c6ac31",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-008",
+      "item_sha256": "f028631e2e5a89a0e55f06aa6dd7d92a26f0d0b2fd7f06f2e6ba4a165b13fedd",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-009",
+      "item_sha256": "b8954229103d51b8f09b2b06f8dbcddf136a238d2d52344db015847a2a4aef17",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-010",
+      "item_sha256": "670c5381f949ae08c6125ac7f7d8ddd82f8500d86a2ca533e88ef5d5f4d2a047",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-011",
+      "item_sha256": "229f923a2842d278d2c083ce4cf685477715db56ca446640e21946c8530752d4",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-012",
+      "item_sha256": "f679f4034de29af00b9123594744e7d0f3114d47d02bb4a07e3f7580333e42da",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-013",
+      "item_sha256": "3ac01add8393432bac72272d672cb9fa8c185f30569245de9cd87a7ec849874d",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-014",
+      "item_sha256": "461059098e07befc82c53277835e65d5647ca16d6e3c1a3bfeb412c6e7eaddca",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-multi-step-calc-015",
+      "item_sha256": "4636d72ac55a6e9fccab98784c828705ccc086eeb35f89718b96a2bf5fe977c4",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -2200,6 +2371,42 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "it-context-overflow-001",
+      "item_sha256": "1139d44f92bf89bcb33ff2a3bafc019a2238e63a50f46d63905fd1a1b9ae2e4f",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-context-overflow-002",
+      "item_sha256": "ed3b00faf659df705766ab200acbf71486de08b371d9d113f132489e960928e4",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-context-overflow-003",
+      "item_sha256": "d7bafb38fa65a1ac4e8bff547c5edaeb91116a64b1962395bf1beecbef4cce52",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-context-overflow-004",
+      "item_sha256": "c856c8f153c2b3bc5ddf97a87f3ca4de5b3b1cf6d84ccebeaf46b969167dcbdc",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "it-duplicate-flood-001",
       "item_sha256": "2a9dbef588cb44bed6feb270ef253e6e74d90e142f99633f3caf118f85de3557",
       "status": "active",
@@ -2499,6 +2706,141 @@
     {
       "id": "it-injection-evasive-006",
       "item_sha256": "b63046caa63c2aa08ac82b79b0f7023fe413195a12f60483c4b9466027669ad4",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-001",
+      "item_sha256": "95127bb7943778f589f0488fa4c8432d39cb8941a9776163470aae3587534532",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-002",
+      "item_sha256": "49888b68640b1fc7e3c26dd2db3337ea6555c1e25a518d7f291aa61f434667bc",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-003",
+      "item_sha256": "c44456deca4eff85a67572b3ed34056765b4854c72082a092b1c6e2350242522",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-004",
+      "item_sha256": "b98b118066c78c09ef9fe84c529b75be5fa5d89789c51f3ff2b6a6caef401c7d",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-005",
+      "item_sha256": "0741d604bc6fddfd5f9e54baf01667692300591a5b26ccfeeace2a09a290072f",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-006",
+      "item_sha256": "9a3b0e75ff5be39c5cde5a58cdbd06a64ac4a9763ab4dc5c8d864bf506936bd5",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-007",
+      "item_sha256": "9deefd03c2d2b9ee454cfee6c22911cee2c521e159d65f0d62a5f63d38ccf2a5",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-008",
+      "item_sha256": "1d7bcfd12d456dfb04fabf48b0a928938379873eea4ce8e8692e5be55e49a517",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-009",
+      "item_sha256": "d7dfddfef452417c8f21515a3c84ced2a7501ea12e1c7ea5e0f8513ef1242be4",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-010",
+      "item_sha256": "0eccf5b9e76fb1587705ecba53eef2865b9ada3db858211ec09f60e013d362dd",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-011",
+      "item_sha256": "bbb2aeaae43527a0b535dcc646aa49e8eb75e2c7e973269b8d1fdba06f64e4fc",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-012",
+      "item_sha256": "12fd4a6ed40efb4e5b95207f9e0ad19fa4c59248536c3c0f835eb04fe462b45b",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-013",
+      "item_sha256": "9129f0bf51a8e7937e42a0e38cca8f3a0bcfc40301abf8ba55911fbfcbf44ecf",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-014",
+      "item_sha256": "8aeb751cf2176c7e1e1b3f6e6db2e20376f4f24d9037c71dd23dd5f626059d4c",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-multi-step-calc-015",
+      "item_sha256": "69d44ff9ba192a4f7977c1e34842463d530416b97733480dd9677f85e9a9edea",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -3757,6 +4099,42 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "zh-context-overflow-001",
+      "item_sha256": "f67401b69c0e1b44ffda73ad6bd257a6e86552277f1166b8e941147075a9d9f1",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-context-overflow-002",
+      "item_sha256": "f7555887604297ce6bf1fca24386666332ce070097692d402f97e6d84aea4a96",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-context-overflow-003",
+      "item_sha256": "4ca4dfdbcdc7d4f9bd61a3a79a0f15a389faea179976643464efb4bbd26f1a05",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-context-overflow-004",
+      "item_sha256": "8d606bd990faef7d8beced3eefe8ffd1e48558f0d1829174300432d9fc1cbf62",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "zh-duplicate-flood-001",
       "item_sha256": "4890d1f2aadcdd3e556d7a6245bec2065bde37b51c98d17915d73357744b8192",
       "status": "active",
@@ -4029,6 +4407,141 @@
     {
       "id": "zh-injection-evasive-006",
       "item_sha256": "dfa75f5f0b3705a797230d7c9332377176cccfcdce418cdf6c22cad6e58cabce",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-001",
+      "item_sha256": "b4793716fad7fa3c861491ac8445da360e5be593b9548acb04193c4b84f5939c",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-002",
+      "item_sha256": "a4bb70698a9120d139bbcf106abafd80b2cb6f3708dc244e1324c98929c9000e",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-003",
+      "item_sha256": "60df8520abb49585c78b551ea87095e48de1e98f1b1927aec47edc00675d7e09",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-004",
+      "item_sha256": "e436b5169fd424d8e7ffb9c0c1f3984aaef297c86f93c1f5cf22aaed351aac43",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-005",
+      "item_sha256": "3b1e1e04f19854ffead7bf4145a893eeebd5ece0515308748630665a6bdd510a",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-006",
+      "item_sha256": "786311033de68573e70345d83f3b2c10b99d46bd8bf5cc949b97d2cdb32f0675",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-007",
+      "item_sha256": "5ee110f34f8a1498a9849ba1d81a3d41c48a5b6415678eb55bf77ab859c208c2",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-008",
+      "item_sha256": "0effd7f4c4a6bc7bbae81c5e2dd7b4c8cb38fd912e63f363a5793db2738fdc87",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-009",
+      "item_sha256": "d9a4cd0f8d59a34f83f0043e817264002460ada6650a851f91af038de5cb4713",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-010",
+      "item_sha256": "fbe0f385c58da77b9ce91d60fd19c58df12a582d7976696054f8a4c44c4d8829",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-011",
+      "item_sha256": "4cc52e9ab90e9e490eac83fa4d62682db7bef69ecdc4a08aedb943e330364410",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-012",
+      "item_sha256": "3537ed16f90d67ef0ccb54233e851010e7455dc083618b63a445f0a22682b778",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-013",
+      "item_sha256": "5f4bbf75e799e283143d0714ae09f6a54525a7bab5a2d6e8d495661053177490",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-014",
+      "item_sha256": "85b79ab5f0de5827f09eeffb8b00744b8147ac8e942747b3d063c75754b48579",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-multi-step-calc-015",
+      "item_sha256": "d52dd6aedd78aa6c8464fc0842cb18e1691a4a868241c0f8a791cc1e2d9d96c9",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -5064,7 +5577,73 @@
       "changed": [],
       "retired": [],
       "stale": []
+    },
+    {
+      "version": 7,
+      "date": "2026-11-27",
+      "added": [
+        "en-context-overflow-001",
+        "en-context-overflow-002",
+        "en-context-overflow-003",
+        "en-context-overflow-004",
+        "en-multi-step-calc-001",
+        "en-multi-step-calc-002",
+        "en-multi-step-calc-003",
+        "en-multi-step-calc-004",
+        "en-multi-step-calc-005",
+        "en-multi-step-calc-006",
+        "en-multi-step-calc-007",
+        "en-multi-step-calc-008",
+        "en-multi-step-calc-009",
+        "en-multi-step-calc-010",
+        "en-multi-step-calc-011",
+        "en-multi-step-calc-012",
+        "en-multi-step-calc-013",
+        "en-multi-step-calc-014",
+        "en-multi-step-calc-015",
+        "it-context-overflow-001",
+        "it-context-overflow-002",
+        "it-context-overflow-003",
+        "it-context-overflow-004",
+        "it-multi-step-calc-001",
+        "it-multi-step-calc-002",
+        "it-multi-step-calc-003",
+        "it-multi-step-calc-004",
+        "it-multi-step-calc-005",
+        "it-multi-step-calc-006",
+        "it-multi-step-calc-007",
+        "it-multi-step-calc-008",
+        "it-multi-step-calc-009",
+        "it-multi-step-calc-010",
+        "it-multi-step-calc-011",
+        "it-multi-step-calc-012",
+        "it-multi-step-calc-013",
+        "it-multi-step-calc-014",
+        "it-multi-step-calc-015",
+        "zh-context-overflow-001",
+        "zh-context-overflow-002",
+        "zh-context-overflow-003",
+        "zh-context-overflow-004",
+        "zh-multi-step-calc-001",
+        "zh-multi-step-calc-002",
+        "zh-multi-step-calc-003",
+        "zh-multi-step-calc-004",
+        "zh-multi-step-calc-005",
+        "zh-multi-step-calc-006",
+        "zh-multi-step-calc-007",
+        "zh-multi-step-calc-008",
+        "zh-multi-step-calc-009",
+        "zh-multi-step-calc-010",
+        "zh-multi-step-calc-011",
+        "zh-multi-step-calc-012",
+        "zh-multi-step-calc-013",
+        "zh-multi-step-calc-014",
+        "zh-multi-step-calc-015"
+      ],
+      "changed": [],
+      "retired": [],
+      "stale": []
     }
   ],
-  "manifest_sha256": "138fd2e7da8f14a8a8797e23cffc08d139b72bffac5b7328e8b2e1e8f939a548"
+  "manifest_sha256": "99d8fafbd005dbe8164a6fee64a6a520aba1b32184d67899b0e2286c3c91a5c8"
 }
