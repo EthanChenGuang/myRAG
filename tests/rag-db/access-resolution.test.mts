@@ -301,5 +301,178 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
         assert.deepEqual((await lookup('group-a', `o:${OTHER_ORG}`)).rows, [{ id: fx.otherGroupA, name: 'Group', labels_current: true }]);
       }
     });
+
+    interface SetRow {
+      document_id: string;
+      outcome: string;
+      before_groups: string[] | null;
+      after_groups: string[] | null;
+    }
+
+    const setGroups = async (documentIds: string[], keys: string[], actorKind = 'admin', actor: string | null = ADMIN): Promise<SetRow[]> => {
+      await assertFunction(db, 'rag_set_document_access_groups');
+      return (
+        await service(db, () =>
+          db.query<SetRow>(
+            `SELECT document_id::text, outcome, before_groups, after_groups
+             FROM public.rag_set_document_access_groups($1, $2::uuid[], $3::text[], $4, $5, $6) ORDER BY document_id`,
+            [fx.tenantKey, documentIds, keys, actor, actorKind, 'manual_change'],
+          ),
+        )
+      ).rows;
+    };
+    const labelOf = async (documentId: string): Promise<string[]> =>
+      (await db.query<{ g: string[] }>('SELECT access_groups AS g FROM documents WHERE id = $1', [documentId])).rows[0]!.g;
+    const auditCount = async (): Promise<number> =>
+      (await db.query<{ n: number }>("SELECT count(*)::int AS n FROM rag_access_audit WHERE action = 'document_set'")).rows[0]!.n;
+
+    test('the setter normalises keys: all alone wins, duplicates are removed, keys are sorted', async () => {
+      const a = `g:${fx.groupA}`;
+      const b = `g:${fx.groupB}`;
+      const first = await setGroups([DOC.open], [a, 'all']);
+      assert.deepEqual(first.map((row) => [row.outcome, row.after_groups]), [['unchanged', ['all']]], 'all wins over another key');
+      const second = await setGroups([DOC.open], [b, a, a]);
+      assert.equal(second[0]?.outcome, 'changed');
+      assert.deepEqual(second[0]?.before_groups, ['all']);
+      assert.deepEqual(second[0]?.after_groups, sortText([a, b]));
+      assert.deepEqual(await labelOf(DOC.open), sortText([a, b]));
+      assert.deepEqual(await setGroups([DOC.open], ['all']).then((rows) => rows[0]?.after_groups), ['all']);
+    });
+
+    test('the setter refuses an empty array, an unknown or foreign group, a user outside the tenant and an unknown actor kind', async () => {
+      const before = await labelOf(DOC.open);
+      await rejects(() => setGroups([DOC.open], []), /^empty_access/, 'empty');
+      const foreignGroup = multi ? fx.otherGroupA! : id('9229', 1);
+      await rejects(() => setGroups([DOC.open], [`g:${foreignGroup}`]), /^unknown_group/, 'foreign group');
+      const foreignUser = multi ? OTHER_USER : id('9229', 2);
+      await rejects(() => setGroups([DOC.open], [`u:${foreignUser}`]), /^unknown_user/, 'user outside the tenant');
+      await rejects(() => setGroups([DOC.open], ['g:not-a-uuid']), /^invalid_access_key/, 'malformed key');
+      await rejects(() => setGroups([DOC.open], ['all'], 'visitor'), /^invalid_actor_kind/, 'actor kind');
+      assert.deepEqual(await labelOf(DOC.open), before, 'nothing changed');
+      const ok = await setGroups([DOC.open], [`u:${MEMBER_B}`]);
+      assert.equal(ok[0]?.outcome, 'changed', 'a user of the tenant is accepted');
+      await setGroups([DOC.open], ['all']);
+    });
+
+    test('a relabel reaches every version of the lineage with one audit row and drift stays zero', async () => {
+      await insertDoc(db, multi, { id: DOC.lineV1, text: 'A first neutral synthetic version.', groups: ['all'] });
+      await insertDoc(db, multi, { id: DOC.lineV2, text: 'A second neutral synthetic version.', groups: ['all'], lineage: DOC.lineV1, version: 2 });
+      await insertChunk(db, multi, { id: CHUNK.lineV1, doc: DOC.lineV1, text: 'A first neutral synthetic version.' });
+      await insertChunk(db, multi, { id: CHUNK.lineV2, doc: DOC.lineV2, text: 'A second neutral synthetic version.' });
+      await supersede(db, DOC.lineV1, DOC.lineV2);
+      const auditBefore = await auditCount();
+      const key = `g:${fx.groupB}`;
+      const rows = await setGroups([DOC.lineV2], [key]);
+      assert.deepEqual(rows.map((row) => [row.document_id, row.outcome]), [[DOC.lineV2, 'changed']]);
+      assert.deepEqual(await labelOf(DOC.lineV1), [key], 'the superseded version follows');
+      assert.deepEqual(await labelOf(DOC.lineV2), [key]);
+      const chunk = await db.query<{ g: string[] }>('SELECT access_groups AS g FROM document_chunks WHERE id = $1', [CHUNK.lineV1]);
+      assert.deepEqual(chunk.rows[0]?.g, [key], 'the superseded chunk follows');
+      const drift = await service(db, () => db.query<{ rows: string }>('SELECT rows::text FROM public.rag_access_groups_drift()'));
+      assert.ok(drift.rows.every((row) => row.rows === '0'), 'no drift');
+      assert.equal(await auditCount(), auditBefore + 1, 'one audit row per lineage');
+      const audit = (
+        await db.query<Row>(
+          "SELECT tenant_key, actor::text, actor_kind, document_id::text, lineage_id::text, before_groups, after_groups, reason FROM rag_access_audit WHERE action = 'document_set' ORDER BY created_at DESC, id DESC LIMIT 1",
+        )
+      ).rows[0];
+      assert.deepEqual(audit, {
+        tenant_key: fx.tenantKey,
+        actor: ADMIN,
+        actor_kind: 'admin',
+        document_id: DOC.lineV2,
+        lineage_id: DOC.lineV1,
+        before_groups: ['all'],
+        after_groups: [key],
+        reason: 'manual_change',
+      });
+      const again = await setGroups([DOC.lineV1, DOC.lineV2], [key]);
+      assert.deepEqual(again.map((row) => row.outcome), ['unchanged', 'unchanged'], 'two ids of one lineage');
+      assert.equal(await auditCount(), auditBefore + 1, 'no audit row for an unchanged lineage');
+    });
+
+    test('an admin call skips connector-managed documents; a connector call changes them', async () => {
+      await insertDoc(db, multi, { id: DOC.synced, text: 'A synced neutral synthetic version.', groups: ['all'] });
+      await insertDoc(db, multi, { id: DOC.syncedV2, text: 'A synced neutral synthetic successor.', groups: ['all'], lineage: DOC.synced, version: 2 });
+      await supersede(db, DOC.synced, DOC.syncedV2);
+      await db.query(
+        "INSERT INTO nango_sync_records (user_id, connection_id, provider, file_id, file_name, document_id) VALUES ($1, 'conn-1', 'google-drive', 'file-1', 'file-1.md', $2)",
+        [MEMBER_A, DOC.synced],
+      );
+      const auditBefore = await auditCount();
+      const key = `g:${fx.groupA}`;
+      const skipped = await setGroups([DOC.syncedV2], [key]);
+      assert.deepEqual(skipped.map((row) => row.outcome), ['skipped_connector'], 'another version of the lineage is synced');
+      assert.deepEqual(await labelOf(DOC.syncedV2), ['all']);
+      assert.equal(await auditCount(), auditBefore);
+      const changed = await setGroups([DOC.syncedV2], [key], 'connector', null);
+      assert.deepEqual(changed.map((row) => row.outcome), ['changed']);
+      assert.deepEqual(await labelOf(DOC.synced), [key]);
+      const audit = await db.query<Row>(
+        "SELECT actor, actor_kind FROM rag_access_audit WHERE action = 'document_set' ORDER BY created_at DESC, id DESC LIMIT 1",
+      );
+      assert.deepEqual(audit.rows[0], { actor: null, actor_kind: 'connector' });
+    });
+
+    test('a document of another tenant or an unknown id is not_found and nothing changes', async () => {
+      const foreign = multi ? DOC.other : id('9229', 3);
+      const rows = await setGroups([foreign, DOC.restricted], ['all']);
+      const byId = Object.fromEntries(rows.map((row) => [row.document_id, row.outcome]));
+      assert.equal(byId[foreign], 'not_found');
+      assert.equal(byId[DOC.restricted], 'changed');
+      if (multi) assert.deepEqual(await labelOf(DOC.other), [`g:${fx.otherGroupA}`], 'the other tenant document keeps its label');
+      await setGroups([DOC.restricted], [`g:${fx.groupA}`]);
+    });
+
+    const visible = async (fn: 'rag_chunks_visible' | 'rag_documents_visible', ids: string[], keys: string[] | null, all = false) => {
+      await assertFunction(db, fn);
+      return (
+        await service(db, () => db.query<{ id: string }>(`SELECT v::text AS id FROM public.${fn}($1, $2::uuid[], $3::text[], $4) AS v`, [fx.tenantKey, ids, keys, all]))
+      ).rows
+        .map((row) => row.id)
+        .sort();
+    };
+
+    test('rag_chunks_visible returns current, ready, in-tenant chunk ids visible through both labels', async () => {
+      const ids = [CHUNK.restricted, CHUNK.open, CHUNK.lineV1, CHUNK.lineV2, ...(multi ? [CHUNK.other] : []), id('9229', 4)];
+      const memberA = keysOf(MEMBER_A, (await resolve(MEMBER_A)).group_ids);
+      const memberB = keysOf(MEMBER_B, (await resolve(MEMBER_B)).group_ids);
+      const outsider = keysOf(OUTSIDER, []);
+      assert.deepEqual(await visible('rag_chunks_visible', ids, memberA), sortText([CHUNK.restricted, CHUNK.open]));
+      assert.deepEqual(await visible('rag_chunks_visible', ids, memberB), sortText([CHUNK.open, CHUNK.lineV2]), 'superseded chunk excluded');
+      assert.deepEqual(await visible('rag_chunks_visible', ids, outsider), [CHUNK.open]);
+      assert.deepEqual(
+        await visible('rag_chunks_visible', ids, null, true),
+        sortText([CHUNK.restricted, CHUNK.open, CHUNK.lineV2]),
+        'access_all skips the label check only, never the tenant',
+      );
+      // A chunk whose own label drifted from its document is hidden even when the document label matches (D-12).
+      await db.exec('ALTER TABLE document_chunks DISABLE TRIGGER document_chunks_access_groups_from_document');
+      try {
+        await db.query("UPDATE document_chunks SET access_groups = '{all}' WHERE id = $1", [CHUNK.restricted]);
+        assert.deepEqual(await visible('rag_chunks_visible', [CHUNK.restricted], outsider), [], 'document label still applies');
+        await db.query('UPDATE document_chunks SET access_groups = $2::text[] WHERE id = $1', [CHUNK.restricted, [`u:${OUTSIDER}`]]);
+        await db.query('UPDATE documents SET access_groups = $2::text[] WHERE id = $1', [DOC.restricted, ['all']]);
+        await db.query('UPDATE document_chunks SET access_groups = $2::text[] WHERE id = $1', [CHUNK.restricted, [`g:${fx.groupA}`]]);
+        assert.deepEqual(await visible('rag_chunks_visible', [CHUNK.restricted], outsider), [], 'chunk label still applies');
+      } finally {
+        await db.exec('ALTER TABLE document_chunks ENABLE TRIGGER document_chunks_access_groups_from_document');
+        await db.query('UPDATE documents SET access_groups = $2::text[] WHERE id = $1', [DOC.restricted, [`g:${fx.groupA}`]]);
+      }
+      await rejects(() => visible('rag_chunks_visible', ids, []), /access_keys_empty/, 'empty keys');
+    });
+
+    test('rag_documents_visible returns in-tenant document ids of any version visible through the label', async () => {
+      const ids = [DOC.restricted, DOC.open, DOC.lineV1, DOC.lineV2, ...(multi ? [DOC.other] : []), id('9229', 5)];
+      const memberA = keysOf(MEMBER_A, (await resolve(MEMBER_A)).group_ids);
+      const memberB = keysOf(MEMBER_B, (await resolve(MEMBER_B)).group_ids);
+      assert.deepEqual(await visible('rag_documents_visible', ids, memberA), sortText([DOC.restricted, DOC.open]));
+      assert.deepEqual(await visible('rag_documents_visible', ids, memberB), sortText([DOC.open, DOC.lineV1, DOC.lineV2]), 'superseded version included');
+      assert.deepEqual(
+        await visible('rag_documents_visible', ids, null, true),
+        sortText([DOC.restricted, DOC.open, DOC.lineV1, DOC.lineV2]),
+        'access_all returns every tenant id and no other',
+      );
+    });
   });
 }
