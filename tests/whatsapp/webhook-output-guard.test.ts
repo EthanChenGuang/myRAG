@@ -129,6 +129,18 @@ describe('WhatsApp reply output guard: enforce', () => {
     expect(text.startsWith(reply)).toBe(true);
   });
 
+  it('does not add a second warning when the streamed reply already ends with it (05.2-13)', async () => {
+    const warning = fixedText('notices.credential_request_warning', 'en');
+    const reply = `Please enter your password here to continue.\n\n${warning}`;
+    const calls = await send(reply);
+    const text = calls[0]![2] as string;
+    expect(text.split(warning)).toHaveLength(2);
+    expect(text.endsWith(warning)).toBe(true);
+    const truncated = fixedText('notices.answer_truncated', 'en');
+    const cut = (await send(`Please enter your password here to continue.\n\n${warning}\n\n${truncated}`)).at(-1)![2] as string;
+    expect(cut.split(warning)).toHaveLength(2);
+  });
+
   it('records the handler findings for channel whatsapp', async () => {
     await send('See https://attacker.example/c for more.');
     expect(h.recordOutputGuardEvents).toHaveBeenCalledTimes(1);

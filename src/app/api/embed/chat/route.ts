@@ -4,7 +4,6 @@ import { checkRateLimit, getRateLimitIdentifier } from '@/lib/embed-rate-limit';
 import { createUIMessageStream, createUIMessageStreamResponse, streamText, type ModelMessage } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { z } from 'zod/v3';
-import { createLinkUsageInstructions } from '@/lib/url-extractor';
 import { appendHistoryNotEvidence, historyNotEvidenceEnabled } from '@/lib/chat/history-not-evidence';
 import { classifyQuery } from '@/lib/query-classifier';
 import {
@@ -30,6 +29,7 @@ import {
   isV2Pipeline,
   knowledgeBaseUnavailableLanguage,
   knowledgeBaseUnavailableMessage,
+  linkUsageInstructions,
   mintEmbedFeedbackToken,
   parseRetrievalFilters,
   resolveScopesFilter,
@@ -159,7 +159,7 @@ function embedSystemPromptTemplate(): string {
 4. Provide balanced, objective information rather than opinions
 5. For technical topics, include practical steps or examples when appropriate
 
-${createLinkUsageInstructions()}
+${linkUsageInstructions()}
 
 Context:
 {{context}}`;
