@@ -54,6 +54,7 @@ import {
   kbUnavailableText,
   noInformationLanguage,
   noInformationText,
+  refusalTextTurn,
   readAnswerConfig,
   identifierSuggestionMessage,
   IDENTIFIER_NOT_FOUND,
@@ -1569,6 +1570,9 @@ export async function POST(req: Request) {
       ragMode,
     });
     const registryAnswerLanguage = answerTurn.textsSource === 'registry' ? answerTurn.answerLanguage : null;
+    // The strict refusal and the unavailable message speak the question's language among the enabled languages (none while unset)
+    const refusalTurn = () =>
+      refusalTextTurn(answerTurn, { question: getLastUserText(rawMessages), history: rawMessages, uiLanguage: userLanguage });
     console.log('[RAG MODE] Using mode:', ragMode, '| Effective disable RAG:', effectiveDisableRAG);
 
     // Extract reasoning settings early for enhanced RAG detection
@@ -2840,10 +2844,11 @@ Context:
       });
 
       if (strictWithoutWebSearch) {
-        setRagLogOutcome('kb_unavailable', kbUnavailableLanguage(answerTurn, fallbackLanguage));
+        const unavailableTurn = refusalTurn();
+        setRagLogOutcome('kb_unavailable', kbUnavailableLanguage(unavailableTurn, fallbackLanguage));
         const refusalMetadata = withRagTurn(refusalStartMetadata(), ragTurnField());
         finishRagTrace();
-        const errorText = kbUnavailableText(answerTurn, fallbackLanguage);
+        const errorText = kbUnavailableText(unavailableTurn, fallbackLanguage);
         const stream = createUIMessageStream({
           execute: async ({ writer }) => {
             if (refusalMetadata) writer.write({ type: 'start', messageMetadata: refusalMetadata });
@@ -2873,16 +2878,18 @@ Context:
       context.trim().toLowerCase().startsWith('no relevant context found');
 
     if (shouldBlockNoContextResponse) {
+      const noInformationTurn = refusalTurn();
+      const refusalRegistryLanguage = noInformationTurn.textsSource === 'registry' ? noInformationTurn.answerLanguage : null;
       // D-31, D-51: identifier_not_found adds the same-tenant suggestion sentence to the fixed text; no model call
       const suggestionText =
         retrievalResult?.reason === IDENTIFIER_NOT_FOUND
-          ? identifierSuggestionMessage(registryAnswerLanguage ?? fallbackLanguage, retrievalResult.identifierSuggestions)
+          ? identifierSuggestionMessage(refusalRegistryLanguage ?? fallbackLanguage, retrievalResult.identifierSuggestions)
           : '';
       const responseText = suggestionText
-        ? `${noInformationText(answerTurn, fallbackLanguage)}\n\n${suggestionText}`
-        : noInformationText(answerTurn, fallbackLanguage);
+        ? `${noInformationText(noInformationTurn, fallbackLanguage)}\n\n${suggestionText}`
+        : noInformationText(noInformationTurn, fallbackLanguage);
       ragTrace?.collector.setReviewContent({ answer: responseText, context });
-      setRagLogOutcome('refused_no_context', noInformationLanguage(answerTurn, fallbackLanguage));
+      setRagLogOutcome('refused_no_context', noInformationLanguage(noInformationTurn, fallbackLanguage));
       const refusalMetadata = withRagTurn(refusalStartMetadata(), ragTurnField());
       const refusalTraceId = ragTrace?.collector.traceId;
       finishRagTrace();

@@ -106,13 +106,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('RAG_REGISTRY_TEXTS off: today\'s texts byte for byte (D-10, Pitfall 6)', () => {
+describe('RAG_REGISTRY_TEXTS off, languages unset: today\'s texts byte for byte (D-10, Pitfall 6)', () => {
   it.each([
     { name: 'English UI', question: QUESTIONS.en, language: 'en', expected: () => LEGACY_NO_INFORMATION_EN },
     { name: 'Spanish heuristic on an English UI', question: QUESTIONS.es, language: 'en', expected: () => LEGACY_NO_INFORMATION_ES },
     { name: 'zh UI', question: QUESTIONS.zh, language: 'zh', expected: () => LEGACY_NO_INFORMATION_EN },
   ])('the refusal for $name', async ({ question, language, expected }) => {
-    for (const env of [{}, { RAG_SUPPORTED_LANGUAGES: 'zh,en,it', RAG_PRIMARY_LANGUAGE: 'en' }, { RAG_REGISTRY_TEXTS: 'true' }]) {
+    // Languages unset (D-02); with languages configured the refusal follows the enabled languages (refusal-language-route.test.ts)
+    for (const env of [{}, { RAG_REGISTRY_TEXTS: 'true' }]) {
       setEnv(env);
       const text = streamedText(await ask(question, { language }));
       expect(text).toBe(expected());
@@ -122,7 +123,7 @@ describe('RAG_REGISTRY_TEXTS off: today\'s texts byte for byte (D-10, Pitfall 6)
   });
 
   it('the unavailable message for a zh UI', async () => {
-    setEnv({ RAG_SUPPORTED_LANGUAGES: 'zh,en,it', RAG_PRIMARY_LANGUAGE: 'en' });
+    setEnv({});
     h.retrieval.mockRejectedValue(new Error('backend down'));
     expect(errorText(await ask(QUESTIONS.it, { language: 'zh' }))).toBe(knowledgeBaseUnavailableMessage('zh'));
   });
