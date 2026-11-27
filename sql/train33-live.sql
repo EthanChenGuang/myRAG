@@ -1494,3 +1494,7 @@ BEGIN
   END IF;
 END
 $r16$;
+
+-- ==== Sections containing DROP statements (owner must be present) — added post-apply 2026-11-27 for the record
+-- 0901_lexical_stats_triggers: DROP TRIGGER IF EXISTS (each re-created immediately)
+-- 0904_bm25_search_chunks: drop loop over existing rag_bm25_search_chunks overloads, then CREATE

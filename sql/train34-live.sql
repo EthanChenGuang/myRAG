@@ -1,4 +1,5 @@
 -- Train 34 live SQL (ci/merge-train-34). Apply after train 33 is live. Multi-tenant production.
+-- NOTE (post-apply 2026-11-27): 0740_vector_sync_purge also drops and re-adds the vector_sync_outbox_entity_check constraint.
 -- Order: 0708, 0709, 0740, 0920 (common), 0920 (multi-tenant), then the 0410 r17 delta (grants only).
 -- DROP sections (all IF EXISTS, followed by a re-create in the same file):
 --   0708: DROP FUNCTION IF EXISTS public.rag_vector_sync_status()  (re-created)
