@@ -135,7 +135,6 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
       'rag_supersession_document_state',
       'rag_fingerprint_backfill_page',
       'rag_fingerprint_backfill_write',
-      'rag_lexstats_rebuild',
     ],
   },
   {
@@ -204,20 +203,6 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
     ],
   },
   {
-    reason: 'Access administration (0924, 0925): service_role only, called by the admin access-group and connector-mapping routes; an admin sees every document of the tenant.',
-    functions: [
-      'rag_access_audience_details',
-      'rag_access_document_audience',
-      'rag_access_documents_counts',
-      'rag_access_documents_list',
-      'rag_access_group_delete',
-      'rag_access_group_impact',
-      'rag_access_groups_list',
-      'rag_connector_map_list',
-      'rag_connector_rules_list',
-    ],
-  },
-  {
     reason: 'Statistics: counts, shares or coverage per tenant, language or profile; no row content and no document id.',
     functions: [
       'get_index_statistics',
@@ -230,8 +215,6 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
       'rag_reembed_count',
       'rag_reembed_remaining',
       'rag_fingerprint_groups',
-      'rag_lexstats_check',
-      'rag_connector_fail_closed_counts',
     ],
   },
   {
@@ -244,8 +227,7 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
       'rag_access_groups_drift',
       'rag_set_document_access_groups',
       'rag_access_readiness',
-      'rag_connector_apply_access',
-      'rag_security_admin_keys',
+      'rag_review_access_sets',
     ],
   },
   {
