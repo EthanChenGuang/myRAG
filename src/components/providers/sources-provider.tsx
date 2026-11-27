@@ -34,7 +34,7 @@ export interface Source {
   cited?: boolean;
 }
 
-export type AnswerDocumentStatus = Readonly<Record<string, 'current' | 'unavailable'>>;
+export type AnswerDocumentStatus = Readonly<Record<string, 'current' | 'unavailable' | 'withdrawn'>>;
 
 /**
  * Sources-panel entries for a message's citations, built only from the metadata snapshots (no chunk is read).

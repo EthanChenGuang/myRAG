@@ -16,7 +16,7 @@ export interface CitationDisplayEntry {
  */
 export function citationDisplayEntries(
   citations: readonly CitationRecord[],
-  documents: Readonly<Record<string, 'current' | 'unavailable'>>,
+  documents: Readonly<Record<string, 'current' | 'unavailable' | 'withdrawn'>>,
 ): CitationDisplayEntry[] {
   return [...citations]
     .sort((a, b) => a.n - b.n)
