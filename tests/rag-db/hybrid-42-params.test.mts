@@ -23,6 +23,7 @@ const SERVICE_KEY = 'fixture-service-role-key-placeholder';
 const TOKEN = 'paramsprobe';
 const FUNCTIONS = ['hybrid_search_chunks', 'rag_exact_id_documents'] as const;
 const NEW_PARAMS = ['p_version_scope', 'p_identifiers_norm'];
+const ACCESS_PARAMS = ['p_access_keys', 'p_access_all'];
 const NEW_COLUMNS = ['dup_cluster_id', 'is_current', 'document_version'];
 
 const numberOf = (file: string): number => Number(path.basename(file).slice(0, 4));
@@ -139,13 +140,20 @@ for (const mode of ['single-tenant', 'multi-tenant'] as DeploymentMode[]) {
         const [names] = await argNames(db, name);
         const inputs = (names ?? []).filter((n) => n.startsWith('p_'));
         for (const param of params) assert.ok(inputs.includes(param), `${param} (from ${file}) is still a parameter`);
-        assert.deepEqual(inputs, [...params, ...NEW_PARAMS]);
+        // 04.3-03: 0930 appends the access parameters to hybrid_search_chunks after the two 0856 ones.
+        const later = name === 'hybrid_search_chunks' ? ACCESS_PARAMS : [];
+        assert.deepEqual(inputs, [...params, ...NEW_PARAMS, ...later]);
         const args = await db.query<{ args: string }>(
           "SELECT pg_get_function_arguments(p.oid) AS args FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = $1",
           [name],
         );
         const text = args.rows[0]?.args ?? '';
-        assert.match(text, /p_version_scope jsonb DEFAULT NULL::jsonb, p_identifiers_norm text\[\] DEFAULT NULL::text\[\]$/);
+        assert.match(
+          text,
+          name === 'hybrid_search_chunks'
+            ? /p_version_scope jsonb DEFAULT NULL::jsonb, p_identifiers_norm text\[\] DEFAULT NULL::text\[\], p_access_keys text\[\] DEFAULT NULL::text\[\], p_access_all boolean DEFAULT false$/
+            : /p_version_scope jsonb DEFAULT NULL::jsonb, p_identifiers_norm text\[\] DEFAULT NULL::text\[\]$/,
+        );
       });
 
       test(`${name}: SECURITY INVOKER, empty search_path, service_role only`, async () => {

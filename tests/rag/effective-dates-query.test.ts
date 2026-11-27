@@ -77,6 +77,7 @@ async function rpcArgs(filters: RetrievalFilters): Promise<Record<string, unknow
     denseVector: [0.1],
     lexicalTokens: [],
     lexicalLanguages: null,
+    access: { mode: 'off' },
     filters,
     denseLimit: 5,
     lexicalLimit: 0,

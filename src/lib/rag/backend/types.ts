@@ -1,3 +1,4 @@
+import type { ScopeAccessFilter } from '../tenant/access';
 import type { TenantScope } from '../tenant/scope';
 
 export type BackendId = 'pgvector' | 'weaviate' | 'qdrant';
@@ -40,6 +41,8 @@ export type RetrievalFilterInput = Omit<RetrievalFilters, 'currentOnly' | 'effec
 export interface BackendCapabilities {
   versionScope?: boolean;
   identifierFilter?: boolean;
+  /** D-05: the backend applies BackendSearchRequest.access before ranking. */
+  accessFilter?: boolean;
 }
 
 export interface RankedHitDocument {
@@ -85,6 +88,8 @@ export interface BackendSearchRequest {
   versionScope?: VersionScope;
   /** D-31, D-45: normalized identifiers; every leg keeps only chunks that carry one of them. */
   identifiersNorm?: string[];
+  /** D-05, A-14: scopeAccessFilter(scope); the backend checks it against the scope and filters every leg by it. */
+  access: ScopeAccessFilter;
   signal: AbortSignal;
 }
 
