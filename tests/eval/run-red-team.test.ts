@@ -29,7 +29,7 @@ function fakeRenderer(reportPath: string, markdownPath: string): void {
   };
   const lines = ['| technique | language | n | successes |', '| --- | --- | --- | --- |'];
   for (const cell of report.cells) lines.push(`| ${cell.technique} | ${cell.language} | ${cell.n} | ${cell.successes} |`);
-  for (const success of report.successes) lines.push(`- ${success.item_id} ${success.trace_id}`);
+  for (const success of (report.successes ?? [])) lines.push(`- ${success.item_id} ${success.trace_id}`);
   fs.writeFileSync(markdownPath, `${lines.join('\n')}\n`);
 }
 
@@ -175,7 +175,7 @@ describe('runRedTeam guards', () => {
     });
     expect(report.skipped_reason).toBe('domain_expert_review_off');
     expect(report.review_items_opened).toBe(0);
-    expect(report.successes).toHaveLength(1);
+    expect((report.successes ?? [])).toHaveLength(1);
   });
 
   test('case posts are batched at 500', async () => {
@@ -211,7 +211,7 @@ describe('runRedTeam guards', () => {
       log: () => undefined,
     });
     expect(transport.asked).toEqual(['rt-private-en-002']);
-    expect(report.successes[0]?.signals).toEqual(['canary', 'exposed']);
+    expect((report.successes ?? [])[0]?.signals).toEqual(['canary', 'exposed']);
     for (const file of [markdownPath, reportPath]) {
       const text = fs.readFileSync(file, 'utf8');
       expect(text).not.toContain(secretQuestion);
@@ -331,24 +331,32 @@ describe('full in-process run over the stub generator', () => {
       });
       expect(asked).toEqual(set.cases.map((item) => item.id));
       expect(report.cells.reduce((sum, cell) => sum + cell.n, 0)).toBe(set.cases.length);
-      expect(report.successes.length).toBeGreaterThan(0);
+      expect((report.successes ?? []).length).toBeGreaterThan(0);
       expect(report.skipped_reason).toBeNull();
-      expect(report.review_items_opened).toBe(report.successes.length);
+      expect(report.review_items_opened).toBe((report.successes ?? []).length);
 
       const rows = await transport.fixtureDb.query<{ n: number }>(
         "SELECT count(*)::int AS n FROM public.rag_review_items WHERE tenant_key = 's:default' AND 'red_team' = ANY(tags)",
       );
-      expect(rows.rows[0]?.n).toBe(report.successes.length);
+      expect(rows.rows[0]?.n).toBe((report.successes ?? []).length);
 
       const again = await transport.postCases({
         run_id: report.run_id,
         run_started_at: report.started_at,
-        cases: report.successes.map((success) => {
+        cases: (report.successes ?? []).map((success) => {
           const item = set.cases.find((entry) => entry.id === success.item_id) as RedTeamCase;
           return { item_id: item.id, technique: item.technique, language: item.language, trace_id: success.trace_id, question: item.question };
         }),
       });
       expect(again).toEqual({ status: 200, opened: 0 });
+
+      const chosenTenant = await transport.postCases({
+        run_id: report.run_id,
+        run_started_at: report.started_at,
+        cases: [],
+        tenant_key: 'u:00000000-0000-4000-8000-000000000003',
+      } as never);
+      expect(chosenTenant.status).toBe(400);
     } finally {
       await transport.close();
     }

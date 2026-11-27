@@ -326,7 +326,7 @@ function runRequest(item: RedTeamCase, scopeOptions: Record<string, string>, gen
     item_id: item.id,
     include_answer: true,
     options: { ...scopeOptions, ...(generatorModel ? { generator_model: generatorModel } : {}) },
-  } as RagRunRequest;
+  } as unknown as RagRunRequest;
 }
 
 function scopeOptionsFor(deploymentMode: DeploymentMode, ids: { organizationId?: string; userId?: string }): Record<string, string> {

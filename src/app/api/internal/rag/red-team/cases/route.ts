@@ -3,8 +3,7 @@ import { z } from 'zod/v3';
 import { env } from '@/lib/env';
 import { evalScope, readFeedbackLoopConfig, scopeKey } from '@/lib/rag';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
-import { scalarOf } from '@/lib/rag/cache/wire';
-import { getRagDeps } from '@/lib/rag/deps';
+import { getSupabaseAdmin } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
 
@@ -30,6 +29,14 @@ const RedTeamCasesBody = z
     cases: z.array(RedTeamCase).max(MAX_CASES_PER_REQUEST),
   })
   .strict();
+
+/** PostgREST answers a scalar function with the value; a row-shaped answer carries it under the function's name. */
+function openedCount(data: unknown): number {
+  const value = Array.isArray(data) && data.length === 1 && data[0] !== null && typeof data[0] === 'object'
+    ? (data[0] as Record<string, unknown>).rag_red_team_open_cases
+    : data;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
+}
 
 /**
  * SEC-11: the red-team runner opens one review case per attack success. Same access as the eval route (the eval secret,
@@ -79,20 +86,26 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   if (body.cases.length === 0) return NextResponse.json({ success: true, opened: 0 }, { headers: NO_STORE });
 
-  const admin = getRagDeps().adminClient();
-  if (!admin) return NextResponse.json({ success: false, error: 'Review queue unavailable' }, { status: 503, headers: NO_STORE });
-  const { data, error } = await admin.rpc('rag_red_team_open_cases', {
-    p_tenant_key: tenantKey,
-    p_run_id: body.run_id,
-    p_run_started_at: body.run_started_at,
-    p_cases: body.cases,
-  });
-  if (error) {
-    console.error('[Red Team] opening review cases failed', { code: error.code ?? 'unknown', cases: body.cases.length });
+  let data: unknown;
+  try {
+    const admin = getSupabaseAdmin();
+    if (!admin) return NextResponse.json({ success: false, error: 'Review queue unavailable' }, { status: 503, headers: NO_STORE });
+    const result = await admin.rpc('rag_red_team_open_cases', {
+      p_tenant_key: tenantKey,
+      p_run_id: body.run_id,
+      p_run_started_at: body.run_started_at,
+      p_cases: body.cases,
+    });
+    if (result.error) {
+      console.error('[Red Team] opening review cases failed', { code: result.error.code ?? 'unknown', cases: body.cases.length });
+      return NextResponse.json({ success: false, error: 'Review queue unavailable' }, { status: 503, headers: NO_STORE });
+    }
+    data = result.data;
+  } catch {
+    console.error('[Red Team] opening review cases failed', { code: 'unknown', cases: body.cases.length });
     return NextResponse.json({ success: false, error: 'Review queue unavailable' }, { status: 503, headers: NO_STORE });
   }
-  const value = scalarOf(data, 'rag_red_team_open_cases');
-  const opened = typeof value === 'number' ? value : 0;
+  const opened = openedCount(data);
   console.log('[Red Team] review cases opened', { runId: body.run_id, cases: body.cases.length, opened });
   return NextResponse.json({ success: true, opened }, { headers: NO_STORE });
 }
