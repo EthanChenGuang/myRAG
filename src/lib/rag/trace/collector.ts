@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { getRagDeps } from '../deps';
-import type { Profile, StageFailureReason, StageRecord, StageRunStatus } from '../types';
+import { logLanguageCodes } from '../feedback-loop/log-languages';
+import type { Profile, RetrievalResult, StageFailureReason, StageRecord, StageRunStatus } from '../types';
 
 const TRACE_ID = /^[0-9a-f]{32}$/;
 
@@ -56,6 +57,42 @@ export interface TraceTiming {
   cache: TraceCacheState;
 }
 
+const LANGUAGE_CODE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/;
+const UNDETERMINED = 'und';
+
+/** LANG-10: the query language and its confidence, the kept chunks' languages in rank order and the answer language; codes only. */
+export interface TraceLanguages {
+  query_language: string | null;
+  query_language_confidence: number | null;
+  chunk_languages: string[];
+  answer_language: string | null;
+}
+
+function codeOrNull(value: unknown): string | null {
+  return typeof value === 'string' && LANGUAGE_CODE.test(value) ? value : null;
+}
+
+/** Pattern-checks a block: a value that is not a code is left out (null, or und for a chunk), as in the FBK-01 writer. */
+export function sanitizeTraceLanguages(block: TraceLanguages): TraceLanguages {
+  const confidence = block.query_language_confidence;
+  const chunks: string[] = [];
+  for (const value of Array.isArray(block.chunk_languages) ? block.chunk_languages : []) {
+    const code = codeOrNull(value) ?? UNDETERMINED;
+    if (!chunks.includes(code)) chunks.push(code);
+  }
+  return {
+    query_language: codeOrNull(block.query_language),
+    query_language_confidence: typeof confidence === 'number' && Number.isFinite(confidence) && confidence >= 0 && confidence <= 1 ? confidence : null,
+    chunk_languages: chunks,
+    answer_language: codeOrNull(block.answer_language),
+  };
+}
+
+/** The trace block from the same derivation the retrieval log row uses, so both carry the same codes for one request. */
+export function traceLanguagesOf(result: RetrievalResult, query: string | undefined): TraceLanguages {
+  return sanitizeTraceLanguages(logLanguageCodes(result, query));
+}
+
 /** The retrieval profiles plus `ingest`, the profile of an ingestion trace. */
 export type TraceProfile = Profile | 'ingest';
 
@@ -78,6 +115,10 @@ export interface TraceCollector {
   setCacheState(state: TraceCacheState): void;
   /** Null until a request start was marked, so a request that records no timing exports what it exported before. */
   timing(): TraceTiming | null;
+  /** LANG-10: recorded when the trace is finished; a later call replaces it (the answer language may arrive after the stream). */
+  setLanguages(block: TraceLanguages): void;
+  /** Null until languages were recorded. */
+  languages(): TraceLanguages | null;
 }
 
 export interface TraceCollectorOptions {
@@ -100,6 +141,7 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
   let preGenerationMs: number | null = null;
   let ttftMs: number | null = null;
   let cacheState: TraceCacheState = 'bypass';
+  let languageBlock: TraceLanguages | null = null;
   const elapsedSince = (start: number): number => {
     const elapsed = deps.now() - start;
     return Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0;
@@ -164,6 +206,10 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
         cache: cacheState,
       };
     },
+    setLanguages(block) {
+      languageBlock = sanitizeTraceLanguages(block);
+    },
+    languages: () => (languageBlock ? { ...languageBlock, chunk_languages: [...languageBlock.chunk_languages] } : null),
     toStageStatus() {
       const status: Record<string, StageRunStatus> = {};
       for (const record of records) status[record.name] = record.status;
