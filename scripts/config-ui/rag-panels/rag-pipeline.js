@@ -134,7 +134,6 @@ const RAG_PIPELINE_LABEL_ROWS = [
 
 const RAG_PIPELINE_EXTRA_LABELS = [
   ['section.detectors', 'Prompt-injection detectors', '提示注入检测器', 'Rilevatori di prompt injection'],
-  ['provider.unknown', 'Provider {provider}', '服务商 {provider}', 'Provider {provider}'],
 ];
 
 const RAG_PIPELINE_LABELS = (() => {
@@ -669,6 +668,7 @@ class RagPipelineSettings {
     const button = this.el('button', { className: 'btn btn-link btn-sm px-0', text: this.t('action.showSetting'), attrs: { type: 'button', 'data-rag-pipeline-show': entry.name } });
     button.addEventListener('click', () => this.showHosted(state, tabId, button));
     right.appendChild(button);
+    this.appendRelated(state);
   }
 
   hostedValueNodes(entry) {

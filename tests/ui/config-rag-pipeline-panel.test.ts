@@ -387,3 +387,148 @@ describe('Test connection, warnings and sync (07-20 Task 3)', () => {
     expect(SCRIPT).toContain("document.addEventListener('DOMContentLoaded', initRagPipelineSettings)");
   });
 });
+
+interface ManifestVar {
+  name: string;
+  status: string;
+  group?: string;
+  label?: string;
+  type?: string;
+  options?: string[];
+  requires?: string[];
+  default?: string;
+  provider?: string;
+  help?: string;
+}
+
+const MANIFEST_VARS = (JSON.parse(fs.readFileSync('scripts/rag/env-manifest.json', 'utf8')) as { vars: ManifestVar[] }).vars;
+const MANAGED = MANIFEST_VARS.filter((v) => v.status === 'managed');
+const REAL_ENTRIES = MANAGED.map((v) =>
+  v.type === 'secret' ? { ...v, default: '', secret: { state: 'unset' } } : { ...v, value: null },
+);
+const BODY = indexHtml.slice(indexHtml.indexOf('<body'), indexHtml.lastIndexOf('</body>'));
+const STATIC_KEPT_BLOCKS = ['rag-ingestion-settings', 'rag-phase032-settings'];
+
+async function realPage() {
+  const page = loadPipelinePage({ entries: REAL_ENTRIES, page: BODY });
+  await flush(20);
+  return page;
+}
+
+describe('the real page after the hand-written RAG Modes inputs were removed (07-20 Task 4)', () => {
+  it('exactly once: every managed variable has one row and occurs exactly once as a control on the page', async () => {
+    const { doc, section } = await realPage();
+    const controls = doc.querySelectorAll('input').concat(doc.querySelectorAll('select'), doc.querySelectorAll('textarea'));
+    for (const v of MANAGED) {
+      expect(section().querySelectorAll(`[data-rag-pipeline-row="${v.name}"]`), `${v.name} row`).toHaveLength(1);
+      expect(controls.filter((el) => el.id === v.name), `${v.name} control`).toHaveLength(1);
+    }
+  });
+
+  it('the inputs inside the hand-built ingestion and Phase 3.2 blocks stay where they are and appear as hosted rows', async () => {
+    const { doc, row } = await realPage();
+    for (const block of STATIC_KEPT_BLOCKS) {
+      const host = doc.getElementById(block)!;
+      expect(host, block).not.toBeNull();
+      const ids = host.querySelectorAll('input').concat(host.querySelectorAll('select')).map((el) => el.id).filter((id) => MANAGED.some((v) => v.name === id));
+      expect(ids.length, block).toBeGreaterThan(0);
+      for (const id of ids) {
+        expect(row(id)!.querySelector('[data-rag-pipeline-show]'), id).not.toBeNull();
+        expect(row(id)!.querySelector('input'), id).toBeNull();
+      }
+    }
+    expect(STATIC_KEPT_BLOCKS.map((b) => indexHtml.match(new RegExp(`id="${b}"`, 'g'))?.length)).toEqual([1, 1]);
+  });
+
+  it('the seven RAG Modes settings cards lost their managed inputs; legacy inputs, hand-built panels and the detector summary stay', () => {
+    for (const id of ['RAG_INJECTION_CHECK', 'LAKERA_GUARD_API_KEY', 'RAG_EVAL_ENDPOINT_ENABLED', 'RAG_SIDECAR_URL', 'LANGFUSE_ENABLED', 'RAG_CITATIONS', 'RAG_PIPELINE', 'RAG_QUERY_LAYER', 'RAG_INGEST_PIPELINE']) {
+      expect(indexHtml, id).not.toMatch(new RegExp(`<(input|select|textarea)\\b[^>]*\\bid="${id}"`));
+    }
+    for (const comment of ['<!-- Evaluation & Sidecar -->', '<!-- Langfuse tracing -->', '<!-- Citations and groundedness -->']) expect(indexHtml).not.toContain(comment);
+    expect(indexHtml.match(/id="injection-defense-summary"/g)).toHaveLength(1);
+    const section = indexHtml.indexOf('id="rag-pipeline-settings"');
+    const afterSection = indexHtml.indexOf('</section>', section);
+    const comment = indexHtml.indexOf('<!-- Prompt-injection defense -->');
+    expect(comment).toBeGreaterThan(afterSection);
+    expect(indexHtml.slice(afterSection, comment).replace(/<\/section>|\s/g, '')).toBe('');
+    const card = indexHtml.slice(comment, indexHtml.indexOf('<!-- Retrieval pipeline -->', comment));
+    expect(card).toContain('>Prompt-injection detectors</h3>');
+    expect(card).toContain('Read-only summary of the committed rule set and detector settings. The switches are above, under Security.');
+    expect(card).toContain('id="injection-defense-summary"');
+    expect(card).not.toMatch(/<(input|select|textarea)\b/);
+    for (const kept of ['id="rag-tuning-switches"', 'id="query-layer-status"', 'id="query-layer-clear-button"', 'id="rag-finetune-slots"', 'id="rag-feedback-loop-settings"', 'id="rag-ingestion-settings"', 'id="rag-phase032-settings"', 'id="RAG_ANSWER_STYLE"', 'id="NEXT_PUBLIC_SITE_URL"']) {
+      expect(indexHtml, kept).toContain(kept);
+    }
+    expect(indexHtml).not.toContain('data-refusal-pointer');
+    expect(indexHtml).not.toContain('id="open-ingestion-settings-link"');
+  });
+
+  it('moved: generated rows keep label, name, input type, autofill, spellcheck and aria-describedby of the removed inputs', async () => {
+    const { doc, control, row } = await realPage();
+    for (const name of ['RAG_QUERY_LAYER', 'RAG_INJECTION_CHECK', 'RAG_PIPELINE', 'RAG_RERANKER', 'RAG_SEMANTIC_CACHE_TTL', 'COHERE_API_KEY', 'COHERE_BASE_URL', 'LAKERA_GUARD_API_KEY', 'RAG_CONTEXT_TOKEN_BUDGET']) {
+      const el = control(name)!;
+      expect(el, name).not.toBeNull();
+      const generated = row(name)!.querySelector(`#${name}`);
+      if (!generated) continue;
+      expect(el.getAttribute('name'), name).toBe(name);
+      expect(row(name)!.querySelector(`label`)!.getAttribute('for'), name).toBe(name);
+      for (const ref of (el.getAttribute('aria-describedby') ?? '').split(' ').filter(Boolean)) expect(doc.getElementById(ref), `${name} -> ${ref}`).not.toBeNull();
+    }
+    expect(control('LAKERA_GUARD_API_KEY')!.getAttribute('type')).toBe('password');
+    expect(control('LAKERA_GUARD_API_KEY')!.getAttribute('autocomplete')).toBe('off');
+    expect(control('COHERE_BASE_URL')!.getAttribute('type')).toBe('url');
+    expect(control('COHERE_BASE_URL')!.getAttribute('spellcheck')).toBe('false');
+    expect(control('RAG_CONTEXT_TOKEN_BUDGET')!.getAttribute('type')).toBe('number');
+    expect(control('RAG_INJECTION_CHECK')!.tagName).toBe('select');
+    expect(control('RAG_INJECTION_CHECK')!.querySelectorAll('option').map((o) => o.getAttribute('value'))).toEqual(['off', 'flag', 'drop', 'downweight']);
+    expect(control('RAG_QUERY_LAYER')!.getAttribute('type')).toBe('checkbox');
+    expect(control('RAG_QUERY_LAYER')!.checked).toBe(false);
+  });
+
+  it('moved: the security help lines survive as manifest help (evaluation endpoint, Lakera)', async () => {
+    const { doc, control } = await realPage();
+    const lakera = doc.getElementById('rag-pipeline-help-RAG_INJECTION_LAKERA')!;
+    expect(text(lakera)).toContain('Sends chunk text to Lakera, a third party.');
+    expect(control('RAG_INJECTION_LAKERA')!.getAttribute('aria-describedby')).toContain('rag-pipeline-help-RAG_INJECTION_LAKERA');
+    expect(text(doc.getElementById('rag-pipeline-help-RAG_EVAL_ENDPOINT_ENABLED'))).toContain('The endpoint returns document content.');
+  });
+
+  it('moved: the refusal switch row links to the Refusal calibration panel instead of the static pointer', async () => {
+    const { row } = await realPage();
+    const button = row('RAG_REFUSAL_THRESHOLD')!.querySelector('[data-rag-pipeline-related="rag-administration-refusal"]');
+    expect(button).not.toBeNull();
+    expect(text(button)).toMatch(/^Open /);
+  });
+
+  it('null-safety: ingestion.js and refusal-calibration.js load without #open-ingestion-settings-link and [data-refusal-pointer]', () => {
+    for (const file of ['ingestion.js', 'refusal-calibration.js']) {
+      const doc = new FakeDocument();
+      const holder = doc.createElement('div');
+      doc.body.appendChild(holder);
+      holder.innerHTML = BODY;
+      const context: Record<string, unknown> = {
+        document: doc,
+        console: { log() {}, error() {}, warn() {}, info() {}, debug() {} },
+        navigator: { language: 'en-US' },
+        location: { origin: 'http://config.local', search: '', hash: '' },
+        setTimeout,
+        clearTimeout,
+        AbortController,
+        URLSearchParams,
+        Intl,
+        Date,
+        fetch: async () => ({ ok: false, status: 503, json: async () => ({}) }),
+        ragFetch: async () => ({ ok: false, status: 503, body: null }),
+      };
+      context.window = context;
+      vm.createContext(context);
+      expect(doc.getElementById('open-ingestion-settings-link')).toBeNull();
+      expect(doc.querySelector('[data-refusal-pointer]')).toBeNull();
+      expect(() => {
+        vm.runInContext(fs.readFileSync(`scripts/config-ui/rag-panels/${file}`, 'utf8'), context, { filename: file });
+        doc.dispatch('DOMContentLoaded');
+        for (const link of doc.querySelectorAll('[data-tab]')) link.dispatch('click');
+      }, file).not.toThrow();
+    }
+  });
+});
