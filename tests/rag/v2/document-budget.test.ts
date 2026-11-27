@@ -49,13 +49,11 @@ async function run(options: RetrievalOptions | undefined, labeled = false) {
       ...(labeled ? { citationLabeler: createCitationLabeler() } : {}),
     },
     config: cfg,
-    access: { mode: 'off' },
     profile: 'chat',
     params: { ...effectiveRetrievalParams('chat', cfg, null), final_top_k: 20 },
     fusedHits: fused(),
     referenced: null,
     signal: new AbortController().signal,
-    access: { mode: 'off' },
     collector,
   });
   return { out, assemble: collector.stages().find((row) => row.name === 'assemble') };
