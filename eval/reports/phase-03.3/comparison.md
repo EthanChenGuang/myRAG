@@ -125,20 +125,20 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 
 | Slice | Exposure | Attack success | n |
 |---|---|---|---|
-| category:injection | 0.9167 | 0.9167 | 12 |
-| category:injection_evasive | 0.7222 | 0.7222 | 18 |
-| language:en | 0.9000 | 0.9000 | 10 |
-| language:it | 0.9000 | 0.9000 | 10 |
-| language:zh | 0.6000 | 0.6000 | 10 |
+| category:injection | 1.0000 | 1.0000 | 12 |
+| category:injection_evasive | 1.0000 | 1.0000 | 18 |
+| language:en | 1.0000 | 1.0000 | 10 |
+| language:it | 1.0000 | 1.0000 | 10 |
+| language:zh | 1.0000 | 1.0000 | 10 |
 | language_category:en:injection | 1.0000 | 1.0000 | 4 |
-| language_category:en:injection_evasive | 0.8333 | 0.8333 | 6 |
+| language_category:en:injection_evasive | 1.0000 | 1.0000 | 6 |
 | language_category:it:injection | 1.0000 | 1.0000 | 4 |
-| language_category:it:injection_evasive | 0.8333 | 0.8333 | 6 |
-| language_category:zh:injection | 0.7500 | 0.7500 | 4 |
-| language_category:zh:injection_evasive | 0.5000 | 0.5000 | 6 |
-| overall | 0.8000 | 0.8000 | 30 |
+| language_category:it:injection_evasive | 1.0000 | 1.0000 | 6 |
+| language_category:zh:injection | 1.0000 | 1.0000 | 4 |
+| language_category:zh:injection_evasive | 1.0000 | 1.0000 | 6 |
+| overall | 1.0000 | 1.0000 | 30 |
 
-Recall@5 0.1649, Recall@10 0.1684, MRR 0.1546, correct refusal 1.0000, false refusal 0.8316, invalid citation rate 0.0000, citation coverage 0.9351.
+Recall@5 0.8282, Recall@10 0.8706, MRR 0.7290, correct refusal 0.9828, false refusal 0.0309, invalid citation rate 0.0000, citation coverage 0.8593.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -187,20 +187,20 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 
 | Slice | Exposure | Attack success | n |
 |---|---|---|---|
-| category:injection | 0.9167 | 0.9167 | 12 |
-| category:injection_evasive | 0.7222 | 0.7222 | 18 |
-| language:en | 0.9000 | 0.9000 | 10 |
-| language:it | 0.9000 | 0.9000 | 10 |
-| language:zh | 0.6000 | 0.6000 | 10 |
+| category:injection | 1.0000 | 1.0000 | 12 |
+| category:injection_evasive | 1.0000 | 1.0000 | 18 |
+| language:en | 1.0000 | 1.0000 | 10 |
+| language:it | 1.0000 | 1.0000 | 10 |
+| language:zh | 1.0000 | 1.0000 | 10 |
 | language_category:en:injection | 1.0000 | 1.0000 | 4 |
-| language_category:en:injection_evasive | 0.8333 | 0.8333 | 6 |
+| language_category:en:injection_evasive | 1.0000 | 1.0000 | 6 |
 | language_category:it:injection | 1.0000 | 1.0000 | 4 |
-| language_category:it:injection_evasive | 0.8333 | 0.8333 | 6 |
-| language_category:zh:injection | 0.7500 | 0.7500 | 4 |
-| language_category:zh:injection_evasive | 0.5000 | 0.5000 | 6 |
-| overall | 0.8000 | 0.8000 | 30 |
+| language_category:it:injection_evasive | 1.0000 | 1.0000 | 6 |
+| language_category:zh:injection | 1.0000 | 1.0000 | 4 |
+| language_category:zh:injection_evasive | 1.0000 | 1.0000 | 6 |
+| overall | 1.0000 | 1.0000 | 30 |
 
-Recall@5 0.1649, Recall@10 0.1649, MRR 0.1541, correct refusal 1.0000, false refusal 0.8351, invalid citation rate 0.0000, citation coverage 0.9324.
+Recall@5 0.8969, Recall@10 0.9118, MRR 0.7761, correct refusal 0.9828, false refusal 0.0344, invalid citation rate 0.0000, citation coverage 0.8590.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -249,20 +249,20 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 
 | Slice | Exposure | Attack success | n |
 |---|---|---|---|
-| category:injection | 0.9167 | 0.9167 | 12 |
-| category:injection_evasive | 0.7222 | 0.7222 | 18 |
-| language:en | 0.9000 | 0.9000 | 10 |
-| language:it | 0.9000 | 0.9000 | 10 |
-| language:zh | 0.6000 | 0.6000 | 10 |
+| category:injection | 1.0000 | 1.0000 | 12 |
+| category:injection_evasive | 1.0000 | 1.0000 | 18 |
+| language:en | 1.0000 | 1.0000 | 10 |
+| language:it | 1.0000 | 1.0000 | 10 |
+| language:zh | 1.0000 | 1.0000 | 10 |
 | language_category:en:injection | 1.0000 | 1.0000 | 4 |
-| language_category:en:injection_evasive | 0.8333 | 0.8333 | 6 |
+| language_category:en:injection_evasive | 1.0000 | 1.0000 | 6 |
 | language_category:it:injection | 1.0000 | 1.0000 | 4 |
-| language_category:it:injection_evasive | 0.8333 | 0.8333 | 6 |
-| language_category:zh:injection | 0.7500 | 0.7500 | 4 |
-| language_category:zh:injection_evasive | 0.5000 | 0.5000 | 6 |
-| overall | 0.8000 | 0.8000 | 30 |
+| language_category:it:injection_evasive | 1.0000 | 1.0000 | 6 |
+| language_category:zh:injection | 1.0000 | 1.0000 | 4 |
+| language_category:zh:injection_evasive | 1.0000 | 1.0000 | 6 |
+| overall | 1.0000 | 1.0000 | 30 |
 
-Recall@5 0.1649, Recall@10 0.1649, MRR 0.1541, correct refusal 1.0000, false refusal 0.8351, invalid citation rate 0.0000, citation coverage 0.9324.
+Recall@5 0.8488, Recall@10 0.8809, MRR 0.7352, correct refusal 0.9828, false refusal 0.0309, invalid citation rate 0.0000, citation coverage 0.8593.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -311,20 +311,20 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 
 | Slice | Exposure | Attack success | n |
 |---|---|---|---|
-| category:injection | 0.9167 | 0.9167 | 12 |
-| category:injection_evasive | 0.7222 | 0.7222 | 18 |
-| language:en | 0.9000 | 0.9000 | 10 |
-| language:it | 0.9000 | 0.9000 | 10 |
-| language:zh | 0.6000 | 0.6000 | 10 |
+| category:injection | 1.0000 | 1.0000 | 12 |
+| category:injection_evasive | 1.0000 | 1.0000 | 18 |
+| language:en | 1.0000 | 1.0000 | 10 |
+| language:it | 1.0000 | 1.0000 | 10 |
+| language:zh | 1.0000 | 1.0000 | 10 |
 | language_category:en:injection | 1.0000 | 1.0000 | 4 |
-| language_category:en:injection_evasive | 0.8333 | 0.8333 | 6 |
+| language_category:en:injection_evasive | 1.0000 | 1.0000 | 6 |
 | language_category:it:injection | 1.0000 | 1.0000 | 4 |
-| language_category:it:injection_evasive | 0.8333 | 0.8333 | 6 |
-| language_category:zh:injection | 0.7500 | 0.7500 | 4 |
-| language_category:zh:injection_evasive | 0.5000 | 0.5000 | 6 |
-| overall | 0.8000 | 0.8000 | 30 |
+| language_category:it:injection_evasive | 1.0000 | 1.0000 | 6 |
+| language_category:zh:injection | 1.0000 | 1.0000 | 4 |
+| language_category:zh:injection_evasive | 1.0000 | 1.0000 | 6 |
+| overall | 1.0000 | 1.0000 | 30 |
 
-Recall@5 0.1924, Recall@10 0.1924, MRR 0.1816, correct refusal 1.0000, false refusal 0.8076, invalid citation rate 0.0000, citation coverage 0.9398.
+Recall@5 0.8282, Recall@10 0.8499, MRR 0.7275, correct refusal 0.9828, false refusal 0.0344, invalid citation rate 0.0000, citation coverage 0.8590.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -373,20 +373,20 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 
 | Slice | Exposure | Attack success | n |
 |---|---|---|---|
-| category:injection | 0.9167 | 0.9167 | 12 |
-| category:injection_evasive | 0.7222 | 0.7222 | 18 |
-| language:en | 0.9000 | 0.9000 | 10 |
-| language:it | 0.9000 | 0.9000 | 10 |
-| language:zh | 0.6000 | 0.6000 | 10 |
+| category:injection | 1.0000 | 1.0000 | 12 |
+| category:injection_evasive | 1.0000 | 1.0000 | 18 |
+| language:en | 1.0000 | 1.0000 | 10 |
+| language:it | 1.0000 | 1.0000 | 10 |
+| language:zh | 1.0000 | 1.0000 | 10 |
 | language_category:en:injection | 1.0000 | 1.0000 | 4 |
-| language_category:en:injection_evasive | 0.8333 | 0.8333 | 6 |
+| language_category:en:injection_evasive | 1.0000 | 1.0000 | 6 |
 | language_category:it:injection | 1.0000 | 1.0000 | 4 |
-| language_category:it:injection_evasive | 0.8333 | 0.8333 | 6 |
-| language_category:zh:injection | 0.7500 | 0.7500 | 4 |
-| language_category:zh:injection_evasive | 0.5000 | 0.5000 | 6 |
-| overall | 0.8000 | 0.8000 | 30 |
+| language_category:it:injection_evasive | 1.0000 | 1.0000 | 6 |
+| language_category:zh:injection | 1.0000 | 1.0000 | 4 |
+| language_category:zh:injection_evasive | 1.0000 | 1.0000 | 6 |
+| overall | 1.0000 | 1.0000 | 30 |
 
-Recall@5 0.1649, Recall@10 0.1684, MRR 0.1546, correct refusal 1.0000, false refusal 0.8316, invalid citation rate 0.0000, citation coverage 0.9351.
+Recall@5 0.8282, Recall@10 0.8706, MRR 0.7290, correct refusal 0.9828, false refusal 0.0309, invalid citation rate 0.0000, citation coverage 0.8593.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -435,20 +435,20 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 
 | Slice | Exposure | Attack success | n |
 |---|---|---|---|
-| category:injection | 0.9167 | 0.9167 | 12 |
-| category:injection_evasive | 0.7222 | 0.7222 | 18 |
-| language:en | 0.9000 | 0.9000 | 10 |
-| language:it | 0.9000 | 0.9000 | 10 |
-| language:zh | 0.6000 | 0.6000 | 10 |
+| category:injection | 1.0000 | 1.0000 | 12 |
+| category:injection_evasive | 1.0000 | 1.0000 | 18 |
+| language:en | 1.0000 | 1.0000 | 10 |
+| language:it | 1.0000 | 1.0000 | 10 |
+| language:zh | 1.0000 | 1.0000 | 10 |
 | language_category:en:injection | 1.0000 | 1.0000 | 4 |
-| language_category:en:injection_evasive | 0.8333 | 0.8333 | 6 |
+| language_category:en:injection_evasive | 1.0000 | 1.0000 | 6 |
 | language_category:it:injection | 1.0000 | 1.0000 | 4 |
-| language_category:it:injection_evasive | 0.8333 | 0.8333 | 6 |
-| language_category:zh:injection | 0.7500 | 0.7500 | 4 |
-| language_category:zh:injection_evasive | 0.5000 | 0.5000 | 6 |
-| overall | 0.8000 | 0.8000 | 30 |
+| language_category:it:injection_evasive | 1.0000 | 1.0000 | 6 |
+| language_category:zh:injection | 1.0000 | 1.0000 | 4 |
+| language_category:zh:injection_evasive | 1.0000 | 1.0000 | 6 |
+| overall | 1.0000 | 1.0000 | 30 |
 
-Recall@5 0.1649, Recall@10 0.1649, MRR 0.1541, correct refusal 1.0000, false refusal 0.8351, invalid citation rate 0.0000, citation coverage 0.9324.
+Recall@5 0.8900, Recall@10 0.9049, MRR 0.7705, correct refusal 0.9828, false refusal 0.0378, invalid citation rate 0.0000, citation coverage 0.8587.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -497,20 +497,20 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 
 | Slice | Exposure | Attack success | n |
 |---|---|---|---|
-| category:injection | 0.9167 | 0.9167 | 12 |
-| category:injection_evasive | 0.7222 | 0.7222 | 18 |
-| language:en | 0.9000 | 0.9000 | 10 |
-| language:it | 0.9000 | 0.9000 | 10 |
-| language:zh | 0.6000 | 0.6000 | 10 |
+| category:injection | 1.0000 | 1.0000 | 12 |
+| category:injection_evasive | 1.0000 | 1.0000 | 18 |
+| language:en | 1.0000 | 1.0000 | 10 |
+| language:it | 1.0000 | 1.0000 | 10 |
+| language:zh | 1.0000 | 1.0000 | 10 |
 | language_category:en:injection | 1.0000 | 1.0000 | 4 |
-| language_category:en:injection_evasive | 0.8333 | 0.8333 | 6 |
+| language_category:en:injection_evasive | 1.0000 | 1.0000 | 6 |
 | language_category:it:injection | 1.0000 | 1.0000 | 4 |
-| language_category:it:injection_evasive | 0.8333 | 0.8333 | 6 |
-| language_category:zh:injection | 0.7500 | 0.7500 | 4 |
-| language_category:zh:injection_evasive | 0.5000 | 0.5000 | 6 |
-| overall | 0.8000 | 0.8000 | 30 |
+| language_category:it:injection_evasive | 1.0000 | 1.0000 | 6 |
+| language_category:zh:injection | 1.0000 | 1.0000 | 4 |
+| language_category:zh:injection_evasive | 1.0000 | 1.0000 | 6 |
+| overall | 1.0000 | 1.0000 | 30 |
 
-Recall@5 0.1649, Recall@10 0.1684, MRR 0.1546, correct refusal 1.0000, false refusal 0.8316, invalid citation rate 0.0000, citation coverage 0.9351.
+Recall@5 0.8729, Recall@10 0.8981, MRR 0.7608, correct refusal 0.9828, false refusal 0.0309, invalid citation rate 0.0000, citation coverage 0.8593.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -559,20 +559,20 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 
 | Slice | Exposure | Attack success | n |
 |---|---|---|---|
-| category:injection | 0.9167 | 0.9167 | 12 |
-| category:injection_evasive | 0.7222 | 0.7222 | 18 |
-| language:en | 0.9000 | 0.9000 | 10 |
-| language:it | 0.9000 | 0.9000 | 10 |
-| language:zh | 0.6000 | 0.6000 | 10 |
+| category:injection | 1.0000 | 1.0000 | 12 |
+| category:injection_evasive | 1.0000 | 1.0000 | 18 |
+| language:en | 1.0000 | 1.0000 | 10 |
+| language:it | 1.0000 | 1.0000 | 10 |
+| language:zh | 1.0000 | 1.0000 | 10 |
 | language_category:en:injection | 1.0000 | 1.0000 | 4 |
-| language_category:en:injection_evasive | 0.8333 | 0.8333 | 6 |
+| language_category:en:injection_evasive | 1.0000 | 1.0000 | 6 |
 | language_category:it:injection | 1.0000 | 1.0000 | 4 |
-| language_category:it:injection_evasive | 0.8333 | 0.8333 | 6 |
-| language_category:zh:injection | 0.7500 | 0.7500 | 4 |
-| language_category:zh:injection_evasive | 0.5000 | 0.5000 | 6 |
-| overall | 0.8000 | 0.8000 | 30 |
+| language_category:it:injection_evasive | 1.0000 | 1.0000 | 6 |
+| language_category:zh:injection | 1.0000 | 1.0000 | 4 |
+| language_category:zh:injection_evasive | 1.0000 | 1.0000 | 6 |
+| overall | 1.0000 | 1.0000 | 30 |
 
-Recall@5 0.1649, Recall@10 0.1684, MRR 0.1546, correct refusal 1.0000, false refusal 0.8316, invalid citation rate 0.0000, citation coverage 0.9351.
+Recall@5 0.8729, Recall@10 0.8981, MRR 0.7591, correct refusal 0.9828, false refusal 0.0309, invalid citation rate 0.0000, citation coverage 0.8593.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -621,20 +621,20 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 
 | Slice | Exposure | Attack success | n |
 |---|---|---|---|
-| category:injection | 0.9167 | 0.9167 | 12 |
-| category:injection_evasive | 0.7222 | 0.7222 | 18 |
-| language:en | 0.9000 | 0.9000 | 10 |
-| language:it | 0.9000 | 0.9000 | 10 |
-| language:zh | 0.6000 | 0.6000 | 10 |
+| category:injection | 1.0000 | 1.0000 | 12 |
+| category:injection_evasive | 1.0000 | 1.0000 | 18 |
+| language:en | 1.0000 | 1.0000 | 10 |
+| language:it | 1.0000 | 1.0000 | 10 |
+| language:zh | 1.0000 | 1.0000 | 10 |
 | language_category:en:injection | 1.0000 | 1.0000 | 4 |
-| language_category:en:injection_evasive | 0.8333 | 0.8333 | 6 |
+| language_category:en:injection_evasive | 1.0000 | 1.0000 | 6 |
 | language_category:it:injection | 1.0000 | 1.0000 | 4 |
-| language_category:it:injection_evasive | 0.8333 | 0.8333 | 6 |
-| language_category:zh:injection | 0.7500 | 0.7500 | 4 |
-| language_category:zh:injection_evasive | 0.5000 | 0.5000 | 6 |
-| overall | 0.8000 | 0.8000 | 30 |
+| language_category:it:injection_evasive | 1.0000 | 1.0000 | 6 |
+| language_category:zh:injection | 1.0000 | 1.0000 | 4 |
+| language_category:zh:injection_evasive | 1.0000 | 1.0000 | 6 |
+| overall | 1.0000 | 1.0000 | 30 |
 
-Recall@5 0.1649, Recall@10 0.1684, MRR 0.1546, correct refusal 1.0000, false refusal 0.8316, invalid citation rate 0.0000, citation coverage 0.9351.
+Recall@5 0.8419, Recall@10 0.8740, MRR 0.7584, correct refusal 0.9828, false refusal 0.0309, invalid citation rate 0.0000, citation coverage 0.8593.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -683,20 +683,20 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 
 | Slice | Exposure | Attack success | n |
 |---|---|---|---|
-| category:injection | 0.9167 | 0.9167 | 12 |
-| category:injection_evasive | 0.7222 | 0.7222 | 18 |
-| language:en | 0.9000 | 0.9000 | 10 |
-| language:it | 0.9000 | 0.9000 | 10 |
-| language:zh | 0.6000 | 0.6000 | 10 |
+| category:injection | 1.0000 | 1.0000 | 12 |
+| category:injection_evasive | 1.0000 | 1.0000 | 18 |
+| language:en | 1.0000 | 1.0000 | 10 |
+| language:it | 1.0000 | 1.0000 | 10 |
+| language:zh | 1.0000 | 1.0000 | 10 |
 | language_category:en:injection | 1.0000 | 1.0000 | 4 |
-| language_category:en:injection_evasive | 0.8333 | 0.8333 | 6 |
+| language_category:en:injection_evasive | 1.0000 | 1.0000 | 6 |
 | language_category:it:injection | 1.0000 | 1.0000 | 4 |
-| language_category:it:injection_evasive | 0.8333 | 0.8333 | 6 |
-| language_category:zh:injection | 0.7500 | 0.7500 | 4 |
-| language_category:zh:injection_evasive | 0.5000 | 0.5000 | 6 |
-| overall | 0.8000 | 0.8000 | 30 |
+| language_category:it:injection_evasive | 1.0000 | 1.0000 | 6 |
+| language_category:zh:injection | 1.0000 | 1.0000 | 4 |
+| language_category:zh:injection_evasive | 1.0000 | 1.0000 | 6 |
+| overall | 1.0000 | 1.0000 | 30 |
 
-Recall@5 0.1649, Recall@10 0.1684, MRR 0.1546, correct refusal 1.0000, false refusal 0.8316, invalid citation rate 0.0000, citation coverage 0.9351.
+Recall@5 0.8282, Recall@10 0.8706, MRR 0.7290, correct refusal 0.9828, false refusal 0.0309, invalid citation rate 0.0000, citation coverage 0.8593.
 
 | Check | Result | Detail |
 |---|---|---|
