@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server';
 import type { IngestConfig } from '../config';
 import { currentIngestConfig } from '../current-config';
+import { currentUploaderHoldMode } from './decide';
 
 /** D-56: the legacy writers insert ready rows directly and cannot hold a document, so they refuse while upload approval is on. */
 export const UPLOAD_APPROVAL_REQUIRES_UNIFIED = 'upload_approval_requires_unified_pipeline';
 
-/** True when upload approval is on and the ingest pipeline is legacy: knowledge-base writes must refuse. */
+/**
+ * True when upload approval or the uploader hold (D-46, Phase 5.2) is on and the ingest pipeline is legacy: knowledge-base writes must
+ * refuse, since a legacy writer cannot hold a held uploader's document.
+ */
 export function approvalRequiresUnified(config: Pick<IngestConfig, 'pipeline' | 'uploadApproval'>): boolean {
-  return config.uploadApproval !== 'off' && config.pipeline === 'legacy';
+  return (config.uploadApproval !== 'off' || currentUploaderHoldMode() !== 'off') && config.pipeline === 'legacy';
 }
 
 /**
@@ -15,6 +19,8 @@ export function approvalRequiresUnified(config: Pick<IngestConfig, 'pipeline' | 
  * back to the raw switch, so a set RAG_UPLOAD_APPROVAL still refuses.
  */
 export function legacyWriteRefused(): boolean {
+  // D-46 (Phase 5.2): a legacy writer cannot hold a held uploader's document either.
+  if (currentUploaderHoldMode() !== 'off') return true;
   try {
     return currentIngestConfig().uploadApproval !== 'off';
   } catch {

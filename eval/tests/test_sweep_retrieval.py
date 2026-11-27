@@ -160,6 +160,8 @@ def test_harness_run_spawns_run_smoke_with_the_exact_argv(tmp_path: Path):
     assert _flag(argv, "--out") == str(out)
     assert _flag(argv, "--fixture-mode") == "prechunked"
     assert "--base-url" not in argv
+    # 05.3-15: run-smoke answers by default; the tuning tools stay retrieval-only.
+    assert "--no-answers" in argv
 
 
 def test_harness_run_with_base_url_passes_it_and_drops_the_env_overlay(tmp_path: Path):
@@ -178,6 +180,7 @@ def test_harness_run_with_base_url_passes_it_and_drops_the_env_overlay(tmp_path:
     argv, _ = stub.calls[0]
     assert _flag(argv, "--base-url") == "http://127.0.0.1:9"
     assert "--fixture-mode" not in argv
+    assert "--no-answers" not in argv
     assert stub.run_config_seen[0]["env"] == {}
 
 

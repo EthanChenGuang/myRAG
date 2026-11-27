@@ -22,6 +22,7 @@ from rag_sidecar.contracts.finetune import (
 
 from rag_eval.corpus import load_corpus
 from rag_eval.finetune import cli, pipeline
+from rag_eval.finetune.export import fixture_export_documents
 from rag_eval.finetune.decontam import (
     FIXTURE_GOLDEN_PATH,
     GoldenIndex,
@@ -244,21 +245,25 @@ def test_invariant_every_pair_belongs_to_one_tenant(fixture_run):
 
 
 def _fixture_sentences(n: int = 20) -> list[str]:
+    """n probe sentences from the documents the fixture export reads: one per document first, then any."""
     sentences: list[str] = []
-    for doc in sorted(load_corpus(CORPUS_DIR), key=lambda d: d.relpath):
-        for piece in re.split(r"(?<=[.!?。！？])\s*|\n+", doc.content):
-            piece = piece.strip().lstrip("#-*> ").strip()
-            if len(piece) >= 24 and piece not in sentences:
-                sentences.append(piece)
-                break
-    for doc in sorted(load_corpus(CORPUS_DIR), key=lambda d: d.relpath):
+    documents = sorted(fixture_export_documents(CORPUS_DIR), key=lambda d: d.relpath)
+    for doc in documents:
         for piece in re.split(r"(?<=[.!?。！？])\s*|\n+", doc.content):
             piece = piece.strip().lstrip("#-*> ").strip()
             if len(sentences) >= n:
                 return sentences
             if len(piece) >= 24 and piece not in sentences:
                 sentences.append(piece)
-    return sentences
+                break
+    for doc in documents:
+        for piece in re.split(r"(?<=[.!?。！？])\s*|\n+", doc.content):
+            piece = piece.strip().lstrip("#-*> ").strip()
+            if len(sentences) >= n:
+                return sentences[:n]
+            if len(piece) >= 24 and piece not in sentences:
+                sentences.append(piece)
+    return sentences[:n]
 
 
 def test_invariant_reports_validate_and_contain_no_fixture_text(fixture_run):

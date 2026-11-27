@@ -1,7 +1,10 @@
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
+import { readAnswerConfig } from '../generation/answer-config';
+import { neutralizeSentinel } from '../generation/sentinel';
 import { renderReferencedSection } from '../refs/resolve';
 import type { InjectionMarks } from '../security/injection-check';
 import { legacyKeepReason, legacyQueryTerms } from './relevance';
+import { effectiveDateOf, versionHeaderSuffix, versionLabelLanguage, versionLabelOf } from './version-labels';
 import { docsFromBlocks, wrapDocuments, type WrapDoc } from './wrap';
 import type {
   CitationLabel,
@@ -32,6 +35,13 @@ export interface AssemblyDocumentRow {
   content?: string | null;
   metadata?: Record<string, any> | null;
   version?: number | null;
+  /** Selected only while RAG_SECURITY_EVENTS is on (fetchAssemblyRows). */
+  user_id?: string | null;
+  /** Selected only while RAG_VERSION_LABELS is on (fetchAssemblyRows, D-49). */
+  doc_type?: string | null;
+  doc_date?: string | null;
+  effective_from?: string | null;
+  version_label?: string | null;
 }
 
 export interface AssembleInput<C extends AssemblyCandidate = AssemblyCandidate> {
@@ -111,6 +121,8 @@ export interface AssembleOutput<C extends AssemblyCandidate = AssemblyCandidate>
   links: ExtractedURL[];
   refusalCandidate: boolean;
   blocks: ContextBlock[];
+  /** Sentinel tokens neutralized in the context (a rule switch on); absent when none was found. */
+  neutralizedSentinels?: number;
 }
 
 export const NO_CONTEXT_TEXT = 'No relevant context found.';
@@ -191,6 +203,12 @@ export function filterCandidates<C extends AssemblyCandidate>(input: AssembleInp
 
 type DraftBlock = Omit<ContextBlock, 'alias' | 'title'>;
 
+/** The uploader field of a block, only when its document row carries user_id, so all-off blocks stay deep-equal. */
+function uploaderOf(row: AssemblyDocumentRow | undefined): Pick<ContextBlock, 'uploaderId'> {
+  if (!row || !Object.prototype.hasOwnProperty.call(row, 'user_id')) return {};
+  return { uploaderId: typeof row.user_id === 'string' ? row.user_id : null };
+}
+
 function chunkMetadataOf(chunk: AssemblyCandidate, rows: Map<string, Record<string, any> | null>): Record<string, any> | undefined {
   let metadata = chunk.metadata ?? undefined;
   if (!metadata || !metadata.image_url) {
@@ -218,19 +236,59 @@ export function blockTitle(block: Pick<ContextBlock, 'documentName' | 'page' | '
   return `${block.documentName}${page}${section}`;
 }
 
+interface VersionView {
+  /** documentVersion from the row, null without one. */
+  documentVersion: number | null;
+  fields: Pick<ContextBlock, 'versionLabel' | 'effectiveFrom'>;
+  /** Appended to the block title and the legacy document line; empty without a version or date. */
+  suffix: string;
+}
+
+/**
+ * D-48 to D-50: null with RAG_VERSION_LABELS off, so no row is read for labels and every title stays as it was. On, each
+ * document row gives its version label, effective date and title suffix in the label language resolved from the question.
+ */
+function versionViews(input: AssembleInput): ((documentId: string) => VersionView | null) | null {
+  if (!readAnswerConfig().versionLabels) return null;
+  const language = versionLabelLanguage(input.queryText);
+  const cache = new Map<string, VersionView | null>();
+  return (documentId) => {
+    if (cache.has(documentId)) return cache.get(documentId)!;
+    const row = input.documents.get(documentId);
+    let view: VersionView | null = null;
+    if (row) {
+      const versionLabel = versionLabelOf(row, language);
+      const effectiveFrom = effectiveDateOf(row);
+      view = {
+        documentVersion: typeof row.version === 'number' ? row.version : null,
+        fields: {
+          ...(versionLabel !== null ? { versionLabel } : {}),
+          ...(effectiveFrom !== null ? { effectiveFrom } : {}),
+        },
+        suffix: versionHeaderSuffix(row, language),
+      };
+    }
+    cache.set(documentId, view);
+    return view;
+  };
+}
+
 /** Applies the labeler to non-image blocks in order, continuing the ordinal count. */
 class BlockLabeller {
   readonly blocks: ContextBlock[] = [];
   private ordinal = 0;
 
-  constructor(private readonly labeler: CitationLabeler | undefined) {}
+  constructor(
+    private readonly labeler: CitationLabeler | undefined,
+    private readonly neutralize: (text: string) => string = (text) => text,
+  ) {}
 
   /** Block index to the label line written before it. */
   readonly headers = new Map<number, string>();
 
   /** Records the block; returns its label when a labeler is set and the block is not an image. */
-  add(draft: DraftBlock): CitationLabel | null {
-    const unlabelled = { ...draft, title: blockTitle(draft) };
+  add(draft: DraftBlock, titleSuffix = ''): CitationLabel | null {
+    const unlabelled = { ...draft, title: this.neutralize(`${blockTitle(draft)}${titleSuffix}`) };
     if (!this.labeler || draft.isImage) {
       this.blocks.push({ ...unlabelled, alias: null });
       return null;
@@ -275,11 +333,16 @@ export function buildContext<C extends AssemblyCandidate>(
     if (!docById.has(doc.id)) docById.set(doc.id, doc);
   }
 
-  const labeller = new BlockLabeller(input.citationLabeler);
+  const sentinel = sentinelNeutralizer();
+  const versionOf = versionViews(input);
+  const labeller = new BlockLabeller(input.citationLabeler, sentinel.quiet);
   const marks = input.injectionMarks ?? null;
   const entries: WrapEntry[] = [];
-  let context = filtered.referencedContext;
-  const sections = input.referenced?.sections;
+  const sections = sentinel.on
+    ? input.referenced?.sections?.map((section) => (section.missing ? section : { ...section, text: sentinel.text(section.text) }))
+    : input.referenced?.sections;
+  // Section texts are counted above; the rendered string of the same sections is neutralized without counting them again.
+  let context = sections?.length ? sentinel.quiet(filtered.referencedContext) : sentinel.text(filtered.referencedContext);
   if (sections?.length) {
     const rendered = sections.map((section, sectionIndex) => {
       if (section.missing) {
@@ -287,16 +350,22 @@ export function buildContext<C extends AssemblyCandidate>(
         return renderReferencedSection(section);
       }
       entries.push({ block: labeller.blocks.length, reference: true, flagged: marks?.sectionIndexes.has(sectionIndex) ?? false });
-      const label = labeller.add({
-        documentId: section.documentId,
-        documentName: section.documentName,
-        documentVersion: null,
-        chunkIds: [...section.chunkIds],
-        page: null,
-        sectionPath: null,
-        text: section.text,
-        isImage: false,
-      });
+      const version = versionOf?.(section.documentId) ?? null;
+      const label = labeller.add(
+        {
+          documentId: section.documentId,
+          documentName: section.documentName,
+          documentVersion: version?.documentVersion ?? null,
+          chunkIds: [...section.chunkIds],
+          page: null,
+          sectionPath: null,
+          text: section.text,
+          isImage: false,
+          ...uploaderOf(input.documents.get(section.documentId)),
+          ...version?.fields,
+        },
+        version?.suffix,
+      );
       return label ? renderReferencedSection({ ...section, text: label.text }, label.header) : renderReferencedSection(section);
     });
     if (input.citationLabeler) context = rendered.join('');
@@ -313,7 +382,7 @@ export function buildContext<C extends AssemblyCandidate>(
     // Sections group by file name; a version-labelled document groups by its id, so two versions of one file stay apart.
     const sectionNames = new Map<string, string>();
     const sectionKey = (documentId: string, docName: string): string => {
-      if (!input.versionLabels?.has(documentId)) return docName;
+      if (!input.versionLabels?.has(documentId) && !versionOf) return docName;
       const key = `${docName}\u0000${documentId}`;
       sectionNames.set(key, docName);
       return key;
@@ -331,7 +400,7 @@ export function buildContext<C extends AssemblyCandidate>(
         chunksByDocument.set(groupKey, []);
       }
       chunksByDocument.get(groupKey)!.push({
-        content: chunk.content,
+        content: sentinel.text(chunk.content),
         similarity: chunk.similarity,
         chunkNum,
         chunkId: chunk.chunk_id,
@@ -398,7 +467,8 @@ export function buildContext<C extends AssemblyCandidate>(
         return b.similarity - a.similarity;
       });
 
-      contextParts.push(`\n--- Document: ${docName} (${chunks.length} relevant chunks) ---`);
+      const sectionVersion = versionOf?.(chunks[0]!.documentId) ?? null;
+      contextParts.push(`\n--- Document: ${docName}${sectionVersion?.suffix ?? ''} (${chunks.length} relevant chunks) ---`);
 
       const pieces = chunks.map((c) => {
         const contentMatch = c.content.match(/^Document: [^.]+\.[^.]+\. Chunk \d+ of (\d+)\. Content: (.*)$/s);
@@ -429,6 +499,7 @@ export function buildContext<C extends AssemblyCandidate>(
         }
         const group = pieces.slice(start, end);
         const documentVersion = input.documents.get(first.chunk.documentId)?.version;
+        const version = versionOf?.(first.chunk.documentId) ?? null;
         const draft: DraftBlock = {
           documentId: first.chunk.documentId,
           documentName: docName,
@@ -438,13 +509,15 @@ export function buildContext<C extends AssemblyCandidate>(
           sectionPath: sectionPathOf(first.chunk.metadata),
           text: group.map((piece) => piece.body).join('\n\n'),
           isImage: first.isImage,
+          ...uploaderOf(input.documents.get(first.chunk.documentId)),
+          ...version?.fields,
         };
         entries.push({
           block: labeller.blocks.length,
           reference: false,
           flagged: marks !== null && draft.chunkIds.some((chunkId) => marks.chunkIds.has(chunkId)),
         });
-        const label = labeller.add(draft);
+        const label = labeller.add(draft, version?.suffix);
         if (versionLine !== undefined && !draft.isImage) {
           // The line is written before the entry (and is the wrapped doc's header), never into the block text that citations quote.
           labeller.headers.set(labeller.blocks.length - 1, label ? `${versionLine}\n${label.header}` : versionLine);
@@ -474,6 +547,9 @@ export function buildContext<C extends AssemblyCandidate>(
     const wrapped = wrapDocuments(wrapEntries(entries, labeller, linksSection));
     if (wrapped !== null) context = wrapped;
   }
+
+  // Residual pass: document names, version lines and links rendered outside the block text.
+  context = sentinel.text(context);
 
   if (!context.trim()) {
     context = NO_CONTEXT_TEXT;
@@ -522,7 +598,43 @@ export function buildContext<C extends AssemblyCandidate>(
     });
   });
 
-  return { context, usedDocuments, relevantChunks, kept, queryTerms, sourceImages, links, refusalCandidate, blocks: labeller.blocks };
+  return {
+    context,
+    usedDocuments,
+    relevantChunks,
+    kept,
+    queryTerms,
+    sourceImages,
+    links,
+    refusalCandidate,
+    blocks: labeller.blocks,
+    ...(sentinel.count > 0 ? { neutralizedSentinels: sentinel.count } : {}),
+  };
+}
+
+/**
+ * RESEARCH Pitfall 13: with RAG_CONTEXT_RELEVANCE_RULE or RAG_PARTIAL_ANSWER_RULE on, the no-answer sentinel is
+ * neutralized in retrieved text so a document cannot make the model refuse; with both off every text is returned as is.
+ */
+function sentinelNeutralizer() {
+  const config = readAnswerConfig();
+  const on = config.contextRelevanceRule || config.partialAnswerRule;
+  const state = { count: 0 };
+  return {
+    on,
+    get count() {
+      return state.count;
+    },
+    text(text: string): string {
+      if (!on) return text;
+      const result = neutralizeSentinel(text);
+      state.count += result.count;
+      return result.text;
+    },
+    quiet(text: string): string {
+      return on ? neutralizeSentinel(text).text : text;
+    },
+  };
 }
 
 export function assembleContext<C extends AssemblyCandidate>(input: AssembleInput<C>): AssembleOutput<C> {

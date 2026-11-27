@@ -54,15 +54,17 @@ def _result_for(item: GoldenItem, index: int, provenance: str | None = None) -> 
     )
 
 
-# Plans 06-38 and 06-39 appended the Phase 6 items after the snapshot was saved; the snapshot keeps the earlier set.
+# Plans 06-38, 06-39 and 04.2-37 appended items after the snapshot was saved; the snapshot keeps the earlier set.
 CACHE_PAIR_CATEGORIES = frozenset({"cache_paraphrase", "cache_near_miss"})
 PHASE6_TAGS = frozenset(
-    {"phase6_protected_followup", "phase6_elliptical", "phase6_relative_time", "phase6_compound", "phase6_cross_lingual"}
+    {"phase6_protected_followup", "phase6_elliptical", "phase6_relative_time", "phase6_compound", "phase6_cross_lingual", "phase42"}
 )
 
 
 # Plan 04.1.1-10 appended the colloquial and no_answer term items, too.
 TERM_ITEM_ID = re.compile(r"^[a-z]+-(colloquial|no_answer)-term-\d{3}$")
+# Plan 05.3-15 appended the implicit_condition and near-miss no-answer items under this tag.
+PHASE53_TAG = "phase53_fixture"
 
 
 def _added_after_snapshot(item: GoldenItem) -> bool:
@@ -71,6 +73,7 @@ def _added_after_snapshot(item: GoldenItem) -> bool:
         or item.category in CACHE_PAIR_CATEGORIES
         or bool(PHASE6_TAGS & set(item.tags))
         or bool(TERM_ITEM_ID.match(item.id))
+        or PHASE53_TAG in item.tags
     )
 
 

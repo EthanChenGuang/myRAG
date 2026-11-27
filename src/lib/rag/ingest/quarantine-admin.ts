@@ -1,6 +1,8 @@
 import type { RpcClient } from '../backend/supabase-rpc';
+import { activeUploaderHolds } from '../security/uploader-hold';
 import { buildQuarantineReasons, legacyQuarantineReasons, type QuarantineReason } from '../security/quarantine-reasons';
 import { displayUsers, type UserDisplay } from './approval/admin';
+import { currentUploaderHoldMode } from './approval/decide';
 import { removeVersionObjects } from './artifacts';
 import { getIngestDeps } from './deps';
 import { afterPublish } from './post-publish';
@@ -28,6 +30,8 @@ export interface QuarantineItem {
   uploaderId: string | null;
   /** The uploader's e-mail or name, the id when no display is known; null when no uploader was recorded. Never log it. */
   uploader: UserDisplay | null;
+  /** D-46 (Phase 5.2): the uploader has an active hold in the item's tenant; present only while RAG_UPLOADER_HOLD is on. */
+  uploaderHeld?: boolean;
 }
 
 export interface NotCheckedItem {
@@ -206,7 +210,26 @@ export async function listQuarantine(input: ListQuarantineInput): Promise<ListQu
   if (!Number.isFinite(total)) return { ok: false, reason: 'unavailable' };
   const names = await displayUsers(items.map((item) => item.uploaderId), input.signal);
   for (const item of items) item.uploader = item.uploaderId === null ? null : { id: item.uploaderId, display: names.get(item.uploaderId) ?? item.uploaderId };
+  await markUploaderHolds(items, input.signal);
   return { ok: true, items, total, limit, offset };
+}
+
+/**
+ * D-46, UI-SPEC 6.14: uploaderHeld on each item while RAG_UPLOADER_HOLD is on, from one rag_active_uploader_holds call per tenant on the
+ * page, each with that tenant's key, so another tenant's hold never shows. A failed lookup shows nobody held.
+ */
+async function markUploaderHolds(items: QuarantineItem[], signal: AbortSignal): Promise<void> {
+  if (currentUploaderHoldMode() === 'off') return;
+  const byTenant = new Map<string, Array<string | null>>();
+  for (const item of items) byTenant.set(item.tenantKey, [...(byTenant.get(item.tenantKey) ?? []), item.uploaderId]);
+  const client = getIngestDeps().db();
+  const held = new Map<string, Set<string>>();
+  await Promise.all(
+    [...byTenant].map(async ([tenantKey, userIds]) => {
+      held.set(tenantKey, await activeUploaderHolds(tenantKey, userIds, { client, signal }));
+    }),
+  );
+  for (const item of items) item.uploaderHeld = item.uploaderId !== null && held.get(item.tenantKey)?.has(item.uploaderId.toLowerCase()) === true;
 }
 
 /**

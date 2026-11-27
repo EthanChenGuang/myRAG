@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AnswerGroundednessValue, InsertAnswerRecordInput, ReviewReason } from '@/lib/answers/store';
-import type { CitationRecord } from '@/lib/rag-eval/contracts.generated';
+import { AnswerChecksSchema, type AnswerChecks, type CitationRecord } from '@/lib/rag-eval/contracts.generated';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { detectLanguage } from '../lang/detect';
 import { isTenantScope, type TenantScope } from '../tenant/scope';
@@ -14,6 +14,8 @@ import { exportReviewCandidate, type ReviewCandidateInput, type ReviewExportOpti
 import { isSampled } from '../trace/sample';
 import { postLangfuseScores, type LangfuseScoreInput, type PostScoresOptions, type PostScoresResult } from '../trace/scores';
 import type { StageRunStatus } from '../types';
+import type { AnswerChecksInput } from './answer-checks';
+import type { TextsSource } from './answer-turn';
 import { readGenerationConfig, type GenerationConfig } from './config';
 import { answerGroundednessLanguage, scoreAnswerGroundedness, type AnswerGroundedness } from './groundedness';
 import { requestGroundedness } from './groundedness-client';
@@ -50,6 +52,13 @@ export interface AnswerFinishInput {
   requestLanguage: string;
   /** A semantic-cache hit: the cached groundedness is inserted unchanged and no scoring runs (06-36, plan-check W6). */
   groundedness?: AnswerGroundedness;
+  /** Phase 5.2 (set only when a 5.2 switch is on): the stream-end checks; plan 05.2-24 stores them. */
+  checks?: AnswerChecksInput;
+  /** D-09 / D-89: the answer language of the turn. */
+  answerLanguage?: string | null;
+  textsSource?: TextsSource;
+  /** D-16: a sentinel refusal; treated like the server-side refusal (not scored). */
+  refusedByModel?: boolean;
 }
 
 export interface AnswerPendingContext {
@@ -367,12 +376,23 @@ async function ownedChatId(admin: SupabaseClient, input: AnswerFinishInput): Pro
   }
 }
 
+/** D-23, D-89: the stream-end checks with the language detected from the answer text; null when they fail the contract (not written). */
+function recordChecks(input: AnswerFinishInput, textLanguage: string | null): AnswerChecks | null {
+  if (!input.checks) return null;
+  const parsed = AnswerChecksSchema.safeParse({ ...input.checks, text_language: textLanguage });
+  if (parsed.success) return parsed.data;
+  console.warn('[Answer Record] Checks failed the contract; not written:', { answerId: input.answerId, issues: parsed.error.issues.length });
+  return null;
+}
+
 async function finishAnswer(input: AnswerFinishInput, deps: AnswerFinishDeps): Promise<AnswerGroundedness | null> {
   if (!isTenantScope(input.scope)) throw new Error('unminted tenant scope');
   const admin = deps.admin();
   if (!admin) throw new Error('admin client unavailable');
   const groundedness = input.groundedness ?? initialGroundedness(input, deps.readConfig().groundedness);
   const chatId = await ownedChatId(admin, input);
+  const textLanguage = detectLanguage(input.answerText);
+  const checks = recordChecks(input, textLanguage);
   const { inserted } = await deps.insert(admin, {
     id: input.answerId,
     scope: input.scope,
@@ -382,10 +402,12 @@ async function finishAnswer(input: AnswerFinishInput, deps: AnswerFinishDeps): P
     modelId: input.modelId,
     citationStrategy: input.citationStrategy,
     ragMode: input.ragMode,
-    answerLanguage: detectLanguage(input.answerText),
+    answerLanguage: typeof input.answerLanguage === 'string' && input.answerLanguage.length > 0 ? input.answerLanguage : textLanguage,
     invalidCitations: input.invalidCitations,
     citations: input.citations,
     groundedness,
+    ...(checks ? { checks } : {}),
+    ...(input.textsSource !== undefined ? { textsSource: input.textsSource } : {}),
   });
   if (!inserted) return null;
   if (groundedness.status !== 'pending') return groundedness;

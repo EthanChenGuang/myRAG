@@ -28,6 +28,7 @@ export interface IngestSpanDetail {
   'scan.hidden_text'?: string | null;
   'scan.links'?: string | null;
   approval_state?: string | null;
+  uploader_hold?: string | null;
   'translation.translated'?: number | null;
   'translation.gaps'?: number | null;
 }
@@ -77,6 +78,7 @@ const DETAIL_KEYS = [
   'scan.hidden_text',
   'scan.links',
   'approval_state',
+  'uploader_hold',
   'translation.translated',
   'translation.gaps',
 ] as const;
@@ -121,6 +123,7 @@ export function phaseSpanDetail(stage: string, facts: IngestTraceFacts | null | 
       return {
         ...(facts.ingest_fingerprint !== undefined ? { ingest_fingerprint: facts.ingest_fingerprint } : {}),
         ...(facts.approval_state !== undefined ? { approval_state: facts.approval_state } : {}),
+        ...(facts.uploader_hold !== undefined ? { uploader_hold: facts.uploader_hold } : {}),
       };
     default:
       return {};

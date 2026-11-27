@@ -20,7 +20,7 @@ import { evalFinalTopK, evalResultCap, runContextStages } from './stages/context
 import { runQueryStages } from './stages/query';
 import { runRankStages } from './stages/rank';
 import { embedForRetrieval, embedVariantTexts, runSearchStages, type QueryLexicalOptions, type SearchIdentifiers } from './stages/search';
-import { resolveLexicalOptions } from '../lexical/resolve-options';
+import { lexicalOptionsOn, resolveLexicalOptions } from '../lexical/resolve-options';
 import {
   bindingHashFields,
   planBindingLegs,
@@ -32,7 +32,10 @@ import {
 import { buildCacheHitResult, buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks, requestRetrievalConfigHash } from './result';
 import { buildRetrievalFilters, effectiveOnFor } from '../query/filters';
 import { queryLanguage as detectQueryLanguage } from '../query/language';
-import type { RetrievalConfigHashQueryLayer, TerminologyHashStage } from './config-hash';
+import { effectiveQueryLayerConfig, queryLayerOverrides } from '../query/layer-config';
+import { effectiveQueryParams } from '../query/query-params';
+import { queryLayerHashComponent } from '../query/hash-part';
+import { ATTRIBUTE_STATE_SKIPPED, type AttributeFilterHashStage, type RetrievalConfigHashQueryLayer, type TerminologyHashStage } from './config-hash';
 import { hasTranslationWork, planTranslationLegs, translationHashFields, type TranslationLegsPlan } from './translation-legs';
 import type { SemanticCacheSeam } from '../query/run-layer';
 import { variantDenseTexts } from '../query/variants';
@@ -66,12 +69,8 @@ function precomputedVectors(entry: { text: string; embedding: QueryEmbedding } |
 }
 
 /** The query-layer part of the config hash (research A-7); loaded only while the layer is on, so run-layer stays unimported otherwise. */
-async function queryLayerHashFor(input: RunRetrievalInput, config: ReturnType<typeof loadRagConfig>, profile: Profile): Promise<RetrievalConfigHashQueryLayer> {
-  const [{ effectiveQueryLayerConfig, queryLayerOverrides }, { effectiveQueryParams }, { queryLayerHashComponent }] = await Promise.all([
-    import('../query/layer-config'),
-    import('../query/query-params'),
-    import('../query/hash-part'),
-  ]);
+// Static imports: a cold dynamic import here stalled the first request after a transform timeout until the embed stage timed out.
+function queryLayerHashFor(input: RunRetrievalInput, config: ReturnType<typeof loadRagConfig>, profile: Profile): RetrievalConfigHashQueryLayer {
   const overrides = queryLayerOverrides(profile, input.stageOverrides);
   return queryLayerHashComponent(effectiveQueryLayerConfig(config.queryLayer, overrides), effectiveQueryParams(profile, overrides?.queryParams));
 }
@@ -110,12 +109,15 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let cacheTicket: RetrievalResult['cacheTicket'];
   // D-21: set by the terminology stage before semantic_cache builds its key; enabled but not reached reads as unavailable.
   let terminologyStage: TerminologyHashStage = spec('terminology', 'skip').enabled ? { enabled: true, version: null } : { enabled: false };
+  // D-30: set by the attribute stage before semantic_cache builds its key; enabled but not reached reads as skipped.
+  let attributeStage: AttributeFilterHashStage =
+    config.v2.attributeFilter !== 'off' && spec('attribute_resolve', 'skip').enabled ? { enabled: true, state: ATTRIBUTE_STATE_SKIPPED } : { enabled: false };
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
   // LANG-07 (D-08, D-09): the tenant's query-side lexical options, resolved once per request from the verified scope only while a
   // switch is on; the search stage and both config hashes (result and semantic-cache key) read the same resolution.
-  const lexicalSwitchOn = config.v2.lexicalDictionary || config.v2.lexicalStemIt || config.v2.identifierIndex;
+  const lexicalSwitchOn = lexicalOptionsOn(config);
   let lexicalPending: Promise<QueryLexicalOptions> | null = null;
   const resolveQueryLexical = (): Promise<QueryLexicalOptions> =>
     (lexicalPending ??= resolveLexicalOptions(scope, config, { language: detectQueryLanguage(input.query), signal }).then(
@@ -145,7 +147,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       options: input.options,
     }));
   const layerHash = async (): Promise<RetrievalConfigHashQueryLayer> => {
-    queryLayerHash ??= await queryLayerHashFor(input, config, profile);
+    queryLayerHash ??= queryLayerHashFor(input, config, profile);
     return queryLayerHash;
   };
   // XLG-04: one translation state lookup per request and embedding profile, shared by the cache key and the search stage.
@@ -182,6 +184,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         ...(config.effectiveDates ? { effectiveOn: effectiveOnFor(config, deps.now()) } : {}),
         terminology: terminologyStage,
         ...(await lexicalStampFor()),
+        attributeFilter: attributeStage,
       }),
   };
 
@@ -197,6 +200,9 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       cache: cacheSeam,
       onTerminology: (stage) => {
         terminologyStage = stage;
+      },
+      onAttributeFilter: (stage) => {
+        attributeStage = stage;
       },
     });
     queryContext = query.queryContext;
@@ -291,6 +297,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         : {}),
       ...(query.terminology ? { terminologyDenseWeight: query.terminology.denseWeight } : {}),
       ...(queryLexical ? { lexical: queryLexical } : {}),
+      ...(query.attributes ? { attributes: query.attributes } : {}),
     });
 
     // D-31, D-51: strict with no asked identifier in the tenant answers nothing; rank and context are not run for it.
@@ -478,6 +485,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     ...(identifierState ? { identifiers: identifierState } : {}),
     ...(identifierRefusal ? { identifierRefusal } : {}),
     ...(queryLexical ? { lexicalStamp: queryLexical.stamp } : {}),
+    attributeFilter: attributeStage,
   });
 }
 

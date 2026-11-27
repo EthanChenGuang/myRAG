@@ -93,6 +93,7 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
   const { getIngestDeps } = await import('../deps');
   const { currentIngestConfig } = await import('../current-config');
   const tableRowSerialization = currentIngestConfig().tableRowSerialization;
+  const attributeHeader = currentIngestConfig().attributeHeader;
   const { loadRagConfig } = await import('../../config');
   const { getRagDeps } = await import('../../deps');
   const config = loadRagConfig(getRagDeps().ragEnv());
@@ -112,6 +113,8 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
         tableRowSerialization,
         config,
         staleDictionary: parsed.staleDictionary === true,
+        attributeHeader,
+        onProgress: (line) => io.out(`[RAG Relex] ${line}`),
         ...(signal ? { signal } : {}),
       });
       io.out('[RAG Relex] dry run, nothing written');
@@ -132,6 +135,7 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
       tableRowSerialization,
       config,
       staleDictionary: parsed.staleDictionary === true,
+      attributeHeader,
       ...(signal ? { signal } : {}),
     });
     for (const [tenant, count] of Object.entries(report.tenants).sort(([a], [b]) => (a < b ? -1 : 1))) {

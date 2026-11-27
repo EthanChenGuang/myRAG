@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
-import { KoyebWebhookPayload, WhatsAppConversation } from './types';
+import { KoyebWebhookPayload, TextMessageOptions, WhatsAppConversation } from './types';
 import { WhatsAppMessageConverter } from './message-converter';
 import { getSessionManager } from './session-manager';
 import { getWhatsAppClient } from './client-factory';
@@ -8,6 +8,16 @@ import { ExtendedMessage } from '@/types/chat';
 import { env } from '@/lib/env';
 import { nanoid } from 'nanoid';
 import { generateTitle, generateSmartTitle } from '@/lib/title-generator';
+import { guardChannelReply, readAnswerConfig } from '@/lib/rag';
+
+function messageText(message: ExtendedMessage): string {
+  if (typeof message.content === 'string') return message.content;
+  if (!Array.isArray(message.content)) return '';
+  return message.content
+    .map((part) => (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n');
+}
 
 /**
  * Handles incoming webhooks from WhatsApp provider (Koyeb/Fly.io)
@@ -367,6 +377,7 @@ export class WhatsAppWebhookHandler {
       // Send the message to the chat API
       // This will use the main RAG_SYSTEM_PROMPT from .env.local
       const messagesToSend = [message];  // Always fresh context, no history
+      const answerConfig = readAnswerConfig();
       
       const response = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
@@ -391,7 +402,8 @@ export class WhatsAppWebhookHandler {
               phoneNumber: conversation.phoneNumber
             },
             // Enable RAG - will use the main system prompt with {{context}}
-            disableRAG: false
+            disableRAG: false,
+            ...(answerConfig.anyNonDefault ? { channel: 'whatsapp' as const } : {})
           }
         })
       });
@@ -529,10 +541,12 @@ export class WhatsAppWebhookHandler {
       // });
 
       // Send response back via WhatsApp
-      await this.sendWhatsAppResponse(
+      fullResponse = await this.sendWhatsAppResponse(
         sessionId,
         conversation.whatsappJid,
-        fullResponse
+        fullResponse,
+        messageText(message),
+        conversation.userId
       );
 
       // Store the AI response in the database
@@ -629,8 +643,15 @@ export class WhatsAppWebhookHandler {
   private async sendWhatsAppResponse(
     sessionId: string,
     to: string,
-    response: string
-  ): Promise<void> {
+    reply: string,
+    userMessage = '',
+    ownerUserId?: string
+  ): Promise<string> {
+    // Phase 5.2 D-40: the whole reply is filtered before it is split; previews are off per message while the guard is on
+    const guarded = await guardChannelReply({ text: reply, userMessage, ownerUserId, channel: 'whatsapp' });
+    const response = guarded.text;
+    const sendOptions: TextMessageOptions | null = guarded.linkPreviewOff ? { linkPreview: false } : null;
+
     // Start keep-alive before processing the response
     // This prevents disconnection during long message formatting/sending
     const isFlyyoClient = 'startKeepAlive' in this.whatsappClient;
@@ -664,7 +685,9 @@ export class WhatsAppWebhookHandler {
       for (let i = 0; i < parts.length; i++) {
         logger.info('WhatsAppWebhookHandler', `[DEBUG] Sending part ${i + 1}/${parts.length}, length: ${parts[i].length}`);
         logger.info('WhatsAppWebhookHandler', `[DEBUG] Part ${i + 1} content (first 500 chars): ${parts[i].substring(0, 500)}`);
-        const result = await this.whatsappClient.sendTextMessage(sessionId, to, parts[i]);
+        const result = sendOptions
+          ? await this.whatsappClient.sendTextMessage(sessionId, to, parts[i], sendOptions)
+          : await this.whatsappClient.sendTextMessage(sessionId, to, parts[i]);
 
         // Track outgoing message
         const conversation = await this.getConversationByJid(to);
@@ -672,6 +695,7 @@ export class WhatsAppWebhookHandler {
           await this.trackMessage(conversation.id, result.messageId, 'outgoing');
         }
       }
+      return response;
     } finally {
       // Stop keep-alive after all messages are sent
       if (isFlyyoClient) {

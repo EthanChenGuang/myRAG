@@ -1,6 +1,6 @@
 import { effectiveLexicalVersion, loadRagConfig } from '../config';
 import { getRagDeps } from '../deps';
-import { resolveLexicalOptions, type LexicalStamp, type ResolvedLexicalOptions } from '../lexical/resolve-options';
+import { lexicalOptionsOn, resolveLexicalOptions, type LexicalStamp, type ResolvedLexicalOptions } from '../lexical/resolve-options';
 import { LEXICAL_VERSION, lexicalText } from '../lexical/tokenize';
 import type { StageContext } from './types';
 
@@ -23,8 +23,7 @@ const OFF: IngestLexical = Object.freeze({
 export async function ingestLexical(ctx: StageContext): Promise<IngestLexical> {
   if (ctx.work.lexical) return ctx.work.lexical;
   const config = loadRagConfig(getRagDeps().ragEnv());
-  const { lexicalDictionary, lexicalStemIt, identifierIndex } = config.v2;
-  if (!lexicalDictionary && !lexicalStemIt && !identifierIndex) {
+  if (!lexicalOptionsOn(config)) {
     ctx.work.lexical = OFF;
     return OFF;
   }

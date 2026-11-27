@@ -323,6 +323,13 @@ def test_stale_scan_on_a_temp_corpus_changes_only_the_manifest(fixture_dir):
     assert by_id[quote_item.id]["status"] == "stale" and by_id[quote_item.id]["stale_reason"] == "quote_not_found"
 
 
+def test_corpus_documents_keeps_every_version_of_a_lineage_filename():
+    versions = [doc for doc in load_corpus(CORPUS_DIR) if doc.lineage is not None and doc.filename == "versioned-note.en.md"]
+    assert len(versions) == 2
+    text = golden_set.corpus_documents(versions)["versioned-note.en.md"]
+    assert all(doc.content in text for doc in versions)
+
+
 def test_stale_scan_of_the_committed_fixture_set_finds_nothing(capsys):
     items = load_golden(FIXTURE_GOLDEN)
     manifest = golden_set.load_manifest(FIXTURE_MANIFEST)
@@ -332,16 +339,17 @@ def test_stale_scan_of_the_committed_fixture_set_finds_nothing(capsys):
     assert findings == []
 
 
-def test_real_set_scan_and_register_wait_for_plan_35(fixture_dir, capsys):
+def test_real_set_commands_refuse_a_fixture_set(fixture_dir, capsys, monkeypatch):
     golden = fixture_dir / "golden.jsonl"
     manifest_path = fixture_dir / "golden.manifest.json"
     items = [_item("syn-a")]
     _write_jsonl(golden, items)
     _write_manifest(manifest_path, golden_set.build_manifest("syn", items, today=DAY1))
-    base = ["--golden", str(golden), "--manifest", str(manifest_path)]
+    monkeypatch.setenv("RAG_ADMIN_BEARER", "test-token-value")
+    base = ["--golden", str(golden), "--manifest", str(manifest_path), "--tenant", "s:default", "--base-url", "http://localhost:3000"]
     assert golden_set.main(["register", *base]) == 2
-    assert golden_set.main(["stale-scan", *base, "--base-url", "http://localhost:3000"]) == 2
-    assert "needs plan 05.3-35" in capsys.readouterr().err
+    assert golden_set.main(["stale-scan", *base]) == 2
+    assert "not a fixture set" in capsys.readouterr().err
 
 
 # --- registration rows -------------------------------------------------------------------------------------------
@@ -376,7 +384,21 @@ def test_committed_ingest_manifest_verifies_against_the_merged_ingest_set():
 
 
 def test_committed_manifests_start_at_version_one_all_active():
+    # Version 1 recorded the set when 05.3-06 created the manifests; train 30 bumped it twice: version 2 added only the
+    # 36 Phase 4.2 items of plan 04.2-37 (tag phase42), version 3 changed only the six small_talk items the Phase 6 gate fix
+    # marked conversational. Train 31 bumped it to version 4 with only the 25 implicit_condition and near-miss no-answer
+    # items of plan 05.3-15. Every item is still active.
+    golden = load_golden(FIXTURE_GOLDEN)
+    phase42 = sorted(item.id for item in golden if "phase42" in item.tags)
+    conversational = sorted(item.id for item in golden if item.expected_behavior == "conversational")
+    assert len(phase42) == 36 and len(conversational) == 6
     for path in (FIXTURE_MANIFEST, INGEST_MANIFEST):
         manifest = golden_set.load_manifest(path)
-        assert manifest.version == 1
+        assert manifest.version == 4
+        assert [entry.version for entry in manifest.changelog] == [1, 2, 3, 4]
+        assert sorted(manifest.changelog[1].added) == phase42
+        assert not manifest.changelog[1].changed
+        assert sorted(manifest.changelog[2].changed) == conversational
+        assert not manifest.changelog[2].added
+        assert len(manifest.changelog[3].added) == 25 and not manifest.changelog[3].changed
         assert all(entry.status == "active" for entry in manifest.items)

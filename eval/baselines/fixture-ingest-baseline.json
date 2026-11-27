@@ -1,5 +1,5 @@
 {
-  "corpus_sha256": "e305373afc3358fef441ad92fb3c2b1ee6db50079aacb999fb5ed66b77661dcc",
+  "corpus_sha256": "820103f4ef1eba2fe21277c6b9e1180c5cda7a6755f4d753e0786755cedba342",
   "deployment_mode": "single-tenant",
   "embedder_id": "fixture-ngram",
   "embedder_source_sha256": "569156a98ef50469ce7ada4e6ee3c1c22182035c7ce6aa46b8d0bc5b200fc7ad",
@@ -11,7 +11,9 @@
       "approved"
     ]
   },
-  "golden_sha256": "5b7de9702d06a0726f30b91eeb1eb7417294548aad7bd22881d707876a438fce",
+  "golden_manifest_sha256": "7065ec0ea808425a78bc3769df8efb34b34db9efcf8e90182523745fcc299235",
+  "golden_set_version": 4,
+  "golden_sha256": "d0695d7276a36010c05dbecd59ad3a58a369ab2b2d796200690fcdca27f01edb",
   "items": {
     "en-ambiguous-001": {
       "correct_refusal_rate": [
@@ -634,6 +636,87 @@
         0.0
       ]
     },
+    "en-duplicate-flood-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-duplicate-flood-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_5": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    "en-duplicate-flood-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_5": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
     "en-exact-term-001": {
       "correct_refusal_rate": [
         null,
@@ -875,6 +958,249 @@
         0.0,
         0.0,
         0.0
+      ]
+    },
+    "en-general-007": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_5": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    "en-identifier-near-miss-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-identifier-near-miss-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-identifier-near-miss-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-identifier-near-miss-004": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-implicit-condition-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-implicit-condition-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-implicit-condition-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-implicit-condition-004": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
       ]
     },
     "en-injection-001": {
@@ -1284,9 +1610,9 @@
     },
     "en-no-answer-001": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -1311,9 +1637,9 @@
     },
     "en-no-answer-002": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -1392,9 +1718,9 @@
     },
     "en-no-answer-005": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -1500,9 +1826,9 @@
     },
     "en-no-answer-009": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -1527,9 +1853,198 @@
     },
     "en-no-answer-010": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-011": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-012": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-013": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-014": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-015": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-016": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "en-no-answer-017": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -1554,9 +2069,9 @@
     },
     "en-no_answer-term-001": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -1640,9 +2155,9 @@
         null
       ],
       "false_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "mrr": [
         1.0,
@@ -1667,9 +2182,9 @@
         null
       ],
       "false_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "mrr": [
         1.0,
@@ -1850,6 +2365,33 @@
       ]
     },
     "en-table-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "en-table-004": {
       "correct_refusal_rate": [
         null,
         null,
@@ -3388,6 +3930,87 @@
         0.6666666666666666
       ]
     },
+    "it-duplicate-flood-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_5": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    "it-duplicate-flood-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-duplicate-flood-005": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_5": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
     "it-exact-term-001": {
       "correct_refusal_rate": [
         null,
@@ -3605,6 +4228,330 @@
       ]
     },
     "it-general-006": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-general-007": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_5": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    "it-general-008": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-general-009": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-general-010": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-identifier-near-miss-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-identifier-near-miss-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-identifier-near-miss-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-identifier-near-miss-004": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-implicit-condition-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-implicit-condition-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-implicit-condition-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-implicit-condition-004": {
       "correct_refusal_rate": [
         null,
         null,
@@ -4038,9 +4985,9 @@
     },
     "it-no-answer-001": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -4065,9 +5012,9 @@
     },
     "it-no-answer-002": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -4146,9 +5093,9 @@
     },
     "it-no-answer-005": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -4281,9 +5228,171 @@
     },
     "it-no-answer-010": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-011": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-012": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-014": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-015": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-016": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "it-no-answer-018": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -4308,9 +5417,9 @@
     },
     "it-no_answer-term-001": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -4618,6 +5727,33 @@
         0.5,
         0.5,
         0.5
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "it-table-004": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
       ],
       "recall_at_10": [
         1.0,
@@ -5091,9 +6227,9 @@
     },
     "parse-no-answer-en": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -5118,9 +6254,9 @@
     },
     "parse-no-answer-it": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -5145,9 +6281,9 @@
     },
     "parse-no-answer-zh": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -5933,9 +7069,9 @@
         null
       ],
       "false_refusal_rate": [
-        1.0,
-        1.0,
-        1.0
+        0.0,
+        0.0,
+        0.0
       ],
       "mrr": [
         0.0,
@@ -7033,6 +8169,87 @@
         0.0
       ]
     },
+    "zh-duplicate-flood-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-duplicate-flood-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-duplicate-flood-013": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_5": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
     "zh-exact-term-001": {
       "correct_refusal_rate": [
         null,
@@ -7274,6 +8491,249 @@
         1.0,
         1.0,
         1.0
+      ]
+    },
+    "zh-general-008": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "recall_at_5": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    "zh-identifier-near-miss-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-identifier-near-miss-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-identifier-near-miss-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-identifier-near-miss-011": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-implicit-condition-001": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-implicit-condition-002": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "zh-implicit-condition-003": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "zh-implicit-condition-004": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mrr": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_10": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "recall_at_5": [
+        0.0,
+        0.0,
+        0.0
       ]
     },
     "zh-injection-001": {
@@ -7683,9 +9143,9 @@
     },
     "zh-no-answer-001": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -7710,9 +9170,9 @@
     },
     "zh-no-answer-002": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -7791,9 +9251,9 @@
     },
     "zh-no-answer-005": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -7899,9 +9359,9 @@
     },
     "zh-no-answer-009": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -7926,9 +9386,171 @@
     },
     "zh-no-answer-010": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-011": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-012": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-013": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-015": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-016": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "false_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "mrr": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_10": [
+        null,
+        null,
+        null
+      ],
+      "recall_at_5": [
+        null,
+        null,
+        null
+      ]
+    },
+    "zh-no-answer-017": {
+      "correct_refusal_rate": [
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -7953,9 +9575,9 @@
     },
     "zh-no_answer-term-001": {
       "correct_refusal_rate": [
-        0.0,
-        0.0,
-        0.0
+        1.0,
+        1.0,
+        1.0
       ],
       "false_refusal_rate": [
         null,
@@ -8275,6 +9897,33 @@
         1.0
       ]
     },
+    "zh-table-004": {
+      "correct_refusal_rate": [
+        null,
+        null,
+        null
+      ],
+      "false_refusal_rate": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mrr": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_10": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "recall_at_5": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
     "zh-typo-001": {
       "correct_refusal_rate": [
         null,
@@ -8338,7 +9987,7 @@
     "domain_control_leg": null,
     "embedding_bindings": null,
     "embedding_profile": null,
-    "generator_model": null,
+    "generator_model": "fake/instruction-sensitive-v1",
     "groundedness": false,
     "max_results": null,
     "organization_id": null,
@@ -8352,25 +10001,25 @@
     "stage_timeouts_ms": null,
     "user_id": null
   },
-  "run_config_hash": "3b4471466c1987e6fb0c93895740ab9f20cde5c28635275d77e8d07f365f2739",
+  "run_config_hash": "1a400dfbc3fb9271790e03021c84a9150da732dea847f7ed9b49d3846b020f07",
   "runs": [
     {
-      "created_at": "2026-11-26T15:13:05Z",
-      "git_sha": "64e11521a53a092777099b4e1a8090aabf9bbc81",
-      "run_config_hash": "3b4471466c1987e6fb0c93895740ab9f20cde5c28635275d77e8d07f365f2739",
-      "run_id": "5addc133-289d-4406-b85c-9ed080125c0e"
+      "created_at": "2026-11-26T23:20:49Z",
+      "git_sha": "5f8c28305af0812f3d399a19bb47c1ceb4a7ddfe",
+      "run_config_hash": "1a400dfbc3fb9271790e03021c84a9150da732dea847f7ed9b49d3846b020f07",
+      "run_id": "2566416d-0ffa-4524-9510-407dbcf38358"
     },
     {
-      "created_at": "2026-11-26T15:13:33Z",
-      "git_sha": "3fa047fff96c1ca984874253db9f8df086be6312",
-      "run_config_hash": "3b4471466c1987e6fb0c93895740ab9f20cde5c28635275d77e8d07f365f2739",
-      "run_id": "15e300e5-20b4-4fd9-b41f-1288f233b463"
+      "created_at": "2026-11-26T23:21:49Z",
+      "git_sha": "5f8c28305af0812f3d399a19bb47c1ceb4a7ddfe",
+      "run_config_hash": "1a400dfbc3fb9271790e03021c84a9150da732dea847f7ed9b49d3846b020f07",
+      "run_id": "515874de-b369-4ba0-b46f-96c72a18845c"
     },
     {
-      "created_at": "2026-11-26T15:14:04Z",
-      "git_sha": "3fa047fff96c1ca984874253db9f8df086be6312",
-      "run_config_hash": "3b4471466c1987e6fb0c93895740ab9f20cde5c28635275d77e8d07f365f2739",
-      "run_id": "efe2a9db-7b96-4f13-ae69-e8497de10bcc"
+      "created_at": "2026-11-26T23:22:45Z",
+      "git_sha": "5f8c28305af0812f3d399a19bb47c1ceb4a7ddfe",
+      "run_config_hash": "1a400dfbc3fb9271790e03021c84a9150da732dea847f7ed9b49d3846b020f07",
+      "run_id": "7f875086-0ee6-4349-a01d-4944325442b1"
     }
   ],
   "schema_version": 1,
@@ -8647,12 +10296,12 @@
         "spread": 0.0
       },
       "false_refusal_rate": {
-        "mean": 0.391304347826087,
+        "mean": 0.34782608695652173,
         "n": 23,
         "runs": [
-          0.391304347826087,
-          0.391304347826087,
-          0.391304347826087
+          0.34782608695652173,
+          0.34782608695652173,
+          0.34782608695652173
         ],
         "spread": 0.0
       },
@@ -8683,6 +10332,58 @@
           0.391304347826087,
           0.391304347826087,
           0.391304347826087
+        ],
+        "spread": 0.0
+      }
+    },
+    "category:duplicate_flood": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.0,
+        "n": 6,
+        "runs": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 1.0,
+        "n": 6,
+        "runs": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 0.8333333333333334,
+        "n": 6,
+        "runs": [
+          0.8333333333333334,
+          0.8333333333333334,
+          0.8333333333333334
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 0.8333333333333334,
+        "n": 6,
+        "runs": [
+          0.8333333333333334,
+          0.8333333333333334,
+          0.8333333333333334
         ],
         "spread": 0.0
       }
@@ -8751,42 +10452,146 @@
         "spread": 0.0
       },
       "false_refusal_rate": {
-        "mean": 0.13043478260869565,
-        "n": 23,
+        "mean": 0.10714285714285714,
+        "n": 28,
         "runs": [
-          0.13043478260869565,
-          0.13043478260869565,
-          0.13043478260869565
+          0.10714285714285714,
+          0.10714285714285714,
+          0.10714285714285714
         ],
         "spread": 0.0
       },
       "mrr": {
-        "mean": 0.8260869565217391,
-        "n": 23,
+        "mean": 0.8571428571428571,
+        "n": 28,
         "runs": [
-          0.8260869565217391,
-          0.8260869565217391,
-          0.8260869565217391
+          0.8571428571428571,
+          0.8571428571428571,
+          0.8571428571428571
         ],
         "spread": 0.0
       },
       "recall_at_10": {
-        "mean": 0.8695652173913043,
-        "n": 23,
+        "mean": 0.8392857142857143,
+        "n": 28,
         "runs": [
-          0.8695652173913043,
-          0.8695652173913043,
-          0.8695652173913043
+          0.8392857142857143,
+          0.8392857142857143,
+          0.8392857142857143
         ],
         "spread": 0.0
       },
       "recall_at_5": {
-        "mean": 0.8695652173913043,
-        "n": 23,
+        "mean": 0.8392857142857143,
+        "n": 28,
         "runs": [
-          0.8695652173913043,
-          0.8695652173913043,
-          0.8695652173913043
+          0.8392857142857143,
+          0.8392857142857143,
+          0.8392857142857143
+        ],
+        "spread": 0.0
+      }
+    },
+    "category:identifier_near_miss": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.0,
+        "n": 9,
+        "runs": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 1.0,
+        "n": 9,
+        "runs": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 1.0,
+        "n": 9,
+        "runs": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 1.0,
+        "n": 9,
+        "runs": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "spread": 0.0
+      }
+    },
+    "category:implicit_condition": {
+      "correct_refusal_rate": {
+        "mean": null,
+        "n": 0,
+        "runs": [
+          null,
+          null,
+          null
+        ],
+        "spread": 0.0
+      },
+      "false_refusal_rate": {
+        "mean": 0.0,
+        "n": 7,
+        "runs": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "spread": 0.0
+      },
+      "mrr": {
+        "mean": 0.9285714285714286,
+        "n": 7,
+        "runs": [
+          0.9285714285714286,
+          0.9285714285714286,
+          0.9285714285714286
+        ],
+        "spread": 0.0
+      },
+      "recall_at_10": {
+        "mean": 1.0,
+        "n": 7,
+        "runs": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "spread": 0.0
+      },
+      "recall_at_5": {
+        "mean": 1.0,
+        "n": 7,
+        "runs": [
+          1.0,
+          1.0,
+          1.0
         ],
         "spread": 0.0
       }
@@ -8949,12 +10754,12 @@
     },
     "category:no_answer": {
       "correct_refusal_rate": {
-        "mean": 0.48148148148148145,
-        "n": 27,
+        "mean": 1.0,
+        "n": 43,
         "runs": [
-          0.48148148148148145,
-          0.48148148148148145,
-          0.48148148148148145
+          1.0,
+          1.0,
+          1.0
         ],
         "spread": 0.0
       },
@@ -9063,12 +10868,12 @@
         "spread": 0.0
       },
       "false_refusal_rate": {
-        "mean": 0.375,
+        "mean": 0.5,
         "n": 8,
         "runs": [
-          0.375,
-          0.375,
-          0.375
+          0.5,
+          0.5,
+          0.5
         ],
         "spread": 0.0
       },
@@ -9105,12 +10910,12 @@
     },
     "category:small_talk": {
       "correct_refusal_rate": {
-        "mean": 1.0,
-        "n": 3,
+        "mean": null,
+        "n": 0,
         "runs": [
-          1.0,
-          1.0,
-          1.0
+          null,
+          null,
+          null
         ],
         "spread": 0.0
       },
@@ -9168,7 +10973,7 @@
       },
       "false_refusal_rate": {
         "mean": 0.0,
-        "n": 13,
+        "n": 16,
         "runs": [
           0.0,
           0.0,
@@ -9177,18 +10982,18 @@
         "spread": 0.0
       },
       "mrr": {
-        "mean": 0.8461538461538461,
-        "n": 13,
+        "mean": 0.875,
+        "n": 16,
         "runs": [
-          0.8461538461538461,
-          0.8461538461538461,
-          0.8461538461538461
+          0.875,
+          0.875,
+          0.875
         ],
         "spread": 0.0
       },
       "recall_at_10": {
         "mean": 1.0,
-        "n": 13,
+        "n": 16,
         "runs": [
           1.0,
           1.0,
@@ -9198,7 +11003,7 @@
       },
       "recall_at_5": {
         "mean": 1.0,
-        "n": 13,
+        "n": 16,
         "runs": [
           1.0,
           1.0,
@@ -9313,208 +11118,208 @@
     },
     "language:en": {
       "correct_refusal_rate": {
-        "mean": 0.45454545454545453,
-        "n": 11,
+        "mean": 1.0,
+        "n": 16,
         "runs": [
-          0.45454545454545453,
-          0.45454545454545453,
-          0.45454545454545453
+          1.0,
+          1.0,
+          1.0
         ],
         "spread": 0.0
       },
       "false_refusal_rate": {
-        "mean": 0.1891891891891892,
-        "n": 74,
+        "mean": 0.18072289156626506,
+        "n": 83,
         "runs": [
-          0.1891891891891892,
-          0.1891891891891892,
-          0.1891891891891892
+          0.18072289156626506,
+          0.18072289156626506,
+          0.18072289156626506
         ],
         "spread": 0.0
       },
       "mrr": {
-        "mean": 0.6423423423423423,
-        "n": 74,
+        "mean": 0.6811244979919678,
+        "n": 83,
         "runs": [
-          0.6423423423423423,
-          0.6423423423423423,
-          0.6423423423423423
+          0.6811244979919678,
+          0.6811244979919678,
+          0.6811244979919678
         ],
         "spread": 0.0
       },
       "recall_at_10": {
-        "mean": 0.722972972972973,
-        "n": 74,
+        "mean": 0.7409638554216867,
+        "n": 83,
         "runs": [
-          0.722972972972973,
-          0.722972972972973,
-          0.722972972972973
+          0.7409638554216867,
+          0.7409638554216867,
+          0.7409638554216867
         ],
         "spread": 0.0
       },
       "recall_at_5": {
-        "mean": 0.722972972972973,
-        "n": 74,
+        "mean": 0.7409638554216867,
+        "n": 83,
         "runs": [
-          0.722972972972973,
-          0.722972972972973,
-          0.722972972972973
+          0.7409638554216867,
+          0.7409638554216867,
+          0.7409638554216867
         ],
         "spread": 0.0
       }
     },
     "language:it": {
       "correct_refusal_rate": {
-        "mean": 0.6666666666666666,
-        "n": 9,
+        "mean": 1.0,
+        "n": 13,
         "runs": [
-          0.6666666666666666,
-          0.6666666666666666,
-          0.6666666666666666
+          1.0,
+          1.0,
+          1.0
         ],
         "spread": 0.0
       },
       "false_refusal_rate": {
-        "mean": 0.17647058823529413,
-        "n": 51,
+        "mean": 0.12698412698412698,
+        "n": 63,
         "runs": [
-          0.17647058823529413,
-          0.17647058823529413,
-          0.17647058823529413
+          0.12698412698412698,
+          0.12698412698412698,
+          0.12698412698412698
         ],
         "spread": 0.0
       },
       "mrr": {
-        "mean": 0.5738562091503268,
-        "n": 51,
+        "mean": 0.647089947089947,
+        "n": 63,
         "runs": [
-          0.5738562091503268,
-          0.5738562091503268,
-          0.5738562091503268
+          0.647089947089947,
+          0.647089947089947,
+          0.647089947089947
         ],
         "spread": 0.0
       },
       "recall_at_10": {
-        "mean": 0.7058823529411765,
-        "n": 51,
+        "mean": 0.746031746031746,
+        "n": 63,
         "runs": [
-          0.7058823529411765,
-          0.7058823529411765,
-          0.7058823529411765
+          0.746031746031746,
+          0.746031746031746,
+          0.746031746031746
         ],
         "spread": 0.0
       },
       "recall_at_5": {
-        "mean": 0.7058823529411765,
-        "n": 51,
+        "mean": 0.746031746031746,
+        "n": 63,
         "runs": [
-          0.7058823529411765,
-          0.7058823529411765,
-          0.7058823529411765
+          0.746031746031746,
+          0.746031746031746,
+          0.746031746031746
         ],
         "spread": 0.0
       }
     },
     "language:zh": {
       "correct_refusal_rate": {
-        "mean": 0.5,
-        "n": 10,
+        "mean": 1.0,
+        "n": 14,
         "runs": [
-          0.5,
-          0.5,
-          0.5
+          1.0,
+          1.0,
+          1.0
         ],
         "spread": 0.0
       },
       "false_refusal_rate": {
-        "mean": 0.21153846153846154,
-        "n": 52,
+        "mean": 0.18032786885245902,
+        "n": 61,
         "runs": [
-          0.21153846153846154,
-          0.21153846153846154,
-          0.21153846153846154
+          0.18032786885245902,
+          0.18032786885245902,
+          0.18032786885245902
         ],
         "spread": 0.0
       },
       "mrr": {
-        "mean": 0.6256410256410256,
-        "n": 52,
+        "mean": 0.6808743169398906,
+        "n": 61,
         "runs": [
-          0.6256410256410256,
-          0.6256410256410256,
-          0.6256410256410256
+          0.6808743169398906,
+          0.6808743169398906,
+          0.6808743169398906
         ],
         "spread": 0.0
       },
       "recall_at_10": {
-        "mean": 0.7403846153846154,
-        "n": 52,
+        "mean": 0.7704918032786885,
+        "n": 61,
         "runs": [
-          0.7403846153846154,
-          0.7403846153846154,
-          0.7403846153846154
+          0.7704918032786885,
+          0.7704918032786885,
+          0.7704918032786885
         ],
         "spread": 0.0
       },
       "recall_at_5": {
-        "mean": 0.7019230769230769,
-        "n": 52,
+        "mean": 0.7377049180327869,
+        "n": 61,
         "runs": [
-          0.7019230769230769,
-          0.7019230769230769,
-          0.7019230769230769
+          0.7377049180327869,
+          0.7377049180327869,
+          0.7377049180327869
         ],
         "spread": 0.0
       }
     },
     "overall": {
       "correct_refusal_rate": {
-        "mean": 0.5333333333333333,
-        "n": 30,
+        "mean": 1.0,
+        "n": 43,
         "runs": [
-          0.5333333333333333,
-          0.5333333333333333,
-          0.5333333333333333
+          1.0,
+          1.0,
+          1.0
         ],
         "spread": 0.0
       },
       "false_refusal_rate": {
-        "mean": 0.192090395480226,
-        "n": 177,
+        "mean": 0.1642512077294686,
+        "n": 207,
         "runs": [
-          0.192090395480226,
-          0.192090395480226,
-          0.192090395480226
+          0.1642512077294686,
+          0.1642512077294686,
+          0.1642512077294686
         ],
         "spread": 0.0
       },
       "mrr": {
-        "mean": 0.6177024482109228,
-        "n": 177,
+        "mean": 0.6706924315619969,
+        "n": 207,
         "runs": [
-          0.6177024482109228,
-          0.6177024482109228,
-          0.6177024482109228
+          0.6706924315619969,
+          0.6706924315619969,
+          0.6706924315619969
         ],
         "spread": 0.0
       },
       "recall_at_10": {
-        "mean": 0.7231638418079096,
-        "n": 177,
+        "mean": 0.751207729468599,
+        "n": 207,
         "runs": [
-          0.7231638418079096,
-          0.7231638418079096,
-          0.7231638418079096
+          0.751207729468599,
+          0.751207729468599,
+          0.751207729468599
         ],
         "spread": 0.0
       },
       "recall_at_5": {
-        "mean": 0.711864406779661,
-        "n": 177,
+        "mean": 0.7415458937198067,
+        "n": 207,
         "runs": [
-          0.711864406779661,
-          0.711864406779661,
-          0.711864406779661
+          0.7415458937198067,
+          0.7415458937198067,
+          0.7415458937198067
         ],
         "spread": 0.0
       }
@@ -9635,12 +11440,12 @@
         "spread": 0.0
       },
       "false_refusal_rate": {
-        "mean": 0.3333333333333333,
+        "mean": 0.0,
         "n": 3,
         "runs": [
-          0.3333333333333333,
-          0.3333333333333333,
-          0.3333333333333333
+          0.0,
+          0.0,
+          0.0
         ],
         "spread": 0.0
       },

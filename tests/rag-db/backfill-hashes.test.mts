@@ -26,6 +26,7 @@ describe('legacy content-hash backfill (D-09)', () => {
   let supabaseModule: typeof import('@/lib/supabase');
   const inserted: string[] = [];
   let corpusRows = 0;
+  const unhashedIds: string[] = [];
 
   before(async () => {
     fixture = await createTwoTenantDatabase();
@@ -43,6 +44,10 @@ describe('legacy content-hash backfill (D-09)', () => {
     supabaseModule = await import('@/lib/supabase');
     const corpus = await fixture.db.query<Row>('SELECT count(*)::int AS n FROM documents WHERE content_hash IS NULL AND status = $1 AND id <> ALL($2::uuid[])', ['ready', BASE_IDS]);
     corpusRows = Number(corpus.rows[0]?.n);
+    // Every row that starts without a hash is reset before each test, not only the legacy:% ones: the 04.2-37 version notes
+    // are seeded with their own source keys.
+    const unhashed = await fixture.db.query<Row>('SELECT id FROM documents WHERE content_hash IS NULL');
+    unhashedIds.push(...unhashed.rows.map((row) => String(row.id)));
     assert.ok(corpusRows > 0, 'the fixture carries corpus documents of other tenants besides the three canary documents');
   });
 
@@ -52,7 +57,10 @@ describe('legacy content-hash backfill (D-09)', () => {
   });
 
   beforeEach(async () => {
-    await fixture.db.query("UPDATE documents SET content_hash = NULL, metadata = metadata - 'content_hash_version' WHERE source_key LIKE 'legacy:%'");
+    await fixture.db.query(
+      "UPDATE documents SET content_hash = NULL, metadata = metadata - 'content_hash_version' WHERE source_key LIKE 'legacy:%' OR id = ANY($1::uuid[])",
+      [unhashedIds],
+    );
   });
 
   beforeEach(() => {

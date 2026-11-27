@@ -1,12 +1,9 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createFixtureDatabase, type DeploymentMode, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+import { compactFixtureCorpus, removeCompactCorpus } from '../helpers/compact-corpus.mts';
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 
 const LEGACY = 'openai-3-small-1536';
@@ -117,14 +114,18 @@ for (const mode of MODES) {
   describe(`embedding profile activation gate (${mode})`, () => {
     let fixture: FixtureDatabase;
     let db: PGlite;
+    let corpusDir: string | undefined;
 
     before(async () => {
-      fixture = await createFixtureDatabase({ deploymentMode: mode, corpusDir: REAL_CORPUS });
+      // Every test fills a profile row for each current chunk; the duplicate-passage copies only make that slower.
+      corpusDir = compactFixtureCorpus();
+      fixture = await createFixtureDatabase({ deploymentMode: mode, corpusDir });
       db = fixture.db;
     });
 
     after(async () => {
       await db.close();
+      removeCompactCorpus(corpusDir);
     });
 
     test('refuses with incomplete and the count when a current ready chunk lacks a row', async () => {

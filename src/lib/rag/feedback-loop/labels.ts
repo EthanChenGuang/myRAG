@@ -29,7 +29,7 @@ export function normalizeQuoteText(text: string): string {
   return out;
 }
 
-const UNANSWERABLE_CATEGORIES = new Set(['no_answer', 'small_talk']);
+const UNANSWERABLE_CATEGORIES = new Set(['no_answer', 'small_talk', 'off_topic_context']);
 
 /** The model rules of the Pydantic ExpertLabel (generated Zod carries the fields only). */
 function checkLabelRules(label: ExpertLabel, ctx: z.RefinementCtx): void {

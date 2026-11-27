@@ -1,10 +1,7 @@
-const SECRET_ENV_NAME =
-  /(KEY|SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE|SERVICE_ROLE|DATABASE_URL|WEBHOOK|DSN|CREDENTIAL|COOKIE|SALT|CERT|CONNECTION_STRING|JWT|SIGNING)/i;
-const BENIGN_ENV_NAME = /(_TOKENS$|TOKEN_TTL|TOKEN_LIMIT|KEY_TERMS)/;
-const URL_WITH_CREDENTIALS = /:\/\/[^/\s:@]+:[^/\s@]*@/;
+import { hasUrlCredentials, isSecretName } from './rag/config-gate/secret-name.cjs';
 
 export function isSecretEnvName(name: string): boolean {
-  return SECRET_ENV_NAME.test(name) && !BENIGN_ENV_NAME.test(name);
+  return isSecretName(name);
 }
 
 /**
@@ -234,5 +231,5 @@ export function isWritableEnvName(name: string): boolean {
 }
 
 export function isReadableEnvEntry(name: string, value: string): boolean {
-  return isWritableEnvName(name) && !URL_WITH_CREDENTIALS.test(value);
+  return isWritableEnvName(name) && !hasUrlCredentials(value);
 }

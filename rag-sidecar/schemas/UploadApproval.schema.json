@@ -26,7 +26,8 @@
             "personal_workspace",
             "exempt_connector",
             "exempt_uploader",
-            "unknown_uploader"
+            "unknown_uploader",
+            "uploader_hold"
           ],
           "type": "string"
         },

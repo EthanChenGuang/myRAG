@@ -12,7 +12,7 @@ export { buildHistoryWindow } from './query/history';
 export type { HistoryWindowLimits } from './query/history';
 export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
-export { currentLexicalVersion } from './deps';
+export { currentAttributeFilterMode, currentLexicalVersion } from './deps';
 export { createTraceCollector } from './trace/collector';
 export type { TraceCollector, StageEntry } from './trace/collector';
 export { isTraceId } from './trace/collector';
@@ -118,8 +118,16 @@ export { validateChunkingProfile } from './chunking/validate';
 export type { ChunkingFinding, ChunkingValidationContext, ChunkingValidationResult } from './chunking/validate';
 export { getChunkingSweepReport, getChunkingDecisions, ChunkingReportInvalid } from './chunking/report';
 export type { ChunkingReportCode } from './chunking/report';
-export { refusalCalibrationStatus, currentRefusalCalibrationStatus } from './refusal/status';
+export { refusalCalibrationStatus, currentRefusalCalibrationStatus, currentRefusalCalibrationInputs } from './refusal/status';
 export type { RefusalCalibrationStatus } from './refusal/status';
+export { judgeCalibrationStatus, currentJudgeCalibrationStatus } from './judge/calibration-status';
+export type { JudgeCalibrationStatus, JudgeCalibrationWarning, JudgeCalibrationCellView } from './judge/calibration-status';
+export { exportCalibrationCases } from './judge/calibration-export';
+export type { CalibrationCase, CalibrationExport, CalibrationExportResult } from './judge/calibration-export';
+export { AnswerCheckRequestSchema, readAnswerCheck, saveAnswerCheck } from './judge/answer-check';
+export type { AnswerCheck, AnswerCheckFailure, AnswerCheckResult, AnswerCheckVerdicts } from './judge/answer-check';
+export { pendingCells, proposedPendingCells, PENDING_KEY_CATEGORIES, PENDING_KEYS } from './refusal/pending';
+export type { CellPending, PendingAlert, PendingChangeRecord, PendingCells } from './refusal/pending';
 export type {
   Candidate,
   HistoryTurn,
@@ -184,11 +192,39 @@ export {
   type AnswerLanguageOptions,
 } from './generation/answer-language';
 export {
+  kbUnavailableLanguage,
+  kbUnavailableText,
   knowledgeBaseUnavailableLanguage,
   knowledgeBaseUnavailableMessage,
+  LEGACY_NO_INFORMATION_EN,
+  LEGACY_NO_INFORMATION_ES,
+  noInformationLanguage,
+  noInformationText,
   noKnowledgeBaseResponse,
   noKnowledgeBaseResponseLanguage,
 } from './generation/messages';
+export { readAnswerConfig, type AnswerConfig } from './generation/answer-config';
+export {
+  answerReserveTokens,
+  decideOutputCap,
+  effectiveMaxOutputTokens,
+  outputCapFloor,
+  resolveOutputCap,
+  type OutputCapDecision,
+} from './generation/output-cap';
+export { CLAUDE_MAX_OUTPUT_TOKENS } from './generation/citations/claude';
+export {
+  answerFinishFields,
+  answerTraceFields,
+  createAnswerTurn,
+  parseBodyChannel,
+  type AnswerChannel,
+  type AnswerTurn,
+  type TextsSource,
+} from './generation/answer-turn';
+export { guardChannelReply } from './security/channel-reply-guard';
+export type { ChannelReplyGuardInput, ChannelReplyGuardResult } from './security/channel-reply-guard';
+export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource } from './lang/answer-language';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';
 export type { IdentifierFilterSummary } from './types';
@@ -581,3 +617,87 @@ export type {
   ListAttributeDefinitionsResult,
   UpsertAttributeDefinitionResult,
 } from './ingest/attributes/schema';
+export {
+  adminTenantKeys,
+  claimEvalRunRequests,
+  closeEvalRunRequest,
+  decodeEvalRunCursor,
+  EVAL_RUN_CLAIM_MAX,
+  EVAL_RUN_PAGE_MAX,
+  EvalRunResultSummarySchema,
+  listEvalRunRequests,
+  ReasonCodeSchema,
+  requestTenantNightly,
+  type EvalRunRequest,
+} from './config-gate/eval-run-requests';
+export { attributeHeaderEnabled, getHeaderTemplate, listStaleHeaderDocuments, setHeaderTemplate } from './ingest/attributes/header';
+export type {
+  GetHeaderTemplateResult,
+  HeaderTemplate,
+  HeaderTemplateError,
+  HeaderTemplateFailure,
+  ListStaleHeaderDocumentsResult,
+  SetHeaderTemplateResult,
+  StaleHeaderDocument,
+} from './ingest/attributes/header';
+export { renderPendingHeaders } from './ingest/attributes/apply';
+export { isSecretName, RAG_AFFECTING_NAMES, ragAffectingDiff, ragSettingsCanonical, ragSettingsHash } from './config-gate/settings-hash';
+export type { SettingValues } from './config-gate/settings-hash';
+export {
+  buildChangeRecord,
+  cachedCheck,
+  CHECK_CACHE_MS,
+  CHECK_DIR,
+  decideSave,
+  insertChangeRecord,
+  latestCheck,
+  listChangeRecords,
+  normaliseGateMode,
+  OVERRIDE_REASON_MAX,
+  OVERRIDE_REASON_MIN,
+  readCheck,
+  writeCheck,
+} from './config-gate/gate-core';
+export type { BuildChangeRecordInput, ChangeRecordClient, ChangeRecordRow, DecideSaveOptions, RagGateInput, SaveDecision } from './config-gate/gate-core';
+export { monitorSettings } from './monitor/config';
+export type { MonitorSettings } from './monitor/config';
+export { runDaily } from './monitor/daily';
+export type { RunDailyOptions, RunDailyResult } from './monitor/daily';
+export { deliverAlerts, deliverStoredAlerts, signWebhookBody, WEBHOOK_SIGNATURE_HEADER, WEBHOOK_TIMESTAMP_HEADER } from './monitor/deliver';
+export type { DeliveryReport, StoredDeliverySummary } from './monitor/deliver';
+export { setAlertStatus } from './monitor/alerts-store';
+export { alertForAdmin, alertFromRow, listAlerts, MAX_ALERTS_PAGE, monitorSummary } from './monitor/alerts-read';
+export type { AlertStatusFilter, ListAlertsResult, MonitorSummary } from './monitor/alerts-read';
+export {
+  addPilotUser,
+  decodePilotCursor,
+  listPilotUsers,
+  maskEmail,
+  pilotSamplingParams,
+  PilotUsersError,
+  removePilotUser,
+  PILOT_PAGE_SIZE,
+} from './monitor/pilot-users';
+export type { AddPilotUserResult, PilotUserEntry, PilotUserPage, PilotSamplingParams } from './monitor/pilot-users';
+export { allocateStrata, drawWeeklySample, loadSampleConfig, missingSamplePrerequisites, planWeeklySample, sampleStatus, sampleTenants, sampleWindow } from './monitor/sample';
+export type { DrawWeeklySampleResult, SamplePrerequisite, SampleStatus, WeeklySampleConfig } from './monitor/sample';
+export {
+  checkEvidence,
+  clearEvidence,
+  enqueueReReview,
+  MAX_DOCUMENT_NAME_CHARS,
+  MAX_EVIDENCE_SPANS,
+  MAX_QUOTE_CHARS,
+  MAX_RE_REVIEW_ITEMS,
+  MAX_REGISTER_ROWS,
+  normalizeQuote,
+  pendingEvidence,
+  quoteSha256,
+  registerEvidence,
+  weekStart,
+} from './monitor/golden-evidence';
+export type { EvidenceCheckResult, EvidenceRow, EvidenceSpanInput, EvidenceSpanResult, EvidenceStatus } from './monitor/golden-evidence';
+export { IMPORT_LIMITS, importQuestions, parseQuestionFile, prepareQuestions, QuestionsImportError } from './monitor/questions-import';
+export type { ImportCounts, PreparedQuestions, QuestionFileFormat } from './monitor/questions-import';
+export { guardAppEnvWrite, RAG_GATE_INVALID_REASON_MESSAGE, RAG_GATE_REQUIRED_MESSAGE } from './config-gate/guard';
+export type { AppGuardRoute, GuardAppEnvWriteInput, GuardAppEnvWriteResult } from './config-gate/guard';

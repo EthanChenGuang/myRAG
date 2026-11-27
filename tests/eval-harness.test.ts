@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -109,6 +110,64 @@ describe('tracer retrieval through runEval', () => {
     expect(traces[0].kept.map((chunk) => chunk.document_name)).toContain('refund-policy.en.md');
     inProcessKeptIds = traces[0].kept.map((chunk) => chunk.chunk_id);
     expect(inProcessKeptIds.length).toBeGreaterThan(0);
+    // D-07: the request's RAG mode is recorded in run.json; it is not an input of run_config_hash.
+    expect(result.manifest.rag_mode).toBe('strict');
+    expect(JSON.parse(fs.readFileSync(result.runPath, 'utf8')).rag_mode).toBe('strict');
+  });
+});
+
+describe('run-smoke absolute-gate flags', () => {
+  test('--gates-mode without --gates is refused with exit 2 naming the flag', () => {
+    const result = spawnSync(process.execPath, ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--gates-mode', 'report', '--out', makeOutDir()], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('--gates-mode needs --gates');
+  });
+
+  test('--gates-mode accepts only enforce or report', () => {
+    const result = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--gates', 'eval/config/quality-gates.json', '--gates-mode', 'warn', '--out', makeOutDir()],
+      { cwd: REPO_ROOT, encoding: 'utf8' },
+    );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('--gates-mode must be enforce or report');
+  });
+});
+
+describe('run-smoke answers by default (05.3-15, O-1)', () => {
+  function smoke(extra: string[]): { status: number | null; stderr: string; generatorModel: string | null; answer: string | null } {
+    const out = makeOutDir();
+    const result = spawnSync(process.execPath, ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--golden', GOLDEN_PATH, '--no-gate', '--out', out, ...extra], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+    });
+    if (result.status !== 0) return { status: result.status, stderr: result.stderr, generatorModel: null, answer: null };
+    const manifest = JSON.parse(fs.readFileSync(path.join(out, 'run.json'), 'utf8')) as { request_options: { generator_model?: string | null } };
+    const trace = JSON.parse(fs.readFileSync(path.join(out, 'traces.jsonl'), 'utf8').trim().split('\n')[0]) as { answer?: string | null };
+    return { status: 0, stderr: result.stderr, generatorModel: manifest.request_options.generator_model ?? null, answer: trace.answer ?? null };
+  }
+
+  test('a run without flags answers with the instruction-sensitive fake generator', () => {
+    const run = smoke([]);
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.generatorModel).toBe('fake/instruction-sensitive-v1');
+    expect(typeof run.answer).toBe('string');
+  });
+
+  test('--no-answers keeps the retrieval-only run', () => {
+    const run = smoke(['--no-answers']);
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.generatorModel).toBeNull();
+    expect(run.answer).toBeNull();
+  });
+
+  test('--answers together with --no-answers is refused with exit 2', () => {
+    const run = smoke(['--answers', '--no-answers']);
+    expect(run.status).toBe(2);
+    expect(run.stderr).toContain('--answers and --no-answers');
   });
 });
 

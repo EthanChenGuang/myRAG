@@ -16,6 +16,7 @@ const TRACKED = [
   'scripts/config-ui/index.html',
 ];
 const MANIFEST = 'scripts/rag/env-manifest.json';
+const GENERATED = 'src/lib/rag/config-gate/rag-affecting.generated.json';
 
 function run(root) {
   const result = spawnSync(process.execPath, [SCRIPT, '--root', root], { encoding: 'utf8' });
@@ -30,17 +31,36 @@ function write(root, relative, text) {
 
 function copyRealTree() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-config-'));
-  for (const relative of [...TRACKED, MANIFEST]) {
-    write(root, relative, fs.readFileSync(path.join(REPO, relative), 'utf8'));
+  for (const relative of [...TRACKED, MANIFEST, GENERATED]) {
+    const source = path.join(REPO, relative);
+    if (fs.existsSync(source)) write(root, relative, fs.readFileSync(source, 'utf8'));
   }
   return root;
 }
 
-function syntheticTree({ files = {}, manifest }) {
+function syntheticTree({ files = {}, manifest, raw = false }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-config-syn-'));
   for (const relative of TRACKED) write(root, relative, files[relative] ?? '');
-  write(root, MANIFEST, JSON.stringify(manifest, null, 2));
+  const stated = raw
+    ? manifest
+    : {
+        ...manifest,
+        vars: (manifest.vars ?? []).map((entry) => ('ragAffecting' in entry ? entry : { ...entry, ragAffecting: false })),
+      };
+  write(root, MANIFEST, JSON.stringify(stated, null, 2));
+  if (!raw) {
+    const names = [
+      ...stated.vars.filter((entry) => entry.ragAffecting === true).map((entry) => entry.name),
+      ...(stated.ragAffectingExtra ?? []),
+    ];
+    write(root, GENERATED, `${JSON.stringify({ names: [...new Set(names)].sort() }, null, 2)}\n`);
+  }
   return root;
+}
+
+function runArgs(root, extra) {
+  const result = spawnSync(process.execPath, [SCRIPT, '--root', root, ...extra], { encoding: 'utf8' });
+  return { code: result.status, out: `${result.stdout}${result.stderr}` };
 }
 
 function editManifest(root, edit) {
@@ -1060,4 +1080,164 @@ test('the config UI hides the fine-tune endpoint key and offers only off and on 
   const select = html.match(/<select id="RAG_FINETUNE"[^>]*>([\s\S]*?)<\/select>/);
   assert.ok(select, 'RAG_FINETUNE select exists');
   assert.deepEqual([...select[1].matchAll(/value="([^"]*)"/g)].map((m) => m[1]), ['off', 'on']);
+});
+
+const PHASE53_SWITCHES = [
+  'RAG_MONITOR',
+  'RAG_MONITOR_WEBHOOK_URL',
+  'RAG_MONITOR_WEBHOOK_SECRET',
+  'RAG_CONFIG_GATE',
+  'RAG_CONFIG_GATE_LIVE',
+  'RAG_REPRESENTATIVE_SAMPLE',
+];
+const D11_TRUE = [
+  'RAG_SYSTEM_PROMPT',
+  'RAG_PRE_CONTEXT',
+  'RAG_POST_CONTEXT',
+  'RAG_BEHAVIOR_MODE',
+  'RAG_PIPELINE',
+  'RAG_RERANKER',
+  'RAG_REFUSAL_THRESHOLD',
+  'RAG_CONTEXT_TOKEN_BUDGET',
+  'RAG_CITATIONS',
+  'RAG_GROUNDEDNESS',
+  'RAG_LEXICAL_SEARCH',
+  'RAG_QUERY_DECOMPOSE',
+  'RAG_EMBEDDING_PROFILES',
+  'OPENAI_EMBEDDING_MODEL',
+];
+const D11_EXTRA = [
+  'NEXT_PUBLIC_AI_PROVIDER',
+  'NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE',
+  'NEXT_PUBLIC_OPENAI_MODELS',
+  'NEXT_PUBLIC_OPENROUTER_MODELS',
+];
+
+function realManifest() {
+  return JSON.parse(fs.readFileSync(path.join(REPO, MANIFEST), 'utf8'));
+}
+
+test('every manifest entry states a boolean ragAffecting (D-11)', () => {
+  const missing = realManifest().vars.filter((entry) => typeof entry.ragAffecting !== 'boolean').map((entry) => entry.name);
+  assert.deepEqual(missing, []);
+});
+
+test('the D-11 true list is RAG-affecting and the extra names are listed', () => {
+  const manifest = realManifest();
+  const byName = new Map(manifest.vars.map((entry) => [entry.name, entry]));
+  for (const name of D11_TRUE) assert.equal(byName.get(name)?.ragAffecting, true, name);
+  assert.deepEqual([...(manifest.ragAffectingExtra ?? [])].sort(), D11_EXTRA);
+});
+
+test('LANGFUSE_*, the six Phase 5.3 switches and the log and feedback switches are not RAG-affecting (D-11)', () => {
+  const manifest = realManifest();
+  const falseNames = [
+    ...PHASE53_SWITCHES,
+    'RAG_RETRIEVAL_LOG',
+    'RAG_ANSWER_FEEDBACK',
+    'RAG_REFUSAL_FEEDBACK',
+    'RAG_EMBED_FEEDBACK',
+    'RAG_DOMAIN_EXPERT_REVIEW',
+  ];
+  for (const entry of manifest.vars) {
+    if (entry.name.startsWith('LANGFUSE_') || falseNames.includes(entry.name)) {
+      assert.equal(entry.ragAffecting, false, entry.name);
+    }
+  }
+});
+
+test('the committed generated list equals the true entries plus ragAffectingExtra and omits the gate switches', () => {
+  const manifest = realManifest();
+  const expected = [
+    ...new Set([
+      ...manifest.vars.filter((entry) => entry.ragAffecting === true).map((entry) => entry.name),
+      ...(manifest.ragAffectingExtra ?? []),
+    ]),
+  ].sort();
+  const generated = JSON.parse(fs.readFileSync(path.join(REPO, GENERATED), 'utf8'));
+  assert.deepEqual(generated.names, expected);
+  assert.ok(generated.names.includes('RAG_BEHAVIOR_MODE'));
+  for (const name of PHASE53_SWITCHES) assert.equal(generated.names.includes(name), false, name);
+});
+
+test('fails with a manifest violation when a RAG_* entry omits ragAffecting', () => {
+  const root = syntheticTree({
+    raw: true,
+    manifest: {
+      schemaVersion: 1,
+      vars: [{ name: 'RAG_PLACEHOLDER', status: 'legacy', knownGaps: ['config-server', 'config-ui', 'env-ts', 'init-env'] }],
+    },
+  });
+  try {
+    write(root, GENERATED, `${JSON.stringify({ names: [] }, null, 2)}\n`);
+    const { code, out } = run(root);
+    assert.equal(code, 1, out);
+    assert.match(out, /RAG_PLACEHOLDER \[manifest\] .*ragAffecting/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when ragAffecting is not a boolean on any entry', () => {
+  const root = syntheticTree({
+    manifest: {
+      schemaVersion: 1,
+      vars: [
+        { name: 'RAG_PLACEHOLDER', status: 'legacy', knownGaps: ['config-server', 'config-ui', 'env-ts', 'init-env'], ragAffecting: 'yes' },
+      ],
+    },
+  });
+  try {
+    const { code, out } = run(root);
+    assert.equal(code, 1, out);
+    assert.match(out, /RAG_PLACEHOLDER \[manifest\] .*ragAffecting/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('--write-rag-affecting writes the sorted union and the default run then passes', () => {
+  const root = syntheticTree({
+    manifest: {
+      schemaVersion: 1,
+      ragAffectingExtra: ['NEXT_PUBLIC_AI_PROVIDER'],
+      vars: [
+        { name: 'RAG_ZETA', status: 'legacy', knownGaps: ['config-server', 'config-ui', 'env-ts', 'init-env'], ragAffecting: true },
+        { name: 'RAG_ALPHA', status: 'legacy', knownGaps: ['config-server', 'config-ui', 'env-ts', 'init-env'], ragAffecting: true },
+        { name: 'RAG_OFF', status: 'legacy', knownGaps: ['config-server', 'config-ui', 'env-ts', 'init-env'], ragAffecting: false },
+      ],
+    },
+  });
+  try {
+    fs.rmSync(path.join(root, GENERATED));
+    const written = runArgs(root, ['--write-rag-affecting']);
+    assert.equal(written.code, 0, written.out);
+    const generated = JSON.parse(fs.readFileSync(path.join(root, GENERATED), 'utf8'));
+    assert.deepEqual(generated, { names: ['NEXT_PUBLIC_AI_PROVIDER', 'RAG_ALPHA', 'RAG_ZETA'] });
+    const { code, out } = run(root);
+    assert.equal(code, 0, out);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('the default run fails and names --write-rag-affecting when the generated list is stale or missing', () => {
+  const root = syntheticTree({
+    manifest: {
+      schemaVersion: 1,
+      vars: [{ name: 'RAG_ALPHA', status: 'legacy', knownGaps: ['config-server', 'config-ui', 'env-ts', 'init-env'], ragAffecting: true }],
+    },
+  });
+  try {
+    write(root, GENERATED, `${JSON.stringify({ names: [] }, null, 2)}\n`);
+    const stale = run(root);
+    assert.equal(stale.code, 1, stale.out);
+    assert.match(stale.out, /rag-affecting\.generated\.json.*--write-rag-affecting/);
+    fs.rmSync(path.join(root, GENERATED));
+    const missing = run(root);
+    assert.equal(missing.code, 1, missing.out);
+    assert.match(missing.out, /--write-rag-affecting/);
+  } finally {
+    cleanup(root);
+  }
 });

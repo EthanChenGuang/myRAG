@@ -2,6 +2,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -175,7 +176,13 @@ def test_run_configs_load_through_the_typescript_run_config_loader(tmp_path):
     loaded = [json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")]
     assert [entry["name"] for entry in loaded] == sorted(FEATURE_RUNS)
     for entry in loaded:
-        assert entry["overrides"] is None
+        if entry["name"] == "v2-diversity-mmr":
+            # Plan 04.2-29: rag_eval.sweep diversity --write-run-config stores the eval-only lambda here and nothing else.
+            overrides = entry["overrides"]
+            assert overrides is not None and overrides["diversity"]["mmr_lambda"] in (0.5, 0.6, 0.7, 0.8, 0.9)
+            assert all(value is None for key, value in overrides.items() if key != "diversity"), overrides
+        else:
+            assert entry["overrides"] is None
         for key, value in FEATURE_RUNS[entry["name"]].items():
             assert entry["env"][key] == value
 
@@ -210,7 +217,9 @@ from rag_eval.profile_compare import baseline_from_report  # noqa: E402
 from rag_eval.report import build_report  # noqa: E402
 
 NOISE = NoiseConfig.model_validate_json((REPO_ROOT / "eval" / "config" / "noise.json").read_text(encoding="utf-8"))
-CALIBRATION = REPO_ROOT / "eval" / "reports" / "refusal-calibration-fixture" / "refusal-calibration-result.json"
+# The calibration result the refusal-cell rule tests were written against, frozen when plan 05.3-15 re-calibrated the
+# fixture (golden set version 2); the committed result now lives in eval/reports/refusal-calibration-fixture/.
+CALIBRATION = REPO_ROOT / "eval" / "tests" / "data" / "refusal-calibration-result.pre-05.3-15.json"
 SECOND = "the second passage names one more neutral fact"
 EARLIER = "the earlier version described another neutral rule"
 ASKED = "ab12"
@@ -405,6 +414,22 @@ def test_identifier_gate_fails_when_precision_is_not_measured_on_every_item():
     assert "category:identifier_near_miss identifier_precision not measured" in result.offenders
 
 
+def test_identifier_gate_measures_tagged_no_answer_items_too(monkeypatch):
+    absent = _g("en-no_answer-002", "en", answerable=False, tags=["asked_identifier:AB-14"])
+    monkeypatch.setattr(sys.modules[__name__], "GOLDEN", [*GOLDEN, absent])
+    gate = _spec().gates.identifier
+    refused = ("en-no_answer-001", "en-no_answer-002")
+    ok = identifier_gate(gate, _identifier_outputs(on=_output(identifier=_ident(), refused=refused), reference=_output(refused=refused)), NOISE)
+    assert ok.passed is True, ok.offenders
+    assert (ok.numbers["items"], ok.numbers["identifier_precision_n"], ok.numbers["near_miss_leakage_n"]) == (2, 2, 2)
+    leaking = {"en-no_answer-002": [_chunk("en-no_answer-002", 1, "doc.en.md", "x", identifiers_norm=[NEAR])]}
+    on = _output(kept=leaking, identifier=_ident(), refused=("en-no_answer-001",))
+    result = identifier_gate(gate, _identifier_outputs(on=on, reference=_output(refused=refused)), NOISE)
+    assert result.passed is False
+    assert "category:identifier_near_miss near_miss_leakage 0.5000 > 0.0000" in result.offenders
+    assert "category:identifier_near_miss identifier_precision 0.5000 < 1.0000" in result.offenders
+
+
 def test_identifier_gate_fails_when_the_descriptive_slice_drops():
     gate = _spec().gates.identifier
     on = _output(misses=("it-general-001",), identifier=_ident())
@@ -533,6 +558,7 @@ def _spec_with(tmp_path):
     path = tmp_path / "spec.json"
     payload = json.loads(spec.model_dump_json())
     payload["baselines"] = {"prechunked": str(baseline_path), "ingest": str(baseline_path)}
+    payload["calibration_result"] = str(CALIBRATION)
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
 

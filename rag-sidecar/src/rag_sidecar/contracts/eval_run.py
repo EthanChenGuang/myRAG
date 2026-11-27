@@ -1,7 +1,15 @@
 from typing import Annotated, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from rag_sidecar.contracts.answer_checks import (
+    AnswerNotice,
+    AnswerSentence,
+    Count,
+    FinishReason,
+    OutputGuardSummary,
+    VersionConflict,
+)
 from rag_sidecar.contracts.answers import AnswerGroundedness, CitationRecord, CitationStrategy
 from rag_sidecar.contracts.ingest import DocType
 from rag_sidecar.contracts.omit import omit_default_schema, omit_none_schema
@@ -283,6 +291,27 @@ class TraceAttributeFilter(_Contract):
     too_broad: bool
 
 
+RefusalOrigin = Literal["server", "model_relevance"]
+AnswerRulePartId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
+ResidualRuleId = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._-]{1,63}$")]
+
+
+class TraceResidualOutputFindings(_Contract):
+    """D-42: what a flag-mode guard pass still finds in the final answer; counts and rule ids only, never text."""
+
+    links: Count = 0
+    credential_matches: Count = 0
+    rule_ids: list[ResidualRuleId] = Field(default_factory=list)
+
+    @property
+    def total(self) -> int:
+        return self.links + self.credential_matches
+
+
+def _optional_field(**kwargs: object) -> object:
+    return Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema, **kwargs)  # type: ignore[arg-type]
+
+
 class RagTrace(_Contract):
     schema_version: Literal[1] = 1
     item_id: str | None = None
@@ -335,6 +364,29 @@ class RagTrace(_Contract):
     attribute_filter: TraceAttributeFilter | None = Field(
         default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
     )
+    # Phase 5.2 (D-16, D-18, D-33, D-41, D-42, D-52, D-89); absent on traces recorded before it.
+    answer_language: str | None = _optional_field(min_length=1, max_length=16)
+    sentences: list[AnswerSentence] | None = _optional_field()
+    refusal_origin: RefusalOrigin | None = _optional_field()
+    output_guard: OutputGuardSummary | None = _optional_field()
+    residual_output_findings: TraceResidualOutputFindings | None = _optional_field()
+    version_conflict: VersionConflict | None = _optional_field()
+    mixed_versions: bool | None = _optional_field()
+    finish_reason: FinishReason | None = _optional_field()
+    answer_rules_parts: list[AnswerRulePartId] | None = _optional_field()
+    notices: list[AnswerNotice] | None = _optional_field()
+
+    @model_validator(mode="after")
+    def _phase52_rules(self) -> "RagTrace":
+        if self.sentences is not None:
+            indexes = [sentence.index for sentence in self.sentences]
+            if len(indexes) != len(set(indexes)):
+                raise ValueError("sentence indexes must not repeat")
+        if self.answer_rules_parts is not None and len(set(self.answer_rules_parts)) != len(
+            self.answer_rules_parts
+        ):
+            raise ValueError("answer_rules_parts must not repeat")
+        return self
 
 
 class RunEmbedder(_Contract):

@@ -6,7 +6,8 @@ from rag_sidecar.contracts.judge import JudgeReport
 
 from rag_eval.config_files import load_gate_population
 from rag_eval.corpus import load_corpus
-from rag_eval.golden_io import load_golden, select_golden
+from rag_eval.golden_io import item_sha256, load_golden, select_golden
+from rag_eval.golden_set import LifecycleError, load_manifest as load_set_manifest
 from rag_eval.metrics import RealSetTooSmall, score_items
 from rag_eval.paths import REPO_ROOT, resolve_cli_path
 from rag_eval.report import build_report, write_report
@@ -75,6 +76,20 @@ def _rate(label: str, metric) -> str:
     return f"{label}={shown} (n={metric.n})"
 
 
+def _set_manifest_problems(golden, set_manifest) -> list[str]:
+    """Every scored item must be in the set manifest with its recorded hash (D-46); the set may hold items this run
+    does not score (for example table_split items left out of a queued run)."""
+    recorded = {entry.id: entry for entry in set_manifest.items}
+    problems: list[str] = []
+    for item in golden:
+        entry = recorded.get(item.id)
+        if entry is None:
+            problems.append(f"added: {item.id} is in the golden file but not in the manifest")
+        elif item_sha256(item) != entry.item_sha256:
+            problems.append(f"changed: {item.id} differs from its manifest hash")
+    return problems
+
+
 def _score(args: argparse.Namespace) -> int:
     try:
         golden = load_golden(resolve_cli_path(args.golden))
@@ -88,6 +103,19 @@ def _score(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    set_manifest = None
+    if args.golden_manifest:
+        try:
+            set_manifest = load_set_manifest(resolve_cli_path(args.golden_manifest))
+        except (OSError, ValueError, LifecycleError) as exc:
+            print(f"error: golden manifest: {exc}", file=sys.stderr)
+            return 2
+        lifecycle_problems = _set_manifest_problems(golden, set_manifest)
+        if lifecycle_problems:
+            print("error: the golden file does not match its golden-set manifest:", file=sys.stderr)
+            for problem in lifecycle_problems:
+                print(f"  {problem}", file=sys.stderr)
+            return 2
     try:
         missing = _missing_from_manifest(
             resolve_cli_path(args.golden),
@@ -124,7 +152,9 @@ def _score(args: argparse.Namespace) -> int:
     results = score_items(traces, golden, rank_field=args.rank_source, doc_types=doc_types)
     out_dir = resolve_cli_path(args.out)
     try:
-        report = build_report(manifest, results, golden, traces, judge=judge, gate_population_config=gate_config)
+        report = build_report(
+            manifest, results, golden, traces, judge=judge, gate_population_config=gate_config, golden_manifest=set_manifest
+        )
     except RealSetTooSmall as exc:
         _remove_stale_report(out_dir)
         print(
@@ -193,6 +223,13 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="split manifest whose every item id must be in the golden file (default: a docgroup-rule "
         "split-manifest.json next to the golden file; a deleted item is refused)",
+    )
+    score.add_argument(
+        "--golden-manifest",
+        type=Path,
+        default=None,
+        help="golden-set manifest (D-46): every scored item must match its hash; fills golden_set_version, "
+        "golden_manifest_sha256, stale_count and stale_share and leaves stale and retired items out of the gated slices",
     )
     score.set_defaults(handler=_score)
     args = parser.parse_args(argv)

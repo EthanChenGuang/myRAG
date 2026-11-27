@@ -4,6 +4,9 @@ import type { AliasMap } from './blocks';
 
 export const MESSAGE_QUOTE_CAP = 1000;
 
+/** CitationRecord.versionLabel holds at most 40 characters, the 0941 column limit. */
+const VERSION_LABEL_MAX = 40;
+
 /** One record per validated alias, numbered in order of first appearance in the answer. */
 export function buildCitationRecords(
   validAliases: readonly string[],
@@ -27,6 +30,9 @@ export function buildCitationRecords(
       quote: block.text,
       quoteHash: createHash('sha256').update(block.text).digest('hex'),
       strategy,
+      // Phase 5.2 D-50: the block's version label and effective date, only when RAG_VERSION_LABELS set them.
+      ...(block.versionLabel !== undefined && block.versionLabel.length <= VERSION_LABEL_MAX ? { versionLabel: block.versionLabel } : {}),
+      ...(block.effectiveFrom !== undefined ? { effectiveFrom: block.effectiveFrom } : {}),
       // D-13, D-21: the used document's version currency, effective dates and other sources, only when set.
       ...(facts?.isCurrent !== undefined ? { isCurrent: facts.isCurrent } : {}),
       ...(facts?.effectiveFrom !== undefined ? { effectiveFrom: facts.effectiveFrom } : {}),

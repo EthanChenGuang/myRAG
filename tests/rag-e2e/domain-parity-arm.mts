@@ -62,6 +62,8 @@ try {
     fixtureMode,
     tier: 'smoke',
     appEnv,
+    // 05.3-15: npm run test-rag answers in-process runs by default, and the committed baselines are recorded that way.
+    answers: true,
   });
   fs.writeFileSync(
     path.join(outDir, 'arm.json'),
