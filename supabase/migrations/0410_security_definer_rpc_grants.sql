@@ -760,6 +760,18 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_purge_verify(text, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_verify(text, uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_purge_store_inventory()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_store_inventory() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_store_inventory() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_foreign_stores(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_foreign_stores(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_foreign_stores(text, uuid, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_foreign_leftovers(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_foreign_leftovers(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_foreign_leftovers(text, uuid, uuid[]) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_table_rows_follow_document()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_table_rows_follow_document() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_table_rows_follow_document() TO service_role;
