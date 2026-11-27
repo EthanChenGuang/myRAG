@@ -68,6 +68,8 @@ MiningReason = Literal[
     "low_score",
     "no_source_opened",
 ]
+# Phase 5.2 D-55: reasons written by the answer checks and by rag_enqueue_review_item (0944); never produced by weekly mining alone.
+CheckReviewReason = Literal["claim_unsupported", "output_guard", "version_conflict"]
 ReviewItemStatus = Literal["open", "labelled", "skipped", "exported"]
 Triage = Literal["dictionary", "training", "golden", "kb_gap", "not_a_failure"]
 DictionaryRelation = Literal["synonym", "abbreviation", "translation", "misspelling"]
@@ -260,19 +262,22 @@ class ExpertLabel(_Contract):
 
 
 class ReviewItem(_LanguageSnapshot):
-    """D-14 queue row as the review routes return it; the snapshot survives the log purge."""
+    """D-14 queue row as the review routes return it; the snapshot survives the log purge.
+
+    An item raised by a check (Phase 5.2 D-55, output_guard or version_conflict) comes from no question: it has no channel and may have no
+    trace id."""
 
     id: UuidStr
     tenant_key: TenantKey
     retrieval_log_id: UuidStr | None = None
-    trace_id: str = Field(min_length=1, max_length=128)
+    trace_id: str | None = Field(default=None, min_length=1, max_length=128)
     query_masked: str | None = Field(default=None, max_length=MAX_QUERY_CHARS)
     answer_masked: str | None = Field(default=None, max_length=20000)
-    channel: Channel
+    channel: Channel | None = None
     outcome: LogOutcome
     candidates: list[RetrievalLogCandidate] = Field(default_factory=list, max_length=MAX_LOG_CANDIDATES)
     retrieval_config_hash: str | None = Field(default=None, max_length=128)
-    reasons: list[MiningReason] = _unique(default_factory=list)
+    reasons: list[MiningReason | CheckReviewReason] = _unique(default_factory=list)
     occurrences: int = Field(default=1, ge=1)
     tags: list[ReviewTag] = Field(default_factory=list)
     status: ReviewItemStatus

@@ -503,6 +503,21 @@ export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';
 export { escapeTags, REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE } from './context/wrap';
 export { readSecurityConfig } from './security/config';
+export {
+  acknowledgeSecurityAlert,
+  checkItemDetails,
+  checkReasonOf,
+  holdUploader,
+  linkPreviewStatus,
+  listSecurityAlerts,
+  listSecurityEvents,
+  listSecurityUploaders,
+  readSecuritySettings,
+  releaseUploaderHold,
+  resolveAdminTenants,
+  SECURITY_EVENT_SOURCES,
+} from './security/security-admin';
+export type { ReviewSnapshotReader, SecurityActor, SecurityAdminDb, SecurityFailure } from './security/security-admin';
 export { injectionTraceVersions } from './security/injection-check';
 export type { ToolResultGuardMode } from './security/config';
 export { escapeToolOutput, scanToolOutput, wrapToolResultsForPrompt } from './security/tool-results';

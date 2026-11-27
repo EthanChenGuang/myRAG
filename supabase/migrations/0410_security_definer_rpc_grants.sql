@@ -881,6 +881,15 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb) TO service_role;
   END IF;
+  -- Phase 5.2, migration 0945: security-events admin tenant resolution (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_security_admin_keys(uuid, boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_security_admin_keys(uuid, boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_security_admin_keys(uuid, boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_security_uploader_in_tenant(text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_security_uploader_in_tenant(text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_security_uploader_in_tenant(text, uuid) TO service_role;
+  END IF;
 END
 $service_role_only$;
 
