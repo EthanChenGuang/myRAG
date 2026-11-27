@@ -224,6 +224,7 @@ function validReason(reason: PurgeReason): boolean {
 
 /** Time the work after the commit may take; it never follows the request's signal, so a closed tab cannot stop it half way. */
 const POST_COMMIT_TIMEOUT_MS = 45_000;
+const PURGE_TIMEOUT_MS = 60_000;
 const FINISH_TIMEOUT_MS = 15_000;
 const RECENT_MS = 7 * 86_400_000;
 const UPLOAD_FOLDER = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\//;
@@ -600,7 +601,8 @@ async function purgeTenantLineage(
       p_actor: { kind: actor.kind, id: actor.id.toLowerCase() },
       p_reason: reason.note === null || reason.note === undefined ? { code: reason.code } : { code: reason.code, note: reason.note },
     },
-    signal,
+    // Not the request's signal: a tab closed while the transaction commits must not skip the object removal that follows.
+    AbortSignal.timeout(PURGE_TIMEOUT_MS),
   );
   if (!purged.ok) return purged;
   const row = purged.rows[0];
@@ -608,7 +610,6 @@ async function purgeTenantLineage(
   if (!row || auditId === null) return { ok: false, reason: 'unavailable' };
   const removed = countsOf(row.counts);
 
-  const after = AbortSignal.timeout(POST_COMMIT_TIMEOUT_MS);
   const target: LineageTarget = {
     auditId,
     tenantKey,
@@ -617,8 +618,28 @@ async function purgeTenantLineage(
     parsePrefixes: strings(row, 'parse_cache_prefixes'),
     uploads: documents.map(uploadOf).filter((upload): upload is Upload => upload !== null),
   };
-  const pending: PendingItem[] = [];
   const objectCounts: Record<string, number> = { original_files: 0, parse_cache_files: 0, page_images: 0 };
+  const pending: PendingItem[] = [];
+  try {
+    const checked = await afterCommit(target, row, scope, objectCounts, pending);
+    if (checked.ok) return { ok: true, auditId, lineageId, removed: { ...removed, ...objectCounts }, check: checked.check };
+  } catch (error) {
+    console.error('[RAG Admin] purge object step failed after commit', { auditId, lineageId, error: error instanceof Error ? error.name : 'unknown' });
+  }
+  console.error('[RAG Admin] purge committed but its check was not stored', { auditId, lineageId });
+  return { ok: true, auditId, lineageId, removed: { ...removed, ...objectCounts }, check: unchecked(pending.length) };
+}
+
+/** Removes the objects of a committed purge, invalidates the RedisVL cache and stores the check. Fills the counts and pending items as it goes. */
+async function afterCommit(
+  target: LineageTarget,
+  row: Row,
+  scope: TenantScope | null,
+  objectCounts: Record<string, number>,
+  pending: PendingItem[],
+): Promise<VerifyPurgeResult> {
+  const { tenantKey, lineageId } = target;
+  const after = AbortSignal.timeout(POST_COMMIT_TIMEOUT_MS);
   const record = (store: string, step: StepResult): void => {
     if (store in objectCounts || step.removed > 0) objectCounts[store] = (objectCounts[store] ?? 0) + step.removed;
     if (step.pending) addPending(pending, step.pending);
@@ -629,9 +650,8 @@ async function purgeTenantLineage(
   for (const upload of target.uploads) record('uploaded_image', await removeUploadedImage(upload, after));
   const cache = await invalidateCache(tenantKey, target.versionIds, scope, after);
   if (cache.pending) addPending(pending, cache.pending);
-
-  const checked = await verifyPurge({
-    auditId,
+  return verifyPurge({
+    auditId: target.auditId,
     tenantKey,
     lineageId,
     pending: pending.map(encodePending),
@@ -639,11 +659,6 @@ async function purgeTenantLineage(
     objectCounts,
     signal: after,
   });
-  if (!checked.ok) {
-    console.error('[RAG Admin] purge committed but its check was not stored', { auditId, lineageId });
-    return { ok: true, auditId, lineageId, removed: { ...removed, ...objectCounts }, check: unchecked(pending.length) };
-  }
-  return { ok: true, auditId, lineageId, removed: { ...removed, ...objectCounts }, check: checked.check };
 }
 
 /** Scope-based entry for source sync (plan 06.3-21): the tenant comes from the minted scope, never from the caller. */
