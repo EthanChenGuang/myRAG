@@ -82,7 +82,8 @@ function fakeSpawn(handlers = {}) {
     const call = { command, args: [...args], options, script, files: {} };
     for (const flag of ['--env-overlay', '--golden', '--run-config', '--current', '--proposed']) {
       const file = argAfter(args, flag);
-      if (file && fs.existsSync(file)) call.files[flag] = fs.readFileSync(file, 'utf8');
+      const resolved = file ? path.resolve(options.cwd || '.', file) : null;
+      if (resolved && fs.existsSync(resolved)) call.files[flag] = fs.readFileSync(resolved, 'utf8');
     }
     calls.push(call);
     const handler = handlers[script] || defaultHandlers[script];
@@ -104,15 +105,19 @@ function exit(child, code) {
   child.emit('close', code, null);
 }
 
+function outOf(call) {
+  return path.resolve(call.options.cwd || '.', argAfter(call.args, '--out'));
+}
+
 function writeGate(call, checks) {
-  const out = argAfter(call.args, '--out');
+  const out = outOf(call);
   fs.mkdirSync(out, { recursive: true });
   fs.writeFileSync(path.join(out, 'gate.json'), JSON.stringify({ absolute: { passed: true, checks } }));
 }
 
 const defaultHandlers = {
   smoke(call, child) {
-    const out = argAfter(call.args, '--out');
+    const out = outOf(call);
     fs.mkdirSync(out, { recursive: true });
     if (call.args.includes('--base-url')) {
       fs.writeFileSync(path.join(out, 'report.json'), '{}');
@@ -126,20 +131,20 @@ const defaultHandlers = {
     exit(child, 0);
   },
   nightly(call, child) {
-    const out = argAfter(call.args, '--out');
+    const out = outOf(call);
     fs.mkdirSync(out, { recursive: true });
     fs.writeFileSync(path.join(out, 'traces.jsonl'), '');
     fs.writeFileSync(path.join(out, 'run.json'), '{}');
     exit(child, 0);
   },
   score(call, child) {
-    const out = argAfter(call.args, '--out');
+    const out = outOf(call);
     fs.mkdirSync(out, { recursive: true });
     fs.writeFileSync(path.join(out, 'report.json'), '{}');
     exit(child, 0);
   },
   absolute(call, child) {
-    const out = argAfter(call.args, '--out');
+    const out = outOf(call);
     fs.mkdirSync(out, { recursive: true });
     fs.writeFileSync(path.join(out, 'absolute.json'), JSON.stringify({ passed: true, checks: [row('false_answer_rate', 'overall', 'passed')] }));
     exit(child, 0);
@@ -401,7 +406,7 @@ test('live layer: switched_off, no_credentials, and the run when on', async () =
 test('a live failure fails the check', async () => {
   const handlers = {
     absolute(call, child) {
-      const out = argAfter(call.args, '--out');
+      const out = outOf(call);
       fs.mkdirSync(out, { recursive: true });
       fs.writeFileSync(path.join(out, 'absolute.json'), JSON.stringify({ passed: false, checks: [row('false_refusal_rate', 'overall', 'failed')] }));
       exit(child, 0);
