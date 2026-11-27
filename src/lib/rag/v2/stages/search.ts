@@ -23,6 +23,7 @@ import { loadTenantIdentifierPatterns } from '../../identifiers/patterns';
 import { tableLookupStage, type TableLookupRow } from '../../retrieval/table-lookup';
 import type { LexicalOptions } from '../../lexical/options';
 import type { LexicalStamp } from '../../lexical/resolve-options';
+import { scopeAccessFilter, type ScopeAccessFilter } from '../../tenant/access';
 import { scopeKey, type TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
@@ -76,6 +77,8 @@ export interface SearchStagesInput {
   lexical?: QueryLexicalOptions;
   /** D-29: the attribute stage's soft list and fallback filters; absent runs neither. */
   attributes?: AttributeSearchInput;
+  /** D-05: the access filter runRetrieval computed once; absent reads it from the scope. Set on every backend request. */
+  access?: ScopeAccessFilter;
 }
 
 /** The request's query-side lexical options and what they were built from. */
@@ -476,6 +479,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const versions = effectiveVersionScope(config, profile, input.retrievalFilters?.versionScope, input.channel);
   const historyScope = versions.scope === 'current' ? undefined : versions.scope;
   const versionScopeArg = historyScope ? { versionScope: historyScope } : {};
+  const access = ctx.access ?? scopeAccessFilter(scope);
   // D-18, D-34: the terminology variant's dense list weighs dense_weight × the dense leg weight in force, read at run time.
   const terminologyDenseWeight = ctx.terminologyDenseWeight ?? terminologyParams().dense_weight;
   const denseFactor = (index: number): number => (variants[index]?.kind === 'terminology' ? terminologyDenseWeight : 1);
@@ -535,6 +539,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
             timeoutMs: bindingTimeoutMs,
             ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
             ...identifierArg,
+            access,
           })
         : Promise.resolve(null);
 
@@ -570,6 +575,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
               lexicalTokens: termTokens,
               lexicalLanguages: null,
               filters: roundFilters,
+              access,
               denseLimit: 0,
               lexicalLimit: pool,
               signal: stageSignal,
@@ -601,6 +607,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
             ...versionScopeArg,
             ...identifierArg,
             ...lexicalOptionsArg,
+            access,
           }),
         );
         return { legs: softLegs, failed: false };
@@ -633,6 +640,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         ...identifierArg,
         terminologyDenseWeight,
         ...lexicalOptionsArg,
+        access,
       });
       let order: unknown;
       try {
@@ -690,6 +698,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
               ...versionScopeArg,
               ...identifierArg,
               ...lexicalOptionsArg,
+              access,
             }),
           );
           denseTotal += legs.dense.length;

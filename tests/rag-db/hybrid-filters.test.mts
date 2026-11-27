@@ -395,7 +395,7 @@ describe('hybrid_search_chunks und language rule (0802, D-14)', () => {
       const current: Row[][] = [];
       for (const call of calls) current.push(await search(db, call));
       await db.exec(
-        'DROP FUNCTION public.hybrid_search_chunks(text, text, vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer, text[], text, numeric, numeric, text, jsonb, boolean, text[], boolean, date, jsonb, text[])',
+        'DROP FUNCTION public.hybrid_search_chunks(text, text, vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer, text[], text, numeric, numeric, text, jsonb, boolean, text[], boolean, date, jsonb, text[], text[], boolean)',
       );
       await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0602_hybrid_include_undated.sql'), 'utf8'));
       try {
@@ -405,11 +405,12 @@ describe('hybrid_search_chunks und language rule (0802, D-14)', () => {
       } finally {
         await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0802_hybrid_search_scopes_dates_und.sql'), 'utf8'));
         await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0856_hybrid_search_42.sql'), 'utf8'));
+        await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0930_access_retrieval_functions.sql'), 'utf8'));
       }
     } finally {
       await db.query(`UPDATE document_chunks SET language = 'und' WHERE id = ANY($1::uuid[])`, [[ids.undChunk, ids.enChunk]]);
     }
     const count = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'hybrid_search_chunks'");
-    assert.equal(count.rows[0]?.n, 1, 're-applying 0802 and 0856 on top of 0602 leaves one function');
+    assert.equal(count.rows[0]?.n, 1, 're-applying 0802, 0856 and 0930 on top of 0602 leaves one function');
   });
 });

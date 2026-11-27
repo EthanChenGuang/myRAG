@@ -73,6 +73,7 @@ import {
 import { securitySpanAttributes } from './security/security-events';
 import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
 import { hybridRerank } from './rerank/local-hybrid';
+import { AccessScopeMissingError, scopeAccessFilter, type ScopeAccessFilter } from './tenant/access';
 import { assertTenantScope, scopeKey, type TenantScope } from './tenant/scope';
 import { createTraceCollector, sanitizeStageCounts, type TraceCollector } from './trace/collector';
 import { finishTrace, type FinishTraceOptions } from './trace/finish';
@@ -819,10 +820,26 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
     if (ownsTrace) finishTrace(collector, blocked, traceOptions(input));
     return blocked;
   }
-  const result = await dispatchRetrieval(input, collector);
+  // D-05, D-09: the access filter is read once; a scope never resolved for access fails closed while RAG_DOC_ACCESS_GROUPS is on.
+  let access: ScopeAccessFilter | undefined;
+  if (input.scope !== null) {
+    try {
+      access = scopeAccessFilter(input.scope);
+    } catch (error) {
+      if (!(error instanceof AccessScopeMissingError)) throw error;
+      logger.warn('RAG Access', 'Retrieval refused: scope not resolved for access', { code: ACCESS_SCOPE_MISSING });
+      const missing = withLogOutcome(failure(collector, 'error', ACCESS_SCOPE_MISSING, null), 'v2');
+      if (ownsTrace) finishTrace(collector, missing, traceOptions(input));
+      return missing;
+    }
+  }
+  const result = await dispatchRetrieval(input, collector, access);
   if (ownsTrace) finishTrace(collector, result, traceOptions(input));
   return result;
 }
+
+/** D-09: the retrieval error reason while the switch is on and the scope carries no access scope. */
+export const ACCESS_SCOPE_MISSING = 'access_scope_missing';
 
 function traceOptions(input: RunRetrievalInput): FinishTraceOptions {
   return { query: input.query, ...(input.logContext !== undefined ? { logContext: input.logContext } : {}) };
@@ -888,7 +905,11 @@ function hasEvalBindingOverride(options: RetrievalOptions | undefined): boolean 
   return (bindings !== undefined && Object.keys(bindings).length > 0) || options?.domainControlLeg !== undefined;
 }
 
-async function dispatchRetrieval(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
+async function dispatchRetrieval(
+  input: RunRetrievalInput,
+  collector: TraceCollector,
+  access: ScopeAccessFilter | undefined,
+): Promise<RetrievalResult> {
   const evalBindingOverride = input.profile === 'eval' && hasEvalBindingOverride(input.options);
   const eligible = !input.options?.generalOverview && V2_PROFILES.includes(input.profile);
   if (evalBindingOverride && (!eligible || !loadRagConfig(getRagDeps().ragEnv()).v2.domainEmbeddings.enabled)) {
@@ -904,11 +925,11 @@ async function dispatchRetrieval(input: RunRetrievalInput, collector: TraceColle
   }
 
   const { runV2Pipeline } = await import('./v2/pipeline');
-  if (effective.source === 'explicit') return withLogOutcome(await runV2Pipeline(input, collector), 'v2');
+  if (effective.source === 'explicit') return withLogOutcome(await runV2Pipeline(input, collector, access), 'v2');
 
   // A defaulted v2 may find the Phase 4 functions missing: that attempt is discarded and the same input re-runs on legacy.
   const attempt = bufferedCollector(collector);
-  const result = await runV2Pipeline(input, attempt);
+  const result = await runV2Pipeline(input, attempt, access);
   if (result.status === 'error' && result.reason === V2_UNAVAILABLE) {
     if (evalBindingOverride) {
       attempt.commit();

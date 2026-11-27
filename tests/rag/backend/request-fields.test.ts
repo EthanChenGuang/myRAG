@@ -36,6 +36,7 @@ function request(over: Partial<BackendSearchRequest> = {}): BackendSearchRequest
     denseVector: [0.1, 0.2, 0.3],
     lexicalTokens: ['term'],
     lexicalLanguages: null,
+    access: { mode: 'off' },
     filters: { currentOnly: true },
     denseLimit: 5,
     lexicalLimit: 5,
