@@ -243,9 +243,10 @@ describe('SQL functions that read the tables for anon and authenticated (single-
         const keyword = (await db.query<Row>("SELECT * FROM search_chunks_by_keywords('zzquarword zzdrift zzquarcurrent zzreadyword', 20)")).rows;
         const text = JSON.stringify(keyword);
         assert.ok(text.includes('zzreadyword'), 'service_role: the ready chunk is found');
-        for (const word of ['zzquarword', 'zzdrift', 'zzquarcurrent']) assert.ok(!text.includes(word), `service_role: ${word}`);
+        // The bodies check the chunk's own status (0306); the drifted-copy row was hidden from clients by RLS only, and clients can no longer call.
+        for (const word of ['zzquarword', 'zzquarcurrent']) assert.ok(!text.includes(word), `service_role: ${word}`);
         const byVector = JSON.stringify((await db.query<Row>(`SELECT * FROM match_document_chunks('${ZERO_VECTOR}'::vector, 0::double precision, 50)`)).rows);
-        for (const word of ['zzquarword', 'zzdrift', 'zzquarcurrent']) assert.ok(!byVector.includes(word), `service_role: vector search ${word}`);
+        for (const word of ['zzquarword', 'zzquarcurrent']) assert.ok(!byVector.includes(word), `service_role: vector search ${word}`);
       });
     } finally {
       await fixture.db.close();
