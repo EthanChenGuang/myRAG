@@ -3,7 +3,7 @@ import os
 import sys
 from pathlib import Path
 
-from rag_eval.calibrate import cache, dup_clusters, groundedness, refusal
+from rag_eval.calibrate import cache, dup_clusters, groundedness, groundedness_judge, refusal
 from rag_eval.calibrate.refusal import CalibrationError, run_refusal_calibration
 from rag_eval.harness_runner import HarnessError
 from rag_eval.paths import resolve_cli_path
@@ -102,6 +102,28 @@ def _groundedness(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _groundedness_judge(args: argparse.Namespace) -> int:
+    labelled = resolve_cli_path(args.labelled)
+    out = None if args.dry_run else resolve_cli_path(args.out)
+    report_dir = resolve_cli_path(args.report_dir)
+    try:
+        result = groundedness_judge.run_judge_calibration(
+            labelled, out, report_dir, judge=args.judge, generator_model=args.generator_model
+        )
+    except (groundedness_judge.JudgeCalibrationError, OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    counts: dict[str, int] = {}
+    for record in result.languages:
+        counts[record.status] = counts.get(record.status, 0) + 1
+    summary = " ".join(f"{status}={count}" for status, count in sorted(counts.items())) or "no languages"
+    print(f"groundedness-judge calibration ({result.judge_model} {result.judge_version}, {result.source}): {summary}")
+    print(f"wrote {report_dir / groundedness_judge.RESULT_NAME} and {report_dir / groundedness_judge.REPORT_NAME}")
+    if result.thresholds_written:
+        print(f"wrote judge cells to {result.thresholds_path}")
+    return EXIT_OK
+
+
 EXIT_GATE = 1
 
 
@@ -177,6 +199,22 @@ def main(argv: list[str] | None = None) -> int:
         help="merge the cells into a thresholds file (default path: eval/config/groundedness-thresholds.json); live runs on real pairs only",
     )
     cmd.set_defaults(handler=_groundedness)
+    cmd = commands.add_parser(
+        "groundedness-judge",
+        help="fit the judge's max unsupported share per (judge model, judge version, language) on dev, check once on test",
+    )
+    cmd.add_argument("--judge", required=True, help="fake (the deterministic fake judge) or a judge model id")
+    cmd.add_argument("--generator-model", default=None, help="the generator the real judge must differ from (D-25)")
+    cmd.add_argument("--labelled", type=Path, default=groundedness_judge.DEFAULT_LABELLED)
+    cmd.add_argument(
+        "--out",
+        type=Path,
+        default=groundedness_judge.THRESHOLDS_PATH,
+        help="the judge thresholds file to merge the cells into (default eval/config/groundedness-judge-thresholds.json)",
+    )
+    cmd.add_argument("--report-dir", type=Path, default=groundedness_judge.DEFAULT_REPORT_DIR)
+    cmd.add_argument("--dry-run", action="store_true", help="write the report only, no thresholds file")
+    cmd.set_defaults(handler=_groundedness_judge)
     cmd = commands.add_parser(
         "cache", help="fit the semantic-cache distance per embedding profile on dev cache pairs, check once on test"
     )

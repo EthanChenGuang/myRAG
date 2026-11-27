@@ -226,9 +226,11 @@ describe('judgeAnswerLabel (D-27)', () => {
     ...overrides,
   });
 
-  it('commits the thresholds file with schema_version 1 and no cell', () => {
-    expect(rawJudgeThresholds).toEqual({ cells: [], schema_version: 1 });
-    expect(loadJudgeThresholds().cells.size).toBe(0);
+  it('commits the thresholds file with schema_version 1 and only the fake judge fixture cells (05.2-26)', () => {
+    expect(rawJudgeThresholds.schema_version).toBe(1);
+    expect(rawJudgeThresholds.cells.length).toBeGreaterThan(0);
+    for (const cell of rawJudgeThresholds.cells) expect([cell.judge_model, cell.source]).toEqual(['fake/judge-v1', 'fixture']);
+    expect(loadJudgeThresholds().cells.size).toBe(rawJudgeThresholds.cells.length);
   });
 
   it('keeps an uncalibrated language not_checked judge_uncalibrated', () => {
