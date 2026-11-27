@@ -52,6 +52,31 @@ const REVIEW_LABELLING_LABELS = {
     'reason.no_source_opened': "No source opened",
     'reason.none': "No reason recorded",
     'reason.unknown': "Reason code {code}",
+    'tag.representative': "Weekly sample",
+    'tag.re_review': "Due for re-review",
+    'tag.historical': "Imported question",
+    'tag.pilot': "Pilot user",
+    'tag.drift_fill': "Under-covered topic group",
+    'source.unknown': "Source code {code}",
+    'check.title': "Answer check",
+    'check.help': "Your three answers are compared with the model judges, to find out where the judges can be trusted.",
+    'check.q.supported': "Is the answer backed by the documents shown?",
+    'check.q.supported.help': "Choose Supported when the main statements are backed. A single unbacked detail belongs to the third question.",
+    'check.opt.supported': "Supported",
+    'check.opt.notSupported': "Not supported",
+    'check.q.relevant': "Does the answer address the question?",
+    'check.opt.relevant': "Relevant",
+    'check.opt.notRelevant': "Not relevant",
+    'check.q.unsupported': "Does it contain any statement the documents do not back, even a minor one?",
+    'check.opt.yes': "Yes",
+    'check.opt.no': "No",
+    'action.saveCheck': "Save answer check",
+    'check.incomplete': "Answer all three questions before saving.",
+    'check.saved': "Answer check saved.",
+    'check.savedAt': "Last saved {time}",
+    'check.notAllowed': "Not saved. You are not an expert for this workspace. Ask an admin for access.",
+    'check.gone': "Not saved. This item is no longer in the queue. The list has been reloaded.",
+    'item.noAnswerImported': "No answer is recorded for this question, so there is nothing to check. Use the search to find the evidence for your label.",
     'outcome.answered': "Answered",
     'outcome.refused_no_context': "Refused: not in the documents",
     'outcome.kb_unavailable': "Knowledge base unavailable",
@@ -263,6 +288,31 @@ const REVIEW_LABELLING_LABELS = {
     'reason.no_source_opened': "未打开任何来源",
     'reason.none': "未记录原因",
     'reason.unknown': "原因代码 {code}",
+    'tag.representative': "每周抽样",
+    'tag.re_review': "需要复审",
+    'tag.historical': "导入的问题",
+    'tag.pilot': "试点用户",
+    'tag.drift_fill': "覆盖不足的主题分组",
+    'source.unknown': "来源代码 {code}",
+    'check.title': "回答检查",
+    'check.help': "你的三个判断会与评判模型的结果对比，用来确定评判模型在哪些情况下可信。",
+    'check.q.supported': "回答是否有所示文档作为依据？",
+    'check.q.supported.help': "主要陈述有依据时选择“有依据”。个别没有依据的细节在第三个问题中说明。",
+    'check.opt.supported': "有依据",
+    'check.opt.notSupported': "没有依据",
+    'check.q.relevant': "回答是否切题？",
+    'check.opt.relevant': "切题",
+    'check.opt.notRelevant': "不切题",
+    'check.q.unsupported': "回答中是否有文档不支持的陈述（哪怕是次要的）？",
+    'check.opt.yes': "是",
+    'check.opt.no': "否",
+    'action.saveCheck': "保存回答检查",
+    'check.incomplete': "请回答全部三个问题后再保存。",
+    'check.saved': "回答检查已保存。",
+    'check.savedAt': "上次保存于 {time}",
+    'check.notAllowed': "未保存。你不是该工作区的专家。请向管理员申请权限。",
+    'check.gone': "未保存。该条目已不在队列中。列表已重新加载。",
+    'item.noAnswerImported': "这个问题没有记录回答，因此无需检查回答。请使用搜索查找标注所需的依据。",
     'outcome.answered': "已回答",
     'outcome.refused_no_context': "拒答：文档中没有",
     'outcome.kb_unavailable': "知识库不可用",
@@ -474,6 +524,31 @@ const REVIEW_LABELLING_LABELS = {
     'reason.no_source_opened': "Nessuna fonte aperta",
     'reason.none': "Nessun motivo registrato",
     'reason.unknown': "Codice motivo {code}",
+    'tag.representative': "Campione settimanale",
+    'tag.re_review': "Da rivedere",
+    'tag.historical': "Domanda importata",
+    'tag.pilot': "Utente pilota",
+    'tag.drift_fill': "Gruppo di argomenti poco coperto",
+    'source.unknown': "Codice origine {code}",
+    'check.title': "Verifica della risposta",
+    'check.help': "Le tue tre risposte vengono confrontate con i modelli giudice, per capire dove i giudici sono affidabili.",
+    'check.q.supported': "La risposta è supportata dai documenti mostrati?",
+    'check.q.supported.help': "Scegli Supportata quando le affermazioni principali sono supportate. Un singolo dettaglio non supportato riguarda la terza domanda.",
+    'check.opt.supported': "Supportata",
+    'check.opt.notSupported': "Non supportata",
+    'check.q.relevant': "La risposta risponde alla domanda?",
+    'check.opt.relevant': "Pertinente",
+    'check.opt.notRelevant': "Non pertinente",
+    'check.q.unsupported': "Contiene qualche affermazione non supportata dai documenti, anche secondaria?",
+    'check.opt.yes': "Sì",
+    'check.opt.no': "No",
+    'action.saveCheck': "Salva verifica della risposta",
+    'check.incomplete': "Rispondi a tutte e tre le domande prima di salvare.",
+    'check.saved': "Verifica della risposta salvata.",
+    'check.savedAt': "Ultimo salvataggio {time}",
+    'check.notAllowed': "Non salvato. Non sei un esperto per quest’area di lavoro. Chiedi l’accesso a un amministratore.",
+    'check.gone': "Non salvato. Questo elemento non è più in coda. L’elenco è stato ricaricato.",
+    'item.noAnswerImported': "Per questa domanda non è registrata alcuna risposta, quindi non c'è nulla da verificare. Usa la ricerca per trovare le prove per la tua etichetta.",
     'outcome.answered': "Risposta data",
     'outcome.refused_no_context': "Rifiutata: non nei documenti",
     'outcome.kb_unavailable': "Knowledge base non disponibile",
@@ -666,7 +741,18 @@ const REVIEW_LABELLING_REASONS = [
   'low_score',
   'no_source_opened',
 ];
+/** Phase 5.3 reasons (0967): the weekly sample and re-review. Kept apart from the mined reasons, which the mining report counts. */
+const REVIEW_LABELLING_SAMPLE_REASONS = ['representative', 're_review'];
+/** rag_review_item_strata.source; a mined item has none. */
+const REVIEW_LABELLING_SOURCES = ['representative', 'pilot', 'drift_fill', 'historical'];
+const REVIEW_LABELLING_SOURCE_FILTER = 'source:';
 const REVIEW_LABELLING_LANGUAGES = ['zh', 'en', 'it'];
+/** D-31 answer check: three yes/no questions, never preselected (UI-SPEC 6.11). */
+const REVIEW_LABELLING_CHECK_GROUPS = [
+  { field: 'supported', legend: 'check.q.supported', help: 'check.q.supported.help', yes: 'check.opt.supported', no: 'check.opt.notSupported' },
+  { field: 'relevant', legend: 'check.q.relevant', help: null, yes: 'check.opt.relevant', no: 'check.opt.notRelevant' },
+  { field: 'unsupported_content', legend: 'check.q.unsupported', help: null, yes: 'check.opt.yes', no: 'check.opt.no' },
+];
 const REVIEW_LABELLING_OUTCOMES = ['answered', 'refused_no_context', 'kb_unavailable', 'degraded_answer', 'unknown'];
 const REVIEW_LABELLING_CHANNELS = ['chat', 'embed', 'voice'];
 const REVIEW_LABELLING_CATEGORIES = [
@@ -839,8 +925,39 @@ function reviewLabellingFormatDate(value, locale) {
   }
 }
 
+function reviewLabellingFormatDateTime(value, locale) {
+  const date = new Date(String(value || ''));
+  if (Number.isNaN(date.getTime())) return String(value || '');
+  try {
+    return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+  } catch {
+    return date.toISOString().slice(0, 16).replace('T', ' ');
+  }
+}
+
+/** Only the three verdicts and the save time are kept from an answer-check body; any other field (a score) is dropped. */
+function reviewLabellingCheckValues(body) {
+  const flag = (value) => (typeof value === 'boolean' ? value : null);
+  const raw = reviewLabellingIsObject(body) ? body : {};
+  return {
+    values: { supported: flag(raw.supported), relevant: flag(raw.relevant), unsupported_content: flag(raw.unsupported_content) },
+    labelledAt: typeof raw.labelled_at === 'string' ? raw.labelled_at : null,
+  };
+}
+
 function reviewLabellingReasonText(code, locale) {
+  if (REVIEW_LABELLING_SAMPLE_REASONS.includes(code)) return reviewLabellingLabel(`tag.${code}`, locale);
   return REVIEW_LABELLING_REASONS.includes(code) ? reviewLabellingLabel(`reason.${code}`, locale) : reviewLabellingLabel('reason.unknown', locale, { code });
+}
+
+function reviewLabellingSourceText(code, locale) {
+  return REVIEW_LABELLING_SOURCES.includes(code) ? reviewLabellingLabel(`tag.${code}`, locale) : reviewLabellingLabel('source.unknown', locale, { code });
+}
+
+/** A known reason or source as its label; an unknown code inside its sentence, the code in a code element (text only). */
+function reviewLabellingCodeNodes(doc, known, key, label, locale, code) {
+  if (known) return [doc.createTextNode(label)];
+  return reviewLabellingTemplateNodes(doc, reviewLabellingLabel(key, locale), { code });
 }
 
 function reviewLabellingOutcomeText(code, locale) {
@@ -873,7 +990,9 @@ function reviewLabellingQueuePath(filters, cursor) {
   const params = new URLSearchParams();
   for (const name of ['status', 'reason', 'language']) {
     const value = filters && filters[name];
-    if (value) params.set(name, value);
+    if (!value) continue;
+    if (name === 'reason' && value.startsWith(REVIEW_LABELLING_SOURCE_FILTER)) params.set('source', value.slice(REVIEW_LABELLING_SOURCE_FILTER.length));
+    else params.set(name, value);
   }
   if (cursor) params.set('cursor', cursor);
   const query = params.toString();
@@ -934,6 +1053,7 @@ function reviewLabellingQueueRow(raw) {
     question: reviewLabellingString(raw.query_masked),
     queryLanguage: reviewLabellingString(raw.query_language),
     reasons: reviewLabellingStrings(raw.reasons),
+    source: reviewLabellingString(raw.source),
     occurrences: Number.isInteger(raw.occurrences) ? raw.occurrences : 1,
     outcome: reviewLabellingString(raw.outcome) || 'unknown',
     status: reviewLabellingString(raw.status) || 'open',
@@ -1241,7 +1361,12 @@ class ReviewLabellingPanel {
         ...REVIEW_LABELLING_STATUSES.map((s) => ({ value: s, label: this.t(`status.${s}`) })),
         { value: '', label: all },
       ]),
-      this.filterSelect('reason', 'filter.reason', [{ value: '', label: all }, ...REVIEW_LABELLING_REASONS.map((r) => ({ value: r, label: this.t(`reason.${r}`) }))]),
+      this.filterSelect('reason', 'filter.reason', [
+        { value: '', label: all },
+        ...REVIEW_LABELLING_REASONS.map((r) => ({ value: r, label: this.t(`reason.${r}`) })),
+        ...REVIEW_LABELLING_SAMPLE_REASONS.map((r) => ({ value: r, label: this.t(`tag.${r}`) })),
+        { value: `${REVIEW_LABELLING_SOURCE_FILTER}historical`, label: this.t('tag.historical') },
+      ]),
       this.filterSelect('language', 'filter.language', [{ value: '', label: all }, ...REVIEW_LABELLING_LANGUAGES.map((l) => ({ value: l, label: this.t(`lang.${l}`) }))]),
     ]);
     const refresh = this.el('button', { className: 'btn btn-sm btn-outline md:ml-auto', attrs: { type: 'button', 'data-review-refresh': true } }, [
@@ -1306,7 +1431,12 @@ class ReviewLabellingPanel {
       open.addEventListener('click', () => this.openCase(row.id));
       const reasons = this.reasonBadges(row);
       const small = this.el('div', { className: 'md:hidden mt-1 text-xs font-normal text-base-content/70 flex flex-wrap gap-x-2 gap-y-1' }, [
-        this.el('span', { text: row.reasons.length ? row.reasons.map((r) => reviewLabellingReasonText(r, this.locale)).join(', ') : this.t('reason.none') }),
+        this.el('span', {
+          text: [
+            ...(row.reasons.length ? row.reasons.map((r) => reviewLabellingReasonText(r, this.locale)) : [this.t('reason.none')]),
+            ...(row.source ? [reviewLabellingSourceText(row.source, this.locale)] : []),
+          ].join(', '),
+        }),
         this.el('span', {}, [reviewLabellingLanguageNode(doc, row.queryLanguage, this.locale)]),
         row.minedAt ? this.el('span', { text: reviewLabellingFormatDate(row.minedAt, this.locale) }) : null,
       ]);
@@ -1343,7 +1473,26 @@ class ReviewLabellingPanel {
   reasonBadges(row) {
     const wrap = this.el('div', { className: 'flex flex-wrap items-center gap-2' });
     if (row.reasons.length === 0) wrap.appendChild(this.el('span', { className: 'text-xs text-base-content/70', text: this.t('reason.none') }));
-    for (const reason of row.reasons) wrap.appendChild(this.el('span', { className: 'badge badge-sm badge-ghost h-auto', text: reviewLabellingReasonText(reason, this.locale) }));
+    for (const reason of row.reasons) {
+      const sample = REVIEW_LABELLING_SAMPLE_REASONS.includes(reason);
+      const known = sample || REVIEW_LABELLING_REASONS.includes(reason);
+      wrap.appendChild(
+        this.el(
+          'span',
+          { className: `badge badge-sm ${sample ? 'badge-outline' : 'badge-ghost'} h-auto` },
+          reviewLabellingCodeNodes(this.doc, known, 'reason.unknown', reviewLabellingReasonText(reason, this.locale), this.locale, reason),
+        ),
+      );
+    }
+    if (row.source) {
+      wrap.appendChild(
+        this.el(
+          'span',
+          { className: 'badge badge-sm badge-outline h-auto', attrs: { 'data-review-source-tag': true } },
+          reviewLabellingCodeNodes(this.doc, REVIEW_LABELLING_SOURCES.includes(row.source), 'source.unknown', reviewLabellingSourceText(row.source, this.locale), this.locale, row.source),
+        ),
+      );
+    }
     if (row.occurrences > 1) {
       wrap.appendChild(this.el('span', { className: 'text-xs text-base-content/70 tabular-nums', text: this.t('occurrences', { count: reviewLabellingFormatNumber(row.occurrences, this.locale) }) }));
     }
@@ -1435,7 +1584,7 @@ class ReviewLabellingPanel {
     if (!opts.keepStatus) this.announce('');
     const back = this.contentHost.querySelector('[data-review-back]');
     if (back) back.focus();
-    await this.loadChunks();
+    await Promise.all([this.loadCheck(), this.loadChunks()]);
     return view;
   }
 
@@ -1452,6 +1601,13 @@ class ReviewLabellingPanel {
       dirty: false,
       busy: false,
       readOnly: view.status === 'exported',
+      check: {
+        state: view.answer ? 'loading' : 'none',
+        values: { supported: null, relevant: null, unsupported_content: null },
+        labelledAt: null,
+        message: null,
+        busy: false,
+      },
     };
   }
 
@@ -1493,6 +1649,7 @@ class ReviewLabellingPanel {
     const top = this.el('div', { className: 'flex flex-wrap items-center justify-between gap-2 mb-4' }, [back, reviewLabellingStatusBadge(doc, view.status, this.locale)]);
 
     const questionId = reviewLabellingNextId('review-question');
+    this.checkHost = null;
     const header = this.el('div', { className: 'mb-6 min-w-0' }, [
       this.el('p', { className: 'text-xs text-base-content/70', text: this.t('item.question'), attrs: { id: questionId } }),
       this.el('p', {
@@ -1515,6 +1672,10 @@ class ReviewLabellingPanel {
           attrs: { tabindex: '0', role: 'region', 'aria-label': this.t('item.answer'), dir: 'auto', translate: 'no', 'data-review-answer': true },
         }),
       );
+      this.checkHost = this.el('section', { className: 'mt-4 min-w-0 max-w-prose', attrs: { 'data-review-check': true, 'aria-labelledby': reviewLabellingNextId('review-check-title') } });
+      header.appendChild(this.checkHost);
+    } else if (this.importedWithoutAnswer()) {
+      header.appendChild(this.el('p', { className: 'text-sm text-base-content/70 mt-4 max-w-prose', text: this.t('item.noAnswerImported'), attrs: { 'data-review-no-answer': true } }));
     } else {
       header.appendChild(this.el('p', { className: 'text-xs text-base-content/70 mt-2', text: this.t('item.noAnswer') }));
     }
@@ -1528,8 +1689,158 @@ class ReviewLabellingPanel {
     }
     nodes.push(header, columns);
     this.contentHost.replaceChildren(...nodes);
+    this.renderCheck();
     this.renderEvidence();
     this.renderLabel();
+  }
+
+  /** The caller's own saved answer check (GET); a 409 means the item has no answer after all, so the check is removed. */
+  async loadCheck() {
+    const state = this.caseState;
+    if (!state || state.check.state === 'none') return;
+    const result = await this.request(reviewLabellingItemPath(state.view.id, '/answer-check'), { method: 'GET' });
+    if (this.caseState !== state) return;
+    const check = state.check;
+    check.state = 'ready';
+    if (result.ok) {
+      const parsed = reviewLabellingCheckValues(result.body);
+      check.values = parsed.values;
+      check.labelledAt = parsed.labelledAt;
+    } else if (result.status === 409) {
+      check.state = 'none';
+      if (this.checkHost) this.checkHost.remove();
+      this.checkHost = null;
+      return;
+    } else if (result.status === 403) {
+      check.message = { key: 'check.notAllowed', error: true };
+    } else if (result.thrown) {
+      check.message = { text: reviewLabellingShared('error.network', this.locale), error: true };
+    } else if (result.status !== 404) {
+      check.message = { text: result.status === 503 ? this.t('list.unavailable') : reviewLabellingShared('error.generic', this.locale, { status: result.status }), error: true };
+    }
+    this.renderCheck();
+  }
+
+  renderCheck(focusSelector) {
+    const host = this.checkHost;
+    const state = this.caseState;
+    if (!host || !state) return;
+    const doc = this.doc;
+    const check = state.check;
+    const locked = check.state !== 'ready' || check.busy || state.readOnly;
+    const titleId = host.getAttribute('aria-labelledby');
+    const nodes = [
+      this.el('h4', { className: 'text-balance text-base font-semibold', text: this.t('check.title'), attrs: { id: titleId } }),
+      this.el('p', { className: 'text-sm mt-1 text-pretty', text: this.t('check.help') }),
+    ];
+    for (const group of REVIEW_LABELLING_CHECK_GROUPS) {
+      const name = reviewLabellingNextId(`review-check-${group.field}`);
+      const helpId = group.help ? `${name}-help` : null;
+      const option = (value, key) => {
+        const input = this.el('input', {
+          className: 'radio radio-sm',
+          attrs: { type: 'radio', name, value: String(value), 'data-review-check-field': group.field },
+        });
+        input.checked = check.values[group.field] === value;
+        input.disabled = locked;
+        input.addEventListener('change', () => {
+          if (input.checked) check.values[group.field] = value;
+        });
+        return this.el('label', { className: 'label cursor-pointer justify-start gap-2 py-1 min-w-0' }, [input, this.el('span', { className: 'label-text text-sm break-words', text: this.t(key) })]);
+      };
+      nodes.push(
+        this.el('fieldset', { className: 'mt-4 min-w-0', attrs: { 'data-review-check-group': group.field, 'aria-describedby': helpId } }, [
+          this.el('legend', { className: 'text-sm font-medium break-words text-pretty', text: this.t(group.legend) }),
+          this.el('div', { className: 'flex flex-wrap gap-x-6 gap-y-1 mt-1' }, [option(true, group.yes), option(false, group.no)]),
+          helpId ? this.el('p', { className: 'text-xs text-base-content/70 mt-1 text-pretty', text: this.t(group.help), attrs: { id: helpId } }) : null,
+        ]),
+      );
+    }
+    const save = this.el('button', { className: 'btn btn-primary btn-sm h-auto min-h-8 py-1 whitespace-normal text-left', attrs: { type: 'button', 'data-review-save-check': true } }, [
+      check.busy ? reviewLabellingSpinner(doc, this.t('action.saving')) : this.el('span', { text: this.t('action.saveCheck') }),
+    ]);
+    save.disabled = check.state !== 'ready' || check.busy || state.readOnly;
+    save.addEventListener('click', () => this.saveCheck());
+    const actions = this.el('div', { className: 'mt-4 flex flex-wrap items-center gap-x-4 gap-y-2' }, [save]);
+    if (check.labelledAt) {
+      const template = this.t('check.savedAt');
+      const at = template.indexOf('{time}');
+      const time = this.el('time', { className: 'tabular-nums', text: reviewLabellingFormatDateTime(check.labelledAt, this.locale), attrs: { datetime: check.labelledAt } });
+      actions.appendChild(
+        this.el('span', { className: 'min-w-0 break-words text-xs text-base-content/70', attrs: { 'data-review-check-saved-at': true } }, at < 0 ? [template, ' ', time] : [template.slice(0, at), time, template.slice(at + 6)]),
+      );
+    }
+    nodes.push(actions);
+    const message = check.message;
+    const text = message ? (message.text !== undefined ? message.text : this.t(message.key)) : '';
+    nodes.push(
+      this.el('p', { className: `text-sm mt-2 min-h-5 break-words ${message && message.error ? 'text-error' : ''}`.trim(), attrs: { role: 'status', 'data-review-check-status': true } }, [
+        message && message.error ? reviewLabellingIcon(doc, 'bi-exclamation-circle', 'mr-1') : null,
+        text || null,
+      ]),
+    );
+    host.replaceChildren(...nodes);
+    if (check.state === 'loading') host.setAttribute('aria-busy', 'true');
+    else host.removeAttribute('aria-busy');
+    if (focusSelector) {
+      const target = host.querySelector(focusSelector);
+      if (target) target.focus();
+    }
+  }
+
+  /** D-31: sends the three verdicts only; an unanswered question sends nothing and moves focus to that group. */
+  async saveCheck() {
+    const state = this.caseState;
+    if (!state || state.check.busy || state.check.state !== 'ready' || state.readOnly) return;
+    const check = state.check;
+    const missing = REVIEW_LABELLING_CHECK_GROUPS.find((group) => typeof check.values[group.field] !== 'boolean');
+    if (missing) {
+      check.message = { key: 'check.incomplete', error: true };
+      this.renderCheck(`fieldset[data-review-check-group="${missing.field}"] input[type="radio"]`);
+      return;
+    }
+    const id = state.view.id;
+    const body = { supported: check.values.supported, relevant: check.values.relevant, unsupported_content: check.values.unsupported_content };
+    check.busy = true;
+    check.message = null;
+    this.renderCheck();
+    const result = await this.request(reviewLabellingItemPath(id, '/answer-check'), { method: 'POST', body: JSON.stringify(body) });
+    if (this.caseState !== state) return;
+    check.busy = false;
+    if (result.ok) {
+      const parsed = reviewLabellingCheckValues(result.body);
+      for (const group of REVIEW_LABELLING_CHECK_GROUPS) if (typeof parsed.values[group.field] === 'boolean') check.values[group.field] = parsed.values[group.field];
+      check.labelledAt = parsed.labelledAt || check.labelledAt;
+      check.message = { key: 'check.saved' };
+      this.renderCheck('[data-review-save-check]');
+      return;
+    }
+    if (result.thrown) check.message = { text: reviewLabellingShared('error.network', this.locale), error: true };
+    else if (result.status === 401) {
+      this.showSignIn();
+      return;
+    } else if (result.status === 403) check.message = { key: 'check.notAllowed', error: true };
+    else if (result.status === 404) {
+      this.view = 'queue';
+      this.caseState = null;
+      await this.loadQueue({ reset: true });
+      this.announce(this.t('check.gone'), { error: true });
+      if (this.titleEl) this.titleEl.focus();
+      return;
+    } else if (result.status === 409) {
+      await this.openCase(id, { keepStatus: true });
+      if (!(result.body && result.body.error === 'no_answer')) this.announce(this.t('exported.notice'), { error: true });
+      return;
+    } else if (result.status === 400) check.message = { text: this.t('error.invalid', { detail: reviewLabellingDetail(result.body || {}) }), error: true };
+    else if (result.status === 503) check.message = { text: this.t('list.unavailable'), error: true };
+    else check.message = { text: reviewLabellingShared('error.generic', this.locale, { status: result.status }), error: true };
+    this.renderCheck('[data-review-save-check]');
+  }
+
+  /** An imported question without a recorded answer: no answer, no candidate list and no answer check; the search stays. */
+  importedWithoutAnswer() {
+    const view = this.caseState && this.caseState.view;
+    return Boolean(view) && !view.answer && view.source === 'historical';
   }
 
   caseMeta() {
@@ -1599,6 +1910,10 @@ class ReviewLabellingPanel {
     if (!this.evidenceHost || !this.caseState) return;
     const doc = this.doc;
     const state = this.caseState;
+    if (this.importedWithoutAnswer()) {
+      this.evidenceHost.replaceChildren(this.searchBlock());
+      return;
+    }
     const nodes = [this.el('h4', { className: 'text-balance text-base font-semibold mb-2', text: this.t('passages.heading') })];
     if (state.chunksState === 'failed') {
       const reload = this.el('button', { className: 'btn btn-sm', text: this.t('action.reloadPassages'), attrs: { type: 'button', 'data-review-reload-passages': true } });

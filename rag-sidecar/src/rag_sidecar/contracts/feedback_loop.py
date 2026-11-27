@@ -81,7 +81,8 @@ ReviewItemReason = Literal[
     "representative",
     "re_review",
 ]
-ReviewSource = Literal["representative", "pilot", "drift_fill", "historical"]
+ReviewItemSource = Literal["representative", "pilot", "drift_fill", "historical"]
+ReviewSource = ReviewItemSource
 ReviewItemStatus = Literal["open", "labelled", "skipped", "exported"]
 Triage = Literal["dictionary", "training", "golden", "kb_gap", "not_a_failure"]
 DictionaryRelation = Literal["synonym", "abbreviation", "translation", "misspelling"]
@@ -277,7 +278,8 @@ class ReviewItem(_LanguageSnapshot):
     """D-14 queue row as the review routes return it; the snapshot survives the log purge.
 
     An item raised by a check (Phase 5.2 D-55, output_guard or version_conflict) comes from no question: it has no channel and may have no
-    trace id."""
+    trace id. Phase 5.3 (0967) enqueues sampled, pilot and imported items, which may have no trace or channel; `source` is their
+    rag_review_item_strata source (null for mined items)."""
 
     id: UuidStr
     tenant_key: TenantKey
@@ -290,6 +292,7 @@ class ReviewItem(_LanguageSnapshot):
     candidates: list[RetrievalLogCandidate] = Field(default_factory=list, max_length=MAX_LOG_CANDIDATES)
     retrieval_config_hash: str | None = Field(default=None, max_length=128)
     reasons: list[ReviewItemReason | CheckReviewReason] = _unique(default_factory=list)
+    source: ReviewItemSource | None = None
     occurrences: int = Field(default=1, ge=1)
     tags: list[ReviewTag] = Field(default_factory=list)
     status: ReviewItemStatus

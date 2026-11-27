@@ -316,7 +316,7 @@ async function readItemSources(admin: Client, tenantKey: string, ids: string[]):
  * One golden export line: the review item fields the promotion needs (never user, chat, trace or log ids, the expert's id or the
  * candidate snapshot), the ExpertLabel, and per evidence span the current chunk text under the item's tenant (null when the chunk is
  * no longer current, ready and non-quarantined in that tenant) with quote_verified, and the item's source from
- * rag_review_item_strata (null when it has none).
+ * rag_review_item_strata (null when it has none). Channel and reasons keep the shape of the Python twin (_GoldenExportLine).
  */
 export const GoldenExportLineSchema = ReviewItemSchema.pick({
   id: true,
@@ -333,7 +333,25 @@ export const GoldenExportLineSchema = ReviewItemSchema.pick({
   mining_window: true,
   mined_at: true,
 })
-  .extend({ label: ExpertLabelSchema, evidence: z.array(GoldenEvidenceSchema).max(20), source: ReviewSourceSchema.nullable() })
+  .extend({
+    channel: z.enum(['chat', 'embed', 'voice']),
+    reasons: z.array(
+      z.enum([
+        'feedback_negative',
+        'refusal_disputed',
+        'groundedness_flagged',
+        'refused_high_score',
+        'zero_results',
+        'low_score',
+        'no_source_opened',
+        'representative',
+        're_review',
+      ]),
+    ),
+    label: ExpertLabelSchema,
+    evidence: z.array(GoldenEvidenceSchema).max(20),
+    source: ReviewSourceSchema.nullable(),
+  })
   .strict();
 export type GoldenExportLine = z.infer<typeof GoldenExportLineSchema>;
 

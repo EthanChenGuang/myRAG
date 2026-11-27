@@ -1,7 +1,8 @@
 """Phase 5.2 golden items in the D-54 sequence (plan 05.2-29): parity, additions, re-baseline.
 
 The baselines recorded before this plan are kept under eval/baselines/history/*.pre-05.2-29.json; the parity tests
-pin the item set they hold, so later tests can prove that set is unchanged by the additions.
+pin the item set they hold, so later tests can prove that set is unchanged by the additions. Train 33 replaced them with
+the train-32 records (main before this plan landed, 05.3-15 items included); the train-30 records stay as *.pre-05.3-15.json.
 """
 
 import collections
@@ -24,8 +25,8 @@ PRE_PREFIX = "pre-05.2-29"
 
 # Item count and sha256 over the sorted, newline-joined item ids of each baseline before plan 05.2-29.
 PRE_ITEM_SETS = {
-    "fixture-baseline": (283, "a86c8693e9074d5c600556ce9a5539e07a0366b58f6246390e7862fc1a0df0c3"),
-    "fixture-ingest-baseline": (344, "8842c2de25ba004d9e4ce5aff61c2858edf8a921820f25755978b070dd80208d"),
+    "fixture-baseline": (308, "dae26f1b46c8ed13e303a2c65de7abe9deb2ed612f6940408343b47f025bc0a5"),
+    "fixture-ingest-baseline": (369, "192460c7b7743befd738ad15a9e2964649c3afaeb96b5ec93dccf7ae99860bf5"),
 }
 
 
