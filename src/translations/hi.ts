@@ -399,6 +399,7 @@ export const hi = {
   waitingForApproval: "आपकी अनुमति का इंतज़ार...",
   executingTool: "टूल चल रहा है, कृपया प्रतीक्षा करें...",
   toolError: "टूल चलाने में त्रुटि हुई।",
+  voiceUnavailable: "आवाज़ अस्थायी रूप से उपलब्ध नहीं है। कृपया बाद में पुनः प्रयास करें।",
   
   // Chat message action tooltips
   copyTooltip: "कॉपी करें",

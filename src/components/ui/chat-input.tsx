@@ -8,7 +8,7 @@ import { useWebSearchStore } from "@/lib/web-search-store";
 import { useFileUploadStore } from "@/lib/file-upload-store";
 import { useMultiFileUploadStore } from "@/lib/multi-file-upload-store";
 import { ContentPart, SourceImageData } from "@/types/chat";
-import { startRecording, stopRecording, speechToText } from '@/lib/audio-utils';
+import { startRecording, stopRecording, speechToText, isVoiceUnavailableError } from '@/lib/audio-utils';
 import { useUserSettingsStore } from '@/lib/user-settings-store';
 import { env } from '@/lib/env';
 import { useAudioSettings } from '@/lib/hooks/use-audio-settings';
@@ -23,7 +23,7 @@ import { useChatStore } from '@/lib/chat-store';
 import { useShallow } from 'zustand/react/shallow';
 import { v4 as uuidv4 } from 'uuid';
 import { useLanguage } from '@/components/providers/language-provider';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from '@/components/ui/use-toast';
 // Add document selector imports
 import DocumentSelector from './document-selector';
 import { useDocumentMentionStore, Document } from '@/lib/document-mention-store';
@@ -3247,6 +3247,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 
     } catch (error) {
       console.error('Failed to stop recording:', error);
+      if (isVoiceUnavailableError(error)) {
+        toast({ title: t('voiceUnavailable'), variant: 'destructive' });
+      }
     } finally {
       // Reset all states
       setIsTranscribing(false);
