@@ -220,6 +220,7 @@ export {
   parseBodyChannel,
   type AnswerChannel,
   type AnswerTurn,
+  type OutputGuardTurnSources,
   type TextsSource,
 } from './generation/answer-turn';
 export { guardChannelReply, guardSummaryText } from './security/channel-reply-guard';

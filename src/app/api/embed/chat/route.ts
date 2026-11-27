@@ -32,6 +32,7 @@ import {
   kbUnavailableText,
   readAnswerConfig,
   type AnswerTurn,
+  type OutputGuardTurnSources,
   linkUsageInstructions,
   mintEmbedFeedbackToken,
   parseRetrievalFilters,
@@ -552,6 +553,22 @@ export async function POST(request: NextRequest) {
 
     try {
       const timingCollector = pendingTrace?.collector ?? null;
+      // Phase 5.2 D-35, D-37, D-40: the guard's allow evidence; the tenant comes from the resolved embed scope only
+      const guardSources: OutputGuardTurnSources = {
+        blocks: () => (smallTalkTurn || !retrievalResult ? [] : retrievalResult.blocks ?? []),
+        serverUrls: () =>
+          retrievalResult
+            ? [
+                ...retrievalResult.usedDocuments.flatMap((doc) => [doc.external_url, doc.image_url]),
+                ...retrievalResult.sourceImages.map((image) => image.url),
+              ].filter((url): url is string => typeof url === 'string' && url !== '')
+            : [],
+        contextFlagged: () => retrievalResult?.injection?.flagged === true,
+        tenantKey: () => scopeKey(embedScope.scope),
+        trace: () => timingCollector,
+      };
+      // Empty with every Phase 5.2 switch off, so no transform is passed (as today)
+      const answerTransforms = answerTurn.transforms([], { guard: guardSources });
       await awaitPreGenerationDelay();
       timingCollector?.markGenerationStart();
       const result = await streamText({
@@ -560,6 +577,7 @@ export async function POST(request: NextRequest) {
         temperature: 0.1, // Use same temperature as main chat
         // D-30: min(2000, cap) when the cap applies; 2000 otherwise
         maxOutputTokens: answerTurn.maxOutputTokens(2000),
+        ...(answerTransforms.length > 0 ? { experimental_transform: answerTransforms } : {}),
         // Don't include tools for embed API to keep it simple
         onFinish: (event) => {
           pendingTrace?.collector.setReviewContent({ answer: event.text ?? '' });
