@@ -91,6 +91,14 @@ export type {
   SetDocumentsAccessResult,
   UploadAccessOutcome,
 } from './access/documents';
+export {
+  UPLOAD_ACCESS_FIELD,
+  UPLOAD_ACCESS_MAX_GROUPS,
+  accessKeysForGroupKeys,
+  checkUploadAccess,
+  parseUploadAccessField,
+} from './access/upload';
+export type { CheckUploadAccessInput, GroupKeysResult, ParsedUploadAccessField, UploadAccessCheck, UploadAccessField } from './access/upload';
 export { accessStatus, runAccessDrift, syncAccessStatus } from './access/status';
 export type { AccessDriftRow, AccessEmbedGroupStatus, AccessStatus, AccessStatusDeps } from './access/status';
 export {
