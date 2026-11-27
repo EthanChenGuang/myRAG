@@ -75,6 +75,7 @@ import {
   accessGroupsEnabled,
   createCitationRecheck,
   accessSetsFor,
+  cachedSourceDocumentIds,
   scheduleSecurityEvent,
   bodyNamesAccessGroups,
   resolveAccessScope,
@@ -2776,6 +2777,8 @@ Context:
       finishRagTrace();
       // W6: a hit writes its own Phase 5 answer record when a fresh answer would; refusals never carry one
       const hitAnswerId = cached.is_refusal ? null : answerId;
+      // T-04.3-143: the cached sources count as this turn's kept sources; their label sets go on the hit's answer record
+      const hitAccessSets = accessSetsFor(retrievalResult?.accessLabels, cachedSourceDocumentIds(cacheHit));
       const answerFields = hitAnswerId ? { answerId: hitAnswerId } : {};
       const stream = createUIMessageStream({
         execute: async ({ writer }) => {
@@ -2807,6 +2810,7 @@ Context:
             premise: { blocks: [], webSearchTexts: [] },
             requestLanguage: userLanguage,
             groundedness: cached.groundedness,
+            ...(hitAccessSets && hitAccessSets.length > 0 ? { accessSets: hitAccessSets } : {}),
           });
         },
       });

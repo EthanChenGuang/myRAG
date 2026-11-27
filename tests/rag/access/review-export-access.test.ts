@@ -264,7 +264,7 @@ describe('feedback_negative review export', () => {
         session: sessionClient(db),
         deps: {
           admin: () => adminClient(db),
-          schedule: (task) => {
+          schedule: (task: () => Promise<void>) => {
             tasks.push(task);
           },
           now: () => NOW,
@@ -374,8 +374,8 @@ describe('semantic-cache hit review content (cached sources count as kept)', () 
     return value;
   }
 
-  async function settle(): Promise<void> {
-    for (let index = 0; index < 5; index += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  async function settle(count = 1): Promise<void> {
+    await vi.waitFor(() => expect(langfuseCalls.length).toBeGreaterThanOrEqual(count), { timeout: 5000 });
   }
 
   function finish(result: RetrievalResult, accessOn: boolean): void {
@@ -407,7 +407,7 @@ describe('semantic-cache hit review content (cached sources count as kept)', () 
   it('keeps the cached answer for open cached sources and while access is off', async () => {
     finish(hitResult(new Map([['doc-cached', ['all']]])), true);
     finish(hitResult(), false);
-    await settle();
+    await settle(2);
     expect(langfuseCalls).toHaveLength(2);
     for (const trace of langfuseCalls) expect(trace.review?.answer).toContain('5521');
   });
