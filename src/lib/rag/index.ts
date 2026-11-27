@@ -69,6 +69,18 @@ export type {
   AccessMemberCandidate,
   MyAccessGroups,
 } from './access/groups';
+export { documentAccessCounts, documentAudiences, listAccessDocuments, setDocumentsAccess, setUploadAccess } from './access/documents';
+export { accessStatus, runAccessDrift, syncAccessStatus } from './access/status';
+export {
+  applyConnectorAccess,
+  connectorFailClosedCounts,
+  deleteConnectorMap,
+  listConnectorMap,
+  listSharingRules,
+  matchConnectorMembers,
+  setConnectorMap,
+  setSharingRule,
+} from './access/connector';
 export type {
   AccessIdentity,
   AccessScopeRefusalReason,
