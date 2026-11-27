@@ -3,6 +3,7 @@ import { loadRagConfig, type BgeM3Serving } from '../config';
 import { getRagDeps } from '../deps';
 import { embeddingProfileDeclaration } from './catalog';
 import { createReembedWriter } from '../ingest/writer';
+import { kickVectorSync } from '../sync/kick';
 import type { EmbeddingProfile, StartupVerdict } from './active-profile';
 import {
   LEGACY_PROFILE,
@@ -20,7 +21,13 @@ export interface ProfileRefusal {
   reason: string;
   /** The full message the SQL function raised. */
   detail: string;
+  /** Only on an external readiness refusal (Phase 7 D-06): the code without the backend. */
+  code?: 'external_not_ready';
+  /** Only on an external readiness refusal: the enabled backend whose index is not ready. */
+  backend?: ExternalBackend;
 }
+
+export type ExternalBackend = 'qdrant' | 'weaviate';
 
 export interface EmbeddingProfileStatus {
   switch: 'off' | 'on';
@@ -65,7 +72,14 @@ export type RecordEvidenceResult = { ok: true; profileId: string } | ProfileRefu
 
 const REFUSAL = /^((?:activation|rollback|profile_status|evidence|binding)_refused): ([a-z_]+)/;
 
+const EXTERNAL_NOT_READY = /^external_not_ready:(qdrant|weaviate)(?![a-z_])/;
+
 function refusalFrom(error: RpcError, pattern: RegExp): ProfileRefusal | null {
+  const external = EXTERNAL_NOT_READY.exec(error.message);
+  if (external) {
+    const backend = external[1] as ExternalBackend;
+    return { ok: false, reason: `external_not_ready:${backend}`, code: 'external_not_ready', backend, detail: error.message };
+  }
   const match = pattern.exec(error.message);
   if (!match) return null;
   return { ok: false, reason: match[2] ? `${match[1]}: ${match[2]}` : (match[1] as string), detail: error.message };
@@ -129,6 +143,7 @@ export async function activateEmbeddingProfile(target: string, actor: string): P
   const activated = text(outcome.row, 'activated_profile');
   if (!activated) throw new ProfileUnavailableError('rpc_failed', 'malformed_response');
   await refreshAfterOperation();
+  kickVectorSync();
   return { ok: true, activated, previous: text(outcome.row, 'previous_profile') };
 }
 
