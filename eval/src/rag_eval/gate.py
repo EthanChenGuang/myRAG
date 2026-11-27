@@ -17,7 +17,7 @@ from rag_sidecar.contracts.report import (
     SliceMetrics,
 )
 
-from rag_eval.paired import is_gated_slice, paired_report
+from rag_eval.paired import SUBQ_METRICS, is_gated_slice, paired_report
 from rag_eval.paths import resolve_cli_path
 
 EXIT_PASS = 0
@@ -27,6 +27,7 @@ EXIT_ABSOLUTE = 11
 EXIT_COMPOSITION = 12
 EXIT_INTERNAL = 70
 RE_RECORD_HINT = "re-record the baseline: npm run eval:baseline"
+NO_BASELINE_NOTE = "(not gated: no baseline)"
 
 
 def _report_slices(report: EvalReport) -> dict[str, SliceMetrics]:
@@ -305,6 +306,22 @@ def phase52_offenders(report: EvalReport) -> list[GateOffender]:
     return []
 
 
+def _observed(metrics: SliceMetrics | None, metric: str) -> float | None:
+    cell = getattr(metrics, metric, None) if metrics is not None else None
+    return cell.value if cell is not None else None
+
+
+def _no_baseline_slices(report: EvalReport, baseline: Baseline, noise: NoiseConfig) -> list[str]:
+    """Gated report slices the baseline lacks entirely that carry a sub-question metric (P-33)."""
+    return [
+        f"{slice_name}:{metric} {NO_BASELINE_NOTE}"
+        for slice_name, metrics in sorted(_report_slices(report).items())
+        if slice_name not in baseline.slices and _is_gated(slice_name, noise)
+        for metric in SUBQ_METRICS
+        if metric in noise.metrics and _observed(metrics, metric) is not None
+    ]
+
+
 def evaluate_gate(
     report: EvalReport, baseline: Baseline, noise: NoiseConfig, manifest: GoldenSetManifest | None = None
 ) -> GateResult:
@@ -325,9 +342,12 @@ def evaluate_gate(
         observed_metrics = observed_slices.get(slice_name)
         for metric, direction in noise.metrics.items():
             stat = recorded.get(metric)
-            observed_value = None
-            if observed_metrics is not None:
-                observed_value = getattr(observed_metrics, metric).value
+            observed_value = _observed(observed_metrics, metric)
+            if stat is None and metric in SUBQ_METRICS:
+                # P-33: measured now but absent from the baseline; reported, gated once the baseline is re-recorded.
+                if observed_value is not None:
+                    skipped.append(f"{slice_name}:{metric} {NO_BASELINE_NOTE}")
+                continue
             if stat is None or stat.mean is None or observed_value is None:
                 skipped.append(f"{slice_name}:{metric}")
                 continue
@@ -349,6 +369,7 @@ def evaluate_gate(
                         direction=direction,
                     )
                 )
+    skipped.extend(_no_baseline_slices(report, baseline, noise))
     if report.request_options.generator_model in VIOLATING_MODELS:
         # D-54: a violating fake's run proves its metric detects the failure; the slices it moves are reported, not gated.
         skipped.extend(f"{offender.slice}:{offender.metric} (violating fake, report-only)" for offender in offenders)
@@ -376,8 +397,9 @@ def _category_rows(report: EvalReport, baseline: Baseline, noise: NoiseConfig) -
             continue
         for metric in noise.metrics:
             stat = baseline.slices[slice_name].get(metric)
-            observed_metrics = observed_slices.get(slice_name)
-            observed_value = getattr(observed_metrics, metric).value if observed_metrics is not None else None
+            observed_value = _observed(observed_slices.get(slice_name), metric)
+            if stat is None and observed_value is None and metric in SUBQ_METRICS:
+                continue
             if stat is None or stat.mean is None or observed_value is None:
                 rows.append(f"| {slice_name} | {metric} | n/a | n/a | n/a |")
                 continue

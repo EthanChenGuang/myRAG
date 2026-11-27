@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from rag_sidecar.contracts.baseline import Baseline, BaselineMetricStat
 from rag_sidecar.contracts.report import EvalReport, SliceMetrics
 
-from rag_eval.paired import item_metrics
+from rag_eval.paired import SUBQ_METRICS, item_metrics
 from rag_eval.paths import REPO_ROOT, resolve_cli_path
 
 METRICS = ("recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate")
@@ -92,11 +92,26 @@ def record_baseline(
             if not allow_spread and any(value != values[0] for value in values[1:]):
                 raise NonDeterministicRunError(f"{name} {metric} differs between runs: {values!r}")
             slices[name][metric] = _stat(values, cells[0].n)
+        for metric in SUBQ_METRICS:
+            # D-10: recorded only where measured, so a set without sub_questions records the same baseline as before.
+            subq_cells = [getattr(run[name], metric) for run in per_run]
+            if all(cell is None for cell in subq_cells):
+                continue
+            if any(cell is None for cell in subq_cells):
+                raise NonDeterministicRunError(f"{name} {metric} is measured in some runs only")
+            values = [cell.value for cell in subq_cells]
+            if not allow_spread and any(value != values[0] for value in values[1:]):
+                raise NonDeterministicRunError(f"{name} {metric} differs between runs: {values!r}")
+            slices[name][metric] = _stat(values, subq_cells[0].n)
 
     _require_same("item set", [sorted(item.item_id for item in report.items) for report in reports])
     per_run_items = [{item.item_id: item_metrics(item) for item in report.items} for report in reports]
     items = {
-        item_id: {metric: [run[item_id][metric] for run in per_run_items] for metric in METRICS}
+        item_id: {
+            metric: [run[item_id].get(metric) for run in per_run_items]
+            for metric in (*METRICS, *SUBQ_METRICS)
+            if metric in METRICS or any(metric in run[item_id] for run in per_run_items)
+        }
         for item_id in sorted(per_run_items[0])
     }
 

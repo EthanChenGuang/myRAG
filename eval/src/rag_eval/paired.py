@@ -113,10 +113,11 @@ def paired_report(
         if not is_gated_slice(slice_name, noise):
             continue
         stats: dict[str, PairedStat] = {}
-        for metric in METRICS:
+        measured = {metric for item in members for metric in _subq_metrics(item)}
+        for metric in (*METRICS, *(metric for metric in SUBQ_METRICS if metric in measured)):
             differences: list[float] = []
             for item in members:
-                observed = item_metrics(item)[metric]
+                observed = item_metrics(item).get(metric)
                 recorded = _baseline_value(baseline.items.get(item.item_id, {}).get(metric))
                 if observed is None or recorded is None:
                     continue

@@ -344,3 +344,12 @@ def test_recorded_baseline_carries_sub_question_metrics_only_when_measured():
     recorded = record_baseline([plain] * 3)
     for metrics in recorded.slices.values():
         assert set(metrics) == set(BASE_METRICS)
+
+
+def test_category_rows_skip_sub_question_metrics_nobody_measured():
+    from rag_eval.gate import _category_rows
+
+    report = _report([], {"general": _slice_values()})
+    baseline = _baseline({"category:general": {m: _stat(0.6) for m in BASE_METRICS}})
+    rows = _category_rows(report, baseline, _noise())
+    assert len(rows) == len(BASE_METRICS)
