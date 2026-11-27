@@ -50,11 +50,11 @@
   },
   "items": [
     {
-      "status": "pending",
-      "date": "",
-      "by": "",
+      "status": "not_done",
+      "date": "2026-11-27",
+      "by": "executor (no person available; owner delegated checkpoints)",
       "evidence": "",
-      "reason": "",
+      "reason": "operator pending: needs the docling sidecar image on a Docker host and real scanned zh and it pages; this session has no Docker daemon, no docling extra or models, and no real documents.",
       "id": "real_ocr_docling",
       "requirements": [
         "DATA-05"
@@ -72,11 +72,11 @@
       }
     },
     {
-      "status": "pending",
-      "date": "",
-      "by": "",
+      "status": "not_done",
+      "date": "2026-11-27",
+      "by": "executor (no person available; owner delegated checkpoints)",
       "evidence": "",
-      "reason": "",
+      "reason": "operator pending: needs LLAMA_CLOUD_API_KEY (not available to this session) and real scanned zh and it pages.",
       "id": "real_ocr_llamaparse_unified",
       "requirements": [
         "DATA-05"
@@ -94,11 +94,11 @@
       }
     },
     {
-      "status": "pending",
-      "date": "",
-      "by": "",
+      "status": "not_done",
+      "date": "2026-11-27",
+      "by": "executor (no person available; owner delegated checkpoints)",
       "evidence": "",
-      "reason": "",
+      "reason": "operator pending: needs LLAMA_CLOUD_API_KEY and real scanned pages; assumption A1 stays unverified until then.",
       "id": "real_ocr_llamaparse_legacy",
       "requirements": [
         "DATA-05"
@@ -117,11 +117,11 @@
       }
     },
     {
-      "status": "pending",
-      "date": "",
-      "by": "",
+      "status": "not_done",
+      "date": "2026-11-27",
+      "by": "executor (no person available; owner delegated checkpoints)",
       "evidence": "",
-      "reason": "",
+      "reason": "operator pending: needs a tenant with real documents and an admin's judgement; the eval project holds fixture documents only.",
       "id": "quarantine_sample_review",
       "requirements": [
         "SEC-07",
@@ -140,11 +140,11 @@
       }
     },
     {
-      "status": "pending",
-      "date": "",
-      "by": "",
+      "status": "not_done",
+      "date": "2026-11-27",
+      "by": "executor (no person available; owner delegated checkpoints)",
       "evidence": "",
-      "reason": "",
+      "reason": "operator pending: needs a tenant with real documents and an admin's judgement.",
       "id": "supersession_sample_review",
       "requirements": [
         "DATA-19"
@@ -162,11 +162,11 @@
       }
     },
     {
-      "status": "pending",
-      "date": "",
-      "by": "",
+      "status": "not_done",
+      "date": "2026-11-27",
+      "by": "executor (no person available; owner delegated checkpoints)",
       "evidence": "",
-      "reason": "",
+      "reason": "operator pending: the item asks for a person in a real terminal; the executor's PTY run (see dry_run) passed every step but does not replace it.",
       "id": "init_env_picker_terminal",
       "requirements": [
         "LANG-01"
@@ -182,11 +182,11 @@
       }
     },
     {
-      "status": "pending",
-      "date": "",
-      "by": "",
+      "status": "not_done",
+      "date": "2026-11-27",
+      "by": "executor (no person available; owner delegated checkpoints)",
       "evidence": "",
-      "reason": "",
+      "reason": "operator pending: needs a native Chinese speaker; no item was reviewed, so all 5 stay pending in the golden file and the zh table_split slice stays report-only.",
       "id": "native_review_zh",
       "requirements": [
         "XLG-02",
@@ -210,11 +210,11 @@
       }
     },
     {
-      "status": "pending",
-      "date": "",
-      "by": "",
+      "status": "not_done",
+      "date": "2026-11-27",
+      "by": "executor (no person available; owner delegated checkpoints)",
       "evidence": "",
-      "reason": "",
+      "reason": "operator pending: needs a native Italian speaker; no item was reviewed, so all 5 stay pending in the golden file and the it table_split slice stays report-only.",
       "id": "native_review_it",
       "requirements": [
         "XLG-02",
@@ -237,5 +237,9 @@
         "result": "5 items, native_review origin llm_drafted, status pending."
       }
     }
-  ]
+  ],
+  "checkpoint_answers": {
+    "task_2": "skip all items: no person, vendor key, real documents or real tenant available in this session (owner asleep, checkpoints delegated to the executor)",
+    "task_3": "not reviewed: no native speaker available in this session"
+  }
 }
