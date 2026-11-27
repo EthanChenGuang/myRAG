@@ -12,6 +12,8 @@ export interface BuildQueryPlanInput {
   framework: QueryFramework;
   /** The condensed standalone query; null or equal to the original when nothing was rewritten. */
   condensed?: string | null;
+  /** D-23: previous standalone query + newline + follow-up, when condense was skipped; searched right after the original. */
+  historyFallback?: string | null;
   skipped?: readonly SkippedTransform[];
   dateRange?: QueryPlan['date_range'];
   /** Translated variants in target order (D-23, at most two). */
@@ -49,8 +51,8 @@ function gateContract(gate: GateResult): QueryPlan['gate'] {
 }
 
 /**
- * D-03: the original is always variant 0; the condensed standalone query follows when the rewrite changed it, then the
- * translations, the expansions, the HyDE passage and the sub-questions. Duplicates by text are dropped.
+ * D-03: the original is always variant 0; the condensed standalone query follows when the rewrite changed it (or, D-23, the
+ * history_fallback variant when condense was skipped), then the translations, the expansions, the HyDE passage and the sub-questions. Duplicates by text are dropped.
  */
 export function buildQueryPlan(input: BuildQueryPlanInput): QueryPlan {
   const { original, gate } = input;
@@ -67,6 +69,9 @@ export function buildQueryPlan(input: BuildQueryPlanInput): QueryPlan {
     variants.push(variant);
     return true;
   };
+  if (input.historyFallback) {
+    add({ text: input.historyFallback, language: gate.lang, kind: 'history_fallback', sub_question_index: null, protected_ok: true });
+  }
   for (const item of input.translated ?? []) {
     add({ text: item.text, language: item.language, kind: 'translated', sub_question_index: null, protected_ok: true });
   }
@@ -111,6 +116,6 @@ export function planToVariants(plan: QueryPlan): QueryVariant[] {
     ...(variant.sub_question_index !== null && variant.sub_question_index !== undefined
       ? { subQuestionIndex: variant.sub_question_index }
       : {}),
-    ...(suffix && (variant.kind === 'original' || variant.kind === 'condensed') ? { denseText: `${variant.text} ${suffix}` } : {}),
+    ...(suffix && (variant.kind === 'original' || variant.kind === 'condensed' || variant.kind === 'history_fallback') ? { denseText: `${variant.text} ${suffix}` } : {}),
   }));
 }

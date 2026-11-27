@@ -257,7 +257,7 @@ function terminologyVariant(standalone: string, outcome: TerminologyOutcome, lan
   return { text, language, kind: 'terminology', legs: 'dense' };
 }
 
-const PROTECTED_KINDS: ReadonlySet<QueryVariantKind> = new Set(['original', 'condensed', 'translated', 'sub_question']);
+const PROTECTED_KINDS: ReadonlySet<QueryVariantKind> = new Set(['original', 'condensed', 'history_fallback', 'translated', 'sub_question']);
 const MULTI_QUERY_KINDS: ReadonlySet<QueryVariantKind> = new Set(['expanded', 'hyde']);
 
 /** D-31 (3): the cuts are counts on the stage's own record; the record was written before the variant list was final. */
