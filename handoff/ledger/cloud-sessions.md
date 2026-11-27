@@ -880,3 +880,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 23:37Z The owner chose A+B for 06.2-42 Task 2.
   - B (bge-m3, voyage) dispatched on exec/06.2-42.
   - A is waiting on the owner's OpenRouter key: the form was rejected, and the owner asked for the link (openrouter.ai/settings/keys).
+- 23:38Z OWNER chose (b) for 4.2 W-1 (no post-hoc metric change; re-register, then re-run) -> quick-42-w1-reregister. The pre-registration commit is pushed before the re-run commit.
