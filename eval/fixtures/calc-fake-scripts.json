@@ -320,7 +320,7 @@
       "blocks": {
         "B1": {
           "document": "calc-rules.en.md",
-          "quote": "each interval is charged 2 pell per step for its first 50 steps and 3 pell per step for every step beyond 50",
+          "quote": "each interval is charged 2 pell per step for its first 50 steps and 3 pell per step for every further step past 50",
           "section": "Talvoran tally rule D: tiered rate per interval"
         }
       },
@@ -488,14 +488,14 @@
         "en-multi-step-calc-015"
       ],
       "questions": [
-        "Under Talvoran tally rule E, one interval opens on 2026-03-10 and closes on 2026-04-02, and another opens on 2026-05-28 and closes on 2026-06-03. How many pell do they add?",
+        "Under Talvoran tally rule E, one interval opens on 2026-03-10 and ends on 2026-04-02, and another opens on 2026-05-28 and ends on 2026-06-03. How many pell do they add?",
         "Two intervals, from 2026-03-10 to 2026-04-02 and from 2026-05-28 to 2026-06-03, are counted with Talvoran tally rule E. What total in pell do they add?",
         "What do intervals running from 2026-03-10 to 2026-04-02 and from 2026-05-28 to 2026-06-03 add in pell under Talvoran tally rule E?"
       ],
       "blocks": {
         "B1": {
           "document": "calc-rules.en.md",
-          "quote": "both the opening day and the closing day count. Each counted day adds 4 pell",
+          "quote": "both the starting day and the closing day count. Each counted day adds 4 pell",
           "section": "Talvoran tally rule E: length of an interval"
         }
       },
@@ -585,7 +585,7 @@
       "unit": "pell",
       "skip_rule": {
         "stated_value": "116",
-        "how": "the days counted without the opening day (29 days)"
+        "how": "the days counted without the starting day (29 days)"
       },
       "missing_operand": {
         "operand": "rate_day",
@@ -1669,7 +1669,7 @@
         "it-multi-step-calc-015"
       ],
       "questions": [
-        "Con la regola E del registro Merovesca un intervallo si apre il 2026-01-26 e si chiude il 2026-02-09, un altro si apre il 2026-02-27 e si chiude il 2026-03-02. Quanti dalt aggiungono?",
+        "Con la regola E del registro Merovesca un intervallo si apre il 2026-01-26 e termina il 2026-02-09, un altro si apre il 2026-02-27 e termina il 2026-03-02. Quanti dalt aggiungono?",
         "Due intervalli, dal 2026-01-26 al 2026-02-09 e dal 2026-02-27 al 2026-03-02, si contano secondo la regola E del registro Merovesca. Quanti dalt aggiungono in tutto?",
         "Quanti dalt aggiungono, secondo la regola E del registro Merovesca, gli intervalli dal 2026-01-26 al 2026-02-09 e dal 2026-02-27 al 2026-03-02?"
       ],

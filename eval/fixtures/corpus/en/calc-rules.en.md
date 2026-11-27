@@ -20,12 +20,12 @@ Under Talvoran tally rule C, the batches of one tally are added together and the
 
 ## Talvoran tally rule D: tiered rate per interval
 
-Under Talvoran tally rule D, each interval is charged 2 pell per step for its first 50 steps and 3 pell per step for every step beyond 50. The charges of all intervals are added together.
+Under Talvoran tally rule D, each interval is charged 2 pell per step for its first 50 steps and 3 pell per step for every further step past 50. The charges of all intervals are added together.
 
 <!-- chunk -->
 
 ## Talvoran tally rule E: length of an interval
 
-Under Talvoran tally rule E, an interval is counted in days from its opening date to its closing date, and both the opening day and the closing day count. Each counted day adds 4 pell.
+Under Talvoran tally rule E, an interval is counted in days from its starting date to its closing date, and both the starting day and the closing day count. Each counted day adds 4 pell.
 
 <!-- chunk -->
