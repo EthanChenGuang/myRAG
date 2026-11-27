@@ -933,3 +933,26 @@ export type {
 export type { VectorStore, VectorSyncTarget } from './sync/stores/types';
 // Phase 5.2.1 plan 21: the prompt budget on the chat route (its runtime exports are listed with plan 22's above)
 export type { PromptBudgetTrace } from '@/lib/rag-eval/contracts.generated';
+export { getCentroidSnapshot, invalidateCentroidCache, refreshCentroidSnapshot, SCOPE_CENTROID_CACHE_TTL_MS } from './scope/centroids';
+export type { CentroidSnapshot, ScopeCentroid, ScopeGroupKind } from './scope/centroids';
+export { rebuildScopeCentroids, ScopeRebuildError } from './scope/build';
+export type { ScopeRebuildCounts, ScopeRebuildOptions, ScopeRebuildResult } from './scope/build';
+export {
+  addScopeExample,
+  deleteScopeExample,
+  listScopeExamples,
+  scopeGateStatus,
+  startScopeRebuild,
+  SCOPE_EXAMPLE_LIMIT,
+  SCOPE_EXAMPLE_MAX_CHARS,
+} from './scope/admin';
+export type {
+  AddScopeExampleCode,
+  AddScopeExampleResult,
+  DeleteScopeExampleResult,
+  ListScopeExamplesResult,
+  ScopeExample,
+  ScopeGateStatus,
+  ScopeGateStatusResult,
+  StartScopeRebuildResult,
+} from './scope/admin';
