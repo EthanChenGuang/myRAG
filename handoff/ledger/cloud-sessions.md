@@ -814,3 +814,8 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - The orchestrator's countersign of the overrides and of T-41-01/28/SC was REFUSED by the session's classifier, correctly: a sign-off must be the owner's own. These are now owner items in 04.1-LIVE-CHECKLIST part A.
   - RULE: never delegate owner sign-offs or accepted-risk signatures to executors. Ask the user. The same applies to the T-0411-51 "accepted" entry: it is a ledger note only, not a signature, and still needs the owner.
   - Archived.
+- 22:50Z quick-openrouter-fixes (261127-orv) DONE on exec/quick-openrouter-fallback. Covers OR-4 strict D-26 plus the provider check, the OR-2 help text, the OR-1 tests and the catalog fix.
+  - Route the branch to train 41.
+  - TRAIN NOTE: after merging main, run `git apply .planning/quick/261127-orv-openrouter-verification-fixes/vendor-data-flow-openrouter-embeddings.patch`.
+  - Owner decision pending: whether serving through OpenRouter requires a recorded live match (recommended) or the risk is accepted.
+  - Archived.
