@@ -261,6 +261,30 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
     functions: ['create_organization_safe'],
   },
   {
+    reason: 'Phase 4.3 admin console (0924): tenant-checked, service_role only, called only by the admin access routes, never by retrieval.',
+    functions: [
+      'rag_access_audience_details',
+      'rag_access_document_audience',
+      'rag_access_documents_counts',
+      'rag_access_documents_list',
+      'rag_access_group_delete',
+      'rag_access_group_impact',
+      'rag_access_groups_list',
+    ],
+  },
+  {
+    reason: 'Phase 4.3 connector access (0925): writes or lists label mappings and counts for the admin and sync paths; no chunk content.',
+    functions: ['rag_connector_apply_access', 'rag_connector_fail_closed_counts', 'rag_connector_map_list', 'rag_connector_rules_list'],
+  },
+  {
+    reason: 'Phase 4.4 lexical statistics maintenance (0902): returns counts, timestamps and the state as jsonb, never a lexeme or chunk text.',
+    functions: ['rag_lexstats_check', 'rag_lexstats_rebuild'],
+  },
+  {
+    reason: 'Phase 5.2 security-events admin (0945): returns the tenant keys an actor may administer; no document or chunk content.',
+    functions: ['rag_security_admin_keys'],
+  },
+  {
     reason: 'Owned by Phase 7, access applied through scopeAccessFilter and document_chunks.access_groups (A-14, 07-38, 07-39).',
     functions: [
       'rag_validate_chunks',

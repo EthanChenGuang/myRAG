@@ -55,6 +55,7 @@ async function run(options: RetrievalOptions | undefined, labeled = false) {
     fusedHits: fused(),
     referenced: null,
     signal: new AbortController().signal,
+    access: { mode: 'off' },
     collector,
   });
   return { out, assemble: collector.stages().find((row) => row.name === 'assemble') };

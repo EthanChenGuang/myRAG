@@ -53,6 +53,7 @@ async function blocks(specs: Spec[], variants?: QueryVariant[]): Promise<Context
     fusedHits: fusedList(specs),
     referenced: null,
     signal: new AbortController().signal,
+    access: { mode: 'off' },
     collector: createTraceCollector({ profile: 'chat', tenantKey: 's:default' }),
     ...(variants ? { variants } : {}),
   });

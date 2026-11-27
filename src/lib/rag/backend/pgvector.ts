@@ -431,6 +431,7 @@ export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBacke
       const client = deps.adminClient();
       if (!client) throw new RetrievalBackendError('hybrid_search_translations', 'admin_unavailable');
       const rpcClient = client as RpcClient;
+      // D-11: the translation leg filters by the scope's access like the chunk legs; loaded lazily as in search().
       const { scopeAccessFilter } = await import('../tenant/access');
       const response = await rpcClient
         .rpc('hybrid_search_translations', buildTranslationArgs(req, deps.getConfig(), scopeAccessFilter(req.scope)))
