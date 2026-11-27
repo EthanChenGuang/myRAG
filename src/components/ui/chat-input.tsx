@@ -66,7 +66,8 @@ const THREE_D_GENERATION_ENABLED = process.env.NEXT_PUBLIC_3D_GENERATION_ENABLED
 const MCP_TOOLS_LIST_ENABLED = process.env.NEXT_PUBLIC_MCP_TOOLS_LIST_ENABLED === 'true';
 const VOICE_MODE_ENABLED = process.env.NEXT_PUBLIC_VOICE_MODE_ENABLED !== 'false'; // Enabled by default if not explicitly disabled
 const COMET_TRAIL_PX = 180;
-const COMET_HEAD_PX = 28;
+const COMET_BODY_PX = 72;
+const COMET_HEAD_PX = 24;
 
 // Compile-time default for suggestions
 const ENV_SHOW_SUGGESTIONS = env.NEXT_PUBLIC_SHOW_SUGGESTIONS === 'true';
@@ -4430,7 +4431,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               'z-20' // Ensure it sits above voice overlay text
             )}
           >
-            {/* Animated Gradient Border - SVG Implementation */}
+            {/* Travelling comet border (styles in chat-shell.css) */}
             <div
               ref={containerRef}
               className="chat-composer-comet absolute -inset-[1px] pointer-events-none z-30"
@@ -4441,7 +4442,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             >
               {(perimeter > 0 && borderEnabled) && (
                 <svg className="chat-composer-comet__svg" aria-hidden="true" focusable="false">
-                  {/* One faint trail with a brighter head at its leading end */}
+                  {/* Faint trail, brighter body and head stacked at the leading end */}
                   <rect
                     className="chat-composer-comet__trail"
                     x="0.5" y="0.5"
@@ -4450,6 +4451,16 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                     style={{
                       strokeDasharray: `${COMET_TRAIL_PX} ${Math.max(0, perimeter - COMET_TRAIL_PX)}`,
                       '--comet-from': '0px',
+                    } as React.CSSProperties}
+                  />
+                  <rect
+                    className="chat-composer-comet__body"
+                    x="0.5" y="0.5"
+                    width="calc(100% - 1px)" height="calc(100% - 1px)"
+                    rx="24" ry="24"
+                    style={{
+                      strokeDasharray: `${COMET_BODY_PX} ${Math.max(0, perimeter - COMET_BODY_PX)}`,
+                      '--comet-from': `${COMET_BODY_PX - COMET_TRAIL_PX}px`,
                     } as React.CSSProperties}
                   />
                   <rect

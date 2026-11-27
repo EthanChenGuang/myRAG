@@ -18,6 +18,7 @@
   --chat-accent: #f2611a;
   --chat-accent-ink: #b8430e;
   --chat-focus: rgba(242, 97, 26, 0.55);
+  --chat-comet-rgb: 84 102 128;
   --chat-card-shadow: 0 8px 24px -12px rgba(60, 30, 10, 0.28), 0 1px 2px rgba(60, 30, 10, 0.06);
   --chat-glass-fill: rgba(255, 250, 246, 0.46);
   --chat-glass-border: rgba(0, 0, 0, 0.08);
@@ -39,6 +40,7 @@
   --chat-accent: #ff7a33;
   --chat-accent-ink: #ffa36e;
   --chat-focus: rgba(255, 122, 51, 0.6);
+  --chat-comet-rgb: 178 210 238;
   --chat-glass-fill: rgba(56, 55, 53, 0.4);
   --chat-glass-border: rgba(255, 255, 255, 0.12);
   --chat-glass-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -422,6 +424,55 @@ html .chat-input-container form.chat-composer-card {
 
 html .chat-input-container form.chat-composer-card:focus-within {
   border-color: var(--chat-focus);
+}
+
+/* Travelling comet: a 1px cool trace with a faint tail, quieter than the focus border. */
+.chat-composer-comet__svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 0 2px rgb(var(--chat-comet-rgb) / 0.35));
+  transition: opacity 240ms var(--chat-ease);
+}
+
+.chat-composer-comet__trail,
+.chat-composer-comet__body,
+.chat-composer-comet__head {
+  fill: none;
+  stroke: rgb(var(--chat-comet-rgb));
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-dashoffset: var(--comet-from);
+  animation: chat-comet-travel 24s linear infinite;
+}
+
+.chat-composer-comet__trail {
+  stroke-opacity: 0.14;
+}
+
+.chat-composer-comet__body {
+  stroke-opacity: 0.2;
+}
+
+.chat-composer-comet__head {
+  stroke-opacity: 0.4;
+}
+
+html .chat-input-container form.chat-composer-card:focus-within .chat-composer-comet__svg {
+  opacity: 0.4;
+}
+
+html .chat-input-container form.chat-composer-card:focus-within .chat-composer-comet__svg rect {
+  animation-play-state: paused;
+}
+
+@keyframes chat-comet-travel {
+  from {
+    stroke-dashoffset: var(--comet-from);
+  }
+  to {
+    stroke-dashoffset: calc(var(--comet-from) - var(--perimeter) * 1px);
+  }
 }
 
 .chat-composer-fill {
@@ -1145,6 +1196,10 @@ html .chat-row[data-role='user'] .chat-message.rounded-\[20px\] :is(div, p) {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .chat-composer-comet {
+    display: none;
+  }
+
   .chat-pill-icon,
   .chat-model-pill,
   .chat-avatar-pill,
