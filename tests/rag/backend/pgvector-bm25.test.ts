@@ -239,8 +239,8 @@ describe('pgvector backend with lexicalScoring', () => {
   });
 
   it.each([
-    ['empty tokens', { lexicalTokens: [] }],
-    ['lexical limit 0', { lexicalLimit: 0 }],
+    ['empty tokens', { lexicalTokens: [] } as Partial<BackendSearchRequest>],
+    ['lexical limit 0', { lexicalLimit: 0 } as Partial<BackendSearchRequest>],
   ])('sends only today\'s hybrid call with %s', async (_name, over) => {
     const { client, calls } = fakeClient({ rag_lexstats_status: READY, hybrid_search_chunks: () => ({ data: [], error: null }) });
     const backend = createPgvectorBackend({ adminClient: () => client, getConfig: () => config() });
