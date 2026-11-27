@@ -6,7 +6,12 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from pydantic import ValidationError
-from rag_sidecar.contracts.baseline import Baseline, NoiseConfig, PairedReport, PairedStat
+from rag_sidecar.contracts.baseline import (
+    Baseline,
+    NoiseConfig,
+    PairedReport,
+    PairedStat,
+)
 from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
 from rag_sidecar.contracts.report import EvalReport, ItemResult
 

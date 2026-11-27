@@ -13,7 +13,11 @@ from typing import Literal
 
 from rag_sidecar.contracts.baseline import NoiseConfig
 from rag_sidecar.contracts.latency import LatencyBudgets
-from rag_sidecar.contracts.release import BackendComparison, BackendResult, SwitchVerdict
+from rag_sidecar.contracts.release import (
+    BackendComparison,
+    BackendResult,
+    SwitchVerdict,
+)
 
 from rag_eval.paired import _stat, paired_p_value
 
@@ -65,7 +69,7 @@ class RuleSettings:
         gated_slice_prefixes: Sequence[str],
         min_gate_n: int,
         alpha: float,
-    ) -> "RuleSettings":
+    ) -> RuleSettings:
         return cls(
             k=noise.k,
             floor=noise.floor,

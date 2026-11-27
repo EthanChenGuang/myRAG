@@ -3,7 +3,11 @@ from pathlib import Path
 
 import pytest
 from rag_sidecar.contracts.eval_run import RagTrace
-from rag_sidecar.contracts.release import DefaultsDecision, RegressionPlan, RegressionRunConfig
+from rag_sidecar.contracts.release import (
+    DefaultsDecision,
+    RegressionPlan,
+    RegressionRunConfig,
+)
 from rag_sidecar.contracts.report import EvalReport
 from rag_sidecar.contracts.samples import build_samples
 

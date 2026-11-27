@@ -91,7 +91,7 @@ def _pair(gain_share: float, n: int = 100, **kwargs) -> tuple[RunSummary, RunSum
     """Incumbent recall 0 on every item; the challenger lifts `gain_share` of the items to 1, a mean gain of gain_share."""
     ids = _ids(n)
     incumbent = _run("incumbent", {item: 0.0 for item in ids}, {f"u{i}": 1.0 for i in range(20)})
-    moved = int(round(gain_share * n))
+    moved = round(gain_share * n)
     challenger = _run("challenger", {item: (1.0 if index < moved else 0.0) for index, item in enumerate(ids)}, {f"u{i}": 1.0 for i in range(20)}, **kwargs)
     return challenger, incumbent
 
@@ -202,7 +202,7 @@ def _slice_drop(slice_n: int) -> tuple[RunSummary, RunSummary]:
     small = _ids(slice_n, "s")
     categories = {item: "table" for item in small}
     incumbent = _run("i", {**{item: 0.0 for item in ids}, **{item: 1.0 for item in small}}, categories=categories)
-    drop = int(round(0.3 * slice_n))
+    drop = round(0.3 * slice_n)
     challenger = _run(
         "c",
         {
@@ -266,7 +266,7 @@ def _backend_runs(shift_share: float, noisy: bool) -> tuple[RunSummary, RunSumma
     ids = _ids(100)
     incumbent = _run("b.pgvector.1", {item: 0.0 for item in ids}, {f"u{i}": 1.0 for i in range(20)})
     values: dict[str, float] = {}
-    moved = int(round(shift_share * 100))
+    moved = round(shift_share * 100)
     for index, item in enumerate(ids):
         if index < moved:
             values[item] = 1.0
