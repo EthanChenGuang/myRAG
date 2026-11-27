@@ -3,6 +3,7 @@ import { z } from 'zod/v3';
 import { env } from '@/lib/env';
 import { evalScope, readFeedbackLoopConfig, scopeKey } from '@/lib/rag';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
+import { scalarOf } from '@/lib/rag/cache/wire';
 import { getRagDeps } from '@/lib/rag/deps';
 
 export const runtime = 'nodejs';
@@ -90,7 +91,8 @@ export async function POST(req: NextRequest): Promise<Response> {
     console.error('[Red Team] opening review cases failed', { code: error.code ?? 'unknown', cases: body.cases.length });
     return NextResponse.json({ success: false, error: 'Review queue unavailable' }, { status: 503, headers: NO_STORE });
   }
-  const opened = typeof data === 'number' ? data : 0;
+  const value = scalarOf(data, 'rag_red_team_open_cases');
+  const opened = typeof value === 'number' ? value : 0;
   console.log('[Red Team] review cases opened', { runId: body.run_id, cases: body.cases.length, opened });
   return NextResponse.json({ success: true, opened }, { headers: NO_STORE });
 }
