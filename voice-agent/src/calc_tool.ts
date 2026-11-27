@@ -134,7 +134,8 @@ const MESSAGE_OVERHEAD_TOKENS = 4;
 export interface HistoryMessage {
     role: string;
     content?: unknown;
-    [key: string]: unknown;
+    tool_calls?: unknown;
+    tool_call_id?: unknown;
 }
 
 function messageTokens(message: HistoryMessage): number {
