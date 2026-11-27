@@ -182,6 +182,10 @@ export function versionConflictAttributes(conflict: VersionConflict | null | und
   };
 }
 
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
 /** Builds the per-document view the rules read from the row and the document's block texts in context order. */
 export function versionBlockOf(
   documentId: string,
@@ -192,7 +196,7 @@ export function versionBlockOf(
   return {
     documentId,
     filename: row.filename ?? '',
-    docType: typeof row.doc_type === 'string' ? row.doc_type : null,
+    docType: stringOrNull(row.doc_type),
     effectiveFrom: effectiveDateOf(row),
     version: typeof row.version === 'number' && Number.isFinite(row.version) ? row.version : null,
     text: texts.join('\n\n'),
