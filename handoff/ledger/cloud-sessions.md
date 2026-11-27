@@ -820,3 +820,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - Owner decision pending: whether serving through OpenRouter requires a recorded live match (recommended) or the risk is accepted.
   - Archived.
 - 22:51Z quick-term-glossary-wiring (261127-tgw) DONE exec/quick-term-glossary-wiring -> train 41 (W-2; gated prompt shared.terminology.v1; off = byte-identical; voice cache-only). Staging latency check is an owner item. Archived.
+- 22:55Z OWNER SIGNED in this session ('同意以上签字'): the 04.1 overrides for criteria 1/4/8 and AR-41-01..03 (exec/plan-41-fixes 1a4bf9e1), and T-0411-51 as AR-03 (verify/04.1.1). The bge-m3 weights confirmation still needs the owner to say they actually checked the HF commit.
