@@ -1,4 +1,4 @@
-import { after, before, describe, test } from 'node:test';
+import { after, afterEach, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -125,6 +125,13 @@ for (const mode of MODES) {
 
     after(async () => {
       await db.close();
+    });
+
+    // Every test fills profiles inside a transaction it rolls back. The rolled-back rows stay in the HNSW indexes of
+    // chunk_embeddings as dead entries until a vacuum, and the next fill inserts the same constant vector into a graph of
+    // ever more equal dead elements, so each later test gets slower (PGlite runs no autovacuum).
+    afterEach(async () => {
+      await db.exec('VACUUM chunk_embeddings');
     });
 
     test('refuses with incomplete and the count when a current ready chunk lacks a row', async () => {
