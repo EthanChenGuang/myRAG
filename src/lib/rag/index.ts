@@ -224,6 +224,9 @@ export {
   type TextsSource,
 } from './generation/answer-turn';
 export { guardChannelReply, guardSummaryText } from './security/channel-reply-guard';
+export { applyAnswerPipelineToText, type AnswerTextPipelineResult } from './generation/answer-transforms';
+export { buildSentenceRecords } from './generation/sentences-record';
+export { attributeSourceChunks } from './security/security-events';
 export { formatGuardedLinks, linkUsageInstructions } from './security/link-section';
 export type { ChannelReplyGuardInput, ChannelReplyGuardResult, SummaryGuardInput } from './security/channel-reply-guard';
 export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource } from './lang/answer-language';

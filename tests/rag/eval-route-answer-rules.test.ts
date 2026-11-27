@@ -265,7 +265,7 @@ describe('eval route answer rules, output cap and whole-text chain (05.2-31)', (
 
   it('cap 512: the limit is min(model limit, 512), finish_reason length is recorded and the truncation notice ends the answer', async () => {
     env.RAG_MAX_OUTPUT_TOKENS = '512';
-    const words = (offset: number) => Array.from({ length: 45 }, (_, index) => `segment${offset}w${index}`).join(' ');
+    const words = (offset: number) => Array.from({ length: 120 }, (_, index) => `q${(index + offset) % 10}`).join(' ');
     seed(Array.from({ length: 14 }, (_, index) => chunkRow(String(index + 1), `${words(index)}.`, 0.95 - index * 0.01)));
     const calls: Captured[] = [];
     const fakes = installFakeAnswerModels({ items: [] });

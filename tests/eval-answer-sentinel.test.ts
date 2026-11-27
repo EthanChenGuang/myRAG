@@ -91,7 +91,7 @@ describe('eval answer prompt assembly stays tied to the chat route', () => {
 
     test('the check fails when either composer call is removed', () => {
       const chatWithout = chatRoute.replace(/answerTurn\.composeSystemPrompt\(\s*citationSession\.decorateSystemPrompt/g, '(citationSession.decorateSystemPrompt');
-      const evalWithout = evalRoute.replace('answerTurn.composeSystemPrompt(', '(');
+      const evalWithout = evalRoute.replace(/answerTurn\.composeSystemPrompt\(citationSession \?/g, '(citationSession ?');
       expect(chatWithout).not.toBe(chatRoute);
       expect(evalWithout).not.toBe(evalRoute);
       expect(composesAnswerRules(chatWithout, evalRoute)).toBe(false);

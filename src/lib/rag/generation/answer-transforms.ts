@@ -2,8 +2,10 @@ import type { StreamTextTransform, ToolSet } from 'ai';
 import type { AnswerNotice } from '@/lib/rag-eval/contracts.generated';
 import { createNoticeState } from './answer-collector';
 import type { AnswerChannel } from './answer-turn';
+import { emitNotice } from './notices';
 import { applySentinelToText } from './sentinel';
 import type { AnswerConfig } from './answer-config';
+import { guardWholeText, type OutputGuardLinkSummary, type OutputGuardPolicy } from '../security/output-guard';
 import { outputGuardTransform, type OutputGuardTransformOptions } from '../security/output-guard-stream';
 
 type Transform = StreamTextTransform<ToolSet>;
@@ -44,6 +46,8 @@ export interface AnswerTextPipelineOptions {
   channel: AnswerChannel;
   /** False skips the notice stage (no truncation notice, nothing appended). */
   notices?: boolean;
+  /** D-35: the output guard's whole-text function with this policy, after the sentinel; absent or null: no guard. */
+  guard?: OutputGuardPolicy | null;
 }
 
 export interface AnswerTextPipelineResult {
@@ -52,6 +56,8 @@ export interface AnswerTextPipelineResult {
   strippedCount: number;
   notices: AnswerNotice[];
   truncated: boolean;
+  /** The guard's summary; absent when no guard ran. */
+  outputGuard?: OutputGuardLinkSummary;
 }
 
 /**
@@ -69,10 +75,24 @@ export function applyAnswerPipelineToText(text: string | readonly string[], opti
     refused = sentinel.refused;
     strippedCount = sentinel.strippedCount;
   }
-  if (options.notices === false) return { text: out, refused, strippedCount, notices: [], truncated: false };
   const state = createNoticeState({ language: options.language, channel: options.channel });
+  let outputGuard: OutputGuardLinkSummary | undefined;
+  if (options.guard) {
+    const language = options.language;
+    // The stream guard hands its notices to the collector; here they go to the same notice state the final stage renders.
+    const guarded = guardWholeText(out, {
+      ...options.guard,
+      onNotice: (notice) => {
+        if (language) state.add(emitNotice(notice.kind, { language }));
+      },
+    });
+    out = guarded.text;
+    outputGuard = guarded.summary;
+  }
+  const guardField = outputGuard ? { outputGuard } : {};
+  if (options.notices === false) return { text: out, refused, strippedCount, notices: [], truncated: false, ...guardField };
   if (refused) state.markRefused();
   const appended = state.atFinal(options.finishReason ?? 'stop');
   if (appended) out += out ? appended : appended.replace(/^\n+/, '');
-  return { text: out, refused, strippedCount, notices: state.notices(), truncated: state.truncated() };
+  return { text: out, refused, strippedCount, notices: state.notices(), truncated: state.truncated(), ...guardField };
 }
