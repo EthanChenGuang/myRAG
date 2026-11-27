@@ -821,3 +821,8 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - Archived.
 - 22:51Z quick-term-glossary-wiring (261127-tgw) DONE exec/quick-term-glossary-wiring -> train 41 (W-2; gated prompt shared.terminology.v1; off = byte-identical; voice cache-only). Staging latency check is an owner item. Archived.
 - 22:55Z OWNER SIGNED in this session ('同意以上签字'): the 04.1 overrides for criteria 1/4/8 and AR-41-01..03 (exec/plan-41-fixes 1a4bf9e1), and T-0411-51 as AR-03 (verify/04.1.1). The bge-m3 weights confirmation still needs the owner to say they actually checked the HF commit.
+- 22:56Z VERIFY 3.1.1: PASS_WITH_GAPS (verify/03.1.1 aae0e6ed). threats_open 1: T-15 high, blocked only by the missing LIVE.md.
+  - Code gaps 1/3/6/7/8/9 and the LIVE.md doc (gap 2) -> quick-311-binding-hardening.
+  - Gaps 4/5 (validate-phase, ui-review) -> verify/03.1.1-audits.
+  - Plan 15 Task 1 (real Voyage calls) and Task 3 (live comparison) are owner items.
+  - Archived.
