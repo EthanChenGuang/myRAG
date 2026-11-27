@@ -83,6 +83,17 @@ test('retrieval-rpc: unrelated rpc names are not flagged under src', () => {
   assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('increment_counter', {});\n" }), []);
 });
 
+test('source-recheck-rpc: rag_source_recheck called outside src/lib/rag is flagged; inside it is allowed (RET-14)', () => {
+  const code = "const r = await db.rpc('rag_source_recheck', { p_tenant_key: key, p_chunk_ids: ids });\n";
+  const multiLine = 'const r = await db.rpc(\n  "rag_source_recheck",\n  args,\n);\n';
+  assert.deepEqual(rulesFor({ 'src/app/api/x/route.ts': code, 'src/lib/other.ts': multiLine }).sort(), [
+    'src/app/api/x/route.ts:source-recheck-rpc',
+    'src/lib/other.ts:source-recheck-rpc',
+  ]);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/retrieval/source-recheck.ts': code }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('rag_source_recheck_report', {});\n// db.rpc('rag_source_recheck')\n" }), []);
+});
+
 test('retired-module: alias and relative imports fail', () => {
   const files = {
     'src/app/a.ts': "import { x } from '@/lib/enhanced-rag-retrieval';\n",
