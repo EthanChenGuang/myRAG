@@ -96,7 +96,7 @@ const RETRIEVAL_TUNING_LABELS = {
       'Permette anche al widget di chat incorporata di chiedere le versioni precedenti. Funziona solo mentre il filtro per versione è attivo. I visitatori del widget possono allora leggere le versioni precedenti dei documenti dello spazio di lavoro.',
     'RAG_TABLE_LOOKUP.label': 'Ricerca nelle righe di tabella',
     'RAG_TABLE_LOOKUP.help':
-      "Trova le righe di tabella le cui celle corrispondono ai valori citati nella domanda e le aggiunge ai risultati, con l'intestazione.",
+      'Trova le righe di tabella le cui celle corrispondono ai valori citati nella domanda e le aggiunge ai risultati, con l’intestazione.',
     'RAG_TABLE_LOOKUP.stored': 'Documenti archiviati: le loro tabelle non hanno righe da cercare finché non esegui {tableRows}.',
     'RAG_DUP_CLUSTERS.label': 'Gruppi di duplicati',
     'RAG_DUP_CLUSTERS.help':
@@ -107,11 +107,11 @@ const RETRIEVAL_TUNING_LABELS = {
       '`off` mantiene tutti i risultati. `collapse` mantiene il passaggio migliore di ogni gruppo di duplicati ed elenca gli altri documenti sotto la sua citazione. `mmr` fa lo stesso, poi preferisce passaggi diversi tra loro.',
     'RAG_IDENTIFIER_INDEX.label': 'Indice degli identificatori',
     'RAG_IDENTIFIER_INDEX.help':
-      "Memorizza in un'unica forma normalizzata gli identificatori trovati in ogni passaggio, così le diverse grafie di uno stesso identificatore corrispondono tra loro.",
-    'RAG_IDENTIFIER_INDEX.stored': "Documenti archiviati: non hanno identificatori nell'indice finché non esegui {identifiers}.",
+      'Memorizza in un’unica forma normalizzata gli identificatori trovati in ogni passaggio, così le diverse grafie di uno stesso identificatore corrispondono tra loro.',
+    'RAG_IDENTIFIER_INDEX.stored': 'Documenti archiviati: non hanno identificatori nell’indice finché non esegui {identifiers}.',
     'RAG_IDENTIFIER_FILTER.label': 'Filtro per identificatore',
     'RAG_IDENTIFIER_FILTER.help':
-      "Quando una domanda cita un identificatore presente in questo spazio di lavoro, il recupero si limita ai passaggi che lo contengono ed esclude quelli relativi a un identificatore simile. Richiede l'indice degli identificatori.",
+      'Quando una domanda cita un identificatore presente in questo spazio di lavoro, il recupero si limita ai passaggi che lo contengono ed esclude quelli relativi a un identificatore simile. Richiede l’indice degli identificatori.',
     'pointer.text': 'I modelli per i tuoi formati di identificatore sono in RAG administration, Modelli di identificatori.',
     'pointer.open': 'Apri modelli di identificatori',
     'note.needsV2':
@@ -119,7 +119,7 @@ const RETRIEVAL_TUNING_LABELS = {
     'note.diversityNeedsClusters':
       'I gruppi di duplicati sono disattivati, quindi nessun passaggio è ancora raggruppato. `collapse` non cambia nulla; `mmr` preferisce comunque passaggi diversi. Attiva Gruppi di duplicati ed esegui il suo comando.',
     'note.filterNeedsIndex':
-      "L'indice degli identificatori è disattivato, quindi il filtro non può funzionare e il recupero resta non filtrato. Attiva Indice degli identificatori ed esegui il suo comando.",
+      'L’indice degli identificatori è disattivato, quindi il filtro non può funzionare e il recupero resta non filtrato. Attiva Indice degli identificatori ed esegui il suo comando.',
   },
 };
 
