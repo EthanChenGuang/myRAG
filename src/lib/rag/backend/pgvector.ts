@@ -324,3 +324,10 @@ export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBacke
     },
   };
 }
+export function bm25CandidateLimit(_lexicalLimit: number): number {
+  return 0;
+}
+
+export function bm25ArgsFrom(_hybridArgs: Record<string, unknown>, _scoring: unknown, _lexicalLimit: number): Record<string, unknown> {
+  return {};
+}
