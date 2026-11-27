@@ -275,8 +275,9 @@ describe('the re-recorded ingest baseline (T-03.1-104)', () => {
       .readFileSync(path.join(ROOT, 'eval/fixtures/golden.jsonl'), 'utf8')
       .split('\n')
       .filter((line) => line.trim() !== '')
-      .map((line) => JSON.parse(line) as { id: string; category: string })
-      .filter((item) => item.category === 'injection' || item.category === 'injection_evasive')
+      .map((line) => JSON.parse(line) as { id: string; category: string; tags?: string[] })
+      // Plan 05.2-29's link-injection items (tag link_injection) joined after the pre-05.3-15 record.
+      .filter((item) => (item.category === 'injection' || item.category === 'injection_evasive') && !(item.tags ?? []).includes('link_injection'))
       .map((item) => item.id);
     // Plan 03.2-30 added the table_split items to golden-ingest.jsonl; they run against their isolated tenants.
     const tableSplitIds = fs

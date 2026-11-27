@@ -387,20 +387,27 @@ def test_committed_manifests_start_at_version_one_all_active():
     # Version 1 recorded the set when 05.3-06 created the manifests; train 30 bumped it twice: version 2 added only the
     # 36 Phase 4.2 items of plan 04.2-37 (tag phase42), version 3 changed only the six small_talk items the Phase 6 gate fix
     # marked conversational. Version 4 (the merge of train 30 into 05.3-16) added only the 25 items of plan 05.3-15
-    # (tag phase53_fixture). Every item is still active.
+    # (tag phase53_fixture). Version 5 adds only the 48 Phase 5.2 items of plan 05.2-29. Every item is still active.
     golden = load_golden(FIXTURE_GOLDEN)
     phase42 = sorted(item.id for item in golden if "phase42" in item.tags)
     phase53 = sorted(item.id for item in golden if "phase53_fixture" in item.tags)
     conversational = sorted(item.id for item in golden if item.expected_behavior == "conversational")
-    assert len(phase42) == 36 and len(conversational) == 6 and len(phase53) == 25
+    phase52 = sorted(
+        item.id
+        for item in golden
+        if item.category in ("partial_answer", "stale_version", "off_topic_context") or "link_injection" in item.tags
+    )
+    assert len(phase42) == 36 and len(conversational) == 6 and len(phase53) == 25 and len(phase52) == 48
     for path in (FIXTURE_MANIFEST, INGEST_MANIFEST):
         manifest = golden_set.load_manifest(path)
-        assert manifest.version == 4
-        assert [entry.version for entry in manifest.changelog] == [1, 2, 3, 4]
+        assert manifest.version == 5
+        assert [entry.version for entry in manifest.changelog] == [1, 2, 3, 4, 5]
         assert sorted(manifest.changelog[1].added) == phase42
         assert not manifest.changelog[1].changed
         assert sorted(manifest.changelog[2].changed) == conversational
         assert not manifest.changelog[2].added
         assert sorted(manifest.changelog[3].added) == phase53
         assert not manifest.changelog[3].changed
+        assert sorted(manifest.changelog[4].added) == phase52
+        assert not manifest.changelog[4].changed
         assert all(entry.status == "active" for entry in manifest.items)
