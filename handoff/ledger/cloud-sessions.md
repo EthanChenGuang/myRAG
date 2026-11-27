@@ -691,3 +691,8 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - sidebar-hide DONE [fa81af29] -> archived
   Only the walkthrough desk has not confirmed; it pauses with the owner anyway.
 - 22:03Z RESUME ALL (user request): sent resume to 14 executors and builders, plus the owner desk (eval t35-37) and the walkthrough desk. Self-check re-armed.
+- 22:06Z 06.2-22 resume was BLOCKED by its own permission classifier: a cross-session RESUME is not owner approval. The user must say "继续" in that session.
+- quick-doc-types-access DONE (9cba16b0, migration 0986) and archived -> train 40.
+  Train 39 has 2 failures of its own, sent to the t39 builder:
+  (a) the sentinel finds rag_scope_centroids_rebuild unclassified -> mark it EXEMPT, with the follow-up "should restricted chunks shape scope centroids?";
+  (b) the q62-scope-separation report is stale -> re-generate it.
