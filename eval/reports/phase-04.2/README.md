@@ -8,7 +8,7 @@ Verdict: **FAIL** over off_identity, diversity, identifier, table, versions, dic
 | diversity | D-22 | PASS | 0 |
 | identifier | D-32 | FAIL | 11 |
 | table | ROADMAP-4.2-SC3 | PASS | 0 |
-| versions | ROADMAP-4.2-SC5 | FAIL | 6 |
+| versions | ROADMAP-4.2-SC5 | PASS | 0 |
 | dictionary | D-09 | PASS | 0 |
 
 ## off_identity (D-37)
@@ -82,15 +82,7 @@ Runs: v2-version-scope-on, v2-default.
 | Number | Value |
 | --- | --- |
 | items | 3 |
-| superseded_kept | 0 |
-
-Offenders:
-- en-general-007: an evidence group has no kept chunk
-- en-general-007: 0 superseded chunk(s) kept, fewer than 1
-- zh-general-008: an evidence group has no kept chunk
-- zh-general-008: 0 superseded chunk(s) kept, fewer than 1
-- it-general-007: an evidence group has no kept chunk
-- it-general-007: 0 superseded chunk(s) kept, fewer than 1
+| superseded_kept | 3 |
 
 ## dictionary (D-09)
 
@@ -137,7 +129,7 @@ Runs: v2-lexical-dict-on, v2-default.
 | v2-diversity-mmr | prechunked | 0.6792 | 0.6064 | `46bb67866dcc` |
 | v2-identifier-on | prechunked | 0.6676 | 0.5969 | `51c381e27231` |
 | v2-table-lookup-on | prechunked | 0.6792 | 0.6085 | `4c542c55241a` |
-| v2-version-scope-on | prechunked | 0.6792 | 0.6085 | `fab385fa4103` |
+| v2-version-scope-on | prechunked | 0.6879 | 0.6085 | `fab385fa4103` |
 | v2-lexical-dict-on | prechunked | 0.6792 | 0.6117 | `5bafb006d90e` |
 | v2-lexical-stem-it-on | prechunked | 0.6792 | 0.6085 | `20c3313beb97` |
 
