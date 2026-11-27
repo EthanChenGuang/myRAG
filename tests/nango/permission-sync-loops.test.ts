@@ -54,6 +54,7 @@ const proxy = vi.fn(async (request: ProxyRequest) => {
     if (children) return { data: { results: remote.notionChildren[children[1]] ?? [] } };
     if (endpoint === '/v1/search') return { data: { results: Object.values(remote.notionPages) } };
     if (endpoint === '/2/files/list_folder') return { data: { entries: remote.dropboxEntries } };
+    if (endpoint === '/2/sharing/list_folder_members') return { data: { users: [], groups: [], invitees: [] } };
     if (endpoint === '/2/sharing/list_file_members') {
         const members = remote.dropboxMembers[String(request.data?.file)];
         if (!members) throw httpError(409, { error_summary: 'access_error/' });
@@ -315,5 +316,220 @@ describe('connector sync loops run the permission step on every file', () => {
         expect(stats.failClosed).toBe(1);
         expect(labelOf(harness, 'doc-f1')).toEqual(OWNER_ONLY);
         expect(harness.applied.at(-1)?.status).toBe('source_error');
+    });
+
+    const syncedRecord = (fileId: string, documentId: string): Row => ({
+        id: `rec-${fileId}`,
+        user_id: OWNER,
+        connection_id: CONNECTION,
+        file_id: fileId,
+        document_id: documentId,
+        status: 'completed',
+        last_synced_at: '2026-06-01T00:00:00.000Z',
+        metadata: {},
+    });
+    const syncedDocument = (id: string, fileId: string, label: string[], tenantKey = 's:default'): Row => ({
+        id,
+        tenant_key: tenantKey,
+        user_id: OWNER,
+        source: 'nango',
+        source_connection_id: CONNECTION,
+        source_file_id: fileId,
+        source_key: fileId,
+        access_groups: label,
+    });
+
+    it('Drive files picked by id: unchanged files get the step before the skip, new ones are ingested owner-only', async () => {
+        remote.driveMeta = { f1: driveFile('f1'), f2: driveFile('f2') };
+        remote.permissions = { f1: [groupShare('team-b@example.test')], f2: [groupShare('team-a@example.test')] };
+        const { syncDocumentsForConnection, harness } = await loadSyncManager({
+            nango_connections: [connection('google-drive', null, ['f1', 'f2'])],
+            nango_sync_records: [syncedRecord('f1', 'doc-f1')],
+            documents: [syncedDocument('doc-f1', 'f1', [`g:${GROUP_A}`])],
+        });
+
+        const stats = await syncDocumentsForConnection(CONNECTION, 'google-drive');
+
+        expect(stats).toMatchObject({ skipped: 1, processed: 1, failClosed: 1 });
+        expect(labelOf(harness, 'doc-f1')).toEqual(OWNER_ONLY);
+        expect(harness.ingests.map((entry) => entry.options.accessKeys)).toEqual([OWNER_ONLY]);
+        expect(labelOf(harness, 'doc-f2')).toEqual([`g:${GROUP_A}`]);
+    });
+
+    it('Notion pages by id: workspace read once per sync, unchanged pages re-mapped before the skip', async () => {
+        mapping.groups.set('notion:workspace:ws-loops', GROUP_A);
+        remote.notionPages = {
+            p1: { object: 'page', id: 'p1', last_edited_time: MODIFIED, public_url: null, properties: {} },
+            p2: { object: 'page', id: 'p2', last_edited_time: MODIFIED, public_url: 'https://example-site.notion.site/p2', properties: {} },
+        };
+        const { syncDocumentsForConnection, harness } = await loadSyncManager({
+            nango_connections: [connection('notion', null, ['p1', 'p2'])],
+            nango_sync_records: [syncedRecord('p1', 'doc-p1')],
+            documents: [syncedDocument('doc-p1', 'p1', ['all'])],
+        });
+
+        const stats = await syncDocumentsForConnection(CONNECTION, 'notion');
+
+        expect(getConnection).toHaveBeenCalledTimes(1);
+        expect(stats).toMatchObject({ skipped: 1, processed: 1, failClosed: 1 });
+        expect(labelOf(harness, 'doc-p1')).toEqual([`g:${GROUP_A}`]);
+        expect(labelOf(harness, 'doc-p2')).toEqual(OWNER_ONLY);
+        expect(harness.ingests.map((entry) => entry.options.accessKeys)).toEqual([OWNER_ONLY]);
+    });
+
+    it('Notion top-level page with children: every page gets the step; a missing workspace id closes them all', async () => {
+        remote.notionRaw = {};
+        remote.notionPages = {
+            top: { object: 'page', id: 'top', last_edited_time: MODIFIED, public_url: null, properties: {} },
+            child: { object: 'page', id: 'child', last_edited_time: MODIFIED, public_url: null, properties: {} },
+        };
+        remote.notionChildren = { top: [{ id: 'child', type: 'child_page', child_page: { title: 'Child' }, last_edited_time: MODIFIED }] };
+        const { syncDocumentsForConnection, harness } = await loadSyncManager({
+            nango_connections: [connection('notion', 'top-level-mode', ['top'])],
+            nango_sync_records: [syncedRecord('top', 'doc-top'), syncedRecord('child', 'doc-child')],
+            documents: [syncedDocument('doc-top', 'top', ['all']), syncedDocument('doc-child', 'child', ['all'])],
+        });
+
+        const stats = await syncDocumentsForConnection(CONNECTION, 'notion');
+
+        expect(stats).toMatchObject({ skipped: 2, failClosed: 2 });
+        expect(labelOf(harness, 'doc-top')).toEqual(OWNER_ONLY);
+        expect(labelOf(harness, 'doc-child')).toEqual(OWNER_ONLY);
+        expect(harness.applied.every((entry) => entry.status === 'source_error')).toBe(true);
+        expect(getConnection).toHaveBeenCalledTimes(1);
+    });
+
+    it('generic loop (Dropbox folder): unchanged files are re-mapped, the shared folder is read, new files go in owner-only', async () => {
+        mapping.groups.set('dropbox:group:g:team-a', GROUP_A);
+        remote.dropboxEntries = [
+            { '.tag': 'file', id: 'id:d1', name: 'd1.txt', path_display: '/d1.txt', client_modified: MODIFIED, sharing_info: { read_only: false, parent_shared_folder_id: 'sf-1' } },
+            { '.tag': 'file', id: 'id:d2', name: 'd2.txt', path_display: '/d2.txt', client_modified: MODIFIED },
+        ];
+        const groupMembers = { users: [], groups: [{ access_type: { '.tag': 'viewer' }, group: { group_id: 'g:team-a', group_name: 'Team' } }], invitees: [] };
+        remote.dropboxMembers = { 'id:d1': groupMembers, 'id:d2': groupMembers };
+        const { syncDocumentsForConnection, harness } = await loadSyncManager({
+            nango_connections: [connection('dropbox', '/folder')],
+            nango_sync_records: [syncedRecord('id:d1', 'doc-d1')],
+            documents: [syncedDocument('doc-d1', 'id:d1', ['all'])],
+        });
+
+        const stats = await syncDocumentsForConnection(CONNECTION, 'dropbox');
+        const folderCalls = remote.calls.filter((call) => call.endpoint === '/2/sharing/list_folder_members');
+
+        expect(stats).toMatchObject({ skipped: 1, processed: 1, failClosed: 0 });
+        expect(folderCalls.map((call) => call.data?.shared_folder_id)).toEqual(['sf-1']);
+        expect(labelOf(harness, 'doc-d1')).toEqual([`g:${GROUP_A}`]);
+        expect(labelOf(harness, 'doc-id:d2')).toEqual([`g:${GROUP_A}`]);
+        expect(harness.ingests.map((entry) => entry.options.accessKeys)).toEqual([OWNER_ONLY]);
+    });
+
+    it('generic multi-folder loop: unchanged files get the step before the skip', async () => {
+        remote.dropboxEntries = [{ '.tag': 'file', id: 'id:m1', name: 'm1.txt', path_display: '/a/m1.txt', client_modified: MODIFIED }];
+        remote.dropboxMembers = { 'id:m1': { users: [], groups: [{ group: { group_id: 'g:unmapped' } }], invitees: [] } };
+        const { syncDocumentsForConnection, harness } = await loadSyncManager({
+            nango_connections: [connection('dropbox', 'multi-folder-mode', ['/a'])],
+            nango_sync_records: [syncedRecord('id:m1', 'doc-m1')],
+            documents: [syncedDocument('doc-m1', 'id:m1', ['all'])],
+        });
+
+        const stats = await syncDocumentsForConnection(CONNECTION, 'dropbox');
+
+        expect(stats).toMatchObject({ skipped: 1, failClosed: 1 });
+        expect(labelOf(harness, 'doc-m1')).toEqual(OWNER_ONLY);
+    });
+
+    it('never relabels a document that is not this file\'s connector copy', async () => {
+        remote.files = [driveFile('f1')];
+        remote.permissions.f1 = [{ id: 'p-anyone', type: 'anyone', role: 'reader' }];
+        mapping.rules.add('google-drive:anyone:');
+        const { syncDocumentsForConnection, harness } = await loadSyncManager({
+            nango_connections: [connection('google-drive', FOLDER)],
+            nango_sync_records: [syncedRecord('f1', 'doc-upload')],
+            documents: [{ id: 'doc-upload', tenant_key: 's:default', user_id: MEMBER, source: 'upload', source_file_id: null, access_groups: [`g:${GROUP_A}`] }],
+        });
+
+        await syncDocumentsForConnection(CONNECTION, 'google-drive');
+
+        expect(labelOf(harness, 'doc-upload')).toEqual([`g:${GROUP_A}`]);
+        expect(harness.applied.map((entry) => entry.documentId)).not.toContain('doc-upload');
+    });
+
+    it('single-tenant canary: mapped group, unmapped group and unruled domain sharing, then the domain rule (DATA-22 criterion 4)', async () => {
+        remote.files = [driveFile('c1'), driveFile('c2'), driveFile('c3')];
+        remote.permissions = { c1: [groupShare('team-a@example.test')], c2: [groupShare('team-x@example.test')], c3: [domainShare] };
+        const { syncDocumentsForConnection, harness } = await loadSyncManager({ nango_connections: [connection('google-drive', FOLDER)] });
+
+        const first = await syncDocumentsForConnection(CONNECTION, 'google-drive');
+        expect(first).toMatchObject({ processed: 3, failClosed: 2 });
+        expect([labelOf(harness, 'doc-c1'), labelOf(harness, 'doc-c2'), labelOf(harness, 'doc-c3')]).toEqual([[`g:${GROUP_A}`], OWNER_ONLY, OWNER_ONLY]);
+
+        mapping.rules.add('google-drive:domain:example.test');
+        const second = await syncDocumentsForConnection(CONNECTION, 'google-drive');
+        expect(second).toMatchObject({ skipped: 3, failClosed: 1 });
+        expect(labelOf(harness, 'doc-c3')).toEqual(['all']);
+    });
+
+    it('multi-tenant: arrays are computed in the owner personal tenant', async () => {
+        remote.files = [driveFile('c1')];
+        remote.permissions = { c1: [groupShare('team-a@example.test')] };
+        const { syncDocumentsForConnection, harness } = await loadSyncManager({ nango_connections: [connection('google-drive', FOLDER)] }, { deploymentMode: 'multi-tenant' });
+
+        await syncDocumentsForConnection(CONNECTION, 'google-drive');
+
+        expect((harness.memory.tables.documents ?? []).find((row) => row.id === 'doc-c1')?.tenant_key).toBe(`u:${OWNER}`);
+        expect(labelOf(harness, 'doc-c1')).toEqual([`g:${GROUP_A}`]);
+    });
+
+    it('writes the arrays with RAG_DOC_ACCESS_GROUPS off (D-22)', async () => {
+        vi.stubEnv('RAG_DOC_ACCESS_GROUPS', 'off');
+        try {
+            remote.files = [driveFile('c1')];
+            remote.permissions = { c1: [groupShare('team-x@example.test')] };
+            const { syncDocumentsForConnection, harness } = await loadSyncManager({ nango_connections: [connection('google-drive', FOLDER)] }, { pipeline: 'legacy' });
+            const stats = await syncDocumentsForConnection(CONNECTION, 'google-drive');
+            expect(stats.failClosed).toBe(1);
+            expect(harness.ingests.map((entry) => entry.options.accessKeys)).toEqual([OWNER_ONLY]);
+            expect(labelOf(harness, 'doc-c1')).toEqual(OWNER_ONLY);
+        } finally {
+            vi.unstubAllEnvs();
+        }
+    });
+});
+
+describe('POST /api/nango/sync answer', () => {
+    afterEach(() => {
+        vi.resetModules();
+        for (const name of ['@/lib/nango/client', '@/lib/nango/sync-manager', '@/lib/supabase', '@/lib/supabase/server']) vi.doUnmock(name);
+    });
+
+    async function post(stats: Row) {
+        vi.resetModules();
+        const admin = {
+            from: () => {
+                const builder: Record<string, unknown> = {
+                    select: () => builder,
+                    update: () => builder,
+                    eq: () => builder,
+                    single: async () => ({ data: { user_id: OWNER, connection_id: CONNECTION }, error: null }),
+                    then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve),
+                };
+                return builder;
+            },
+        };
+        vi.doMock('@/lib/nango/client', () => ({ isNangoEnabled: () => true, getNango: () => ({ triggerSync: async () => undefined }) }));
+        vi.doMock('@/lib/nango/sync-manager', () => ({ syncDocumentsForConnection: async () => stats }));
+        vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => admin }));
+        vi.doMock('@/lib/supabase/server', () => ({ createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: OWNER } }, error: null }) } }) }));
+        const { POST } = await import('@/app/api/nango/sync/route');
+        const { NextRequest } = await import('next/server');
+        const response = await POST(
+            new NextRequest('http://localhost/api/nango/sync', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ connectionId: CONNECTION, provider: 'google-drive' }) }),
+        );
+        return response.json();
+    }
+
+    it('carries the number of documents left with the fallback audience', async () => {
+        await expect(post({ processed: 1, failed: 0, skipped: 0, deleted: 0, failClosed: 2 })).resolves.toMatchObject({ failClosed: 2 });
+        await expect(post({ processed: 1, failed: 0, skipped: 0, deleted: 0 })).resolves.toMatchObject({ failClosed: 0 });
     });
 });
