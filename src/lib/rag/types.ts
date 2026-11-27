@@ -2,7 +2,7 @@ import type { ExtractedURL } from '@/lib/url-extractor';
 import type { QueryClassification } from '@/lib/query-classifier';
 import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
 import type { QueryParamsOverrides } from './query/query-params';
-import type { RetrievalFilterInput } from './backend/types';
+import type { BackendId, RetrievalFilterInput } from './backend/types';
 import type { VoiceResults } from './context/voice';
 import type { QueryFramework, QueryTransformSwitches, SemanticCacheBackend, StageName, StageTimeouts } from './config';
 import type { TemporalQueryContext } from './query/temporal-query-detector';
@@ -17,6 +17,20 @@ import type { CacheHit, CacheTicket } from './cache/types';
 export type Profile = 'chat' | 'embed' | 'voice' | 'media' | 'eval';
 
 export type RetrievalStatus = 'ok' | 'empty' | 'error' | 'degraded';
+
+/** D-11, A-8: the reasons an external backend's request was served by pgvector, which make the result degraded. */
+export type BackendDegradedReason = 'backend_not_ready' | 'backend_error' | 'backend_slow';
+
+/** D-03, D-07: filter_unsupported routes the request to pgvector without degrading it. */
+export type BackendFallbackReason = BackendDegradedReason | 'filter_unsupported';
+
+/** D-24, D-25: which backend served a request's search stage, and why when it was not the selected one. */
+export interface RetrievalBackendSelection {
+  backend: BackendId;
+  fallbackReason: BackendFallbackReason | null;
+  tenantValidationDropped: number;
+  degraded: boolean;
+}
 
 export interface Candidate {
   chunk_id: string;
@@ -220,6 +234,8 @@ export interface RetrievalOverrides {
   iterativeScan?: string;
   exactScanCutoff?: number;
   chunkingProfileByDocType?: Record<string, string>;
+  /** Eval only (D-24): the retrieval backend this run searches; every other profile ignores it. */
+  backend?: BackendId;
   /** Eval only: the structured table leg's parameters (TableLookupParams). */
   tableLookup?: { min_cells?: number; limit?: number; weight?: number };
 }
