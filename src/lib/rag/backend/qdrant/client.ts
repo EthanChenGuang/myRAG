@@ -11,6 +11,7 @@ export type QdrantApi = Pick<
   | 'createCollection'
   | 'createPayloadIndex'
   | 'deleteCollection'
+  | 'updateCollection'
   | 'upsert'
   | 'delete'
   | 'scroll'

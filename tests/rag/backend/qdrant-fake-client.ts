@@ -167,6 +167,20 @@ export function createFakeQdrantClient(): FakeQdrantClient {
       col.payload_schema[field] = schema;
       return { operation_id: 0, status: 'completed' } as never;
     },
+    async updateCollection(name, body = {}) {
+      record('updateCollection', name, body);
+      const col = get(name);
+      const metadata = (body as Json).metadata;
+      if (metadata && typeof metadata === 'object') {
+        const merged = { ...((col.config.metadata as Json | null) ?? {}) };
+        for (const [key, value] of Object.entries(metadata as Json)) {
+          if (value === null) delete merged[key];
+          else merged[key] = structuredClone(value);
+        }
+        col.config.metadata = merged;
+      }
+      return true;
+    },
     async deleteCollection(name) {
       record('deleteCollection', name, {});
       return collections.delete(name);
@@ -224,7 +238,9 @@ export function createFakeQdrantClient(): FakeQdrantClient {
         if (Array.isArray(query)) {
           scored = pool.map((point) => ({ id: point.id, score: cosine(query as number[], point.vector[search.using as string] ?? []) }));
         } else {
-          const tokens = new Set(String((query as Json).text).split(' ').filter(Boolean));
+          const text = (query as Json).text;
+          const raw = text !== null && typeof text === 'object' ? (text as Json).query : text;
+          const tokens = new Set(String(raw).split(' ').filter(Boolean));
           scored = pool
             .map((point) => {
               const words = String(point.payload[search.using as string] ?? '').split(/\s+/);
