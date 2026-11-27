@@ -404,15 +404,15 @@ const AUTO_EXPLAIN_ON = [
   'SET client_min_messages = notice',
 ];
 
-function percentile(values: number[], p: number): number {
+function percentile(values: number[], p: number, digits = 2): number {
   if (values.length === 0) return 0;
   const sorted = values.slice().sort((a, b) => a - b);
   const rank = Math.max(1, Math.ceil((p / 100) * sorted.length));
-  return round(sorted[rank - 1] as number);
+  return round(sorted[rank - 1] as number, digits);
 }
 
-function median(values: number[]): number {
-  return percentile(values, 50);
+function median(values: number[], digits = 2): number {
+  return percentile(values, 50, digits);
 }
 
 function round(value: number, digits = 2): number {
@@ -574,6 +574,9 @@ async function runSize(
     });
     const seedStart = performance.now();
     await seedCorpus(conn, tenant, corpus);
+    // Planner statistics as autovacuum would leave them on a live table; PGlite has no autovacuum.
+    await conn.exec('ANALYZE public.document_chunks');
+    await conn.exec('ANALYZE public.documents');
     const seedMs = performance.now() - seedStart;
 
     const rebuildStart = performance.now();
@@ -715,8 +718,8 @@ const PGLITE_NOTE =
 const POSTGRES_NOTE =
   'Real Postgres, synthetic throwaway tenant. This is the budget measurement of plan 04.4-15 when run against the eval project.';
 
-function fmtList(values: number[]): string {
-  return values.length <= 1 ? String(values[0] ?? '') : `${median(values)} (${Math.min(...values)}–${Math.max(...values)})`;
+function fmtList(values: number[], digits = 2): string {
+  return values.length <= 1 ? String(values[0] ?? '') : `${median(values, digits)} (${Math.min(...values)}–${Math.max(...values)})`;
 }
 
 function mean(values: number[]): number {
@@ -733,6 +736,7 @@ export function renderMarkdown(report: BenchReport): string {
   lines.push('## Settings', '');
   lines.push(
     `- Corpus: ${report.corpus.generator}, seed ${report.seed}, vocabulary ${report.corpus.vocabulary}, ${report.corpus.min_length}–${report.corpus.max_length} tokens per chunk, Zipf exponent ${report.corpus.exponent}, one document per ${report.corpus.chunks_per_document} chunks, legacy chunking profile, no embeddings.`,
+    '- After seeding, `ANALYZE` on `document_chunks` and `documents` (planner statistics as autovacuum leaves them on a live table).',
     `- Statistics: \`rag_lexstats_enable\` then \`rag_lexstats_rebuild\` on the throwaway tenant; removed afterwards with \`rag_lexstats_disable\` and a chunk and document delete.`,
     `- ts_rank_cd: the lexical leg of \`hybrid_search_chunks\` (\`p_dense_limit = 0\`, \`p_lexical_limit = ${report.lexical_limit}\`).`,
     `- BM25: \`rag_bm25_search_chunks\` (\`p_lexical_limit = ${report.lexical_limit}\`, \`p_candidate_limit = ${report.candidate_limit}\`, k1 ${report.k1}, b ${report.b}); the uncapped reference uses \`p_candidate_limit = 0\` and runs once per query.`,
@@ -754,7 +758,7 @@ export function renderMarkdown(report: BenchReport): string {
     );
     for (const s of size.shapes) {
       lines.push(
-        `| ${s.shape} | ${s.queries} | ${fmtList(s.terms)} | ${fmtList(s.matched_rows)} | ${fmtList(s.matched_fraction)} | ${fmtList(s.candidates_scored)} | ` +
+        `| ${s.shape} | ${s.queries} | ${fmtList(s.terms)} | ${fmtList(s.matched_rows)} | ${fmtList(s.matched_fraction, 4)} | ${fmtList(s.candidates_scored)} | ` +
           `${s.ts_rank_cd.p50_ms} / ${s.ts_rank_cd.p95_ms} | ${s.bm25.p50_ms} / ${s.bm25.p95_ms} | ${s.bm25_to_ts_rank_cd_p50} | ${median(s.bm25_uncapped_ms)} | ` +
           `${mean(s.overlap_at_10)} (${Math.min(...s.overlap_at_10)}) | ${mean(s.overlap_at_50)} (${Math.min(...s.overlap_at_50)}) |`,
       );
