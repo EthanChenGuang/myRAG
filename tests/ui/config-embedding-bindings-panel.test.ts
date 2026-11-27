@@ -506,3 +506,18 @@ describe('UI review fixes (03.1.1-UI-REVIEW, quick 261127-cuf)', () => {
     expect(state.querySelectorAll('.mt-2')).toEqual([]);
   });
 });
+
+describe('re-audit column widths (03.1.1-UI-REVIEW W-1..W-3, quick 261127-cuf)', () => {
+  const classes = (el: FakeElement | null) => (el?.className ?? '').split(/\s+/).filter(Boolean);
+
+  it('from md the profile id stays on one line and Profile, Status and Evidence keep a minimum width', async () => {
+    const { root } = mountPanel(() => ({ ok: true, status: 200, body: listBody() }));
+    await flush();
+    const row = root.querySelectorAll('[data-rag-bindings-list] tbody tr').find((tr) => tr.querySelector('th'))!;
+    const [, profile, status, , evidence] = [...row.children];
+    expect(classes(profile)).toContain('md:min-w-48');
+    expect(classes(profile.querySelector('[translate="no"]'))).toContain('md:whitespace-nowrap');
+    expect(classes(status)).toContain('md:min-w-60');
+    expect(classes(evidence)).toContain('md:min-w-36');
+  });
+});
