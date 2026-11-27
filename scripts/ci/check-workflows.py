@@ -1249,6 +1249,9 @@ RELEASE_GATE_RUN = "python -m rag_eval.release_gate run"
 RELEASE_GATE_OVERRIDE = "python -m rag_eval.release_gate override"
 RELEASE_GATE_POSTER = "node scripts/ci/post-release-status.mjs"
 RELEASE_GATE_SHA_PATTERN = "^[0-9a-f]{40}$"
+RELEASE_GATE_ANCESTOR = 'git merge-base --is-ancestor "$GATE_SHA" origin/main'
+RELEASE_GATE_DOWNLOAD = 'gh run download "$GITHUB_RUN_ID" -n rag-release-gate'
+RELEASE_GATE_TARGET_URL = "target_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
 
 def _step_index(steps: list[dict], needle: str) -> int | None:

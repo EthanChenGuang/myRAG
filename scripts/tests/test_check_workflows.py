@@ -1446,7 +1446,16 @@ class ReleaseGateWorkflowTest(unittest.TestCase):
         return data["jobs"]["gate"]["steps"]
 
     def step(self, data: dict, needle: str) -> dict:
-        return next(s for s in self.steps(data) if needle in str(s.get("run", "")))
+        for job in data["jobs"].values():
+            for s in job.get("steps") or []:
+                if needle in str(s.get("run", "")):
+                    return s
+        raise AssertionError(f"no step runs {needle!r}")
+
+    def job_steps(self, data: dict, name: str) -> list[dict]:
+        job = data["jobs"].get(name)
+        self.assertIsNotNone(job, f"job {name!r} missing")
+        return job["steps"]
 
     def assert_error(self, data: dict, fragment: str, text: str | None = None) -> None:
         errors = self.errors_for(data, text)
@@ -1516,16 +1525,13 @@ class ReleaseGateWorkflowTest(unittest.TestCase):
 
     def test_no_pending_post_before_the_gate_fails(self):
         data = self.workflow()
-        steps = self.steps(data)
+        steps = self.job_steps(data, "status-pending")
         pending = next(s for s in steps if "state=pending" in str(s.get("run", "")))
         steps.remove(pending)
-        self.assert_error(data, "pending rag-release-gate status must be posted before")
+        self.assert_error(data, "status-pending must post a pending rag-release-gate status")
         data = self.workflow()
-        steps = self.steps(data)
-        pending = next(s for s in steps if "state=pending" in str(s.get("run", "")))
-        steps.remove(pending)
-        steps.insert(len(steps) - 1, pending)
-        self.assert_error(data, "pending rag-release-gate status must be posted before")
+        data["jobs"]["gate"].pop("needs", None)
+        self.assert_error(data, "gate must need status-pending")
 
     def test_posting_step_without_always_fails(self):
         data = self.workflow()
@@ -1534,6 +1540,93 @@ class ReleaseGateWorkflowTest(unittest.TestCase):
         data = self.workflow()
         self.step(data, "post-release-status.mjs")["if"] = "success()"
         self.assert_error(data, "if: always()")
+
+    # T-05.3-391 (05.3-SECURITY.md fix 1-4)
+    def test_the_gate_job_holds_no_write_permission(self):
+        data = self.workflow()
+        data["jobs"]["gate"]["permissions"]["statuses"] = "write"
+        self.assert_error(data, "permissions must be exactly")
+        self.assert_error(data, "only the status jobs")
+
+    def test_the_gate_job_posts_no_status(self):
+        data = self.workflow()
+        self.steps(data).append({"name": "post", "env": {"GH_TOKEN": "${{ github.token }}"}, "run": 'gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GATE_SHA" -f state=success'})
+        self.assert_error(data, "job 'gate' must not post a commit status")
+        data = self.workflow()
+        self.steps(data).append({"if": "always()", "env": {"GH_TOKEN": "${{ github.token }}"}, "run": "node scripts/ci/post-release-status.mjs out.json"})
+        self.assert_error(data, "job 'gate' must not post a commit status")
+
+    def test_the_ancestor_check_runs_before_any_repository_code(self):
+        for job in ("gate", "status-pending"):
+            data = self.workflow()
+            steps = self.job_steps(data, job)
+            ancestor = next(s for s in steps if check_workflows.RELEASE_GATE_ANCESTOR in str(s.get("run", "")))
+            steps.remove(ancestor)
+            self.assert_error(data, f"job '{job}' must refuse a GATE_SHA that is not an ancestor of origin/main")
+        data = self.workflow()
+        steps = self.steps(data)
+        ancestor = next(s for s in steps if check_workflows.RELEASE_GATE_ANCESTOR in str(s.get("run", "")))
+        steps.remove(ancestor)
+        steps.append(ancestor)
+        self.assert_error(data, "before any step that runs repository code")
+
+    def test_checkouts_do_not_persist_credentials(self):
+        for job in ("gate", "status-pending", "status-final"):
+            data = self.workflow()
+            checkout = next(s for s in self.job_steps(data, job) if str(s.get("uses", "")).startswith("actions/checkout@"))
+            checkout.setdefault("with", {})["persist-credentials"] = True
+            self.assert_error(data, f"job '{job}': checkout must set persist-credentials: false")
+
+    def test_the_gate_checkout_fetches_main_for_the_ancestor_check(self):
+        data = self.workflow()
+        checkout = next(s for s in self.steps(data) if str(s.get("uses", "")).startswith("actions/checkout@"))
+        checkout["with"].pop("fetch-depth", None)
+        self.assert_error(data, "fetch-depth: 0")
+
+    def test_the_final_status_job_reads_only_the_result_artifact(self):
+        data = self.workflow()
+        self.job_steps(data, "status-final").insert(1, {"run": "npm ci --ignore-scripts"})
+        self.assert_error(data, "job 'status-final' must run no repository install or gate code")
+        data = self.workflow()
+        steps = self.job_steps(data, "status-final")
+        download = next(s for s in steps if check_workflows.RELEASE_GATE_DOWNLOAD in str(s.get("run", "")))
+        steps.remove(download)
+        self.assert_error(data, f"job 'status-final' must download the result with '{check_workflows.RELEASE_GATE_DOWNLOAD}'")
+
+    def test_the_final_status_job_checks_out_its_own_sha(self):
+        data = self.workflow()
+        checkout = next(s for s in self.job_steps(data, "status-final") if str(s.get("uses", "")).startswith("actions/checkout@"))
+        checkout["with"]["ref"] = "${{ env.GATE_SHA }}"
+        self.assert_error(data, "job 'status-final': checkout must not set a ref")
+
+    def test_the_final_status_job_waits_for_the_gate_and_always_runs(self):
+        data = self.workflow()
+        data["jobs"]["status-final"]["needs"] = ["status-pending"]
+        self.assert_error(data, "status-final must need gate")
+        data = self.workflow()
+        data["jobs"]["status-final"]["if"] = "success()"
+        self.assert_error(data, "status-final must run with if: always() && needs.status-pending.result == 'success'")
+
+    def test_a_write_permission_outside_the_status_jobs_fails(self):
+        data = self.workflow()
+        data["jobs"]["extra"] = {"runs-on": "ubuntu-latest", "permissions": {"statuses": "write"}, "steps": [{"run": "true"}]}
+        self.assert_error(data, "only the status jobs")
+
+    def test_the_status_jobs_have_exact_permissions(self):
+        data = self.workflow()
+        data["jobs"]["status-final"]["permissions"]["contents"] = "write"
+        self.assert_error(data, "job 'status-final' permissions must be exactly")
+
+    def test_the_pending_status_carries_the_run_url(self):
+        data = self.workflow()
+        pending = self.step(data, "state=pending")
+        pending["run"] = pending["run"].replace(check_workflows.RELEASE_GATE_TARGET_URL, "")
+        self.assert_error(data, "target_url")
+
+    def test_the_run_name_names_the_gated_sha(self):
+        data = self.workflow()
+        data.pop("run-name", None)
+        self.assert_error(data, "run-name")
 
     def test_unpinned_or_unknown_action_fails(self):
         data = self.workflow()
@@ -1720,6 +1813,13 @@ class PromoteProductionWorkflowTest(unittest.TestCase):
         errors: list[str] = []
         check_workflows.check_promote_production(self.workflow(), text, errors, self.known_refs())
         self.assertEqual(errors, [])
+
+    def test_the_promote_job_reads_the_gate_run(self):
+        """T-05.3-391: promote-production.mjs resolves the bot status run, so the job needs actions: read and nothing more."""
+        self.assertEqual(check_workflows.PROMOTE_JOB_PERMISSIONS, {"contents": "read", "statuses": "read", "actions": "read"})
+        data = self.workflow()
+        self.job(data)["permissions"].pop("actions", None)
+        self.assert_error(data, "permissions must be exactly")
 
     def test_a_push_trigger_fails(self):
         data = self.workflow()
