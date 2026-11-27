@@ -100,6 +100,7 @@
     <script src="rag-panels/review-labelling.js"></script>
     <script src="rag-panels/review-admin.js"></script>
     <script src="rag-panels/query-layer.js"></script>
+    <script src="rag-panels/query-additions.js"></script>
     <script src="rag-panels/retrieval-tuning-switches.js"></script>
 
     <style>
@@ -7177,6 +7178,10 @@
                                                 <label class="label pl-8">
                                                     <span class="label-text-alt min-w-0" id="rag-translation-glossary-help">Query translation, document translation and query rewriting keep to the glossary’s required translations. With no entries nothing changes.</span>
                                                 </label>
+                                                <div class="flex flex-wrap items-center gap-x-2 pl-8" data-query-additions-glossary-pointer hidden>
+                                                    <span class="label-text-alt text-base-content/70 min-w-0" data-query-additions-glossary-text>Entries are edited under RAG administration, Terminology, Glossary.</span>
+                                                    <button type="button" class="btn btn-link btn-xs px-0">Open glossary</button>
+                                                </div>
                                             </div>
                                             <div class="form-control">
                                                 <label class="label cursor-pointer justify-start gap-3">
@@ -7225,6 +7230,7 @@
                                                     </select>
                                                 </div>
                                             </div>
+                                            <div id="query-additions-routing-warnings" class="grid gap-2 mt-2 empty:mt-0" role="status" aria-live="polite"></div>
                                         </div>
 
                                         <div class="flex flex-wrap items-center gap-x-2 mb-4">

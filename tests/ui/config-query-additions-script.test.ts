@@ -154,6 +154,7 @@ function loadPage(options: PageOptions = {}) {
   }
   vm.createContext(context);
   populate(doc, rawConfig);
+  const createdBefore = doc.created.length;
   new vm.Script(source, { filename: scriptFile }).runInContext(context);
   doc.dispatch('DOMContentLoaded');
 
@@ -168,6 +169,7 @@ function loadPage(options: PageOptions = {}) {
     tabSelects,
     rawConfig,
     modelConfig,
+    createdByScript: () => doc.created.slice(createdBefore),
     select,
     options: (id: string) => select(id).querySelectorAll('option').map((o) => ({ value: o.getAttribute('value') ?? '', text: o.textContent })),
     selected: (id: string) => {
@@ -175,7 +177,7 @@ function loadPage(options: PageOptions = {}) {
       return { value: select(id).value, options: chosen.map((o) => o.getAttribute('value')) };
     },
     host: () => doc.getElementById('query-additions-routing-warnings') as FakeElement,
-    warnings: () => page.host().children.map((alert) => ({ className: alert.className, text: alert.textContent.replace(/\s+/g, ' ').trim() })),
+    warnings: () => page.host().children.map((alert) => ({ className: alert.className, text: (alert.querySelector('span') ?? alert).textContent.replace(/\s+/g, ' ').trim() })),
     change: (id: string, value?: string | boolean) => {
       const el = select(id);
       if (typeof value === 'boolean') el.checked = value;
@@ -257,13 +259,14 @@ describe('query-additions.js: routing selects', () => {
   it('says the list has no Auto entry (info under off, warning under auto) with an Open AI Models button', () => {
     const noAuto = LIST.filter((m) => m.id !== 'auto');
     const page = loadPage({ models: noAuto, config: D35 });
-    const text = 'The model list has no Auto entry, so users cannot select it. Under AI Models, add a model with the ID auto and the name Auto. Open AI Models';
+    const text = 'The model list has no Auto entry, so users cannot select it. Under AI Models, add a model with the ID auto and the name Auto.';
     expect(page.warnings()).toEqual([{ className: expect.stringContaining('alert-info'), text }]);
     const code = page.host().querySelector('code')!;
     expect(code.textContent).toBe('auto');
     expect(code.getAttribute('translate')).toBe('no');
     page.change('RAG_MODEL_ROUTING', 'auto');
     expect(page.warnings()).toEqual([{ className: expect.stringContaining('alert-warning'), text }]);
+    expect(page.host().querySelector('button')!.textContent).toBe('Open AI Models');
     page.host().querySelector('button')!.click();
     expect(page.clicks).toEqual(['ai']);
     expect(page.requests).toEqual([]);
@@ -351,8 +354,8 @@ describe('query-additions.js: safety', () => {
     expect(page.warnings().map((w) => w.text).join(' ')).toContain(`saved${XSS}`);
     expect(injectedElements(page.doc)).toEqual([]);
     expect(page.doc.querySelectorAll('a').filter((a) => a.getAttribute('href'))).toEqual([]);
-    expect(page.doc.created).not.toContain('img');
-    expect(page.doc.created).not.toContain('a');
+    expect(page.createdByScript()).not.toContain('img');
+    expect(page.createdByScript()).not.toContain('a');
     expect(source).not.toMatch(/innerHTML|insertAdjacentHTML|outerHTML|document\.write/);
   });
 
