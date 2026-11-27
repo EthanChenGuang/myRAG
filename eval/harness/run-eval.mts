@@ -281,7 +281,7 @@ function stubAnswerFromSystemPrompt(system: string): string {
   return (sentence ? sentence[0] : body.split('\n')[0]).trim();
 }
 
-function createStubLanguageModel(): LanguageModel {
+export function createStubLanguageModel(): LanguageModel {
   return new MockLanguageModelV3({
     provider: 'stub',
     modelId: STUB_GENERATOR_MODEL,

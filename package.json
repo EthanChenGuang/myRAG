@@ -35,6 +35,7 @@
     "rag:embedding": "tsx src/lib/rag/embeddings/cli.ts",
     "rag:vector-sync": "tsx src/lib/rag/sync/cli.ts vector-sync",
     "rag:reconcile": "tsx src/lib/rag/sync/cli.ts reconcile",
+    "rag:red-team": "tsx eval/harness/run-red-team.mts",
     "test": "vitest run",
     "test-rag": "tsx eval/harness/run-smoke.mts",
     "typecheck:new": "node scripts/typecheck-new.mjs",
