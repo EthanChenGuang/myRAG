@@ -9,7 +9,7 @@ from rag_eval.corpus import load_corpus, main
 from rag_eval.paths import REPO_ROOT
 
 # Re-recorded by plan 05.2.1-12 (calc-rules and long-reference documents) on train 33 plus 05.2.1-01 and -06.
-COMMITTED_CORPUS_SHA256 = "402eed9d7c3c09635c28f03de8a4cc32b7b9d83307421f9f117863382bc8358d"
+COMMITTED_CORPUS_SHA256 = "16f10857169c282a15df7f9434a43e0452111ae83c9c5b77a330f12eb4709160"
 META = '<!-- fixture-meta {"filename": "Policy Handbook.pdf", "image_url": "https://example.test/a.png"} -->'
 
 

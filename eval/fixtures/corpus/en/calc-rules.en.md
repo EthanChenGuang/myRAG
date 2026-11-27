@@ -18,9 +18,9 @@ Under Talvoran tally rule C, the batches of one tally are added together and the
 
 <!-- chunk -->
 
-## Talvoran tally rule D: tiered rate per interval
+## Talvoran tally rule H: tiered rate per interval
 
-Under Talvoran tally rule D, each interval is charged 2 pell per step for its first 50 steps and 3 pell per step for every further step past 50. The charges of all intervals are added together.
+Under Talvoran tally rule H, each interval is charged 2 pell per step for its first 50 steps and 3 pell per step for every further step past 50. The charges of all intervals are added together.
 
 <!-- chunk -->
 

@@ -313,15 +313,15 @@
         "en-multi-step-calc-012"
       ],
       "questions": [
-        "Under Talvoran tally rule D, one interval runs 80 steps and another runs 30 steps. How many pell are charged in total?",
-        "Two intervals of 80 steps and 30 steps are charged with Talvoran tally rule D. What is the total charge in pell?",
-        "What total charge in pell does Talvoran tally rule D give for intervals of 80 and 30 steps?"
+        "Under Talvoran tally rule H, one interval runs 80 steps and another runs 30 steps. How many pell are charged in total?",
+        "Two intervals of 80 steps and 30 steps are charged with Talvoran tally rule H. What is the total charge in pell?",
+        "What total charge in pell does Talvoran tally rule H give for intervals of 80 and 30 steps?"
       ],
       "blocks": {
         "B1": {
           "document": "calc-rules.en.md",
           "quote": "each interval is charged 2 pell per step for its first 50 steps and 3 pell per step for every further step past 50",
-          "section": "Talvoran tally rule D: tiered rate per interval"
+          "section": "Talvoran tally rule H: tiered rate per interval"
         }
       },
       "request": {
@@ -1270,15 +1270,15 @@
         "it-multi-step-calc-006"
       ],
       "questions": [
-        "Con la regola B del registro Merovesca si annotano tre turni da 130, 64 e 95 dalt. Quanti dalt si contano?",
-        "Tre turni, da 130 dalt, 64 dalt e 95 dalt, si contano secondo la regola B del registro Merovesca. Qual è il totale in dalt?",
-        "Applicando la regola B del registro Merovesca a turni da 130, 64 e 95 dalt, quale totale si conta?"
+        "Con la regola B del registro Merovesca si annotano tre cicli da 130, 64 e 95 dalt. Quanti dalt si contano?",
+        "Tre cicli, da 130 dalt, 64 dalt e 95 dalt, si contano secondo la regola B del registro Merovesca. Qual è il totale in dalt?",
+        "Applicando la regola B del registro Merovesca a cicli da 130, 64 e 95 dalt, quale totale si conta?"
       ],
       "blocks": {
         "B1": {
           "document": "calc-rules.it.md",
-          "quote": "di ogni turno si conta soltanto la parte che supera gli 80 dalt",
-          "section": "Registro Merovesca, regola B: soglia per turno"
+          "quote": "di ogni ciclo si conta soltanto la parte che supera gli 80 dalt",
+          "section": "Registro Merovesca, regola B: soglia per ciclo"
         }
       },
       "request": {
@@ -1386,7 +1386,7 @@
       "unit": "dalt",
       "skip_rule": {
         "stated_value": "209",
-        "how": "la soglia di 80 dalt sottratta una sola volta dalla somma dei turni"
+        "how": "la soglia di 80 dalt sottratta una sola volta dalla somma dei cicli"
       },
       "missing_operand": {
         "operand": "threshold",
@@ -1501,7 +1501,7 @@
       "blocks": {
         "B1": {
           "document": "calc-rules.it.md",
-          "quote": "ogni intervallo costa 3 dalt per passo per i primi 40 passi e 5 dalt per passo per ogni passo oltre i primi 40",
+          "quote": "ogni intervallo costa 3 dalt per passo fino a 40 passi e 5 dalt per ogni passo dopo i 40",
           "section": "Registro Merovesca, regola D: tariffa a scaglioni per intervallo"
         }
       },

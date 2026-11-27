@@ -6,9 +6,9 @@ Secondo la regola A del registro Merovesca, ogni lotto vale al massimo 35 dalt. 
 
 <!-- chunk -->
 
-## Registro Merovesca, regola B: soglia per turno
+## Registro Merovesca, regola B: soglia per ciclo
 
-Secondo la regola B del registro Merovesca, di ogni turno si conta soltanto la parte che supera gli 80 dalt. Un turno di 80 dalt o meno vale 0 dalt, e le parti contate di tutti i turni si sommano.
+Secondo la regola B del registro Merovesca, di ogni ciclo si conta soltanto la parte che supera gli 80 dalt. Un ciclo di 80 dalt o meno vale 0 dalt, e le parti contate di tutti i cicli si sommano.
 
 <!-- chunk -->
 
@@ -20,7 +20,7 @@ Secondo la regola C del registro Merovesca, le partite di un registro si sommano
 
 ## Registro Merovesca, regola D: tariffa a scaglioni per intervallo
 
-Secondo la regola D del registro Merovesca, ogni intervallo costa 3 dalt per passo per i primi 40 passi e 5 dalt per passo per ogni passo oltre i primi 40. I costi di tutti gli intervalli si sommano.
+Secondo la regola D del registro Merovesca, ogni intervallo costa 3 dalt per passo fino a 40 passi e 5 dalt per ogni passo dopo i 40. I costi di tutti gli intervalli si sommano.
 
 <!-- chunk -->
 
