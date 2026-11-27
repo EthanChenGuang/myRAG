@@ -68,6 +68,10 @@ WEEKLY_JOB = "weekly-report"
 WEEKLY_CRON = "23 4 * * 1"
 PRIVATE_FLAG = "HAS_PRIVATE_EVAL"
 WEEKLY_SKIP_NOTICE = "::notice::no private eval data on this runner, skipping weekly report"
+TENANT_NIGHTLY_JOB = "tenant-nightly"
+TENANT_NIGHTLY_SKIP_NOTICE = "::notice::no private eval data or admin token on this runner, skipping tenant nightly"
+MONITOR_JOB = "monitor"
+MONITOR_SKIP_NOTICE = "::notice::supabase service-role secrets not configured, skipping monitor"
 SEC_SMOKE_STEP = "npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec"
 SEC_NIGHTLY_STEP = "run-nightly.mts --sec-matrix --generator live"
 FRAMEWORKS_STEP = "uv run --directory eval python -m rag_eval.compare frameworks --fixtures"
@@ -714,6 +718,18 @@ def check_weekly_report(data: dict, errors: list[str]) -> None:
             errors.append(f"{name}: secrets must be passed through step env, not interpolated into run")
         if re.search(r"\becho\b.*\b(KEY|TOKEN|BEARER)\b", run):
             errors.append(f"{name}: a step appears to echo a credential")
+
+
+def check_tenant_nightly(data: dict, errors: list[str]) -> None:
+    pass
+
+
+def check_monitor_job(data: dict, errors: list[str]) -> None:
+    pass
+
+
+def check_nightly_triggers(data: dict, errors: list[str]) -> None:
+    pass
 
 
 def check_nightly(errors: list[str]) -> None:
