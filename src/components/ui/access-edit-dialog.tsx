@@ -195,7 +195,7 @@ export function readAccessSaveResponse(
   return errorOutcome(accessGroupText('error.outcomeUnknown', language), { reloadRows: true });
 }
 
-type SaveFetch = (url: string, init: RequestInit) => Promise<Pick<Response, 'status' | 'json'>>;
+type SaveFetch = (_url: string, _init: RequestInit) => Promise<Pick<Response, 'status' | 'json'>>;
 
 export async function saveDocumentsAccess(
   documents: readonly AccessEditDocument[],
@@ -243,7 +243,7 @@ export interface AccessEditDialogProps {
   organizationId: string | null;
   language: string;
   /** Called with the outcome once a save finished (or failed in a way that closes the dialog). */
-  onDone: (outcome: AccessSaveOutcome) => void;
+  onDone: (_outcome: AccessSaveOutcome) => void;
   onCancel: () => void;
   onReloadGroups: () => void;
   /** The element focus returns to on close; the status region when it is gone. */
@@ -309,7 +309,7 @@ export function AccessEditDialog({
       }}
     >
       <DialogContent
-        className="max-h-[85vh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto"
+        className="max-h-[85vh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto overscroll-contain"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           keepRef.current?.focus();
@@ -431,8 +431,8 @@ export function AccessEditDialogBody({
   const single = documents.length === 1 && !bulk ? documents[0]! : null;
   const currentView = single ? audienceViewOf(single.access, isAdmin, language) : null;
   return (
-    <DialogHeader className="min-w-0">
-      <Title className="break-words text-lg font-semibold leading-none tracking-tight">
+    <DialogHeader className="min-w-0 text-left">
+      <Title className="break-words text-balance text-lg font-semibold leading-snug tracking-tight">
         {single ? accessGroupText('edit.title', language, { file: single.name }) : accessGroupText('bulk.title', language)}
       </Title>
       <Description className="min-w-0 text-sm text-muted-foreground">

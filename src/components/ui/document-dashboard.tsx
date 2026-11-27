@@ -1775,7 +1775,7 @@ export function DocumentDashboard({
                     <div className="mb-2 flex min-h-9 flex-wrap items-center gap-2 text-sm">
                       {accessSelected.length > 0 && (
                         <>
-                          <span className="text-gray-700 dark:text-gray-300">
+                          <span className="tabular-nums text-gray-700 dark:text-gray-300">
                             {accessGroupText('bulk.selected', language, { count: accessSelected.length })}
                           </span>
                           <Button
@@ -1800,7 +1800,15 @@ export function DocumentDashboard({
                   >
                     <div className="relative h-full">
                       {/* Resizable column divider - hidden for now */}
-                      <div ref={tableRef} className="h-full overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[#FFE0D0] [&::-webkit-scrollbar-track]:dark:bg-[#2A2A2A] [&::-webkit-scrollbar-thumb]:bg-[#FF6417]/50 [&::-webkit-scrollbar-thumb]:dark:bg-[#3A3A3A] [&::-webkit-scrollbar-thumb]:rounded-full">
+                      <div
+                        ref={tableRef}
+                        {...(accessAdmin ? { tabIndex: 0, role: "region", "aria-label": t('documentManagement') } : {})}
+                        className={
+                          accessAdmin
+                            ? "h-full overflow-y-auto overflow-x-auto overscroll-contain focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[#FFE0D0] [&::-webkit-scrollbar-track]:dark:bg-[#2A2A2A] [&::-webkit-scrollbar-thumb]:bg-[#FF6417]/50 [&::-webkit-scrollbar-thumb]:dark:bg-[#3A3A3A] [&::-webkit-scrollbar-thumb]:rounded-full"
+                            : "h-full overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[#FFE0D0] [&::-webkit-scrollbar-track]:dark:bg-[#2A2A2A] [&::-webkit-scrollbar-thumb]:bg-[#FF6417]/50 [&::-webkit-scrollbar-thumb]:dark:bg-[#3A3A3A] [&::-webkit-scrollbar-thumb]:rounded-full"
+                        }
+                      >
                         <Table className="w-full">
                           <TableHeader>
                             <TableRow>
@@ -1818,14 +1826,14 @@ export function DocumentDashboard({
                               <TableHead className="pl-4 pr-3" style={{ maxWidth: '450px' }}>
                                 {t('docName')}
                               </TableHead>
-                              <TableHead className="pl-2 pr-2 whitespace-nowrap" style={{ width: '110px' }}>
+                              <TableHead className="pl-2 pr-2 whitespace-nowrap" style={{ width: accessAdmin ? `${columnWidths.uploadDate}px` : '110px' }}>
                                 {t('uploadDate')}
                               </TableHead>
-                              <TableHead className="pl-2 pr-2 whitespace-nowrap" style={{ width: '80px' }}>
+                              <TableHead className="pl-2 pr-2 whitespace-nowrap" style={{ width: accessAdmin ? `${columnWidths.status}px` : '80px' }}>
                                 {t('docStatus')}
                               </TableHead>
                               {!readOnly && (
-                                <TableHead className="text-center px-1" style={{ width: accessAdmin ? '122px' : '90px' }}>
+                                <TableHead className="text-center px-1" style={{ width: accessAdmin ? '104px' : '90px' }}>
                                   <span className="sr-only">Actions</span>
                                 </TableHead>
                               )}
@@ -1923,17 +1931,22 @@ export function DocumentDashboard({
                                         )}
                                         {(() => {
                                           const view = rowMarkView(doc.access, accessMine.isAdmin, language)
-                                          return view ? <AudienceLine view={view} context="list" className="mt-1" /> : null
+                                          // The cell has no fixed width, so the line is capped at the name column or a long group list would widen the table.
+                                          return view ? (
+                                            <div className="mt-1 min-w-0" style={{ maxWidth: `${columnWidths.name}px` }}>
+                                              <AudienceLine view={view} context="list" />
+                                            </div>
+                                          ) : null
                                         })()}
                                       </div>
                                     </div>
                                   </TableCell>
-                                  <TableCell className="pl-2 pr-2 whitespace-nowrap" style={{ width: '110px' }}>
+                                  <TableCell className="pl-2 pr-2 whitespace-nowrap" style={{ width: accessAdmin ? `${columnWidths.uploadDate}px` : '110px' }}>
                                     <div className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                                       {doc.uploadedAt ? format(new Date(doc.uploadedAt), 'MMM dd') : ''}
                                     </div>
                                   </TableCell>
-                                  <TableCell className="pl-2 pr-2 whitespace-nowrap" style={{ width: '80px' }}>
+                                  <TableCell className="pl-2 pr-2 whitespace-nowrap" style={{ width: accessAdmin ? `${columnWidths.status}px` : '80px' }}>
                                     {doc.jobId || doc.ingest ? (
                                       <div className="flex items-center overflow-hidden">
                                         {doc.ingest ? (
@@ -1981,7 +1994,7 @@ export function DocumentDashboard({
                                     )}
                                   </TableCell>
                                   {!readOnly && (
-                                    <TableCell className="text-center px-1" style={{ width: accessAdmin ? '122px' : '90px' }}>
+                                    <TableCell className="text-center px-1" style={{ width: accessAdmin ? '104px' : '90px' }}>
                                       <div className="flex items-center justify-center gap-1">
                                         {/* Globe icon for URL management */}
                                         <Button
@@ -2007,21 +2020,26 @@ export function DocumentDashboard({
                                           <span className="sr-only">{doc.external_url ? 'Edit URL' : 'Add URL'}</span>
                                         </Button>
                                         {accessAdmin && (
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 flex-shrink-0"
-                                            onClick={(event) => openAccessEdit([doc.id], false, event.currentTarget)}
-                                            title={
-                                              doc.access?.connectorManaged
-                                                ? accessGroupText('docs.connectorManaged', language)
-                                                : accessGroupText('action.editAccessAria', language, { file: doc.name })
-                                            }
-                                            disabled={!doc.access || doc.access.connectorManaged === true || doc.status !== "ready"}
+                                          // A disabled button takes no pointer events, so the connector reason sits on the wrapper.
+                                          <span
+                                            className="inline-flex flex-shrink-0"
+                                            title={doc.access?.connectorManaged ? accessGroupText('docs.connectorManaged', language) : undefined}
                                           >
-                                            <Lock aria-hidden="true" className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
-                                            <span className="sr-only">{accessGroupText('action.editAccessAria', language, { file: doc.name })}</span>
-                                          </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-7 w-7 flex-shrink-0"
+                                              onClick={(event) => openAccessEdit([doc.id], false, event.currentTarget)}
+                                              title={doc.access?.connectorManaged ? undefined : accessGroupText('action.editAccessAria', language, { file: doc.name })}
+                                              disabled={!doc.access || doc.access.connectorManaged === true || doc.status !== "ready"}
+                                            >
+                                              <Lock aria-hidden="true" className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400 hover:text-[#FF6417]" />
+                                              <span className="sr-only">
+                                                {accessGroupText('action.editAccessAria', language, { file: doc.name })}
+                                                {doc.access?.connectorManaged ? `. ${accessGroupText('docs.connectorManaged', language)}` : null}
+                                              </span>
+                                            </Button>
+                                          </span>
                                         )}
                                         {/* Delete button */}
                                         <Button
