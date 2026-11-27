@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { RetrievalFilterInput } from '@/lib/rag/backend/types';
 import { narrowFilters, parseProposedFilter, type NarrowVocabulary, type SubQuestionFilter } from '@/lib/rag/query/subq-filters';
+import { loadTenantDocTypes, resetTenantVocabularyCacheForTests } from '@/lib/rag/query/tenant-vocabulary';
+import { mintScope } from '@/lib/rag/tenant/scope';
 
 /** Neutral synthetic vocabulary: dimension and value slugs carry no domain meaning. */
 const VOCAB_A: NarrowVocabulary = {
@@ -223,5 +225,53 @@ describe('narrowFilters: property', () => {
       expect(out.scopesIncludeUntagged).toEqual(base.scopesIncludeUntagged);
       for (const value of out.docTypes ?? []) if (!base.docTypes) expect(vocabulary.docTypes).toContain(value);
     }
+  });
+});
+
+describe('loadTenantDocTypes', () => {
+  function fakeClient(rows: Record<string, unknown[]>) {
+    const calls: string[] = [];
+    const client = {
+      rpc(name: string, args: { p_tenant_key: string }) {
+        calls.push(`${name}:${args.p_tenant_key}`);
+        const response = { data: rows[args.p_tenant_key] ?? [], error: null };
+        return Object.assign(Promise.resolve(response), { abortSignal: () => Promise.resolve(response) });
+      },
+    };
+    return { client, calls };
+  }
+
+  it("reads each tenant's own doc types by scope key only and caches per tenant", async () => {
+    resetTenantVocabularyCacheForTests();
+    const tenantA = mintScope('org', null, '00000000-0000-4000-8000-0000000062aa');
+    const tenantB = mintScope('org', null, '00000000-0000-4000-8000-0000000062bb');
+    const { client, calls } = fakeClient({
+      'o:00000000-0000-4000-8000-0000000062aa': [{ doc_type: 'general', docs: 2 }],
+      'o:00000000-0000-4000-8000-0000000062bb': [{ doc_type: 'contract_legal', docs: 1 }],
+    });
+    const deps = { adminClient: () => client as never, now: () => 5_000 };
+    expect(await loadTenantDocTypes(tenantA, { deps })).toEqual(['general']);
+    expect(await loadTenantDocTypes(tenantB, { deps })).toEqual(['contract_legal']);
+    expect(await loadTenantDocTypes(tenantA, { deps })).toEqual(['general']);
+    expect(calls).toEqual([
+      'rag_tenant_doc_types:o:00000000-0000-4000-8000-0000000062aa',
+      'rag_tenant_doc_types:o:00000000-0000-4000-8000-0000000062bb',
+    ]);
+  });
+
+  it('answers null on a read failure and does not cache it', async () => {
+    resetTenantVocabularyCacheForTests();
+    const tenant = mintScope('single', null, null);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const failing = {
+      rpc: () => {
+        const response = { data: null, error: { code: 'XX000' } };
+        return Object.assign(Promise.resolve(response), { abortSignal: () => Promise.resolve(response) });
+      },
+    };
+    expect(await loadTenantDocTypes(tenant, { deps: { adminClient: () => failing as never, now: () => 0 } })).toBeNull();
+    const { client } = fakeClient({ 's:default': [{ doc_type: 'general', docs: 1 }] });
+    expect(await loadTenantDocTypes(tenant, { deps: { adminClient: () => client as never, now: () => 0 } })).toEqual(['general']);
+    warn.mockRestore();
   });
 });
