@@ -501,6 +501,7 @@ export type {
   IdentifierTestMatch,
   IdentifierTestResult,
 } from './identifiers/patterns';
+export { contentIdentifierNorms } from './retrieval/identifiers';
 export { removeDocumentObjects } from './ingest/remove-document-objects';
 export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';

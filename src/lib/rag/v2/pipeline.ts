@@ -325,7 +325,15 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
             : evalFinalTopK(profile, input, params.final_top_k),
         embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
         ...(searchIdentifiers && searchIdentifiers.asked.length > 0
-          ? { identifiers: { askedNorms: searchIdentifiers.asked, patterns: searchIdentifiers.patterns } }
+          ? {
+              identifiers: {
+                askedNorms: [...new Set([...searchIdentifiers.asked, ...searchIdentifiers.found])],
+                patterns: searchIdentifiers.patterns,
+                ...(searchIdentifiers.filtered
+                  ? { filteredBy: { norms: searchIdentifiers.found, spellings: searchIdentifiers.foundSpellings } }
+                  : {}),
+              },
+            }
           : {}),
         ...(query.queryLayer
           ? {
