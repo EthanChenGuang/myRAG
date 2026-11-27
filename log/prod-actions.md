@@ -93,3 +93,12 @@
   - rag_access_enforced()=false. The calc_* review reasons are present.
 - No data rows were written or rewritten. Eval now matches main for trains 30-37.
 - The Supabase connector is still authorized to the eval org. The owner switches it back to the prod org before train 38.
+
+## 2026-11-27 ~23:20 UTC: Config UI walkthrough resumed after the EVAL catch-up (EVAL fsgaeysipkukqoocgzbx only)
+- Item 1 (04.1.1-13 Terminology): PASS, except candidate dismiss, which is SKIP because no candidates exist.
+- EVAL writes, all in the Workspace layer of the test admin's u: tenant (rag_term_* tables, with audit rows):
+  - Manual: 1 entry created ("termalpha beta"). A conflicting entry was refused by the server, so nothing was written for it.
+  - Script tools/walkthrough/walkthrough-terminology.mjs, run wtqhjf: 1 translation pair, 2 CSV-imported entries (merge).
+  - Cleanup: all four entries deleted (two by the script, two by the owner by hand, with the owner's approval). Workspace layer back to 0 entries.
+  - Audit/history rows for these writes remain, by design.
+- Languages saved from the Config UI: RAG_SUPPORTED_LANGUAGES=zh,en,it, RAG_PRIMARY_LANGUAGE=en. This went to the owner's local .env.local. The save may also record a config-change row on EVAL. No rebuild was started ("Saving rebuilds nothing").
