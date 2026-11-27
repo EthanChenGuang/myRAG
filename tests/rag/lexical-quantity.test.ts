@@ -221,14 +221,18 @@ describe('tokenizer: quantity on (D-31)', () => {
   it('appends the quantity token after every token produced without the option', () => {
     expect(lexicalTokens('2.5 kg', ON)).toEqual(['2.5', '25', '2.5', 'kg', '_q_2.5kg']);
     expect(lexicalTokens('10 %', ON)).toEqual(['10', '_q_10%']);
-    expect(lexicalTokens('0,75 L', ON)).toEqual(['0', '75', '_q_0.75l']);
+    expect(lexicalTokens('0,75 L', ON)).toEqual(['0', '75', '_q_0.75l', '0.75']);
+    expect(lexicalTokens('2,5kg', ON)).toEqual(['2', '5kg', '_q_2.5kg', '2.5', 'kg']);
   });
 
   it.each(PROBE)('keeps every off token for %s', (text, index) => {
     const on = lexicalTokens(text, ON);
     expect(on.slice(0, index.length)).toEqual(index);
-    expect(on.slice(index.length).every((token) => token.startsWith('_q_'))).toBe(true);
-    expect(on.length).toBeGreaterThan(index.length);
+    const added = on.slice(index.length);
+    const quantity = added.filter((token) => token.startsWith('_q_'));
+    expect(quantity.length).toBeGreaterThan(0);
+    expect(added.slice(0, quantity.length)).toEqual(quantity);
+    expect(added.slice(quantity.length).every((token) => !token.startsWith('_') && !index.includes(token))).toBe(true);
   });
 
   it('gives the four spellings of one quantity one shared token on both sides', () => {
@@ -236,12 +240,13 @@ describe('tokenizer: quantity on (D-31)', () => {
       expect(lexicalTokens(text, ON)).toContain('_q_2.5kg');
       expect(queryLexicalTokens(text, ON)).toContain('_q_2.5kg');
     }
-    expect(lexicalTokens('1.250,5 ml', ON).at(-1)).toBe('_q_1250.5ml');
-    expect(lexicalTokens('1,250.5 ML', ON).at(-1)).toBe('_q_1250.5ml');
+    expect(lexicalTokens('1.250,5 ml', ON).filter((t) => t.startsWith('_q_')).at(-1)).toBe('_q_1250.5ml');
+    expect(lexicalTokens('1,250.5 ML', ON).filter((t) => t.startsWith('_q_')).at(-1)).toBe('_q_1250.5ml');
   });
 
   it('emits both readings after an ambiguous number, decimal first', () => {
-    expect(lexicalTokens('1.250 ml', ON).slice(-2)).toEqual(['_q_1.25ml', '_q_1250ml']);
+    expect(lexicalTokens('1.250 ml', ON).filter((t) => t.startsWith('_q_'))).toEqual(['_q_1.25ml', '_q_1250ml']);
+    expect(lexicalTokens('1.250 ml', ON).slice(-1)).toEqual(['1.25']);
   });
 
   it('index side: natural, then dictionary, then quantity tokens, one per occurrence', () => {
@@ -282,8 +287,8 @@ describe('tokenizer: quantity on (D-31)', () => {
   });
 
   it('lexicalText and chunkLexicalText pass the option through', () => {
-    expect(lexicalText(['zento'], '2,5 kg', ON)).toBe('zento 2 5 kg _q_2.5kg');
-    expect(chunkLexicalText({ sectionPath: ['zento'], content: '2,5 kg' }, ON)).toBe('zento 2 5 kg _q_2.5kg');
+    expect(lexicalText(['zento'], '2,5 kg', ON)).toBe('zento 2 5 kg _q_2.5kg 2.5');
+    expect(chunkLexicalText({ sectionPath: ['zento'], content: '2,5 kg' }, ON)).toBe('zento 2 5 kg _q_2.5kg 2.5');
     expect(chunkLexicalText({ sectionPath: ['zento'], content: '2,5 kg' })).toBe('zento 2 5 kg');
   });
 

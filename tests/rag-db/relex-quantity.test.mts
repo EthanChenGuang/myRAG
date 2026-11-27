@@ -319,7 +319,10 @@ if (MODE === undefined) {
       assert.equal(on.tokens[0], Q_TOKEN);
       assert.ok(on.lexical.includes(own.chunk), 'quantity match on the lexical leg');
       const off = await retrieve(own, QUESTION, ALL_OFF);
-      assert.ok(!off.lexical.includes(own.chunk));
+      assert.deepEqual(off.tokens, tokenize.queryLexicalTokens(QUESTION));
+      assert.ok(!off.tokens.some((token) => token.startsWith('_q_')));
+      const stored = String((await rows('SELECT lexical_text FROM document_chunks WHERE id = $1', [own.chunk]))[0]!.lexical_text).split(' ');
+      assert.ok(!tokenize.lexicalTokens(CHUNK_TEXT).includes('kg') && stored.includes('kg'), 'the relexed chunk carries the unit companion');
     });
 
     test('plain relex rewrites every remaining chunk whose version differs; a second run rewrites zero and prints no reminder', async () => {
