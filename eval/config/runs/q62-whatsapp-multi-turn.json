@@ -1,0 +1,9 @@
+{
+  "name": "q62-whatsapp-multi-turn",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_QUERY_LAYER": "true",
+    "RAG_WHATSAPP_HISTORY": "true"
+  },
+  "overrides": null
+}
