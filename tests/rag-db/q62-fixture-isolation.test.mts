@@ -263,7 +263,12 @@ describe('ingest mode: the q62 documents load into an isolated tenant and leave 
 
   before(async () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'q62-isolation-ingest-'));
-    const old = [...lines(PRECHUNKED_GOLDEN), ...lines(INGEST_GOLDEN)].filter((line) => (JSON.parse(line) as { category: string }).category !== 'table_split');
+    // table_split and templated_collection items run against builds of their own (table-split.mts, the 03.3 templated collection),
+    // which this q62 build does not load, so only the other items are compared.
+    const old = [...lines(PRECHUNKED_GOLDEN), ...lines(INGEST_GOLDEN)].filter((line) => {
+      const category = (JSON.parse(line) as { category: string }).category;
+      return category !== 'table_split' && category !== 'templated_collection';
+    });
     without = runSmoke('ingest', writeGolden(tmp, 'old.jsonl', old), path.join(tmp, 'without'));
     fixture = (await buildIngestFixtureDatabase({
       deploymentMode: 'single-tenant',
