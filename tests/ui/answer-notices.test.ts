@@ -60,6 +60,32 @@ describe('AnswerNotices', () => {
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
   });
 
+  test('calculation notices: corrected amber then not verified grey, one block per notice, each with the Calculator icon (UI-SPEC 14.1, 14.5)', () => {
+    const corrected = (lang: 'en' | 'zh' | 'it', value: string) => n('calc_corrected', FIXED_TEXTS[lang].notices.calc_corrected!.replace('{value}', value), lang);
+    const html = notices({
+      notices: [
+        n('calc_not_verified', FIXED_TEXTS.it.notices.calc_not_verified!, 'it'),
+        corrected('zh', '1,234.5'),
+        corrected('zh', '88'),
+        corrected('zh', '88'),
+      ],
+    });
+    const kinds = [...html.matchAll(/data-answer-notice="([^"]+)"/g)].map((m) => m[1]);
+    expect(kinds).toEqual(['calc_corrected', 'calc_corrected', 'calc_not_verified']);
+    expect(html.match(/lucide-calculator/g)).toHaveLength(3);
+    expect(html).toMatch(/data-answer-notice="calc_corrected" lang="zh" class="[^"]*bg-amber-50/);
+    expect(html).toMatch(/data-answer-notice="calc_not_verified" lang="it" class="[^"]*bg-gray-100/);
+    expect(html).toContain('计算已复核：正确结果为 1,234.5。');
+    expect(html).toContain(FIXED_TEXTS.it.notices.calc_not_verified!);
+    expect(html.match(/aria-live="polite"/g)).toHaveLength(1);
+  });
+
+  test('markup in a calculation notice text creates no element and no link', () => {
+    const html = notices({ notices: [n('calc_corrected', 'Result <img src=x onerror=alert(1)> <a href="javascript:alert(1)">z</a>')] });
+    expect(html).not.toMatch(/<img|<a\b/);
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+  });
+
   test('orderNotices keeps arrival order among unknown kinds', () => {
     expect(orderNotices([n('z_kind', '1'), n('a_kind', '2'), n('answer_truncated', '3')]).map((x) => x.text)).toEqual(['3', '1', '2']);
   });
@@ -153,6 +179,20 @@ describe('ChatMessage notices', async () => {
     const html = render({ notices: [] });
     expect(html).toContain('(link removed)');
     expect(html).not.toMatch(/<a[^>]*>[^<]*link removed/);
+  });
+
+  test('a corrected calculation leaves the number in the answer text unchanged and adds one notice', () => {
+    const answer = 'The total is 15, from 5 plus 7.';
+    const notice = n('calc_corrected', EN.calc_corrected!.replace('{value}', '12'));
+    const html = render({ notices: [notice] }, answer);
+    expect(html).toContain('The total is 15, from 5 plus 7.');
+    expect(html).not.toMatch(/<(del|s|mark)\b/);
+    expect(html.match(/data-answer-notice="calc_corrected"/g)).toHaveLength(1);
+    expect(html).toContain('The calculation was rechecked: the correct result is 12.');
+  });
+
+  test('a verified calculation shows nothing beyond the answer', () => {
+    expect(render({ notices: [], checks: { calc: { status: 'verified' } } })).not.toContain('data-answer-notice');
   });
 
   test('notices render after the answer text', () => {
