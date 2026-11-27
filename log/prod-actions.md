@@ -77,3 +77,19 @@
   - item 3 deferred until EVAL matches main.
   - Owner decision sent to the orchestrator: hide the sidebar footer button when unset, keeping the ability to show it later (quick task exec/quick-sidebar-hide).
   - No database writes since the entry above.
+
+## 2026-11-27 ~22:35 UTC: EVAL (fsgaeysipkukqoocgzbx) catch-up to main 00afa6d9, DONE (owner resumed: "是，继续做")
+- Applied after the pause, one call at a time:
+  - train35: 0921, 0922, 0930, 0932, r18
+  - train36: 0903, 0923, 0926, 0926.multi-tenant, 0931, 0950, r19 (file text, which grants rag_caller_is_access_admin)
+  - train37: 0924, 0925, 0934, 0980, r20
+- Fidelity: all 43 eval_train30..37 statements match the section files by md5 (raw or trailing-newline variant). 0 mismatches.
+- Verify:
+  - 44 access/connector/term/review functions, all with search_path="".
+  - No unexpected anon/authenticated EXECUTE. service_role can execute all of them.
+  - Only the 8-arg rag_term_list_entries is left.
+  - access_sets present on 3 tables, with 2 RESTRICTIVE policies.
+  - rag_connector_document_access: RLS on, no client SELECT.
+  - rag_access_enforced()=false. The calc_* review reasons are present.
+- No data rows were written or rewritten. Eval now matches main for trains 30-37.
+- The Supabase connector is still authorized to the eval org. The owner switches it back to the prod org before train 38.
