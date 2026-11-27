@@ -106,3 +106,30 @@ Recall@5 0.7704, Recall@10 0.7790, MRR 0.6924, correct refusal 1.0000, false ref
 | latency_budget | post_filter.p95_ms | 3.0000 |
 | latency_budget | retrieval_total.p95_ms | 28.0000 |
 | latency_budget | search.p95_ms | 14.0000 |
+
+## Phase 5.3 gate state (plan 05.3-48)
+
+Recorded from the CI-shaped runs of plan 05.3-48 on the same commit; the table numbers are read from each run's gate.json, nothing is edited by hand.
+
+Golden set: fixture version 5, 356 items (active 356, stale 0, retired 0), manifest f45624e772df328f3934d4f718d658fa7728bc3a27b14dc87f42dc3d3d1ec23e; fixture-ingest version 5, 417 items (active 417, stale 0, retired 0), manifest 1a7dfb4aeb0016ba5025b1a964ac27a54872e1ece2dbb6bb4ea70a5f0beae954. Stale share 0.0000 in both tiers (passed).
+
+| Tier | Absolute mode | False-answer rate (max 0.05) | False-refusal rate (max 0.25) | Failed checks | Exit |
+|---|---|---|---|---|---|
+| smoke (prechunked, `--gates-mode report`) | report | 0.0000 | 0.2462 | false_refusal_rate language:en 0.3143 | 0 |
+| smoke-ingest | enforce | 0.0000 | 0.1459 | none | 0 |
+| smoke-legacy (`--gates-mode report`) | report | - | - | paired all zero: true | 0 |
+| smoke-legacy-ingest | enforce | - | - | paired all zero: true | 0 |
+| negative-degrade (drop_top_candidate) | report | - | - | noise band, overall MRR margin 0.4993 | 10 |
+| negative (max results 1) | report | - | - | noise band | 10 |
+| negative-prompt (no refusal directive) | enforce | 0.5625 | - | false_answer_rate overall | 11 |
+
+Composition (no-answer share per language, min 0.15, target 0.20):
+
+| Tier | en | it | zh |
+|---|---|---|---|
+| smoke | 0.1954 (87 items, warning) | 0.1905 (84, warning) | 0.1974 (76, warning) |
+| smoke-ingest | 0.1712 (111, warning) | 0.1910 (89, warning) | 0.1977 (86, warning) |
+
+Without `--gates-mode report` the prechunked smoke tier exits 11 on the en false-refusal ceiling; that tier is report-only until the ceilings are ratified (O-1, eval/reports/phase-05.3/absolute-gate-measurement.md).
+
+Against the Phase 5.1.1 closing baselines (commit 1315b1a9) the gate refuses to pair: the golden and corpus hashes differ (items and documents added by Phases 4.2, 5.2 and 5.3 and re-recorded by trains 30 to 33), so no paired difference across phases exists; the paired differences above are against the committed baselines of this tree.
