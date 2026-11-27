@@ -129,6 +129,7 @@ export async function runV2Pipeline(
     config.v2.attributeFilter !== 'off' && spec('attribute_resolve', 'skip').enabled ? { enabled: true, state: ATTRIBUTE_STATE_SKIPPED } : { enabled: false };
   // D-14: set by the query layer before semantic_cache builds its key, only while RAG_TRANSLATION_GLOSSARY is effective.
   let glossaryStage: GlossaryHashStage = { enabled: false };
+  let sourceRecheck: RetrievalResult['sourceRecheck'];
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
@@ -362,6 +363,7 @@ export async function runV2Pipeline(
         : {}),
     });
     searchesCounted = search.searchesCounted;
+    sourceRecheck = search.sourceRecheck;
     if (queryPlan && search.filterRetries) queryPlan = withFilterRetries(queryPlan, search.filterRetries);
 
     // D-31, D-51: strict with no asked identifier in the tenant answers nothing; rank and context are not run for it.
@@ -576,6 +578,7 @@ export async function runV2Pipeline(
     ...(queryLexical ? { lexicalStamp: queryLexical.stamp } : {}),
     attributeFilter: attributeStage,
     glossary: glossaryStage,
+    ...(sourceRecheck ? { sourceRecheck } : {}),
   });
   return scopeGate ? { ...result, scopeGate } : result;
 }

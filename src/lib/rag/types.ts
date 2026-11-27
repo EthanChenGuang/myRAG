@@ -457,4 +457,6 @@ export interface IdentifierFilterSummary {
   resolved: number;
   fallback: boolean;
   nearMissDropped: number;
+  /** D-46: set only when a source recheck completed; the trace's stale_index_drop is its dropped count. */
+  sourceRecheck?: { checked: number; dropped: number };
 }

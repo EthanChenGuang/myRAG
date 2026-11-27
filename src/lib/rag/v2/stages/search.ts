@@ -34,6 +34,7 @@ import type { LexicalOptions } from '../../lexical/options';
 import type { LexicalStamp } from '../../lexical/resolve-options';
 import { scopeAccessFilter, type ScopeAccessFilter } from '../../tenant/access';
 import { scopeKey, type TenantScope } from '../../tenant/scope';
+import { runSourceRecheckStage, type SourceRecheckMarker } from '../../retrieval/source-recheck';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RetrievalBackendSelection, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
@@ -244,6 +245,8 @@ export interface SearchStagesOutput {
   searchesCounted?: number;
   /** Phase 6.2 D-08: one entry per filtered sub-question variant; absent when no variant carried a filter. */
   filterRetries?: VariantFilterRetry[];
+  /** Set only when the source_recheck stage completed (D-46). */
+  sourceRecheck?: SourceRecheckMarker;
 }
 
 
@@ -1155,9 +1158,23 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
 
   const capped = deduped.skipped ? reserve(sliceCap(fused, params.rerank_input_cap)) : deduped.value;
 
+  // D-19, D-38: an index row that missed a delete never reaches rerank; a failed recheck keeps the candidates and degrades the result.
+  const recheck = config.sourceRecheck
+    ? await runSourceRecheckStage({
+        spec: spec('source_recheck', 'skip'),
+        signal,
+        collector,
+        scope,
+        client: () => requireAdminSearchClient(getRagDeps()),
+        items: capped.hits,
+        chunkIdOf: (row) => row.hit.chunkId,
+      })
+    : null;
+
   return {
-    fusedHits: capped.hits,
+    fusedHits: recheck ? recheck.items : capped.hits,
     dedupeCounts: capped.counts,
+    ...(recheck?.marker ? { sourceRecheck: recheck.marker } : {}),
     versionScope: versions.scope,
     ...(tableRows ? { tableRows } : {}),
     ...(identifiers ? { identifiers: { ...identifiers, filtered: filterIdentifiers !== undefined && !fallback, fallback } } : {}),
