@@ -4182,7 +4182,8 @@ function isAllowedRagProxyPathname(pathname) {
 }
 
 function buildRagProxyTargetPath(pathParam, queryString) {
-  const raw = String(pathParam ?? '').replace(/^\/+/, '');
+  const joinedParam = Array.isArray(pathParam) ? pathParam.join('/') : pathParam;
+  const raw = String(joinedParam ?? '').replace(/^\/+/, '');
   const parts = raw ? raw.split('/').filter(Boolean) : [];
   for (const part of parts) {
     let decoded;
