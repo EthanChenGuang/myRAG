@@ -12,6 +12,7 @@ const PANELS = [
   { file: 'languages.js', rootId: 'rag-administration-languages', instance: 'languagesPanel', deps: ['rag-ui.js'] },
   { file: 'ingest-impact.js', rootId: 'rag-administration-ingest-impact', instance: 'ingestImpactPanel', deps: ['rag-ui.js'] },
   { file: 'upload-approvals.js', rootId: 'rag-administration-approvals', instance: 'uploadApprovalsPanel', deps: ['rag-ui.js'] },
+  { file: 'access-groups.js', rootId: 'rag-administration-access', instance: 'accessGroupsPanel', deps: ['rag-ui.js'] },
   { file: 'scope-tags.js', rootId: 'rag-administration-scopes', instance: 'scopeTagsPanel', deps: ['rag-ui.js'] },
   { file: 'quarantine.js', rootId: 'rag-administration-quarantine', instance: 'quarantinePanel', deps: ['rag-ui.js'] },
   { file: 'versions-dates.js', rootId: 'rag-administration-versions', instance: 'versionsDatesPanel', deps: ['rag-ui.js'] },
