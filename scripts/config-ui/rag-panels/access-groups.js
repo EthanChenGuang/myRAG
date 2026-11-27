@@ -5216,6 +5216,138 @@ const AccessGroupsQueueControls = {
   uploadErrorText: accessGroupsQueueErrorText,
 };
 
+/** UI-SPEC 6.8: the badge under a stored document's name; null for Everyone (and for anything unreadable). */
+function buildAccessGroupsTableBadgeView(audience, locale) {
+  const kind = audience && audience.kind;
+  if (kind === 'groups' && Array.isArray(audience.groups) && audience.groups.length > 0) {
+    return { kind: 'groups', icon: 'lock', text: accessGroupsLabel('badge.restricted', locale), hint: accessGroupsLabel('badge.restrictedHint', locale) };
+  }
+  if (kind === 'uploader_only' || kind === 'groups') {
+    return { kind: 'uploader_only', icon: 'shield-exclamation', text: accessGroupsLabel('audience.uploaderOnly', locale), hint: null };
+  }
+  return null;
+}
+
+function accessGroupsWorkspaceId(doc) {
+  const container = doc && doc.getElementById('workspace-selector-container');
+  const selector = doc && doc.getElementById('workspace-selector');
+  if (!container || !selector || container.classList.contains('hidden')) return null;
+  return accessGroupsText(selector.value);
+}
+
+/**
+ * Appends the badge to the name cell of each restricted row of the stored-documents table, and docs.manageHint under the table,
+ * while the switch is on. Rows are matched by their data-access-groups-doc id; a request that fails leaves the table as it is.
+ */
+async function accessGroupsApplyTableBadges(tableBody, organizationId) {
+  if (!tableBody || typeof tableBody.querySelectorAll !== 'function') return;
+  const ui = accessGroupsUiLib();
+  const doc = accessGroupsDocOf(tableBody);
+  const token = {};
+  tableBody.accessGroupsBadgeToken = token;
+  const rows = Array.from(tableBody.querySelectorAll('[data-access-groups-doc]'));
+  const ids = [...new Set(rows.map((r) => r.getAttribute('data-access-groups-doc')).filter((id) => id && ACCESS_GROUPS_UUID_RE.test(id)))];
+  const container = doc && doc.getElementById('documents-table-container');
+  const oldHint = container && container.querySelector('[data-access-groups-manage-hint]');
+  if (oldHint) oldHint.remove();
+  if (ids.length === 0) return;
+  const orgQuery = organizationId ? '&organizationId=' + encodeURIComponent(String(organizationId)) : '';
+  const status = await ui.ragUiRagRequest(ACCESS_GROUPS_PATH + '?limit=1' + orgQuery, { method: 'GET' });
+  if (tableBody.accessGroupsBadgeToken !== token) return;
+  if (!status || !status.ok || !status.body || status.body.enabled !== true || status.body.personal === true) return;
+  const audiences = new Map();
+  for (let i = 0; i < ids.length; i += ACCESS_GROUPS_BADGE_IDS_MAX) {
+    const chunk = ids.slice(i, i + ACCESS_GROUPS_BADGE_IDS_MAX);
+    const result = await ui.ragUiRagRequest(ACCESS_GROUPS_PATH + '/documents?ids=' + chunk.join(',') + orgQuery, { method: 'GET' });
+    if (tableBody.accessGroupsBadgeToken !== token) return;
+    if (!result || !result.ok || !result.body || !Array.isArray(result.body.audiences)) return;
+    for (const audience of result.body.audiences) {
+      const id = audience && accessGroupsText(audience.documentId);
+      if (id) audiences.set(id.toLowerCase(), audience);
+    }
+  }
+  const locale = ui.ragUiBrowserLocale();
+  const el = (tag, opts, children) => ui.ragUiEl(doc, tag, opts, children);
+  for (const row of rows) {
+    const id = (row.getAttribute('data-access-groups-doc') || '').toLowerCase();
+    const cell = row.children && row.children[0];
+    if (!cell) continue;
+    const previous = cell.querySelector('[data-access-groups-table-badge]');
+    if (previous) previous.remove();
+    const view = buildAccessGroupsTableBadgeView(audiences.get(id), locale);
+    if (!view) continue;
+    const tone = view.kind === 'groups' ? 'badge badge-outline badge-sm' : 'badge badge-warning badge-outline badge-sm text-base-content';
+    const badge = el('span', { className: tone + ' gap-1 h-auto max-w-full whitespace-normal text-left mt-1', attrs: { 'data-access-groups-table-badge': view.kind, title: view.hint } }, [
+      ui.ragUiIcon(doc, view.icon, view.kind === 'groups' ? null : 'text-warning'),
+      el('span', { className: 'break-words [overflow-wrap:anywhere] min-w-0', text: view.text }),
+    ]);
+    cell.appendChild(el('div', {}, [badge]));
+  }
+  if (container) container.appendChild(el('p', { className: 'text-xs text-base-content/70 mt-2', text: accessGroupsLabel('docs.manageHint', locale), attrs: { 'data-access-groups-manage-hint': '' } }));
+}
+
+/** The Connectors-card notice (UI-SPEC 6.8): null without fallen-back documents; the wording follows the switch (D-22). */
+function buildAccessGroupsConnectorNoticeView(count, enabled, locale) {
+  const n = Number.isInteger(count) && count > 0 ? count : 0;
+  if (n === 0) return null;
+  const key = enabled ? 'connector.failClosed' : 'connector.failClosedOff';
+  return { key, text: accessGroupsLabel(key, locale, { count: accessGroupsUiLib().ragUiFormatNumber(n, locale) }), action: accessGroupsLabel('action.openMapping', locale) };
+}
+
+/** Activates RAG administration through its menu link, selects Connector mapping, scrolls the panel into view and focuses its heading. */
+async function accessGroupsOpenConnectorMapping(doc) {
+  const link = doc.querySelector('[data-tab="rag-administration"]');
+  if (link && typeof link.click === 'function') link.click();
+  await Promise.resolve(initAccessGroupsPanel());
+  const section = doc.getElementById('rag-administration-access');
+  if (section && typeof section.scrollIntoView === 'function') {
+    const reduce = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    section.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  }
+  if (accessGroupsPanelInstance) accessGroupsPanelInstance.selectMapping();
+}
+
+/**
+ * Appends the notice to each connected provider card whose connection has fallen-back documents. cards: [{ host, connectionId }],
+ * host being the card's `[data-connector-extras]` element. A request that fails leaves the cards as they are.
+ */
+async function accessGroupsApplyConnectorNotices(cards, organizationId) {
+  const list = (Array.isArray(cards) ? cards : []).filter((c) => c && c.host && accessGroupsText(c.connectionId));
+  for (const card of list) card.host.replaceChildren();
+  if (list.length === 0) return;
+  const ui = accessGroupsUiLib();
+  const doc = accessGroupsDocOf(list[0].host);
+  const orgQuery = organizationId ? '?organizationId=' + encodeURIComponent(String(organizationId)) : '';
+  const [status, counts] = await Promise.all([
+    ui.ragUiRagRequest(ACCESS_GROUPS_PATH + (orgQuery ? orgQuery + '&' : '?') + 'limit=1', { method: 'GET' }),
+    ui.ragUiRagRequest(ACCESS_GROUPS_PATH + '/connector-map/fail-closed' + orgQuery, { method: 'GET' }),
+  ]);
+  if (!counts || !counts.ok || !counts.body || !Array.isArray(counts.body.connections)) return;
+  const enabled = Boolean(status && status.ok && status.body && status.body.enabled === true);
+  const byConnection = new Map();
+  for (const row of counts.body.connections) {
+    const id = row && accessGroupsText(row.connectionId);
+    if (id) byConnection.set(id, Number(row.documents));
+  }
+  const locale = ui.ragUiBrowserLocale();
+  const el = (tag, opts, children) => ui.ragUiEl(doc, tag, opts, children);
+  for (const card of list) {
+    const view = buildAccessGroupsConnectorNoticeView(byConnection.get(accessGroupsText(card.connectionId)), enabled, locale);
+    if (!view) continue;
+    const open = el('button', { className: 'btn btn-sm', text: view.action, attrs: { type: 'button', 'data-access-groups-open-mapping': '' } });
+    open.addEventListener('click', () => accessGroupsOpenConnectorMapping(doc));
+    card.host.replaceChildren(
+      el('div', { className: 'alert alert-warning text-sm items-start mt-2', attrs: { 'data-access-groups-connector-notice': view.key } }, [
+        ui.ragUiIcon(doc, 'shield-exclamation'),
+        el('div', { className: 'flex flex-col items-start gap-2 min-w-0' }, [el('p', { className: 'break-words [overflow-wrap:anywhere]', text: view.text }), open]),
+      ]),
+    );
+  }
+}
+
+const AccessGroupsDocumentBadges = { apply: accessGroupsApplyTableBadges, workspaceId: accessGroupsWorkspaceId };
+const AccessGroupsConnectorNotices = { apply: accessGroupsApplyConnectorNotices, workspaceId: accessGroupsWorkspaceId };
+
 let accessGroupsPanelInstance = null;
 
 function initAccessGroupsPanel() {
@@ -5241,6 +5373,8 @@ function accessGroupsBindPanel() {
 if (typeof window !== 'undefined') {
   window.ACCESS_GROUPS_LABELS = ACCESS_GROUPS_LABELS;
   window.AccessGroupsQueueControls = AccessGroupsQueueControls;
+  window.AccessGroupsDocumentBadges = AccessGroupsDocumentBadges;
+  window.AccessGroupsConnectorNotices = AccessGroupsConnectorNotices;
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
@@ -5301,5 +5435,11 @@ if (typeof module !== 'undefined' && module.exports) {
     accessGroupsQueueErrorText,
     accessGroupsMountQueueControls,
     AccessGroupsQueueControls,
+    buildAccessGroupsTableBadgeView,
+    accessGroupsApplyTableBadges,
+    buildAccessGroupsConnectorNoticeView,
+    accessGroupsApplyConnectorNotices,
+    AccessGroupsDocumentBadges,
+    AccessGroupsConnectorNotices,
   };
 }
