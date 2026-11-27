@@ -9,7 +9,8 @@ Verdicts and exit codes:
 - holds (0): neither the target slice (default category:cache_near_miss, recall_at_5) nor any other slice falls beyond the band;
 - reopen_d26 (1): the target slice or another non-templated slice falls beyond the band (D-26 is reopened: header lexical-only);
 - missing_data (2): the runs cannot be compared (different golden manifests, fewer than --min-items target items, or, with
-  --population real, a run that is not a live run on real items); nothing passes vacuously.
+  --population real, a run that is not a live run or a gated item whose provenance is not one of the real provenances of
+  eval/config/gate-population.json); nothing passes vacuously.
 header-ab.json and header-ab.md hold numbers, slice names, codes and counts only. Item ids are listed only with --population
 fixture; no question, chunk text, document name or tenant value is ever written.
 """
@@ -25,6 +26,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from rag_sidecar.contracts.baseline import NoiseConfig
 
+from rag_eval.config_files import load_gate_population
 from rag_eval.metrics import TEMPLATED_CATEGORY, report_gate_items
 from rag_eval.paired import _bootstrap_interval, item_metrics
 from rag_eval.paths import REPO_ROOT, resolve_cli_path
@@ -43,7 +45,6 @@ DEFAULT_NOISE = REPO_ROOT / "eval" / "config" / "noise.json"
 DEFAULT_SLICE = "category:cache_near_miss"
 DEFAULT_METRIC = "recall_at_5"
 DEFAULT_MIN_ITEMS = 10
-REAL_POPULATIONS = frozenset({"real", "production"})
 LIVE_TIER = "live"
 
 Verdict = Literal["holds", "reopen_d26", "missing_data"]
@@ -124,8 +125,12 @@ def evaluate(on: RunOutput, off: RunOutput, *, on_tier: str, off_tier: str, nois
     if population == "real":
         if on_tier != LIVE_TIER or off_tier != LIVE_TIER:
             reasons.append("not_live_run")
-        if on.report.gate_population not in REAL_POPULATIONS or off.report.gate_population not in REAL_POPULATIONS:
-            reasons.append("not_real_population")
+        real = frozenset(load_gate_population()[0].provenances)
+        for report in (on.report, off.report):
+            gated = report_gate_items(report.items, report.golden_filter.gate_split, report.gate_population)
+            if not gated or any(item.provenance not in real for item in gated):
+                reasons.append("not_real_population")
+                break
 
     on_view = RunOutput(report=without_categories(on.report, excluded), traces=on.traces, golden=on.golden)
     off_view = RunOutput(report=without_categories(off.report, excluded), traces=off.traces, golden=off.golden)

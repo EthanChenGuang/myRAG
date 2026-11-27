@@ -295,3 +295,10 @@ def test_paired_counts_read_the_gated_split_only(tmp_path):
     assert code == 0
     assert result["target"]["worsened"] == 0
     assert result["target"]["paired_mean_difference"] == 0.0
+
+
+def test_real_population_accepts_human_items(tmp_path):
+    on, off = _world(tmp_path, provenance="human", tier="live")
+    code, result, _ = _run(tmp_path, on, off)
+    assert code == 0
+    assert result["verdict"] == "holds"
