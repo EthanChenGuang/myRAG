@@ -915,6 +915,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
               signal: stageSignal,
               ...versionScopeArg,
               ...identifierArg,
+              access,
             }),
           collector,
           {
@@ -1057,9 +1058,9 @@ async function runIdentifierResolve(ctx: SearchStagesInput): Promise<ResolvedIde
       const { expressions } = await loadTenantIdentifierPatterns(scope, { signal: stageSignal });
       try {
         const client = requireAdminSearchClient(getRagDeps());
-        const resolved = await resolveQueryIdentifiers(scope, input.query, expressions, { client, signal: stageSignal });
+        const resolved = await resolveQueryIdentifiers(scope, input.query, expressions, { client, signal: stageSignal, access: ctx.access });
         const notFound = resolved.asked.length > 0 && resolved.found.length === 0;
-        const suggestions = notFound ? await identifierSuggestions(scope, resolved.missing, { client, signal: stageSignal }) : [];
+        const suggestions = notFound ? await identifierSuggestions(scope, resolved.missing, { client, signal: stageSignal, access: ctx.access }) : [];
         return { ok: true, resolved, patterns: expressions, suggestions };
       } catch (error) {
         if (stageSignal.aborted) throw error;

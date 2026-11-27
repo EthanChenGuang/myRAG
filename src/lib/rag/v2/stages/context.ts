@@ -20,6 +20,7 @@ import { countTokens } from '../../ingest/text/tokens';
 import type { RpcClient } from '../../backend/supabase-rpc';
 import type { VersionScope } from '../../backend/types';
 import { versionLabelLine, type VersionLabelInfo } from '../../context/version-label';
+import { accessRpcArgs, scopeAccessFilter } from '../../tenant/access';
 import { scopeKey, type TenantScope } from '../../tenant/scope';
 import { expandParents, selectWithParents, type ParentBudgetCandidate, type ParentSelection } from '../../parents/expand';
 import type { RerankSpan } from '../../rerank/types';
@@ -140,12 +141,12 @@ interface ClusterSourceRow {
   chunk_id: string;
 }
 
-/** One batched rag_dup_cluster_sources call for the request's clusters (0862; tenant asserted in SQL). */
+/** One batched rag_dup_cluster_sources call for the request's clusters (0862, 0933: tenant asserted and access filtered in SQL). */
 async function fetchClusterSources(scope: TenantScope, clusterIds: string[], signal: AbortSignal): Promise<Map<string, AlsoIn[]>> {
   const admin = getRagDeps().adminClient() as RpcClient | null;
   if (!admin) throw new Error('[RAG Context] admin client unavailable');
   const { data, error } = await admin
-    .rpc('rag_dup_cluster_sources', { p_tenant_key: scopeKey(scope), p_cluster_ids: clusterIds, p_limit: ALSO_IN_MAX })
+    .rpc('rag_dup_cluster_sources', { p_tenant_key: scopeKey(scope), p_cluster_ids: clusterIds, p_limit: ALSO_IN_MAX, ...accessRpcArgs(scopeAccessFilter(scope)) })
     .abortSignal(signal);
   if (error) throw new Error(`[RAG Context] rag_dup_cluster_sources failed (${error.code ?? 'unknown'})`);
   const out = new Map<string, AlsoIn[]>();

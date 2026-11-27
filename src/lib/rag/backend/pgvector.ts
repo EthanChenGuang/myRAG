@@ -270,6 +270,7 @@ function buildTranslationArgs(req: BackendTranslationSearchRequest, config: RagC
     ...(filters.dateRange?.includeUndated === true ? { p_include_undated: true } : {}),
     ...scopeArgs(filters),
     ...(filters.effectiveOn ? { p_effective_on: filters.effectiveOn } : {}),
+    ...accessRpcArgs(scopeAccessFilter(req.scope)),
   };
 }
 

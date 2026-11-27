@@ -2,6 +2,7 @@ import { versionAndIdentifierArgs } from '../backend/pgvector';
 import { RetrievalBackendError, rpcRows, type RpcClient } from '../backend/supabase-rpc';
 import type { VersionScope } from '../backend/types';
 import { queryLexicalTokens } from '../lexical/tokenize';
+import { accessRpcArgs, scopeAccessFilter, type ScopeAccessFilter } from '../tenant/access';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import type { TableLookupParams } from '@/lib/rag-eval/contracts.generated';
 
@@ -31,6 +32,8 @@ export interface TableLookupOptions {
   /** Passed through to the SQL function only when set; 'current' sends nothing. */
   versionScope?: VersionScope;
   identifiersNorm?: string[];
+  /** D-05: the access filter runRetrieval computed; absent reads it from the scope. */
+  access?: ScopeAccessFilter;
 }
 
 export interface TableLookupStageResult {
@@ -98,6 +101,7 @@ export async function tableLookup(
       p_min_cells: clamp(params.min_cells, MAX_MIN_CELLS),
       p_limit: clamp(params.limit, MAX_LOOKUP_LIMIT),
       ...versionAndIdentifierArgs(options.versionScope, options.identifiersNorm),
+      ...accessRpcArgs(options.access ?? scopeAccessFilter(scope)),
     })
     .abortSignal(signal);
   signal.throwIfAborted();
