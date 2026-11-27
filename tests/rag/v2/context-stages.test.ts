@@ -6,7 +6,8 @@ import { loadRagConfig, resetRagConfigForTests, type RagConfig } from '@/lib/rag
 import type { FusedHit } from '@/lib/rag/fusion/rrf';
 import type { RerankSpan } from '@/lib/rag/rerank/types';
 import { createTraceCollector } from '@/lib/rag/trace/collector';
-import { mintScope } from '@/lib/rag/tenant/scope';
+import { mintAccessScope } from '@/lib/rag/tenant/access';
+import { mintScope, withAccess } from '@/lib/rag/tenant/scope';
 import type { Profile } from '@/lib/rag/types';
 import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
 import { ALSO_IN_MAX, ALSO_IN_SOURCES_UNAVAILABLE, mergeAlsoIn, runContextStages, type ContextStagesInput } from '@/lib/rag/v2/stages/context';
@@ -615,6 +616,24 @@ describe('runContextStages cluster sources (D-21)', () => {
     vi.restoreAllMocks();
     resetRagDepsForTests();
     resetRagConfigForTests();
+  });
+
+  it('sends the scope access filter to rag_dup_cluster_sources (04.3-11: other sources only from visible documents)', async () => {
+    const group = 'g:00000000-0000-4000-8000-0000000000f1';
+    const keyed = withAccess(scope, mintAccessScope('keys', ['all', group]));
+    const { client, calls } = sourcesAdmin(clusterRows);
+    setRagDepsForTests({ adminClient: () => client as never });
+    const { promise } = clusterRun(collapse, { input: { scope: keyed, query: 'kept other', profile: 'chat', signal: new AbortController().signal } });
+    await promise;
+    const sourceCalls = calls.filter((call) => call.fn === 'rag_dup_cluster_sources');
+    expect(sourceCalls).toHaveLength(1);
+    expect(sourceCalls[0]!.args).toEqual({
+      p_tenant_key: 's:default',
+      p_cluster_ids: [CLUSTER],
+      p_limit: 30,
+      p_access_keys: ['all', group],
+      p_access_all: false,
+    });
   });
 
   it('lists the dropped candidates first, then the other sources, without the own document or duplicates', async () => {

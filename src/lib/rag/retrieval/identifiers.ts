@@ -2,6 +2,7 @@ import { RetrievalBackendError, rpcRows, type RpcClient } from '../backend/supab
 import { extractChunkIdentifiers, MAX_IDENTIFIER_CHARS } from '../identifiers/extract';
 import { damerauLevenshtein, isNearMissIdentifier, MAX_IDENTIFIER_INPUT_CHARS, normalizeIdentifier } from '../ids/normalize';
 import { splitAtIdentifiers } from '../ids/shapes';
+import { accessRpcArgs, scopeAccessFilter, type ScopeAccessFilter } from '../tenant/access';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 
 /** rag_identifier_resolve takes at most 16 forms (0858). */
@@ -31,6 +32,8 @@ export interface QueryIdentifiers {
 export interface IdentifierCallOptions {
   client: RpcClient;
   signal: AbortSignal;
+  /** D-05: the access filter runRetrieval computed; absent reads it from the scope. */
+  access?: ScopeAccessFilter;
 }
 
 /**
@@ -79,11 +82,12 @@ export async function resolveQueryIdentifiers(
   options: IdentifierCallOptions,
 ): Promise<QueryIdentifiers> {
   const tenantKey = tenantKeyOf(scope);
+  const access = accessRpcArgs(options.access ?? scopeAccessFilter(scope));
   const asked = queryIdentifierEntries(query, patterns);
   if (asked.length === 0) return { asked: [], found: [], missing: [] };
   const { client, signal } = options;
   signal.throwIfAborted();
-  const response = await client.rpc(RESOLVE_RPC, { p_tenant_key: tenantKey, p_norm: asked.map((entry) => entry.norm) }).abortSignal(signal);
+  const response = await client.rpc(RESOLVE_RPC, { p_tenant_key: tenantKey, p_norm: asked.map((entry) => entry.norm), ...access }).abortSignal(signal);
   signal.throwIfAborted();
   if (response.error) throw new RetrievalBackendError(RESOLVE_RPC, response.error.code ?? null);
   const existing = new Set(rpcRows(response.data).map((row) => stringField(row, 'norm')).filter((norm): norm is string => norm !== null));
@@ -141,10 +145,11 @@ export async function identifierSuggestions(scope: TenantScope, missing: readonl
   const { client, signal } = options;
   try {
     const tenantKey = tenantKeyOf(scope);
+    const access = accessRpcArgs(options.access ?? scopeAccessFilter(scope));
     signal.throwIfAborted();
     const lists = await Promise.all(
       forms.map(async (norm) => {
-        const response = await client.rpc(CANDIDATES_RPC, { p_tenant_key: tenantKey, p_norm: norm, p_limit: CANDIDATE_LIMIT }).abortSignal(signal);
+        const response = await client.rpc(CANDIDATES_RPC, { p_tenant_key: tenantKey, p_norm: norm, p_limit: CANDIDATE_LIMIT, ...access }).abortSignal(signal);
         if (response.error) throw new RetrievalBackendError(CANDIDATES_RPC, response.error.code ?? null);
         return rpcRows(response.data).flatMap((row): Suggestion[] => {
           const raw = stringField(row, 'raw');

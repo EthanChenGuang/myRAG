@@ -276,6 +276,31 @@ for (const mode of MODES) {
       assert.deepEqual(Object.keys(calls[0]?.args ?? {}).filter((key) => /user|org|tenant/.test(key)), ['p_tenant_key']);
     });
 
+    test('rag_find_invoices and rag_exact_id_documents take the 0930 access arguments, and a key set without the label returns nothing', async () => {
+      await requireSchema();
+      await seed(scopeA, { sourceKey: `access-args-${mode}`, fields: { invoice_number: 'ACC-2025-00931', supplier_name: 'Access Args Co', issue_date: '2025-03-15', gross_total: '10.00', currency: 'EUR' } });
+      const find = (keys: string[]) =>
+        pgliteRpc(db).rpc('rag_find_invoices', {
+          p_tenant_key: keyOf(scopeA),
+          p_supplier: 'access args co',
+          p_date_from: null,
+          p_date_to: null,
+          p_amount_min: null,
+          p_amount_max: null,
+          p_currency: null,
+          p_limit: 10,
+          p_access_keys: keys,
+          p_access_all: false,
+        });
+      const open = await find(['all']);
+      assert.equal(open.error, null);
+      assert.deepEqual((open.data as Row[]).map((row) => row.invoice_number), ['ACC-2025-00931']);
+      assert.deepEqual((await find(['g:00000000-0000-4000-8000-0000000000ff'])).data, []);
+      const exact = await pgliteRpc(db).rpc('rag_exact_id_documents', { p_tenant_key: keyOf(scopeA), p_tokens: ['acc-2025-00931'], p_limit: 20, p_access_keys: ['g:00000000-0000-4000-8000-0000000000ff'], p_access_all: false });
+      assert.equal(exact.error, null);
+      assert.deepEqual(exact.data, []);
+    });
+
     test('invalid filters are refused before any call is made', async () => {
       const calls: Array<{ fn: string; args: Record<string, unknown> }> = [];
       const deps = { db: () => pgliteRpc(db, calls), signal };
