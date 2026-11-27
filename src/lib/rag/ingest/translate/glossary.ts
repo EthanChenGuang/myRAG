@@ -20,3 +20,6 @@ export const NO_GLOSSARY_VERSION = 'none';
 export async function glossaryFor(_scope: GlossaryScope, _source: string, _target: string): Promise<Glossary> {
   return { version: NO_GLOSSARY_VERSION, terms: [] };
 }
+
+/** Stub until 06.2-17. */
+export class GlossaryUnavailable extends Error {}
