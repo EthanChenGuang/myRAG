@@ -553,3 +553,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 13:53Z base branches pushed: base/04.3-32 (23+31), base/04.3-46 (23+22), base/06.2-11 (06+04), base/04.3-15 (09+21). base/04.3-14 conflicts in src/lib/rag/tenant/access.ts, so its executor merges exec/04.3-13 itself.
   Launched: 04.3-32 session_01X342smUF2tiFLkR5bZfB4p | 04.3-46 session_01X342smWNn4NkQVLRxLXr6Y | 06.2-11 session_01X342shhSS91RYF4oj5pYFw | 04.3-15 session_01X342smQek1mTr6HqawfvHo | 06.2-10 session_01X342smzxFSYdQt22QkfPb9 | 04.3-14 session_01X342shZG3dTaW1rz5NMxYz
   Still held: 06.3-14, 07-37 (Phase 6.3 close), plus auto=false.
+- 13:54Z 04.3-09 DONE (af040ffe) → archived; train 38 candidate.
