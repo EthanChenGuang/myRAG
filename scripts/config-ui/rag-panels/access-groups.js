@@ -222,6 +222,11 @@ const ACCESS_GROUPS_LABELS = {
     'action.refreshDocuments': "Refresh documents",
     'action.loadMoreDocuments': "Load more documents",
     'docs.manageHint': "To change who can see a document, open RAG administration, Access groups, Documents.",
+    'docs.filterLabel': "Show documents",
+    'docs.caption': "Documents and who can see them",
+    'docs.loaded': "Documents shown: {count}.",
+    'field.choose': "Choose Everyone or Only these groups.",
+    'field.current': "Now",
     'enforce.scope': "Applies to every workspace in this deployment.",
     'enforce.state.off': "Off",
     'enforce.state.enforced': "Enforced",
@@ -496,6 +501,11 @@ const ACCESS_GROUPS_LABELS = {
     'action.refreshDocuments': "刷新文档",
     'action.loadMoreDocuments': "加载更多文档",
     'docs.manageHint': "要更改文档的可见范围，请打开“RAG 管理 → 访问组 → 文档”。",
+    'docs.filterLabel': "显示文档",
+    'docs.caption': "文档及其可见范围",
+    'docs.loaded': "显示的文档：{count}。",
+    'field.choose': "请选择“所有人”或“仅这些访问组”。",
+    'field.current': "当前",
     'enforce.scope': "适用于此部署中的所有工作区。",
     'enforce.state.off': "已关闭",
     'enforce.state.enforced': "已生效",
@@ -770,6 +780,11 @@ const ACCESS_GROUPS_LABELS = {
     'action.refreshDocuments': "Aggiorna i documenti",
     'action.loadMoreDocuments': "Carica altri documenti",
     'docs.manageHint': "Per cambiare chi può vedere un documento, apri RAG administration, Gruppi di accesso, Documenti.",
+    'docs.filterLabel': "Mostra documenti",
+    'docs.caption': "Documenti e chi può vederli",
+    'docs.loaded': "Documenti mostrati: {count}.",
+    'field.choose': "Scegli Tutti oppure Solo questi gruppi.",
+    'field.current': "Ora",
     'enforce.scope': "Vale per ogni spazio di lavoro di questa installazione.",
     'enforce.state.off': "Disattivato",
     'enforce.state.enforced': "Applicato",
@@ -1036,6 +1051,12 @@ function mapAccessGroupsError(result, locale, ctx) {
     const key = err === 'invalid_key' ? 'form.badKey' : 'form.reservedKey';
     return { key, kind: 'field', field: 'key', message: accessGroupsLabel(key, locale) };
   }
+  if (status === 400 && err === 'unknown_group') {
+    return { key: 'error.groupGone', kind: 'groupGone', message: accessGroupsLabel('error.groupGone', locale), reload: true };
+  }
+  if (status === 409 && err === 'access_managed_by_connector') {
+    return { key: 'docs.connectorManaged', kind: 'connector', message: accessGroupsLabel('docs.connectorManaged', locale), reload: true };
+  }
   if (status === 404 || (status === 409 && opts.write)) {
     return { key: 'error.changed', kind: 'changed', message: accessGroupsLabel('error.changed', locale), reload: true };
   }
@@ -1129,6 +1150,405 @@ function accessGroupsCountLabel(template) {
   return accessGroupsText(template).replace(/\s*[:：]\s?\{count\}\s*$/, '');
 }
 
+const ACCESS_GROUPS_DOC_FILTERS = ['restricted', 'uploader_only', 'everyone', 'all'];
+const ACCESS_GROUPS_FILTER_KEYS = { restricted: 'filter.restricted', uploader_only: 'filter.uploaderOnly', everyone: 'filter.everyone', all: 'filter.all' };
+const ACCESS_GROUPS_KNOWN_REASONS = new Set(['group_deleted', 'unmapped_source', 'source_error']);
+/** Reasons whose remedy is a connector mapping, so the action is Open connector mapping (UI-SPEC 6.2.1). */
+const ACCESS_GROUPS_SOURCE_REASONS = new Set(['unmapped_source', 'source_error']);
+const ACCESS_GROUPS_DOC_COLUMNS = 6;
+
+/**
+ * One document of GET /documents (04.3-24 Audience), normalised. A kind the UI does not know is read as the fallback audience
+ * with the kind as its reason code, so an unknown value is never shown as Everyone.
+ */
+function buildAccessGroupsDocumentRow(audience) {
+  if (!audience || typeof audience !== 'object') return null;
+  const id = accessGroupsText(audience.documentId);
+  if (!id) return null;
+  const rawKind = accessGroupsText(audience.kind);
+  const known = rawKind === 'everyone' || rawKind === 'groups' || rawKind === 'uploader_only';
+  const groups = (Array.isArray(audience.groups) ? audience.groups : [])
+    .filter((g) => g && typeof g === 'object' && accessGroupsText(g.id))
+    .map((g) => ({ id: accessGroupsText(g.id), name: accessGroupsText(g.name) || accessGroupsText(g.id) }));
+  let kind = known ? rawKind : 'uploader_only';
+  if (kind === 'groups' && groups.length === 0) kind = 'uploader_only';
+  const reason = known ? accessGroupsText(audience.fallbackReason) : rawKind || 'unknown_kind';
+  return {
+    id,
+    filename: accessGroupsText(audience.filename) || id,
+    docType: accessGroupsText(audience.docType),
+    source: accessGroupsText(audience.source),
+    kind,
+    groups: kind === 'groups' ? groups : [],
+    peopleCount: accessGroupsCount(audience.peopleCount),
+    fallbackReason: kind === 'uploader_only' ? reason || null : null,
+    connectorManaged: audience.connectorManaged === true,
+  };
+}
+
+/** The GET /documents answer: rows, cursor, personal workspace and the per-filter counts. */
+function buildAccessGroupsDocumentsList(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  const rows = (Array.isArray(b.documents) ? b.documents : []).map(buildAccessGroupsDocumentRow).filter(Boolean);
+  const c = b.counts && typeof b.counts === 'object' ? b.counts : {};
+  return {
+    personal: b.personal === true,
+    rows,
+    nextCursor: typeof b.nextCursor === 'string' && b.nextCursor ? b.nextCursor : null,
+    counts: { restricted: accessGroupsCount(c.restricted), uploader_only: accessGroupsCount(c.uploaderOnly), everyone: accessGroupsCount(c.everyone), all: accessGroupsCount(c.all) },
+  };
+}
+
+function accessGroupsJoinNames(names, locale) {
+  return names.join(locale === 'zh' ? '、' : ', ');
+}
+
+/**
+ * D-02, D-18, D-20, UI-SPEC 6.2.1: the one function that turns a document's audience into words. Accepts a GET /documents
+ * Audience or a normalised row. Exactly three readings: everyone, groups (with the people count only), uploader_only (with
+ * its reason and one action). Names and words only: no key is ever part of the view.
+ */
+function buildAccessGroupsAudienceView(audience, locale) {
+  const row = audience && typeof audience === 'object' && 'documentId' in audience ? buildAccessGroupsDocumentRow(audience) : audience;
+  if (!row || typeof row !== 'object' || !row.kind) return null;
+  const loc = accessGroupsLocale(locale);
+  const t = (key, vars) => accessGroupsLabel(key, loc, vars);
+  const view = { kind: row.kind, restricted: row.kind !== 'everyone', badge: null, text: '', groups: [], peopleCount: 0, peopleText: null, reason: null, action: null, summary: '' };
+  if (row.kind === 'everyone') {
+    view.text = t('audience.everyone');
+    view.action = row.connectorManaged ? null : 'editAccess';
+  } else if (row.kind === 'groups') {
+    view.groups = row.groups.map((g) => g.name);
+    view.badge = t('badge.restricted');
+    view.text = t('audience.groups', { groups: accessGroupsJoinNames(view.groups, loc) });
+    view.peopleCount = row.peopleCount > 0 ? row.peopleCount : 0;
+    if (view.peopleCount) view.peopleText = t('audience.people', { count: accessGroupsUiLib().ragUiFormatNumber(view.peopleCount, loc) });
+    view.action = row.connectorManaged ? null : 'editAccess';
+  } else {
+    view.badge = t('audience.uploaderOnly');
+    view.text = t('audience.uploaderOnly');
+    const code = accessGroupsText(row.fallbackReason);
+    if (code && ACCESS_GROUPS_KNOWN_REASONS.has(code)) view.reason = { code, known: true, template: t('reason.' + code), text: t('reason.' + code) };
+    else if (code) view.reason = { code, known: false, template: t('reason.other'), text: t('reason.other', { code }) };
+    view.action = row.connectorManaged || ACCESS_GROUPS_SOURCE_REASONS.has(code) ? 'openMapping' : 'editAccess';
+  }
+  const parts = [view.text];
+  if (view.peopleText) parts.push(view.peopleText);
+  view.summary = parts.join(loc === 'zh' ? '；' : '; ');
+  if (view.reason) view.summary += ' ' + view.reason.text;
+  return view;
+}
+
+/** UI-SPEC 6.2.1: the only Config UI renderer of an audience view. Every string is text; an unknown reason code is a code element. */
+function AccessGroupsAudienceLine(doc, view, extraClass) {
+  const ui = accessGroupsUiLib();
+  const el = (tag, options, children) => ui.ragUiEl(doc, tag, options, children);
+  const root = el('span', { className: 'block min-w-0 text-sm' + (extraClass ? ' ' + extraClass : ''), attrs: { 'data-access-groups-audience': view.kind } });
+  if (view.kind === 'everyone') {
+    root.appendChild(el('span', { className: 'break-words', text: view.text }));
+    return root;
+  }
+  if (view.kind === 'groups') {
+    root.appendChild(el('span', { className: 'badge badge-outline badge-sm gap-1 h-auto whitespace-normal mr-1 align-middle' }, [ui.ragUiIcon(doc, 'lock'), el('span', { text: view.badge })]));
+    root.appendChild(el('span', { className: 'break-words', text: view.text }));
+    if (view.peopleText) root.appendChild(el('span', { className: 'block text-xs text-base-content/70 break-words', text: view.peopleText }));
+    return root;
+  }
+  root.appendChild(el('span', { className: 'badge badge-warning badge-outline badge-sm gap-1 h-auto whitespace-normal align-middle' }, [ui.ragUiIcon(doc, 'shield-exclamation'), el('span', { text: view.badge })]));
+  if (view.reason) {
+    const nodes = view.reason.known ? [doc.createTextNode(view.reason.text)] : ui.ragUiTemplateNodes(doc, view.reason.template, { code: view.reason.code }, ['code']);
+    root.appendChild(el('span', { className: 'block text-xs mt-1 break-words', attrs: { 'data-access-groups-reason': view.reason.known ? view.reason.code : 'other' } }, nodes));
+  }
+  return root;
+}
+
+/** One key per distinct audience, so a bulk selection knows whether its documents share one (UI-SPEC 6.2.2 Bulk). */
+function accessGroupsAudienceKey(row) {
+  if (!row) return '';
+  if (row.kind === 'groups') return 'groups:' + row.groups.map((g) => g.id).sort().join(',');
+  return row.kind;
+}
+
+/**
+ * UI-SPEC 6.2.2: the field's starting value. One shared audience pre-chooses its radio (uploader_only chooses none); documents with
+ * different audiences choose none and are mixed.
+ */
+function accessGroupsInitialChoice(rows) {
+  const list = (rows || []).filter(Boolean);
+  const keys = new Set(list.map(accessGroupsAudienceKey));
+  if (list.length === 0) return { choice: null, chips: [], mixed: false };
+  if (keys.size > 1) return { choice: null, chips: [], mixed: true };
+  const first = list[0];
+  if (first.kind === 'everyone') return { choice: 'everyone', chips: [], mixed: false };
+  if (first.kind === 'groups') return { choice: 'groups', chips: first.groups.map((g) => g.id), mixed: false };
+  return { choice: null, chips: [], mixed: false };
+}
+
+/** D-02, UI-SPEC 6.2.2, 7.2: the field's rules. It can be saved only with Everyone or at least one chip. */
+function accessGroupsFieldFindings(state) {
+  const s = state || {};
+  const chips = Array.isArray(s.chips) ? s.chips : [];
+  const groupCount = Number(s.groupCount) || 0;
+  const choice = s.choice === 'everyone' || (s.choice === 'groups' && groupCount + chips.length > 0) ? s.choice : null;
+  const needGroup = choice === 'groups' && chips.length === 0;
+  return {
+    choice,
+    canSave: choice === 'everyone' || (choice === 'groups' && chips.length > 0),
+    needGroup,
+    noGroups: groupCount === 0,
+    widen: choice === 'everyone' && s.restrictedNow === true,
+    widenKey: s.many ? 'field.widenMany' : 'field.widen',
+    reasonKey: needGroup ? 'field.needGroup' : choice ? null : s.mixed ? 'field.mixed' : 'field.choose',
+  };
+}
+
+/** D-06, D-17: the PUT documents/access body. Document ids and either everyone or group ids; nothing else, never a key. */
+function accessGroupsAccessBody(documentIds, choice, chips) {
+  const ids = (documentIds || []).map(accessGroupsText).filter(Boolean);
+  if (ids.length === 0) return null;
+  if (choice === 'everyone') return { documentIds: ids, everyone: true };
+  const groupIds = [...new Set((chips || []).map(accessGroupsText).filter(Boolean))];
+  if (choice === 'groups' && groupIds.length > 0) return { documentIds: ids, groupIds };
+  return null;
+}
+
+/** The Source column: the Ingestion panel's source labels when that panel is loaded, else the stored value. */
+function accessGroupsSourceLabel(source, locale) {
+  const text = accessGroupsText(source);
+  if (!text) return '';
+  const lookup = typeof window !== 'undefined' && typeof window.ingestionLabel === 'function' ? window.ingestionLabel : null;
+  const label = lookup ? lookup('source.' + text, locale) : '';
+  return label && label !== 'source.' + text ? String(label) : text;
+}
+
+/**
+ * UI-SPEC 6.2.2, 9.3: the audience field (the signature element). Two radios in a fieldset, a chip row with Add group under the
+ * second, the findings line wired to every bound save button, field.widen, field.mixed and a polite live region for chips.
+ */
+class AccessGroupsAudienceField {
+  constructor(panel, options) {
+    const o = options || {};
+    this.panel = panel;
+    this.doc = panel.doc;
+    this.groups = Array.isArray(o.groups) ? o.groups : [];
+    this.names = new Map();
+    for (const g of o.known || []) this.names.set(g.id, g.name);
+    this.choice = o.choice || null;
+    this.chips = [...(o.chips || [])];
+    this.mixed = Boolean(o.mixed);
+    this.restrictedNow = Boolean(o.restrictedNow);
+    this.many = Boolean(o.many);
+    this.mode = o.mode === 'org' ? 'org' : 'single';
+    this.saveButtons = [];
+    this.menuOpen = false;
+    this.build();
+    this.update();
+  }
+
+  t(key, vars) {
+    return this.panel.t(key, vars);
+  }
+
+  el(tag, options, children) {
+    return this.panel.el(tag, options, children);
+  }
+
+  nameOf(id) {
+    const g = this.groups.find((x) => x.id === id);
+    return g ? g.name : this.names.get(id) || id;
+  }
+
+  orderedChips() {
+    const chosen = new Set(this.chips);
+    const ordered = this.groups.filter((g) => chosen.has(g.id)).map((g) => g.id);
+    for (const id of this.chips) if (!ordered.includes(id)) ordered.push(id);
+    return ordered;
+  }
+
+  build() {
+    const ui = accessGroupsUiLib();
+    const id = (p) => ui.ragUiNextId('rag-access-groups-field-' + p);
+    const name = id('choice');
+    this.ids = { everyoneHelp: id('everyone-help'), groupsHelp: id('groups-help'), groupsLabel: id('groups-label'), findings: id('findings'), mixed: id('mixed'), choose: id('choose') };
+    const radio = (value, helpId) => {
+      const input = this.el('input', { className: 'radio radio-sm mt-0.5', id: id(value), attrs: { type: 'radio', name, value, 'aria-describedby': helpId, 'data-access-groups-choice': value } });
+      input.addEventListener('change', () => {
+        if (input.checked) this.choose(value);
+      });
+      return input;
+    };
+    this.everyoneRadio = radio('everyone', this.ids.everyoneHelp);
+    this.groupsRadio = radio('groups', this.ids.groupsHelp);
+    const option = (input, labelId, label, helpId, helpNode) =>
+      this.el('div', { className: 'flex items-start gap-3 min-w-0' }, [
+        input,
+        this.el('div', { className: 'min-w-0' }, [
+          this.el('label', { className: 'text-sm font-medium cursor-pointer', id: labelId, text: label, attrs: { for: input.id } }),
+          helpNode || this.el('p', { className: 'text-xs text-base-content/70 break-words', id: helpId }),
+        ]),
+      ]);
+    this.everyoneHelp = this.el('p', { className: 'text-xs text-base-content/70 break-words', id: this.ids.everyoneHelp, text: this.t('field.everyoneHelp.' + this.mode) });
+    this.groupsHelp = this.el('p', { className: 'text-xs text-base-content/70 break-words', id: this.ids.groupsHelp });
+    this.chipList = this.el('ul', { className: 'flex flex-wrap gap-2 min-w-0', attrs: { role: 'list', 'aria-labelledby': this.ids.groupsLabel, 'data-access-groups-chips': '' } });
+    this.addHost = this.el('div', { className: 'min-w-0' });
+    this.findings = this.el('p', { className: 'text-xs text-warning-content bg-warning/20 rounded px-2 py-1 mt-2 break-words', id: this.ids.findings, text: this.t('field.needGroup'), attrs: { 'data-access-groups-findings': '' } });
+    this.chipArea = this.el('div', { className: 'ml-7 mt-2 min-w-0', attrs: { 'data-access-groups-chip-area': '' } }, [
+      this.el('div', { className: 'flex flex-wrap items-start gap-2 min-w-0' }, [this.chipList, this.addHost]),
+      this.findings,
+    ]);
+    this.mixedLine = this.el('p', { className: 'text-sm mb-2 break-words max-w-prose', id: this.ids.mixed, text: this.t('field.mixed'), attrs: { 'data-access-groups-mixed': '' } });
+    this.chooseLine = this.el('p', { className: 'sr-only', id: this.ids.choose, text: this.t('field.choose') });
+    this.widenLine = this.el('p', { className: 'text-sm text-warning flex items-start gap-2 mt-2 break-words max-w-prose', attrs: { 'data-access-groups-widen': '' } }, [
+      accessGroupsUiLib().ragUiIcon(this.doc, 'exclamation-triangle', 'mt-0.5'),
+      this.el('span', { className: 'min-w-0', text: this.t(this.many ? 'field.widenMany' : 'field.widen') }),
+    ]);
+    this.live = this.el('span', { className: 'sr-only', attrs: { 'aria-live': 'polite', 'data-access-groups-chip-live': '' } });
+    this.element = this.el('fieldset', { className: 'min-w-0 grid gap-3', attrs: { 'data-access-groups-field': '' } }, [
+      this.el('legend', { className: 'text-sm font-semibold mb-2', text: this.t('audience.label') }),
+      this.mixedLine,
+      this.chooseLine,
+      option(this.everyoneRadio, null, this.t('term.everyone'), this.ids.everyoneHelp, this.everyoneHelp),
+      this.el('div', { className: 'min-w-0' }, [option(this.groupsRadio, this.ids.groupsLabel, this.t('field.onlyGroups'), this.ids.groupsHelp, this.groupsHelp), this.chipArea]),
+      this.widenLine,
+      this.el('p', { className: 'text-xs text-base-content/70', text: this.t('field.effect') }),
+      this.live,
+    ]);
+    this.element.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && this.menu && this.menu.open) {
+        if (typeof event.preventDefault === 'function') event.preventDefault();
+        if (typeof event.stopPropagation === 'function') event.stopPropagation();
+        this.menuOpen = false;
+        this.menu.open = false;
+        if (this.menuSummary) this.menuSummary.focus();
+      }
+    });
+  }
+
+  choose(value) {
+    this.choice = value === 'groups' ? 'groups' : 'everyone';
+    this.update();
+  }
+
+  state() {
+    return accessGroupsFieldFindings({ choice: this.choice, chips: this.chips, groupCount: this.groups.length, restrictedNow: this.restrictedNow, many: this.many, mixed: this.mixed });
+  }
+
+  value() {
+    const s = this.state();
+    return { choice: s.choice, chips: s.choice === 'groups' ? this.orderedChips() : [] };
+  }
+
+  bindSave(button) {
+    this.saveButtons.push(button);
+    this.update();
+  }
+
+  setGroups(groups) {
+    this.groups = Array.isArray(groups) ? groups : [];
+    const present = new Set(this.groups.map((g) => g.id));
+    this.chips = this.chips.filter((id) => present.has(id));
+    this.update();
+  }
+
+  addChip(id) {
+    if (this.chips.includes(id)) return;
+    this.chips.push(id);
+    this.menuOpen = true;
+    this.update();
+    this.live.textContent = this.t('chip.added', { group: this.nameOf(id) });
+    const next = this.menuButtons && this.menuButtons[0];
+    if (next) next.focus();
+    else if (this.removeButtons.length) this.removeButtons[this.removeButtons.length - 1].focus();
+  }
+
+  removeChip(id) {
+    const ordered = this.orderedChips();
+    const index = ordered.indexOf(id);
+    if (index < 0) return;
+    this.chips = this.chips.filter((c) => c !== id);
+    this.update();
+    this.live.textContent = this.t('chip.removed', { group: this.nameOf(id) });
+    const next = this.removeButtons[index] || null;
+    if (next) next.focus();
+    else if (this.addControl) this.addControl.focus();
+  }
+
+  renderChips() {
+    const ui = accessGroupsUiLib();
+    this.removeButtons = [];
+    const items = this.orderedChips().map((id) => {
+      const name = this.nameOf(id);
+      const remove = this.el('button', {
+        className: 'btn btn-ghost btn-xs btn-circle h-6 w-6 min-h-6 shrink-0',
+        attrs: { type: 'button', 'aria-label': this.t('action.removeGroupChip', { group: name }), 'data-access-groups-chip-remove': id },
+      }, [ui.ragUiIcon(this.doc, 'x-lg')]);
+      remove.addEventListener('click', () => this.removeChip(id));
+      this.removeButtons.push(remove);
+      return this.el('li', { className: 'inline-flex items-center gap-1 max-w-full min-w-0 rounded-full border border-base-content/30 pl-3 pr-1 py-0.5 text-sm', attrs: { 'data-access-groups-chip': id } }, [
+        this.el('span', { className: 'min-w-0 break-words', text: name }),
+        remove,
+      ]);
+    });
+    this.chipList.replaceChildren(...items);
+    this.chipList.hidden = items.length === 0;
+    const remaining = this.groups.filter((g) => !this.chips.includes(g.id));
+    this.menuButtons = [];
+    this.menu = null;
+    this.menuSummary = null;
+    if (remaining.length === 0) {
+      this.addControl = this.el('button', { className: 'btn btn-outline btn-sm min-h-8 h-auto py-1', text: this.t('action.addGroup'), attrs: { type: 'button', 'aria-describedby': this.groups.length ? null : this.ids.groupsHelp, 'data-access-groups-add-group': '' } });
+      this.addControl.disabled = true;
+      this.addHost.replaceChildren(this.addControl);
+      return;
+    }
+    const list = this.el('ul', { className: 'menu dropdown-content z-10 mt-1 w-64 max-w-[calc(100vw-2rem)] max-h-72 overflow-y-auto flex-nowrap rounded-box bg-base-100 p-1 shadow', attrs: { 'data-access-groups-add-menu': '' } });
+    for (const g of remaining) {
+      const b = this.el('button', { className: 'text-left break-words whitespace-normal', text: g.name, attrs: { type: 'button', 'data-access-groups-add-option': g.id } });
+      b.addEventListener('click', () => this.addChip(g.id));
+      this.menuButtons.push(b);
+      list.appendChild(this.el('li', { className: 'min-w-0' }, [b]));
+    }
+    this.menuSummary = this.el('summary', {
+      className: 'btn btn-outline btn-sm min-h-8 h-auto py-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+      attrs: { 'data-access-groups-add-group': '' },
+    }, [this.el('span', { text: this.t('action.addGroup') }), ui.ragUiIcon(this.doc, 'chevron-down')]);
+    this.menu = this.el('details', { className: 'dropdown' }, [this.menuSummary, list]);
+    this.menu.open = this.menuOpen;
+    this.menu.addEventListener('toggle', () => {
+      this.menuOpen = Boolean(this.menu && this.menu.open);
+    });
+    this.addControl = this.menuSummary;
+    this.addHost.replaceChildren(this.menu);
+  }
+
+  update() {
+    const s = this.state();
+    const noGroups = s.noGroups && this.chips.length === 0;
+    this.groupsRadio.disabled = noGroups;
+    this.groupsHelp.textContent = noGroups ? this.t('field.noGroups') : this.t('field.onlyGroupsHelp');
+    this.everyoneRadio.checked = s.choice === 'everyone';
+    this.groupsRadio.checked = s.choice === 'groups';
+    this.mixedLine.hidden = !(this.mixed && !s.choice);
+    this.chooseLine.hidden = Boolean(s.choice) || this.mixed;
+    this.chipArea.hidden = s.choice !== 'groups';
+    this.findings.hidden = !s.needGroup;
+    this.widenLine.hidden = !s.widen;
+    this.renderChips();
+    const reasonId = s.reasonKey === 'field.needGroup' ? this.ids.findings : s.reasonKey === 'field.mixed' ? this.ids.mixed : s.reasonKey === 'field.choose' ? this.ids.choose : null;
+    for (const button of this.saveButtons) {
+      if (button.getAttribute('aria-disabled') === 'true') continue;
+      button.disabled = !s.canSave;
+      if (reasonId) button.setAttribute('aria-describedby', reasonId);
+      else button.removeAttribute('aria-describedby');
+    }
+  }
+
+  focusFirst() {
+    const target = this.groupsRadio.checked ? this.groupsRadio : this.everyoneRadio;
+    target.focus();
+  }
+}
+
 class AccessGroupsPanel {
   constructor(root) {
     this.root = root;
@@ -1161,6 +1581,19 @@ class AccessGroupsPanel {
     this.memberHosts = null;
     this.deleting = null;
     this.moreButton = null;
+    this.docs = null;
+    this.docsFailure = null;
+    this.docsSeq = 0;
+    this.docsRequested = false;
+    this.docsUpdatedAt = null;
+    this.docFilter = 'restricted';
+    this.docQuery = '';
+    this.docSearchTimer = null;
+    this.docHosts = {};
+    this.docSelected = new Map();
+    this.docEditor = null;
+    this.bulk = null;
+    this.docsMoreButton = null;
   }
 
   t(key, vars) {
@@ -1212,11 +1645,14 @@ class AccessGroupsPanel {
       idPrefix: 'rag-access-groups',
       tabs: [
         { id: 'groups', label: this.t('tab.groupsPlain') },
+        { id: 'documents', label: this.t('tab.documents') },
         { id: 'enforcement', label: this.t('tab.enforcement') },
       ],
       selected: 'groups',
+      onSelect: (id) => this.onTabSelect(id),
     });
     this.buildGroups(this.tabs.panels.groups);
+    this.buildDocuments(this.tabs.panels.documents);
     this.buildEnforcement(this.tabs.panels.enforcement);
     const content = this.root.querySelector('[data-access-groups-content]');
     if (content) content.replaceChildren(this.tabs.tablist, ...Object.values(this.tabs.panels));
@@ -1235,6 +1671,7 @@ class AccessGroupsPanel {
     this.readWorkspace();
     this.bindWorkspace();
     await this.loadGroups('refresh');
+    if (this.docsRequested) await this.loadDocuments('refresh');
     await this.loadStatus('refresh');
   }
 
@@ -1781,7 +2218,10 @@ class AccessGroupsPanel {
       this.closeMembers({ render: false });
       this.form = this.emptyForm();
       this.renderForm();
-      this.loadGroups('first');
+      this.resetDocuments();
+      this.loadGroups('first').then(() => {
+        if (this.docsRequested) this.loadDocuments('first');
+      });
     });
   }
 
@@ -1798,7 +2238,7 @@ class AccessGroupsPanel {
   }
 
   byData(name, value) {
-    return this.root.querySelectorAll('[' + name + ']').filter((node) => node.getAttribute(name) === value);
+    return Array.from(this.root.querySelectorAll('[' + name + ']')).filter((node) => node.getAttribute(name) === value);
   }
 
   focusManage(id) {
@@ -2665,7 +3105,7 @@ class AccessGroupsPanel {
       this.renderMembersTable();
       this.announce(this.t('member.removed', { name: member.name.text, group: row ? row.name : '' }));
       const next = m.rows && m.rows.length ? m.rows[Math.min(index, m.rows.length - 1)] : null;
-      const target = next && this.memberHosts ? this.memberHosts.table.querySelectorAll('[data-access-groups-remove-member]').find((b) => b.getAttribute('data-access-groups-remove-member') === next.userId) : null;
+      const target = next && this.memberHosts ? Array.from(this.memberHosts.table.querySelectorAll('[data-access-groups-remove-member]')).find((b) => b.getAttribute('data-access-groups-remove-member') === next.userId) : null;
       if (target) target.focus();
       else if (this.memberHosts) this.memberHosts.search.focus();
       return;
@@ -2834,6 +3274,628 @@ class AccessGroupsPanel {
     const target = state.opener && state.opener.isConnected !== false ? state.opener : this.statusEl();
     if (target && typeof target.focus === 'function') target.focus();
   }
+  // Documents sub-view (D-17, D-28, UI-SPEC 6.4)
+
+  onTabSelect(id) {
+    if (id === 'documents' && !this.docsRequested) {
+      this.docsRequested = true;
+      this.loadDocuments('first');
+    }
+  }
+
+  selectMapping() {
+    if (!this.tabs || !this.tabs.panels.mapping) return false;
+    this.tabs.select('mapping');
+    const heading = this.tabs.panels.mapping.querySelector('[data-access-groups-mapping-heading]') || this.doc.getElementById('rag-access-groups-tab-mapping');
+    if (heading && typeof heading.focus === 'function') heading.focus();
+    return true;
+  }
+
+  fieldMode() {
+    return this.multiTenant() ? 'org' : 'single';
+  }
+
+  groupOptions() {
+    return this.groups && !this.groups.personal ? this.groups.rows.map((r) => ({ id: r.id, name: r.name })) : [];
+  }
+
+  docsUnavailable() {
+    return this.t('docs.unavailable', { reload: this.t('action.reload') });
+  }
+
+  findDoc(id) {
+    return this.docs ? this.docs.rows.find((r) => r.id === id) || null : null;
+  }
+
+  resetDocuments() {
+    this.docs = null;
+    this.docsFailure = null;
+    this.docsUpdatedAt = null;
+    this.docEditor = null;
+    this.docSelected.clear();
+    if (this.bulk) this.bulk.dialog.close('keep');
+    this.renderDocuments();
+  }
+
+  buildDocuments(panel) {
+    const ui = accessGroupsUiLib();
+    const filterName = ui.ragUiNextId('rag-access-groups-doc-filter');
+    this.docFilterInputs = {};
+    const filters = this.el('fieldset', { className: 'flex flex-wrap gap-2 min-w-0', attrs: { 'data-access-groups-doc-filters': '' } }, [
+      this.el('legend', { className: 'sr-only', text: this.t('docs.filterLabel') }),
+    ]);
+    for (const value of ACCESS_GROUPS_DOC_FILTERS) {
+      const input = this.el('input', {
+        className: 'btn btn-sm h-auto min-h-8 py-1',
+        attrs: { type: 'radio', name: filterName, value, 'aria-label': this.t(ACCESS_GROUPS_FILTER_KEYS[value]), 'data-access-groups-doc-filter': value },
+      });
+      input.checked = value === this.docFilter;
+      input.addEventListener('change', () => {
+        if (input.checked) this.setDocFilter(value);
+      });
+      this.docFilterInputs[value] = input;
+      filters.appendChild(input);
+    }
+    const searchId = 'rag-access-groups-doc-search';
+    this.docSearch = this.el('input', {
+      className: 'input input-bordered input-sm w-full sm:w-64',
+      id: searchId,
+      attrs: { type: 'search', maxlength: '200', autocomplete: 'off', spellcheck: 'false', name: 'access-groups-document-search', 'data-access-groups-doc-search': '' },
+    });
+    this.docSearch.addEventListener('input', () => this.onDocSearchInput());
+    this.docSearch.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      if (typeof event.preventDefault === 'function') event.preventDefault();
+      this.runDocSearch();
+    });
+    const search = this.el('div', { className: 'form-control min-w-0' }, [
+      this.el('label', { className: 'label py-1', attrs: { for: searchId } }, [this.el('span', { className: 'label-text text-sm', text: this.t('docs.search') })]),
+      this.docSearch,
+    ]);
+    this.docsUpdated = this.el('span', { className: 'text-xs text-base-content/70', attrs: { 'data-access-groups-docs-updated': '' } });
+    this.refreshDocsButton = this.btn(this.t('action.refreshDocuments'), 'btn-outline btn-sm min-h-8 py-1', { 'data-access-groups-docs-refresh': '' }, () => this.loadDocuments('refresh'));
+    this.docHosts.toolbar = this.el('div', { className: 'flex flex-wrap items-end gap-3 min-w-0' }, [
+      filters,
+      search,
+      this.el('div', { className: 'flex flex-wrap items-center gap-2 ml-auto' }, [this.docsUpdated, this.refreshDocsButton]),
+    ]);
+    this.selectionCount = this.el('span', { className: 'text-sm font-medium tabular-nums', attrs: { 'data-access-groups-selected-count': '' } });
+    this.changeAccessButton = this.btn(this.t('action.changeAccess'), 'btn-outline btn-sm min-h-8 py-1', { 'data-access-groups-change-access': '' }, () => this.openBulk());
+    this.clearSelectionButton = this.btn(this.t('action.clearSelection'), 'btn-ghost btn-sm min-h-8 py-1', { 'data-access-groups-clear-selection': '' }, () => this.clearSelection(true));
+    this.docHosts.selection = this.el('div', { className: 'flex flex-wrap items-center gap-2 mt-4 rounded bg-base-200 px-3 py-2 min-w-0', attrs: { 'data-access-groups-selection': '' } }, [
+      this.selectionCount,
+      this.el('div', { className: 'flex flex-wrap gap-2' }, [this.changeAccessButton, this.clearSelectionButton]),
+    ]);
+    this.docHosts.selection.hidden = true;
+    this.docHosts.list = this.el('div', { className: 'min-w-0 mt-4', attrs: { 'data-access-groups-docs': '' } });
+    this.docHosts.more = this.el('div', { className: 'mt-4 empty:hidden', attrs: { 'data-access-groups-docs-more': '' } });
+    panel.replaceChildren(this.docHosts.toolbar, this.docHosts.selection, this.docHosts.list, this.docHosts.more);
+  }
+
+  setDocFilter(value) {
+    if (!ACCESS_GROUPS_DOC_FILTERS.includes(value) || value === this.docFilter) return;
+    this.docFilter = value;
+    this.loadDocuments('filter');
+  }
+
+  onDocSearchInput() {
+    if (this.docSearchTimer !== null) clearTimeout(this.docSearchTimer);
+    this.docSearchTimer = setTimeout(() => {
+      this.docSearchTimer = null;
+      this.runDocSearch();
+    }, ACCESS_GROUPS_SEARCH_WAIT_MS);
+  }
+
+  runDocSearch() {
+    if (this.docSearchTimer !== null) {
+      clearTimeout(this.docSearchTimer);
+      this.docSearchTimer = null;
+    }
+    const q = accessGroupsText(this.docSearch.value).trim().slice(0, 200);
+    if (q === this.docQuery && this.docs) return;
+    this.docQuery = q;
+    this.loadDocuments('filter');
+  }
+
+  async loadDocuments(source) {
+    const ui = accessGroupsUiLib();
+    const host = this.docHosts.list;
+    if (!host) return false;
+    this.docsRequested = true;
+    const seq = ++this.docsSeq;
+    const append = source === 'more' && this.docs && this.docs.nextCursor;
+    if (source === 'filter') {
+      this.docEditor = null;
+      this.docSelected.clear();
+    }
+    let restore = null;
+    if (append) {
+      restore = this.docsMoreButton ? ui.ragUiButtonBusy(this.doc, this.docsMoreButton, this.t('docs.loading')) : null;
+    } else if (!this.docs && !this.docsFailure) {
+      ui.ragUiListLoading(this.doc, host, this.t('docs.loading'));
+      if (source !== 'quiet') this.announce(this.t('docs.loading'));
+    } else {
+      ui.ragUiListBusy(host, true);
+      if (this.refreshDocsButton && source !== 'quiet') restore = ui.ragUiButtonBusy(this.doc, this.refreshDocsButton, this.t('docs.loading'));
+    }
+    let result;
+    try {
+      const query = { filter: this.docFilter, q: this.docQuery || null, cursor: append ? this.docs.nextCursor : null };
+      result = await this.request(ACCESS_GROUPS_PATH + '/documents' + this.orgQuery(query), { method: 'GET' });
+    } finally {
+      if (restore) restore();
+    }
+    if (seq !== this.docsSeq) return false;
+    ui.ragUiListBusy(host, false);
+    if (result && result.ok && result.body && typeof result.body === 'object') {
+      const list = buildAccessGroupsDocumentsList(result.body);
+      let firstNew = null;
+      if (append) {
+        const seen = new Set(this.docs.rows.map((r) => r.id));
+        const fresh = list.rows.filter((r) => !seen.has(r.id));
+        firstNew = fresh[0] || null;
+        this.docs = { ...list, rows: [...this.docs.rows, ...fresh] };
+      } else {
+        this.docs = list;
+      }
+      this.docsFailure = null;
+      this.docsUpdatedAt = new Date();
+      for (const id of [...this.docSelected.keys()]) {
+        const row = this.findDoc(id);
+        if (!row || row.connectorManaged) this.docSelected.delete(id);
+        else this.docSelected.set(id, row);
+      }
+      if (this.docEditor && !this.findDoc(this.docEditor.id)) this.docEditor = null;
+      this.renderDocuments();
+      if (source !== 'quiet') this.announce(this.t('docs.loaded', { count: ui.ragUiFormatNumber(this.docs.rows.length, this.locale) }));
+      if (firstNew) this.focusDocRow(firstNew.id);
+      else if (append) this.focusStatus();
+      return true;
+    }
+    const mapped = mapAccessGroupsError(result, this.locale, { unavailable: this.docsUnavailable() });
+    this.docsFailure = mapped.kind === 'unavailable' || mapped.kind === 'network' ? { ...mapped, kind: 'unavailable', message: this.docsUnavailable() } : mapped;
+    this.renderDocuments();
+    this.announce(this.docsFailure.message, true);
+    return false;
+  }
+
+  focusDocRow(id) {
+    const row = this.byData('data-access-groups-doc-row', id)[0];
+    if (!row) return;
+    const target = Array.from(row.querySelectorAll('input, button')).find((n) => !n.disabled);
+    if (target) target.focus();
+  }
+
+  focusEditAccess(id) {
+    const button = this.byData('data-access-groups-edit-access', id)[0];
+    if (button && !button.disabled) button.focus();
+    else this.focusStatus();
+  }
+
+  renderDocuments() {
+    const ui = accessGroupsUiLib();
+    const host = this.docHosts.list;
+    if (!host) return;
+    const failure = this.docsFailure;
+    const replaced = Boolean(failure && (failure.kind === 'signIn' || failure.kind === 'workspace'));
+    const personal = Boolean(this.docs && this.docs.personal);
+    this.docHosts.toolbar.hidden = replaced || personal;
+    if (this.docsUpdatedAt && !replaced) {
+      this.docsUpdated.replaceChildren(...this.withNode(this.t('panel.updated'), 'time', this.timeEl(this.docsUpdatedAt)));
+    } else this.docsUpdated.replaceChildren();
+    this.docsMoreButton = null;
+    this.docHosts.more.replaceChildren();
+    this.updateSelectionUi(false);
+    if (replaced) {
+      host.replaceChildren(
+        failure.kind === 'signIn'
+          ? ui.ragUiSignInAlert(this.doc, this.locale, () => this.loadDocuments('refresh'))
+          : ui.ragUiAlert(this.doc, { tone: 'warning', icon: 'person-lock', body: [failure.message], actions: [ui.ragUiReloadButton(this.doc, this.locale, () => this.loadDocuments('refresh'))] }),
+      );
+      return;
+    }
+    const nodes = [];
+    if (failure) nodes.push(ui.ragUiUnavailableAlert(this.doc, this.locale, failure.message, () => this.loadDocuments('refresh')));
+    if (!this.docs) {
+      host.replaceChildren(...nodes);
+      return;
+    }
+    if (personal) {
+      nodes.push(ui.ragUiAlert(this.doc, { tone: 'info', icon: 'person', body: [this.t('groups.personal')] }));
+      host.replaceChildren(...nodes);
+      return;
+    }
+    const content = this.docs.rows.length ? this.docsTable() : this.docsEmpty();
+    if (failure) content.classList.add('opacity-60');
+    nodes.push(content);
+    host.replaceChildren(...nodes);
+    this.updateSelectionUi(false);
+    if (this.docs.nextCursor) {
+      this.docsMoreButton = this.btn(this.t('action.loadMoreDocuments'), 'btn-outline btn-sm min-h-8 py-1', { 'data-access-groups-docs-load-more': '' }, () => this.loadDocuments('more'));
+      this.docHosts.more.replaceChildren(this.docsMoreButton);
+    }
+  }
+
+  docsEmpty() {
+    const restricted = this.docFilter === 'restricted' && !this.docQuery;
+    return this.el('div', { className: 'py-8 text-center', attrs: { 'data-access-groups-docs-empty': restricted ? 'restricted' : 'filter' } }, restricted
+      ? [
+          this.el('p', { className: 'text-base font-semibold text-balance', text: this.t('docs.empty.restricted.title') }),
+          this.el('p', { className: 'text-sm max-w-prose mx-auto mt-1', text: this.t('docs.empty.restricted.body') }),
+        ]
+      : [this.el('p', { className: 'text-sm max-w-prose mx-auto', text: this.t('docs.empty.filter') })]);
+  }
+
+  docsTable() {
+    const th = (text, extra) => this.el('th', { className: 'font-semibold ' + (extra || ''), text, attrs: { scope: 'col' } });
+    this.docHeaderCheckbox = this.el('input', { className: 'checkbox checkbox-sm', attrs: { type: 'checkbox', 'aria-label': this.t('select.allAria'), 'data-access-groups-select-all': '' } });
+    this.docHeaderCheckbox.addEventListener('change', () => this.toggleAll(this.docHeaderCheckbox.checked));
+    const body = this.el('tbody');
+    for (const row of this.docs.rows) {
+      body.appendChild(this.docRow(row));
+      if (this.docEditor && this.docEditor.id === row.id) {
+        body.appendChild(
+          this.el('tr', { attrs: { 'data-access-groups-doc-editor': row.id } }, [
+            this.el('td', { className: 'p-2 md:p-3', attrs: { colspan: String(ACCESS_GROUPS_DOC_COLUMNS) } }, [this.docEditor.container]),
+          ]),
+        );
+      }
+    }
+    const table = this.el('table', { className: 'table table-sm' }, [
+      this.el('caption', { className: 'sr-only', text: this.t('docs.caption') }),
+      this.el('thead', {}, [
+        this.el('tr', {}, [
+          this.el('th', { className: 'w-10', attrs: { scope: 'col' } }, [this.docHeaderCheckbox]),
+          th(this.t('col.file')),
+          th(this.t('col.docType'), 'hidden lg:table-cell'),
+          th(this.t('audience.label'), 'hidden md:table-cell'),
+          th(this.t('col.source'), 'hidden lg:table-cell'),
+          th(this.t('col.actions')),
+        ]),
+      ]),
+      body,
+    ]);
+    return this.el(
+      'div',
+      {
+        className: 'overflow-x-auto rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+        attrs: { tabindex: '0', role: 'region', 'aria-label': this.t('docs.caption'), 'data-access-groups-docs-table': '' },
+      },
+      [table],
+    );
+  }
+
+  docRow(row) {
+    const ui = accessGroupsUiLib();
+    const view = buildAccessGroupsAudienceView(row, this.locale);
+    const source = accessGroupsSourceLabel(row.source, this.locale);
+    const check = this.el('input', { className: 'checkbox checkbox-sm', attrs: { type: 'checkbox', 'aria-label': this.t('select.aria', { file: row.filename }), 'data-access-groups-select': row.id } });
+    check.checked = this.docSelected.has(row.id);
+    check.disabled = row.connectorManaged;
+    check.addEventListener('change', () => this.toggleRow(row.id, check.checked));
+    const fileCell = this.el('th', { className: 'font-normal align-top min-w-0 max-w-[16rem] sm:max-w-sm md:max-w-md', attrs: { scope: 'row' } }, [
+      this.el('span', { className: 'block text-sm break-words', text: row.filename, attrs: { 'data-access-groups-doc-name': '' } }),
+    ]);
+    if (source) fileCell.appendChild(this.el('span', { className: 'block text-xs text-base-content/70 break-words lg:hidden', text: source }));
+    fileCell.appendChild(AccessGroupsAudienceLine(this.doc, view, 'mt-1 md:hidden'));
+    const actions = [];
+    const notes = [];
+    const managedId = row.connectorManaged ? ui.ragUiNextId('rag-access-groups-managed') : null;
+    if (view.action === 'openMapping') {
+      const mapping = this.btn(this.t('action.openMapping'), 'btn-outline md:btn-sm md:min-h-8 py-1', { 'data-access-groups-open-mapping': row.id, 'aria-describedby': managedId });
+      mapping.disabled = !(this.tabs && this.tabs.panels.mapping);
+      mapping.addEventListener('click', () => this.selectMapping());
+      actions.push(mapping);
+    }
+    if (view.action !== 'openMapping' || row.connectorManaged) {
+      const editing = Boolean(this.docEditor && this.docEditor.id === row.id);
+      const edit = this.btn(this.t('action.editAccess'), 'btn-outline md:btn-sm md:min-h-8 py-1', {
+        'aria-label': this.t('action.editAccessAria', { file: row.filename }),
+        'aria-expanded': editing ? 'true' : 'false',
+        'aria-describedby': managedId,
+        'data-access-groups-edit-access': row.id,
+      });
+      edit.disabled = row.connectorManaged || editing;
+      edit.addEventListener('click', () => this.openEditor(row.id));
+      actions.push(edit);
+    }
+    if (row.connectorManaged) notes.push(this.el('p', { className: 'text-xs text-base-content/70 break-words max-w-xs', id: managedId, text: this.t('docs.connectorManaged'), attrs: { 'data-access-groups-managed': '' } }));
+    return this.el('tr', { className: 'align-top', attrs: { 'data-access-groups-doc-row': row.id } }, [
+      this.el('td', { className: 'align-top' }, [check]),
+      fileCell,
+      this.el('td', { className: 'hidden lg:table-cell break-words', text: row.docType }),
+      this.el('td', { className: 'hidden md:table-cell min-w-0 max-w-md', attrs: { 'data-access-groups-visible-to': row.id } }, [AccessGroupsAudienceLine(this.doc, view)]),
+      this.el('td', { className: 'hidden lg:table-cell break-words', text: source }),
+      this.el('td', { className: 'min-w-0' }, [this.el('div', { className: 'flex flex-col md:flex-row flex-wrap gap-2' }, actions), ...notes]),
+    ]);
+  }
+
+  // Selection (UI-SPEC 6.4 Selection, 9.10)
+
+  selectableRows() {
+    return this.docs ? this.docs.rows.filter((r) => !r.connectorManaged) : [];
+  }
+
+  toggleRow(id, checked) {
+    const row = this.findDoc(id);
+    if (!row || row.connectorManaged) return;
+    const before = this.docSelected.size;
+    if (checked) this.docSelected.set(id, row);
+    else this.docSelected.delete(id);
+    if (this.docEditor) {
+      this.docEditor = null;
+      this.renderDocuments();
+      const box = this.byData('data-access-groups-select', id)[0];
+      if (box) box.focus();
+    }
+    this.updateSelectionUi(before === 0 && this.docSelected.size > 0);
+  }
+
+  toggleAll(checked) {
+    const before = this.docSelected.size;
+    for (const row of this.selectableRows()) {
+      if (checked) this.docSelected.set(row.id, row);
+      else this.docSelected.delete(row.id);
+    }
+    if (this.docEditor) {
+      this.docEditor = null;
+      this.renderDocuments();
+      if (this.docHeaderCheckbox) this.docHeaderCheckbox.focus();
+    }
+    for (const box of Array.from(this.root.querySelectorAll('[data-access-groups-select]'))) box.checked = this.docSelected.has(box.getAttribute('data-access-groups-select'));
+    this.updateSelectionUi(before === 0 && this.docSelected.size > 0);
+  }
+
+  clearSelection(focusBack) {
+    this.docSelected.clear();
+    for (const box of Array.from(this.root.querySelectorAll('[data-access-groups-select]'))) box.checked = false;
+    this.updateSelectionUi(false);
+    if (focusBack) {
+      const first = Array.from(this.root.querySelectorAll('[data-access-groups-select]')).find((b) => !b.disabled);
+      if (first) first.focus();
+      else this.focusStatus();
+    }
+  }
+
+  updateSelectionUi(announce) {
+    const count = this.docSelected.size;
+    if (this.docHosts.selection) this.docHosts.selection.hidden = count === 0;
+    if (this.selectionCount) this.selectionCount.textContent = this.countText('bulk.selected', count);
+    if (this.docHeaderCheckbox) {
+      const shown = this.selectableRows();
+      const ticked = shown.filter((r) => this.docSelected.has(r.id)).length;
+      this.docHeaderCheckbox.checked = shown.length > 0 && ticked === shown.length;
+      this.docHeaderCheckbox.indeterminate = ticked > 0 && ticked < shown.length;
+      this.docHeaderCheckbox.disabled = shown.length === 0;
+    }
+    if (announce) this.announce(this.countText('bulk.selected', count));
+  }
+
+  // Editor row (UI-SPEC 6.4, 6.2.2)
+
+  newField(rows, many) {
+    const init = accessGroupsInitialChoice(rows);
+    const known = [];
+    for (const r of rows) for (const g of r.groups) known.push(g);
+    return new AccessGroupsAudienceField(this, {
+      groups: this.groupOptions(),
+      known,
+      choice: init.choice,
+      chips: init.chips,
+      mixed: init.mixed,
+      restrictedNow: rows.some((r) => r.kind !== 'everyone'),
+      many,
+      mode: this.fieldMode(),
+    });
+  }
+
+  openEditor(id) {
+    const row = this.findDoc(id);
+    if (!row || row.connectorManaged) return;
+    if (this.docSelected.size) this.clearSelection(false);
+    const ui = accessGroupsUiLib();
+    const field = this.newField([row], false);
+    const titleId = ui.ragUiNextId('rag-access-groups-edit-title');
+    const save = this.btn(this.t('action.saveAccess'), 'btn-primary btn-sm min-h-8 py-1', { 'data-access-groups-save-access': id });
+    const cancel = this.btn(this.t('action.cancelEditing'), 'btn-ghost btn-sm min-h-8 py-1', { 'data-access-groups-cancel-access': id });
+    const errorHost = this.el('div', { className: 'empty:hidden mt-3', attrs: { role: 'alert' } });
+    const current = row.kind === 'uploader_only'
+      ? this.el('div', { className: 'mb-3 min-w-0' }, [this.el('p', { className: 'text-xs text-base-content/70', text: this.t('field.current') }), AccessGroupsAudienceLine(this.doc, buildAccessGroupsAudienceView(row, this.locale))])
+      : null;
+    const container = this.el('div', { className: 'bg-base-100 p-4 rounded min-w-0', attrs: { role: 'group', 'aria-labelledby': titleId, 'data-access-groups-editor': id } }, [
+      this.el('h4', { className: 'text-base font-semibold mb-3 break-words text-balance', id: titleId, text: this.t('edit.title', { file: row.filename }) }),
+      current,
+      field.element,
+      errorHost,
+      this.el('div', { className: 'flex flex-wrap gap-2 mt-4' }, [save, cancel]),
+    ]);
+    container.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || (this.docEditor && this.docEditor.busy)) return;
+      if (event.defaultPrevented) return;
+      if (typeof event.preventDefault === 'function') event.preventDefault();
+      this.closeEditor(true);
+    });
+    field.bindSave(save);
+    save.addEventListener('click', () => this.saveEditor());
+    cancel.addEventListener('click', () => this.closeEditor(true));
+    this.docEditor = { id, row, field, save, cancel, errorHost, container, busy: false };
+    this.renderDocuments();
+    field.focusFirst();
+  }
+
+  closeEditor(focusBack) {
+    const id = this.docEditor ? this.docEditor.id : null;
+    this.docEditor = null;
+    this.renderDocuments();
+    if (focusBack && id) this.focusEditAccess(id);
+  }
+
+  async putAccess(body) {
+    return this.request(ACCESS_GROUPS_PATH + '/documents/access' + this.orgQuery(), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async groupsGone(field, errorHost, message) {
+    errorHost.replaceChildren(this.el('p', { className: 'text-sm text-error break-words', text: message }));
+    this.announce(message, true);
+    await this.loadGroups('quiet');
+    field.setGroups(this.groupOptions());
+    this.announce(message, true);
+  }
+
+  async saveEditor() {
+    const ed = this.docEditor;
+    if (!ed || ed.busy) return;
+    const value = ed.field.value();
+    const body = accessGroupsAccessBody([ed.id], value.choice, value.chips);
+    if (!body) return;
+    ed.busy = true;
+    ed.errorHost.replaceChildren();
+    const restore = accessGroupsUiLib().ragUiButtonBusy(this.doc, ed.save, this.t('save.running'), [ed.cancel]);
+    const result = await this.putAccess(body);
+    restore();
+    ed.busy = false;
+    ed.field.update();
+    if (this.docEditor !== ed) return;
+    if (result && result.ok && result.body && typeof result.body === 'object') {
+      const audiences = (Array.isArray(result.body.audiences) ? result.body.audiences : []).map(buildAccessGroupsDocumentRow).filter(Boolean);
+      const fresh = audiences.find((a) => a.id === ed.id);
+      if (!fresh) {
+        this.docEditor = null;
+        const skipped = accessGroupsCount(result.body.skipped) > 0;
+        this.announce(this.t(skipped ? 'docs.connectorManaged' : 'error.changed'), true);
+        await this.loadDocuments('quiet');
+        return;
+      }
+      const index = this.docs.rows.findIndex((r) => r.id === ed.id);
+      if (index >= 0) this.docs.rows[index] = fresh;
+      this.docEditor = null;
+      this.renderDocuments();
+      const view = buildAccessGroupsAudienceView(fresh, this.locale);
+      this.announce(this.t('save.done', { file: fresh.filename, audience: view.summary }));
+      this.focusEditAccess(ed.id);
+      return;
+    }
+    const mapped = mapAccessGroupsError(result, this.locale, { write: true, unavailable: this.docsUnavailable() });
+    if (mapped.kind === 'groupGone') {
+      await this.groupsGone(ed.field, ed.errorHost, mapped.message);
+      return;
+    }
+    if (mapped.reload) {
+      this.docEditor = null;
+      this.focusStatus();
+      this.announce(mapped.message, true);
+      await this.loadDocuments('quiet');
+      this.announce(mapped.message, true);
+      return;
+    }
+    ed.errorHost.replaceChildren(this.el('p', { className: 'text-sm text-error break-words', text: mapped.message }));
+    this.announce(mapped.message, true);
+  }
+
+  // Bulk dialog (D-17, UI-SPEC decision 7)
+
+  openBulk() {
+    if (this.bulk || this.docSelected.size === 0) return;
+    const ui = accessGroupsUiLib();
+    const rows = [...this.docSelected.values()];
+    const field = this.newField(rows, true);
+    const titleId = ui.ragUiNextId('rag-access-groups-bulk-title');
+    const countId = ui.ragUiNextId('rag-access-groups-bulk-count');
+    const dialog = this.el('dialog', { className: 'modal', attrs: { 'aria-labelledby': titleId, 'aria-describedby': countId, 'data-access-groups-bulk-dialog': '' } });
+    const keep = this.btn(this.t('action.keepAccess'), 'btn-sm min-h-8 py-1', { 'data-access-groups-keep-access': '' });
+    const save = this.btn(this.t('action.saveAccess'), 'btn-primary btn-sm min-h-8 py-1', { 'data-access-groups-bulk-save': '' });
+    const errorHost = this.el('div', { className: 'empty:hidden mt-3', attrs: { role: 'alert' } });
+    const backdropButton = this.el('button', { className: 'cursor-default', text: this.t('action.keepAccess'), attrs: { type: 'submit', tabindex: '-1' } });
+    const backdrop = this.el('form', { className: 'modal-backdrop', attrs: { method: 'dialog' } }, [backdropButton]);
+    const box = this.el('div', { className: 'modal-box min-w-0 max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain' }, [
+      this.el('h3', { className: 'text-base font-semibold mb-1 break-words text-balance', id: titleId, text: this.t('bulk.title') }),
+      this.el('p', { className: 'text-sm mb-4 tabular-nums', id: countId, text: this.countText('bulk.selected', rows.length) }),
+      field.element,
+      errorHost,
+      this.el('div', { className: 'modal-action flex-wrap gap-2' }, [keep, save]),
+    ]);
+    dialog.appendChild(box);
+    dialog.appendChild(backdrop);
+    const state = { dialog, field, keep, save, errorHost, rows, running: false, done: null, followUp: null, finished: false, opener: this.changeAccessButton };
+    this.bulk = state;
+    field.bindSave(save);
+    dialog.addEventListener('cancel', (event) => {
+      if (state.running && typeof event.preventDefault === 'function') event.preventDefault();
+    });
+    backdrop.addEventListener('submit', (event) => {
+      if (state.running && typeof event.preventDefault === 'function') event.preventDefault();
+    });
+    dialog.addEventListener('close', () => this.finishBulk(state));
+    keep.addEventListener('click', () => {
+      if (!state.running) dialog.close('keep');
+    });
+    save.addEventListener('click', () => this.saveBulk(state));
+    this.doc.body.appendChild(dialog);
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    keep.focus();
+  }
+
+  async saveBulk(state) {
+    if (state.running) return;
+    const value = state.field.value();
+    const body = accessGroupsAccessBody(state.rows.map((r) => r.id), value.choice, value.chips);
+    if (!body) return;
+    state.running = true;
+    state.errorHost.replaceChildren();
+    const restore = accessGroupsUiLib().ragUiButtonBusy(this.doc, state.save, this.t('save.running'), [state.keep]);
+    const result = await this.putAccess(body);
+    restore();
+    state.running = false;
+    state.field.update();
+    if (result && result.ok && result.body && typeof result.body === 'object') {
+      state.done = { changed: accessGroupsCount(result.body.changed), skipped: accessGroupsCount(result.body.skipped) };
+      state.dialog.close('save');
+      return;
+    }
+    const mapped = mapAccessGroupsError(result, this.locale, { write: true, unavailable: this.docsUnavailable() });
+    if (mapped.kind === 'groupGone') {
+      await this.groupsGone(state.field, state.errorHost, mapped.message);
+      return;
+    }
+    if (mapped.reload) {
+      state.followUp = mapped;
+      state.dialog.close('keep');
+      return;
+    }
+    state.errorHost.replaceChildren(this.el('p', { className: 'text-sm text-error break-words', text: mapped.message }));
+  }
+
+  async finishBulk(state) {
+    if (state.finished) return;
+    state.finished = true;
+    state.dialog.remove();
+    if (this.bulk === state) this.bulk = null;
+    if (state.done) {
+      const ui = accessGroupsUiLib();
+      let message = this.t('save.doneMany', { count: ui.ragUiFormatNumber(state.done.changed, this.locale) });
+      if (state.done.skipped > 0) message += ' ' + this.t('save.skipped', { count: ui.ragUiFormatNumber(state.done.skipped, this.locale) });
+      this.clearSelection(false);
+      this.focusStatus();
+      this.announce(message);
+      await this.loadDocuments('quiet');
+      this.announce(message);
+      return;
+    }
+    if (state.followUp) {
+      this.clearSelection(false);
+      this.focusStatus();
+      this.announce(state.followUp.message, true);
+      await this.loadDocuments('quiet');
+      this.announce(state.followUp.message, true);
+      return;
+    }
+    const target = state.opener && state.opener.isConnected !== false && this.docSelected.size > 0 ? state.opener : this.statusEl();
+    if (target && typeof target.focus === 'function') target.focus();
+  }
 }
 
 let accessGroupsPanelInstance = null;
@@ -2890,6 +3952,16 @@ if (typeof module !== 'undefined' && module.exports) {
     accessGroupsMemberName,
     buildAccessGroupsImpactView,
     accessGroupsCountLabel,
+    buildAccessGroupsDocumentRow,
+    buildAccessGroupsDocumentsList,
+    buildAccessGroupsAudienceView,
+    AccessGroupsAudienceLine,
+    accessGroupsAudienceKey,
+    accessGroupsInitialChoice,
+    accessGroupsFieldFindings,
+    accessGroupsAccessBody,
+    accessGroupsSourceLabel,
+    AccessGroupsAudienceField,
     AccessGroupsPanel,
     initAccessGroupsPanel,
   };
