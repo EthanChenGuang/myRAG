@@ -201,9 +201,12 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
       'rag_get_document_for_type_change',
       'rag_golden_evidence_register',
       'rag_term_corpus_df',
-      // 0983 (06.2-15): writes the tenant's scope centroids (mean vectors) and returns per-kind group and chunk counts only.
-      'rag_scope_centroids_rebuild',
     ],
+  },
+  {
+    reason:
+      'Scope gate (0983, 06.2-15): a service-role rebuild of derived tenant-level centroids; its output is used only as an in/out scope score, never returned as content.',
+    functions: ['rag_scope_centroids_rebuild'],
   },
   {
     reason: 'Statistics: counts, shares or coverage per tenant, language or profile; no row content and no document id.',
