@@ -67,6 +67,7 @@ import {
   type ReleasedRules,
 } from './security/injection-check';
 import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
+import { runSourceRecheckStage, type SourceRecheckMarker } from './retrieval/source-recheck';
 import { hybridRerank } from './rerank/local-hybrid';
 import { assertTenantScope, scopeKey, type TenantScope } from './tenant/scope';
 import { createTraceCollector, sanitizeStageCounts, type TraceCollector } from './trace/collector';
@@ -918,6 +919,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
   let injectionMarks: InjectionMarks | null = null;
+  let sourceRecheck: SourceRecheckMarker | undefined;
   const security = deps.securityConfig();
 
   try {
@@ -975,6 +977,21 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         },
       );
       if (!exact.skipped && exact.value.rows.length > 0) rankInput = mergeExactCandidates(searched.results, exact.value.rows, maxResults);
+    }
+
+    if (config.sourceRecheck) {
+      // D-19, D-38: after the last step that adds candidates and before ranking; a failed recheck keeps them and degrades the result.
+      const recheck = await runSourceRecheckStage({
+        spec: spec('source_recheck', 'skip'),
+        signal,
+        collector,
+        scope,
+        client: () => requireAdminSearchClient(deps),
+        items: rankInput,
+        chunkIdOf: (item) => item.chunk_id,
+      });
+      rankInput = recheck.items;
+      sourceRecheck = recheck.marker ?? undefined;
     }
 
     const ranked = await runStage(
@@ -1102,7 +1119,11 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
           : 'no_relevant_context'
         : injectionReason(records, injectionStalled);
 
-  const base = { ...failure(collector, status, reason, queryContext), ...(injection ? { injection } : {}) };
+  const base = {
+    ...failure(collector, status, reason, queryContext),
+    ...(injection ? { injection } : {}),
+    ...(sourceRecheck ? { sourceRecheck } : {}),
+  };
   if (!assembly) return { ...base, candidates };
 
   return {
