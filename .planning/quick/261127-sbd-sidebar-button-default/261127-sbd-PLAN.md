@@ -1,6 +1,6 @@
 ---
 quick_id: 261127-sbd
-status: planned
+status: complete
 ---
 
 # Plan: sidebar button falls back to its defaults when the server value is empty
