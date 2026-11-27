@@ -1,4 +1,10 @@
 import { createHash } from 'node:crypto';
+import rawOutputCaps from '../../../../eval/config/output-caps.json';
+import type { AnswerConfig } from '../generation/answer-config';
+import { registryPackVersion } from '../lang/texts';
+import { outputGuardRulesVersion } from '../security/credential-rules';
+import { TLD_SNAPSHOT_VERSION } from '../security/link-targets';
+import type { BackendIndexParams } from '../backend/index-params';
 import type { AttributeFilterConfig, RetrievalParams, TerminologyParams } from '@/lib/rag-eval/contracts.generated';
 import type { AttributeFilterMode, IterativeScanMode, RagConfig, RerankerKind, RerankTier } from '../config';
 import type { InjectionCheckMode, SecurityConfig, ToolResultGuardMode } from '../security/config';
@@ -66,6 +72,73 @@ export function securityHashComponent(
   };
 }
 
+/** Phase 5.2 D-58: the answer rules an answer was produced under; present only while a prompt- or output-affecting switch is on. */
+export interface RetrievalConfigHashAnswerRules {
+  registryTexts: boolean;
+  partialAnswerRule: boolean;
+  contextRelevanceRule: boolean;
+  citationPerSentence: boolean;
+  versionLabels: boolean;
+  maxOutputTokens: 'off' | 'auto' | number;
+  outputGuard: AnswerConfig['outputGuard'];
+  /** The registry pack versions: every composed part and notice is a registry text. */
+  packVersion: string;
+  /** While the guard is on: the output-guard rule set and the public TLD snapshot it decides bare domains with. */
+  outputGuardRulesVersion?: string;
+  tldVersion?: string;
+  /** While RAG_MAX_OUTPUT_TOKENS is auto: the committed per-mode caps file. */
+  outputCapsVersion?: string;
+}
+
+export type AnswerRulesHashConfig = Pick<
+  AnswerConfig,
+  'registryTexts' | 'partialAnswerRule' | 'contextRelevanceRule' | 'citationPerSentence' | 'versionLabels' | 'maxOutputTokens' | 'outputGuard'
+>;
+
+let committedCapsVersion: string | null = null;
+
+/** SHA-256 (first 12 hex characters) of the canonical committed output-caps file. */
+function outputCapsVersion(): string {
+  committedCapsVersion ??= createHash('sha256').update(canonicalJson(rawOutputCaps), 'utf8').digest('hex').slice(0, 12);
+  return committedCapsVersion;
+}
+
+/**
+ * D-58, RESEARCH Pitfall 24: null while every prompt- or output-affecting Phase 5.2 switch is at its default, so the hash keeps
+ * its pre-5.2 value; otherwise the switches and the versions of the data they read. The claim check, the judge, security events
+ * and uploader holds change no answer text and stay out.
+ */
+export function answerRulesHashComponent(
+  config: AnswerRulesHashConfig,
+  options: { packVersion?: string; guardRulesVersion?: string; tldVersion?: string; capsVersion?: string } = {},
+): RetrievalConfigHashAnswerRules | null {
+  const cap = config.maxOutputTokens;
+  const on =
+    config.registryTexts ||
+    config.partialAnswerRule ||
+    config.contextRelevanceRule ||
+    config.citationPerSentence ||
+    config.versionLabels ||
+    cap.kind !== 'off' ||
+    config.outputGuard !== 'off';
+  if (!on) return null;
+  const guardOn = config.outputGuard !== 'off';
+  return {
+    registryTexts: config.registryTexts,
+    partialAnswerRule: config.partialAnswerRule,
+    contextRelevanceRule: config.contextRelevanceRule,
+    citationPerSentence: config.citationPerSentence,
+    versionLabels: config.versionLabels,
+    maxOutputTokens: cap.kind === 'fixed' ? cap.value : cap.kind,
+    outputGuard: config.outputGuard,
+    packVersion: options.packVersion ?? registryPackVersion(),
+    ...(guardOn
+      ? { outputGuardRulesVersion: options.guardRulesVersion ?? outputGuardRulesVersion(), tldVersion: options.tldVersion ?? TLD_SNAPSHOT_VERSION }
+      : {}),
+    ...(cap.kind === 'auto' ? { outputCapsVersion: options.capsVersion ?? outputCapsVersion() } : {}),
+  };
+}
+
 /** The query layer's setup (D-04, research A-7); present only while the layer is on, so a Phase 4 hash is unchanged. */
 export interface RetrievalConfigHashQueryLayer {
   framework: string;
@@ -126,6 +199,8 @@ export const ATTRIBUTE_STATE_SKIPPED = 'attribute:skipped';
 
 export interface RetrievalConfigHashInput {
   backendId: string;
+  /** D-24: an external backend's index parameters (backendIndexParams); absent for pgvector, so its hash keeps its value. */
+  backendIndex?: BackendIndexParams | null;
   embeddingProfileId: string;
   lexicalVersion: number;
   rerankTextVersion: number;
@@ -136,6 +211,8 @@ export interface RetrievalConfigHashInput {
   switches: RetrievalConfigHashSwitches;
   /** Present only when a 5.1 switch is not at its default (securityHashComponent). */
   security?: RetrievalConfigHashSecurity | null;
+  /** Phase 5.2 D-58: present only while a prompt- or output-affecting answer switch is on (answerRulesHashComponent). */
+  answerRules?: RetrievalConfigHashAnswerRules | null;
   /** Doc type to binding profile id of the legs planned for the request; omitted (or empty) when none is planned. */
   embeddingBindings?: Record<string, string> | null;
   /** Eval only: the doc type of the control leg. */
@@ -231,6 +308,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
   return {
     active_chunking_profiles: chunkingForHash(input.activeChunkingProfiles),
     backend_id: input.backendId,
+    ...(input.backendIndex ? { backend_index: input.backendIndex } : {}),
     embedding_profile_id: input.embeddingProfileId,
     lexical_version: input.lexicalVersion,
     params: paramsForHash(input.params),
@@ -239,6 +317,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     switches: input.switches,
     thresholds_config_hash: input.switches.refusalThreshold ? input.thresholdsConfigHash : null,
     ...(input.security ? { security: input.security } : {}),
+    ...(input.answerRules ? { answer_rules: input.answerRules } : {}),
     ...(input.embeddingBindings && Object.keys(input.embeddingBindings).length > 0 ? { embedding_bindings: input.embeddingBindings } : {}),
     ...(input.domainControlLeg ? { domain_control_leg: input.domainControlLeg } : {}),
     ...(input.effectiveOn ? { effective_on: input.effectiveOn } : {}),

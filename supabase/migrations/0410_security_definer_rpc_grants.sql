@@ -64,6 +64,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_access_groups_on_org_member_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_access_groups_on_org_member_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_access_groups_on_org_member_delete() TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_activate_embedding_profile(text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_activate_embedding_profile(text, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_activate_embedding_profile(text, text) TO service_role;

@@ -264,6 +264,13 @@
     "InjectionReport": {
       "additionalProperties": false,
       "properties": {
+        "allowlisted_link_kept_rate": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MetricValue"
+          },
+          "title": "Allowlisted Link Kept Rate",
+          "type": "object"
+        },
         "attack_success_rate": {
           "additionalProperties": {
             "$ref": "#/$defs/MetricValue"

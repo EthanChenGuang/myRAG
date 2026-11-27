@@ -1,6 +1,7 @@
 import type { RpcClient } from '../backend/supabase-rpc';
 import { redisvlInvalidationTarget } from '../cache/emit';
 import { recomputeDirtyDupClusters } from '../dedupe/cluster';
+import { kickVectorSync } from '../sync/kick';
 import { scheduleAfterResponse } from '../trace/schedule';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { getIngestDeps } from './deps';
@@ -82,6 +83,7 @@ export async function softDeleteLineage(
   const returnedLineage = text(row, 'lineage_id');
   if (returnedLineage !== lineageId) return { ok: false, reason: 'unavailable' };
   const jobId = text(row, 'job_id');
+  kickVectorSync();
   // D-20: the 0853 triggers marked the lineage's clusters dirty; switch-gated and non-fatal.
   if (outcome === 'deleted') await recomputeDirtyDupClusters(scope, { signal: options.signal, ...(options.deps ? { db: options.deps.db() } : {}) });
   const cache = redisvlInvalidationTarget();

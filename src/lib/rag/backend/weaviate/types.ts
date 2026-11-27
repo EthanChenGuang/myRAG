@@ -82,7 +82,7 @@ export interface WeaviateTenantCollection {
     insertMany(objects: WeaviateInsertObject[]): Promise<WeaviateInsertResult>;
     deleteMany(where: WeaviateFilterValue, opts?: { dryRun?: boolean; verbose?: boolean }): Promise<WeaviateDeleteResult>;
   };
-  aggregate: { overAll(): Promise<{ totalCount: number }> };
+  aggregate: { overAll(opts?: { filters?: WeaviateFilterValue }): Promise<{ totalCount: number }> };
 }
 
 export interface WeaviateTenantInfo {
@@ -103,6 +103,7 @@ export interface WeaviateCollectionHandle {
 export interface WeaviateClientLike {
   collections: {
     use(name: string): WeaviateCollectionHandle;
+    listAll(): Promise<Array<{ name: string }>>;
     exists(name: string): Promise<boolean>;
     create(config: Record<string, unknown>): Promise<unknown>;
     export(name: string): Promise<{ description?: string | null }>;

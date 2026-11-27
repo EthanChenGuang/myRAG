@@ -108,6 +108,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_DOC_ACCESS_GROUPS",
+      "side": "query"
+    },
+    {
       "name": "RAG_DOC_ATTRIBUTES",
       "side": "query"
     },
@@ -160,6 +164,10 @@
       "name": "RAG_EMBEDDING_PROFILES",
       "side": "both",
       "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_EMBED_ACCESS_GROUP",
+      "side": "query"
     },
     {
       "name": "RAG_EMBED_BATCH_MODE",

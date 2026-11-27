@@ -759,10 +759,141 @@ function registerRagGateRoutes(app, runner) {
   });
 }
 
+/** Names POST /api/config may empty with { clear: [...] }; write-only values the UI cannot otherwise remove (UI-SPEC 6.12). */
+const clearableNames = Object.freeze(['RAG_MONITOR_WEBHOOK_URL']);
+
+const RAG_GATE_REQUIRED_MESSAGE =
+  'This change affects RAG answers. Run the setting check in the Config UI and save once it passes, or save with a typed reason.';
+const RAG_GATE_INVALID_REASON_MESSAGE = 'An override reason must be 10 to 500 characters.';
+const MODE_RANK = { off: 0, warn: 1, enforce: 2 };
+
+function refuseWith(status, error, message) {
+  return { ok: false, status, body: message ? { success: false, error, message } : { success: false, error } };
+}
+
+function gateRequired() {
+  return refuseWith(409, 'rag_gate_required', RAG_GATE_REQUIRED_MESSAGE);
+}
+
+/** The three accepted ragGate shapes of UI-SPEC 8.1, strictly: { check_id }, { override: { reason }, check_id? }, { skipped: true }. */
+function parseRagGate(value) {
+  if (value === undefined || value === null) return { ok: true, value: null };
+  if (!isPlainObject(value)) return { ok: false };
+  const keys = Object.keys(value);
+  const only = (allowed) => keys.every((key) => allowed.includes(key));
+  if (Object.prototype.hasOwnProperty.call(value, 'override')) {
+    if (!only(['override', 'check_id'])) return { ok: false };
+    if (value.check_id !== undefined && typeof value.check_id !== 'string') return { ok: false };
+    const override = value.override;
+    if (!isPlainObject(override) || Object.keys(override).some((key) => key !== 'reason') || typeof override.reason !== 'string') return { ok: false };
+    return { ok: true, value };
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'skipped')) {
+    return only(['skipped']) && value.skipped === true ? { ok: true, value } : { ok: false };
+  }
+  if (only(['check_id']) && typeof value.check_id === 'string') return { ok: true, value };
+  return { ok: false };
+}
+
+function defaultMakeClient(values) {
+  const url = values && typeof values.NEXT_PUBLIC_SUPABASE_URL === 'string' ? values.NEXT_PUBLIC_SUPABASE_URL.trim() : '';
+  const key = values && typeof values.SUPABASE_SERVICE_ROLE_KEY === 'string' ? values.SUPABASE_SERVICE_ROLE_KEY.trim() : '';
+  if (!url || !key) return null;
+  const { createClient } = require('@supabase/supabase-js');
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+/**
+ * D-10, D-15, D-16: decides one config-server write of .env.local before anything is written.
+ * Mode off (the stricter of the process value and the file's RAG_CONFIG_GATE) returns at once without reading a check or
+ * creating a client. A save that changes no RAG-affecting name is written without a check. Otherwise enforce needs a passed check
+ * of the proposed hash or a typed reason, and every written RAG-affecting change gets a change record; an override whose record
+ * cannot be written is refused with 503. Warn never blocks. Never throws: an internal failure refuses with 409 in enforce.
+ * @param {{ before: Record<string, string>, after: Record<string, string>, ragGate?: unknown, repoRoot: string, mode?: string,
+ *   processEnv?: Record<string, string | undefined>, makeClient?: (values: Record<string, string>) => object | null,
+ *   route?: string, log?: (line: string, data?: object) => void, loadNames?: () => string[] }} input
+ * @returns {Promise<{ ok: true, ragGate: { record_id: string, gate_result: string } | null } | { ok: false, status: number, body: object }>}
+ */
+async function guardEnvWrite(input) {
+  const before = isPlainObject(input && input.before) ? input.before : {};
+  const after = isPlainObject(input && input.after) ? input.after : {};
+  const route = input && typeof input.route === 'string' ? input.route : 'config';
+  const log = (input && input.log) || ((line, data) => console.log(line, data || ''));
+  const processEnv = (input && input.processEnv) || process.env;
+  const fromProcess = gateCore.normaliseMode(input && input.mode !== undefined ? input.mode : processEnv.RAG_CONFIG_GATE);
+  const fromFile = gateCore.normaliseMode(before.RAG_CONFIG_GATE);
+  const mode = MODE_RANK[fromFile] > MODE_RANK[fromProcess] ? fromFile : fromProcess;
+  if (mode === 'off') return { ok: true, ragGate: null };
+
+  try {
+    const keys = (typeof input.loadNames === 'function' ? input.loadNames : names)();
+    if (!Array.isArray(keys) || keys.length === 0) throw new Error('rag-affecting list unavailable');
+    if (ragAffectingDiff(before, after, keys).length === 0) return { ok: true, ragGate: null };
+
+    const parsed = parseRagGate(input.ragGate);
+    if (!parsed.ok && mode === 'enforce') return refuseWith(400, 'invalid_rag_gate', RAG_GATE_REQUIRED_MESSAGE);
+    const ragGate = parsed.ok ? parsed.value : null;
+
+    const repoRoot = path.resolve(input.repoRoot);
+    let matched = null;
+    const decision = await gateCore.decideSave({
+      mode,
+      before,
+      after,
+      ragGate,
+      names: keys,
+      readCheck: (id) => {
+        matched = gateCore.readCheck(repoRoot, id);
+        return matched;
+      },
+    });
+    if (decision.kind === 'refuse') {
+      log('[Config Gate] save refused', { route, error: decision.error });
+      return decision.error === 'invalid_reason'
+        ? refuseWith(400, 'invalid_reason', RAG_GATE_INVALID_REASON_MESSAGE)
+        : gateRequired();
+    }
+
+    const row = gateCore.buildChangeRecord({
+      actor: 'local-config-ui',
+      source: 'config_ui',
+      before,
+      after,
+      names: keys,
+      gateResult: decision.gateResult,
+      check: decision.checkId ? matched : null,
+      overrideReason: decision.overrideReason,
+    });
+
+    let inserted = { ok: false, reason: 'insert_failed' };
+    try {
+      const makeClient = input.makeClient || defaultMakeClient;
+      const client = await makeClient(before);
+      if (client) inserted = await gateCore.insertChangeRecord(client, row);
+    } catch {
+      inserted = { ok: false, reason: 'insert_failed' };
+    }
+
+    if (!inserted.ok) {
+      log('[Config Gate] change record insert failed', { route, result: decision.gateResult, changed: row.changed_keys.length });
+      if (decision.overrideReason !== null && mode === 'enforce') return refuseWith(503, 'rag_gate_record_failed');
+      return { ok: true, ragGate: null };
+    }
+
+    log('[Config Gate] save recorded', { route, result: decision.gateResult, recordId: inserted.id, changed: row.changed_keys.length });
+    return { ok: true, ragGate: { record_id: inserted.id, gate_result: decision.gateResult } };
+  } catch {
+    log('[Config Gate] guard failed', { route, mode });
+    return mode === 'enforce' ? gateRequired() : { ok: true, ragGate: null };
+  }
+}
+
 module.exports = {
   CHECK_TIMEOUT_MS,
   CHILD_ENV_ALLOWLIST,
+  clearableNames,
   createRagGateRunner,
+  guardEnvWrite,
   proposalUpdates,
   registerRagGateRoutes,
 };

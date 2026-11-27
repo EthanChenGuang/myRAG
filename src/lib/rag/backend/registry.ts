@@ -36,12 +36,14 @@ function requiredCapabilities(request: Pick<BackendSearchRequest, 'versionScope'
 }
 
 /**
- * The backend that serves a request (research pitfall 13): the selected one when it declares every optional field the request carries,
- * otherwise the pgvector backend, which honours them all, with reason backend_field_unsupported. A request without such a field always
- * gets the selected backend.
+ * The backend that serves a request (research pitfall 13): the selected one (the request's resolved backend, 07-12; the registry's
+ * backend when absent) when it declares every optional field the request carries, otherwise the pgvector backend, which honours them
+ * all, with reason backend_field_unsupported. A request without such a field always gets the selected backend.
  */
-export function backendForRequest(request: Pick<BackendSearchRequest, 'versionScope' | 'identifiersNorm'>): BackendRoute {
-  const selected = getRetrievalBackend();
+export function backendForRequest(
+  request: Pick<BackendSearchRequest, 'versionScope' | 'identifiersNorm'>,
+  selected: RetrievalBackend = getRetrievalBackend(),
+): BackendRoute {
   const needed = requiredCapabilities(request);
   if (needed.every((field) => selected.capabilities?.[field] === true)) return { backend: selected };
   defaultBackend ??= buildDefaultBackend();

@@ -23,6 +23,7 @@ const PANELS = [
   { file: 'embedding-profiles.js', rootId: 'rag-administration-profiles', instance: 'embeddingProfilesPanel' },
   { file: 'embedding-bindings.js', rootId: 'rag-administration-bindings', instance: 'embeddingBindingsPanel' },
   { file: 'question-sources.js', rootId: 'rag-administration-question-sources', instance: 'questionSourcesPanel', deps: ['../utils/safe-dom.js', 'gates-ui.js'] },
+  { file: 'monitor.js', rootId: 'rag-administration-monitor', instance: 'monitorPanel', deps: ['../utils/safe-dom.js', 'gates-ui.js'] },
 ] as const;
 
 function addLink(doc: FakeDocument, label: string): FakeElement {

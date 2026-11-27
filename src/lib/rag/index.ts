@@ -226,6 +226,9 @@ export {
   type TextsSource,
 } from './generation/answer-turn';
 export { guardChannelReply, guardSummaryText, guardVoiceTranscript } from './security/channel-reply-guard';
+export { applyAnswerPipelineToText, type AnswerTextPipelineResult } from './generation/answer-transforms';
+export { buildSentenceRecords } from './generation/sentences-record';
+export { attributeSourceChunks } from './security/security-events';
 export { formatGuardedLinks, linkUsageInstructions } from './security/link-section';
 export type { ChannelReplyGuardInput, ChannelReplyGuardResult, SummaryGuardInput, VoiceTranscriptMessage } from './security/channel-reply-guard';
 export { recordOutputGuardEvents } from './security/security-events';
@@ -732,3 +735,35 @@ export { IMPORT_LIMITS, importQuestions, parseQuestionFile, prepareQuestions, Qu
 export type { ImportCounts, PreparedQuestions, QuestionFileFormat } from './monitor/questions-import';
 export { guardAppEnvWrite, RAG_GATE_INVALID_REASON_MESSAGE, RAG_GATE_REQUIRED_MESSAGE } from './config-gate/guard';
 export type { AppGuardRoute, GuardAppEnvWriteInput, GuardAppEnvWriteResult } from './config-gate/guard';
+export { DRAIN_DEFAULT_BUDGET_MS, drainSlice, drainUntilEmpty } from './sync/drain';
+export type { DrainSliceOptions, DrainUntilEmptyOptions } from './sync/drain';
+export { RECONCILE_DEFAULT_BUDGET_MS, reconcileSlice } from './sync/reconcile';
+export type { ReconcileSliceOptions, ReconcileSliceResult } from './sync/reconcile';
+export { checkVectorSyncAccess } from './sync/auth';
+export type { VectorSyncAccessResult } from './sync/auth';
+export { runVectorSyncSlice } from './sync/slice';
+export type { RunVectorSyncSliceOptions, VectorSyncMode } from './sync/slice';
+export type { RpcClient } from './backend/supabase-rpc';
+export {
+  buildVectorSyncStores,
+  defaultStoreFactories,
+  isVectorSyncTarget,
+  listVectorSyncTargets,
+  readEnabledTargets,
+  readVectorSyncStatus,
+  setVectorSyncTarget,
+  VECTOR_SYNC_TARGETS,
+} from './sync/targets';
+export type { SetVectorSyncTargetResult, VectorStoreFactories, VectorSyncTargetFlag, VectorSyncTargetStatus } from './sync/targets';
+export { resolveVectorSyncAdminRpc } from './sync/admin-rpc';
+export { computeIndexCompat, envLoadedAt, INDEX_COMPAT_STORE_TIMEOUT_MS, readIndexCompat } from './backend/index-compat';
+export type {
+  IndexCompatBackend,
+  IndexCompatCode,
+  IndexCompatInput,
+  IndexCompatReport,
+  IndexCompatView,
+  IndexCompatWarning,
+  ProfileStateCounts,
+} from './backend/index-compat';
+export type { VectorStore, VectorSyncTarget } from './sync/stores/types';

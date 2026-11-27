@@ -107,6 +107,8 @@ export const RUN_CONFIG_CONSTRAINED_VALUES: Readonly<Record<string, readonly str
   VOYAGE_API_KEY: ['', 'proxy-injected', RUN_CONFIG_FIXTURE_KEY_TOKEN],
   COHERE_BASE_URL: ['', 'https://api.cohere.com'],
   VOYAGE_BASE_URL: ['', 'https://api.voyageai.com/v1'],
+  // D-42: the output-guard run allowlists the fixture corpus's own link host and nothing else.
+  RAG_OUTPUT_LINK_ALLOWLIST: ['', 'help.fixture-site.example'],
 };
 
 /**

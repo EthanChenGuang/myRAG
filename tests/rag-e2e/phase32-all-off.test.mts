@@ -39,6 +39,9 @@ const ADDITIVE_JSON_KEYS: Record<string, ReadonlySet<string>> = {
 
 /** Seed rows of later migrations, not of a write path: 0440 (Phase 3.1.1) adds three catalog profiles to embedding_profiles. */
 const MIGRATION_SEEDED_TABLES = new Set(['embedding_profiles']);
+// Tables a later migration creates together with a fixed seed row; they hold exactly that seed, never a row the all-off paths wrote.
+// 0920 (04.3-02) seeds the single rag_access_group_settings row (enforced false); no app path writes the table.
+const MIGRATION_SEEDED_NEW_TABLES = new Map<string, number>([['rag_access_group_settings', 1]]);
 
 interface Reference {
   recorded_from: string;
@@ -159,7 +162,9 @@ describe('Phase 3.2 all off: ingestion and retrieval equal the tree before the p
     for (const pathName of PATHS) {
       const counts = current.paths[pathName].table_rows;
       const recorded = reference.snapshot.paths[pathName].table_rows;
-      const newTables = Object.entries(counts).filter(([table, count]) => !before.has(table) && count !== 0);
+      const newTables = Object.entries(counts).filter(
+        ([table, count]) => !before.has(table) && count !== (MIGRATION_SEEDED_NEW_TABLES.get(table) ?? 0),
+      );
       assert.deepEqual(newTables, [], `${pathName}: rows in tables this phase or a later one created`);
       const changed = Object.entries(recorded).filter(([table, count]) => !MIGRATION_SEEDED_TABLES.has(table) && counts[table] !== count);
       assert.deepEqual(changed, [], `${pathName}: row counts of tables that existed before`);

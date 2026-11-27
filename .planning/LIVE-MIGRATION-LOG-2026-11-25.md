@@ -1143,3 +1143,51 @@ Numbers are unique across `supabase/migrations` (0706 in the 07 block, 0900-0902
 - Corpus hash (f95a702d...), both phase42 dump digests and the fingerprint backfill count (149 + 3) are re-pinned for the three sec-link-topics documents. Local gates: tsc 0 errors, check-config and check-rag-boundary ok, `tests/rag-db/*.test.mts` 4087 tests, 0 failed.
 - Setup files after the PR #125 merge: main's Phase 4.1.1 section (0471-0473) follows Phase 6, then the Phase 6.1 section closes the file; `schema-equality.test.mts` and AGENTS.md list both folds.
 - Merge conflicts (both intents kept): `feedback_loop.py` / `review-access.ts` / `exports.ts` / review item route (05.2 check reasons and check_details plus 05.3 sample reasons, `source` and `getReviewItemWithSource`; golden export keeps the Python twin's channel and reason enums plus `source`); `src/lib/rag/index.ts` (union of exports); setup files (train 32's Phase 5.1.1 and Phase 6 sections, then the 06.1-18 Phase 6.1 section, header now "after 0603"); `schema-equality.test.mts`, `agents-guide.test.ts`, `AGENTS.md` (all three folds); `config-server.js` (train 32's encoded wildcard join); `sources-provider.tsx` / `sources-sidebar.tsx` (04.2-26 provenance fields and 05.2 version line both kept); `answer-checks.ts` / `answer-turn.ts` (05.2-22 version_conflict); `review-labelling.js` (both reason lists; check-raised items skip the answer check and chunks load); eval fixture count tests (sums of both additions). `ingestion-schema` replays 0706 in its 0351 re-run; `ingest-mode-routing` leaves the link-injection items out of the train-30 comparison.
+
+## Train 34: 0708, 0709, 0740, 0920 and 0410 r17 (to apply after train 34 reaches `origin/main`)
+
+Branch `ci/merge-train-34`, built on `ci/merge-train-33` (45ef38b8) with `origin/main` merged after PR #127 (train 33) landed as f0a990cd; main's tree equals train 33's, so that merge changes nothing. Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+All 23 branches carry their own SUMMARY and are merged with `--no-ff` in this order; none skipped. `exec/04.3-03`, `exec/05.3-43` and `exec/05.2-38` are still in progress and are not in this train.
+
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/03.2.1-03` | 03.2.1-03 BGE-M3 in the profile comparison, inactive-profile parity | none |
+| `exec/03.2.1-05` | 03.2.1-05 BGE-M3 live verification record | none |
+| `exec/04.1.1-15` | 04.1.1-15 summary (its other content was already in train 33) | none |
+| `exec/04.3-01` | 04.3-01 access-group switch and embed group setting | none |
+| `exec/04.3-02` | 04.3-02 access group stores and seam inventory | 0920 (common, single-, multi-tenant); 0410 entry (r17) |
+| `exec/05.2-31` | 05.2-31 eval answer path runs the production composition | none |
+| `exec/05.2-32` | 05.2-32 Phase 5.2 metrics, gates and CI wiring (`eval-smoke-p52`) | none |
+| `exec/05.2-26` | 05.2-26 output-cap sweep and judge calibration | none |
+| `exec/05.3-23`, `-38`, `-39`, `-40`, `-42`, `-44`, `-45` | 05.3 config-server save guard, release-gate workflow, required `pr-smoke` check, weekly gates, pre-save check dialog, monitoring panel, test set coverage | none |
+| `exec/07-12` | 07-12 backend factory, readiness and pgvector fallback | none |
+| `exec/07-13` | 07-13 drain route, kick, CLI and scheduler recipe | 0708 |
+| `exec/07-14` | 07-14 cross-tenant canary suite | none |
+| `exec/07-15` | 07-15 index-compat warning and sync-target admin routes | 0709 |
+| `exec/07-16` | 07-16 backend canary CI job (`backend-canary`) | none |
+| `exec/07-35` | 07-35 vector sync purges and stale-id repair | 0740 |
+| `exec/07-36` | 07-36 purges in the drain, vendor stores and reconcile | none (`supabase/optional/vector-sync-schedule.sql` is optional) |
+| `exec/05-26` | 05-26 live verification summary | none |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0708_vector_sync_status.sql` | Needs 0701 (live). `rag_vector_sync_status()`: counts per target only. SECURITY INVOKER, empty search_path, service_role only. **DROP:** `DROP FUNCTION IF EXISTS public.rag_vector_sync_status()`, re-created at once. |
+| 2 | `0709_backend_index_state_counts.sql` | Needs 0707 (live). `rag_backend_index_state_counts()`: tenants per (target, profile, state). SECURITY INVOKER, service_role only. **DROP:** `DROP FUNCTION IF EXISTS public.rag_backend_index_state_counts()`, re-created at once. |
+| 3 | `0740_vector_sync_purge.sql` | Needs 0701-0707 (live). Tables `vector_sync_purges`, `vector_sync_purge_targets` (IF NOT EXISTS) and the purge enqueue, row, complete, status, purged-documents, reopen and stale-enqueue functions (CREATE OR REPLACE); grants in the file, service_role only. The 0703 claim functions are unchanged. **DROP:** none. |
+| 4 | `0920_access_groups_tables.sql` | Needs 0942 (live, `rag_security_events`). Access group, member, settings (one row, `enforced` false), connector map, sharing rules, document principals, access security events and audit tables, RLS on. **DROP:** `DROP TRIGGER IF EXISTS` for `rag_access_groups_immutable_key` and `rag_connector_group_map_same_tenant`, `DROP POLICY IF EXISTS rag_access_group_members_select_own`, each re-created at once. |
+| 5 | `0920_access_groups_tables.multi-tenant.sql` | After 4. `organization_id` NOT NULL with a cascading foreign key, generated `tenant_key` `o:<organization_id>`, member insert requires an `organization_members` row, deleting it removes the memberships (SECURITY DEFINER trigger function `rag_access_groups_on_org_member_delete`). **DROP:** `DROP TRIGGER IF EXISTS` for `rag_access_group_members_require_org_member` and `rag_access_groups_on_org_member_delete` (on `organization_members`), each re-created at once. Apply with the owner present (trigger on `organization_members`). The `.single-tenant.sql` variant is not for production. |
+| 6 | `0410_security_definer_rpc_grants.sql` (r17) | +4 lines since r16: guarded REVOKE/GRANT (service_role only) for `rag_access_groups_on_org_member_delete()`. Grants only; run it last. |
+
+Numbers are unique across `supabase/migrations` (0708, 0709 after 0707; 0740 in the 07 block; 0920 with its two mode files in the 4.3 block). None is folded into the setup files; all are idempotent (CREATE OR REPLACE, IF NOT EXISTS, DROP ... IF EXISTS before each CREATE TRIGGER, CREATE POLICY and plain CREATE FUNCTION). The combined live SQL (the five files verbatim in this order, each after a `-- ==== <file>` line, then the 0410 r17 delta as a `DO $r17$` block, with the DROP sections listed in its header) is `train34-live.sql` in the orchestrator scratchpad.
+
+### Operator actions
+- Apply the table above after train 33 is live; 0920 multi-tenant with the owner present.
+- Every new switch ships off (access groups `RAG_DOC_ACCESS_GROUPS`, external vector backends, the vector sync kick does nothing while no target is enabled). Two new npm scripts (`rag:vector-sync`, `rag:reconcile`); no new npm package.
+
+### Deviations
+- Baselines: kept train 33's `fixture-baseline.json` and `fixture-ingest-baseline.json` (05.2-32 re-recorded the same fixture inputs on train 32; the two differ only in run metadata). The explicit-legacy smoke tiers on the merged tree report `paired.all_zero == true` for both, so nothing is re-recorded.
+- Conflict resolutions (both intents kept): `src/lib/rag/index.ts` (union of exports, train 33's `guardVoiceTranscript` kept); `eval/harness/run-nightly.mts` and `run-smoke.mts` (both new CLI options); `rag-eval/trace.ts`, `v2/config-hash.ts`, the eval run route (05.2 answer-rule fields and 07-12 `retrieval_backend` together); `.github/workflows/pr-smoke.yml` and `check-workflows.py` (the `backend-canary` job and the `pr-smoke` aggregate; the aggregate now needs `eval-smoke-p52` and `backend-canary` too, because it must list every other job); `config-security-events-panel.test.ts` (05.3-42's stricter CSS assertion, which holds on the tree); fixture count and comment hunks and `ingest-mode-routing.test.mts` take train 33's version (its link-injection accounting replaces 05.2-32's filter for the same items); `schema-equality.test.mts` and `AGENTS.md` keep train 33's Phase 6.1 fold.
+- Train fix: 07-13's kick imports `after` from `next/server` in the ingest writer, which the PGlite harness reaches statically, so four tests that set the global AsyncLocalStorage after their static imports failed at load. `tests/helpers/next-async-storage.mts` is imported first in them.

@@ -129,6 +129,21 @@
         "profile_id": {
           "title": "Profile Id",
           "type": "string"
+        },
+        "serving": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ServingModeMeasurement"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Serving"
         }
       },
       "required": [
@@ -153,6 +168,120 @@
         "candidates"
       ],
       "title": "ProfileMetricBlocks",
+      "type": "object"
+    },
+    "ServingModeMeasurement": {
+      "additionalProperties": false,
+      "description": "Throughput, query latency and cost of one serving mode of a profile; every figure is null while the mode was not measured.",
+      "properties": {
+        "ingest_chunks_per_second": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ingest Chunks Per Second"
+        },
+        "measured": {
+          "title": "Measured",
+          "type": "boolean"
+        },
+        "mode": {
+          "enum": [
+            "hosted",
+            "sidecar"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "query_embed_p50_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Embed P50 Ms"
+        },
+        "query_embed_p95_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Embed P95 Ms"
+        },
+        "run_cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Cost Usd"
+        },
+        "run_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Tokens"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "usd_per_million_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Usd Per Million Tokens"
+        }
+      },
+      "required": [
+        "mode",
+        "measured"
+      ],
+      "title": "ServingModeMeasurement",
       "type": "object"
     },
     "SliceMetrics": {
@@ -267,6 +396,18 @@
       "title": "Gate Passed",
       "type": "boolean"
     },
+    "label": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Label"
+    },
     "notes": {
       "items": {
         "type": "string"
@@ -289,6 +430,11 @@
       "default": 1,
       "title": "Schema Version",
       "type": "integer"
+    },
+    "wiring_proof": {
+      "default": false,
+      "title": "Wiring Proof",
+      "type": "boolean"
     }
   },
   "required": [

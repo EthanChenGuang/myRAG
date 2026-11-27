@@ -1,4 +1,47 @@
 {
-  "cells": [],
+  "cells": [
+    {
+      "config_hash": "95084039f22afb061f408fd8315bfc21e53b65e5997e469c129d484dbad1a37a",
+      "fitted_at": "2026-11-27",
+      "judge_model": "fake/judge-v1",
+      "judge_version": "164cfbe825be6e32",
+      "language": "en",
+      "max_unsupported_share": 0.0,
+      "precision": 0.6666666666666666,
+      "recall": 0.6666666666666666,
+      "run_ids": [
+        "judge-calibration-164cfbe825be6e32-7a139ca2ec87"
+      ],
+      "source": "fixture"
+    },
+    {
+      "config_hash": "95084039f22afb061f408fd8315bfc21e53b65e5997e469c129d484dbad1a37a",
+      "fitted_at": "2026-11-27",
+      "judge_model": "fake/judge-v1",
+      "judge_version": "164cfbe825be6e32",
+      "language": "it",
+      "max_unsupported_share": 0.0,
+      "precision": 0.6666666666666666,
+      "recall": 0.6666666666666666,
+      "run_ids": [
+        "judge-calibration-164cfbe825be6e32-7a139ca2ec87"
+      ],
+      "source": "fixture"
+    },
+    {
+      "config_hash": "95084039f22afb061f408fd8315bfc21e53b65e5997e469c129d484dbad1a37a",
+      "fitted_at": "2026-11-27",
+      "judge_model": "fake/judge-v1",
+      "judge_version": "164cfbe825be6e32",
+      "language": "zh",
+      "max_unsupported_share": 0.0,
+      "precision": 0.75,
+      "recall": 1.0,
+      "run_ids": [
+        "judge-calibration-164cfbe825be6e32-7a139ca2ec87"
+      ],
+      "source": "fixture"
+    }
+  ],
   "schema_version": 1
 }

@@ -1,3 +1,5 @@
+import { selectedBackendId } from '../backend/factory';
+import { backendIndexParams } from '../backend/index-params';
 import { getRetrievalBackend } from '../backend/registry';
 import { CORE_STAGES, QUERY_LAYER_STAGES, effectiveLexicalVersion, terminologyDenseFor, type RagConfig } from '../config';
 import { getActiveChunkingProfiles } from '../chunking/active';
@@ -19,12 +21,15 @@ import type { TemporalQueryContext } from '../query/temporal-query-detector';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import { getRagDeps } from '../deps';
 import type { SecurityConfig } from '../security/config';
+import { readAnswerConfig } from '../generation/answer-config';
 import {
   attributeFilterHashBlock,
   computeRetrievalConfigHash,
   lexicalScoringHashBlock,
   securityHashComponent,
+  answerRulesHashComponent,
   terminologyHashBlock,
+  type AnswerRulesHashConfig,
   type AttributeFilterHashStage,
   type RetrievalConfigHashQueryLayer,
   type TerminologyHashStage,
@@ -92,6 +97,8 @@ export interface BuildV2ResultInput {
 }
 
 export interface RequestConfigHashInput {
+  /** Phase 5.2 D-58: the answer switches; read from the environment when absent. */
+  answerConfig?: AnswerRulesHashConfig;
   input: RunRetrievalInput;
   config: RagConfig;
   profile: Profile;
@@ -121,8 +128,12 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
   const attributeFilter = attributeStage.enabled
     ? attributeFilterHashBlock(attributeStage, config.v2.attributeFilter, attributeFilterConfig())
     : undefined;
+  // D-24: the configured backend of this entry point; pgvector keeps the registry id and no index block, so its hash is unchanged.
+  const backendChoice = selectedBackendId(profile, config, input.stageOverrides?.retrievalOverrides);
+  const backendIndex = backendIndexParams(backendChoice, ctx.embeddingProfileId);
   return computeRetrievalConfigHash({
-    backendId: getRetrievalBackend().id,
+    backendId: backendIndex ? backendChoice : getRetrievalBackend().id,
+    ...(backendIndex ? { backendIndex } : {}),
     embeddingProfileId: ctx.embeddingProfileId,
     lexicalVersion: effectiveLexicalVersion(config),
     rerankTextVersion: RERANK_TEXT_VERSION,
@@ -146,6 +157,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
       ...(config.monolingual ? { monolingual: true as const } : {}),
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
+    answerRules: answerRulesHashComponent(ctx.answerConfig ?? readAnswerConfig()),
     tuning: tuningHashComponent(
       config,
       effectiveTuningParams(profile, config, evalTuningOverrides(profile, input.stageOverrides?.retrievalOverrides), { embeddingProfileId: ctx.embeddingProfileId }),

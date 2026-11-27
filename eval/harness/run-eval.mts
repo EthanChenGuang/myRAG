@@ -18,10 +18,9 @@ import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedTermin
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 import {
-  DEFAULT_FAKE_CITATION_SEED,
   FAKE_CITATION_GENERATOR_MODEL,
   FAKE_INSTRUCTION_GENERATOR_MODEL,
-  installFakeCitationGenerator,
+  type FakeCitationGeneratorOptions,
   type FakeLanguageModelFactory,
 } from './fake-citation-generator.mts';
 import { installFakeAnswerModels, isFakeGeneratorModel } from './fake-answer-models.mts';
@@ -101,8 +100,11 @@ export function resolveAnswerGenerator(input: AnswerGeneratorInput): {
 }
 
 /** The one fake factory: the Phase 5.2 fakes by model id, every other id the fake citation generator (D-24, D-54). */
-export function evalFakeLanguageModelFactory(items: readonly GoldenItem[]): FakeLanguageModelFactory {
-  return installFakeAnswerModels({ items });
+export function evalFakeLanguageModelFactory(
+  items: readonly GoldenItem[],
+  citation?: FakeCitationGeneratorOptions,
+): FakeLanguageModelFactory {
+  return installFakeAnswerModels({ items, ...(citation ? { citation } : {}) });
 }
 export const LIVE_KEY_MISSING_NOTICE = '[RAG Eval] OPENROUTER_API_KEY not set; live generation skipped';
 
@@ -183,6 +185,8 @@ export interface RunEvalOptions {
   envOverlay?: Record<string, string>;
   /** With cachePairs and baseUrl: the live run seeds and probes a live cache (plan 06-46); refused without it. */
   allowLiveCache?: boolean;
+  /** D-34: the rag_mode of every request (the output-cap sweep runs each mode); default strict. */
+  ragMode?: EvalRagMode;
 }
 
 export interface RunEvalResult {
@@ -239,6 +243,7 @@ export function itemRequestOptions(
 
 // D-07: every harness request runs in strict mode; run.json and the report carry it, run_config_hash does not.
 const EVAL_RAG_MODE = 'strict' as const;
+export type EvalRagMode = 'strict' | 'balanced';
 const NO_INGEST_DOCUMENT_IDS: ReadonlyMap<string, string> = new Map();
 
 const INJECTION_CATEGORIES: ReadonlySet<string> = new Set(['injection', 'injection_evasive']);
@@ -619,6 +624,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     retainInProcess,
     runConfig,
   } = options;
+  const ragMode: EvalRagMode = options.ragMode ?? EVAL_RAG_MODE;
+  if (ragMode !== 'strict' && ragMode !== 'balanced') throw new Error('[Eval Harness] ragMode must be strict or balanced');
   const cachePairs = options.cachePairs === true;
   if (cachePairs && baseUrl && options.allowLiveCache !== true) {
     throw new Error('[Eval Harness] a --cache-pairs run against --base-url seeds and probes a live cache; pass --allow-live-cache (plan 06-46)');
@@ -782,8 +789,9 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         } else if (generator === 'fake' && answers) {
           // D-13: the directive is read from the template the route assembles under this run's env (research F-5).
           const noAnswerQuestions = new Map(items.filter((item) => !item.answerable).map((item) => [item.question, item.language]));
+          // A run config's Phase 5.2 fake still answers by its id; every other id gets the instruction-sensitive generator.
           answerModule.setEvalLanguageModelFactory(
-            installFakeCitationGenerator(DEFAULT_FAKE_CITATION_SEED, {
+            evalFakeLanguageModelFactory(items, {
               noAnswerQuestions,
               promptTemplate: answerModule.resolveEvalPromptTemplate(),
             }),
@@ -873,7 +881,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         schema_version: 1 as const,
         query: item.question,
         conversation: item.conversation,
-        rag_mode: EVAL_RAG_MODE,
+        rag_mode: ragMode,
         web_search: false as const,
         options,
         item_id: item.id,
@@ -995,7 +1003,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     embedding_profile: embeddingProfile,
     effective_config_hash: effectiveConfigHash,
     run_config_hash: runConfigHash,
-    rag_mode: EVAL_RAG_MODE,
+    rag_mode: ragMode,
     item_count: items.length,
     edge_errors: edgeErrors,
     ...(runConfigRecord ? { run_config: runConfigRecord } : {}),

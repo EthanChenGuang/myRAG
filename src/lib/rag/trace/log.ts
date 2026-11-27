@@ -1,5 +1,5 @@
 import type { RefusalRecord } from '../refusal/types';
-import type { RetrievalResult } from '../types';
+import type { RetrievalResult, StageRecord } from '../types';
 import type { TraceCollector } from './collector';
 import { sanitizeStageCounts } from './collector';
 
@@ -15,6 +15,23 @@ const REFUSAL_BASIS = new Set(['rerank_threshold', 'similarity_floor', 'none']);
 const REFUSAL_REASON = /^[a-z][a-z0-9_]*$/;
 const CACHE_STATES = new Set(['hit', 'miss', 'bypass']);
 const DETECTOR_VERSION = /^[a-z_]{1,32}@[A-Za-z0-9._-]{1,64}$/;
+const BACKENDS = new Set(['pgvector', 'weaviate', 'qdrant']);
+const FALLBACK_REASONS = new Set(['backend_not_ready', 'backend_error', 'backend_slow', 'filter_unsupported']);
+
+/** D-25: the search span's backend, fallback_reason and tenant_validation_dropped, from a fixed vocabulary only. */
+function backendFieldsForLog(stage: StageRecord): Record<string, unknown> {
+  if (stage.name !== 'search') return {};
+  const attributes = stage.attributes ?? {};
+  const backend = attributes.backend;
+  if (typeof backend !== 'string' || !BACKENDS.has(backend)) return {};
+  const reason = attributes.fallback_reason;
+  const dropped = attributes.tenant_validation_dropped;
+  return {
+    backend,
+    fallback_reason: typeof reason === 'string' && FALLBACK_REASONS.has(reason) ? reason : null,
+    tenant_validation_dropped: typeof dropped === 'number' && Number.isInteger(dropped) && dropped >= 0 ? dropped : 0,
+  };
+}
 
 function finiteOrNull(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -73,6 +90,7 @@ export function buildTraceLogPayload(collector: TraceCollector, result: Retrieva
         rules: stage.rules,
         ...(counts !== undefined ? { counts } : {}),
         ...(stage.versions ? { versions: stage.versions.filter((version) => DETECTOR_VERSION.test(version)) } : {}),
+        ...backendFieldsForLog(stage),
       };
     }),
     ...(result.refusal ? { refusal: sanitizeRefusalForLog(result.refusal) } : {}),
