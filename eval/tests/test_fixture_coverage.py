@@ -37,6 +37,10 @@ TERM_ITEMS_PER_LANGUAGE_04_1_1_10 = COLLOQUIAL_TERM_PER_LANGUAGE_04_1_1_10 + NO_
 # Plan 05.2-29: four partial_answer, stale_version and off_topic_context items and four link-injection
 # injection_evasive items per language; test_golden_phase52.py checks them.
 PHASE52_PER_LANGUAGE_05_2_29 = 16
+# Plan 05.2.1-12: fifteen multi_step_calc and four context_overflow items per language (test_fixture_calc_overflow.py).
+MULTI_STEP_CALC_PER_LANGUAGE_05_2_1_12 = 15
+CONTEXT_OVERFLOW_PER_LANGUAGE_05_2_1_12 = 4
+PHASE521_PER_LANGUAGE_05_2_1_12 = MULTI_STEP_CALC_PER_LANGUAGE_05_2_1_12 + CONTEXT_OVERFLOW_PER_LANGUAGE_05_2_1_12
 TERM_ITEM_ID = re.compile(r"^[a-z]+-(colloquial|no_answer)-term-\d{3}$")
 PHASE6_RELATIVE_TIME_TAG = "phase6_relative_time"
 # Plan 04.2-37 (tag phase42): per language three duplicate_flood, four identifier_near_miss, two no_answer (asked
@@ -76,6 +80,8 @@ PER_LANGUAGE_CATEGORY = {
     "stale_version": 4,
     "off_topic_context": 4,
     "implicit_condition": IMPLICIT_CONDITION_PER_LANGUAGE_05_3_15,
+    "multi_step_calc": MULTI_STEP_CALC_PER_LANGUAGE_05_2_1_12,
+    "context_overflow": CONTEXT_OVERFLOW_PER_LANGUAGE_05_2_1_12,
 }
 PER_LANGUAGE_CATEGORY_OVERRIDES = {
     ("en", "cross_lingual"): 13,
@@ -132,6 +138,7 @@ def test_single_language_items_forty_per_language(items):
         + CACHE_PAIRS_PER_LANGUAGE_06_39
         + TERM_ITEMS_PER_LANGUAGE_04_1_1_10
         + PHASE52_PER_LANGUAGE_05_2_29
+        + PHASE521_PER_LANGUAGE_05_2_1_12
     )
     phase42 = sum(PHASE42_PER_LANGUAGE_04_2_37.values())
     phase53 = IMPLICIT_CONDITION_PER_LANGUAGE_05_3_15 * len(LANGUAGES) + sum(NO_ANSWER_ADDED_BY_PLAN_05_3_15.values())
@@ -155,6 +162,7 @@ def test_twenty_six_cross_lingual_items_at_least_four_per_pair(items):
         + CACHE_PAIRS_PER_LANGUAGE_06_39
         + TERM_ITEMS_PER_LANGUAGE_04_1_1_10
         + PHASE52_PER_LANGUAGE_05_2_29
+        + PHASE521_PER_LANGUAGE_05_2_1_12
     )
     phase42 = sum(PHASE42_PER_LANGUAGE_04_2_37.values())
     phase53 = IMPLICIT_CONDITION_PER_LANGUAGE_05_3_15 * len(LANGUAGES) + sum(NO_ANSWER_ADDED_BY_PLAN_05_3_15.values())
