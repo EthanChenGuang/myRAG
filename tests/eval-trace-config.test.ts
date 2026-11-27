@@ -73,3 +73,69 @@ describe('buildEffectiveConfig security block (D-18)', () => {
     expect(configHash(changed)).not.toBe(configHash(on));
   });
 });
+
+describe('Phase 5.2 eval trace fields (05.2-31, D-62 a)', () => {
+  test('nothing while every Phase 5.2 switch is off, whatever the inputs say', async () => {
+    const trace = await import('@/lib/rag-eval/trace');
+    expect(typeof trace.answerRulesTraceFields).toBe('function');
+    expect(
+      trace.answerRulesTraceFields({
+        anyNonDefault: false,
+        answerLanguage: 'en',
+        refusedByServer: true,
+        refusedByModel: true,
+        finishReason: 'length',
+        parts: ['relevance'],
+      }),
+    ).toEqual({});
+  });
+
+  test('the fields validate against RagTrace and the refusal origin names who refused', async () => {
+    const trace = await import('@/lib/rag-eval/trace');
+    expect(typeof trace.answerRulesTraceFields).toBe('function');
+    const counts = {
+      mode: 'enforce' as const,
+      rules_version: 'abcdef012345',
+      links_checked: 2,
+      links_removed: 1,
+      credential_blocked: 1,
+      credential_warned: 0,
+      rule_ids: ['cred.en.request-secret', 'Not A Rule Id'],
+    };
+    const fields = trace.answerRulesTraceFields({
+      anyNonDefault: true,
+      answerLanguage: 'en',
+      refusedByServer: false,
+      refusedByModel: true,
+      finishReason: 'Weird Reason',
+      parts: ['relevance', 'output_policy'],
+      notices: [{ kind: 'credential_request_blocked', text: 'Blocked.', language: 'en' }],
+      outputGuard: trace.outputGuardTraceSummary(counts, ['chunk-1']),
+      residual: trace.residualOutputFindings(counts),
+      mixedVersions: false,
+    });
+    expect(fields.refusal_origin).toBe('model_relevance');
+    expect(fields.finish_reason).toBe('other');
+    expect(fields.residual_output_findings).toEqual({ links: 1, credential_matches: 1, rule_ids: ['cred.en.request-secret'] });
+    expect(fields.output_guard?.source_chunk_ids).toEqual(['chunk-1']);
+    const base = {
+      query: 'q',
+      query_context: { is_financial_query: false, is_temporal_query: false, required_precision: 'medium', search_strategy: 'semantic_only', suggested_threshold: 0.3 },
+      retrieval_strategy: 'fake',
+      candidates: [],
+      kept: [],
+      used_documents: [],
+      context: '',
+      refused: true,
+      answer: null,
+      citations: [],
+      stage_latency_ms: {},
+      stage_status: {},
+      effective_config: buildEffectiveConfig(),
+      config_hash: 'x'.repeat(64),
+    };
+    const parsed = RagTraceSchema.safeParse({ ...base, ...fields });
+    expect(parsed.success).toBe(true);
+    expect(trace.answerRulesTraceFields({ anyNonDefault: true, answerLanguage: null, refusedByServer: true, refusedByModel: false }).refusal_origin).toBe('server');
+  });
+});
