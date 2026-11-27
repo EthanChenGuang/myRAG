@@ -302,6 +302,30 @@ describe('POST /api/rag/admin/golden/re-review (D-50)', () => {
     expect(logs.join('\n')).not.toContain('synthetic note');
   });
 
+  it('sends the golden item ids, so with access groups enforced the item carries its evidence document label set (0986)', async () => {
+    const route = await loadReReview();
+    guard.session = { id: ADMIN };
+    const group = `g:${crypto.randomUUID()}`;
+    const question = 'Which date does the fourth synthetic note give?';
+    await db.query('UPDATE public.rag_access_group_settings SET enforced = true WHERE id');
+    try {
+      await db.query('UPDATE documents SET access_groups = $2::text[] WHERE id = $1', [DOC_A, [group]]);
+      await db.query(
+        "INSERT INTO rag_golden_evidence_index (tenant_key, set_id, item_id, document_id, quote_sha256) VALUES ($1, 'set-access', 'g-r4', $2, $3)",
+        [TENANT_A, DOC_A, 'c'.repeat(64)],
+      );
+      const response = await route.POST(post('re-review', { tenant: TENANT_A, items: [{ item_id: 'g-r4', question }] }));
+      expect(await response.json()).toEqual({ success: true, requested: 1, inserted: 1 });
+      const { maskPII } = await import('@/lib/rag/trace/mask');
+      const row = (await db.query<{ access_sets: unknown }>('SELECT access_sets FROM rag_review_items WHERE query_masked = $1', [maskPII(question)])).rows[0];
+      expect(row?.access_sets).toEqual([[group]]);
+    } finally {
+      await db.query('UPDATE public.rag_access_group_settings SET enforced = false WHERE id');
+      await db.query("UPDATE documents SET access_groups = '{all}'::text[] WHERE id = $1", [DOC_A]);
+      await db.query("DELETE FROM rag_golden_evidence_index WHERE set_id = 'set-access'");
+    }
+  });
+
   it('computes the week start as Monday 00:00 UTC', async () => {
     const { weekStart } = await import('@/lib/rag/monitor/golden-evidence');
     expect(weekStart(new Date('2026-11-26T15:00:00Z'))).toBe('2026-11-23T00:00:00.000Z');
