@@ -761,3 +761,7 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - G7 (merge 04.3-52, run the switch-on smoke, add it to pr-smoke) and G8 (the 53 apply test and its list are stale) are pending. Low items are pending.
   - Note: the verifier calls 0983 EXEMPT acceptable, but quick-scope-access (0987) hardens it anyway.
   - Archived.
+- 22:40Z OWNER answered the three questions:
+  - (3) Consent given: comet as a standalone PR, then deploy a Medical preview from main. PR #136 (fix/composer-comet 5051b057, cherry-picked from main, front end only) is open and subscribed. Next: CI green -> merge -> deploy myrag-medical-eval from the main sha, preview only.
+  - (2) The owner will top up DeepInfra.
+  - (1) Recommendation given: the owner confirms the HF bge-m3 commit 5617a9f6 personally (~2 min).
