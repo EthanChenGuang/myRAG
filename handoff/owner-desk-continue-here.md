@@ -1,7 +1,7 @@
 # Owner desk: continue here (paused 2026-11-27 ~12:55 UTC)
 
 The owner desk session talks to the owner in short Simplified Chinese and handles only items that need the owner.
-Orchestrator: session_01SEn5g5F9BVw4WjuKoGXY7X (it is moving to another account).
+Orchestrator: session_01X342shLsAZx6PYph2vA7hc (new account, 2026-11-27).
 
 ## Production (Supabase ppvywaxrycaxrtrrditl, multi-tenant)
 - Applied and verified (owner approved each train): train 30, 31, 32, 33, 34, 35.
@@ -10,7 +10,7 @@ Orchestrator: session_01SEn5g5F9BVw4WjuKoGXY7X (it is moving to another account)
 - Verification for each train: objects exist, RLS is on, new functions are not executable by anon/authenticated.
   For t35, the md5 of the hybrid_search_chunks and rag_bm25_search_chunks bodies matches the file.
   `rag_access_group_settings.enforced = false`.
-- **Train 36: NOT applied.** It waits for PR #131 to merge. SQL: `sql/train36-live.sql`.
+- **Train 36: APPLIED and verified 2026-11-27 ~13:39 UTC** (see log/prod-actions.md; one-line typo in the stored r19 text, no effect). Was: waits for PR #131 to merge. SQL: `sql/train36-live.sql`.
   Order: 0903, 0923, 0926 (common, then .multi-tenant), 0931, 0950, then 0410 r19.
   0923 builds 3 GIN indexes without CONCURRENTLY. The tables are tiny (~3 documents / ~35 chunks est.).
   Tell the owner about the DROP sections listed in the header and get approval before applying.
