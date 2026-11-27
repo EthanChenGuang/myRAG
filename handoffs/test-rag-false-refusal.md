@@ -92,4 +92,4 @@ Decision: A done (above). C is queued for the owner and waits on OpenAI eval cre
 | Prompt control `--gates-mode enforce` | 11, false_answer_rate overall failed |
 | Prompt control without a flag (shows why the flag is needed) | 10 |
 
-`vitest run tests/eval-gate-mode-default.test.ts tests/eval-harness.test.ts tests/eval-phase52-tier.test.ts`: 35 passed. `pytest scripts/tests/test_check_workflows.py`: 199 passed. `check-workflows.py`: OK. `tsc --noEmit`: 0 errors. No baseline was re-recorded.
+`vitest run tests/eval-gate-mode-default.test.ts tests/eval-harness.test.ts tests/eval-phase52-tier.test.ts`: 35 passed. `pytest scripts/tests/test_check_workflows.py`: 198 passed (197 on main + 1 new). `check-workflows.py`: OK. `tsc --noEmit`: 0 errors. No baseline was re-recorded.
