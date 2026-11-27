@@ -312,8 +312,13 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RAG_MONITOR: ${{ vars.RAG_MONITOR }}
+          RAG_RETRIEVAL_LOG: ${{ vars.RAG_RETRIEVAL_LOG }}
           RAG_MONITOR_WEBHOOK_URL: ${{ secrets.RAG_MONITOR_WEBHOOK_URL }}
           RAG_MONITOR_WEBHOOK_SECRET: ${{ secrets.RAG_MONITOR_WEBHOOK_SECRET }}
+          LANGFUSE_ENABLED: ${{ vars.LANGFUSE_ENABLED }}
+          LANGFUSE_BASE_URL: ${{ vars.LANGFUSE_BASE_URL }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
         run: npm run rag:monitor
   real-docling:
     if: github.event.schedule != '23 4 * * 1'
@@ -380,8 +385,43 @@ jobs:
           name: real-docling-report
           path: ${{ runner.temp }}/real-docling-report.json
           if-no-files-found: warn
-  weekly-report:
+  weekly-sample:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '23 4 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HAS_MONITOR_SECRETS: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
+    steps:
+      - name: Skip notice when the Supabase service-role secrets are absent
+        if: env.HAS_MONITOR_SECRETS != 'true'
+        run: echo "::notice::supabase service-role secrets not configured, skipping the weekly sample"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: env.HAS_MONITOR_SECRETS == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: env.HAS_MONITOR_SECRETS == 'true'
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install Node dependencies
+        if: env.HAS_MONITOR_SECRETS == 'true'
+        run: npm ci --ignore-scripts
+      - name: Weekly representative sample and cluster refit (report-only, never fails the run)
+        if: env.HAS_MONITOR_SECRETS == 'true'
+        continue-on-error: true
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RAG_REPRESENTATIVE_SAMPLE: ${{ vars.RAG_REPRESENTATIVE_SAMPLE }}
+          RAG_RETRIEVAL_LOG: ${{ vars.RAG_RETRIEVAL_LOG }}
+          RAG_DOMAIN_EXPERT_REVIEW: ${{ vars.RAG_DOMAIN_EXPERT_REVIEW }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: npm run rag:monitor -- sample
+  weekly-report:
+    needs: [weekly-sample]
+    if: always() && (github.event_name == 'workflow_dispatch' || github.event.schedule == '23 4 * * 1')
     runs-on: ${{ vars.PRIVATE_EVAL_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 60
     permissions:

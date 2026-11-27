@@ -1022,6 +1022,7 @@ def check_monitor_job(data: dict, errors: list[str]) -> None:
         for secret in ("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
             if secret not in runner_env:
                 errors.append(f"{name}: the monitor step must receive {secret} through step env")
+        _check_step_env_sources(f"{name}: the monitor step", runner_env, MONITOR_STEP_ENV, errors)
     if "npm ci --ignore-scripts" not in step_text(job):
         errors.append(f"{name} must install with npm ci --ignore-scripts")
     for step in steps:
@@ -1030,8 +1031,61 @@ def check_monitor_job(data: dict, errors: list[str]) -> None:
     _check_no_leaks(name, steps, errors, private=False)
 
 
+def _check_step_env_sources(label: str, step_env: dict, required: dict[str, str], errors: list[str]) -> None:
+    """Each required name reaches the step as exactly ${{ <secrets|vars>.<NAME> }}, never as a hard-coded value."""
+    for env_name, source in required.items():
+        if env_name not in step_env:
+            errors.append(f"{label} must receive {env_name} through step env")
+            continue
+        expected = f"${{{{{source}.{env_name}}}}}"
+        if str(step_env[env_name]).replace(" ", "") != expected:
+            errors.append(f"{label} must take {env_name} as ${{{{ {source}.{env_name} }}}}")
+
+
 def check_weekly_sample_job(data: dict, errors: list[str]) -> None:
     """Gap 2: the weekly representative sample runs on the weekly schedule, gated like the monitor job, report-only."""
+    name = f"nightly: {WEEKLY_SAMPLE_JOB}"
+    flag = "HAS_MONITOR_SECRETS"
+    jobs = data.get("jobs") or {}
+    job = jobs.get(WEEKLY_SAMPLE_JOB)
+    if job is None:
+        errors.append(f"nightly: job '{WEEKLY_SAMPLE_JOB}' missing")
+        return
+    condition = str(job.get("if", ""))
+    if f"github.event.schedule == '{WEEKLY_CRON}'" not in condition or f"github.event.schedule != '{WEEKLY_CRON}'" in condition:
+        errors.append(f"{name} must run only on the weekly schedule '{WEEKLY_CRON}' or workflow_dispatch")
+    flag_expr = str((job.get("env") or {}).get(flag, ""))
+    for secret in ("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+        if f"secrets.{secret} != ''" not in flag_expr:
+            errors.append(f"{name}: job env {flag} must require secrets.{secret}")
+    steps = all_steps(job)
+    ungated = [s for s in steps if f"{flag} == 'true'" not in str(s.get("if", ""))]
+    if (
+        len(ungated) != 1
+        or WEEKLY_SAMPLE_SKIP_NOTICE not in str(ungated[0].get("run", ""))
+        or f"{flag} != 'true'" not in str(ungated[0].get("if", ""))
+    ):
+        errors.append(f"{name}: only the skip-notice step may run without the {flag} == 'true' condition")
+    runner = next((s for s in steps if WEEKLY_SAMPLE_RUN in str(s.get("run", ""))), None)
+    if runner is None:
+        errors.append(f"{name} must run '{WEEKLY_SAMPLE_RUN}'")
+    else:
+        if runner.get("continue-on-error") is not True:
+            errors.append(f"{name}: the sample step is report-only and must set continue-on-error: true")
+        _check_step_env_sources(f"{name}: the sample step", runner.get("env") or {}, WEEKLY_SAMPLE_STEP_ENV, errors)
+    if "npm ci --ignore-scripts" not in step_text(job):
+        errors.append(f"{name} must install with npm ci --ignore-scripts")
+    for step in steps:
+        if str(step.get("uses", "")).startswith("actions/upload-artifact@"):
+            errors.append(f"{name} must not upload an artifact")
+    _check_no_leaks(name, steps, errors, private=False)
+    report = jobs.get(WEEKLY_JOB) or {}
+    needs = report.get("needs")
+    needs = [needs] if isinstance(needs, str) else list(needs or [])
+    if WEEKLY_SAMPLE_JOB not in needs:
+        errors.append(f"nightly: {WEEKLY_JOB} needs must list {WEEKLY_SAMPLE_JOB}, so drift reads the refreshed clusters")
+    if not str(report.get("if", "")).replace(" ", "").startswith("always()&&"):
+        errors.append(f"nightly: {WEEKLY_JOB} must start its if with always() && so a skipped or failed sample never skips the report")
 
 
 JUDGE_CALIBRATION_FLAG = "HAS_JUDGE_KEYS"
@@ -1120,6 +1174,7 @@ def check_nightly(errors: list[str]) -> None:
     check_weekly_report(data, errors)
     check_tenant_nightly(data, errors)
     check_monitor_job(data, errors)
+    check_weekly_sample_job(data, errors)
     job = (data.get("jobs") or {}).get("judge")
     if job is None:
         errors.append("nightly: job 'judge' missing")
