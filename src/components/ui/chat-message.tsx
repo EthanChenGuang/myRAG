@@ -71,7 +71,7 @@ import { ImageModal } from './image-modal'
 import { SourceImagesGrid } from './source-images-grid'
 import type { SourceImageData } from '@/types/chat'
 import { CitationChip } from './citation-chip'
-import { citationSourcesFor } from '@/components/providers/sources-provider'
+import { citationSourcesFor, documentSourceFields } from '@/components/providers/sources-provider'
 import { citeAliasFromHref, isCitationAware, renderCitationMarkers, type CitationMarkerTarget, type CitationRenderPhase } from '@/lib/chat/citation-markers'
 import { noticesOf, pickAnswerMetadata } from '@/lib/chat/answer-metadata'
 import { useShallow } from 'zustand/react/shallow'
@@ -2933,7 +2933,8 @@ ChatMessage = function ({
             uploadedAt: doc.uploadedAt || doc.created_at,
             content: doc.content_preview,
             provider: 'Document Database',
-            explicitly_referenced: doc.explicitly_referenced || false
+            explicitly_referenced: doc.explicitly_referenced || false,
+            ...documentSourceFields(doc)
           });
         });
       }
@@ -2949,7 +2950,8 @@ ChatMessage = function ({
               uploadedAt: doc.uploadedAt || doc.created_at,
               content: doc.content_preview,
               provider: doc.provider || 'Document Database',
-              explicitly_referenced: doc.explicitly_referenced || false
+              explicitly_referenced: doc.explicitly_referenced || false,
+              ...documentSourceFields(doc)
             });
           }
         });

@@ -25,6 +25,17 @@ export interface AnswerQualityStrings {
   refusalReasons: Record<'answer_exists' | 'wrong_language' | 'other', string>;
   refusalFailed: string;
   refusalRetry: string;
+  versionSuperseded: string;
+  versionCurrent: string;
+  /** The version phrases keep `{from}` and `{to}` as placeholders; the panel renders a `<time>` element in their place. */
+  versionOnly: (version: number) => string;
+  versionFromTo: (version: number) => string;
+  versionFrom: (version: number) => string;
+  versionUntil: (version: number) => string;
+  /** `count` is the number already formatted for the language; `n` picks the plural form. */
+  alsoInSummary: (count: string, n: number) => string;
+  alsoInListLabel: string;
+  alsoInMore: (count: string) => string;
 }
 
 const STRINGS: Record<string, AnswerQualityStrings> = {
@@ -58,6 +69,15 @@ const STRINGS: Record<string, AnswerQualityStrings> = {
     refusalReasons: { answer_exists: 'The Answer Is in My Documents', wrong_language: 'Wrong Language', other: 'Other' },
     refusalFailed: 'Your feedback was not saved.',
     refusalRetry: 'Try Again',
+    versionSuperseded: 'Superseded',
+    versionCurrent: 'Current',
+    versionOnly: (v) => `Version ${v}`,
+    versionFromTo: (v) => `Version ${v}, in effect {from} to {to}`,
+    versionFrom: (v) => `Version ${v}, in effect from {from}`,
+    versionUntil: (v) => `Version ${v}, in effect until {to}`,
+    alsoInSummary: (count, n) => (n === 1 ? `Also in ${count} other document` : `Also in ${count} other documents`),
+    alsoInListLabel: 'Other documents with the same passage',
+    alsoInMore: (count) => `and ${count} more`,
   },
   zh: {
     citationsHeading: '本回答引用的内容',
@@ -89,6 +109,15 @@ const STRINGS: Record<string, AnswerQualityStrings> = {
     refusalReasons: { answer_exists: '答案就在我的文档里', wrong_language: '语言不对', other: '其他' },
     refusalFailed: '反馈未能保存。',
     refusalRetry: '重试',
+    versionSuperseded: '已被取代',
+    versionCurrent: '当前',
+    versionOnly: (v) => `版本 ${v}`,
+    versionFromTo: (v) => `版本 ${v}，生效期 {from} 至 {to}`,
+    versionFrom: (v) => `版本 ${v}，自 {from} 起生效`,
+    versionUntil: (v) => `版本 ${v}，有效至 {to}`,
+    alsoInSummary: (count) => `另有 ${count} 份文档包含相同内容`,
+    alsoInListLabel: '包含相同段落的其他文档',
+    alsoInMore: (count) => `以及另外 ${count} 份`,
   },
   it: {
     citationsHeading: 'Citato in questa risposta',
@@ -120,6 +149,15 @@ const STRINGS: Record<string, AnswerQualityStrings> = {
     refusalReasons: { answer_exists: 'La risposta è nei miei documenti', wrong_language: 'Lingua sbagliata', other: 'Altro' },
     refusalFailed: 'Il feedback non è stato salvato.',
     refusalRetry: 'Riprova',
+    versionSuperseded: 'Sostituita',
+    versionCurrent: 'Attuale',
+    versionOnly: (v) => `Versione ${v}`,
+    versionFromTo: (v) => `Versione ${v}, in vigore dal {from} al {to}`,
+    versionFrom: (v) => `Versione ${v}, in vigore dal {from}`,
+    versionUntil: (v) => `Versione ${v}, in vigore fino al {to}`,
+    alsoInSummary: (count, n) => (n === 1 ? `Anche in ${count} altro documento` : `Anche in altri ${count} documenti`),
+    alsoInListLabel: 'Altri documenti con lo stesso passaggio',
+    alsoInMore: (count) => `e altri ${count}`,
   },
 };
 
