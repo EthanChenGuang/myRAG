@@ -259,4 +259,16 @@ describe('Phase 5.2.1 calculation tool loop on the eval answer path (D-65, RESEA
     expect(answerSource).toContain('const EVAL_CALC_MAX_STEPS = 3;');
     expect(compact(chatRoute)).toContain(compact('buildCalculateTool({ aliases: calcOffer.aliases, holder: calcHolder })'));
   });
+
+  test('the eval route offers, extracts and checks the calculation with the chat route\'s pieces', () => {
+    expect(compact(evalRoute)).toContain(compact('buildCalculateTool({ aliases: calcOffer.aliases, holder: calcHolder })'));
+    for (const source of [chatRoute, evalRoute]) {
+      expect(source).toContain('mayOfferCalc(');
+      expect(source).toContain('shouldOfferCalcTool(');
+      expect(source).toContain('turnCanUseTools(');
+      expect(source).toContain('calcBlock: { onTrace: calcHolder.recordBlock, stripMarkers: calcOffer.stripMarkers }');
+    }
+    expect(evalRoute).toContain('runCalcChecks(');
+    expect(evalRoute).toContain('calc_observed');
+  });
 });
