@@ -86,6 +86,7 @@ const ANSWER_RULES_LABELS = {
     'overflow.truncate': 'Keep the highest-ranked documents',
     'overflow.refine': 'Answer over several calls',
     'RAG_CONTEXT_OVERFLOW.help': 'Read only while the prompt budget is on. Several calls apply to the web chat only.',
+    'list.separator': ', ',
     'calc.limits': 'Limits: {operands} values, {steps} steps, {items} list items',
     'budget.unknownModels': 'Models without a known context window: {n}. They use the default window of {tokens} tokens.',
     'budget.estimate': 'Token estimate measured for: {measured}. Default factor for: {defaulted}.',
@@ -198,6 +199,7 @@ const ANSWER_RULES_LABELS = {
     'overflow.truncate': '保留排名最高的文档',
     'overflow.refine': '分多次调用作答',
     'RAG_CONTEXT_OVERFLOW.help': '仅在提示词预算开启时生效。多次调用仅适用于网页聊天。',
+    'list.separator': '、',
     'calc.limits': '限制：{operands} 个数值，{steps} 个步骤，{items} 个列表项',
     'budget.unknownModels': '上下文窗口未知的模型：{n} 个。它们使用 {tokens} token 的默认窗口。',
     'budget.estimate': '已实测 token 估算的系列：{measured}。使用默认系数的系列：{defaulted}。',
@@ -302,6 +304,7 @@ const ANSWER_RULES_LABELS = {
     'overflow.truncate': 'Mantieni i documenti con il punteggio più alto',
     'overflow.refine': 'Rispondi con più chiamate',
     'RAG_CONTEXT_OVERFLOW.help': 'Letto solo con il budget del prompt attivo. Le chiamate multiple valgono solo per la chat web.',
+    'list.separator': ', ',
     'calc.limits': 'Limiti: {operands} valori, {steps} passaggi, {items} elementi di elenco',
     'budget.unknownModels': 'Modelli senza finestra di contesto nota: {n}. Usano la finestra predefinita di {tokens} token.',
     'budget.estimate': 'Stima dei token misurata per: {measured}. Fattore predefinito per: {defaulted}.',
@@ -808,7 +811,7 @@ class AnswerRulesPanel {
     if (names.length === 0) return [this.doc.createTextNode('—')];
     const nodes = [];
     names.forEach((name, index) => {
-      if (index > 0) nodes.push(this.doc.createTextNode(', '));
+      if (index > 0) nodes.push(this.doc.createTextNode(this.t('list.separator')));
       nodes.push(this.code(name));
     });
     return nodes;

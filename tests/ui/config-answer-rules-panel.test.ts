@@ -811,6 +811,7 @@ describe('answer-rules.js: calculations and prompt size (UI-SPEC 14.3, 14.5)', (
     await ui.settle();
     expect(lines(ui).limits).toBe(limits);
     expect(lines(ui).unknown).toBe(unknown);
+    expect(lines(ui).estimate).toContain(locale === 'zh-CN' ? 'google、openai' : 'google, openai');
     ui.setValue('RAG_CONTEXT_OVERFLOW', 'refine');
     expect(text(ui.byId('rag-answer-rules-alerts'))).toContain(warning);
     expect(text(ui.doc.querySelector('[data-rag-i18n="group.budget"]'))).toBe(locale === 'zh-CN' ? '提示词大小' : 'Dimensione del prompt');
