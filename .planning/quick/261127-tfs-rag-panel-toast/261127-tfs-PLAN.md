@@ -28,7 +28,7 @@ bottom of the card, far from the button; the owner expected a toast. Amendment: 
 2. RED: `tests/ui/config-rag-panel-toast.test.ts` (helper, `showToast` aria-hidden option, script order, every panel delegates)
    and new cases in `tests/ui/config-identifier-patterns-panel.test.ts` (disable, delete: status and toast both carry the text;
    503 on toggle: status error, no toast).
-3. GREEN: `scripts/config-ui/rag-panels/panel-status.js` (`ragPanelSetStatus(host, render, isError, options)`), loaded right after
+3. GREEN: `scripts/config-ui/rag-panels/panel-status.js` (`ragPanelSetStatus(host, render, isError, options)`), loaded right before
    `rag-fetch.js`; `showToast(message, type, options)` takes `{ ariaHidden }`; each of the nine panels' `setStatus` delegates to the
    helper, and completed-action call sites pass `{ toast: true }`.
 4. Design pipeline (frontend-design, Impeccable, web-design-guidelines on every touched file), gates, SUMMARY.

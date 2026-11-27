@@ -144,6 +144,13 @@ function buildProfileRowView(profile, options) {
   };
 }
 
+const EMBEDDING_PROFILES_PANEL_STATUS =
+  typeof ragPanelSetStatus === 'function'
+    ? ragPanelSetStatus
+    : typeof require !== 'undefined'
+      ? require('./panel-status.js').ragPanelSetStatus
+      : null;
+
 class EmbeddingProfilesPanel {
   constructor() {
     this.listEl = null;
@@ -199,10 +206,14 @@ class EmbeddingProfilesPanel {
     }
   }
 
-  setStatus(text, isError) {
-    if (!this.statusEl) return;
-    this.statusEl.textContent = text || '';
-    this.statusEl.classList.toggle('text-error', Boolean(isError));
+  setStatus(text, isError, options) {
+    const render = () => {
+      if (!this.statusEl) return;
+      this.statusEl.textContent = text || '';
+      this.statusEl.classList.toggle('text-error', Boolean(isError));
+    };
+    if (EMBEDDING_PROFILES_PANEL_STATUS) EMBEDDING_PROFILES_PANEL_STATUS(this.statusEl, render, isError, options);
+    else render();
   }
 
   async load() {

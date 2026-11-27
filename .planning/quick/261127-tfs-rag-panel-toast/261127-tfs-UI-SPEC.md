@@ -33,7 +33,7 @@ was pressed. The owner did not see it and expected a toast. The earlier contract
    loading lines, progress lines ("Building… 3 of 9"), list-loaded counts, dry-run or test results shown in the panel itself, an
    unconfirmed outcome (`error.unconfirmed`, `changeUnknown`) and a gate refusal returned with HTTP 200.
 5. **No new copy.** The toast reuses the panel's existing localized sentence (en, zh, it); nothing new is translated.
-6. **One helper.** `scripts/config-ui/rag-panels/panel-status.js` (`ragPanelSetStatus`), loaded right after `rag-fetch.js`; every RAG
+6. **One helper.** `scripts/config-ui/rag-panels/panel-status.js` (`ragPanelSetStatus`), loaded right before `rag-fetch.js` (the rag-fetch, gates-ui, judge-calibration order stays as pinned); every RAG
    panel's `setStatus` goes through it. A panel loaded without it (unit harnesses) renders the status region only.
 
 ## Panels

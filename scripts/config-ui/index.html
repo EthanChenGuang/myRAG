@@ -70,6 +70,7 @@
     <script src="document-processing/document-manager.js"></script>
     <script src="document-processing/status-monitor.js"></script>
     <script src="document-processing/process-documents.js"></script>
+    <script src="rag-panels/panel-status.js"></script>
     <script src="rag-panels/rag-fetch.js"></script>
     <script src="rag-panels/gates-ui.js"></script>
     <script src="rag-panels/judge-calibration.js"></script>
@@ -10748,7 +10749,7 @@
 
     <script>
         // Toast notification function - needs to be available globally
-        function showToast(message, type = 'info') {
+        function showToast(message, type = 'info', options = {}) {
             const toast = document.getElementById('toast');
             const toastMessage = document.getElementById('toastMessage');
 
@@ -10759,6 +10760,9 @@
 
             // Update message
             toastMessage.textContent = message;
+            // A panel's echo of its own status region: hidden so screen readers announce it once
+            if (options && options.ariaHidden) toast.setAttribute('aria-hidden', 'true');
+            else toast.removeAttribute('aria-hidden');
 
             // Update alert type
             const alert = toast.querySelector('.alert');

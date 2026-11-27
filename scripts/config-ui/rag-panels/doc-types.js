@@ -95,6 +95,13 @@ async function fetchUploadPickerDefault(organizationId) {
   };
 }
 
+const DOC_TYPES_PANEL_STATUS =
+  typeof ragPanelSetStatus === 'function'
+    ? ragPanelSetStatus
+    : typeof require !== 'undefined'
+      ? require('./panel-status.js').ragPanelSetStatus
+      : null;
+
 class DocTypesPanel {
   constructor() {
     this.locale = detectUiLocale();
@@ -123,10 +130,14 @@ class DocTypesPanel {
     this.load();
   }
 
-  setStatus(text, isError) {
-    if (!this.statusEl) return;
-    this.statusEl.textContent = text || '';
-    this.statusEl.classList.toggle('text-error', Boolean(isError));
+  setStatus(text, isError, options) {
+    const render = () => {
+      if (!this.statusEl) return;
+      this.statusEl.textContent = text || '';
+      this.statusEl.classList.toggle('text-error', Boolean(isError));
+    };
+    if (DOC_TYPES_PANEL_STATUS) DOC_TYPES_PANEL_STATUS(this.statusEl, render, isError, options);
+    else render();
   }
 
   async load() {
@@ -219,7 +230,7 @@ class DocTypesPanel {
         return;
       }
     }
-    this.setStatus('Defaults saved.', false);
+    this.setStatus('Defaults saved.', false, { toast: true });
     await this.load();
   }
 }

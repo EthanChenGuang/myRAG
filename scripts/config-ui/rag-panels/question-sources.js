@@ -631,6 +631,13 @@ function questionSourcesShow(el, shown) {
   el.classList.toggle('hidden', !shown);
 }
 
+const QUESTION_SOURCES_PANEL_STATUS =
+  typeof ragPanelSetStatus === 'function'
+    ? ragPanelSetStatus
+    : typeof require !== 'undefined'
+      ? require('./panel-status.js').ragPanelSetStatus
+      : null;
+
 class QuestionSourcesPanel {
   constructor(root, deps) {
     const d = deps || {};
@@ -677,8 +684,12 @@ class QuestionSourcesPanel {
     return questionSourcesSwitches(this.config(), document);
   }
 
-  setStatus(message, isError) {
-    QUESTION_SOURCES_GATES.gatesUiStatus(this.hosts.status, message, isError);
+  setStatus(message, isError, options) {
+    const render = () => {
+      QUESTION_SOURCES_GATES.gatesUiStatus(this.hosts.status, message, isError);
+    };
+    if (QUESTION_SOURCES_PANEL_STATUS) QUESTION_SOURCES_PANEL_STATUS(this.hosts.status, render, isError, options);
+    else render();
   }
 
   query(extra) {
@@ -967,7 +978,7 @@ class QuestionSourcesPanel {
         return;
       }
     }
-    this.setStatus(this.t('run.done', { count: questionSourcesCount(run.added, this.locale) }));
+    this.setStatus(this.t('run.done', { count: questionSourcesCount(run.added, this.locale) }), false, { toast: true });
   }
 
   // -------------------------------------------------------------------------------------------------------------------------------------
@@ -1136,7 +1147,7 @@ class QuestionSourcesPanel {
       this.pilotInput.value = '';
       this.pilotFieldMessage(null);
       await this.loadPilot();
-      this.setStatus(this.t('pilot.added'));
+      this.setStatus(this.t('pilot.added'), false, { toast: true });
       this.pilotInput.focus();
       return;
     }
@@ -1169,7 +1180,7 @@ class QuestionSourcesPanel {
     if (result.ok) {
       this.pilot.users = this.pilot.users.filter((u) => u.user_id !== row.userId);
       this.renderPilot();
-      this.setStatus(this.t('pilot.removed'));
+      this.setStatus(this.t('pilot.removed'), false, { toast: true });
       const buttons = this.pilotBody.querySelectorAll('tbody button');
       const next = buttons[Math.min(Math.max(index, 0), buttons.length - 1)];
       (next || this.pilotInput).focus();
@@ -1177,7 +1188,7 @@ class QuestionSourcesPanel {
     }
     if (result.status === 404) {
       await this.loadPilot();
-      this.setStatus(this.t('pilot.gone'));
+      this.setStatus(this.t('pilot.gone'), false, { toast: true });
       this.pilotInput.focus();
       return;
     }
@@ -1478,7 +1489,7 @@ class QuestionSourcesPanel {
     const message = this.t('import.done', { count: questionSourcesCount(sums.added, this.locale) });
     this.importResult.replaceChildren(...this.renderImportCounts(sums, false, 'import.result.done'), this.el('p', { className: 'text-sm max-w-prose', text: message }));
     this.setImportActions([this.importReset]);
-    this.setStatus(message);
+    this.setStatus(message, false, { toast: true });
   }
 
   // -------------------------------------------------------------------------------------------------------------------------------------

@@ -3,7 +3,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
-import { FakeDocument, FakeElement, functionSource } from './helpers/html-fake-dom';
+import { FakeDocument, FakeElement, blockFrom } from './helpers/html-fake-dom';
 
 const require = createRequire(import.meta.url);
 const configUiDir = path.resolve(__dirname, '../../scripts/config-ui');
@@ -94,24 +94,38 @@ describe('ragPanelSetStatus (UI-SPEC amendment 261127-tfs)', () => {
   });
 });
 
+function runShowToast() {
+  const doc = new FakeDocument();
+  const toast = doc.createElement('div');
+  toast.setAttribute('id', 'toast');
+  toast.classList.add('hidden');
+  const alert = doc.createElement('div');
+  alert.classList.add('alert', 'alert-info');
+  const message = doc.createElement('span');
+  message.setAttribute('id', 'toastMessage');
+  alert.appendChild(message);
+  toast.appendChild(alert);
+  doc.body.appendChild(toast);
+  const timers: Array<{ id: number; fn: () => void; cleared: boolean }> = [];
+  const context: Record<string, unknown> = {
+    document: doc,
+    console,
+    setTimeout: (fn: () => void) => timers.push({ id: timers.length + 1, fn, cleared: false }),
+    clearTimeout: (id: number) => {
+      const timer = timers.find((t) => t.id === id);
+      if (timer) timer.cleared = true;
+    },
+  };
+  vm.createContext(context);
+  const start = indexHtml.indexOf('function showToast(');
+  const bodyOpen = indexHtml.indexOf(') {', start) + 1;
+  const source = indexHtml.slice(start, bodyOpen) + blockFrom(indexHtml, bodyOpen);
+  new vm.Script(source + '\nthis.showToast = showToast;').runInContext(context);
+  return { toast, message, timers, show: context.showToast as (_m: string, _t?: string, _o?: { ariaHidden?: boolean }) => void };
+}
+
+
 describe('showToast aria-hidden option', () => {
-  function runShowToast() {
-    const doc = new FakeDocument();
-    const toast = doc.createElement('div');
-    toast.setAttribute('id', 'toast');
-    toast.classList.add('hidden');
-    const alert = doc.createElement('div');
-    alert.classList.add('alert', 'alert-info');
-    const message = doc.createElement('span');
-    message.setAttribute('id', 'toastMessage');
-    alert.appendChild(message);
-    toast.appendChild(alert);
-    doc.body.appendChild(toast);
-    const context: Record<string, unknown> = { document: doc, console, setTimeout: () => 0 };
-    vm.createContext(context);
-    new vm.Script(functionSource(indexHtml, 'showToast') + '\nthis.showToast = showToast;').runInContext(context);
-    return { toast, message, show: context.showToast as (m: string, t?: string, o?: { ariaHidden?: boolean }) => void };
-  }
 
   it('sets aria-hidden for an echo toast and removes it for the page’s other toasts', () => {
     const { toast, message, show } = runShowToast();
@@ -125,15 +139,15 @@ describe('showToast aria-hidden option', () => {
 });
 
 describe('panel wiring', () => {
-  it('index.html loads panel-status.js right after rag-fetch.js, before every panel', () => {
+  it('index.html loads panel-status.js right before rag-fetch.js, ahead of every panel', () => {
     const scripts = [...indexHtml.matchAll(/<script src="rag-panels\/([\w-]+)\.js"><\/script>/g)].map((m) => m[1]);
-    expect(scripts.indexOf('panel-status')).toBe(scripts.indexOf('rag-fetch') + 1);
+    expect(scripts.indexOf('panel-status')).toBe(scripts.indexOf('rag-fetch') - 1);
     for (const panel of PANELS) expect(scripts.indexOf(panel)).toBeGreaterThan(scripts.indexOf('panel-status'));
   });
 
   it.each(PANELS)('%s routes setStatus through ragPanelSetStatus', (panel) => {
     const source = fs.readFileSync(path.join(panelDir, panel + '.js'), 'utf8');
-    const start = source.search(/\n  setStatus\(/);
+    const start = source.search(/\n {2}setStatus\(/);
     expect(start).toBeGreaterThan(0);
     const body = source.slice(start, source.indexOf('\n  }\n', start));
     expect(body).toMatch(/_STATUS\(/);
