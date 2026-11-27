@@ -646,3 +646,14 @@ def test_committed_configs_and_baselines_still_load():
     assert baselines
     for path in baselines:
         Baseline.model_validate_json(path.read_text())
+
+
+def test_rag_trace_stale_index_drop_is_optional_and_non_negative():
+    trace = RagTrace.model_validate(_trace())
+    assert trace.stale_index_drop is None
+    assert "stale_index_drop" not in trace.model_dump(mode="json")
+    assert RagTrace.model_validate(_trace(stale_index_drop=0)).stale_index_drop == 0
+    assert RagTrace.model_validate(_trace(stale_index_drop=3)).model_dump(mode="json")["stale_index_drop"] == 3
+    for bad in (-1, 1.5):
+        with pytest.raises(ValidationError):
+            RagTrace.model_validate(_trace(stale_index_drop=bad))
