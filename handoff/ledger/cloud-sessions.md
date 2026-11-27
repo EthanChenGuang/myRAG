@@ -819,3 +819,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - TRAIN NOTE: after merging main, run `git apply .planning/quick/261127-orv-openrouter-verification-fixes/vendor-data-flow-openrouter-embeddings.patch`.
   - Owner decision pending: whether serving through OpenRouter requires a recorded live match (recommended) or the risk is accepted.
   - Archived.
+- 22:51Z quick-term-glossary-wiring (261127-tgw) DONE exec/quick-term-glossary-wiring -> train 41 (W-2; gated prompt shared.terminology.v1; off = byte-identical; voice cache-only). Staging latency check is an owner item. Archived.
