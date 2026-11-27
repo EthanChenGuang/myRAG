@@ -265,9 +265,16 @@ def test_answer_check_budgets_are_report_only():
 
 def test_answer_check_budget_rejects_unknown_entry():
     payload = samples._latency_budgets().model_dump(mode="json")
-    payload["answer_checks"] = {"calc_check": _budget(1, 2)}
+    payload["answer_checks"] = {"unknown_check": _budget(1, 2)}
     with pytest.raises(ValidationError):
         LatencyBudgets.model_validate(payload)
+
+
+def test_answer_check_budget_accepts_calc_check():
+    payload = samples._latency_budgets().model_dump(mode="json")
+    payload["answer_checks"] = {"calc_check": _budget(1, 2)}
+    budgets = LatencyBudgets.model_validate(payload)
+    assert budgets.answer_checks is not None and budgets.answer_checks.calc_check is not None
 
 
 def test_committed_latency_budgets_still_validate_without_answer_checks():

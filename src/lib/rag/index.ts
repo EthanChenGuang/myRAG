@@ -330,7 +330,7 @@ export {
   type TextsSource,
 } from './generation/answer-turn';
 export { guardChannelReply, guardSummaryText, guardVoiceTranscript } from './security/channel-reply-guard';
-export { applyAnswerPipelineToText, type AnswerTextPipelineResult } from './generation/answer-transforms';
+export { applyAnswerPipelineToText, createCalcCheckSink, type AnswerTextPipelineResult, type CalcCheckRun, type CalcCheckSink } from './generation/answer-transforms';
 export { buildSentenceRecords } from './generation/sentences-record';
 export { attributeSourceChunks } from './security/security-events';
 export { formatGuardedLinks, linkUsageInstructions } from './security/link-section';
@@ -372,7 +372,7 @@ export type {
   ClaudeStartInput,
   HistoryMessage,
 } from './generation/citations/session';
-export { mintAnswerId, scheduleAnswerFinish, shouldPersistAnswer } from './generation/answer-finish';
+export { mintAnswerId, scheduleAnswerFinish, scheduleCalcReviewEnqueue, shouldPersistAnswer } from './generation/answer-finish';
 export type { AnswerFinishDeps, AnswerFinishInput, AnswerPendingContext, ShouldPersistAnswerInput } from './generation/answer-finish';
 export { groundednessEligibility, scoreAnswerGroundedness } from './generation/groundedness';
 export type {

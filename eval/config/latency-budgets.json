@@ -1,5 +1,9 @@
 {
   "answer_checks": {
+    "calc_check": {
+      "p50_ms": 5,
+      "p95_ms": 20
+    },
     "claim_check": {
       "p50_ms": 2000,
       "p95_ms": 6000

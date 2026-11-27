@@ -69,6 +69,7 @@ class GroundednessBudgets(_Contract):
 class AnswerCheckBudgets(_Contract):
     """D-28, D-61: report-only budgets for the post-stream checks and the guard's per-delta overhead."""
 
+    calc_check: ScorerBudget | None = None
     claim_check: ScorerBudget | None = None
     groundedness_judge: ScorerBudget | None = None
     output_guard: ScorerBudget | None = None
