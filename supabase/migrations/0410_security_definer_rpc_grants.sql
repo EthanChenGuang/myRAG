@@ -834,6 +834,30 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_purge_hook_dup_clusters(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_hook_dup_clusters(text, uuid, uuid[]) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_nango_owner_tenant_key(uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_nango_owner_tenant_key(uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_nango_owner_tenant_key(uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_source_reconcile_run_record(text, uuid, text, text, jsonb, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_source_reconcile_run_record(text, uuid, text, text, jsonb, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_source_reconcile_run_record(text, uuid, text, text, jsonb, text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_source_reconcile_run_decide(uuid, uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_source_reconcile_run_decide(uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_source_reconcile_run_decide(uuid, uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_source_reconcile_run_finish(uuid, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_source_reconcile_run_finish(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_source_reconcile_run_finish(uuid, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_source_sync_admin_connections(uuid, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_source_sync_admin_connections(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_source_sync_admin_connections(uuid, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_source_sync_set_deletion_mode(uuid, uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_source_sync_set_deletion_mode(uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_source_sync_set_deletion_mode(uuid, uuid, text) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_purge_hook_identifiers(text, uuid, uuid[])') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) TO service_role;
