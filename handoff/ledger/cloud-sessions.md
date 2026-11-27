@@ -798,3 +798,14 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
     - 5.3 T-05.3-391: the release-gate status can be spoofed by any GITHUB_TOKEN workflow, and the dispatch path runs an arbitrary sha with secrets.
     - 3.2 UF-1: authenticated users can INSERT documents/chunks directly via PostgREST (status defaults to ready), bypassing approval and the scans. This is on main.
     - 3.2 UF-3: hybrid_search_translations has no access predicate.
+- 22:48Z 03.3-26 CHECKPOINT human-action. exec/03.3-26 61248077 (base 03.3-25).
+  - Autonomous prep is done and tested:
+    - header_ab_check tool (TPL-09 must-check); the fixture rehearsal reproduces reopen_d26.
+    - live grants probe.
+    - README template.
+  - Owner steps (eval DB only) are in 03.3-26-CHECKPOINT.md:
+    - apply 1001-1009 twice, then the grants probe;
+    - residue on 5 real files;
+    - rules/attributes idempotency + A2/A3 perf;
+    - step T: header A/B on a real golden with >=10 cache_near_miss.
+  - Owner HOLD. Archived.
