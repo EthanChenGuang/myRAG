@@ -12,6 +12,14 @@ export interface SourceCitation {
   sectionPath: string[] | null;
   unavailable: boolean;
   messageId?: string;
+  /** Phase 5.2 (D-50): present only while the version labels produced them. */
+  versionLabel?: string;
+  effectiveFrom?: string;
+  documentVersion?: number;
+  /** The older document of the answer's version conflict (checks.version_conflict). */
+  olderVersion?: true;
+  /** The answer language (metadata, else the merged record value). */
+  answerLanguage?: string;
 }
 
 export interface Source {
@@ -41,14 +49,35 @@ export type AnswerDocumentStatus = Readonly<Record<string, 'current' | 'unavaila
  * `documents` is the answer record's availability map; without a record the snapshot shows without link or note.
  * Existing entries are kept (earlier citation entries are rebuilt); documents that were cited are flagged.
  */
+type CitationVersionFields = Pick<SourceCitation, 'versionLabel' | 'effectiveFrom' | 'documentVersion' | 'olderVersion' | 'answerLanguage'>;
+
+function versionFields(
+  citation: { documentId: string; documentVersion?: number | null; versionLabel?: string; effectiveFrom?: string },
+  conflict: { document_ids: string[]; latest_document_id: string } | null,
+  answerLanguage: string | undefined,
+): CitationVersionFields {
+  const fields: CitationVersionFields = {};
+  if (citation.versionLabel) fields.versionLabel = citation.versionLabel;
+  if (citation.effectiveFrom) fields.effectiveFrom = citation.effectiveFrom;
+  if (conflict && conflict.document_ids.includes(citation.documentId) && conflict.latest_document_id !== citation.documentId) {
+    fields.olderVersion = true;
+  }
+  if (Object.keys(fields).length === 0) return fields;
+  if (typeof citation.documentVersion === 'number') fields.documentVersion = citation.documentVersion;
+  if (answerLanguage) fields.answerLanguage = answerLanguage;
+  return fields;
+}
+
 export function citationSourcesFor(
   metadata: unknown,
   documents: AnswerDocumentStatus | undefined,
   existing: Source[] = [],
   messageId?: string,
 ): Source[] {
-  const citations = pickAnswerMetadata(metadata).citations;
+  const picked = pickAnswerMetadata(metadata);
+  const citations = picked.citations;
   if (!citations || citations.length === 0) return existing;
+  const conflict = picked.checks?.version_conflict ?? null;
   const sorted = [...citations].sort((a, b) => a.n - b.n);
   const entries = citationDisplayEntries(sorted, documents ?? {});
   const citationEntries: Source[] = entries.map((entry, index) => {
@@ -66,6 +95,7 @@ export function citationSourcesFor(
         sectionPath: entry.sectionPath,
         unavailable,
         ...(messageId ? { messageId } : {}),
+        ...versionFields(sorted[index], conflict, picked.answerLanguage),
       },
     };
     if (documents && entry.linkDocumentId) source.documentId = entry.linkDocumentId;

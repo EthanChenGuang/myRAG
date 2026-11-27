@@ -2,13 +2,15 @@
 
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import { X, ExternalLink, FileText, Compass, Info } from 'lucide-react';
+import { X, ExternalLink, FileText, Compass, Info, Clock } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme-provider';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSources, type Source } from '../providers/sources-provider';
 import { answerQualityStrings } from '@/translations/answer-quality';
+import { clientText, clientTextLanguage } from '@/lib/chat/answer-texts';
+import type { SourceCitation } from '../providers/sources-provider';
 import { useShallow } from 'zustand/react/shallow';
 import { useLanguage } from '../providers/language-provider';
 import { useChatStore } from '@/lib/chat-store';
@@ -44,6 +46,56 @@ export interface CitationSourceEntryProps {
   focused?: boolean;
 }
 
+const VERSION_LABEL_MAX = 40;
+
+/** The primary subtag of the UI language, for deciding whether a text needs its own lang attribute. */
+function uiBase(language: string | null | undefined): string {
+  return (language ?? '').split('-')[0]!.toLowerCase();
+}
+
+/** `{date}` in a registry text split around the date, so the date can sit in a time element. */
+function aroundDate(template: string): [string, string] {
+  const at = template.indexOf('{date}');
+  return at < 0 ? [`${template} `, ''] : [template.slice(0, at), template.slice(at + '{date}'.length)];
+}
+
+/** GEN-14 (UI-SPEC 6.7): version, effective date and older-version parts; null when the citation carries none. */
+function CitationVersionLine({ citation, uiLanguage }: { citation: SourceCitation; uiLanguage: string }) {
+  const language = clientTextLanguage(citation.answerLanguage ?? uiLanguage);
+  const version =
+    citation.versionLabel ??
+    (citation.olderVersion && typeof citation.documentVersion === 'number'
+      ? clientText('labels.version', language).replace('{version}', String(citation.documentVersion))
+      : null);
+  const date = citation.effectiveFrom ?? null;
+  const older = citation.olderVersion ? clientText('labels.older_version', language) : '';
+  if (!version && !date && !older) return null;
+  const [beforeDate, afterDate] = date ? aroundDate(clientText('labels.effective_from', language)) : ['', ''];
+  const long = version !== null && version.length > VERSION_LABEL_MAX;
+  return (
+    <p
+      data-citation-version=""
+      lang={language === uiBase(uiLanguage) ? undefined : language}
+      className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400"
+    >
+      {version && (long ? <span className="min-w-0 max-w-full truncate" title={version}>{version}</span> : <span>{version}</span>)}
+      {date && (
+        <span>
+          {beforeDate}
+          <time dateTime={date} className="tabular-nums">{date}</time>
+          {afterDate}
+        </span>
+      )}
+      {older && (
+        <span className="inline-flex items-center gap-1">
+          <Clock aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+          {older}
+        </span>
+      )}
+    </p>
+  );
+}
+
 /** One citation in the sources panel, rendered from its snapshot as plain text nodes. */
 export function CitationSourceEntry({ source, language, focused = false }: CitationSourceEntryProps) {
   const citation = source.citation;
@@ -76,6 +128,7 @@ export function CitationSourceEntry({ source, language, focused = false }: Citat
         </span>
         <div className="min-w-0 flex-1">
           <h4 className="break-words text-sm font-medium text-gray-900 dark:text-gray-100">{source.title}</h4>
+          <CitationVersionLine citation={citation} uiLanguage={language} />
           {location.length > 0 && (
             <p className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">{location.join(' · ')}</p>
           )}

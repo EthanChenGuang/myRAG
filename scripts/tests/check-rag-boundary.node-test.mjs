@@ -132,6 +132,14 @@ test('deep-import: a path below @/lib/rag fails, the public index passes', () =>
   assert.deepEqual(rulesFor({ 'src/app/c.ts': "import { x } from '@/lib/rag/index';\n" }), []);
 });
 
+test('deep-import: the generated client texts module may be imported, nothing else below lang', () => {
+  assert.deepEqual(rulesFor({ 'src/lib/chat/a.ts': "import { FIXED_TEXTS } from '@/lib/rag/lang/texts.generated';\n" }), []);
+  assert.deepEqual(
+    rulesFor({ 'src/lib/chat/b.ts': "import { fixedText } from '@/lib/rag/lang/texts';\n" }),
+    ['src/lib/chat/b.ts:deep-import'],
+  );
+});
+
 test('deep-import: the shared config-gate CommonJS files may be required, nothing else below them', () => {
   assert.deepEqual(
     rulesFor({ 'scripts/a.js': "const { isSecretName } = require('../src/lib/rag/config-gate/secret-name.cjs');\n" }),

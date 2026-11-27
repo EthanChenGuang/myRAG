@@ -104,6 +104,17 @@ function splitCode(text: string): Segment[] {
   return segments;
 }
 
+/** The [start, end) ranges of code (fenced blocks, inline code spans) in text, as renderCitationMarkers sees them. */
+export function codeRanges(text: string): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+  let offset = 0;
+  for (const segment of splitCode(text)) {
+    if (segment.code) ranges.push({ start: offset, end: offset + segment.text.length });
+    offset += segment.text.length;
+  }
+  return ranges;
+}
+
 function trimTrailingHorizontal(text: string): string {
   let end = text.length;
   while (end > 0 && HORIZONTAL_WS.test(text[end - 1])) end--;
