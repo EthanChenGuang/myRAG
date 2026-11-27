@@ -628,3 +628,11 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   Train 38 is at d49d1b6a (subq-filters switch-gated hash fix).
 - 20:29Z User consented: deploying main 00afa6d9 (train 37) -> dpl_6PB9HxaqvBHDWeX1Qc9RxoPJsymW.
 - 20:36Z PROD DEPLOY READY: main 00afa6d9 (train 37) -> dpl_6PB9HxaqvBHDWeX1Qc9RxoPJsymW, aliased to myrag.laoxiang.app. Prod DB and app are now through train 37.
+- 21:03Z TRAIN 38: PR #135 opened ("train 38: 27 plans"), head a6b83f83, subscribed. Full vitest is 15929/0. train38-live.sql is on ops/owner-actions at 796971c8.
+  Apply order: 0930 common (live file edited by 04.3-09/-10, re-run whole), 0930 multi-tenant, 0933, 0741, 0981, 0984, 0409 delta, 0410 r21.
+  DROP sections: 0930 (5 search RPCs), 0930 multi-tenant (match_documents_by_workspace), 0933 (5 RPCs), 0984 (the 4-arg enqueue).
+  Train 39: 06.2-15, 06.2-17, 06.2-18, 06.2-20, 06.2-21, 05.2.1-17, quick-attribute-access, plus 03.3-25 and 06.2-27 when they are done.
+  Follow-ups:
+  (a) accessSetsFor -> enqueueReviewItem; not small, and 0984 merges the labels in SQL anyway.
+  (b) rag_tenant_doc_types may expose doc-type names of restricted documents; this needs an access check.
+  (c) The 0967/0974 writers still write NULL access_sets.
