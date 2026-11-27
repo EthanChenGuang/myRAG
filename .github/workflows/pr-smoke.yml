@@ -52,7 +52,8 @@ jobs:
 
   ts-db:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Train 38: the larger fixture corpus put the slowest shard (migration and fixture-rebuild suites) past 25 minutes.
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:

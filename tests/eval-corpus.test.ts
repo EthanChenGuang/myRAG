@@ -12,7 +12,8 @@ const CORPUS_DIR = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const TRACER_ITEM_ID = 'en-general-001';
 const OTHER_USER_ID = '00000000-0000-4000-8000-0000000000f2';
 const LANGUAGES = ['zh', 'en', 'it'] as const;
-const TIMEOUT_MS = 120_000;
+// Train 38: the multi-tenant tracer build took 122 s on CI with the 05.2.1-12 corpus documents.
+const TIMEOUT_MS = 240_000;
 
 interface GoldenLine {
   id: string;
