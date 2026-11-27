@@ -828,8 +828,61 @@ def check_monitor_job(data: dict, errors: list[str]) -> None:
     _check_no_leaks(name, steps, errors, private=False)
 
 
+JUDGE_CALIBRATION_FLAG = "HAS_JUDGE_KEYS"
+JUDGE_CALIBRATION_SEED_RUN = "python -m rag_eval.judge_calibration run --seed-only"
+_PUSH_OR_PR_RE = re.compile(r"\bgit\s+push\b|\bgh\s+pr\b|\bgh\s+api\b.*\bpulls\b")
+
+
 def check_judge_calibration(data: dict, errors: list[str]) -> None:
-    pass
+    """D-32: monthly calibration with a visible skip; the result is an artifact, a person opens the pull request."""
+    name = "judge-calibration"
+    trig = triggers(data)
+    schedule = trig.get("schedule") or []
+    if not any(isinstance(entry, dict) and entry.get("cron") for entry in schedule):
+        errors.append(f"{name}: a monthly schedule is required")
+    if "workflow_dispatch" not in trig:
+        errors.append(f"{name}: trigger 'workflow_dispatch' missing")
+    for forbidden in ("pull_request", "pull_request_target", "push"):
+        if forbidden in trig:
+            errors.append(f"{name}: trigger '{forbidden}' must not be used")
+    if data.get("permissions") != {"contents": "read"}:
+        errors.append(f"{name}: top-level permissions must be exactly contents: read (no write permission)")
+    env = data.get("env") or {}
+    for key, value in TELEMETRY.items():
+        if str(env.get(key)) != value:
+            errors.append(f"{name}: workflow env {key} must be '{value}'")
+    jobs = data.get("jobs") or {}
+    if not jobs:
+        errors.append(f"{name}: no job")
+    for jname, job in jobs.items():
+        for scope, level in (job.get("permissions") or {}).items():
+            if str(level) == "write":
+                errors.append(f"{name}: job {jname} must not request {scope}: write")
+        flag_expr = str((job.get("env") or {}).get(JUDGE_CALIBRATION_FLAG, ""))
+        for secret in ("OPENROUTER_API_KEY", "OPENAI_API_KEY"):
+            if f"secrets.{secret} != ''" not in flag_expr:
+                errors.append(f"{name}: job env {JUDGE_CALIBRATION_FLAG} must require secrets.{secret}")
+        steps = all_steps(job)
+        ungated = [s for s in steps if f"{JUDGE_CALIBRATION_FLAG} == 'true'" not in str(s.get("if", ""))]
+        if (
+            len(ungated) != 1
+            or JUDGE_CALIBRATION_SKIP_NOTICE not in str(ungated[0].get("run", ""))
+            or f"{JUDGE_CALIBRATION_FLAG} != 'true'" not in str(ungated[0].get("if", ""))
+        ):
+            errors.append(f"{name}: only the skip-notice step may run without the {JUDGE_CALIBRATION_FLAG} == 'true' condition")
+        if JUDGE_CALIBRATION_SEED_RUN not in " ".join(step_text(job).split()):
+            errors.append(f"{name} must run '{JUDGE_CALIBRATION_SEED_RUN}'")
+        uploads = [s for s in steps if str(s.get("uses", "")).startswith("actions/upload-artifact@")]
+        if not any(JUDGE_CALIBRATION in str((s.get("with") or {}).get("path", "")) for s in uploads):
+            errors.append(f"{name} must upload {JUDGE_CALIBRATION} as an artifact for a person to open the pull request")
+        for step in uploads:
+            if "eval/golden/private" in str((step.get("with") or {}).get("path", "")):
+                errors.append(f"{name} must not upload anything under eval/golden/private")
+        for step in steps:
+            run = str(step.get("run", ""))
+            if _PUSH_OR_PR_RE.search(run):
+                errors.append(f"{name} must not push a branch or open a pull request (a person opens it from the artifact)")
+        _check_no_leaks(name, steps, errors, private=False)
 
 
 def check_nightly_triggers(data: dict, errors: list[str]) -> None:
@@ -1273,6 +1326,13 @@ def main() -> int:
         check_no_ray_extra("promote-production", PROMOTE.read_text(encoding="utf-8"), errors)
     else:
         errors.append(f"missing {PROMOTE.relative_to(ROOT)}")
+    if JUDGE_CALIBRATION_WORKFLOW.exists():
+        data, text = load(JUDGE_CALIBRATION_WORKFLOW)
+        check_common("judge-calibration", data, text, errors)
+        check_judge_calibration(data, errors)
+        check_no_ray_extra("judge-calibration", text, errors)
+    else:
+        errors.append(f"missing {JUDGE_CALIBRATION_WORKFLOW.relative_to(ROOT)}")
     check_lakera_secret_scope(errors)
     check_absolute_gates(load(PR)[0] if PR.exists() else None, load(NIGHTLY)[0] if NIGHTLY.exists() else None, errors)
     workflows = [load(path)[0] for path in (PR, NIGHTLY) if path.exists()]
