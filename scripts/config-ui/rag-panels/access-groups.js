@@ -195,6 +195,17 @@ const ACCESS_GROUPS_LABELS = {
     'action.openEnforcement': "Open enforcement",
     'action.openMapping': "Open connector mapping",
     'groups.personal': "A personal workspace has one user, so it has no access groups. Choose a team workspace under Document Processing, Upload Destination.",
+    'tab.groupsPlain': "Groups",
+    'panel.workspaceDefault': "Default workspace",
+    'groups.caption': "Access groups of this workspace",
+    'rename.running': "Saving…",
+    'members.adding': "Adding…",
+    'members.removing': "Removing…",
+    'members.searching': "Searching members…",
+    'members.loading': "Loading members…",
+    'members.unavailable': "Members are unavailable right now. Select Reload panel in a moment.",
+    'members.results': "Search results",
+    'delete.countsLabel': "Affected documents and members",
     'filter.restricted': "Restricted",
     'filter.uploaderOnly': "Uploader and admins only",
     'filter.everyone': "Everyone",
@@ -458,6 +469,17 @@ const ACCESS_GROUPS_LABELS = {
     'action.openEnforcement': "打开生效状态",
     'action.openMapping': "打开连接器映射",
     'groups.personal': "个人工作区只有一位用户，因此没有访问组。请在“文档处理 → 上传目标”中选择团队工作区。",
+    'tab.groupsPlain': "访问组",
+    'panel.workspaceDefault': "默认工作区",
+    'groups.caption': "此工作区的访问组",
+    'rename.running': "正在保存…",
+    'members.adding': "正在添加…",
+    'members.removing': "正在移除…",
+    'members.searching': "正在搜索成员…",
+    'members.loading': "正在加载成员…",
+    'members.unavailable': "暂时无法获取成员。请稍后选择“重新加载面板”。",
+    'members.results': "搜索结果",
+    'delete.countsLabel': "受影响的文档和成员",
     'filter.restricted': "受限",
     'filter.uploaderOnly': "仅上传者和管理员",
     'filter.everyone': "所有人",
@@ -721,6 +743,17 @@ const ACCESS_GROUPS_LABELS = {
     'action.openEnforcement': "Apri applicazione",
     'action.openMapping': "Apri mappatura dei connettori",
     'groups.personal': "Uno spazio personale ha un solo utente, quindi non ha gruppi di accesso. Scegli uno spazio di team in Document Processing, Upload Destination.",
+    'tab.groupsPlain': "Gruppi",
+    'panel.workspaceDefault': "Spazio di lavoro predefinito",
+    'groups.caption': "Gruppi di accesso di questo spazio di lavoro",
+    'rename.running': "Salvataggio…",
+    'members.adding': "Aggiunta…",
+    'members.removing': "Rimozione…",
+    'members.searching': "Ricerca dei membri…",
+    'members.loading': "Caricamento dei membri…",
+    'members.unavailable': "I membri non sono disponibili. Seleziona Ricarica pannello tra poco.",
+    'members.results': "Risultati della ricerca",
+    'delete.countsLabel': "Documenti e membri interessati",
     'filter.restricted': "Riservati",
     'filter.uploaderOnly': "Solo chi ha caricato e amministratori",
     'filter.everyone': "Tutti",
@@ -986,6 +1019,19 @@ function mapAccessGroupsError(result, locale, ctx) {
     return { key: 'error.network', kind: 'network', message: ui.ragUiSharedLabel('error.network', locale) };
   }
   const status = result.status;
+  if (status === 409 && err === 'group_exists') {
+    return { key: 'error.groupExists', kind: 'field', field: 'key', message: accessGroupsLabel('error.groupExists', locale) };
+  }
+  if (status === 409 && err === 'member_exists') {
+    return { key: 'error.memberExists', kind: 'member', message: accessGroupsLabel('error.memberExists', locale), reload: true };
+  }
+  if (status === 400 && err === 'not_a_workspace_member') {
+    return { key: 'error.notWorkspaceMember', kind: 'member', message: accessGroupsLabel('error.notWorkspaceMember', locale), reload: true };
+  }
+  if (status === 409 && err === 'count_required') {
+    const count = Number(body.count);
+    return { key: 'count_required', kind: 'recount', count: Number.isInteger(count) && count >= 0 ? count : null, message: accessGroupsLabel('delete.counting', locale) };
+  }
   if (status === 400 && (err === 'invalid_key' || err === 'reserved_key')) {
     const key = err === 'invalid_key' ? 'form.badKey' : 'form.reservedKey';
     return { key, kind: 'field', field: 'key', message: accessGroupsLabel(key, locale) };
@@ -994,6 +1040,93 @@ function mapAccessGroupsError(result, locale, ctx) {
     return { key: 'error.changed', kind: 'changed', message: accessGroupsLabel('error.changed', locale), reload: true };
   }
   return ui.ragUiMapError(result, locale, { unavailable: opts.unavailable });
+}
+
+const ACCESS_GROUPS_PAGE = 50;
+const ACCESS_GROUPS_SEARCH_MIN = 2;
+const ACCESS_GROUPS_SEARCH_WAIT_MS = 400;
+const ACCESS_GROUPS_SEARCH_MAX = 20;
+
+/** D-01, UI-SPEC 6.3: a key suggested from the name; nothing for a name without an ASCII letter or for a reserved key. */
+function accessGroupsSuggestKey(name) {
+  const slug = accessGroupsText(name)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+/, '')
+    .slice(0, 63)
+    .replace(/-+$/, '');
+  if (!/[a-z]/.test(slug) || ACCESS_GROUPS_RESERVED_KEYS.has(slug) || !ACCESS_GROUPS_KEY_RE.test(slug)) return '';
+  return slug;
+}
+
+/** The new-group form's findings, in field order; the form can be sent only when there is none (UI-SPEC 6.3, 9.6). */
+function accessGroupsFormFindings(name, key) {
+  const findings = [];
+  if (!accessGroupsText(name).trim()) findings.push({ field: 'name', key: 'form.needName' });
+  const k = accessGroupsText(key).trim();
+  if (ACCESS_GROUPS_RESERVED_KEYS.has(k)) findings.push({ field: 'key', key: 'form.reservedKey' });
+  else if (!ACCESS_GROUPS_KEY_RE.test(k)) findings.push({ field: 'key', key: 'form.badKey' });
+  return { findings, valid: findings.length === 0 };
+}
+
+function accessGroupsCount(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 ? n : 0;
+}
+
+/** One row of GET /: id, key, name, source, counts; a row without id or key is dropped. */
+function buildAccessGroupsGroupRow(group) {
+  if (!group || typeof group !== 'object') return null;
+  const id = accessGroupsText(group.id);
+  const key = accessGroupsText(group.key);
+  if (!id || !key) return null;
+  const source = accessGroupsText(group.source) || 'manual';
+  return {
+    id,
+    key,
+    name: accessGroupsText(group.name) || key,
+    source,
+    connector: source === 'connector',
+    memberCount: accessGroupsCount(group.memberCount),
+    documentCount: accessGroupsCount(group.documentCount),
+  };
+}
+
+/** The GET / answer: rows, cursor, personal workspace. */
+function buildAccessGroupsList(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  const rows = (Array.isArray(b.groups) ? b.groups : []).map(buildAccessGroupsGroupRow).filter(Boolean);
+  return { personal: b.personal === true, rows, nextCursor: typeof b.nextCursor === 'string' && b.nextCursor ? b.nextCursor : null };
+}
+
+/** UI-SPEC 6.3: a member's name as the route returns it; the e-mail without a name; a bare id in font-mono. */
+function accessGroupsMemberName(member) {
+  const m = member && typeof member === 'object' ? member : {};
+  const display = accessGroupsText(m.displayName).trim();
+  if (display) return { text: display, mono: false };
+  const email = accessGroupsText(m.email).trim();
+  if (email) return { text: email, mono: false };
+  return { text: accessGroupsText(m.userId), mono: true };
+}
+
+/** GET /{id}/impact: the three counts and the mapping count; null when one of the three is missing (D-18). */
+function buildAccessGroupsImpactView(body) {
+  const impact = body && typeof body === 'object' && body.impact && typeof body.impact === 'object' ? body.impact : null;
+  if (!impact) return null;
+  const pick = (v) => {
+    const n = Number(v);
+    return v !== null && v !== undefined && v !== '' && Number.isInteger(n) && n >= 0 ? n : null;
+  };
+  const onlyCount = pick(impact.onlyCount);
+  const sharedCount = pick(impact.sharedCount);
+  const memberCount = pick(impact.memberCount);
+  if (onlyCount === null || sharedCount === null || memberCount === null) return null;
+  return { onlyCount, sharedCount, memberCount, mappingCount: pick(impact.mappingCount) || 0 };
+}
+
+/** "label: {count}" templates split into the label for a dt; the number goes in the dd. */
+function accessGroupsCountLabel(template) {
+  return accessGroupsText(template).replace(/\s*[:：]\s?\{count\}\s*$/, '');
 }
 
 class AccessGroupsPanel {
@@ -1013,6 +1146,21 @@ class AccessGroupsPanel {
     this.restartNeeded = false;
     this.lastSaved = null;
     this.hosts = {};
+    this.organizationId = null;
+    this.workspaceBound = false;
+    this.groups = null;
+    this.groupsFailure = null;
+    this.groupsSeq = 0;
+    this.groupsUpdatedAt = null;
+    this.groupHosts = {};
+    this.form = this.emptyForm();
+    this.formHosts = null;
+    this.renaming = null;
+    this.members = null;
+    this.membersRegion = null;
+    this.memberHosts = null;
+    this.deleting = null;
+    this.moreButton = null;
   }
 
   t(key, vars) {
@@ -1062,9 +1210,13 @@ class AccessGroupsPanel {
     this.tabs = ui.ragUiSubTabs(this.doc, {
       label: this.t('panel.tabsLabel'),
       idPrefix: 'rag-access-groups',
-      tabs: [{ id: 'enforcement', label: this.t('tab.enforcement') }],
-      selected: 'enforcement',
+      tabs: [
+        { id: 'groups', label: this.t('tab.groupsPlain') },
+        { id: 'enforcement', label: this.t('tab.enforcement') },
+      ],
+      selected: 'groups',
     });
+    this.buildGroups(this.tabs.panels.groups);
     this.buildEnforcement(this.tabs.panels.enforcement);
     const content = this.root.querySelector('[data-access-groups-content]');
     if (content) content.replaceChildren(this.tabs.tablist, ...Object.values(this.tabs.panels));
@@ -1072,11 +1224,17 @@ class AccessGroupsPanel {
     if (this.doc && typeof this.doc.addEventListener === 'function') {
       this.doc.addEventListener('rag:config-saved', (event) => this.onConfigSaved(event && event.detail));
     }
+    this.readWorkspace();
+    this.bindWorkspace();
     this.renderAll();
+    await this.loadGroups('first');
     await this.loadStatus('first');
   }
 
   async refresh() {
+    this.readWorkspace();
+    this.bindWorkspace();
+    await this.loadGroups('refresh');
     await this.loadStatus('refresh');
   }
 
@@ -1557,6 +1715,1125 @@ class AccessGroupsPanel {
       ),
     );
   }
+
+  // --- Groups sub-view (UI-SPEC 6.3; D-01, D-04, D-18, D-28) ---
+
+  orgQuery(extra) {
+    const params = new URLSearchParams();
+    if (this.organizationId) params.set('organizationId', this.organizationId);
+    for (const [name, value] of Object.entries(extra || {})) {
+      if (value !== null && value !== undefined && value !== '') params.set(name, String(value));
+    }
+    const text = params.toString();
+    return text ? '?' + text : '';
+  }
+
+  request(path, init) {
+    return accessGroupsUiLib().ragUiRagRequest(path, init);
+  }
+
+  workspaceSelector() {
+    return this.doc.getElementById('workspace-selector');
+  }
+
+  multiTenant() {
+    const container = this.doc.getElementById('workspace-selector-container');
+    return Boolean(container && this.workspaceSelector() && !container.classList.contains('hidden'));
+  }
+
+  readWorkspace() {
+    const selector = this.workspaceSelector();
+    this.organizationId = selector && selector.value ? String(selector.value) : null;
+    this.renderWorkspace();
+  }
+
+  workspaceName() {
+    const selector = this.workspaceSelector();
+    if (!selector || !selector.value) return this.t('panel.workspaceDefault');
+    const option = Array.from(selector.querySelectorAll('option')).find((o) => o.getAttribute('value') === selector.value);
+    const name = option ? accessGroupsText(option.textContent).trim().replace(/^[^\p{L}\p{N}]+/u, '') : '';
+    return name || this.t('panel.workspaceDefault');
+  }
+
+  renderWorkspace() {
+    let line = this.root.querySelector('[data-access-groups-workspace]');
+    const alertHost = this.root.querySelector('[data-access-groups-alert]');
+    if (!line && alertHost && alertHost.parentNode) {
+      line = this.el('p', { className: 'text-xs text-base-content/70 -mt-2 mb-4 break-words', attrs: { 'data-access-groups-workspace': '' } });
+      alertHost.parentNode.insertBefore(line, alertHost);
+    }
+    if (!line) return;
+    const shown = this.multiTenant();
+    line.hidden = !shown;
+    line.textContent = shown ? this.t('panel.workspace', { name: this.workspaceName() }) : '';
+  }
+
+  bindWorkspace() {
+    const selector = this.workspaceSelector();
+    if (!selector || this.workspaceBound) return;
+    this.workspaceBound = true;
+    selector.addEventListener('change', () => {
+      this.readWorkspace();
+      this.groups = null;
+      this.groupsFailure = null;
+      this.groupsUpdatedAt = null;
+      this.renaming = null;
+      this.closeMembers({ render: false });
+      this.form = this.emptyForm();
+      this.renderForm();
+      this.loadGroups('first');
+    });
+  }
+
+  emptyForm() {
+    return { open: false, name: '', key: '', keyEdited: false, error: null, busy: false };
+  }
+
+  groupsUnavailable() {
+    return this.t('groups.unavailable', { reload: this.t('action.reload') });
+  }
+
+  findRow(id) {
+    return this.groups ? this.groups.rows.find((r) => r.id === id) || null : null;
+  }
+
+  byData(name, value) {
+    return this.root.querySelectorAll('[' + name + ']').filter((node) => node.getAttribute(name) === value);
+  }
+
+  focusManage(id) {
+    const button = this.byData('data-access-groups-manage', id)[0];
+    if (button && typeof button.focus === 'function') button.focus();
+  }
+
+  focusStatus() {
+    const host = this.statusEl();
+    if (host && typeof host.focus === 'function') host.focus();
+  }
+
+  btn(text, className, attrs, onClick) {
+    const button = this.el('button', { className: 'btn h-auto whitespace-normal ' + className, text, attrs: { type: 'button', ...(attrs || {}) } });
+    if (onClick) button.addEventListener('click', onClick);
+    return button;
+  }
+
+  /** A template whose {name} placeholder is the given node (a time element), the rest as text. */
+  withNode(template, name, node) {
+    const parts = accessGroupsText(template).split('{' + name + '}');
+    const nodes = [];
+    parts.forEach((part, index) => {
+      if (part) nodes.push(this.doc.createTextNode(part));
+      if (index < parts.length - 1) nodes.push(node);
+    });
+    return nodes;
+  }
+
+  buildGroups(panel) {
+    this.newGroupButton = this.btn(
+      this.t('action.newGroup'),
+      'btn-outline btn-sm min-h-8 py-1',
+      { 'aria-expanded': 'false', 'aria-controls': 'rag-access-groups-form', 'data-access-groups-new': '' },
+      () => this.openForm(),
+    );
+    this.groupsUpdated = this.el('span', { className: 'text-xs text-base-content/70', attrs: { 'data-access-groups-updated': '' } });
+    this.refreshGroupsButton = this.btn(this.t('action.refreshGroups'), 'btn-outline btn-sm min-h-8 py-1', { 'data-access-groups-refresh': '' }, () => this.loadGroups('refresh'));
+    const toolbar = this.el('div', { className: 'flex flex-wrap items-center gap-2 min-w-0' }, [
+      this.newGroupButton,
+      this.el('div', { className: 'flex flex-wrap items-center gap-2 ml-auto' }, [this.groupsUpdated, this.refreshGroupsButton]),
+    ]);
+    this.groupHosts.form = this.el('div', { className: 'min-w-0', id: 'rag-access-groups-form' });
+    this.groupHosts.list = this.el('div', { className: 'min-w-0 mt-4', attrs: { 'data-access-groups-list': '' } });
+    this.groupHosts.more = this.el('div', { className: 'mt-4 empty:hidden', attrs: { 'data-access-groups-more': '' } });
+    this.groupHosts.toolbar = toolbar;
+    panel.replaceChildren(toolbar, this.groupHosts.form, this.groupHosts.list, this.groupHosts.more);
+  }
+
+  renderGroupsTab() {
+    const tab = this.doc.getElementById('rag-access-groups-tab-groups');
+    if (!tab) return;
+    const ui = accessGroupsUiLib();
+    const known = this.groups && !this.groups.personal && !this.groups.nextCursor;
+    tab.textContent = known ? this.t('tab.groups', { count: ui.ragUiFormatNumber(this.groups.rows.length, this.locale) }) : this.t('tab.groupsPlain');
+  }
+
+  async loadGroups(source) {
+    const ui = accessGroupsUiLib();
+    const host = this.groupHosts.list;
+    if (!host) return false;
+    const seq = ++this.groupsSeq;
+    const append = source === 'more' && this.groups && this.groups.nextCursor;
+    let restore = null;
+    if (append) {
+      restore = this.moreButton ? ui.ragUiButtonBusy(this.doc, this.moreButton, this.t('groups.loading')) : null;
+    } else if (!this.groups && !this.groupsFailure) {
+      ui.ragUiListLoading(this.doc, host, this.t('groups.loading'));
+      if (source !== 'quiet') this.announce(this.t('groups.loading'));
+    } else {
+      ui.ragUiListBusy(host, true);
+      if (this.refreshGroupsButton && source !== 'quiet') restore = ui.ragUiButtonBusy(this.doc, this.refreshGroupsButton, this.t('groups.loading'));
+    }
+    let result;
+    try {
+      result = await this.request(ACCESS_GROUPS_PATH + this.orgQuery({ limit: ACCESS_GROUPS_PAGE, cursor: append ? this.groups.nextCursor : null }), { method: 'GET' });
+    } finally {
+      if (restore) restore();
+    }
+    if (seq !== this.groupsSeq) return false;
+    ui.ragUiListBusy(host, false);
+    if (result && result.ok && result.body && typeof result.body === 'object') {
+      const list = buildAccessGroupsList(result.body);
+      let firstNew = null;
+      if (append) {
+        const seen = new Set(this.groups.rows.map((r) => r.id));
+        const fresh = list.rows.filter((r) => !seen.has(r.id));
+        firstNew = fresh[0] || null;
+        this.groups = { personal: list.personal, rows: [...this.groups.rows, ...fresh], nextCursor: list.nextCursor };
+      } else {
+        this.groups = list;
+      }
+      this.groupsFailure = null;
+      this.groupsUpdatedAt = new Date();
+      if (this.members && !this.findRow(this.members.groupId)) this.closeMembers({ render: false });
+      if (this.renaming && !this.findRow(this.renaming.id)) this.renaming = null;
+      if (this.groups.personal) this.form = this.emptyForm();
+      this.renderForm();
+      this.renderGroups();
+      if (source !== 'quiet') this.announce(this.t('groups.loaded', { count: ui.ragUiFormatNumber(this.groups.rows.length, this.locale) }));
+      if (firstNew) this.focusManage(firstNew.id);
+      else if (append) this.focusStatus();
+      return true;
+    }
+    const mapped = mapAccessGroupsError(result, this.locale, { unavailable: this.groupsUnavailable() });
+    this.groupsFailure = mapped.kind === 'unavailable' || mapped.kind === 'network' ? { ...mapped, kind: 'unavailable', message: this.groupsUnavailable() } : mapped;
+    this.renderGroups();
+    this.announce(this.groupsFailure.message, true);
+    return false;
+  }
+
+  renderGroups() {
+    const ui = accessGroupsUiLib();
+    const host = this.groupHosts.list;
+    if (!host) return;
+    this.renderGroupsTab();
+    const failure = this.groupsFailure;
+    const replaced = Boolean(failure && (failure.kind === 'signIn' || failure.kind === 'workspace'));
+    const personal = Boolean(this.groups && this.groups.personal);
+    this.newGroupButton.hidden = personal || replaced;
+    this.refreshGroupsButton.hidden = replaced;
+    if (this.groupsUpdatedAt && !replaced) {
+      this.groupsUpdated.replaceChildren(...this.withNode(this.t('panel.updated'), 'time', this.timeEl(this.groupsUpdatedAt)));
+    } else this.groupsUpdated.replaceChildren();
+    this.moreButton = null;
+    this.groupHosts.more.replaceChildren();
+    if (replaced) {
+      host.replaceChildren(
+        failure.kind === 'signIn'
+          ? ui.ragUiSignInAlert(this.doc, this.locale, () => this.loadGroups('refresh'))
+          : ui.ragUiAlert(this.doc, { tone: 'warning', icon: 'person-lock', body: [failure.message], actions: [ui.ragUiReloadButton(this.doc, this.locale, () => this.loadGroups('refresh'))] }),
+      );
+      this.groupHosts.form.replaceChildren();
+      return;
+    }
+    const nodes = [];
+    if (failure) nodes.push(ui.ragUiUnavailableAlert(this.doc, this.locale, failure.message, () => this.loadGroups('refresh')));
+    if (!this.groups) {
+      host.replaceChildren(...nodes);
+      return;
+    }
+    if (personal) {
+      nodes.push(ui.ragUiAlert(this.doc, { tone: 'info', icon: 'person', body: [this.t('groups.personal')] }));
+      host.replaceChildren(...nodes);
+      return;
+    }
+    const content = this.groups.rows.length ? this.groupsTable() : this.groupsEmpty();
+    if (failure) content.classList.add('opacity-60');
+    nodes.push(content);
+    host.replaceChildren(...nodes);
+    if (this.groups.nextCursor) {
+      this.moreButton = this.btn(this.t('action.loadMoreGroups'), 'btn-outline btn-sm min-h-8 py-1', { 'data-access-groups-load-more': '' }, () => this.loadGroups('more'));
+      this.groupHosts.more.replaceChildren(this.moreButton);
+    }
+  }
+
+  groupsEmpty() {
+    return this.el('div', { className: 'py-8 text-center', attrs: { 'data-access-groups-empty': '' } }, [
+      this.el('p', { className: 'text-base font-semibold text-balance', text: this.t('groups.empty.title') }),
+      this.el('p', { className: 'text-sm max-w-prose mx-auto mt-1', text: this.t('groups.empty.body') }),
+    ]);
+  }
+
+  groupsTable() {
+    const th = (text, extra) => this.el('th', { className: 'font-semibold ' + (extra || ''), text, attrs: { scope: 'col' } });
+    const body = this.el('tbody');
+    for (const row of this.groups.rows) {
+      body.appendChild(this.groupRow(row));
+      if (this.members && this.members.groupId === row.id && this.membersRegion) {
+        body.appendChild(
+          this.el('tr', { attrs: { 'data-access-groups-members-row': row.id } }, [
+            this.el('td', { className: 'p-2 md:p-3', attrs: { colspan: '4' } }, [this.membersRegion]),
+          ]),
+        );
+      }
+    }
+    const table = this.el('table', { className: 'table table-sm' }, [
+      this.el('caption', { className: 'sr-only', text: this.t('groups.caption') }),
+      this.el('thead', {}, [
+        this.el('tr', {}, [
+          th(this.t('col.group')),
+          th(this.t('col.members'), 'hidden md:table-cell text-right'),
+          th(this.t('col.documents'), 'hidden md:table-cell text-right'),
+          th(this.t('col.actions')),
+        ]),
+      ]),
+      body,
+    ]);
+    return this.el(
+      'div',
+      {
+        className: 'overflow-x-auto rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+        attrs: { tabindex: '0', role: 'region', 'aria-label': this.t('groups.caption'), 'data-access-groups-table': '' },
+      },
+      [table],
+    );
+  }
+
+  countText(key, value) {
+    return this.t(key, { count: accessGroupsUiLib().ragUiFormatNumber(value, this.locale) });
+  }
+
+  groupRow(row) {
+    const ui = accessGroupsUiLib();
+    const editing = Boolean(this.renaming && this.renaming.id === row.id);
+    const open = Boolean(this.members && this.members.groupId === row.id);
+    const nameCell = this.el('th', { className: 'font-normal align-top min-w-0 max-w-[16rem] sm:max-w-sm md:max-w-md', attrs: { scope: 'row' } });
+    if (editing) nameCell.appendChild(this.renameEditor(row));
+    else nameCell.appendChild(this.el('span', { className: 'block text-sm font-medium break-words', text: row.name, attrs: { 'data-access-groups-name': '' } }));
+    if (!editing) {
+      nameCell.appendChild(this.el('code', { className: 'block font-mono text-xs text-base-content/70 break-all', text: row.key, attrs: { translate: 'no' } }));
+    }
+    if (row.connector) {
+      nameCell.appendChild(this.el('span', { className: 'badge badge-ghost badge-sm mt-1 h-auto whitespace-normal', text: this.t('group.sourceConnector') }));
+    }
+    nameCell.appendChild(
+      this.el('span', { className: 'flex flex-wrap gap-x-3 text-xs text-base-content/70 mt-1 md:hidden tabular-nums' }, [
+        this.el('span', { text: this.countText('group.members', row.memberCount), attrs: { 'data-access-groups-members-count': row.id } }),
+        this.el('span', { text: this.countText('group.documents', row.documentCount) }),
+      ]),
+    );
+    const manage = this.btn(
+      open ? this.t('action.closeMembers') : this.t('action.manageMembers'),
+      'btn-outline md:btn-sm md:min-h-8 py-1',
+      {
+        'aria-expanded': open ? 'true' : 'false',
+        'aria-controls': 'rag-access-groups-members-' + row.id,
+        'aria-label': open ? null : this.t('action.manageMembersAria', { group: row.name }),
+        'data-access-groups-manage': row.id,
+      },
+    );
+    manage.addEventListener('click', () => this.toggleMembers(row.id));
+    const rename = this.btn(this.t('action.renameGroup'), 'btn-outline md:btn-sm md:min-h-8 py-1', {
+      'aria-label': this.t('action.renameGroupAria', { group: row.name }),
+      'data-access-groups-rename': row.id,
+    });
+    rename.disabled = editing;
+    rename.addEventListener('click', () => this.startRename(row.id));
+    const remove = this.btn(this.t('action.deleteGroup'), 'btn-outline btn-error md:btn-sm md:min-h-8 py-1', {
+      'aria-label': this.t('action.deleteGroupAria', { group: row.name }),
+      'data-access-groups-delete': row.id,
+    });
+    remove.addEventListener('click', () => this.openDelete(row.id, remove));
+    return this.el('tr', { className: 'align-top', attrs: { 'data-access-groups-row': row.id } }, [
+      nameCell,
+      this.el('td', { className: 'hidden md:table-cell text-right tabular-nums', text: ui.ragUiFormatNumber(row.memberCount, this.locale), attrs: { 'data-access-groups-members-count': row.id } }),
+      this.el('td', { className: 'hidden md:table-cell text-right tabular-nums', text: ui.ragUiFormatNumber(row.documentCount, this.locale) }),
+      this.el('td', { className: 'min-w-0' }, [this.el('div', { className: 'flex flex-col md:flex-row flex-wrap gap-2' }, [manage, rename, remove])]),
+    ]);
+  }
+
+  updateMemberCount(groupId, delta) {
+    const row = this.findRow(groupId);
+    if (!row) return;
+    row.memberCount = Math.max(0, row.memberCount + delta);
+    const ui = accessGroupsUiLib();
+    for (const node of this.byData('data-access-groups-members-count', groupId)) {
+      node.textContent = node.tagName === 'td' || node.tagName === 'TD' ? ui.ragUiFormatNumber(row.memberCount, this.locale) : this.countText('group.members', row.memberCount);
+    }
+  }
+
+  // New group form (D-01)
+
+  openForm() {
+    if (!this.form.open) {
+      this.form = { ...this.emptyForm(), open: true };
+      this.renderForm();
+    }
+    const name = this.doc.getElementById('rag-access-groups-name');
+    if (name) name.focus();
+  }
+
+  closeForm(focusBack) {
+    this.form = this.emptyForm();
+    this.renderForm();
+    if (focusBack && this.newGroupButton) this.newGroupButton.focus();
+  }
+
+  formField(id, label, input, extra) {
+    return this.el('div', { className: 'form-control min-w-0' }, [
+      this.el('label', { className: 'label py-1', attrs: { for: id } }, [this.el('span', { className: 'label-text text-sm', text: label })]),
+      input,
+      ...(extra || []),
+    ]);
+  }
+
+  renderForm() {
+    const host = this.groupHosts.form;
+    if (!host) return;
+    const personal = Boolean(this.groups && this.groups.personal);
+    if (!this.form.open || personal) {
+      host.replaceChildren();
+      this.formHosts = null;
+      if (this.newGroupButton) this.newGroupButton.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    this.newGroupButton.setAttribute('aria-expanded', 'true');
+    const name = this.el('input', {
+      className: 'input input-bordered input-sm w-full',
+      id: 'rag-access-groups-name',
+      attrs: { type: 'text', name: 'access-group-name', autocomplete: 'off', maxlength: '200', 'aria-describedby': 'rag-access-groups-name-error' },
+    });
+    name.value = this.form.name;
+    const key = this.el('input', {
+      className: 'input input-bordered input-sm w-full font-mono',
+      id: 'rag-access-groups-key',
+      attrs: {
+        type: 'text',
+        name: 'access-group-key',
+        autocomplete: 'off',
+        spellcheck: 'false',
+        translate: 'no',
+        maxlength: '63',
+        'aria-describedby': 'rag-access-groups-key-help rag-access-groups-key-error',
+      },
+    });
+    key.value = this.form.key;
+    const nameError = this.el('p', { className: 'text-xs text-error mt-1 empty:hidden break-words', id: 'rag-access-groups-name-error' });
+    const keyHelp = this.el('p', { className: 'text-xs text-base-content/70 mt-1 max-w-prose', id: 'rag-access-groups-key-help', text: this.t('form.keyHelp') });
+    const keyError = this.el('p', { className: 'text-xs text-error mt-1 empty:hidden break-words', id: 'rag-access-groups-key-error' });
+    const findings = this.el('p', { className: 'text-xs text-base-content/70 lg:col-span-2 break-words empty:hidden', id: 'rag-access-groups-findings' });
+    const create = this.btn(this.t('action.createGroup'), 'btn-primary btn-sm min-h-8 py-1', { 'aria-describedby': 'rag-access-groups-findings rag-access-groups-key-error', 'data-access-groups-create': '' }, () =>
+      this.createGroup(),
+    );
+    const close = this.btn(this.t('action.closeForm'), 'btn-ghost btn-sm min-h-8 py-1', { 'data-access-groups-close-form': '' }, () => this.closeForm(true));
+    this.formHosts = { name, key, nameError, keyError, findings, create, close };
+    name.addEventListener('input', () => {
+      this.form.name = accessGroupsText(name.value);
+      if (!this.form.keyEdited) {
+        this.form.key = accessGroupsSuggestKey(this.form.name);
+        key.value = this.form.key;
+      }
+      if (this.form.error && this.form.error.field === 'name') this.form.error = null;
+      this.updateFormFindings();
+    });
+    key.addEventListener('input', () => {
+      this.form.key = accessGroupsText(key.value);
+      this.form.keyEdited = this.form.key !== '';
+      if (this.form.error && this.form.error.field === 'key') this.form.error = null;
+      this.updateFormFindings();
+    });
+    for (const input of [name, key]) {
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && typeof event.preventDefault === 'function') event.preventDefault();
+        if (event.key === 'Escape') {
+          if (typeof event.preventDefault === 'function') event.preventDefault();
+          this.closeForm(true);
+        }
+      });
+    }
+    host.replaceChildren(
+      this.el('div', { className: 'bg-base-100 rounded-lg p-4 mt-4 grid gap-x-6 gap-y-3 lg:grid-cols-2 min-w-0', attrs: { 'data-access-groups-form': '' } }, [
+        this.formField('rag-access-groups-name', this.t('form.name'), name, [nameError]),
+        this.formField('rag-access-groups-key', this.t('form.key'), key, [keyHelp, keyError]),
+        findings,
+        this.el('div', { className: 'lg:col-span-2 flex flex-wrap gap-2' }, [create, close]),
+      ]),
+    );
+    this.updateFormFindings();
+  }
+
+  updateFormFindings() {
+    const h = this.formHosts;
+    if (!h) return;
+    const { findings, valid } = accessGroupsFormFindings(this.form.name, this.form.key);
+    const error = this.form.error;
+    const keyFinding = findings.find((f) => f.field === 'key');
+    const keyInvalid = Boolean((error && error.field === 'key') || (this.form.key && keyFinding));
+    h.findings.textContent = findings
+      .filter((f) => !(f.field === 'key' && keyInvalid))
+      .map((f) => this.t(f.key))
+      .join(' ');
+    h.create.disabled = !valid || this.form.busy;
+    h.keyError.textContent = error && error.field === 'key' ? error.message : this.form.key && keyFinding ? this.t(keyFinding.key) : '';
+    h.nameError.textContent = error && error.field === 'name' ? error.message : '';
+    for (const [input, invalid] of [
+      [h.key, keyInvalid],
+      [h.name, Boolean(error && error.field === 'name')],
+    ]) {
+      if (invalid) input.setAttribute('aria-invalid', 'true');
+      else input.removeAttribute('aria-invalid');
+      input.classList.toggle('input-error', invalid);
+    }
+  }
+
+  async createGroup() {
+    const h = this.formHosts;
+    if (!h || this.form.busy || !accessGroupsFormFindings(this.form.name, this.form.key).valid) return;
+    const ui = accessGroupsUiLib();
+    const form = this.form;
+    form.busy = true;
+    const restore = ui.ragUiButtonBusy(this.doc, h.create, this.t('create.running'), [h.close]);
+    let result;
+    try {
+      result = await this.request(ACCESS_GROUPS_PATH + this.orgQuery(), {
+        method: 'POST',
+        body: JSON.stringify({ key: form.key.trim(), name: form.name.trim() }),
+      });
+    } finally {
+      form.busy = false;
+      restore();
+    }
+    if (this.form !== form) return;
+    if (result && result.ok && result.body && result.body.group) {
+      const row = buildAccessGroupsGroupRow({ ...result.body.group, memberCount: 0, documentCount: 0 });
+      this.closeForm(false);
+      await this.loadGroups('quiet');
+      if (row && this.groups && !this.findRow(row.id)) {
+        this.groups.rows.push(row);
+        this.renderGroups();
+      }
+      this.announce(this.t('create.done', { group: row ? row.name : form.name.trim() }));
+      if (row) this.focusManage(row.id);
+      return;
+    }
+    const mapped = mapAccessGroupsError(result, this.locale, { write: true, unavailable: this.groupsUnavailable() });
+    const field = mapped.kind === 'field' ? mapped.field : mapped.kind === 'invalid' && (mapped.field === 'key' || mapped.field === 'name') ? mapped.field : null;
+    if (field) {
+      form.error = { field, message: mapped.message };
+      this.updateFormFindings();
+      this.announce(mapped.message, true);
+      const input = field === 'key' ? h.key : h.name;
+      input.focus();
+      return;
+    }
+    this.updateFormFindings();
+    this.announce(mapped.message, true);
+    if (mapped.reload) {
+      await this.loadGroups('quiet');
+      this.announce(mapped.message, true);
+    }
+  }
+
+  // Rename (D-01: the key never changes)
+
+  startRename(id) {
+    const row = this.findRow(id);
+    if (!row) return;
+    this.renaming = { id, value: row.name, busy: false };
+    this.renderGroups();
+    const input = this.doc.getElementById('rag-access-groups-rename-input');
+    if (input) input.focus();
+  }
+
+  cancelRename(focusBack) {
+    if (!this.renaming || this.renaming.busy) return;
+    const id = this.renaming.id;
+    this.renaming = null;
+    this.renderGroups();
+    if (focusBack) {
+      const button = this.byData('data-access-groups-rename', id)[0];
+      if (button) button.focus();
+    }
+  }
+
+  renameEditor(row) {
+    const state = this.renaming;
+    const input = this.el('input', {
+      className: 'input input-bordered input-sm w-full',
+      id: 'rag-access-groups-rename-input',
+      attrs: { type: 'text', name: 'access-group-name', autocomplete: 'off', maxlength: '200', 'aria-describedby': 'rag-access-groups-rename-findings' },
+    });
+    input.value = state.value;
+    const findings = this.el('p', { className: 'text-xs text-base-content/70 break-words empty:hidden', id: 'rag-access-groups-rename-findings' });
+    const save = this.btn(this.t('action.saveName'), 'btn-primary btn-sm min-h-8 py-1', { 'aria-describedby': 'rag-access-groups-rename-findings', 'data-access-groups-save-name': '' }, () =>
+      this.saveName(row.id),
+    );
+    const cancel = this.btn(this.t('action.cancelEditing'), 'btn-ghost btn-sm min-h-8 py-1', { 'data-access-groups-cancel-rename': '' }, () => this.cancelRename(true));
+    const update = () => {
+      const empty = !accessGroupsText(state.value).trim();
+      findings.textContent = empty ? this.t('form.needName') : '';
+      save.disabled = empty || state.busy;
+    };
+    input.addEventListener('input', () => {
+      state.value = accessGroupsText(input.value);
+      update();
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && typeof event.preventDefault === 'function') event.preventDefault();
+      if (event.key === 'Escape') {
+        if (typeof event.preventDefault === 'function') event.preventDefault();
+        this.cancelRename(true);
+      }
+    });
+    state.hosts = { input, save, cancel };
+    update();
+    return this.el('div', { className: 'flex flex-col gap-2 min-w-0', attrs: { 'data-access-groups-rename-editor': '' } }, [
+      this.el('label', { className: 'text-xs text-base-content/70', text: this.t('form.name'), attrs: { for: 'rag-access-groups-rename-input' } }),
+      input,
+      this.el('code', { className: 'block font-mono text-xs text-base-content/70 break-all', text: row.key, attrs: { translate: 'no' } }),
+      findings,
+      this.el('div', { className: 'flex flex-wrap gap-2' }, [save, cancel]),
+    ]);
+  }
+
+  async saveName(id) {
+    const state = this.renaming;
+    if (!state || state.id !== id || state.busy) return;
+    const name = accessGroupsText(state.value).trim();
+    if (!name) return;
+    const ui = accessGroupsUiLib();
+    state.busy = true;
+    const restore = state.hosts ? ui.ragUiButtonBusy(this.doc, state.hosts.save, this.t('rename.running'), [state.hosts.cancel]) : null;
+    let result;
+    try {
+      result = await this.request(ACCESS_GROUPS_PATH + '/' + encodeURIComponent(id) + this.orgQuery(), { method: 'PATCH', body: JSON.stringify({ name }) });
+    } finally {
+      state.busy = false;
+      if (restore) restore();
+    }
+    if (this.renaming !== state) return;
+    if (result && result.ok && result.body && result.body.group) {
+      const row = this.findRow(id);
+      const fresh = buildAccessGroupsGroupRow({ ...result.body.group, memberCount: row ? row.memberCount : 0, documentCount: row ? row.documentCount : 0 });
+      if (row && fresh) row.name = fresh.name;
+      this.renaming = null;
+      this.renderGroups();
+      this.announce(this.t('rename.done', { group: row ? row.name : name }));
+      const button = this.byData('data-access-groups-rename', id)[0];
+      if (button) button.focus();
+      return;
+    }
+    const mapped = mapAccessGroupsError(result, this.locale, { write: true, unavailable: this.groupsUnavailable() });
+    this.announce(mapped.message, true);
+    if (mapped.reload) {
+      this.renaming = null;
+      await this.loadGroups('quiet');
+      this.announce(mapped.message, true);
+    }
+  }
+
+  // Members region (D-01, D-04, UI-SPEC decision 21)
+
+  toggleMembers(id) {
+    if (this.members && this.members.groupId === id) {
+      this.closeMembers({ render: true, focus: true });
+      return;
+    }
+    const row = this.findRow(id);
+    if (!row) return;
+    this.closeMembers({ render: false });
+    this.members = { groupId: id, rows: null, failure: null, query: '', results: null, searchState: 'hint', searchError: null, searchedQuery: '', searchSeq: 0, loadSeq: 0, timer: null };
+    this.membersRegion = this.buildMembersRegion(row);
+    this.renderGroups();
+    this.renderSearch();
+    if (this.memberHosts && this.memberHosts.search) this.memberHosts.search.focus();
+    this.loadMembers();
+  }
+
+  closeMembers(options) {
+    const opts = options || {};
+    const m = this.members;
+    if (!m) return;
+    if (m.timer) clearTimeout(m.timer);
+    this.members = null;
+    this.membersRegion = null;
+    this.memberHosts = null;
+    if (opts.render) this.renderGroups();
+    if (opts.focus) this.focusManage(m.groupId);
+  }
+
+  buildMembersRegion(row) {
+    const id = 'rag-access-groups-members-' + row.id;
+    const titleId = id + '-title';
+    const search = this.el('input', {
+      className: 'input input-bordered input-sm w-full max-w-md',
+      id: id + '-search',
+      attrs: { type: 'search', name: 'access-group-member-search', autocomplete: 'off', spellcheck: 'false', maxlength: '200', 'aria-describedby': id + '-search-status', 'data-access-groups-member-search': '' },
+    });
+    const searchStatus = this.el('p', { className: 'text-xs text-base-content/70 mt-1 break-words min-h-4', id: id + '-search-status', attrs: { 'aria-live': 'polite' } });
+    const results = this.el('ul', {
+      className: 'mt-2 max-h-72 overflow-y-auto divide-y divide-base-200 rounded empty:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+      attrs: { tabindex: '0', 'aria-label': this.t('members.results'), 'data-access-groups-results': '' },
+    });
+    const table = this.el('div', { className: 'mt-4 min-w-0', attrs: { 'data-access-groups-members': '' } });
+    const close = this.btn(this.t('action.closeMembers'), 'btn-ghost btn-sm min-h-8 py-1', { 'data-access-groups-close-members': '' }, () => this.closeMembers({ render: true, focus: true }));
+    search.addEventListener('input', () => this.onSearchInput(accessGroupsText(search.value)));
+    const onKey = (event) => {
+      if (event.key === 'Escape') {
+        if (typeof event.preventDefault === 'function') event.preventDefault();
+        this.closeMembers({ render: true, focus: true });
+      }
+    };
+    search.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        if (typeof event.preventDefault === 'function') event.preventDefault();
+        this.searchNow();
+        return;
+      }
+      onKey(event);
+    });
+    const region = this.el('div', { className: 'bg-base-100 rounded-lg p-4 min-w-0', id, attrs: { role: 'region', 'aria-labelledby': titleId } }, [
+      this.el('h4', { className: 'text-base font-semibold mb-2 break-words text-balance', id: titleId, text: this.t('members.title', { group: row.name }) }),
+      this.el('label', { className: 'label py-1', attrs: { for: id + '-search' } }, [this.el('span', { className: 'label-text text-sm', text: this.t('members.search') })]),
+      search,
+      searchStatus,
+      results,
+      table,
+      this.el('div', { className: 'flex flex-wrap items-start justify-between gap-2 mt-4' }, [
+        this.el('p', { className: 'text-xs text-base-content/70 max-w-prose', text: this.t('groups.adminNote') }),
+        close,
+      ]),
+    ]);
+    region.addEventListener('keydown', (event) => {
+      if (event.target !== search) onKey(event);
+    });
+    this.memberHosts = { region, search, searchStatus, results, table, close };
+    return region;
+  }
+
+  onSearchInput(value) {
+    const m = this.members;
+    if (!m) return;
+    m.query = value;
+    if (m.timer) clearTimeout(m.timer);
+    m.timer = null;
+    if (value.trim().length < ACCESS_GROUPS_SEARCH_MIN) {
+      m.searchSeq += 1;
+      m.results = null;
+      m.searchState = 'hint';
+      this.renderSearch();
+      return;
+    }
+    m.timer = setTimeout(() => {
+      m.timer = null;
+      this.runSearch();
+    }, ACCESS_GROUPS_SEARCH_WAIT_MS);
+  }
+
+  searchNow() {
+    const m = this.members;
+    if (!m) return;
+    if (m.timer) clearTimeout(m.timer);
+    m.timer = null;
+    if (m.query.trim().length < ACCESS_GROUPS_SEARCH_MIN) {
+      m.searchState = 'hint';
+      this.renderSearch();
+      return;
+    }
+    this.runSearch();
+  }
+
+  async runSearch() {
+    const m = this.members;
+    if (!m) return;
+    const q = m.query.trim();
+    if (q.length < ACCESS_GROUPS_SEARCH_MIN) return;
+    const seq = ++m.searchSeq;
+    m.searchState = 'searching';
+    this.renderSearch();
+    const result = await this.request(ACCESS_GROUPS_PATH + '/members/candidates' + this.orgQuery({ groupId: m.groupId, q }), { method: 'GET' });
+    if (this.members !== m || seq !== m.searchSeq) return;
+    if (result && result.ok && result.body && typeof result.body === 'object') {
+      const list = Array.isArray(result.body.candidates) ? result.body.candidates : [];
+      m.results = list
+        .filter((c) => c && typeof c === 'object' && accessGroupsText(c.userId))
+        .slice(0, ACCESS_GROUPS_SEARCH_MAX)
+        .map((c) => ({ userId: accessGroupsText(c.userId), name: accessGroupsMemberName(c), already: c.already === true }));
+      m.searchedQuery = q;
+      m.searchState = m.results.length ? 'results' : 'none';
+    } else {
+      const mapped = mapAccessGroupsError(result, this.locale, { unavailable: this.t('members.unavailable') });
+      m.searchState = 'failed';
+      m.searchError = mapped.kind === 'unavailable' || mapped.kind === 'network' ? this.t('members.unavailable') : mapped.message;
+    }
+    this.renderSearch();
+  }
+
+  nameNode(name, extra) {
+    return this.el(name.mono ? 'code' : 'span', {
+      className: (name.mono ? 'font-mono text-xs break-all' : 'break-words') + (extra ? ' ' + extra : ''),
+      text: name.text,
+      attrs: name.mono ? { translate: 'no' } : null,
+    });
+  }
+
+  renderSearch() {
+    const m = this.members;
+    const h = this.memberHosts;
+    if (!m || !h) return;
+    const ui = accessGroupsUiLib();
+    const status = h.searchStatus;
+    status.classList.toggle('text-error', m.searchState === 'failed');
+    if (m.searchState === 'hint') status.textContent = this.t('members.searchHint');
+    else if (m.searchState === 'searching') status.replaceChildren(ui.ragUiSpinner(this.doc, this.t('members.searching')));
+    else if (m.searchState === 'none') status.textContent = this.t('members.noMatch', { query: m.searchedQuery });
+    else if (m.searchState === 'failed') status.textContent = m.searchError || '';
+    else status.textContent = '';
+    if (m.searchState === 'hint') {
+      h.results.replaceChildren();
+      return;
+    }
+    if (m.searchState === 'searching' || m.searchState === 'failed') return;
+    const items = (m.results || []).map((candidate) => {
+      const action = candidate.already
+        ? this.el('span', { className: 'text-xs text-base-content/70', text: this.t('members.already') })
+        : this.btn(this.t('action.addMember'), 'btn-outline btn-sm min-h-8 py-1', {
+            'aria-label': this.t('action.addMemberAria', { name: candidate.name.text }),
+            'data-access-groups-add-member': candidate.userId,
+          });
+      if (!candidate.already) action.addEventListener('click', () => this.addMember(candidate, action));
+      return this.el('li', { className: 'flex flex-wrap items-center justify-between gap-2 py-2 min-w-0', attrs: { 'data-access-groups-candidate': candidate.userId } }, [
+        this.nameNode(candidate.name, 'text-sm min-w-0'),
+        action,
+      ]);
+    });
+    h.results.replaceChildren(...items);
+  }
+
+  async loadMembers() {
+    const m = this.members;
+    const h = this.memberHosts;
+    if (!m || !h) return;
+    const ui = accessGroupsUiLib();
+    const seq = ++m.loadSeq;
+    if (!m.rows) ui.ragUiListLoading(this.doc, h.table, this.t('members.loading'));
+    else ui.ragUiListBusy(h.table, true);
+    const result = await this.request(ACCESS_GROUPS_PATH + '/' + encodeURIComponent(m.groupId) + '/members' + this.orgQuery(), { method: 'GET' });
+    if (this.members !== m || seq !== m.loadSeq) return;
+    ui.ragUiListBusy(h.table, false);
+    if (result && result.ok && result.body && typeof result.body === 'object') {
+      const list = Array.isArray(result.body.members) ? result.body.members : [];
+      m.rows = list
+        .filter((r) => r && typeof r === 'object' && accessGroupsText(r.userId))
+        .map((r) => ({ userId: accessGroupsText(r.userId), name: accessGroupsMemberName(r), addedAt: accessGroupsText(r.addedAt) || null }));
+      m.failure = null;
+    } else {
+      const mapped = mapAccessGroupsError(result, this.locale, { unavailable: this.t('members.unavailable') });
+      if (mapped.kind === 'changed') {
+        this.announce(mapped.message, true);
+        this.closeMembers({ render: false });
+        await this.loadGroups('quiet');
+        this.announce(mapped.message, true);
+        return;
+      }
+      m.failure = mapped.kind === 'unavailable' || mapped.kind === 'network' ? { ...mapped, message: this.t('members.unavailable') } : mapped;
+    }
+    this.renderMembersTable();
+  }
+
+  renderMembersTable() {
+    const m = this.members;
+    const h = this.memberHosts;
+    if (!m || !h) return;
+    const ui = accessGroupsUiLib();
+    const nodes = [];
+    if (m.failure) {
+      nodes.push(
+        m.failure.kind === 'signIn'
+          ? ui.ragUiSignInAlert(this.doc, this.locale, () => this.loadMembers())
+          : ui.ragUiAlert(this.doc, { tone: 'error', icon: 'exclamation-circle', body: [m.failure.message], actions: [ui.ragUiReloadButton(this.doc, this.locale, () => this.loadMembers())] }),
+      );
+    }
+    if (m.rows && !m.rows.length) {
+      nodes.push(this.el('p', { className: 'text-sm max-w-prose', text: this.t('members.empty'), attrs: { 'data-access-groups-members-empty': '' } }));
+    } else if (m.rows) {
+      const row = this.findRow(m.groupId);
+      const caption = this.t('members.title', { group: row ? row.name : '' });
+      const body = this.el(
+        'tbody',
+        {},
+        m.rows.map((member) => {
+          const remove = this.btn(this.t('action.removeMember'), 'btn-outline md:btn-sm md:min-h-8 py-1', {
+            'aria-label': this.t('action.removeMemberAria', { name: member.name.text }),
+            'data-access-groups-remove-member': member.userId,
+          });
+          remove.addEventListener('click', () => this.removeMember(member, remove));
+          return this.el('tr', { className: 'align-top', attrs: { 'data-access-groups-member': member.userId } }, [
+            this.el('th', { className: 'font-normal min-w-0 max-w-[16rem] sm:max-w-sm', attrs: { scope: 'row' } }, [this.nameNode(member.name, 'text-sm')]),
+            this.el('td', { className: 'text-sm whitespace-nowrap' }, [member.addedAt ? this.timeEl(member.addedAt) : this.el('span', { text: this.t('value.none') })]),
+            this.el('td', {}, [remove]),
+          ]);
+        }),
+      );
+      const table = this.el('table', { className: 'table table-sm' }, [
+        this.el('caption', { className: 'sr-only', text: caption }),
+        this.el('thead', {}, [
+          this.el('tr', {}, [
+            this.el('th', { className: 'font-semibold', text: this.t('members.col.name'), attrs: { scope: 'col' } }),
+            this.el('th', { className: 'font-semibold', text: this.t('members.col.added'), attrs: { scope: 'col' } }),
+            this.el('th', { className: 'font-semibold', text: this.t('col.actions'), attrs: { scope: 'col' } }),
+          ]),
+        ]),
+        body,
+      ]);
+      const wrap = this.el(
+        'div',
+        {
+          className: 'overflow-x-auto max-h-96 overflow-y-auto rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+          attrs: { tabindex: '0', role: 'region', 'aria-label': caption },
+        },
+        [table],
+      );
+      if (m.failure) wrap.classList.add('opacity-60');
+      nodes.push(wrap);
+    }
+    h.table.replaceChildren(...nodes);
+  }
+
+  /** member_exists, not_a_workspace_member, 404 and timeouts: the message, then the members (and the search) reload. */
+  async memberActionFailed(m, result) {
+    const mapped = mapAccessGroupsError(result, this.locale, { write: true, unavailable: this.t('members.unavailable') });
+    this.announce(mapped.message, true);
+    if (!mapped.reload) return;
+    await this.loadMembers();
+    if (this.members === m && m.results) await this.runSearch();
+    this.announce(mapped.message, true);
+  }
+
+  async addMember(candidate, button) {
+    const m = this.members;
+    if (!m || candidate.busy) return;
+    const ui = accessGroupsUiLib();
+    candidate.busy = true;
+    const restore = ui.ragUiButtonBusy(this.doc, button, this.t('members.adding'));
+    let result;
+    try {
+      result = await this.request(ACCESS_GROUPS_PATH + '/' + encodeURIComponent(m.groupId) + '/members' + this.orgQuery(), {
+        method: 'POST',
+        body: JSON.stringify({ userId: candidate.userId }),
+      });
+    } finally {
+      candidate.busy = false;
+      restore();
+    }
+    if (this.members !== m) return;
+    if (result && result.ok) {
+      const row = this.findRow(m.groupId);
+      candidate.already = true;
+      this.renderSearch();
+      this.updateMemberCount(m.groupId, 1);
+      await this.loadMembers();
+      this.announce(this.t('member.added', { name: candidate.name.text, group: row ? row.name : '' }));
+      if (this.memberHosts) this.memberHosts.search.focus();
+      return;
+    }
+    await this.memberActionFailed(m, result);
+  }
+
+  async removeMember(member, button) {
+    const m = this.members;
+    if (!m || member.busy) return;
+    const ui = accessGroupsUiLib();
+    member.busy = true;
+    const restore = ui.ragUiButtonBusy(this.doc, button, this.t('members.removing'));
+    let result;
+    try {
+      result = await this.request(
+        ACCESS_GROUPS_PATH + '/' + encodeURIComponent(m.groupId) + '/members/' + encodeURIComponent(member.userId) + this.orgQuery(),
+        { method: 'DELETE' },
+      );
+    } finally {
+      member.busy = false;
+      restore();
+    }
+    if (this.members !== m) return;
+    if (result && result.ok) {
+      const row = this.findRow(m.groupId);
+      const index = m.rows ? m.rows.indexOf(member) : -1;
+      if (index >= 0) m.rows.splice(index, 1);
+      for (const candidate of m.results || []) if (candidate.userId === member.userId) candidate.already = false;
+      this.renderSearch();
+      this.updateMemberCount(m.groupId, -1);
+      this.renderMembersTable();
+      this.announce(this.t('member.removed', { name: member.name.text, group: row ? row.name : '' }));
+      const next = m.rows && m.rows.length ? m.rows[Math.min(index, m.rows.length - 1)] : null;
+      const target = next && this.memberHosts ? this.memberHosts.table.querySelectorAll('[data-access-groups-remove-member]').find((b) => b.getAttribute('data-access-groups-remove-member') === next.userId) : null;
+      if (target) target.focus();
+      else if (this.memberHosts) this.memberHosts.search.focus();
+      return;
+    }
+    await this.memberActionFailed(m, result);
+  }
+
+  // Counted delete dialog (D-18, UI-SPEC decision 10)
+
+  openDelete(id, opener) {
+    const row = this.findRow(id);
+    if (!row || this.deleting) return;
+    const ui = accessGroupsUiLib();
+    const titleId = ui.ragUiNextId('rag-access-groups-delete-title');
+    const bodyId = ui.ragUiNextId('rag-access-groups-delete-body');
+    const countsId = ui.ragUiNextId('rag-access-groups-delete-counts');
+    const dialog = this.el('dialog', { className: 'modal', attrs: { 'aria-labelledby': titleId, 'aria-describedby': countsId + ' ' + bodyId, 'data-access-groups-delete-dialog': '' } });
+    const keep = this.btn(this.t('action.keepGroup'), 'btn-sm min-h-8 py-1', { 'data-access-groups-keep': '' });
+    const confirm = this.btn(this.t('action.deleteGroup'), 'btn-error btn-sm min-h-8 py-1', { 'aria-describedby': countsId, 'data-access-groups-confirm-delete': '' });
+    confirm.disabled = true;
+    const counts = this.el('div', { className: 'my-3 min-w-0', id: countsId, attrs: { 'aria-live': 'polite', 'data-access-groups-impact': '' } });
+    const errorHost = this.el('div', { className: 'empty:hidden mt-3' });
+    const box = this.el('div', { className: 'modal-box min-w-0 overscroll-contain' }, [
+      this.el('h3', { className: 'text-base font-semibold mb-2 break-words text-balance', id: titleId, text: this.t('delete.title', { group: row.name }) }),
+      counts,
+      this.el('p', { className: 'text-sm max-w-prose flex items-start gap-2', id: bodyId }, [
+        ui.ragUiIcon(this.doc, 'exclamation-triangle', 'mt-0.5 text-warning'),
+        this.el('span', { className: 'break-words min-w-0', text: this.t('delete.body') }),
+      ]),
+      errorHost,
+      this.el('div', { className: 'modal-action flex-wrap gap-2' }, [keep, confirm]),
+    ]);
+    const backdropButton = this.el('button', { className: 'cursor-default', text: this.t('action.keepGroup'), attrs: { type: 'submit', tabindex: '-1' } });
+    const backdrop = this.el('form', { className: 'modal-backdrop', attrs: { method: 'dialog' } }, [backdropButton]);
+    dialog.appendChild(box);
+    dialog.appendChild(backdrop);
+    const state = { id, row, dialog, keep, confirm, counts, errorHost, backdropButton, opener, impact: null, running: false, countSeq: 0, done: null, followUp: null };
+    this.deleting = state;
+    dialog.addEventListener('cancel', (event) => {
+      if (state.running && typeof event.preventDefault === 'function') event.preventDefault();
+    });
+    backdrop.addEventListener('submit', (event) => {
+      if (state.running && typeof event.preventDefault === 'function') event.preventDefault();
+    });
+    dialog.addEventListener('close', () => this.finishDelete(state));
+    keep.addEventListener('click', () => {
+      if (!state.running) dialog.close('keep');
+    });
+    confirm.addEventListener('click', () => this.confirmDelete(state));
+    this.doc.body.appendChild(dialog);
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    keep.focus();
+    this.countImpact(state);
+  }
+
+  async countImpact(state) {
+    const ui = accessGroupsUiLib();
+    const seq = ++state.countSeq;
+    state.impact = null;
+    state.confirm.disabled = true;
+    state.counts.replaceChildren(ui.ragUiSpinner(this.doc, this.t('delete.counting')));
+    const result = await this.request(ACCESS_GROUPS_PATH + '/' + encodeURIComponent(state.id) + '/impact' + this.orgQuery(), { method: 'GET' });
+    if (this.deleting !== state || seq !== state.countSeq) return;
+    const impact = result && result.ok ? buildAccessGroupsImpactView(result.body) : null;
+    if (impact) {
+      state.impact = impact;
+      state.counts.replaceChildren(this.impactList(impact));
+      state.confirm.disabled = state.running;
+      return;
+    }
+    if (result && !result.thrown && result.status === 404) {
+      state.followUp = mapAccessGroupsError(result, this.locale, {});
+      state.dialog.close('keep');
+      return;
+    }
+    const again = this.btn(this.t('action.countAgain'), 'btn-outline btn-sm min-h-8 py-1', { 'data-access-groups-count-again': '' }, () => this.countImpact(state));
+    state.counts.replaceChildren(
+      this.el('div', { className: 'flex flex-wrap items-start gap-2 text-sm', attrs: { 'data-access-groups-count-unavailable': '' } }, [
+        this.el('p', { className: 'flex items-start gap-1 max-w-prose min-w-0 flex-1 basis-56' }, [
+          ui.ragUiIcon(this.doc, 'exclamation-circle', 'mt-0.5 text-error'),
+          this.el('span', { text: this.t('delete.countUnavailable') }),
+        ]),
+        again,
+      ]),
+    );
+  }
+
+  impactList(impact) {
+    const ui = accessGroupsUiLib();
+    const item = (key, value, first) =>
+      this.el('div', { className: 'flex items-baseline justify-between gap-4 py-1 min-w-0' + (first ? ' font-semibold' : '') }, [
+        this.el('dt', { className: 'text-sm min-w-0 break-words', text: accessGroupsCountLabel(this.t(key)) }),
+        this.el('dd', { className: 'text-sm text-right tabular-nums shrink-0', text: ui.ragUiFormatNumber(value, this.locale) }),
+      ]);
+    const nodes = [
+      this.el('dl', { className: 'divide-y divide-base-200', attrs: { 'aria-label': this.t('delete.countsLabel') } }, [
+        item('delete.docsClosed', impact.onlyCount, true),
+        item('delete.docsOther', impact.sharedCount),
+        item('delete.members', impact.memberCount),
+      ]),
+    ];
+    if (impact.mappingCount > 0) nodes.push(this.el('p', { className: 'text-sm mt-2 break-words', text: this.countText('delete.mappings', impact.mappingCount) }));
+    return this.el('div', { className: 'min-w-0' }, nodes);
+  }
+
+  async confirmDelete(state) {
+    if (!state.impact || state.running || this.deleting !== state) return;
+    const ui = accessGroupsUiLib();
+    state.running = true;
+    state.errorHost.replaceChildren();
+    const restore = ui.ragUiButtonBusy(this.doc, state.confirm, this.t('delete.running'), [state.keep, state.backdropButton]);
+    let result;
+    try {
+      result = await this.request(ACCESS_GROUPS_PATH + '/' + encodeURIComponent(state.id) + this.orgQuery(), {
+        method: 'DELETE',
+        body: JSON.stringify({ expectedCount: state.impact.onlyCount }),
+      });
+    } finally {
+      state.running = false;
+      restore();
+    }
+    if (result && result.ok) {
+      state.done = { fellBack: accessGroupsCount(result.body && result.body.fellBack) };
+      state.dialog.close('confirm');
+      return;
+    }
+    const mapped = mapAccessGroupsError(result, this.locale, { write: true, unavailable: this.groupsUnavailable() });
+    if (mapped.kind === 'recount') {
+      await this.countImpact(state);
+      return;
+    }
+    if (mapped.reload) {
+      state.followUp = mapped;
+      state.dialog.close('keep');
+      return;
+    }
+    state.errorHost.replaceChildren(
+      this.el('p', { className: 'text-sm text-error flex items-start gap-1 break-words', attrs: { role: 'alert' } }, [
+        ui.ragUiIcon(this.doc, 'exclamation-circle', 'mt-0.5'),
+        this.el('span', { text: mapped.message }),
+      ]),
+    );
+  }
+
+  async finishDelete(state) {
+    if (state.finished) return;
+    state.finished = true;
+    state.dialog.remove();
+    if (this.deleting === state) this.deleting = null;
+    if (state.done) {
+      if (this.groups) this.groups.rows = this.groups.rows.filter((r) => r.id !== state.id);
+      if (this.members && this.members.groupId === state.id) this.closeMembers({ render: false });
+      if (this.renaming && this.renaming.id === state.id) this.renaming = null;
+      this.renderGroups();
+      this.announce(this.t('delete.done', { group: state.row.name, count: accessGroupsUiLib().ragUiFormatNumber(state.done.fellBack, this.locale) }));
+      this.focusStatus();
+      return;
+    }
+    if (state.followUp) {
+      this.focusStatus();
+      this.announce(state.followUp.message, true);
+      await this.loadGroups('quiet');
+      this.announce(state.followUp.message, true);
+      return;
+    }
+    const target = state.opener && state.opener.isConnected !== false ? state.opener : this.statusEl();
+    if (target && typeof target.focus === 'function') target.focus();
+  }
 }
 
 let accessGroupsPanelInstance = null;
@@ -1606,6 +2883,13 @@ if (typeof module !== 'undefined' && module.exports) {
     accessGroupsDriftView,
     accessGroupsEmbedCheck,
     mapAccessGroupsError,
+    accessGroupsSuggestKey,
+    accessGroupsFormFindings,
+    buildAccessGroupsGroupRow,
+    buildAccessGroupsList,
+    accessGroupsMemberName,
+    buildAccessGroupsImpactView,
+    accessGroupsCountLabel,
     AccessGroupsPanel,
     initAccessGroupsPanel,
   };
