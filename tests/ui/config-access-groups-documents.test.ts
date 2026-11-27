@@ -884,6 +884,26 @@ describe('injection, keys and copy (T-04.3-432, T-04.3-433)', () => {
     expect(region.getAttribute('tabindex')).toBe('0');
   });
 
+  it('design pass: one hit target per radio, warning text at body contrast, file names not translated', async () => {
+    const page = loadPage({ replies: { documents: { status: 200, body: docsBody([FALLBACK(D_2), RESTRICTED(D_1)]) } } });
+    await page.openDocuments();
+    const fallbackBadge = page.visibleTo(D_2).querySelector('.badge')!;
+    expect(fallbackBadge.className).toContain('text-base-content');
+    expect(fallbackBadge.querySelector('i')!.className).toContain('text-warning');
+    expect(page.row(D_1).querySelector('[data-access-groups-doc-name]')!.getAttribute('translate')).toBe('no');
+    button(page.row(D_1), 'Edit access').click();
+    const editor = page.editor()!;
+    for (const radio of editor.querySelectorAll('input[type="radio"]')) {
+      const label = radio.parentNode!;
+      expect(label.tagName).toBe('label');
+      expect(label.getAttribute('for')).toBe(radio.id);
+    }
+    const widen = editor.querySelector('[data-access-groups-widen]')!;
+    expect(widen.className).not.toContain('text-warning');
+    expect(widen.querySelector('i')!.className).toContain('text-warning');
+    expect(button(page.row(D_1), 'Edit access').hasAttribute('aria-expanded')).toBe(false);
+  });
+
   it('the panel never chains array methods on a NodeList (regression: browsers have no NodeList.filter or .find)', () => {
     expect(panelSource).not.toMatch(/(?<!Array\.from\()[\w.]*querySelectorAll\([^)]*\)\.(filter|find|map|some|every)\(/);
   });

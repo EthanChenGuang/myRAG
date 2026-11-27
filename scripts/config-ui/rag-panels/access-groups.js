@@ -1254,7 +1254,7 @@ function AccessGroupsAudienceLine(doc, view, extraClass) {
     if (view.peopleText) root.appendChild(el('span', { className: 'block text-xs text-base-content/70 break-words', text: view.peopleText }));
     return root;
   }
-  root.appendChild(el('span', { className: 'badge badge-warning badge-outline badge-sm gap-1 h-auto whitespace-normal align-middle' }, [ui.ragUiIcon(doc, 'shield-exclamation'), el('span', { text: view.badge })]));
+  root.appendChild(el('span', { className: 'badge badge-warning badge-outline badge-sm gap-1 h-auto whitespace-normal align-middle text-base-content' }, [ui.ragUiIcon(doc, 'shield-exclamation', 'text-warning'), el('span', { text: view.badge })]));
   if (view.reason) {
     const nodes = view.reason.known ? [doc.createTextNode(view.reason.text)] : ui.ragUiTemplateNodes(doc, view.reason.template, { code: view.reason.code }, ['code']);
     root.appendChild(el('span', { className: 'block text-xs mt-1 break-words', attrs: { 'data-access-groups-reason': view.reason.known ? view.reason.code : 'other' } }, nodes));
@@ -1379,27 +1379,24 @@ class AccessGroupsAudienceField {
     };
     this.everyoneRadio = radio('everyone', this.ids.everyoneHelp);
     this.groupsRadio = radio('groups', this.ids.groupsHelp);
-    const option = (input, labelId, label, helpId, helpNode) =>
-      this.el('div', { className: 'flex items-start gap-3 min-w-0' }, [
+    const option = (input, labelId, label, helpNode) =>
+      this.el('label', { className: 'flex items-start gap-3 min-w-0 cursor-pointer has-[:disabled]:cursor-not-allowed', attrs: { for: input.id } }, [
         input,
-        this.el('div', { className: 'min-w-0' }, [
-          this.el('label', { className: 'text-sm font-medium cursor-pointer', id: labelId, text: label, attrs: { for: input.id } }),
-          helpNode || this.el('p', { className: 'text-xs text-base-content/70 break-words', id: helpId }),
-        ]),
+        this.el('span', { className: 'min-w-0' }, [this.el('span', { className: 'block text-sm font-medium', id: labelId, text: label }), helpNode]),
       ]);
-    this.everyoneHelp = this.el('p', { className: 'text-xs text-base-content/70 break-words', id: this.ids.everyoneHelp, text: this.t('field.everyoneHelp.' + this.mode) });
-    this.groupsHelp = this.el('p', { className: 'text-xs text-base-content/70 break-words', id: this.ids.groupsHelp });
+    this.everyoneHelp = this.el('span', { className: 'block text-xs text-base-content/70 break-words', id: this.ids.everyoneHelp, text: this.t('field.everyoneHelp.' + this.mode) });
+    this.groupsHelp = this.el('span', { className: 'block text-xs text-base-content/70 break-words', id: this.ids.groupsHelp });
     this.chipList = this.el('ul', { className: 'flex flex-wrap gap-2 min-w-0', attrs: { role: 'list', 'aria-labelledby': this.ids.groupsLabel, 'data-access-groups-chips': '' } });
     this.addHost = this.el('div', { className: 'min-w-0' });
-    this.findings = this.el('p', { className: 'text-xs text-warning-content bg-warning/20 rounded px-2 py-1 mt-2 break-words', id: this.ids.findings, text: this.t('field.needGroup'), attrs: { 'data-access-groups-findings': '' } });
+    this.findings = this.el('p', { className: 'text-xs text-base-content/70 mt-2 break-words', id: this.ids.findings, text: this.t('field.needGroup'), attrs: { 'data-access-groups-findings': '' } });
     this.chipArea = this.el('div', { className: 'ml-7 mt-2 min-w-0', attrs: { 'data-access-groups-chip-area': '' } }, [
       this.el('div', { className: 'flex flex-wrap items-start gap-2 min-w-0' }, [this.chipList, this.addHost]),
       this.findings,
     ]);
     this.mixedLine = this.el('p', { className: 'text-sm mb-2 break-words max-w-prose', id: this.ids.mixed, text: this.t('field.mixed'), attrs: { 'data-access-groups-mixed': '' } });
     this.chooseLine = this.el('p', { className: 'sr-only', id: this.ids.choose, text: this.t('field.choose') });
-    this.widenLine = this.el('p', { className: 'text-sm text-warning flex items-start gap-2 mt-2 break-words max-w-prose', attrs: { 'data-access-groups-widen': '' } }, [
-      accessGroupsUiLib().ragUiIcon(this.doc, 'exclamation-triangle', 'mt-0.5'),
+    this.widenLine = this.el('p', { className: 'text-sm flex items-start gap-2 mt-2 break-words max-w-prose', attrs: { 'data-access-groups-widen': '' } }, [
+      accessGroupsUiLib().ragUiIcon(this.doc, 'exclamation-triangle', 'mt-0.5 text-warning'),
       this.el('span', { className: 'min-w-0', text: this.t(this.many ? 'field.widenMany' : 'field.widen') }),
     ]);
     this.live = this.el('span', { className: 'sr-only', attrs: { 'aria-live': 'polite', 'data-access-groups-chip-live': '' } });
@@ -1407,8 +1404,8 @@ class AccessGroupsAudienceField {
       this.el('legend', { className: 'text-sm font-semibold mb-2', text: this.t('audience.label') }),
       this.mixedLine,
       this.chooseLine,
-      option(this.everyoneRadio, null, this.t('term.everyone'), this.ids.everyoneHelp, this.everyoneHelp),
-      this.el('div', { className: 'min-w-0' }, [option(this.groupsRadio, this.ids.groupsLabel, this.t('field.onlyGroups'), this.ids.groupsHelp, this.groupsHelp), this.chipArea]),
+      option(this.everyoneRadio, null, this.t('term.everyone'), this.everyoneHelp),
+      this.el('div', { className: 'min-w-0' }, [option(this.groupsRadio, this.ids.groupsLabel, this.t('field.onlyGroups'), this.groupsHelp), this.chipArea]),
       this.widenLine,
       this.el('p', { className: 'text-xs text-base-content/70', text: this.t('field.effect') }),
       this.live,
@@ -3574,7 +3571,7 @@ class AccessGroupsPanel {
     check.disabled = row.connectorManaged;
     check.addEventListener('change', () => this.toggleRow(row.id, check.checked));
     const fileCell = this.el('th', { className: 'font-normal align-top min-w-0 max-w-[16rem] sm:max-w-sm md:max-w-md', attrs: { scope: 'row' } }, [
-      this.el('span', { className: 'block text-sm break-words', text: row.filename, attrs: { 'data-access-groups-doc-name': '' } }),
+      this.el('span', { className: 'block text-sm break-words', text: row.filename, attrs: { translate: 'no', 'data-access-groups-doc-name': '' } }),
     ]);
     if (source) fileCell.appendChild(this.el('span', { className: 'block text-xs text-base-content/70 break-words lg:hidden', text: source }));
     fileCell.appendChild(AccessGroupsAudienceLine(this.doc, view, 'mt-1 md:hidden'));
@@ -3591,7 +3588,6 @@ class AccessGroupsPanel {
       const editing = Boolean(this.docEditor && this.docEditor.id === row.id);
       const edit = this.btn(this.t('action.editAccess'), 'btn-outline md:btn-sm md:min-h-8 py-1', {
         'aria-label': this.t('action.editAccessAria', { file: row.filename }),
-        'aria-expanded': editing ? 'true' : 'false',
         'aria-describedby': managedId,
         'data-access-groups-edit-access': row.id,
       });
