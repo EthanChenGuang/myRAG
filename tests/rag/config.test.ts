@@ -1446,3 +1446,37 @@ describe('Phase 4.4 lexical scoring (D-05)', () => {
     expect(loadRagConfig({ ...ON, RAG_LEXICAL_BM25_B: '0.5' })).not.toBe(base);
   });
 });
+
+describe('RAG_DOC_ACCESS_GROUPS (04.3-01, D-09)', () => {
+  function accessWarnings(): string[] {
+    return configWarnings().filter((line) => line.includes('RAG_DOC_ACCESS_GROUPS'));
+  }
+
+  test('unset, empty and off resolve to off without a warning', () => {
+    expect(loadRagConfig({}).accessGroups).toBe('off');
+    resetRagConfigForTests();
+    expect(loadRagConfig({ RAG_DOC_ACCESS_GROUPS: '' }).accessGroups).toBe('off');
+    resetRagConfigForTests();
+    expect(loadRagConfig({ RAG_DOC_ACCESS_GROUPS: ' off ' }).accessGroups).toBe('off');
+    expect(accessWarnings()).toEqual([]);
+  });
+
+  test('on and ON resolve to on', () => {
+    expect(loadRagConfig({ RAG_DOC_ACCESS_GROUPS: 'on' }).accessGroups).toBe('on');
+    resetRagConfigForTests();
+    expect(loadRagConfig({ RAG_DOC_ACCESS_GROUPS: ' ON ' }).accessGroups).toBe('on');
+    expect(accessWarnings()).toEqual([]);
+  });
+
+  test('an unknown value resolves to off and warns with the variable name', () => {
+    const config = loadRagConfig({ RAG_DOC_ACCESS_GROUPS: 'enabled' });
+    expect(config.accessGroups).toBe('off');
+    expect(config.warnings.some((line) => line.includes('RAG_DOC_ACCESS_GROUPS'))).toBe(true);
+    expect(accessWarnings().length).toBeGreaterThan(0);
+  });
+
+  test('a changed value is not served from the memo of another value', () => {
+    expect(loadRagConfig({ RAG_DOC_ACCESS_GROUPS: 'off' }).accessGroups).toBe('off');
+    expect(loadRagConfig({ RAG_DOC_ACCESS_GROUPS: 'on' }).accessGroups).toBe('on');
+  });
+});
