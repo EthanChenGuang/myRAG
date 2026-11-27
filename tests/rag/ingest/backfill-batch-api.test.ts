@@ -535,7 +535,7 @@ describe('submitBatch when batch creation fails', () => {
       files: {
         create: async () => ({ id: 'file-up-1' }),
         content: async () => new Response(''),
-        delete: async (fileId: string) => {
+        del: async (fileId: string) => {
           deleted.push(fileId);
           if (deleteError) throw deleteError;
           return { id: fileId, deleted: true };
@@ -565,6 +565,29 @@ describe('submitBatch when batch creation fails', () => {
     expect(rpc.calls.find((c) => c.fn === 'rag_record_embed_batch')).toBeUndefined();
   });
 
+  test('the real OpenAI client sends DELETE for the uploaded file when create answers 400', async () => {
+    const requests: string[] = [];
+    const fetchStub = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
+      const method = init?.method ?? 'GET';
+      requests.push(`${method} ${url.pathname}`);
+      const json = (status: number, body: unknown) =>
+        new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      if (method === 'POST' && url.pathname === '/v1/files') return json(200, { id: 'file-real-1', object: 'file', purpose: 'batch' });
+      if (method === 'POST' && url.pathname === '/v1/batches') {
+        return json(400, { error: { message: 'Billing hard limit has been reached', type: 'invalid_request_error', code: 'billing_hard_limit_reached' } });
+      }
+      if (method === 'DELETE') return json(200, { id: url.pathname.split('/').pop(), object: 'file', deleted: true });
+      return json(404, { error: { message: 'not found' } });
+    };
+    const client = new OpenAI({ apiKey: 'sk-test-placeholder', baseURL: 'http://fake.invalid/v1', maxRetries: 0, fetch: fetchStub });
+    const [file] = buildBatchLines(chunks(2), PROFILE);
+    await expect(
+      submitBatch(submitDeps(client as unknown as BatchApiClient), { batchId: BATCH_ID, profile: PROFILE, file: file! }),
+    ).rejects.toMatchObject({ status: 400, code: 'billing_hard_limit_reached' });
+    expect(requests).toEqual(['POST /v1/files', 'POST /v1/batches', 'DELETE /v1/files/file-real-1']);
+  });
+
   test('a failed delete still surfaces the original create error', async () => {
     const createError = new Error('billing_hard_limit_reached');
     const { client, deleted } = failingClient(createError, new Error('delete failed'));
@@ -580,7 +603,7 @@ describe('collecting hostile or malformed output', () => {
       files: {
         create: async () => ({ id: 'file-1' }),
         content: async (id: string) => new Response(id === 'out' ? output : (errorFile ?? '')),
-        delete: async () => ({ deleted: true }),
+        del: async () => ({ deleted: true }),
       },
       batches: {
         create: async () => ({ id: 'b1', status: 'validating' }),

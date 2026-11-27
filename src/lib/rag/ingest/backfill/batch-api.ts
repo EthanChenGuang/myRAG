@@ -89,7 +89,7 @@ export interface BatchApiClient {
   files: {
     create(body: { file: Uploadable; purpose: 'batch' }, options?: RequestOptions): PromiseLike<{ id: string }>;
     content(fileId: string, options?: RequestOptions): PromiseLike<Response>;
-    delete(fileId: string, options?: RequestOptions): PromiseLike<unknown>;
+    del(fileId: string, options?: RequestOptions): PromiseLike<unknown>;
   };
   batches: {
     create(
@@ -263,7 +263,7 @@ export async function submitBatch(
     );
   } catch (error) {
     try {
-      await client.files.delete(uploaded.id);
+      await client.files.del(uploaded.id);
     } catch (cleanupError) {
       console.warn('[Embed Batch] input file cleanup failed', {
         error: cleanupError instanceof Error ? cleanupError.name : 'unknown',
