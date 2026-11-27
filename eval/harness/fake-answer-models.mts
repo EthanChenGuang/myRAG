@@ -54,7 +54,10 @@ export function isFakeGeneratorModel(modelId: string): boolean {
 }
 
 /** The fake factory with its tool-support declaration (D-78), read by the eval route through evalModelToolCapability. */
-export type FakeAnswerModelFactory = FakeLanguageModelFactory & { canUseTools: (_modelId: string) => boolean | undefined };
+export type FakeAnswerModelFactory = FakeLanguageModelFactory & {
+  canUseTools: (_modelId: string) => boolean | undefined;
+  maxOutputTokens: (_modelId: string) => number | undefined;
+};
 
 type RuleCategory = 'partial_answer' | 'stale_version' | 'off_topic_context';
 
@@ -396,5 +399,5 @@ export function installFakeAnswerModels(options: FakeAnswerModelsOptions): FakeA
       },
     }) as unknown as LanguageModel;
   };
-  return Object.assign(factory, { canUseTools: fakeCalcToolCapability });
+  return Object.assign(factory, { canUseTools: fakeCalcToolCapability, maxOutputTokens: (_modelId: string) => undefined });
 }
