@@ -896,6 +896,588 @@
         "text": "How often does the connection unit report its status?",
         "source_language": null
       }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "en-scoped-compound-001",
+      "query": "How often does the Corvid unit in Zone Oriel recalibrate a sensor array, and how often does the Lumen unit in Zone Pallas?",
+      "output": {
+        "questions": [
+          {
+            "text": "How often does the Corvid unit in Zone Oriel recalibrate a sensor array?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-oriel"
+                ],
+                "department": [
+                  "unit-corvid"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "How often does the Lumen unit in Zone Pallas recalibrate a sensor array?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-pallas"
+                ],
+                "department": [
+                  "unit-lumen"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "en-scoped-compound-002",
+      "query": "How many spare filter cartridges do the Corvid unit in Zone Oriel and the Lumen unit in Zone Pallas each keep on hand?",
+      "output": {
+        "questions": [
+          {
+            "text": "How many spare filter cartridges does the Corvid unit in Zone Oriel keep on hand?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-oriel"
+                ],
+                "department": [
+                  "unit-corvid"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "How many spare filter cartridges does the Lumen unit in Zone Pallas keep on hand?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-pallas"
+                ],
+                "department": [
+                  "unit-lumen"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "en-scoped-compound-003",
+      "query": "How long does a sensor array recalibration take for the Corvid unit in Zone Oriel, and below how many cartridges does the Lumen unit in Zone Pallas place a new order?",
+      "output": {
+        "questions": [
+          {
+            "text": "How long does a sensor array recalibration take for the Corvid unit in Zone Oriel?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-oriel"
+                ],
+                "department": [
+                  "unit-corvid"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "Below how many cartridges does the Lumen unit in Zone Pallas place a new filter order?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-pallas"
+                ],
+                "department": [
+                  "unit-lumen"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "it-scoped-compound-001",
+      "query": "Ogni quanti giorni l'unità Corvid della Zona Oriel ritara un gruppo di sensori, e ogni quanti l'unità Lumen della Zona Pallas?",
+      "output": {
+        "questions": [
+          {
+            "text": "Ogni quanti giorni l'unità Corvid della Zona Oriel ritara un gruppo di sensori?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-oriel"
+                ],
+                "department": [
+                  "unit-corvid"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "Ogni quanti giorni l'unità Lumen della Zona Pallas ritara un gruppo di sensori?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-pallas"
+                ],
+                "department": [
+                  "unit-lumen"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "it-scoped-compound-002",
+      "query": "Quante cartucce filtranti di ricambio tengono a disposizione l'unità Corvid della Zona Oriel e l'unità Lumen della Zona Pallas?",
+      "output": {
+        "questions": [
+          {
+            "text": "Quante cartucce filtranti di ricambio tiene a disposizione l'unità Corvid della Zona Oriel?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-oriel"
+                ],
+                "department": [
+                  "unit-corvid"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "Quante cartucce filtranti di ricambio tiene a disposizione l'unità Lumen della Zona Pallas?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-pallas"
+                ],
+                "department": [
+                  "unit-lumen"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "it-scoped-compound-003",
+      "query": "Quanto dura una taratura per l'unità Lumen della Zona Pallas, e sotto quante cartucce l'unità Corvid della Zona Oriel fa un nuovo ordine?",
+      "output": {
+        "questions": [
+          {
+            "text": "Quanto dura una taratura per l'unità Lumen della Zona Pallas?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-pallas"
+                ],
+                "department": [
+                  "unit-lumen"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "Sotto quante cartucce l'unità Corvid della Zona Oriel fa un nuovo ordine di filtri?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-oriel"
+                ],
+                "department": [
+                  "unit-corvid"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "it-scoped-compound-004",
+      "query": "Quanto dura una taratura dei sensori per l'unità Corvid della Zona Oriel e per l'unità Lumen della Zona Pallas?",
+      "output": {
+        "questions": [
+          {
+            "text": "Quanto dura una taratura dei sensori per l'unità Corvid della Zona Oriel?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-oriel"
+                ],
+                "department": [
+                  "unit-corvid"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "Quanto dura una taratura dei sensori per l'unità Lumen della Zona Pallas?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-pallas"
+                ],
+                "department": [
+                  "unit-lumen"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "it-scoped-compound-005",
+      "query": "Sotto quante cartucce filtranti parte un nuovo ordine per l'unità Corvid della Zona Oriel e per l'unità Lumen della Zona Pallas?",
+      "output": {
+        "questions": [
+          {
+            "text": "Sotto quante cartucce filtranti parte un nuovo ordine per l'unità Corvid della Zona Oriel?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-oriel"
+                ],
+                "department": [
+                  "unit-corvid"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "Sotto quante cartucce filtranti parte un nuovo ordine per l'unità Lumen della Zona Pallas?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-pallas"
+                ],
+                "department": [
+                  "unit-lumen"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "it-scoped-compound-006",
+      "query": "Per l'unità Lumen della Zona Pallas, ogni quanti giorni si ritara un gruppo di sensori e quante cartucce filtranti di ricambio sono a disposizione?",
+      "output": {
+        "questions": [
+          {
+            "text": "Ogni quanti giorni l'unità Lumen della Zona Pallas ritara un gruppo di sensori?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-pallas"
+                ],
+                "department": [
+                  "unit-lumen"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "Quante cartucce filtranti di ricambio tiene a disposizione l'unità Lumen della Zona Pallas?",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-pallas"
+                ],
+                "department": [
+                  "unit-lumen"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "zh-scoped-compound-001",
+      "query": "奥瑞尔区的科维德组和帕拉斯区的卢门组分别每隔多少天校准一次传感器阵列？",
+      "output": {
+        "questions": [
+          {
+            "text": "奥瑞尔区的科维德组每隔多少天校准一次传感器阵列？",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-oriel"
+                ],
+                "department": [
+                  "unit-corvid"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "帕拉斯区的卢门组每隔多少天校准一次传感器阵列？",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-pallas"
+                ],
+                "department": [
+                  "unit-lumen"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "zh-scoped-compound-002",
+      "query": "奥瑞尔区的科维德组和帕拉斯区的卢门组各常备多少个备用滤芯？",
+      "output": {
+        "questions": [
+          {
+            "text": "奥瑞尔区的科维德组常备多少个备用滤芯？",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-oriel"
+                ],
+                "department": [
+                  "unit-corvid"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "帕拉斯区的卢门组常备多少个备用滤芯？",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-pallas"
+                ],
+                "department": [
+                  "unit-lumen"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "zh-scoped-compound-003",
+      "query": "帕拉斯区的卢门组每次校准耗时多久？奥瑞尔区的科维德组在剩余少于几个滤芯时下单补货？",
+      "output": {
+        "questions": [
+          {
+            "text": "帕拉斯区的卢门组每次校准耗时多久？",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-pallas"
+                ],
+                "department": [
+                  "unit-lumen"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          },
+          {
+            "text": "奥瑞尔区的科维德组在剩余少于几个滤芯时下单补货？",
+            "filter": {
+              "date_range": null,
+              "scopes": {
+                "region": [
+                  "zone-oriel"
+                ],
+                "department": [
+                  "unit-corvid"
+                ]
+              },
+              "doc_types": null,
+              "languages": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "en-glossary-001",
+      "query": "What does the velmora card accompany?",
+      "output": {
+        "target_language": "it",
+        "text": "Che cosa accompagna la carta velmora?",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "en-glossary-002",
+      "query": "Which details are written on the velmora card?",
+      "output": {
+        "target_language": "it",
+        "text": "Quali dati sono scritti sulla carta velmora?",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "en-glossary-003",
+      "query": "How long does the shipping unit keep a copy of the velmora card?",
+      "output": {
+        "target_language": "it",
+        "text": "Per quanto tempo l'unità mittente conserva una copia della velmora card?",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "it-glossary-001",
+      "query": "Che cosa annota il registro tessaro?",
+      "output": {
+        "target_language": "zh",
+        "text": "泰萨罗登记册记录什么？",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "it-glossary-002",
+      "query": "Che cosa va scritto sul registro tessaro a ogni prestito?",
+      "output": {
+        "target_language": "zh",
+        "text": "每次借出时泰萨罗登记册上要写什么？",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "it-glossary-003",
+      "query": "Per quanto tempo l'archivio conserva un registro tessaro completo?",
+      "output": {
+        "target_language": "zh",
+        "text": "档案室把写满的 registro tessaro 保存多久？",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "zh-glossary-001",
+      "query": "蓝序单是什么样的表格？",
+      "output": {
+        "target_language": "en",
+        "text": "What kind of form is the blue sequence sheet?",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "zh-glossary-002",
+      "query": "抽取第一个样本之前，蓝序单需要几名操作员签字？",
+      "output": {
+        "target_language": "en",
+        "text": "How many operators must sign the blue sequence sheet before the first sample is drawn?",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "zh-glossary-003",
+      "query": "填好的蓝序单要存档多久？",
+      "output": {
+        "target_language": "en",
+        "text": "How long is a completed 蓝序单 archived?",
+        "source_language": null
+      }
     }
   ],
   "scenarios": {
