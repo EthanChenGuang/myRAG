@@ -106,8 +106,14 @@ function respond(callOptions: LanguageModelV3CallOptions, options: SmallWindowMo
   const maxOutputTokens = callOptions.maxOutputTokens ?? 0;
   const entry: SmallWindowRequest = { promptTokens, maxOutputTokens, messages: callOptions.prompt.length, outcome: 'ok' };
   recorded.push(entry);
-  void questionIsLast;
-  void options;
+  if (promptTokens + maxOutputTokens > FAKE_SMALL_WINDOW_TOKENS) {
+    entry.outcome = FAKE_WINDOW_EXCEEDED;
+    throw new FakeSmallWindowError(FAKE_WINDOW_EXCEEDED);
+  }
+  if (!questionIsLast(callOptions.prompt, options.isQuestion)) {
+    entry.outcome = FAKE_QUESTION_NOT_LAST;
+    throw new FakeSmallWindowError(FAKE_QUESTION_NOT_LAST);
+  }
   const system = callOptions.prompt
     .filter((message) => message.role === 'system')
     .map((message) => (typeof message.content === 'string' ? message.content : ''))
