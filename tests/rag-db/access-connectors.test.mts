@@ -361,6 +361,182 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       await db.query('DELETE FROM rag_connector_sharing_rules WHERE tenant_key = $1', [fx.tenantKey]);
     });
 
+    interface MapRow {
+      id: string | null;
+      provider: string;
+      kind: string;
+      external_principal_id: string;
+      group_id: string | null;
+      documents: number;
+      total: number;
+    }
+    interface RuleRow {
+      id: string | null;
+      provider: string;
+      kind: string;
+      domain: string | null;
+      enabled: boolean;
+      documents: number;
+    }
+
+    const call = async <T extends Record<string, unknown>>(name: string, sql: string, params: unknown[]): Promise<T[]> => {
+      await assertFunction(db, name);
+      return (await service(db, () => db.query<T>(sql, params))).rows;
+    };
+    const mapList = (offset = 0, tenantKey = fx.tenantKey): Promise<MapRow[]> =>
+      call<MapRow>('rag_connector_map_list', 'SELECT id, provider, kind, external_principal_id, group_id, documents::int AS documents, total::int AS total FROM public.rag_connector_map_list($1, $2)', [tenantKey, offset]);
+    const mapSet = (args: { id?: string | null; provider?: string; kind?: string; principal?: string; group: string | null; tenantKey?: string }) =>
+      call<{ id: string; group_id: string; outcome: string }>('rag_connector_map_set', 'SELECT * FROM public.rag_connector_map_set($1, $2, $3, $4, $5, $6, $7)', [
+        args.tenantKey ?? fx.tenantKey,
+        args.id ?? null,
+        args.provider ?? 'google-drive',
+        args.kind ?? 'group',
+        args.principal ?? null,
+        args.group,
+        OWNER,
+      ]);
+    const mapDelete = (mapId: string, tenantKey = fx.tenantKey) =>
+      call<{ removed: boolean }>('rag_connector_map_delete', 'SELECT public.rag_connector_map_delete($1, $2, $3) AS removed', [tenantKey, mapId, OWNER]);
+    const rulesList = (): Promise<RuleRow[]> =>
+      call<RuleRow>('rag_connector_rules_list', 'SELECT id, provider, kind, domain, enabled, documents::int AS documents FROM public.rag_connector_rules_list($1)', [fx.tenantKey]);
+    const ruleSet = (args: { id?: string | null; provider?: string; kind?: string; domain?: string | null; enabled?: boolean | null }) =>
+      call<{ id: string; enabled: boolean; outcome: string }>('rag_connector_rule_set', 'SELECT * FROM public.rag_connector_rule_set($1, $2, $3, $4, $5, $6, $7)', [
+        fx.tenantKey,
+        args.id ?? null,
+        args.provider ?? 'google-drive',
+        args.kind ?? 'domain',
+        args.domain ?? null,
+        args.enabled ?? null,
+        OWNER,
+      ]);
+    const failClosedCounts = (tenantKey = fx.tenantKey) =>
+      call<{ connection_id: string; documents: number }>('rag_connector_fail_closed_counts', 'SELECT connection_id, documents::int AS documents FROM public.rag_connector_fail_closed_counts($1)', [tenantKey]);
+    const auditCount = async (action: string): Promise<number> =>
+      (await db.query<{ n: number }>("SELECT count(*)::int AS n FROM rag_access_audit WHERE tenant_key = $1 AND action = $2 AND actor_kind = 'admin'", [fx.tenantKey, action])).rows[0]!.n;
+
+    test('the mapping list puts unmapped seen principals first with the documents that fell back because of them', async () => {
+      await apply(DOC.syncedV2, [
+        { kind: 'group', id: 'source-group-1@example.org' },
+        { kind: 'group', id: 'source-group-2@example.org' },
+        { kind: 'domain', id: 'example.org' },
+      ]);
+      await apply(DOC.second, [{ kind: 'group', id: 'source-group-2@example.org' }, { kind: 'anyone' }]);
+      const rows = await mapList();
+      assert.deepEqual(
+        rows.map((r) => [r.id === null, r.provider, r.kind, r.external_principal_id, r.group_id, r.documents, r.total]),
+        [
+          [true, 'google-drive', 'group', 'source-group-2@example.org', null, 2, 2],
+          [false, 'google-drive', 'group', 'source-group-1@example.org', fx.groupA, 0, 2],
+        ],
+      );
+      assert.deepEqual(await failClosedCounts(), [{ connection_id: 'connection-1', documents: 2 }]);
+      assert.deepEqual(
+        (await rulesList()).map((r) => [r.id, r.provider, r.kind, r.domain, r.enabled, r.documents]),
+        [
+          [null, 'google-drive', 'anyone', null, false, 1],
+          [null, 'google-drive', 'domain', 'example.org', false, 1],
+        ],
+      );
+      if (multi) {
+        assert.deepEqual(await mapList(0, `o:${OTHER_ORG}`), [], 'another tenant sees nothing');
+        assert.deepEqual(await failClosedCounts(`o:${OTHER_ORG}`), []);
+      }
+    });
+
+    test('mappings are created, changed and removed inside one tenant, audited, without relabelling', async () => {
+      const before = await auditCount('connector_map_set');
+      const created = await mapSet({ principal: ' Source-Group-2@Example.org ', group: fx.groupB });
+      assert.equal(created[0]?.outcome, 'created');
+      const mapId = created[0]!.id;
+      await rejects(() => mapSet({ principal: 'source-group-2@example.org', group: fx.groupA }), /^mapping_exists/, 'duplicate');
+      await rejects(() => mapSet({ principal: 'source-group-3', group: fx.otherGroup ?? id('9259', 7) }), /^unknown_group/, 'group of another tenant');
+      await rejects(() => mapSet({ principal: 'source-group-3', kind: 'domain', group: fx.groupA }), /^invalid_kind/, 'kind');
+      await rejects(() => mapSet({ principal: '  ', group: fx.groupA }), /^invalid_principal/, 'empty principal');
+      await rejects(() => mapSet({ principal: 'x', provider: 'other', group: fx.groupA }), /^invalid_provider/, 'provider');
+      assert.equal((await mapSet({ id: mapId, group: fx.groupA }))[0]?.outcome, 'changed');
+      assert.equal((await mapSet({ id: mapId, group: fx.groupA }))[0]?.outcome, 'unchanged');
+      assert.equal(await auditCount('connector_map_set'), before + 2, 'created and changed are audited');
+      const listed = (await mapList()).find((r) => r.external_principal_id === 'source-group-2@example.org');
+      assert.equal(listed?.id, mapId);
+      assert.equal(listed?.group_id, fx.groupA);
+      assert.deepEqual(await labels(DOC.second), [[`u:${OWNER}`]], 'a mapping applies at the next sync');
+      if (multi) {
+        await rejects(() => mapDelete(mapId, `o:${OTHER_ORG}`), /^mapping_not_found/, 'another tenant cannot remove it');
+        await rejects(() => mapSet({ id: mapId, group: fx.otherGroup!, tenantKey: `o:${OTHER_ORG}` }), /^mapping_not_found/, 'nor change it');
+      }
+      assert.deepEqual(await mapDelete(mapId), [{ removed: true }]);
+      await rejects(() => mapDelete(mapId), /^mapping_not_found/, 'gone');
+      assert.equal(await auditCount('connector_map_delete'), 1);
+    });
+
+    test('the mapping list pages 50 rows at a time', async () => {
+      await db.query(
+        `INSERT INTO rag_connector_document_principals (document_id, tenant_key, provider, kind, external_principal_id, mapped)
+         SELECT $1, $2, 'google-drive', 'group', 'bulk-' || lpad(n::text, 2, '0'), false FROM generate_series(1, 55) AS n`,
+        [DOC.second, fx.tenantKey],
+      );
+      const first = await mapList(0);
+      const second = await mapList(50);
+      assert.equal(first.length, 50);
+      assert.equal(second.length, first[0]!.total - 50);
+      assert.equal(first[0]!.total, 57);
+      await rejects(() => mapList(-1), /^invalid_offset/, 'negative offset');
+      await db.query("DELETE FROM rag_connector_document_principals WHERE external_principal_id LIKE 'bulk-%'");
+    });
+
+    test('sharing rules are created off, validated and toggled with audit', async () => {
+      const before = await auditCount('sharing_rule_set');
+      const created = await ruleSet({ domain: ' Example.ORG ', enabled: true });
+      assert.equal(created[0]?.enabled, false, 'a new rule is off');
+      assert.equal(created[0]?.outcome, 'created');
+      await rejects(() => ruleSet({ domain: 'example.org' }), /^rule_exists/, 'duplicate');
+      for (const bad of ['https://example.org', 'example.org/path', 'example.org:8080', '*.example.org', 'exa mple.org', 'localhost', '', null]) {
+        await rejects(() => ruleSet({ domain: bad }), /^bad_domain/, `bad domain ${String(bad)}`);
+      }
+      await rejects(() => ruleSet({ kind: 'anyone', domain: 'example.org' }), /^bad_domain/, 'a link rule has no domain');
+      await rejects(() => ruleSet({ kind: 'group' }), /^invalid_kind/, 'kind');
+      const link = await ruleSet({ kind: 'anyone' });
+      assert.equal(link[0]?.enabled, false);
+      await rejects(() => ruleSet({ id: created[0]!.id }), /^enabled_required/, 'a change names the state');
+      assert.equal((await ruleSet({ id: created[0]!.id, enabled: true }))[0]?.outcome, 'enabled');
+      assert.equal((await ruleSet({ id: created[0]!.id, enabled: true }))[0]?.outcome, 'unchanged');
+      await rejects(() => ruleSet({ id: id('9259', 8), enabled: true }), /^rule_not_found/, 'unknown rule');
+      assert.equal(await auditCount('sharing_rule_set'), before + 3, 'two creations and one change');
+      const rules = await rulesList();
+      assert.deepEqual(
+        rules.map((r) => [r.id !== null, r.kind, r.domain, r.enabled, r.documents]),
+        [
+          [true, 'anyone', null, false, 1],
+          [true, 'domain', 'example.org', true, 1],
+        ],
+      );
+      assert.deepEqual(await labels(DOC.syncedV2), [[`u:${OWNER}`]], 'a rule applies at the next sync');
+      await db.query('DELETE FROM rag_connector_sharing_rules WHERE tenant_key = $1', [fx.tenantKey]);
+    });
+
+    test('every 0925 function is executable by service_role only', async () => {
+      const signatures = [
+        'rag_connector_apply_access(text, uuid, text, jsonb, uuid, text)',
+        'rag_connector_match_members(text, text[])',
+        'rag_connector_map_list(text, integer)',
+        'rag_connector_map_set(text, uuid, text, text, text, uuid, uuid)',
+        'rag_connector_map_delete(text, uuid, uuid)',
+        'rag_connector_rules_list(text)',
+        'rag_connector_rule_set(text, uuid, text, text, text, boolean, uuid)',
+        'rag_connector_fail_closed_counts(text)',
+      ];
+      for (const signature of signatures) {
+        await assertFunction(db, signature.slice(0, signature.indexOf('(')));
+        const rows = await db.query<{ service: boolean; anon: boolean; auth: boolean; pub: boolean }>(
+          `SELECT has_function_privilege('service_role', $1, 'EXECUTE') AS service, has_function_privilege('anon', $1, 'EXECUTE') AS anon,
+                  has_function_privilege('authenticated', $1, 'EXECUTE') AS auth,
+                  EXISTS (SELECT 1 FROM pg_proc p, aclexplode(p.proacl) a WHERE p.oid = $1::regprocedure AND a.grantee = 0) AS pub`,
+          [`public.${signature}`],
+        );
+        assert.deepEqual(rows.rows[0], { service: true, anon: false, auth: false, pub: false }, signature);
+      }
+    });
+
     if (multi) {
       test('a personal-tenant document with a group principal falls back to the owner (A-10)', async () => {
         const applied = await apply(DOC.personal, [{ kind: 'group', id: 'source-group-1@example.org' }], 'ok', { tenantKey: `u:${OWNER}` });
