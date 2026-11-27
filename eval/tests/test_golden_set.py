@@ -386,12 +386,13 @@ def test_committed_ingest_manifest_verifies_against_the_merged_ingest_set():
 def test_committed_manifests_start_at_version_one_all_active():
     # Version 1 recorded the set when 05.3-06 created the manifests; train 30 bumped it twice: version 2 added only the
     # 36 Phase 4.2 items of plan 04.2-37 (tag phase42), version 3 changed only the six small_talk items the Phase 6 gate fix
-    # marked conversational. Train 31 bumped it to version 4 with only the 25 implicit_condition and near-miss no-answer
-    # items of plan 05.3-15. Every item is still active.
+    # marked conversational. Version 4 (the merge of train 30 into 05.3-16) added only the 25 items of plan 05.3-15
+    # (tag phase53_fixture). Every item is still active.
     golden = load_golden(FIXTURE_GOLDEN)
     phase42 = sorted(item.id for item in golden if "phase42" in item.tags)
+    phase53 = sorted(item.id for item in golden if "phase53_fixture" in item.tags)
     conversational = sorted(item.id for item in golden if item.expected_behavior == "conversational")
-    assert len(phase42) == 36 and len(conversational) == 6
+    assert len(phase42) == 36 and len(conversational) == 6 and len(phase53) == 25
     for path in (FIXTURE_MANIFEST, INGEST_MANIFEST):
         manifest = golden_set.load_manifest(path)
         assert manifest.version == 4
@@ -400,5 +401,6 @@ def test_committed_manifests_start_at_version_one_all_active():
         assert not manifest.changelog[1].changed
         assert sorted(manifest.changelog[2].changed) == conversational
         assert not manifest.changelog[2].added
-        assert len(manifest.changelog[3].added) == 25 and not manifest.changelog[3].changed
+        assert sorted(manifest.changelog[3].added) == phase53
+        assert not manifest.changelog[3].changed
         assert all(entry.status == "active" for entry in manifest.items)

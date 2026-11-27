@@ -1028,7 +1028,7 @@ def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_p
         (root / "baselines" / "history" / "fixture-ingest-baseline.pre-04.1.1-10.json").read_text(encoding="utf-8")
     )
     # The 04.1.1-10 record, kept in history when plan 04.2-37 added the Phase 4.2 items;
-    # test_the_04_2_37_baselines_add_only_phase42_items_and_move_no_old_item compares it with the committed baselines.
+    # test_the_04_2_37_baselines_add_only_phase42_items_and_move_no_old_item compares it with train 30's baselines.
     current = Baseline.model_validate_json(
         (root / "baselines" / "history" / "fixture-ingest-baseline.pre-04.2-37.json").read_text(encoding="utf-8")
     )
