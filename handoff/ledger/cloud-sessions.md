@@ -696,3 +696,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   Train 39 has 2 failures of its own, sent to the t39 builder:
   (a) the sentinel finds rag_scope_centroids_rebuild unclassified -> mark it EXEMPT, with the follow-up "should restricted chunks shape scope centroids?";
   (b) the q62-scope-separation report is stale -> re-generate it.
+- 22:08Z 03.3-25 DONE (9286399d) and archived -> train 40. TPL-01..08 have passing gates; TPL-09 no_other_slice_drop FAIL is recorded (decision b, re-checked in 03.3-26).
