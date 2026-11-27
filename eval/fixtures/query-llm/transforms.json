@@ -711,6 +711,63 @@
           "What were the launch rules of the Marrowfield Rocketry Club in 2025?"
         ]
       }
+    },
+    {
+      "transform": "decompose",
+      "query": "Compare the sample index last year and this year.",
+      "output": {
+        "questions": [
+          "What was the sample index last year?"
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "query": "Quali sono le regole del modulo campione per la zona alfa e per la zona beta?",
+      "output": {
+        "questions": [
+          "Quali sono le regole del modulo campione per la zona alfa?"
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "query": "比较 QX-210 和 QX-220 的状态码含义有什么区别？",
+      "output": {
+        "questions": [
+          "QX-210 的状态码含义是什么？"
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "query": "How do the Alder Module and the Birch Module differ in setup?",
+      "output": {
+        "questions": [
+          "How is the Alder Module set up?"
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "query": "What does the sample guide say about 2024 and the Alder Module?",
+      "output": {
+        "questions": [
+          "What does the sample guide say about 2024?"
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "query": "Compare the sample totals of 2023 and 2024 in each quarter.",
+      "output": {
+        "questions": [
+          "What were the sample totals in the first quarter of 2023?",
+          "What were the sample totals in the second quarter of 2023?",
+          "What were the sample totals in the third quarter of 2023?",
+          "What were the sample totals in the fourth quarter of 2023?"
+        ]
+      }
     }
   ]
 }
