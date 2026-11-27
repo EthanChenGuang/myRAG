@@ -186,6 +186,23 @@ export type {
 } from './types';
 export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
 export { untaggedVoiceContext } from './context/voice';
+export {
+  assertQuestionLast,
+  finalizePromptBudget,
+  groupHistoryTurns,
+  planPromptBudget,
+  PromptOrderError,
+  type BudgetMessage,
+  type FinalizeResult,
+  type PromptBudgetPlan,
+} from './context/prompt-budget';
+export { modelContextLength, modelFamily } from './context/model-window';
+export {
+  currentDocumentTokenTarget,
+  OPENROUTER_COMPRESSION_OFF,
+  PROMPT_BUDGET_EXCEEDED,
+  promptTooLongText,
+} from './context/prompt-budget-route';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
 export {
