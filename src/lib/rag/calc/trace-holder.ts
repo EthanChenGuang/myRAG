@@ -28,7 +28,8 @@ export interface CalcTraceHolder {
 }
 
 function offset(value: unknown): number | null {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+  // Offsets are text positions: non-negative integers below 2^31 (no float helpers in src/lib/rag/calc, D-68).
+  return typeof value === 'number' && value >= 0 && value <= 0x7fffffff && (value | 0) === value ? value : null;
 }
 
 export function createCalcTraceHolder(): CalcTraceHolder {
