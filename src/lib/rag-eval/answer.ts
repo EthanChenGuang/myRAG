@@ -112,13 +112,10 @@ export function buildEvalSystemPrompt(input: {
   const { context, ragMode, answerLanguage, decomposedAnswer } = input;
   const ragSystemPrompt = resolveEvalPromptTemplate(input.promptEnv);
 
+  // Phase 6.2 D-11: the chat route's options, the answer language plus the decomposed-answer block when present
+  const promptOptions = decomposedAnswer ? { ...(answerLanguage ?? {}), decomposedAnswer } : answerLanguage;
   if (context.length > 0) {
-    return createEnhancedRAGPrompt(
-      ragSystemPrompt,
-      context,
-      ragMode,
-      decomposedAnswer ? { ...(answerLanguage ?? {}), decomposedAnswer } : answerLanguage,
-    );
+    return createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, promptOptions);
   }
   return SystemPromptManager.injectContext(ragSystemPrompt, context);
 }

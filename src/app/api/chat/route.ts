@@ -3031,7 +3031,7 @@ Context:
       decomposedAnswer = knowledgeContextAttached
         ? decomposedAnswerFor(retrievalResult, { citationsActive: citationSession.strategy !== null })
         : undefined;
-      const enhancedPromptOptions = decomposedAnswer ? { ...(answerLanguage ?? {}), decomposedAnswer } : answerLanguage;
+      const promptOptions = decomposedAnswer ? { ...(answerLanguage ?? {}), decomposedAnswer } : answerLanguage;
       // Phase 5.2 D-04, D-07: the answer-rule block goes after the citation instruction; it is the prompt itself with every switch off
       const answerRuleOptions = {
         mode: ragMode,
@@ -3041,7 +3041,7 @@ Context:
       const historyNotEvidence = ragMode !== 'bypass' && historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE);
       systemPrompt = appendHistoryNotEvidence(
         answerTurn.composeSystemPrompt(
-          citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, enhancedPromptOptions)),
+          citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, promptOptions)),
           answerRuleOptions,
         ),
         historyNotEvidence,
