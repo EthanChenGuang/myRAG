@@ -721,3 +721,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   (6) Model roles: dev and review = Opus, ops = Sonnet, design and research = Fable.
   Parallelism stays high (plan upgraded to Ultra).
 - 22:20Z The user approved 06.2-22 to continue in its own session.
+- 22:20Z 07-37 STOPPED again on its precondition, correctly, and the session is archived. It needs 06.3-02 and 06.3-07, which come with train 40, and 06.3-15, which is running; or else a 06.3-VERIFICATION. Re-dispatch it on a base that has train 40, 06.3-15, 07-28 and 07-34 once those exist.
