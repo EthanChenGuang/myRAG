@@ -7,7 +7,7 @@ import { getRagDeps } from '../deps';
 import { LEGACY_PROFILE } from '../embeddings/active-profile';
 import { classifyProfileFailure, type QueryEmbedding } from '../embeddings/query-embedding';
 import { assembleVoiceResults, voiceContext, type VoiceResults } from '../context/voice';
-import { validResultCount, warnInjectionCheckDisabled } from '../config';
+import { scopeGateEnabledFor, validResultCount, warnInjectionCheckDisabled } from '../config';
 import { downweightOrder, failure, injectionDropped, requireValue, runInjectionStage, runStage, stageSpec, StageError } from '../pipeline';
 import { injectionItems, releasedRulesFromRows } from '../security/injection-check';
 import { scopeAccessFilter, type ScopeAccessFilter } from '../tenant/access';
@@ -31,7 +31,7 @@ import {
   type BindingEmbed,
   type BindingLegsPlan,
 } from './stages/binding-legs';
-import { buildCacheHitResult, buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks, requestRetrievalConfigHash } from './result';
+import { buildCacheHitResult, buildOutOfScopeResult, buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks, requestRetrievalConfigHash } from './result';
 import { buildRetrievalFilters, effectiveOnFor } from '../query/filters';
 import { queryLanguage as detectQueryLanguage } from '../query/language';
 import { effectiveQueryLayerConfig, queryLayerOverrides } from '../query/layer-config';
@@ -43,6 +43,7 @@ import type { SemanticCacheSeam } from '../query/run-layer';
 import { variantDenseTexts } from '../query/variants';
 import type { VariantFilterRetry } from './port';
 import { identifierSuggestionMessage } from '../generation/messages';
+import { logScopeGateProblem, runScopeGateStage, scopeGateFailOpen } from '../scope/stage';
 
 export const V2_PROFILES = ['chat', 'embed', 'eval', 'voice'] as const;
 
@@ -120,6 +121,7 @@ export async function runV2Pipeline(
   let effectiveOn: string | undefined;
   let queryLayerHash: RetrievalConfigHashQueryLayer | undefined;
   let cacheTicket: RetrievalResult['cacheTicket'];
+  let scopeGate: RetrievalResult['scopeGate'];
   // D-21: set by the terminology stage before semantic_cache builds its key; enabled but not reached reads as unavailable.
   let terminologyStage: TerminologyHashStage = spec('terminology', 'skip').enabled ? { enabled: true, version: null } : { enabled: false };
   // D-30: set by the attribute stage before semantic_cache builds its key; enabled but not reached reads as skipped.
@@ -285,6 +287,38 @@ export async function runV2Pipeline(
       'embed',
     );
     embedding = variantEmbeddings[0]!;
+
+    // D-26: scores the embeddings already made against the tenant's cached centroids; only out_of_scope skips search, rank and context.
+    if (scopeGateEnabledFor(config, profile)) {
+      const gateSpec = spec('scope_gate', 'skip');
+      if (gateSpec.enabled) {
+        const embeddingProfileId = embedding.profile?.id ?? LEGACY_PROFILE.id;
+        const gate = await runStage(
+          gateSpec,
+          signal,
+          () =>
+            runScopeGateStage({
+              scope,
+              embeddingProfileId,
+              ragMode: input.options?.ragMode ?? 'strict',
+              variants: query.variants,
+              embeddings: variantEmbeddings,
+              queryPlan: queryPlan ?? null,
+            }),
+          collector,
+          { detail: (value) => value.label },
+        );
+        if (gate.skipped) {
+          logScopeGateProblem(gate.reason);
+          scopeGate = scopeGateFailOpen(gate.reason === 'timeout' ? 'timeout' : 'failed');
+        } else {
+          scopeGate = gate.value;
+        }
+        if (scopeGate.label === 'out_of_scope') {
+          return buildOutOfScopeResult({ collector, queryContext, queryLanguage, queryPlan: queryPlan ?? null, scopeGate, ...(cacheTicket ? { cacheTicket } : {}) });
+        }
+      }
+    }
     translationPlan = await planTranslations(embedding.profile?.id ?? LEGACY_PROFILE.id);
     if (lexicalSwitchOn) queryLexical = await resolveQueryLexical();
 
@@ -510,7 +544,7 @@ export async function runV2Pipeline(
     throw error;
   }
 
-  return buildV2Result({
+  const result = await buildV2Result({
     input,
     config,
     profile,
@@ -543,6 +577,7 @@ export async function runV2Pipeline(
     attributeFilter: attributeStage,
     glossary: glossaryStage,
   });
+  return scopeGate ? { ...result, scopeGate } : result;
 }
 
 /** Phase 6.2 D-08: the search stage's retry outcome on each filtered sub-question's filter_trace entry. */
