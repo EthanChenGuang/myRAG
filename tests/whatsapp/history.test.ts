@@ -208,7 +208,7 @@ describe('buildWhatsAppHistory window (D-16 caps)', () => {
     const stored = [] as Array<Record<string, unknown>>;
     for (let i = 0; i < 5; i += 1) {
       stored.push(stampWhatsAppMessage({ role: 'user', content: `Synthetic question ${i} ${'x'.repeat(1200)}` }, stamp));
-      stored.push(stampWhatsAppMessage({ role: 'assistant', content: `Synthetic answer ${i} [S1].\n\nSources:\n- guide.md`, source_images: [{ url: 'https://example.test/a.png' }] } as never, stamp));
+      stored.push(stampWhatsAppMessage({ role: 'assistant', content: `Synthetic answer ${i} [S1].\n\nSources:\n- guide.md`, source_images: [{ url: 'https://example.test/a.png' }] }, stamp));
     }
     stored.push({ role: 'user', content: 'Unstamped synthetic question' });
     const window = buildWhatsAppHistory(stored, stamp);

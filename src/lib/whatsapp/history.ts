@@ -49,15 +49,17 @@ function ragOf(message: StoredMessage): RagTurnMetadata | undefined {
 }
 
 /** Adds the session id and sender JID to a message before it is stored, so a later window can match it exactly. */
-export function stampWhatsAppMessage<T extends { metadata?: Record<string, unknown> }>(message: T, stamp: WhatsAppStamp): T {
-  return { ...message, metadata: { ...(message.metadata ?? {}), whatsapp: { sessionId: stamp.sessionId, senderJid: stamp.senderJid } } };
+export function stampWhatsAppMessage<T extends object>(message: T, stamp: WhatsAppStamp): T {
+  const metadata = recordOf((message as { metadata?: unknown }).metadata) ?? {};
+  return { ...message, metadata: { ...metadata, whatsapp: { sessionId: stamp.sessionId, senderJid: stamp.senderJid } } };
 }
 
 /** Sets the turn's streamed standalone query (D-22) on a stored user message; an invalid value is left out. */
-export function withRagMetadata<T extends { metadata?: Record<string, unknown> }>(message: T, rag: unknown): T {
+export function withRagMetadata<T extends object>(message: T, rag: unknown): T {
   const parsed = RagTurnMetadataSchema.safeParse(rag);
   if (!parsed.success) return message;
-  return { ...message, metadata: { ...(message.metadata ?? {}), rag: parsed.data } };
+  const metadata = recordOf((message as { metadata?: unknown }).metadata) ?? {};
+  return { ...message, metadata: { ...metadata, rag: parsed.data } };
 }
 
 /**
@@ -73,7 +75,7 @@ export function buildWhatsAppHistory(
   if (!isIndividualJid(stamp.senderJid) || !Array.isArray(stored)) return [];
   const own = stored.filter((message): message is StoredMessage => recordOf(message) !== null && sameStamp(message as StoredMessage, stamp));
   if (own.length === 0) return [];
-  const window = buildHistoryWindow([...own, { role: 'user', content: '' }] as never, limits);
+  const window = buildHistoryWindow([...own, { role: 'user', content: '' }], limits);
   const latestUser = [...own].reverse().find((message) => message.role === 'user');
   const latestRag = latestUser ? ragOf(latestUser) : undefined;
   const lastUserIndex = window.map((turn) => turn.role).lastIndexOf('user');

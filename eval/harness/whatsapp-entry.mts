@@ -146,7 +146,7 @@ export interface WhatsAppEntrySession {
 
 /** One fixture database and one chat route for any number of runs; the history switch is set per run. */
 export async function openWhatsAppEntry(options: { runConfig: RunConfig; corpusDir?: string }): Promise<WhatsAppEntrySession> {
-  const { RAG_WHATSAPP_HISTORY: _history, ...retrievalEnv } = options.runConfig.env;
+  const retrievalEnv = Object.fromEntries(Object.entries(options.runConfig.env).filter(([key]) => key !== 'RAG_WHATSAPP_HISTORY'));
   const originalFetch = globalThis.fetch;
   const realSetTimeout = globalThis.setTimeout;
   const realSetInterval = globalThis.setInterval;
