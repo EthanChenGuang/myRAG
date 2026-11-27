@@ -5114,7 +5114,7 @@ function accessGroupsQueueErrorText(code, locale) {
 
 function accessGroupsQueueTrigger(value, locale) {
   if (value.mode === 'everyone') return { icon: 'people', text: accessGroupsLabel('picker.everyone', locale) };
-  if (value.mode === 'groups') return { icon: 'lock', text: accessGroupsLabel('picker.groups', locale, { n: value.groupIds.length }) };
+  if (value.mode === 'groups') return { icon: 'lock', text: accessGroupsLabel('picker.groups', locale, { n: accessGroupsUiLib().ragUiFormatNumber(value.groupIds.length, locale) }) };
   return { icon: 'people', text: accessGroupsLabel('picker.trigger', locale) };
 }
 
@@ -5138,16 +5138,20 @@ function accessGroupsQueueRender(doc, wrap, item, options, locale, focusKey) {
     el('span', { text: trigger.text }),
     el('span', { className: 'sr-only', text: ' ' + t('picker.aria', { file }) }),
   ]);
-  const everyone = el('input', { className: 'checkbox checkbox-sm', attrs: { type: 'checkbox', 'data-access-groups-queue-option': 'everyone' } });
+  const name = 'access-groups-queue-' + String(item.id);
+  const everyone = el('input', { className: 'checkbox checkbox-sm', attrs: { type: 'checkbox', name, value: 'everyone', autocomplete: 'off', 'data-access-groups-queue-option': 'everyone' } });
   everyone.checked = value.mode === 'everyone';
   everyone.addEventListener('change', () => change('everyone', everyone.checked, 'everyone'));
   const full = value.mode === 'groups' && value.groupIds.length >= ACCESS_GROUPS_UPLOAD_MAX_GROUPS;
   const groupItems = options.groups.map((group) => {
-    const box = el('input', { className: 'checkbox checkbox-sm', attrs: { type: 'checkbox', 'data-access-groups-queue-option': group.id } });
+    const box = el('input', { className: 'checkbox checkbox-sm', attrs: { type: 'checkbox', name, value: group.id, autocomplete: 'off', 'data-access-groups-queue-option': group.id } });
     box.checked = value.mode === 'groups' && value.groupIds.includes(group.id);
     if (full && !box.checked) box.disabled = true;
     box.addEventListener('change', () => change(group.id, box.checked, group.id));
-    return el('label', { className: 'label cursor-pointer justify-start items-start gap-2 py-1' }, [box, el('span', { className: 'label-text break-words [overflow-wrap:anywhere] min-w-0', text: group.name })]);
+    return el('label', { className: 'label cursor-pointer justify-start items-start gap-2 py-1 [content-visibility:auto] [contain-intrinsic-size:auto_2rem]' }, [
+      box,
+      el('span', { className: 'label-text break-words [overflow-wrap:anywhere] min-w-0', text: group.name, attrs: { translate: 'no' } }),
+    ]);
   });
   const menu = el('div', { className: 'dropdown-content z-[1] bg-base-100 rounded-box shadow p-4 w-72 max-h-72 overflow-y-auto' }, [
     el('label', { className: 'label cursor-pointer justify-start gap-2 py-1' }, [everyone, el('span', { className: 'label-text', text: t('term.everyone') })]),
@@ -5175,7 +5179,7 @@ function accessGroupsQueueRender(doc, wrap, item, options, locale, focusKey) {
       const name = byId.get(id) || id;
       const remove = el('button', { className: 'btn btn-ghost btn-xs btn-circle min-h-0 h-5 w-5', attrs: { type: 'button', 'aria-label': t('action.removeGroupChip', { group: name }), 'data-access-groups-queue-chip-remove': id } }, [ui.ragUiIcon(doc, 'x')]);
       remove.addEventListener('click', () => change(id, false, 'trigger'));
-      return el('span', { className: 'badge badge-outline badge-sm gap-1 h-auto max-w-full whitespace-normal', attrs: { 'data-access-groups-queue-chip': id } }, [el('span', { className: 'break-words [overflow-wrap:anywhere] min-w-0', text: name }), remove]);
+      return el('span', { className: 'badge badge-outline badge-sm gap-1 h-auto max-w-full whitespace-normal', attrs: { 'data-access-groups-queue-chip': id } }, [el('span', { className: 'break-words [overflow-wrap:anywhere] min-w-0', text: name, attrs: { translate: 'no' } }), remove]);
     });
     nodes.push(el('div', { className: 'flex flex-wrap items-center gap-1 w-full min-w-0' }, [el('span', { className: 'text-xs', text: t('audience.label') }), ...chips]));
   } else if (value.mode === 'everyone') {
@@ -5279,7 +5283,7 @@ async function accessGroupsApplyTableBadges(tableBody, organizationId) {
     const tone = view.kind === 'groups' ? 'badge badge-outline badge-sm' : 'badge badge-warning badge-outline badge-sm text-base-content';
     const badge = el('span', { className: tone + ' gap-1 h-auto max-w-full whitespace-normal text-left mt-1', attrs: { 'data-access-groups-table-badge': view.kind, title: view.hint } }, [
       ui.ragUiIcon(doc, view.icon, view.kind === 'groups' ? null : 'text-warning'),
-      el('span', { className: 'break-words [overflow-wrap:anywhere] min-w-0', text: view.text }),
+      el('span', { className: 'break-words [overflow-wrap:anywhere] min-w-0' + (view.kind === 'groups' ? '' : ' text-base-content'), text: view.text }),
     ]);
     cell.appendChild(el('div', {}, [badge]));
   }
