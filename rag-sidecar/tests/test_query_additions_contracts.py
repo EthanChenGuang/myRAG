@@ -309,7 +309,20 @@ def test_rag_turn_metadata_caps_the_standalone_query():
     assert metadata.model_validate({"standaloneQuery": "alpha beta", "queryLanguage": None})
     assert _rejects(metadata, {"standaloneQuery": "a" * 1001, "queryLanguage": None})
     assert _rejects(metadata, {"standaloneQuery": "alpha", "queryLanguage": None, "filters": {}})
-    assert set(metadata.model_fields) == {"standaloneQuery", "queryLanguage"}
+    assert set(metadata.model_fields) == {"standaloneQuery", "queryLanguage", "scopeGate"}
+
+
+def test_rag_turn_metadata_scope_gate_is_the_label_only():
+    metadata = _symbol("query_additions", "RagTurnMetadata")
+    labelled = metadata.model_validate(
+        {"standaloneQuery": "alpha", "queryLanguage": "en", "scopeGate": "out_of_scope"}
+    )
+    assert labelled.scopeGate == "out_of_scope"
+    unlabelled = metadata.model_validate({"standaloneQuery": "alpha", "queryLanguage": None})
+    assert "scopeGate" not in unlabelled.model_dump()
+    base = {"standaloneQuery": "alpha", "queryLanguage": None}
+    assert _rejects(metadata, {**base, "scopeGate": "outside"})
+    assert _rejects(metadata, {**base, "scopeGate": {"label": "out_of_scope", "score": 0.1}})
 
 
 def test_decision_record():

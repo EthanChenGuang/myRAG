@@ -1,6 +1,7 @@
 """Phase 6.2 trace, wire and decision-record contracts (D-10, D-12, D-20, D-21, D-22, D-31).
 
-T-06.2-02, T-06.2-03: trace parts carry counts, codes and timings only; RagTurnMetadata is query text only.
+T-06.2-02, T-06.2-03: trace parts carry counts, codes and timings only; RagTurnMetadata is query text plus, for an
+out_of_scope answer, the scope-gate label (T-06.2-66).
 """
 
 from datetime import datetime
@@ -8,7 +9,9 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
+from rag_sidecar.contracts.omit import omit_none_schema
 from rag_sidecar.contracts.retrieval import _Contract
+from rag_sidecar.contracts.scope_gate import ScopeGateLabel
 
 from .languages import Language
 
@@ -49,6 +52,12 @@ class RagTurnMetadata(_Contract):
 
     standaloneQuery: str = Field(min_length=1, max_length=1000)
     queryLanguage: Language | None
+    # D-26, T-06.2-66: the scope-gate label of a turn answered without knowledge-base context; the label only, never a score
+    scopeGate: ScopeGateLabel | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=omit_none_schema,
+    )
 
 
 class SwitchDecision(_Contract):

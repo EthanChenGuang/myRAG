@@ -34,6 +34,9 @@ import {
   answerStructureStage,
   decomposedAnswerFor,
   type DecomposedAnswerInput,
+  isOutOfScopeResult,
+  scopeGateNoticeFor,
+  type ScopeNotice,
   answerLanguageOptions,
   appendAnswerLanguage,
   errorStatusOf,
@@ -2766,9 +2769,13 @@ Context:
     } // End of RAG processing (skipped when disableRAG is true)
 
     // D-22, P-22: the turn's standalone query rides on the assistant message only when retrieval produced a query plan
+    // Phase 6.2 D-26, P-05: set for a balanced or flexible turn the scope gate labelled out_of_scope
+    let scopeNotice: ScopeNotice | null = null;
     const ragTurnField = (): { rag?: NonNullable<ReturnType<typeof ragTurnMetadataFromPlan>> } => {
       const rag = ragTurnMetadataFromPlan(retrievalResult?.queryPlan);
-      return rag ? { rag } : {};
+      if (!rag) return {};
+      // T-06.2-66: the label only; scores stay on the server trace
+      return { rag: scopeNotice ? { ...rag, scopeGate: 'out_of_scope' as const } : rag };
     };
 
     // D-32: a semantic-cache hit streams the cached answer through the normal UI stream, with no generation call
@@ -2918,6 +2925,18 @@ Context:
       return createUIMessageStreamResponse({ stream: timeFirstText(stream) });
     }
 
+    // Phase 6.2 D-26: strict mode answered above (or offers webSearch); balanced and flexible answer without knowledge-base
+    // context and start with the localized notice
+    if (
+      !retrievalFailed &&
+      !effectiveDisableRAG &&
+      !smallTalkTurn &&
+      (ragMode === 'balanced' || ragMode === 'flexible') &&
+      isOutOfScopeResult(retrievalResult)
+    ) {
+      scopeNotice = scopeGateNoticeFor(retrievalResult?.queryPlan?.language ?? answerTurn.answerLanguage);
+    }
+
     const knowledgeContextAttached = !(retrievalFailed || effectiveDisableRAG || smallTalkTurn);
     // Phase 5.2.1 D-70, D-72: offered on a knowledge turn whose question or blocks carry the signal; the mode follows the tool rule
     let calcMode: 'tool' | 'trailing_block' | null = null;
@@ -3049,6 +3068,8 @@ Context:
       console.log('[RAG SYSTEM] Reason: No context/documents found');
       systemPrompt = SystemPromptManager.injectContext(ragSystemPrompt, context);
     }
+
+    if (scopeNotice) systemPrompt = `${systemPrompt}\n\n${scopeNotice.rule}`;
 
     console.log('[RAG SYSTEM DEBUG] Final system prompt preview (first 300 chars):');
     console.log('[RAG SYSTEM DEBUG]', systemPrompt.substring(0, 300));
@@ -4812,10 +4833,20 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             if (!ragTraceId && !answerId && injectionFlagged === undefined && Object.keys(finishMetadata).length === 0) return undefined;
             return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...injectionFlaggedField, ...finishMetadata };
           };
+          // Phase 6.2 D-26: the notice is the first text part; the start chunk (with its metadata) is written before it
+          if (scopeNotice) {
+            const startMetadata = messageMetadata({ part: { type: 'start' } });
+            writer.write({ type: 'start', ...(startMetadata ? { messageMetadata: startMetadata } : {}) });
+            const noticeId = `scope-notice-${Date.now()}`;
+            writer.write({ type: 'text-start', id: noticeId });
+            writer.write({ type: 'text-delta', id: noticeId, delta: `${scopeNotice.notice}\n\n` });
+            writer.write({ type: 'text-end', id: noticeId });
+          }
+          const sendStart = precomputedSourceImages.length === 0 && !scopeNotice;
           if (claudeStream) {
             const gate = await firstTokenGate(
               claudeStream.result.toUIMessageStream({
-                sendStart: precomputedSourceImages.length === 0,
+                sendStart,
                 messageMetadata,
                 onError: () => CLAUDE_STREAM_ERROR_TEXT,
               }),
@@ -4837,7 +4868,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           if (!result) return;
           // Merge AI stream
           writer.merge(result.toUIMessageStream({
-            sendStart: precomputedSourceImages.length === 0,
+            sendStart,
             messageMetadata,
           }));
         },

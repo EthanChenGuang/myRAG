@@ -13,6 +13,8 @@ import {
   answerStructureFor,
   answerStructureStage,
   decomposedAnswerFor,
+  isOutOfScopeResult,
+  scopeGateNoticeFor,
   hashSystemPromptTemplate,
   isCacheHitResult,
   isSemanticCacheActive,
@@ -680,9 +682,14 @@ export async function POST(request: NextRequest) {
       if (composed.startsWith(prompt)) builtRules = composed.slice(prompt.length);
       return composed;
     };
+    // Phase 6.2 D-26, P-05: embed answers in balanced mode, so an out_of_scope turn starts with the localized notice
+    const scopeNotice =
+      !smallTalkTurn && isOutOfScopeResult(retrievalResult)
+        ? scopeGateNoticeFor(retrievalResult?.queryPlan?.language ?? answerTurn.answerLanguage)
+        : null;
     // Phase 6.2 D-11, D-12: the per-sub-question block of a decomposed turn; embed renders no citations
     const decomposedAnswer = !smallTalkTurn && context.length > 0 ? decomposedAnswerFor(retrievalResult, { citationsActive: false }) : undefined;
-    const finalSystemPrompt = smallTalkTurn
+    const promptBeforeScopeRule = smallTalkTurn
       ? createEnhancedRAGPrompt(systemPrompt, '', 'bypass')
       : context.length > 0
         ? appendHistoryNotEvidence(
@@ -698,6 +705,7 @@ export async function POST(request: NextRequest) {
             historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE),
           )
         : systemPrompt.replace('{{context}}', context);
+    const finalSystemPrompt = scopeNotice ? `${promptBeforeScopeRule}\n\n${scopeNotice.rule}` : promptBeforeScopeRule;
 
     console.log('[EMBED RAG] Final system prompt preview (first 300 chars):', finalSystemPrompt.substring(0, 300));
     console.log('[EMBED RAG] Using enhanced RAG prompt:', context.length > 0);
@@ -873,24 +881,36 @@ export async function POST(request: NextRequest) {
       const feedbackToken = await embedFeedbackToken();
       // D-22, P-22: the standalone query rides on the finish part only when retrieval produced a query plan
       const ragTurn = ragTurnMetadataFromPlan(retrievalResult?.queryPlan);
+      // T-06.2-66: an out_of_scope turn carries the label only; scores stay on the server trace
+      const ragFinish = ragTurn && scopeNotice ? { ...ragTurn, scopeGate: 'out_of_scope' as const } : ragTurn;
       const streamOptions: Parameters<typeof result.toUIMessageStream>[0] =
-        feedbackToken || ragTurn
+        feedbackToken || ragFinish
           ? {
               messageMetadata: ({ part }) => {
                 if (part.type === 'start' && feedbackToken) return { feedbackToken };
-                if (part.type === 'finish' && ragTurn) return { rag: ragTurn };
+                if (part.type === 'finish' && ragFinish) return { rag: ragFinish };
                 return undefined;
               },
             }
           : {};
+      // Phase 6.2 D-26: the notice is the first text part, after the start chunk and before the model's answer
+      const answerStream = scopeNotice
+        ? createUIMessageStream({
+            execute: ({ writer }) => {
+              writer.write({ type: 'start', ...(feedbackToken ? { messageMetadata: { feedbackToken } } : {}) });
+              const noticeId = `scope-notice-${Date.now()}`;
+              writer.write({ type: 'text-start', id: noticeId });
+              writer.write({ type: 'text-delta', id: noticeId, delta: `${scopeNotice.notice}\n\n` });
+              writer.write({ type: 'text-end', id: noticeId });
+              writer.merge(result.toUIMessageStream({ ...streamOptions, sendStart: false }));
+            },
+          })
+        : result.toUIMessageStream(streamOptions);
 
       // Return the AI SDK stream directly (SAME AS MAIN CHAT API)
       // Same composition as result.toUIMessageStreamResponse, with the first text delta observed
       return createUIMessageStreamResponse({
-        stream: timeFirstText(
-          result.toUIMessageStream(streamOptions),
-          timingCollector,
-        ),
+        stream: timeFirstText(answerStream, timingCollector),
         headers: streamHeaders(),
       });
 
