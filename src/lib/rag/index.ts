@@ -34,7 +34,8 @@ export {
   resolveAccessScope,
   uploadAccessKeys,
 } from './tenant/access';
-export { accessGroupsEnabled, scopeAccessFilter } from './tenant/access';
+export { scopeAccessFilter } from './tenant/access';
+export { accessGroupsEnabled } from './tenant/access';
 export { getAccessStartupVerdict, syncAccessEnforcementNow, verifyAccessGroupsStartup } from './tenant/access-startup';
 export type { AccessStartupStatus, AccessStartupVerdict } from './tenant/access-startup';
 export { createCitationRecheck, recordSecurityEvent, visibleChunkIds, visibleDocumentIds } from './access/visibility';
