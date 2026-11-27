@@ -50,7 +50,7 @@ import {
 } from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest, type RagTrace } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
-import { buildEffectiveConfig, configHash } from '@/lib/rag-eval/trace';
+import { buildEffectiveConfig, configHash, retrievalBackendTrace } from '@/lib/rag-eval/trace';
 import {
   evalGroundednessRequest,
   generateEvalAnswer,
@@ -691,6 +691,7 @@ export async function POST(req: NextRequest) {
       effectiveConfig.generator_model = generatorModel;
       const redundancy = topkRedundancy(result.kept);
       const identifierTrace = identifierTraceOf(result);
+      const backendTrace = retrievalBackendTrace(result.stages);
       const trace = {
         schema_version: 1 as const,
         item_id: itemId ?? null,
@@ -736,6 +737,7 @@ export async function POST(req: NextRequest) {
         refused,
         refusal_reason: refusalReasonOf(result, refused),
         ...(v2Result ? v2TraceFields(result) : {}),
+        ...(v2Result && backendTrace ? { retrieval_backend: backendTrace } : {}),
         ...(v2Result ? (attributeFilterTrace(result.stages, currentAttributeFilterMode()) ?? {}) : {}),
         ...(Object.keys(stageCounts).length > 0 ? { stage_counts: stageCounts } : {}),
         ...(injection ? { injection } : {}),

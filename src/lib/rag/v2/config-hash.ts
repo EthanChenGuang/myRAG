@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { BackendIndexParams } from '../backend/index-params';
 import type { AttributeFilterConfig, RetrievalParams, TerminologyParams } from '@/lib/rag-eval/contracts.generated';
 import type { AttributeFilterMode, IterativeScanMode, RagConfig, RerankerKind, RerankTier } from '../config';
 import type { InjectionCheckMode, SecurityConfig, ToolResultGuardMode } from '../security/config';
@@ -126,6 +127,8 @@ export const ATTRIBUTE_STATE_SKIPPED = 'attribute:skipped';
 
 export interface RetrievalConfigHashInput {
   backendId: string;
+  /** D-24: an external backend's index parameters (backendIndexParams); absent for pgvector, so its hash keeps its value. */
+  backendIndex?: BackendIndexParams | null;
   embeddingProfileId: string;
   lexicalVersion: number;
   rerankTextVersion: number;
@@ -231,6 +234,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
   return {
     active_chunking_profiles: chunkingForHash(input.activeChunkingProfiles),
     backend_id: input.backendId,
+    ...(input.backendIndex ? { backend_index: input.backendIndex } : {}),
     embedding_profile_id: input.embeddingProfileId,
     lexical_version: input.lexicalVersion,
     params: paramsForHash(input.params),
