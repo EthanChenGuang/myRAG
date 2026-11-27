@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 import { checkAdmin, requireAdminOrDeny } from '@/lib/admin-route-auth';
 import { EnvWriteError, readEnvFile, stringifyJsonForEnv, writeEnvUpdates } from '@/lib/env-file';
-import { guardAppEnvWrite } from '@/lib/rag';
+import { currentModelRouting, guardAppEnvWrite } from '@/lib/rag';
+import { isAutoModelSelectable, withoutUnselectableAuto, type AutoModelRouting } from '@/lib/chat/auto-model';
 
 export interface ModelWithReasoning {
   id: string;
@@ -64,6 +65,15 @@ function safeJsonParse(value: string | undefined, fallback: any[] = []): any[] {
   }
 }
 
+function chatModelRouting(): AutoModelRouting | null {
+  try {
+    return currentModelRouting();
+  } catch {
+    console.warn('[Config Models] model routing configuration unreadable, Auto stays hidden');
+    return null;
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Skip admin authorization for config UI access
@@ -108,6 +118,14 @@ export async function GET(request: NextRequest) {
       openrouterModels: safeJsonParse(openrouterModelsStr, defaultOpenRouterModels),
       groqModels: safeJsonParse(groqModelsStr, defaultGroqModels)
     };
+
+    // The Config UI reads the stored lists unfiltered so a save keeps the Auto entry; the chat selector asks with for=chat.
+    if (request.nextUrl.searchParams.get('for') === 'chat') {
+      const selectable = isAutoModelSelectable(chatModelRouting(), config.openrouterModels);
+      config.openaiModels = withoutUnselectableAuto(config.openaiModels, selectable);
+      config.openrouterModels = withoutUnselectableAuto(config.openrouterModels, selectable);
+      config.groqModels = withoutUnselectableAuto(config.groqModels, selectable);
+    }
 
     return NextResponse.json(config);
   } catch (error) {

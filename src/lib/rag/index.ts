@@ -14,7 +14,7 @@ export { queryTurnInputs, ragTurnMetadataFromPlan } from './query/turn-metadata'
 export type { QueryTurnInputs, RagTurnMetadata } from './query/turn-metadata';
 export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
-export { currentAttributeFilterMode, currentContextTokenBudget, currentLexicalVersion } from './deps';
+export { currentAttributeFilterMode, currentContextTokenBudget, currentLexicalVersion, currentModelRouting } from './deps';
 export { createTraceCollector } from './trace/collector';
 export type { TraceCollector, StageEntry } from './trace/collector';
 export { isTraceId } from './trace/collector';

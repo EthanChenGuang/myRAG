@@ -5,6 +5,7 @@ import { createUIMessageStream, createUIMessageStreamResponse, streamText, type 
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { z } from 'zod/v3';
 import { appendHistoryNotEvidence, historyNotEvidenceEnabled } from '@/lib/chat/history-not-evidence';
+import { AUTO_MODEL_ID, resolveStoredAutoModel } from '@/lib/chat/auto-model';
 import { classifyQuery } from '@/lib/query-classifier';
 import {
   buildHistoryWindow,
@@ -129,6 +130,7 @@ function allowedEmbedModels(): Set<string> {
 }
 
 function resolveEmbedModel(requested: string | undefined): string {
+  if (requested === AUTO_MODEL_ID) return resolveStoredAutoModel(requested, defaultEmbedModel(), 'embed') ?? defaultEmbedModel();
   if (requested && allowedEmbedModels().has(requested)) return requested;
   return defaultEmbedModel();
 }

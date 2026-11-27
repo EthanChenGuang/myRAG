@@ -118,3 +118,53 @@ describe('GET /api/config/models?for=chat', () => {
     expect(ids((await get('')).openrouterModels)).toContain(AUTO_MODEL_ID);
   });
 });
+
+describe('currentModelRouting reads the effective switch', () => {
+  const NAMES = ['RAG_PIPELINE', 'RAG_QUERY_LAYER', 'RAG_MODEL_ROUTING', 'RAG_SUPPORTED_LANGUAGES', 'RAG_PRIMARY_LANGUAGE', 'RAG_ROUTING_FAST_MODEL', 'RAG_ROUTING_QUALITY_MODEL'];
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    for (const name of NAMES) saved[name] = process.env[name];
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    for (const name of NAMES) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+    vi.restoreAllMocks();
+  });
+
+  it('defaults: routing off, so Auto is not selectable', async () => {
+    for (const name of NAMES) delete process.env[name];
+    const { currentModelRouting } = await import('@/lib/rag');
+    const routing = currentModelRouting();
+    expect(routing.mode).toBe('off');
+    expect(isAutoModelSelectable(routing, LIST)).toBe(false);
+  });
+
+  it('RAG_MODEL_ROUTING=auto without the query layer stays off', async () => {
+    for (const name of NAMES) delete process.env[name];
+    process.env.RAG_MODEL_ROUTING = 'auto';
+    const { currentModelRouting } = await import('@/lib/rag');
+    expect(currentModelRouting().mode).toBe('off');
+  });
+
+  it('v2 with the query layer and RAG_MODEL_ROUTING=auto is effective and returns the raw ids', async () => {
+    Object.assign(process.env, {
+      RAG_PIPELINE: 'v2',
+      RAG_QUERY_LAYER: 'true',
+      RAG_MODEL_ROUTING: 'auto',
+      RAG_SUPPORTED_LANGUAGES: 'en',
+      RAG_PRIMARY_LANGUAGE: 'en',
+      RAG_ROUTING_FAST_MODEL: FAST,
+      RAG_ROUTING_QUALITY_MODEL: QUALITY,
+    });
+    const { currentModelRouting } = await import('@/lib/rag');
+    const routing = currentModelRouting();
+    expect(routing).toEqual({ mode: 'auto', fastModel: FAST, qualityModel: QUALITY });
+    expect(isAutoModelSelectable(routing, LIST)).toBe(true);
+  });
+});
