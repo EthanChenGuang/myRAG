@@ -1555,15 +1555,31 @@ def latest_tier_modes(measurement_path: Path = MEASUREMENT) -> dict[str, str]:
 
 
 def report_only_checks_by_out(measurement_path: Path = MEASUREMENT) -> dict[str, list[str]]:
-    """Gap 3: the report-only ceilings of each measured tier's latest stage, keyed by --out (stub, see the GREEN commit)."""
-    return {}
+    """Gap 3 (quick-53): the report-only ceilings of each measured tier's latest stage, keyed by its --out directory."""
+    data = json.loads(measurement_path.read_text(encoding="utf-8"))
+    latest: dict[str, tuple[int, dict]] = {}
+    for entry in data.get("tiers") or []:
+        name = str(entry.get("name"))
+        rank = STAGE_ORDER.get(str(entry.get("stage")), -1)
+        if name not in latest or rank > latest[name][0]:
+            latest[name] = (rank, entry)
+    return {
+        str(entry["out"]): [str(check) for check in entry["report_only_checks"]]
+        for _, entry in latest.values()
+        if entry.get("out") and entry.get("report_only_checks")
+    }
 
 
 def report_only_outs(measurement_path: Path = MEASUREMENT) -> set[str]:
     return {out for out, mode in latest_tier_modes(measurement_path).items() if mode == "report"}
 
 
-def check_smoke_gate_flags(job_name: str, job: dict, report_outs: set[str], errors: list[str]) -> None:
+REPORT_ONLY_FLAG_RE = re.compile(r"--gates-report-only\s+(\S+)")
+
+
+def check_smoke_gate_flags(
+    job_name: str, job: dict, report_outs: set[str], errors: list[str], report_only: dict[str, list[str]] | None = None
+) -> None:
     for step in all_steps(job):
         for match in SMOKE_COMMAND_RE.finditer(str(step.get("run", ""))):
             args = match.group("args")
@@ -1579,6 +1595,18 @@ def check_smoke_gate_flags(job_name: str, job: dict, report_outs: set[str], erro
             if re.search(r"--gates-mode\s+report\b", args) and out not in report_outs:
                 errors.append(
                     f"pr-smoke: the {job_name} step writing {out} runs --gates-mode report, but {MEASUREMENT.relative_to(ROOT)} does not mark it report"
+                )
+            listed = (report_only or {}).get(out)
+            passed_match = REPORT_ONLY_FLAG_RE.search(args)
+            passed = passed_match.group(1).split(",") if passed_match else None
+            if listed is not None and passed != listed:
+                errors.append(
+                    f"pr-smoke: the {job_name} step writing {out} must pass --gates-report-only {','.join(listed)}, "
+                    f"the report-only checks {MEASUREMENT.relative_to(ROOT)} records for it"
+                )
+            elif listed is None and passed is not None:
+                errors.append(
+                    f"pr-smoke: the {job_name} step writing {out} passes --gates-report-only, but {MEASUREMENT.relative_to(ROOT)} records no report-only checks for it"
                 )
 
 
@@ -1649,6 +1677,7 @@ def check_absolute_gates(pr: dict | None, nightly: dict | None, errors: list[str
     """D-06, O-1, O-2: every CI tier carries the absolute gates; a tier runs report-only solely because the measurement says so."""
     try:
         report_outs = report_only_outs(measurement_path)
+        report_only = report_only_checks_by_out(measurement_path)
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         errors.append(f"absolute gates: cannot read {measurement_path}: {exc}")
         return
@@ -1656,7 +1685,7 @@ def check_absolute_gates(pr: dict | None, nightly: dict | None, errors: list[str
         jobs = pr.get("jobs") or {}
         for name in ("eval-smoke", "gate-negative-control"):
             if name in jobs:
-                check_smoke_gate_flags(name, jobs[name], report_outs, errors)
+                check_smoke_gate_flags(name, jobs[name], report_outs, errors, report_only)
         check_prompt_control(jobs.get("gate-negative-control"), errors)
         check_manifest_verify(jobs.get("python"), errors)
     if nightly is not None:

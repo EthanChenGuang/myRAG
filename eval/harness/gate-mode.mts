@@ -17,12 +17,15 @@ interface MeasuredTier {
   stage?: unknown;
   mode?: unknown;
   out?: unknown;
+  report_only_checks?: unknown;
 }
 
 export interface TierMode {
   name: string;
   mode: GatesMode | null;
   out: string | null;
+  /** Gap 3 (quick-53): ceilings this tier reports while every other absolute check gates. */
+  reportOnly: string[];
 }
 
 /** The mode of each measured tier's latest stage, keyed by tier name (same rule as latest_tier_modes in check-workflows.py). */
@@ -44,7 +47,10 @@ export function measuredTierModes(measurementPath: string = MEASUREMENT_PATH): M
   const modes = new Map<string, TierMode>();
   for (const [name, { entry }] of latest) {
     const mode = entry.mode === 'enforce' || entry.mode === 'report' ? entry.mode : null;
-    modes.set(name, { name, mode, out: typeof entry.out === 'string' ? entry.out : null });
+    const reportOnly = Array.isArray(entry.report_only_checks)
+      ? entry.report_only_checks.filter((check): check is string => typeof check === 'string')
+      : [];
+    modes.set(name, { name, mode, out: typeof entry.out === 'string' ? entry.out : null, reportOnly });
   }
   return modes;
 }
@@ -54,23 +60,28 @@ export interface GatesModeResolution {
   mode: GatesMode | undefined;
   source: 'flag' | 'measured_tier' | 'gate_default';
   tier: string | null;
+  /** The ceilings passed to rag_eval.gate --gates-report-only; empty gates every check in enforce mode. */
+  reportOnly: string[];
 }
 
 /**
  * O-1 / H-10: an explicit --gates-mode wins. Otherwise an in-process run takes the mode the measurement record holds for its
  * fixture mode's tier, which is the mode pr-smoke runs that tier in. A live run (--base-url), a --gates or --golden override
  * (the record measures eval/config/quality-gates.json on the default golden set), a missing record or an unmeasured tier keeps
- * the gate default, enforce.
+ * the gate default, enforce. An explicit --gates-report-only list wins; otherwise a measured enforce tier brings the report-only
+ * ceilings its record lists, and an explicit --gates-mode brings none.
  */
 export function resolveGatesMode(
   explicit: GatesMode | undefined,
   run: { fixtureMode: FixtureMode; live: boolean; customInputs?: boolean },
   measurementPath: string = MEASUREMENT_PATH,
+  explicitReportOnly?: string[],
 ): GatesModeResolution {
-  if (explicit !== undefined) return { mode: explicit, source: 'flag', tier: null };
-  if (run.live || run.customInputs) return { mode: undefined, source: 'gate_default', tier: null };
+  if (explicitReportOnly !== undefined) return { mode: explicit ?? 'enforce', source: 'flag', tier: null, reportOnly: [...explicitReportOnly] };
+  if (explicit !== undefined) return { mode: explicit, source: 'flag', tier: null, reportOnly: [] };
+  if (run.live || run.customInputs) return { mode: undefined, source: 'gate_default', tier: null, reportOnly: [] };
   const tier = FIXTURE_MODE_TIERS[run.fixtureMode];
-  const measured = measuredTierModes(measurementPath).get(tier)?.mode ?? null;
-  if (measured === null) return { mode: undefined, source: 'gate_default', tier };
-  return { mode: measured, source: 'measured_tier', tier };
+  const measured = measuredTierModes(measurementPath).get(tier) ?? null;
+  if (measured === null || measured.mode === null) return { mode: undefined, source: 'gate_default', tier, reportOnly: [] };
+  return { mode: measured.mode, source: 'measured_tier', tier, reportOnly: measured.mode === 'enforce' ? measured.reportOnly : [] };
 }

@@ -81,7 +81,9 @@ describe('local test-rag gate mode follows the measured tier (O-1, H-10)', () =>
       // A measured tier: the record, pr-smoke and a bare local run agree.
       expect(tier.mode).not.toBeNull();
       expect(ci).toBe(tier.mode);
-      expect(local).toBe(ci);
+      // A step without an explicit mode runs what a bare local run of its fixture mode runs; a negative control is its own
+      // measured tier and states its mode (gap 3: the prechunked default is now enforce with report-only false refusal).
+      if (run.explicit === undefined) expect(local).toBe(ci);
     } else {
       // An unmeasured control (the prompt control) states its mode; it must not rely on the default.
       expect(run.explicit, `${run.job} step writing ${run.out} must pass --gates-mode`).toBeDefined();

@@ -1344,7 +1344,8 @@ class AbsoluteGatesTest(unittest.TestCase):
 
     def test_report_mode_on_a_prechunked_tier_is_reported(self):
         pr, nightly = self.workflows()
-        self.step(pr, "eval-smoke", "--out eval/out/smoke-legacy ")["run"] += " --gates-mode report"
+        step = self.step(pr, "eval-smoke", "--out eval/out/smoke-legacy ")
+        step["run"] = step["run"].replace("--out eval/out/smoke-legacy --gates-report-only false_refusal_rate", "--out eval/out/smoke-legacy --gates-mode report")
         errors = self.errors_for(pr, nightly)
         self.assertTrue(any("eval/out/smoke-legacy" in e and "report" in e for e in errors), errors)
 
