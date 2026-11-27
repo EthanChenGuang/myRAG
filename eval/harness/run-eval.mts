@@ -55,6 +55,8 @@ export interface EvalRequestOptions {
   query_transforms?: NonNullable<RagRunRequest['options']>['query_transforms'];
   semantic_cache?: NonNullable<RagRunRequest['options']>['semantic_cache'];
   query_params?: NonNullable<RagRunRequest['options']>['query_params'];
+  /** Phase 6.2 D-16: run each request through the voice entry point (retrieval only). */
+  entry_profile?: 'voice';
 }
 
 /** 'fake' is the deterministic citation generator (D-24); it serves fixture runs with --citations or --groundedness. */
@@ -741,7 +743,12 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   }
   if (envOverlay && baseUrl) throw new Error('[Eval Harness] --env-overlay applies to in-process runs only; omit --base-url');
   if (envOverlay && retainInProcess) throw new Error('[Eval Harness] an env overlay must be applied when the in-process session is prepared');
-  const includeAnswer = resolved.includeAnswer || answers;
+  // Phase 6.2 D-16: the voice entry measures retrieval only (the voice agent answers), so the default in-process answers are dropped.
+  const voiceEntry = runConfig?.entryProfile === 'voice';
+  if (voiceEntry && (resolved.includeAnswer || options.cachePairs || runConfig?.generatorModel !== undefined)) {
+    throw new RunConfigError('[Eval Harness] a voice entry run config measures retrieval only; drop answers, citations, groundedness and cache pairs');
+  }
+  const includeAnswer = !voiceEntry && (resolved.includeAnswer || answers);
   const generator: EvalGenerator | undefined = answers ? 'fake' : resolved.generator;
   if (runConfig) {
     if (baseUrl && Object.keys(runConfig.env).length > 0) {
@@ -751,6 +758,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       throw new RunConfigError('[Eval Harness] a run-config env overlay must be applied when the in-process session is prepared');
     }
     if (runConfig.overrides) requestOptions.retrieval_overrides = runConfig.overrides;
+    if (voiceEntry) requestOptions.entry_profile = 'voice';
     if (runConfig.chunkingProfiles?.length) {
       if (baseUrl) throw new RunConfigError('[Eval Harness] chunking_profiles seed the fixture database only; a --base-url run cannot use them');
       if (fixtureMode !== 'ingest') throw new RunConfigError(CHUNKING_PROFILES_NEED_INGEST);
@@ -804,7 +812,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     throw new Error(`[Eval Harness] no golden items with review_status in [${goldenFilter.review_statuses.join(', ')}] in ${goldenPath}`);
   }
   // Run-level answers keep their own generator; otherwise an in-process smoke run answers the injection items with the stub only.
-  const stubInjectionAnswers = !includeAnswer && !baseUrl && items.some((item) => answersItemForInjectionMetrics(tier, item));
+  const stubInjectionAnswers = !includeAnswer && !voiceEntry && !baseUrl && items.some((item) => answersItemForInjectionMetrics(tier, item));
   fs.mkdirSync(outDir, { recursive: true });
   const tracesPath = path.join(outDir, 'traces.jsonl');
   const logPath = path.join(outDir, 'harness.log');
@@ -1073,6 +1081,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     ...(includeAnswer ? { generator_model: requestOptions.generator_model ?? null } : {}),
     ...(citations ? { citations: true } : {}),
     ...(groundedness ? { groundedness: true } : {}),
+    ...(requestOptions.entry_profile ? { entry_profile: requestOptions.entry_profile } : {}),
   };
   const embedder = baseUrl
     ? null
