@@ -38,6 +38,24 @@ describe('pinned eval env', () => {
     expect(pinned).not.toHaveProperty('REDIS_URL');
   });
 
+  test('pins the twelve Phase 6.2 variables at their D-28 defaults with the D-35 routing model ids', () => {
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    expect(pinned).toMatchObject({
+      RAG_QUERY_DECOMPOSE_COMPLETENESS: 'true',
+      RAG_QUERY_SUBQ_FILTERS: 'false',
+      RAG_DECOMPOSED_ANSWER: 'true',
+      RAG_TRANSLATION_GLOSSARY: 'false',
+      RAG_LANGID_SIDECAR: 'false',
+      RAG_MODEL_ROUTING: 'off',
+      RAG_ROUTING_FAST_MODEL: 'anthropic/claude-haiku-5.5',
+      RAG_ROUTING_QUALITY_MODEL: 'anthropic/claude-sonnet-5.5',
+      RAG_SPECULATIVE_RETRIEVAL: 'false',
+      RAG_QUERY_HISTORY_FALLBACK: 'true',
+      RAG_WHATSAPP_HISTORY: 'false',
+      RAG_SCOPE_GATE: 'false',
+    });
+  });
+
   test('pins the eighteen Phase 3.2 variables: languages zh,en,it with primary en, every switch at its D-47 default, RAG_TABLE_HEADER_REPEAT at the 03.2-67 decision (D-02, D-19)', () => {
     const expected = {
       RAG_SUPPORTED_LANGUAGES: 'zh,en,it',

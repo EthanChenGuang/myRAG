@@ -247,7 +247,7 @@ describe('POST /api/rag/admin/terminology/import: dry run (D-23)', () => {
     expect(applyCalls()).toEqual([]);
   });
 
-  it('reports a translation pair to a language that is not enabled as invalid_language, and one to its own language as invalid_translation', async () => {
+  it('reports a translation pair to a language that is not enabled as target_language_not_enabled, and one to its own language as target_language_same', async () => {
     state.languages = [HAN, LATIN];
     const csv = csvOf(
       line('term alpha beta', '术语甲乙丙', HAN, 'translation', `one_way,true,,${HAN},${THIRD}`),
@@ -256,8 +256,8 @@ describe('POST /api/rag/admin/terminology/import: dry run (D-23)', () => {
     const loaded = await load();
     const dry = await postImport(loaded, { layer: 'shared', csv });
     const codes = dry.body.report.issues.map((issue: { row: number; code: string }) => [issue.row, issue.code]);
-    expect(codes).toContainEqual([1, 'invalid_language']);
-    expect(codes).toContainEqual([2, 'invalid_translation']);
+    expect(codes).toContainEqual([1, 'target_language_not_enabled']);
+    expect(codes).toContainEqual([2, 'target_language_same']);
     const applied = await postImport(loaded, { layer: 'shared', csv, dry_run: false, expected_version: 3 });
     expect(applied.status).toBe(422);
     expect(applyCalls()).toEqual([]);
@@ -400,7 +400,7 @@ describe('DictionaryCandidate JSONL import (D-25a)', () => {
     expect(applyCalls()).toEqual([]);
   });
 
-  it('maps candidates to entries; a translation with canonical_language becomes a pair, one without it is invalid_translation', async () => {
+  it('maps candidates to entries; a translation with canonical_language becomes a pair, one without it is target_language_required', async () => {
     const loaded = await load();
     const good = [
       candidate(),
@@ -421,7 +421,7 @@ describe('DictionaryCandidate JSONL import (D-25a)', () => {
 
     const missing = candidate({ language: HAN, observed_term: '术语丁', canonical_term: 'term gamma delta', relation: 'translation' });
     const refused = await postImport(loaded, { layer: 'workspace', format: 'dictionary_candidates_jsonl', jsonl: missing });
-    expect(refused.body.report.issues).toEqual([expect.objectContaining({ row: 1, code: 'invalid_translation', severity: 'error' })]);
+    expect(refused.body.report.issues).toEqual([expect.objectContaining({ row: 1, code: 'target_language_required', severity: 'error' })]);
   });
 
   it('adds a candidate variant to a stored entry instead of replacing it', async () => {

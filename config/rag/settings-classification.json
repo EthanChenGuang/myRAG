@@ -108,6 +108,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_DECOMPOSED_ANSWER",
+      "side": "query"
+    },
+    {
       "name": "RAG_DISABLED_STAGES",
       "side": "query"
     },
@@ -425,6 +429,10 @@
       "mechanism": "reparse"
     },
     {
+      "name": "RAG_LANGID_SIDECAR",
+      "side": "query"
+    },
+    {
       "name": "RAG_LANGUAGE_AWARE_INGEST",
       "side": "ingestion",
       "mechanism": "rechunk"
@@ -494,6 +502,10 @@
     },
     {
       "name": "RAG_MMR_LAMBDA",
+      "side": "query"
+    },
+    {
+      "name": "RAG_MODEL_ROUTING",
       "side": "query"
     },
     {
@@ -628,6 +640,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_QUERY_DECOMPOSE_COMPLETENESS",
+      "side": "query"
+    },
+    {
       "name": "RAG_QUERY_ENHANCEMENT",
       "side": "query"
     },
@@ -637,6 +653,10 @@
     },
     {
       "name": "RAG_QUERY_FRAMEWORK",
+      "side": "query"
+    },
+    {
+      "name": "RAG_QUERY_HISTORY_FALLBACK",
       "side": "query"
     },
     {
@@ -651,6 +671,10 @@
       "name": "RAG_QUERY_LLM_MODEL",
       "side": "both",
       "mechanism": "retranslate"
+    },
+    {
+      "name": "RAG_QUERY_SUBQ_FILTERS",
+      "side": "query"
     },
     {
       "name": "RAG_QUERY_TRANSLATE",
@@ -741,6 +765,18 @@
       "side": "query"
     },
     {
+      "name": "RAG_ROUTING_FAST_MODEL",
+      "side": "query"
+    },
+    {
+      "name": "RAG_ROUTING_QUALITY_MODEL",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SCOPE_GATE",
+      "side": "query"
+    },
+    {
       "name": "RAG_SCOPE_TAGS",
       "side": "query"
     },
@@ -795,6 +831,10 @@
     },
     {
       "name": "RAG_SOURCE_OPEN_SIGNAL",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SPECULATIVE_RETRIEVAL",
       "side": "query"
     },
     {
@@ -858,6 +898,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_TRANSLATION_GLOSSARY",
+      "side": "query"
+    },
+    {
       "name": "RAG_UPLOADER_ALERT_THRESHOLD",
       "side": "query"
     },
@@ -895,6 +939,10 @@
     },
     {
       "name": "RAG_VOICE_TOKEN_TTL_SECONDS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_WHATSAPP_HISTORY",
       "side": "query"
     }
   ]
