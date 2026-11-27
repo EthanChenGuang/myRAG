@@ -18,7 +18,13 @@ from rag_eval.profile_compare import (
 )
 
 NOISE_PATH = Path(__file__).resolve().parents[1] / "config" / "noise.json"
-METRICS = ("recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate")
+METRICS = (
+    "recall_at_5",
+    "recall_at_10",
+    "mrr",
+    "correct_refusal_rate",
+    "false_refusal_rate",
+)
 
 
 def _slice_values(value: float = 0.6, **overrides: float | None) -> SliceMetrics:
@@ -164,6 +170,7 @@ def test_activation_evidence_shape():
     )
     ActivationEvidence.model_validate(evidence.model_dump())
 
+
 # Phase 3.2.1 (D-27): the BGE-M3 arm, its serving-mode figures and the wiring-proof label.
 
 import json
@@ -276,7 +283,10 @@ def test_bge_arm_carries_a_hosted_and_a_sidecar_block_and_other_arms_none():
 def test_bge_arm_without_measurements_shows_both_modes_unmeasured():
     comparison = _three_arms(serving={})
     bge = _entry(comparison, BGE_M3_PROFILE)
-    assert [(block.mode, block.measured) for block in bge.serving] == [("hosted", False), ("sidecar", False)]
+    assert [(block.mode, block.measured) for block in bge.serving] == [
+        ("hosted", False),
+        ("sidecar", False),
+    ]
 
 
 def test_report_lists_every_slice_and_pair_row_per_arm():
@@ -284,8 +294,17 @@ def test_report_lists_every_slice_and_pair_row_per_arm():
     for profile_id in ("openai-3-small-1536", BGE_M3_PROFILE, "voyage-4-large-2048"):
         assert f"== {profile_id}" in text, profile_id
         section = text.split(f"== {profile_id}", 1)[1].split("\n== ", 1)[0]
-        for row in ("overall", "language:en", "language:zh", "category:cross_lingual", *[f"pair:{pair}" for pair in PAIRS]):
-            assert re.search(rf"^\s*{re.escape(row)}\s", section, re.MULTILINE), (profile_id, row)
+        for row in (
+            "overall",
+            "language:en",
+            "language:zh",
+            "category:cross_lingual",
+            *[f"pair:{pair}" for pair in PAIRS],
+        ):
+            assert re.search(rf"^\s*{re.escape(row)}\s", section, re.MULTILINE), (
+                profile_id,
+                row,
+            )
 
 
 def test_report_prints_serving_figures_and_not_measured_without_a_number():
@@ -318,7 +337,9 @@ def test_non_fixture_run_names_default_candidates():
 def test_wiring_proof_evidence_is_refused_for_every_arm(target):
     with pytest.raises(FixtureEvidenceRefused):
         comparison_to_activation_evidence(
-            _three_arms(wiring_proof=True), target_profile=target, recorded_at="2026-11-24T12:00:00.000Z"
+            _three_arms(wiring_proof=True),
+            target_profile=target,
+            recorded_at="2026-11-24T12:00:00.000Z",
         )
 
 
@@ -332,7 +353,14 @@ def test_unmeasured_mode_cannot_carry_a_number():
 def test_cli_compares_several_arms_with_serving_and_wiring_proof(tmp_path):
     report = _pair_report()
     paths = {}
-    for name in ("active_gated", "active_candidate", "voyage_gated", "voyage_candidate", "bge_gated", "bge_candidate"):
+    for name in (
+        "active_gated",
+        "active_candidate",
+        "voyage_gated",
+        "voyage_candidate",
+        "bge_gated",
+        "bge_candidate",
+    ):
         paths[name] = tmp_path / f"{name}.json"
         paths[name].write_text(report.model_dump_json(), encoding="utf-8")
     meta = tmp_path / "pre.json"
@@ -343,22 +371,43 @@ def test_cli_compares_several_arms_with_serving_and_wiring_proof(tmp_path):
     text_out = tmp_path / "comparison.txt"
     code = profile_compare_cli.main(
         [
-            "--active-gated", str(paths["active_gated"]),
-            "--active-candidate", str(paths["active_candidate"]),
-            "--arm", "voyage-4-large-2048", str(paths["voyage_gated"]), str(paths["voyage_candidate"]),
-            "--arm", BGE_M3_PROFILE, str(paths["bge_gated"]), str(paths["bge_candidate"]),
-            "--serving", str(serving),
+            "--active-gated",
+            str(paths["active_gated"]),
+            "--active-candidate",
+            str(paths["active_candidate"]),
+            "--arm",
+            "voyage-4-large-2048",
+            str(paths["voyage_gated"]),
+            str(paths["voyage_candidate"]),
+            "--arm",
+            BGE_M3_PROFILE,
+            str(paths["bge_gated"]),
+            str(paths["bge_candidate"]),
+            "--serving",
+            str(serving),
             "--wiring-proof",
-            "--noise", str(NOISE_PATH),
-            "--pre-migration-meta", str(meta),
-            "--backfill-run-id", "01234567-0123-4012-8012-0123456789ab",
-            "--out", str(out),
-            "--text-out", str(text_out),
+            "--noise",
+            str(NOISE_PATH),
+            "--pre-migration-meta",
+            str(meta),
+            "--backfill-run-id",
+            "01234567-0123-4012-8012-0123456789ab",
+            "--out",
+            str(out),
+            "--text-out",
+            str(text_out),
         ]
     )
     assert code == 0
     parsed = EmbeddingProfileComparison.model_validate_json(out.read_text(encoding="utf-8"))
     assert parsed.wiring_proof is True
-    assert {entry.profile_id for entry in parsed.profiles} == {"openai-3-small-1536", "voyage-4-large-2048", BGE_M3_PROFILE}
-    assert [block.mode for block in _entry(parsed, BGE_M3_PROFILE).serving] == ["hosted", "sidecar"]
+    assert {entry.profile_id for entry in parsed.profiles} == {
+        "openai-3-small-1536",
+        "voyage-4-large-2048",
+        BGE_M3_PROFILE,
+    }
+    assert [block.mode for block in _entry(parsed, BGE_M3_PROFILE).serving] == [
+        "hosted",
+        "sidecar",
+    ]
     assert NOT_MEASURED in text_out.read_text(encoding="utf-8")
