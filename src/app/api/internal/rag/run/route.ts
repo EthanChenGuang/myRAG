@@ -926,6 +926,7 @@ export async function POST(req: NextRequest) {
         query,
         query_transforms: queryTransformsOf(result),
         query_plan: result.queryPlan ?? null,
+        ...(result.searchesCounted !== undefined ? { searches_counted: result.searchesCounted } : {}),
         query_context: {
           is_financial_query: queryContext.isFinancialQuery,
           is_temporal_query: queryContext.isTemporalQuery,
