@@ -10,7 +10,26 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 const chatRoute = fs.readFileSync(path.join(REPO_ROOT, 'src/app/api/chat/route.ts'), 'utf8');
 const answerSource = fs.readFileSync(path.join(REPO_ROOT, 'src/lib/rag-eval/answer.ts'), 'utf8');
 
+const evalRoute = fs.readFileSync(path.join(REPO_ROOT, 'src/app/api/internal/rag/run/route.ts'), 'utf8');
+
 const PRE_POST_EXPRESSION = "preContext + '\\n\\nContext:\\n{{context}}\\n\\n' + postContext";
+
+function compact(source: string): string {
+  return source.replace(/\s+/g, '');
+}
+
+/** D-04, D-07: the chat route appends the answer-rule block to the citation-decorated enhanced prompt. */
+const CHAT_COMPOSITION = compact(
+  'answerTurn.composeSystemPrompt(citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage)),',
+);
+/** The eval route's decorateSystemPrompt hook: the same composer, after the same citation decoration. */
+const EVAL_COMPOSITION = compact(
+  'answerTurn.composeSystemPrompt(citationSession ? citationSession.decorateSystemPrompt(prompt) : prompt, answerRuleOptions)',
+);
+
+function composesAnswerRules(chatSource: string, evalSource: string): boolean {
+  return compact(chatSource).includes(CHAT_COMPOSITION) && compact(evalSource).includes(EVAL_COMPOSITION);
+}
 
 function extractDefaultPrompt(source: string): string {
   const marker = 'const defaultSystemPrompt = `';
@@ -63,6 +82,31 @@ describe('eval answer prompt assembly stays tied to the chat route', () => {
   test('the generation temperature literal matches', () => {
     expect(chatRoute).toContain('temperature: 0.1,');
     expect(answerSource).toContain('temperature: 0.1,');
+  });
+
+  describe('Phase 5.2 composition, cap and chain (D-07, D-29, RESEARCH Pitfall 21)', () => {
+    test('both paths call the composer seam after the citation decoration', () => {
+      expect(composesAnswerRules(chatRoute, evalRoute)).toBe(true);
+    });
+
+    test('the check fails when either composer call is removed', () => {
+      const chatWithout = chatRoute.replace(/answerTurn\.composeSystemPrompt\(\s*citationSession\.decorateSystemPrompt/g, '(citationSession.decorateSystemPrompt');
+      const evalWithout = evalRoute.replace('answerTurn.composeSystemPrompt(', '(');
+      expect(chatWithout).not.toBe(chatRoute);
+      expect(evalWithout).not.toBe(evalRoute);
+      expect(composesAnswerRules(chatWithout, evalRoute)).toBe(false);
+      expect(composesAnswerRules(chatRoute, evalWithout)).toBe(false);
+    });
+
+    test('both paths take the output limit through the same cap helper', () => {
+      expect(compact(chatRoute)).toContain(compact('answerTurn.maxOutputTokens(getMaxTokensForModel(safeModelId))'));
+      expect(compact(answerSource)).toContain(compact('effectiveMaxOutputTokens(maxOutputTokensForModel(generatorModel)'));
+      expect(evalRoute).toContain('answerTurn.decideOutputCap(');
+    });
+
+    test('the eval route runs the whole-text twin of the stream chain', () => {
+      expect(evalRoute).toContain('applyAnswerPipelineToText(');
+    });
   });
 
   test('the isGPTModel expression matches the chat route', () => {
