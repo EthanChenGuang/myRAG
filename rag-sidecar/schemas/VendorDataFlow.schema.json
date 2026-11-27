@@ -1,0 +1,133 @@
+{
+  "$defs": {
+    "VendorEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "ack_switch": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Ack Switch",
+          "type": "string"
+        },
+        "content": {
+          "items": {
+            "enum": [
+              "query",
+              "chunk_text",
+              "answer",
+              "vectors",
+              "lexical_text",
+              "file_bytes",
+              "traces"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Content",
+          "type": "array"
+        },
+        "hosts": {
+          "items": {
+            "maxLength": 253,
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Hosts",
+          "type": "array"
+        },
+        "multi_tenant": {
+          "enum": [
+            "allowed",
+            "requires_ack",
+            "blocked"
+          ],
+          "title": "Multi Tenant",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "opt_in": {
+          "title": "Opt In",
+          "type": "boolean"
+        },
+        "providers": {
+          "items": {
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+            "type": "string"
+          },
+          "title": "Providers",
+          "type": "array"
+        },
+        "retention": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Retention",
+          "type": "string"
+        },
+        "switch": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Switch"
+        },
+        "training": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Training",
+          "type": "string"
+        },
+        "vendor": {
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Vendor",
+          "type": "string"
+        }
+      },
+      "required": [
+        "vendor",
+        "name",
+        "hosts",
+        "content",
+        "switch",
+        "opt_in",
+        "multi_tenant",
+        "retention",
+        "training"
+      ],
+      "title": "VendorEntry",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "D-20 inventory in config/rag/vendor-data-flow.json; retention and training read to_verify until checked.",
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "vendors": {
+      "items": {
+        "$ref": "#/$defs/VendorEntry"
+      },
+      "minItems": 1,
+      "title": "Vendors",
+      "type": "array"
+    }
+  },
+  "required": [
+    "vendors"
+  ],
+  "title": "VendorDataFlow",
+  "type": "object"
+}

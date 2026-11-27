@@ -214,6 +214,7 @@ from rag_sidecar.contracts.monitor import (
     MonitorSamplingConfig,
 )
 from rag_sidecar.contracts.judge_calibration import JudgeCalibration, JudgeCalibrationCell, JudgeSeedCase
+from rag_sidecar.contracts.release import DefaultsDecision, RegressionPlan, VendorDataFlow
 from rag_sidecar.contracts.release_gate import ReleaseGateConfig, ReleaseGatePart, ReleaseGateResult
 from rag_sidecar.contracts.config_change import (
     ConfigChangeRecord,
@@ -498,6 +499,9 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (LangidResponse, "serialization"),
     (RagTurnMetadata, "validation"),
     (QueryAdditionsDecisionRecord, "validation"),
+    (DefaultsDecision, "serialization"),
+    (RegressionPlan, "serialization"),
+    (VendorDataFlow, "validation"),
 ]
 
 
