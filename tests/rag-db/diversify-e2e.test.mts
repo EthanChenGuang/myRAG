@@ -39,10 +39,13 @@ function inventedWord(seed: number): string {
 const SHARED = Array.from({ length: 40 }, (_, i) => inventedWord(50_000 + i));
 const SECOND = Array.from({ length: 12 }, (_, i) => inventedWord(70_000 + i));
 
-/** Copy `copy` of the template passage: one slot carries a per-copy word, so copies are near (not exact) duplicates. */
+/**
+ * Copy `copy` of the template passage: one slot carries a per-copy word, so copies are near (not exact) duplicates.
+ * The per-copy word has no digits (copy 0 included): copies that differ in a value token are not duplicates (04.2-32).
+ */
 function sharedPassage(copy: number): string {
   const words = SHARED.slice();
-  if (copy > 0) words[17] = inventedWord(60_000 + copy);
+  words[17] = inventedWord(60_000 + copy).replace(/\d+$/u, '');
   return words.join(' ');
 }
 
