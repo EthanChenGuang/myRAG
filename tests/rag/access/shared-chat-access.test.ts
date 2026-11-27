@@ -323,7 +323,7 @@ describe('share link creation (D-27)', () => {
   });
 
   it('switch off: a restricted chat shares exactly as today and no label is read', async () => {
-    delete env.RAG_DOC_ACCESS_GROUPS;
+    env.RAG_DOC_ACCESS_GROUPS = 'off';
     seed([citing(DOC_RESTRICTED)]);
     const result = await share();
     expect(result.status).toBe(200);
@@ -376,7 +376,7 @@ describe('shared chat read route (D-27, A-13)', () => {
   });
 
   it('switch off: anyone reads the shared chat as today', async () => {
-    delete env.RAG_DOC_ACCESS_GROUPS;
+    env.RAG_DOC_ACCESS_GROUPS = 'off';
     const result = await readShared();
     expect(result.status).toBe(200);
     expect(Object.keys(result.body.chat as Row)).toEqual(['title', 'messages', 'createdAt', 'updatedAt']);
@@ -402,7 +402,7 @@ describe('shared page and generateMetadata (D-27, UI-SPEC 6.13)', () => {
   });
 
   it('switch off: renders for anyone with the chat title, as today', async () => {
-    delete env.RAG_DOC_ACCESS_GROUPS;
+    env.RAG_DOC_ACCESS_GROUPS = 'off';
     expect(await renderPage()).toEqual({ notFound: false, title: 'Synthetic chat title - Shared Chat', chatTitle: 'Synthetic chat title' });
     expect(h.reads).not.toContain('documents');
   });
