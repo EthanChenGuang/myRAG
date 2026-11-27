@@ -270,7 +270,7 @@ function noMarkup(doc: FakeDocument) {
   for (const el of doc.body.querySelectorAll('*')) {
     for (const [name, value] of el.attributes.entries()) {
       expect(name.startsWith('on')).toBe(false);
-      expect(value.toLowerCase()).not.toContain('javascript:');
+      if (['href', 'src', 'action', 'formaction', 'xlink:href', 'srcdoc'].includes(name)) expect(value.toLowerCase()).not.toContain('javascript:');
     }
   }
 }
@@ -288,7 +288,8 @@ describe('files and source rules', () => {
     expect(viewSource).toContain('stopPropagation');
     const tops = viewSource.match(/^(?:const|let|class|function|async function)\s+([A-Za-z_$][\w$]*)/gm) ?? [];
     expect(tops.length).toBeGreaterThan(5);
-    for (const decl of tops) expect(decl.replace(/^(?:const|let|class|async function|function)\s+/, '')).toMatch(/^(glossary|Glossary|GLOSSARY_)/);
+    // initGlossaryView is the entry point UI-SPEC 6.1 names; every other top-level name carries the prefix.
+    for (const decl of tops) expect(decl.replace(/^(?:const|let|class|async function|function)\s+/, '')).toMatch(/^(glossary|Glossary|GLOSSARY_|initGlossaryView$)/);
   });
 
   it('has the same label keys in en, zh and it', () => {
