@@ -925,7 +925,7 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
       {
         transform: 'condense' as const,
         query: LAYER_QUERY.condensed,
-        output: { standalone: 'Which clause does the two tenant isolation canary handbook list first?', unchanged: false },
+        output: { standalone: 'Which clause does the two tenant isolation canary handbook list first?', unchanged: false, language: null },
       },
       { transform: 'expand' as const, query: LAYER_QUERY.expanded, output: { queries: ['two tenant isolation canary phrase clause'] } },
       { transform: 'hyde' as const, query: LAYER_QUERY.hyde, output: { passage: 'Two tenant isolation canary phrase: clause one of the handbook.' } },
@@ -934,7 +934,7 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
         query: LAYER_QUERY.sub_question,
         output: { questions: ['What does the two tenant isolation canary clause say?', 'Which catalogue item carries the canary phrase?'] },
       },
-      { transform: 'translate' as const, query: LAYER_QUERY.translated, output: { target_language: 'it', text: V2_TRANSLATED_TEXT } },
+      { transform: 'translate' as const, query: LAYER_QUERY.translated, output: { target_language: 'it', text: V2_TRANSLATED_TEXT, source_language: null } },
     ],
   };
 
@@ -1043,7 +1043,7 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     const b = tenant('b');
     const question = 'Which clause of the isolation handbook names the canary phrase?';
     const translation = '隔离手册 金丝雀 条款';
-    const table = { version: 1 as const, entries: [{ transform: 'translate' as const, query: question, output: { target_language: 'zh', text: translation } }] };
+    const table = { version: 1 as const, entries: [{ transform: 'translate' as const, query: question, output: { target_language: 'zh', text: translation, source_language: null } }] };
     const saved = await db().query<{ id: string; language: string | null }>(
       'SELECT id::text AS id, language FROM documents WHERE tenant_key = ANY($1::text[])',
       [[a.scopeKey, b.scopeKey]],

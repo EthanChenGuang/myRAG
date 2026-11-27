@@ -216,7 +216,14 @@ describe('chat route calculation offer (05.2.1-14)', () => {
     process.env.RAG_CALC_TOOL = 'true';
     const on = capture((await post({ question: PLAIN_QUESTION })).params);
 
-    expect(on).toEqual(off);
+    // 05.2.1-02 counts RAG_CALC_TOOL in anyNonDefault, so the switch alone installs the Phase 5.2 notice collector (its transforms
+    // pass text through unchanged); nothing calculation-related reaches the call: no tool, no instruction, no block, no check slot.
+    const { transform: onTransform, ...onRest } = on;
+    const { transform: offTransform, ...offRest } = off;
+    expect(onRest).toEqual(offRest);
+    expect(offTransform).toBeNull();
+    expect(onTransform).toBeGreaterThan(0);
+    expect(spy.transformParts.at(-1)?.calcCheck).toBeUndefined();
     expect(lastCalcBlock()).toBeUndefined();
   });
 

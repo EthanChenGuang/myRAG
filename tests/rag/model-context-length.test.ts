@@ -18,6 +18,8 @@ const UNCONFIRMED_WINDOW: Readonly<Record<string, string>> = {
   'gemma-7b-it': 'shut down by Groq; not in the current model list',
   'llama3-groq-70b-8192-tool-use-preview': 'shut down by Groq; not in the current model list',
   'deepseek-r1-distill-llama-70b': 'shut down by Groq; not in the current model list',
+  // 06.2-07 (D-19): the Auto entry is a routing alias for the fast or quality model, so it has no window of its own.
+  auto: 'routing alias (RAG_MODEL_ROUTING); the routed model has the window',
 };
 
 interface Entry {

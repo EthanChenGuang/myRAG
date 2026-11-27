@@ -19,8 +19,8 @@ const TRANSLATION_ZH = '乙方多久进行一次巡检，书面巡检报告何�
 const EXPECTED_ZH_CHUNK = '第一条 服务范围';
 
 const TRANSLATIONS: FakeQueryLlmEntry[] = [
-  { transform: 'translate', query: QUESTION_EN, output: { text: TRANSLATION_ZH, target_language: 'zh' } },
-  { transform: 'translate', query: QUESTION_IT, output: { text: TRANSLATION_ZH, target_language: 'zh' } },
+  { transform: 'translate', query: QUESTION_EN, output: { text: TRANSLATION_ZH, target_language: 'zh', source_language: null } },
+  { transform: 'translate', query: QUESTION_IT, output: { text: TRANSLATION_ZH, target_language: 'zh', source_language: null } },
 ];
 
 interface TraceBody {
