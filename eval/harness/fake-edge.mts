@@ -120,10 +120,10 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     'version',
     'doc_type',
     'version_label',
+    'access_groups',
     // Phase 5.2 D-49, D-50: the version-label reads (fetchAssemblyRows, fetchVersionColumns) while RAG_VERSION_LABELS is on.
     'doc_date',
     'effective_from',
-    'access_groups',
   ],
   document_chunks: [
     'id',

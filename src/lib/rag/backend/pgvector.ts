@@ -431,7 +431,6 @@ export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBacke
       const client = deps.adminClient();
       if (!client) throw new RetrievalBackendError('hybrid_search_translations', 'admin_unavailable');
       const rpcClient = client as RpcClient;
-      // Lazy for the same reason as in search: tenant/access reads the RAG config through deps.
       const { scopeAccessFilter } = await import('../tenant/access');
       const response = await rpcClient
         .rpc('hybrid_search_translations', buildTranslationArgs(req, deps.getConfig(), scopeAccessFilter(req.scope)))

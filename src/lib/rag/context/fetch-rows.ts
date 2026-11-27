@@ -19,10 +19,10 @@ export interface AssemblyRows {
 export interface FetchAssemblyRowsOptions {
   adminClient: SupabaseClient;
   signal: AbortSignal;
-  /** The request's tenant key; the supersession rows are read only with it (T-05.2-223). */
-  tenantKey?: string;
   /** D-11: the request's access filter; a restricted document or chunk row is never read back for a caller without its group. */
   access: ScopeAccessFilter;
+  /** The request's tenant key; the supersession rows are read only with it (T-05.2-223). */
+  tenantKey?: string;
 }
 
 const DOCUMENT_BASE_SELECT = 'id, filename, created_at, content, metadata';
@@ -71,7 +71,7 @@ function unique(values: string[]): string[] {
 
 export async function fetchAssemblyRows(
   candidates: AssemblyCandidate[],
-  { adminClient, signal, tenantKey, access }: FetchAssemblyRowsOptions,
+  { adminClient, signal, access, tenantKey }: FetchAssemblyRowsOptions,
 ): Promise<AssemblyRows> {
   const documents = new Map<string, AssemblyDocumentRow>();
   const chunkMetadata = new Map<string, Record<string, any> | null>();

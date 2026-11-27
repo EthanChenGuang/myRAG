@@ -175,8 +175,8 @@ export async function resolveQueryIdentifiers(
 async function candidateRows(
   tenantKey: string,
   norm: string,
-  options: IdentifierCallOptions,
   access: ReturnType<typeof accessRpcArgs>,
+  options: IdentifierCallOptions,
 ): Promise<Array<{ raw: string; norm: string }>> {
   const response = await options.client
     .rpc(CANDIDATES_RPC, { p_tenant_key: tenantKey, p_norm: norm, p_limit: CANDIDATE_LIMIT, ...access })
@@ -205,7 +205,7 @@ export async function digitLookalikeMatches(
     const tenantKey = tenantKeyOf(scope);
     const access = accessRpcArgs(options.access ?? scopeAccessFilter(scope));
     options.signal.throwIfAborted();
-    const lists = await Promise.all(forms.map((norm) => candidateRows(tenantKey, norm, options, access)));
+    const lists = await Promise.all(forms.map((norm) => candidateRows(tenantKey, norm, access, options)));
     options.signal.throwIfAborted();
     forms.forEach((norm, index) => {
       const folded = foldDigitLookalikes(norm);
@@ -273,7 +273,7 @@ export async function identifierSuggestions(scope: TenantScope, missing: readonl
     signal.throwIfAborted();
     const lists = await Promise.all(
       forms.map(async (norm): Promise<Suggestion[]> =>
-        (await candidateRows(tenantKey, norm, { client, signal }, access)).map((row) => ({ ...row, distance: damerauLevenshtein(norm, row.norm) })),
+        (await candidateRows(tenantKey, norm, access, { client, signal })).map((row) => ({ ...row, distance: damerauLevenshtein(norm, row.norm) })),
       ),
     );
     signal.throwIfAborted();

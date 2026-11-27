@@ -47,6 +47,7 @@ async function blocks(specs: Spec[], variants?: QueryVariant[]): Promise<Context
     access: { mode: 'off' },
     input,
     config: cfg,
+    access: { mode: 'off' },
     profile: 'chat',
     params: { ...effectiveRetrievalParams('chat', cfg, null), final_top_k: 20 },
     fusedHits: fusedList(specs),
