@@ -528,12 +528,59 @@ describe('Batch API client against the fake', () => {
   });
 });
 
+describe('submitBatch when batch creation fails', () => {
+  function failingClient(createError: Error, deleteError?: Error) {
+    const deleted: string[] = [];
+    const client: BatchApiClient = {
+      files: {
+        create: async () => ({ id: 'file-up-1' }),
+        content: async () => new Response(''),
+        delete: async (fileId: string) => {
+          deleted.push(fileId);
+          if (deleteError) throw deleteError;
+          return { id: fileId, deleted: true };
+        },
+      },
+      batches: {
+        create: async () => {
+          throw createError;
+        },
+        retrieve: async () => ({ id: 'never', status: 'failed' }),
+      },
+    };
+    return { client, deleted };
+  }
+
+  function submitDeps(client: BatchApiClient, rpc = fakeRpc()): BatchApiDeps {
+    return { rpc: rpc.rpc, client, signal: new AbortController().signal, clock: fakeClock().clock };
+  }
+
+  test('deletes the uploaded input file and surfaces the original error', async () => {
+    const createError = Object.assign(new Error('billing_hard_limit_reached'), { status: 400 });
+    const { client, deleted } = failingClient(createError);
+    const rpc = fakeRpc();
+    const [file] = buildBatchLines(chunks(2), PROFILE);
+    await expect(submitBatch(submitDeps(client, rpc), { batchId: BATCH_ID, profile: PROFILE, file: file! })).rejects.toBe(createError);
+    expect(deleted).toEqual(['file-up-1']);
+    expect(rpc.calls.find((c) => c.fn === 'rag_record_embed_batch')).toBeUndefined();
+  });
+
+  test('a failed delete still surfaces the original create error', async () => {
+    const createError = new Error('billing_hard_limit_reached');
+    const { client, deleted } = failingClient(createError, new Error('delete failed'));
+    const [file] = buildBatchLines(chunks(2), PROFILE);
+    await expect(submitBatch(submitDeps(client), { batchId: BATCH_ID, profile: PROFILE, file: file! })).rejects.toBe(createError);
+    expect(deleted).toEqual(['file-up-1']);
+  });
+});
+
 describe('collecting hostile or malformed output', () => {
   function stubClient(output: string, errorFile?: string): BatchApiClient {
     return {
       files: {
         create: async () => ({ id: 'file-1' }),
         content: async (id: string) => new Response(id === 'out' ? output : (errorFile ?? '')),
+        delete: async () => ({ deleted: true }),
       },
       batches: {
         create: async () => ({ id: 'b1', status: 'validating' }),

@@ -89,6 +89,7 @@ export interface BatchApiClient {
   files: {
     create(body: { file: Uploadable; purpose: 'batch' }, options?: RequestOptions): PromiseLike<{ id: string }>;
     content(fileId: string, options?: RequestOptions): PromiseLike<Response>;
+    delete(fileId: string, options?: RequestOptions): PromiseLike<unknown>;
   };
   batches: {
     create(
@@ -254,10 +255,22 @@ export async function submitBatch(
     { file: await toFile(content, 'embeddings-batch.jsonl'), purpose: 'batch' },
     { signal },
   );
-  const remote = await client.batches.create(
-    { input_file_id: uploaded.id, endpoint: '/v1/embeddings', completion_window: '24h' },
-    { signal },
-  );
+  let remote: RemoteBatch;
+  try {
+    remote = await client.batches.create(
+      { input_file_id: uploaded.id, endpoint: '/v1/embeddings', completion_window: '24h' },
+      { signal },
+    );
+  } catch (error) {
+    try {
+      await client.files.delete(uploaded.id);
+    } catch (cleanupError) {
+      console.warn('[Embed Batch] input file cleanup failed', {
+        error: cleanupError instanceof Error ? cleanupError.name : 'unknown',
+      });
+    }
+    throw error;
+  }
   const status = KNOWN_STATUSES.has(remote.status) ? remote.status : 'validating';
   let rowId: string;
   try {
