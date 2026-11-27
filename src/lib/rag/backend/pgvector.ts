@@ -2,8 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import type { RagConfig } from '../config';
 import { dropLexstatsReady, lexstatsReady } from '../lexical/stats';
-import { accessRpcArgs, sameAccessFilter, scopeAccessFilter, type ScopeAccessFilter } from '../tenant/access';
-import { getV2StartupVerdict } from '../v2/startup';
+import { accessRpcArgs, sameAccessFilter, type ScopeAccessFilter } from '../tenant/access-filter';
 import { assertTenantScope, scopeKey } from '../tenant/scope';
 import {
   EmbeddingProfileMismatchError,
@@ -408,6 +407,8 @@ export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBacke
     async search(req: BackendSearchRequest): Promise<BackendLegs> {
       assertTenantScope(req.scope);
       // D-05: the request's filter must be the one its scope resolves to; a mismatch never reaches SQL.
+      // Loaded lazily: tenant/access reads the RAG config through deps, which modules importing this file (table-lookup) must not load.
+      const { scopeAccessFilter } = await import('../tenant/access');
       if (!req.access || !sameAccessFilter(req.access, scopeAccessFilter(req.scope))) {
         throw new RetrievalBackendError('hybrid_search_chunks', 'access_filter_mismatch');
       }
@@ -415,7 +416,8 @@ export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBacke
       if (!client) throw new RetrievalBackendError('hybrid_search_chunks', 'admin_unavailable');
       const config = deps.getConfig();
       const rpcClient = client as RpcClient;
-      const version = deps.pgvectorVersion ? deps.pgvectorVersion() : getV2StartupVerdict().pgvectorVersion;
+      // Lazy for the same reason as tenant/access: v2/startup reads the RAG config through deps.
+      const version = deps.pgvectorVersion ? deps.pgvectorVersion() : (await import('../v2/startup')).getV2StartupVerdict().pgvectorVersion;
       const scan = denseScanArgs(req.access, config, version);
       const args = buildRpcArgs(req, config, scan);
       if (!req.lexicalScoring || req.lexicalLimit <= 0 || req.lexicalTokens.length === 0) {
