@@ -3,6 +3,7 @@ import { loadRagConfig, type BgeM3Serving } from '../config';
 import { getRagDeps } from '../deps';
 import { embeddingProfileDeclaration } from './catalog';
 import { createReembedWriter } from '../ingest/writer';
+import { kickVectorSync } from '../sync/kick';
 import type { EmbeddingProfile, StartupVerdict } from './active-profile';
 import {
   LEGACY_PROFILE,
@@ -142,6 +143,7 @@ export async function activateEmbeddingProfile(target: string, actor: string): P
   const activated = text(outcome.row, 'activated_profile');
   if (!activated) throw new ProfileUnavailableError('rpc_failed', 'malformed_response');
   await refreshAfterOperation();
+  kickVectorSync();
   return { ok: true, activated, previous: text(outcome.row, 'previous_profile') };
 }
 

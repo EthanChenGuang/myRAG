@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
-import { RetrievalBackendError } from '@/lib/rag/backend/supabase-rpc';
 
 const tasks = vi.hoisted(() => [] as Array<() => Promise<void>>);
 const afterMock = vi.hoisted(() => vi.fn((task: () => Promise<void>) => void tasks.push(task)));
@@ -101,9 +100,10 @@ describe('kickVectorSync', () => {
 
   test('a drain error is swallowed with one [Vector Sync] kick failed warning carrying the code only', async () => {
     statusMock.mockResolvedValue(['qdrant']);
-    sliceMock.mockRejectedValue(new RetrievalBackendError('rag_vector_sync_claim', 'PGRST301'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { kickVectorSync } = await load();
+    const { RetrievalBackendError } = await import('@/lib/rag/backend/supabase-rpc');
+    sliceMock.mockRejectedValue(new RetrievalBackendError('rag_vector_sync_claim', 'PGRST301'));
     kickVectorSync(deps());
     await expect(flush()).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalledTimes(1);
