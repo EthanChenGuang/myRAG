@@ -18,6 +18,8 @@ const DEFAULT_BASELINES: Record<FixtureMode, string> = {
   prechunked: path.join(REPO_ROOT, 'eval/baselines/fixture-baseline.json'),
   ingest: path.join(REPO_ROOT, 'eval/baselines/fixture-ingest-baseline.json'),
 };
+/** Phase 6.2 D-16: the voice entry baseline, recorded from eval/config/runs/q62-voice-no-translate.json (prechunked). */
+const DEFAULT_VOICE_BASELINE = path.join(REPO_ROOT, 'eval/baselines/fixture-voice-baseline.json');
 const DEFAULT_GOLDEN = 'eval/fixtures/golden.jsonl';
 // D-46: the golden-set manifest of each fixture mode's default golden files; a --golden override has none unless given.
 const DEFAULT_GOLDEN_MANIFESTS: Record<FixtureMode, string> = {
@@ -188,6 +190,9 @@ async function main(): Promise<number> {
   const runConfigFile = values['run-config']?.trim();
   if (runConfigFile !== undefined && runConfigFile === '') throw new RunConfigError('[Eval Harness] --run-config must not be empty');
   const runConfig = runConfigFile ? loadRunConfig(path.resolve(runConfigFile)) : undefined;
+  if (runConfig?.entryProfile === 'voice' && values.answers) {
+    throw new RunConfigError('[Eval Harness] a voice entry run config measures retrieval only; omit --answers');
+  }
   if (runConfig && baseUrl && Object.keys(runConfig.env).length > 0) {
     throw new RunConfigError('[Eval Harness] a run-config env overlay applies to in-process runs only; omit --base-url or drop its env');
   }
@@ -244,7 +249,13 @@ async function main(): Promise<number> {
     console.error('[Eval Harness] a --base-url run needs --baseline <live baseline> or --no-gate');
     return 2;
   }
-  const baselinePath = path.resolve(values.baseline ?? DEFAULT_BASELINES[fixtureMode]);
+  // Phase 6.2 D-16: a voice entry run is gated against the voice baseline (same noise band), never against the text-chat one.
+  const voiceEntry = runConfig?.entryProfile === 'voice';
+  if (voiceEntry && values.baseline === undefined && (fixtureMode !== 'prechunked' || baseUrl)) {
+    console.log('[Eval Harness] no committed voice baseline for this fixture mode; the relative gate is skipped (pass --baseline)');
+    gate = false;
+  }
+  const baselinePath = path.resolve(values.baseline ?? (voiceEntry ? DEFAULT_VOICE_BASELINE : DEFAULT_BASELINES[fixtureMode]));
 
   const outDir = path.resolve(values.out as string);
   if (envOverlay) {
