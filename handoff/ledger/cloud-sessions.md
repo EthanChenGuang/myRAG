@@ -782,3 +782,9 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - The eval DB already has 0900-0904 plus the 0932 body. Re-applying 0904 must always be followed by 0932.
   - T2-T5 need the owner's credentials (eval DB, JWT, golden set, eval deploy env). Owner HOLD.
   - Archived.
+- 22:45Z plan-62-fixes reported exec/plan-62-fixes 8adebf7c. Session still running on follow-ups A (06.2-32 dsw) and B (06-46 commands); do not archive yet.
+  - New plans: 06.2-41 (zh-dominant fixture; dispatch after 22's SUMMARY) and 06.2-42 (real-embedder separation; Task 2 live needs an embedding key).
+  - 26 now depends on 41 and 42, which in turn blocks 38/28/30/31/32. Waves shifted: 26->10, 38->11, 28->12.
+  - 06.2-42 Task 1 dispatched (exec/06.2-42, to checkpoint).
+  - G2 (systemPromptHash) was unowned; added to quick-62-hash-bench.
+  - Train note: plan-62-fixes must merge before the 06.2-26/41/42 executions reach a train.
