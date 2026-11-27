@@ -10776,8 +10776,9 @@
             // Show toast
             toast.classList.remove('hidden');
 
-            // Auto-hide after 3 seconds
-            setTimeout(() => {
+            // Auto-hide after 3 seconds; a newer toast restarts the timer
+            clearTimeout(showToast.hideTimer);
+            showToast.hideTimer = setTimeout(() => {
                 toast.classList.add('hidden');
             }, 3000);
         }
