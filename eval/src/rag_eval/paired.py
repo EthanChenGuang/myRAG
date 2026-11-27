@@ -62,6 +62,14 @@ def _bootstrap_interval(differences: list[float], seed: int = SEED, resamples: i
     return means[math.ceil(resamples * 0.025) - 1], means[math.ceil(resamples * 0.975) - 1]
 
 
+def _resample_means(differences: list[float], seed: int = SEED, resamples: int = RESAMPLES):
+    return iter(())
+
+
+def paired_p_value(differences: list[float], seed: int = SEED, resamples: int = RESAMPLES) -> float | None:
+    return -1.0
+
+
 def _stat(differences: list[float]) -> PairedStat:
     if not differences:
         return PairedStat(n=0, n_nonzero=0, mean_d=None, ci_low=None, ci_high=None)
