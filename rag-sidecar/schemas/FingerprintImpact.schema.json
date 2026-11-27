@@ -28,6 +28,9 @@
             "reembed",
             "recaption",
             "retranslate",
+            "reindex_tables",
+            "reindex_identifiers",
+            "recluster",
             "rescan"
           ],
           "title": "Mechanism",

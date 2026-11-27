@@ -173,6 +173,25 @@ describe('rebuild admin routes', () => {
     expect(JSON.stringify(body)).not.toContain('u:0000');
   });
 
+  it.each([
+    ['reindex_tables', 'npm run rag:table-rows'],
+    ['reindex_identifiers', 'npm run rag:identifiers'],
+    ['recluster', 'npm run rag:dup-clusters'],
+  ])('accepts %s and answers its backfill command with no tenant key', async (mechanism, command) => {
+    state.startResult = {
+      status: 'command',
+      mechanism,
+      affected: 1,
+      withoutFingerprint: 0,
+      plan: { kind: 'command', mechanism, activation: 'none', affected: 1, commands: [`${command} -- --tenant u:00000000-0000-4000-8000-0000000000a1`] },
+    };
+    const response = await loaded.start.POST(post('/api/rag/admin/ingest-fingerprint/rebuild', { mechanism }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({ success: true, status: 'command', mechanism, affected: 1, command });
+    expect(JSON.stringify(body)).not.toContain('u:0000');
+  });
+
   it('answers 503 without the database message when the start fails', async () => {
     state.startError = new loaded.run.RebuildUnavailable('rag_rebuild_start', 'XX000');
     const response = await loaded.start.POST(post('/api/rag/admin/ingest-fingerprint/rebuild', { mechanism: 'rechunk' }));
@@ -249,6 +268,6 @@ describe('rebuild admin routes', () => {
       { id: '00000000-0000-4000-8000-00000000ab03', mechanism: 'rechunk', done: 1, total: 3, gaps: 0, state: 'running', started: '2026-11-25T10:00:00Z', activation: 'chunking_profiles' },
       { id: '00000000-0000-4000-8000-00000000ab04', mechanism: 'reparse', done: 3, total: 3, gaps: 0, state: 'rolled_back', started: '2026-11-25T10:00:00Z', activation: 'rebuild_batch' },
     ]);
-    expect(body.pending).toHaveLength(7);
+    expect(body.pending).toHaveLength(10);
   });
 });
