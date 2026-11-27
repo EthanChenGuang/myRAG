@@ -16,6 +16,9 @@ import {
   scheduleSecurityEvent,
   scopeAccessFilter,
   createTraceCollector,
+  defaultQueryContext,
+  untaggedVoiceContext,
+  type VoiceResult,
   awaitPreGenerationDelay,
   traceCacheState,
   type TraceCollector,
@@ -607,6 +610,38 @@ function evalCacheTraceState(result: RetrievalResult): EvalTraceCacheState | und
   return 'miss';
 }
 
+type EvalKeptChunk = RagTrace['kept'][number];
+
+/** Phase 6.2 D-16, P-26: the voice results in rank order as the trace's kept list, named by their document title. */
+function voiceKept(results: readonly VoiceResult[]): EvalKeptChunk[] {
+  return results.map((row, index) => ({
+    chunk_id: row.chunk_id,
+    document_id: row.document_id,
+    document_name: voiceDocumentName(row),
+    content: row.content,
+    similarity: row.similarity,
+    kept_by: row.rerankScore !== undefined ? 'rerank' : 'similarity',
+    rank: index + 1,
+  }));
+}
+
+function voiceDocumentName(row: VoiceResult): string {
+  const metadata = row.metadata ?? {};
+  for (const value of [metadata.document_title, metadata.filename, metadata.name]) {
+    if (typeof value === 'string' && value.trim() !== '') return value;
+  }
+  return row.document_id;
+}
+
+function voiceUsedDocuments(results: readonly VoiceResult[]): RagTrace['used_documents'] {
+  const seen = new Map<string, RagTrace['used_documents'][number]>();
+  for (const row of results) {
+    if (seen.has(row.document_id)) continue;
+    seen.set(row.document_id, { document_id: row.document_id, name: voiceDocumentName(row), similarity: row.similarity, image_url: row.image_url ?? null });
+  }
+  return [...seen.values()];
+}
+
 export async function POST(req: NextRequest) {
   const requestReceivedAt = Date.now();
   const access = checkEvalAccess(req.headers, {
@@ -644,9 +679,13 @@ export async function POST(req: NextRequest) {
   // closed with status error and the run answers its existing retrieval failure (D-10).
   const resolvedAccess = await resolveAccessScope({ scope: scoped.scope, identity: { kind: 'eval', userId }, signal: req.signal });
   const scope = resolvedAccess.ok ? resolvedAccess.scope : scoped.scope;
+  // Phase 6.2 D-16, T-06.2-73: the voice entry runs the voice profile under the eval scope; it never reads a voice token and
+  // applies no eval-only override, filter, cache or answer option (those are honoured for the eval profile only).
+  const voiceEntry = options?.entry_profile === 'voice';
+  const entryProfile = voiceEntry ? 'voice' : 'eval';
 
   let retrievalFilters: RetrievalFilterInput | undefined;
-  if (options?.retrieval_filters) {
+  if (options?.retrieval_filters && !voiceEntry) {
     const filtersParsed = parseRetrievalFilters(toFilterBody(options.retrieval_filters));
     if (!filtersParsed.ok) {
       return NextResponse.json({ success: false, error: 'Invalid request data', details: filtersParsed.details }, { status: 400 });
@@ -667,14 +706,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid request data', details: bindingOverrides.details }, { status: 400 });
   }
 
-  const stageOverrides = toStageOverrides(options);
-  const collector = createTraceCollector({ profile: 'eval', tenantKey: scopeKey(scope) });
+  const stageOverrides = voiceEntry ? undefined : toStageOverrides(options);
+  const collector = createTraceCollector({ profile: entryProfile, tenantKey: scopeKey(scope) });
   // D-16: the request conversation is the history; D-09: classified once at entry, and only while the query layer is on.
   const history = (conversation ?? []).map((turn) => ({ role: turn.role, content: turn.content }));
   const classification = env.RAG_QUERY_LAYER === 'true' ? classifyQuery(query) : undefined;
 
   try {
-    const generatorModel = includeAnswer ? resolveGeneratorModel(options?.generator_model) : null;
+    const generatorModel = includeAnswer && !voiceEntry ? resolveGeneratorModel(options?.generator_model) : null;
     const isGPTModel = generatorModel !== null && isGPTGeneratorModel(generatorModel);
     // D-05: an eval run has the citations capability only when it asks for it, and only when an answer is generated.
     const generationConfig = readGenerationConfig();
@@ -714,7 +753,7 @@ export async function POST(req: NextRequest) {
     let calcOffer: EvalCalcOffer | null = null;
 
     // D-37/D-38: the key parts of an eval lookup; the pipeline derives the eval entry profile, so no entry reaches chat or embed.
-    const cacheOverride = cacheOverrideOn(options);
+    const cacheOverride = !voiceEntry && cacheOverrideOn(options);
     const cacheContext: RetrievalCacheContext | undefined = cacheOverride
       ? {
           generatorModel: generatorModel ?? resolveGeneratorModel(options?.generator_model),
@@ -728,19 +767,23 @@ export async function POST(req: NextRequest) {
     const result = await runRetrieval({
       scope,
       query,
-      profile: 'eval',
-      options: {
-        // Unset: each pipeline applies RAG_FINAL_RESULT_COUNT itself (legacy) or keeps its own final top-k (v2).
-        ...(options?.max_results != null ? { maxResults: options.max_results } : {}),
-        isGPTModel,
-        ragMode,
-        webSearchEnabled: false,
-        ...(options?.degrade ? { degrade: options.degrade } : {}),
-        ...(options?.embedding_profile ? { embeddingProfile: options.embedding_profile } : {}),
-        ...bindingOverrides.value,
-      },
+      profile: entryProfile,
+      // The voice route passes only the match count; unset, each pipeline keeps its own default.
+      options: voiceEntry
+        ? { ...(options?.max_results != null ? { maxResults: options.max_results } : {}) }
+        : {
+            // Unset: each pipeline applies RAG_FINAL_RESULT_COUNT itself (legacy) or keeps its own final top-k (v2).
+            ...(options?.max_results != null ? { maxResults: options.max_results } : {}),
+            isGPTModel,
+            ragMode,
+            webSearchEnabled: false,
+            ...(options?.degrade ? { degrade: options.degrade } : {}),
+            ...(options?.embedding_profile ? { embeddingProfile: options.embedding_profile } : {}),
+            ...bindingOverrides.value,
+          },
       signal: req.signal,
       trace: collector,
+      ...(voiceEntry ? { evalEntry: true as const } : {}),
       ...(stageOverrides ? { stageOverrides } : {}),
       ...(retrievalFilters ? { retrievalFilters } : {}),
       ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
@@ -756,7 +799,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'retrieval failed', reason: result.reason }, { status: 500 });
       }
       const assembled = result.stages.find((stage) => stage.name === 'assemble');
-      if (result.queryContext === null || (assembled && assembled.status !== 'ok' && assembled.status !== 'disabled')) {
+      if ((result.queryContext === null && !voiceEntry) || (assembled && assembled.status !== 'ok' && assembled.status !== 'disabled')) {
         console.error('[RAG Eval] retrieval incomplete:', { status: result.status, reason: result.reason });
         return NextResponse.json({ error: 'retrieval failed', reason: result.reason }, { status: 500 });
       }
@@ -765,6 +808,8 @@ export async function POST(req: NextRequest) {
       const documentNames = new Map<string, string>();
       for (const doc of result.usedDocuments) documentNames.set(doc.id, doc.filename || doc.name);
       for (const chunk of result.kept) documentNames.set(chunk.document_id, chunk.document_name);
+      const voiceResults = voiceEntry ? (result.voice?.results ?? []) : null;
+      for (const row of voiceResults ?? []) documentNames.set(row.document_id, voiceDocumentName(row));
       const textBlocks = (result.blocks ?? []).filter((block) => !block.isImage);
       // D-37: the eval turn's allow evidence; the eval offers no webSearch tool and no tool results
       const guardSources = {
@@ -782,7 +827,9 @@ export async function POST(req: NextRequest) {
       const calcRun: { outcome: ReturnType<typeof runCalcChecks> | null } = { outcome: null };
       let calcObserved: CalcObserved | null = null;
       const cacheHit = isCacheHitResult(result) ? result.cacheHit : undefined;
-      const serverRefused = cacheHit ? cacheHit.answer.is_refusal : result.refusalCandidate || result.refusal?.decision === 'refuse';
+      const serverRefused = cacheHit
+        ? cacheHit.answer.is_refusal
+        : result.refusalCandidate || result.refusal?.decision === 'refuse' || (voiceResults !== null && voiceResults.length === 0);
       if (cacheHit) {
         if (includeAnswer) answer = cacheHit.answer.answer_text;
       } else if (generatorModel !== null && !serverRefused) {
@@ -1003,7 +1050,7 @@ export async function POST(req: NextRequest) {
       const cacheState = cacheOverride ? evalCacheTraceState(result) : undefined;
 
       const retrievalStrategy = result.stages.find((stage) => stage.name === 'search')?.detail ?? 'unknown';
-      const queryContext = result.queryContext;
+      const queryContext = result.queryContext ?? defaultQueryContext();
       const stageCounts = stageCountsOf(result.stages);
       const v2Result = result.retrievalConfigHash !== undefined;
       const injection = injectionTraceOf(result, documentNames);
@@ -1066,7 +1113,7 @@ export async function POST(req: NextRequest) {
           ...(chunk.legs !== undefined ? { legs: chunk.legs } : {}),
           ...(chunk.language !== undefined ? { language: chunk.language } : {}),
         })),
-        kept: result.kept.map(({ dupClusterId, alsoIn: _alsoIn, isCurrent, documentVersion, ...chunk }, index) => ({
+        kept: voiceResults ? voiceKept(voiceResults) : result.kept.map(({ dupClusterId, alsoIn: _alsoIn, isCurrent, documentVersion, ...chunk }, index) => ({
           ...chunk,
           ...(dupClusterId ? { dup_cluster_id: dupClusterId } : {}),
           ...(isCurrent !== undefined ? { is_current: isCurrent } : {}),
@@ -1075,13 +1122,15 @@ export async function POST(req: NextRequest) {
         })),
         ...(redundancy !== null ? { topk_redundancy: redundancy } : {}),
         ...(identifierTrace ? { identifier: identifierTrace } : {}),
-        used_documents: result.usedDocuments.map((doc) => ({
-          document_id: doc.id,
-          name: doc.name,
-          similarity: doc.similarity ?? null,
-          image_url: doc.image_url ?? null,
-        })),
-        context: result.context,
+        used_documents: voiceResults
+          ? voiceUsedDocuments(voiceResults)
+          : result.usedDocuments.map((doc) => ({
+              document_id: doc.id,
+              name: doc.name,
+              similarity: doc.similarity ?? null,
+              image_url: doc.image_url ?? null,
+            })),
+        context: voiceResults ? (result.voice?.context ?? untaggedVoiceContext(voiceResults)) : result.context,
         refused,
         refusal_reason: refusalReasonOf(result, refused),
         ...(v2Result ? v2TraceFields(result) : {}),

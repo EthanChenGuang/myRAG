@@ -1340,6 +1340,13 @@ async function settingChecksConfigFetch(url, init) {
   return { ok: response.ok, status: response.status, body };
 }
 
+const SETTING_CHECK_PANEL_STATUS =
+  typeof ragPanelSetStatus === 'function'
+    ? ragPanelSetStatus
+    : typeof require !== 'undefined'
+      ? require('./panel-status.js').ragPanelSetStatus
+      : null;
+
 class SettingChecksPanel {
   constructor(root, deps) {
     const d = deps || {};
@@ -1391,8 +1398,12 @@ class SettingChecksPanel {
     return (c.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE || c.MYRAG_DEPLOYMENT_MODE) === 'multi-tenant';
   }
 
-  setStatus(message, isError) {
-    settingCheckGates().gatesUiStatus(this.hosts.status, message, isError);
+  setStatus(message, isError, options) {
+    const render = () => {
+      settingCheckGates().gatesUiStatus(this.hosts.status, message, isError);
+    };
+    if (SETTING_CHECK_PANEL_STATUS) SETTING_CHECK_PANEL_STATUS(this.hosts.status, render, isError, options);
+    else render();
   }
 
   /** A load outcome for screen readers only: the same line is already visible in the view's toolbar. */

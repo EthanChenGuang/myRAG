@@ -370,6 +370,7 @@ function loadPage(options: PageOptions = {}) {
   };
 
   const regexCalls: string[] = [];
+  const toasts: unknown[][] = [];
   const storage: string[] = [];
   const context: Json = {
     document: doc,
@@ -389,10 +390,11 @@ function loadPage(options: PageOptions = {}) {
     removeEventListener() {},
     matchMedia: () => ({ matches: false }),
     ragFetch,
+    showToast: (...args: unknown[]) => toasts.push(args),
   };
   context.window = context;
   vm.createContext(context);
-  for (const file of ['document-processing/status-monitor.js', 'rag-panels/rag-ui.js', 'rag-panels/identifier-patterns.js']) {
+  for (const file of ['document-processing/status-monitor.js', 'rag-panels/panel-status.js', 'rag-panels/rag-ui.js', 'rag-panels/identifier-patterns.js']) {
     new vm.Script(fs.readFileSync(path.join(configUiDir, file), 'utf8'), { filename: file }).runInContext(context);
   }
   // Record every RegExp method call made with a non-empty string, inside the panel's realm.
@@ -413,6 +415,7 @@ function loadPage(options: PageOptions = {}) {
     root: root as FakeElement,
     calls,
     regexCalls,
+    toasts,
     storage,
     selector,
     index,
@@ -691,6 +694,33 @@ describe('panel (UI-SPEC 6.3 to 7)', () => {
     await flush();
     expect(page.status()).toContain('The server did not confirm the change');
     expect(page.routeCalls('list').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('a completed disable or delete shows its sentence in the status region and in an aria-hidden toast', async () => {
+    const page = loadPage();
+    await page.init();
+    expect(page.toasts).toEqual([]);
+    button(page.content(), 'Disable pattern').click();
+    await flush();
+    expect(page.status()).toContain('disabled.');
+    expect(page.toasts).toHaveLength(1);
+    expect(page.toasts[0]![0]).toBe(page.status());
+    expect(page.toasts[0]!.slice(1)).toEqual(['success', { ariaHidden: true }]);
+    button(page.content(), 'Delete pattern').click();
+    button(page.dialog(), 'Delete pattern').click();
+    await flush();
+    expect(page.status()).toContain('deleted.');
+    expect(page.toasts).toHaveLength(2);
+    expect(page.toasts[1]![0]).toBe(page.status());
+  });
+
+  it('an error result stays in the status region only, as before', async () => {
+    const page = loadPage({ replies: { update: { status: 503, body: {} } } });
+    await page.init();
+    button(page.content(), 'Disable pattern').click();
+    await flush();
+    expect(page.status()).toContain('The server did not confirm the change');
+    expect(page.toasts).toEqual([]);
   });
 
   it('closing a changed form opens the Discard dialog with focus on Keep editing', async () => {

@@ -1,0 +1,10 @@
+{
+  "name": "q62-voice-translate",
+  "entry_profile": "voice",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_QUERY_LAYER": "true",
+    "RAG_QUERY_VOICE_TRANSFORMS": "condense_history,normalize_dates,translate"
+  },
+  "overrides": null
+}

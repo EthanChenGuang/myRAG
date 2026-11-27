@@ -713,6 +713,13 @@ function identifierPatternsDiscardDialog(doc, locale, opener) {
   });
 }
 
+const IDENTIFIER_PATTERNS_PANEL_STATUS =
+  typeof ragPanelSetStatus === 'function'
+    ? ragPanelSetStatus
+    : typeof require !== 'undefined'
+      ? require('./panel-status.js').ragPanelSetStatus
+      : null;
+
 class IdentifierPatternsPanel {
   constructor(root, deps) {
     const d = deps || {};
@@ -853,12 +860,16 @@ class IdentifierPatternsPanel {
     }
   }
 
-  setStatus(text, isError) {
-    const status = this.host('status');
-    const children = [];
-    if (isError) children.push(this.icon('exclamation-circle', 'text-error mr-2'));
-    children.push(this.el('span', { text }));
-    status.replaceChildren(...children);
+  setStatus(text, isError, options) {
+    const render = () => {
+      const status = this.host('status');
+      const children = [];
+      if (isError) children.push(this.icon('exclamation-circle', 'text-error mr-2'));
+      children.push(this.el('span', { text }));
+      status.replaceChildren(...children);
+    };
+    if (IDENTIFIER_PATTERNS_PANEL_STATUS) IDENTIFIER_PATTERNS_PANEL_STATUS(this.host('status'), render, isError, options);
+    else render();
   }
 
   async mount() {
@@ -1257,7 +1268,7 @@ class IdentifierPatternsPanel {
       this.items = this.items.map((i) => (i.id === item.id ? updated || { ...i, enabled } : i));
       this.renderList();
       this.patternsChanged();
-      this.setStatus(this.t(enabled ? 'toggle.enabled' : 'toggle.disabled', { name: item.name }));
+      this.setStatus(this.t(enabled ? 'toggle.enabled' : 'toggle.disabled', { name: item.name }), false, { toast: true });
       const again = this.rowButton(item.id, 'toggle');
       if (again) again.focus();
       return;
@@ -1273,7 +1284,7 @@ class IdentifierPatternsPanel {
     }
     if (mapped.closeForm && this.form && this.form.mode === 'edit' && this.form.id === id) this.closeForm({ silent: true, focus: false });
     if (mapped.reload) await this.loadList({ announce: false });
-    this.setStatus(this.message(mapped), mapped.kind !== 'done');
+    this.setStatus(this.message(mapped), mapped.kind !== 'done', { toast: mapped.kind === 'done' });
   }
 
   async confirmDelete(item, button) {
@@ -1295,7 +1306,7 @@ class IdentifierPatternsPanel {
           if (this.form && this.form.mode === 'edit' && this.form.id === item.id) this.closeForm({ silent: true, focus: false });
           this.patternsChanged();
           await this.loadList({ announce: false });
-          this.setStatus(this.t('delete.done', { name: item.name }));
+          this.setStatus(this.t('delete.done', { name: item.name }), false, { toast: true });
           return;
         }
         await this.handleWriteError(mapped, item.id);
@@ -1642,7 +1653,7 @@ class IdentifierPatternsPanel {
       this.closeForm({ silent: true, focus: false });
       this.patternsChanged();
       await this.loadList({ announce: false });
-      this.setStatus(this.t(add ? 'form.saved.add' : 'form.saved.edit', { name }));
+      this.setStatus(this.t(add ? 'form.saved.add' : 'form.saved.edit', { name }), false, { toast: true });
       const target = (id && this.rowButton(id, 'edit')) || this.addButton;
       if (target) target.focus();
       return;
