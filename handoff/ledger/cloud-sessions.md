@@ -873,3 +873,10 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 23:30Z Walkthrough item 1 (terminology) PASS on EVAL, except dismiss (no candidates). Next: item 3.
 - 23:30Z Train 39 final at 3f4f5e71 (10 plans; includes t38 4d6a7c4a). Waits for #135. Builder is idle.
 - 23:30Z PR #135 red on a ts-vitest timeout (eval-corpus 120 s); commented. PR #136 re-run attempt 2 in progress (owner clicked).
+- 23:37Z 06.3-20 DONE exec/06.3-20 3e29132ea (purge library and admin routes; based on 06.3-15 plus 06.3-07). Eval apply order: 0724 -> 0726 -> 0727. -> train 41 with 06.3-15/19. Archived.
+- 23:37Z 06.2-22 DONE exec/06.2-22 bf742fa1 (33 q62 golden items; baselines re-recorded with 0 old items moved). Owner item: native review of 21 zh/it items. -> train 41. Archived.
+  - 06.2-41 dispatched from 06.2-22 plus plan-62-fixes.
+  - TRAIN NOTE: regenerate the q62-scope-separation report with its tool (expected 331 answerable).
+- 23:37Z The owner chose A+B for 06.2-42 Task 2.
+  - B (bge-m3, voyage) dispatched on exec/06.2-42.
+  - A is waiting on the owner's OpenRouter key: the form was rejected, and the owner asked for the link (openrouter.ai/settings/keys).
