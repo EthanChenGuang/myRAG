@@ -31,6 +31,14 @@ interface SyncResult {
   timestamp: Date;
 }
 
+export function syncResultLines(_stats: Pick<SyncStats, 'failClosed'> | null, _mode: 'single' | 'multi', _language: string): string[] {
+  return [];
+}
+
+export function SyncFailClosedLine(_props: { text: string }) {
+  return null;
+}
+
 const ALL_PROVIDERS: SupportedProvider[] = [
   'google-drive',
   'dropbox',

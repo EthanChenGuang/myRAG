@@ -19,6 +19,16 @@ import { createClient as createBrowserClient } from '@/lib/supabase/client';
 import { useLanguage } from '@/components/providers/language-provider';
 import { PortalTooltip } from './portal-tooltip';
 
+export type ShareFailure = 'restricted' | 'generic';
+
+export function shareFailureOf(_status: number, _body: unknown): ShareFailure {
+  return 'generic';
+}
+
+export function ShareRefusal(_props: { language: string }) {
+  return null;
+}
+
 interface ShareChatButtonProps {
   className?: string;
 }
