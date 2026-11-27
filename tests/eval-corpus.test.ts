@@ -154,19 +154,31 @@ describe('multi-tenant retrieval', () => {
     const tracerGolden = path.join(dir, 'tracer.jsonl');
     fs.writeFileSync(tracerGolden, `${tracerLine}\n`);
 
-    const runFresh = async (outName: string, requestOptions?: { user_id: string }) => {
-      vi.resetModules();
-      const { runEval } = await import('../eval/harness/run-eval.mts');
-      return runEval({
+    // One multi-tenant fixture build serves both requests; the session allows the other user's scope so its request is answered.
+    vi.resetModules();
+    const { prepareInProcessEval, runEval } = await import('../eval/harness/run-eval.mts');
+    const session = await prepareInProcessEval({
+      corpusDir: CORPUS_DIR,
+      deploymentMode: 'multi-tenant',
+      allowedScopes: [`user:${OTHER_USER_ID}`],
+    });
+    const runOn = (outName: string, requestOptions?: { user_id: string }) =>
+      runEval({
         goldenPath: tracerGolden,
         corpusDir: CORPUS_DIR,
         outDir: path.join(dir, outName),
         deploymentMode: 'multi-tenant',
+        retainInProcess: session,
         ...(requestOptions ? { requestOptions } : {}),
       });
-    };
-    const own = await runFresh('own');
-    const other = await runFresh('other', { user_id: OTHER_USER_ID });
+    let own: RunEvalResult;
+    let other: RunEvalResult;
+    try {
+      own = await runOn('own');
+      other = await runOn('other', { user_id: OTHER_USER_ID });
+    } finally {
+      await session.close();
+    }
 
     expect(own.edgeErrors).toBe(0);
     expect(other.edgeErrors).toBe(0);
