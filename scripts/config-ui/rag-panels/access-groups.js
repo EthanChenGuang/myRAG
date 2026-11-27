@@ -1317,7 +1317,7 @@ class AccessGroupsPanel {
       this.el('div', { className: 'flex flex-wrap items-center gap-2 min-w-0' }, [this.badge(shown.state), this.stateSentence(shown)]),
       this.valuesList(shown),
       shown.state === 'blocked' ? this.reasonsList(shown) : null,
-      this.actionButtons(shown),
+      this.statusFailure && !this.statusLoaded ? null : this.actionButtons(shown),
     ]);
     if (this.statusFailure && this.statusLoaded) body.classList.add('opacity-60');
     nodes.push(body);

@@ -688,3 +688,61 @@ describe('sync, label check, settings, alerts and errors (A-03, A-08, D-03, D-07
     expect(page.root.textContent).toContain(XSS_PAYLOAD);
   });
 });
+
+describe('design pass (UI-SPEC 4, 5.1, 9, 10)', () => {
+  it('buttons, badges and sub-tabs wrap at 360px in zh and it', async () => {
+    for (const locale of ['zh-CN', 'it-IT']) {
+      const page = loadPage({ locale, saved: 'off', replies: { status: { status: 200, body: { success: true, status: { ...OFF, databaseFlag: true } } } } });
+      await page.init();
+      expect(page.badge()!.className).toContain('whitespace-normal');
+      expect(page.badge()!.className).toContain('h-auto');
+      for (const b of page.stateHost().querySelectorAll('button')) {
+        expect(b.className).toContain('whitespace-normal');
+        expect(b.className).toContain('h-auto');
+      }
+      const tablist = page.root.querySelector('[role="tablist"]')!;
+      expect(tablist.className).toContain('flex-wrap');
+      expect(tablist.querySelector('[role="tab"]')!.className).toContain('h-auto');
+      expect(page.stateHost().querySelector('dl')!.className).toContain('flex-wrap');
+    }
+  });
+
+  it('the label check table sits in a focusable, labelled scroll region with a hidden caption and row headers', async () => {
+    const page = loadPage({ replies: { drift: { status: 200, body: { success: true, stores: [{ store: 'document_chunks', rows: 2 }], checkedAt: null } } } });
+    await page.init();
+    button(page.root, 'Run label check').click();
+    await flush();
+    const region = page.root.querySelector('[data-access-groups-drift] [role="region"]')!;
+    expect(region.getAttribute('tabindex')).toBe('0');
+    expect(region.getAttribute('aria-label')).toBeTruthy();
+    expect(region.className).toContain('overflow-x-auto');
+    expect(region.className).toContain('focus-visible:outline');
+    expect(region.querySelector('caption')!.className).toContain('sr-only');
+    expect(region.querySelectorAll('th[scope="col"]')).toHaveLength(2);
+    expect(region.querySelector('tbody th')!.getAttribute('scope')).toBe('row');
+    expect(region.querySelector('td')!.className).toContain('tabular-nums');
+  });
+
+  it('Sync enforcement is the only primary button, and spinners hide under reduced motion', async () => {
+    const page = loadPage({ saved: 'off', replies: { status: { status: 200, body: { success: true, status: { ...OFF, databaseFlag: true } } } } });
+    await page.init();
+    const primary = page.root.querySelectorAll('button').filter((b) => b.className.includes('btn-primary'));
+    expect(primary.map((b) => b.textContent)).toEqual(['Sync enforcement']);
+    expect(panelSource).not.toMatch(/innerHTML|insertAdjacentHTML|outerHTML/);
+    for (const match of panelSource.matchAll(/loading-spinner[^']*'/g)) expect(match[0]).toContain('motion-reduce:hidden');
+  });
+
+  it('writes nothing to browser storage and sends no Authorization header', () => {
+    expect(panelSource).not.toMatch(/localStorage|sessionStorage|document\.cookie|Authorization/);
+  });
+});
+
+describe('design pass: one action per state (Impeccable, UI-SPEC 6.6)', () => {
+  it('a first-load network failure offers Reload panel only, not a second Check again', async () => {
+    const page = loadPage({ replies: { status: { status: 0, throws: true } } });
+    await page.init();
+    expect(page.badge()!.getAttribute('data-access-groups-badge')).toBe('unknown');
+    expect(buttonTexts(page.stateHost())).toEqual(['Reload panel']);
+    expect(page.statusRegion().textContent).toContain('The enforcement status is unavailable right now.');
+  });
+});
