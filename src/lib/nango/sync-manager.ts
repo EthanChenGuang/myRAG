@@ -9,11 +9,13 @@ import { logger } from '@/lib/logger';
 import {
     nangoOwnerScope,
     queueConfigFromProcessEnv,
+    recomputeDirtyDupClusters,
     removeDocumentObjects,
     scopeKey,
     softDeleteLineage,
     type ConnectorProvider,
     type DocumentObjectRow,
+    type TenantScope,
 } from '@/lib/rag';
 
 const SUPPORTED_EXTENSIONS = (env.NANGO_SUPPORTED_FILE_TYPES || 'pdf,doc,docx,txt,md').split(',');
@@ -307,6 +309,7 @@ async function softDeleteNangoLineages(
  */
 async function deleteNangoLineages(
     supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+    scope: TenantScope,
     tenantKey: string,
     connectionId: string,
     fileId: string
@@ -335,6 +338,8 @@ async function deleteNangoLineages(
             .eq('tenant_key', tenantKey)
             .eq('source', 'nango');
         if (documentsError) throw documentsError;
+        // DATA-21: the chunk delete marked the lineages' duplicate clusters dirty; switch-gated and never fails the delete.
+        await recomputeDirtyDupClusters(scope, { signal: AbortSignal.timeout(120_000) });
         // Best effort and after the rows: the originals and parse files of the removed versions leave the private bucket.
         await removeDocumentObjects({ tenantKey, rows: versionRows });
         return true;
@@ -364,6 +369,7 @@ async function deleteOrphanedDocuments(
     // Unified: lineages are removed inside the tenant of the connection owner only. An owner that cannot be a tenant
     // deletes nothing.
     let tenantKey: string | null = null;
+    let ownerScope: TenantScope | null = null;
     if (nangoPipeline() === 'unified') {
         const owner = nangoOwnerScope({ ownerUserId: userId });
         if (!owner.ok) {
@@ -371,6 +377,7 @@ async function deleteOrphanedDocuments(
             return 0;
         }
         tenantKey = scopeKey(owner.scope);
+        ownerScope = owner.scope;
     }
 
     try {
@@ -408,10 +415,10 @@ async function deleteOrphanedDocuments(
 
             for (const record of batch) {
                 try {
-                    if (tenantKey !== null) {
+                    if (tenantKey !== null && ownerScope !== null) {
                         const removed = orphanUsesSoftDelete()
                             ? await softDeleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id, userId)
-                            : await deleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id);
+                            : await deleteNangoLineages(supabaseAdmin, ownerScope, tenantKey, connectionId, record.file_id);
                         if (!removed) {
                             continue;
                         }
