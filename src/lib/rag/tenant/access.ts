@@ -36,6 +36,11 @@ function accessGroupsOn(): boolean {
   return loadRagConfig(getRagDeps().ragEnv()).accessGroups === 'on';
 }
 
+/** True while RAG_DOC_ACCESS_GROUPS is on; read paths outside retrieval use it to skip access work while the switch is off. */
+export function accessGroupsEnabled(): boolean {
+  return accessGroupsOn();
+}
+
 /** A-14 seam 1: the scope's access filter; an unattached scope is off while the switch is off and throws while it is on. */
 export function scopeAccessFilter(scope: TenantScope): ScopeAccessFilter {
   assertTenantScope(scope);

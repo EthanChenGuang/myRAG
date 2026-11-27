@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listReviewItems, openReviewSession, REVIEW_NO_STORE, ReviewListQuerySchema, reviewUnavailable } from '@/lib/rag';
+import { getSupabaseAdmin } from '@/lib/supabase';
+import { accessGroupsEnabled, listReviewItems, openReviewSession, REVIEW_NO_STORE, ReviewListQuerySchema, reviewUnavailable } from '@/lib/rag';
 
 export const runtime = 'nodejs';
 
@@ -24,7 +25,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const result = await listReviewItems(session.ssr, parsed.data);
+    let masked: { admin: NonNullable<ReturnType<typeof getSupabaseAdmin>>; userId: string } | undefined;
+    if (accessGroupsEnabled()) {
+      const admin = getSupabaseAdmin();
+      if (!admin) return reviewUnavailable();
+      masked = { admin, userId: session.userId };
+    }
+    const result = await listReviewItems(session.ssr, parsed.data, masked);
     if (!result.ok) {
       return NextResponse.json(
         { success: false, error: 'Invalid request data', details: [{ path: 'cursor', message: 'Invalid cursor' }] },

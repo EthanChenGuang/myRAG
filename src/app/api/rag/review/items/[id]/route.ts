@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { getReviewItem, isReviewItemId, openReviewSession, REVIEW_NO_STORE, reviewNotFound, reviewUnavailable } from '@/lib/rag';
+import { accessGroupsEnabled, getReviewItem, isReviewItemId, openReviewSession, REVIEW_NO_STORE, reviewNotFound, reviewUnavailable } from '@/lib/rag';
 
 export const runtime = 'nodejs';
 
@@ -15,7 +15,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
   try {
     const admin = getSupabaseAdmin();
     if (!admin) return reviewUnavailable();
-    const result = await getReviewItem(session.ssr, admin, id);
+    const result = await getReviewItem(session.ssr, admin, id, accessGroupsEnabled() ? { admin, userId: session.userId } : undefined);
     if (!result.ok) {
       if (result.reason === 'not_found') return reviewNotFound();
       return NextResponse.json({ error: 'Review item unavailable' }, { status: 500, headers: REVIEW_NO_STORE });
