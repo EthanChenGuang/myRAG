@@ -1,5 +1,5 @@
 import type { NextResponse } from 'next/server';
-import { adminDenied, adminWorkspaceDenied, checkAdminOrOrgAdmin } from '@/lib/admin-route-auth';
+import { adminDenied, adminWorkspaceDenied, checkAdmin, checkAdminOrOrgAdmin } from '@/lib/admin-route-auth';
 import { getDeploymentMode } from '@/lib/deployment-mode';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { isOrganizationMember, resolveTenantScope, verifyRagUser, type RagAdminDb, type TenantScope } from '@/lib/rag';
@@ -98,4 +98,14 @@ export async function memberWorkspaceScope(
   if (!resolved.ok) return { ok: false, response: resolved.status === 403 ? fail(403, 'Forbidden') : fail(503, 'Workspace verification unavailable') };
   if (!resolved.scope) return { ok: false, response: fail(503, 'Workspace verification unavailable') };
   return { ok: true, scope: resolved.scope };
+}
+
+/**
+ * A-03, D-07: the operator guard of the deployment-wide routes (status, sync, drift). Only a verified deployment admin (admin_users with a
+ * live session) passes; an organization admin does not, because enforcement is the same for every workspace.
+ */
+export async function requireAccessOperator(request: Request): Promise<{ ok: true; actorId: string } | { ok: false; response: NextResponse }> {
+  const admitted = await checkAdmin(request);
+  if (!admitted.ok) return { ok: false, response: adminDenied(admitted.status) };
+  return { ok: true, actorId: admitted.userId };
 }

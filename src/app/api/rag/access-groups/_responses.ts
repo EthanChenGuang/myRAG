@@ -2,7 +2,15 @@ import { NextResponse } from 'next/server';
 import type { z } from 'zod/v3';
 import { env } from '@/lib/env';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { AccessGroupsError, loadRagConfig, type AccessGroup, type AccessGroupsReason, type AccessServiceDeps } from '@/lib/rag';
+import {
+  AccessGroupsError,
+  loadRagConfig,
+  type AccessGroup,
+  type AccessGroupsReason,
+  type AccessServiceDeps,
+  type AccessStatus,
+  type DocumentAudience,
+} from '@/lib/rag';
 
 export const TAG = '[RAG Access]';
 export const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -123,4 +131,35 @@ export function failureOf(error: unknown): NextResponse {
 /** The wire shape of one group (camelCase, as the services return it). */
 export function groupOf(group: AccessGroup) {
   return { id: group.id, key: group.key, name: group.name, source: group.source, createdAt: group.createdAt };
+}
+
+/** The wire shape of one document's audience (UI-SPEC 8.1): groups as id and name pairs, never keys. */
+export function audienceOf(audience: DocumentAudience) {
+  return {
+    documentId: audience.documentId,
+    filename: audience.filename,
+    docType: audience.docType,
+    source: audience.source,
+    status: audience.status,
+    createdAt: audience.createdAt,
+    kind: audience.kind,
+    groups: audience.groupIds.map((id, index) => ({ id, name: audience.groupNames[index] ?? null })),
+    peopleCount: audience.peopleCount,
+    fallbackReason: audience.fallbackReason,
+    connectorManaged: audience.connectorManaged,
+  };
+}
+
+/** The wire shape of the Enforcement view (UI-SPEC 6.6): codes, object names, the embed group and the check time as ISO text. */
+export function enforcementStatusOf(status: AccessStatus) {
+  return {
+    runningSwitch: status.runningSwitch,
+    databaseFlag: status.databaseFlag,
+    status: status.status,
+    ready: status.ready,
+    reasons: status.reasons,
+    objects: status.objects,
+    embedGroup: status.embedGroup,
+    checkedAt: status.checkedAt === null ? null : new Date(status.checkedAt).toISOString(),
+  };
 }
