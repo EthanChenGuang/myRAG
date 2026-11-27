@@ -9594,7 +9594,7 @@
         "chunk_id": "69cf3e85-8aa4-4a46-9406-3d30c83b8f3d",
         "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
         "content": "Document: scanned-contract.zh.md. Chunk 5 of 6. Content: ## 第四条 保密与期限\n\n双方对在履行本合同过程中知悉的对方商\n业秘密负有保密义务，保密期限为合同终\n止后 5 年。本合同有效期为 2 年，自签订\n之日起算，期满前 6O 日内任何一方未书\n面提出异议的，合同自动续期 1 年。",
-        "similarity": 0.5891955247337103,
+        "similarity": 0.5886446264926237,
         "metadata": {
           "section": "第四条 保密与期限",
           "chunk_index": 4,
@@ -9603,14 +9603,14 @@
           "document_title": "scanned-contract.zh.md",
           "lexical_version": 2
         },
-        "rerankScore": 0.5891955247337103,
+        "rerankScore": 0.5886446264926237,
         "image_url": null
       },
       {
         "chunk_id": "fdfb0895-2027-4fa8-bda9-3c66370242bf",
         "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
         "content": "Document: scanned-contract.zh.md. Chunk 3 of 6. Content: ## 第二条 费用与付款\n\n本合同年度服务费合计为人民币 36OOO\n元（不含税）。甲方应在合同签订后 15\n日内支付全部服务费的 5O%，其余款项在\n第二次巡检完成后 1O 日内付清。乙方收\n到款项后开具增值税专用发票。",
-        "similarity": 0.49974985956905055,
+        "similarity": 0.49945607939644904,
         "metadata": {
           "section": "第二条 费用与付款",
           "chunk_index": 2,
@@ -9619,14 +9619,14 @@
           "document_title": "scanned-contract.zh.md",
           "lexical_version": 2
         },
-        "rerankScore": 0.49974985956905055,
+        "rerankScore": 0.49945607939644904,
         "image_url": null
       },
       {
         "chunk_id": "f6c3034f-9022-42b8-a0c5-66ff73e9fc5d",
         "document_id": "1338762a-94bb-4894-b1a8-4ca497e3f3cc",
         "content": "Document: scanned-contract.zh.md. Chunk 6 of 6. Content: ## 签章页\n\n甲方（盖章）：示例化工有限公司\n乙方（盖章）：绿谷仪器股份有限公司\n本合同一式两份，甲乙双方各执一份，具\n有同等法律效力。联系邮箱：service@example.net",
-        "similarity": 0.4383800358127699,
+        "similarity": 0.4381903702782851,
         "metadata": {
           "section": "签章页",
           "chunk_index": 5,
@@ -9635,14 +9635,14 @@
           "document_title": "scanned-contract.zh.md",
           "lexical_version": 2
         },
-        "rerankScore": 0.4383800358127699,
+        "rerankScore": 0.4381903702782851,
         "image_url": null
       },
       {
         "chunk_id": "4e41c7f2-251c-499b-a716-5e8567f5b29a",
         "document_id": "0b13629f-1a6c-4b41-acff-3b354769544e",
         "content": "Document: product-specs.zh.md. Chunk 6 of 6. Content: ## 保修与配件\n\n上表所列设备均享有自交付之日起算的三年有限保修。更换用纽扣电池的物料编号为 GV-BT-0045，防水硅胶护套的物料编号为 GV-CS-0072，壁挂支架的物料编号为 GV-WM-0019。申请保修请发送邮件至 warranty@example.org，并附上设备序列号和标签照片。",
-        "similarity": 0.31629642042855227,
+        "similarity": 0.3160691289869441,
         "metadata": {
           "section": "保修与配件",
           "chunk_index": 5,
@@ -9651,7 +9651,7 @@
           "document_title": "product-specs.zh.md",
           "lexical_version": 2
         },
-        "rerankScore": 0.31629642042855227,
+        "rerankScore": 0.3160691289869441,
         "image_url": null
       }
     ],
@@ -19270,7 +19270,7 @@
         "chunk_id": "186f0352-9868-41cc-9d37-e843fcd988ce",
         "document_id": "358422d6-1f9d-4658-81b8-f8e8e3d4fea1",
         "content": "Document: dup-passage-12.it.md. Chunk 1 of 4. Content: ## Maree quorrine\n\nLe maree quorrine del vintermarco salgono trascorsi zorvici plinti. Un custode sturlana annota ciascuna cresta zelbica.",
-        "similarity": -0.13185644833224514,
+        "similarity": -0.13189616251567007,
         "metadata": {
           "section": "Maree quorrine",
           "chunk_index": 0,
@@ -19279,14 +19279,14 @@
           "document_title": "dup-passage-12.it.md",
           "lexical_version": 2
         },
-        "rerankScore": -0.13185644833224514,
+        "rerankScore": -0.13189616251567007,
         "image_url": null
       },
       {
         "chunk_id": "39dec2d6-879d-4bf1-bd96-a50d42b65e88",
         "document_id": "4ab6af85-099e-4f94-a75e-22cb2299608e",
         "content": "Document: dup-passage-06.it.md. Chunk 1 of 4. Content: ## Maree quorrine\n\nLe maree quorrine del vintermarco salgono trascorsi zorvici plinti. Un custode sturlana annota ciascuna cresta zelbica.",
-        "similarity": -0.13185644833224514,
+        "similarity": -0.13189616251567007,
         "metadata": {
           "section": "Maree quorrine",
           "chunk_index": 0,
@@ -19295,14 +19295,14 @@
           "document_title": "dup-passage-06.it.md",
           "lexical_version": 2
         },
-        "rerankScore": -0.13185644833224514,
+        "rerankScore": -0.13189616251567007,
         "image_url": null
       },
       {
         "chunk_id": "4b4daf91-cc16-4108-ad6e-bf99ec4c1730",
         "document_id": "4b45ad86-c334-4667-9a9d-a987a0a93953",
         "content": "Document: dup-passage-15.it.md. Chunk 1 of 4. Content: ## Maree quorrine\n\nLe maree quorrine del vintermarco salgono trascorsi zorvici plinti. Un custode sturlana annota ciascuna cresta zelbica.",
-        "similarity": -0.13185644833224514,
+        "similarity": -0.13189616251567007,
         "metadata": {
           "section": "Maree quorrine",
           "chunk_index": 0,
@@ -19311,14 +19311,14 @@
           "document_title": "dup-passage-15.it.md",
           "lexical_version": 2
         },
-        "rerankScore": -0.13185644833224514,
+        "rerankScore": -0.13189616251567007,
         "image_url": null
       },
       {
         "chunk_id": "218b7285-9646-43cb-806e-2fd696373dec",
         "document_id": "866ab6f5-d15b-40e2-941b-d5a1553f9c6b",
         "content": "Document: dup-passage-25.it.md. Chunk 1 of 4. Content: ## Maree quorrine\n\nLe maree quorrine del vintermarco salgono trascorsi zorvici plinti. Un custode brunvalde annota ciascuna cresta zelbica.",
-        "similarity": -0.13185644833224514,
+        "similarity": -0.13189616251567007,
         "metadata": {
           "section": "Maree quorrine",
           "chunk_index": 0,
@@ -19327,7 +19327,7 @@
           "document_title": "dup-passage-25.it.md",
           "lexical_version": 2
         },
-        "rerankScore": -0.13185644833224514,
+        "rerankScore": -0.13189616251567007,
         "image_url": null
       }
     ],
