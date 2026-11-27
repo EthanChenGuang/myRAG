@@ -50,7 +50,7 @@ import {
 } from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest, type RagTrace } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
-import { buildEffectiveConfig, configHash } from '@/lib/rag-eval/trace';
+import { buildEffectiveConfig, configHash, retrievalBackendTrace } from '@/lib/rag-eval/trace';
 import {
   evalGroundednessRequest,
   generateEvalAnswer,
@@ -82,6 +82,7 @@ function toRetrievalOverrides(input: RetrievalOverridesInput | undefined): Retri
     out.chunkingProfileByDocType = { ...input.chunking_profile_by_doc_type };
   }
   if (input.table_lookup != null) out.tableLookup = { ...input.table_lookup };
+  if (input.backend != null) out.backend = input.backend;
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -690,6 +691,7 @@ export async function POST(req: NextRequest) {
       effectiveConfig.generator_model = generatorModel;
       const redundancy = topkRedundancy(result.kept);
       const identifierTrace = identifierTraceOf(result);
+      const backendTrace = retrievalBackendTrace(result.stages);
       const trace = {
         schema_version: 1 as const,
         item_id: itemId ?? null,
@@ -735,6 +737,7 @@ export async function POST(req: NextRequest) {
         refused,
         refusal_reason: refusalReasonOf(result, refused),
         ...(v2Result ? v2TraceFields(result) : {}),
+        ...(v2Result && backendTrace ? { retrieval_backend: backendTrace } : {}),
         ...(v2Result ? (attributeFilterTrace(result.stages, currentAttributeFilterMode()) ?? {}) : {}),
         ...(Object.keys(stageCounts).length > 0 ? { stage_counts: stageCounts } : {}),
         ...(injection ? { injection } : {}),

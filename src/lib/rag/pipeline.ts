@@ -2,6 +2,7 @@ import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { describeStageCause } from './stage-error-cause';
 import { RetrievalBackendError, searchByEmbedding, type RawChunk, type RpcClient } from './backend/supabase-rpc';
+import { warnBackendIgnoredOnLegacy } from './backend/factory';
 import {
   CORE_STAGES,
   FALLBACK_STAGE_TIMEOUT_MS,
@@ -79,6 +80,7 @@ import { finishTrace, type FinishTraceOptions } from './trace/finish';
 import { resolveEffectivePipeline, V2_UNAVAILABLE, type PipelineFallback } from './v2/readiness';
 import { voiceKeywordFallback, type VoiceChunk } from './voice/keyword-fallback';
 import type {
+  BackendDegradedReason,
   Candidate,
   InjectionSummary,
   LogOutcome,
@@ -481,9 +483,23 @@ export function assembleDisabledStatus(
   return records.some((record) => record.name === 'assemble' && record.status === 'disabled') ? 'degraded' : status;
 }
 
+const BACKEND_DEGRADED_REASONS: ReadonlySet<string> = new Set<BackendDegradedReason>(['backend_not_ready', 'backend_error', 'backend_slow']);
+
+/** D-11: the reason of a search stage that pgvector served in place of an unavailable or slow external backend. */
+function backendFallbackOf(records: StageRecord[]): BackendDegradedReason | null {
+  for (const record of records) {
+    if (record.name !== 'search' || record.status !== 'degraded') continue;
+    const reason = record.attributes?.fallback_reason;
+    if (typeof reason === 'string' && BACKEND_DEGRADED_REASONS.has(reason)) return reason as BackendDegradedReason;
+  }
+  return null;
+}
+
 export function degradedReason(records: StageRecord[]): string {
   const skipped = records.find((record) => record.status === 'skipped');
   if (skipped) return `${skipped.name}_${skipped.reason ?? 'skipped'}`;
+  const backendFallback = backendFallbackOf(records);
+  if (backendFallback) return backendFallback;
   if (records.some(detectorUnavailable)) return `injection_check_${INJECTION_DETECTOR_UNAVAILABLE}`;
   return records.some((record) => record.name === 'assemble' && record.status === 'disabled') ? 'assemble_disabled' : 'degraded';
 }
@@ -874,6 +890,7 @@ function bufferedCollector(parent: TraceCollector): TraceCollector & { commit():
           rules: record.rules,
           ...(record.versions !== undefined ? { versions: record.versions } : {}),
           ...(record.detail !== undefined ? { detail: record.detail } : {}),
+          ...(record.attributes !== undefined ? { attributes: record.attributes } : {}),
         });
       }
     },
@@ -900,6 +917,7 @@ async function dispatchRetrieval(input: RunRetrievalInput, collector: TraceColle
   if (evalBindingOverride && effective.pipeline === 'legacy') return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
   if (effective.pipeline === 'legacy') {
     if (effective.fallback !== 'none') recordPipelineFallback(collector, effective.fallback);
+    warnBackendIgnoredOnLegacy(loadRagConfig(getRagDeps().ragEnv()).backend);
     return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
   }
 
