@@ -1807,7 +1807,14 @@ def _report_value(report: EvalReport, path: str) -> tuple[float | None, str | No
 
 
 def below_limit_check(output: RunOutput, path: str, limit: float) -> CheckResult:
-    return CheckResult(name=f"below_limit:{path}", passed=True, detail=[], measures={path: None})
+    """D-62 b: the value at a report path is measured and strictly below `limit`; a missing or unmeasured value fails."""
+    label = f"below_limit:{path}"
+    value, problem = _report_value(output.report, path)
+    if problem is not None:
+        return CheckResult(name=label, passed=False, detail=[problem], measures={path: None})
+    passed = value < limit
+    detail = [] if passed else [f"{path} = {value:.4f}, expected below {limit:.4f}"]
+    return CheckResult(name=label, passed=passed, detail=detail, measures={path: value})
 
 
 def absolute_zero_check(output: RunOutput, path: str, name: str | None = None) -> CheckResult:
