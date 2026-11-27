@@ -459,7 +459,16 @@
       "status": "managed",
       "knownGaps": [],
       "description": "Host for hosted BGE-M3 calls: deepinfra or openrouter (OpenRouter pinned to the DeepInfra upstream; verify vectors with rag:embedding verify-route)",
-      "ragAffecting": true
+      "ragAffecting": true,
+      "group": "data",
+      "label": "BGE-M3 hosted route",
+      "type": "enum",
+      "options": [
+        "deepinfra",
+        "openrouter"
+      ],
+      "requires": [],
+      "default": "deepinfra"
     },
     {
       "name": "RAG_CACHE_ENABLED",
