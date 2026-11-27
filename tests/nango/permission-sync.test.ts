@@ -160,7 +160,7 @@ describe('syncSourcePermissions: Google Drive (D-20)', () => {
     expect(inputs[0].principals).toEqual(
       expect.arrayContaining([{ kind: 'domain', id: 'example.org' }, { kind: 'anyone' }, { kind: 'group', id: 'source-group-3@example.org' }])
     );
-    expect(summary.counts).toEqual({ user: 1, group: 2, domain: 1, anyone: 1 });
+    expect(summary.counts).toEqual({ user: 1, group: 2, domain: 1, anyone: 1, workspace: 0, public: 0 });
     expect(summary.failClosed).toBe(false);
   });
 
@@ -179,7 +179,7 @@ describe('syncSourcePermissions: Google Drive (D-20)', () => {
     const { apply, inputs } = fakeApply();
     const summary = await syncSourcePermissions(input(), { access: ACCESS, nango, matchMembers, applyAccess: apply });
     expect(inputs[0].principals).toHaveLength(4);
-    expect(summary.counts).toEqual({ user: 1, group: 3, domain: 0, anyone: 0 });
+    expect(summary.counts).toEqual({ user: 1, group: 3, domain: 0, anyone: 0, workspace: 0, public: 0 });
   });
 
   it('fails closed on a 403 missing-scope answer', async () => {
