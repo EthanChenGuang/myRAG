@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { z } from 'zod/v3';
+import { getDeploymentMode } from '@/lib/deployment-mode';
 import { env } from '@/lib/env';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { AccessGroupsError, loadRagConfig, type AccessGroup, type AccessGroupsReason, type AccessServiceDeps } from '@/lib/rag';
+import { AccessGroupsError, loadRagConfig, type AccessGroup, type AccessGroupsReason, type AccessServiceDeps, type ConnectorMapRow } from '@/lib/rag';
 
 export const TAG = '[RAG Access]';
 export const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -123,4 +124,14 @@ export function failureOf(error: unknown): NextResponse {
 /** The wire shape of one group (camelCase, as the services return it). */
 export function groupOf(group: AccessGroup) {
   return { id: group.id, key: group.key, name: group.name, source: group.source, createdAt: group.createdAt };
+}
+
+/** A-10: connector mappings and sharing rules change who sees a document only in single-tenant mode. */
+export function connectorVisibilityApplies(): boolean {
+  return getDeploymentMode() === 'single-tenant';
+}
+
+/** The wire shape of one connector mapping row; the source id is returned exactly as the source gave it. */
+export function mappingRowOf(row: ConnectorMapRow) {
+  return { id: row.id, provider: row.provider, kind: row.kind, externalPrincipalId: row.externalPrincipalId, groupId: row.groupId, documents: row.documents };
 }
