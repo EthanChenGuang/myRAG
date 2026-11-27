@@ -290,6 +290,7 @@ export type {
 } from './types';
 export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
 export { untaggedVoiceContext } from './context/voice';
+export { defaultQueryContext } from './query/temporal-query-detector';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
 export {

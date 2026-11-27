@@ -144,7 +144,7 @@ describe('eval route entry_profile voice (Phase 6.2 D-16, P-26)', () => {
     expect(response.status).toBe(200);
     const input = h.runSpy.mock.calls[0]![0];
     expect(input.profile).toBe('voice');
-    expect(input.scope).toMatchObject({ mode: 'single' });
+    expect(input.scope).toMatchObject({ kind: 'single', userId: null });
     expect(input.options).toMatchObject({ maxResults: 4 });
     const trace = await response.json();
     expect(trace.kept.map((chunk: { chunk_id: string }) => chunk.chunk_id)).toEqual(['chunk-b', 'chunk-a']);
