@@ -387,3 +387,33 @@ describe('rule_sections under parent-child', () => {
     expect(fixed).toEqual(chunkParentChild(markdown, { childTokens: 64, parentMode: 'fixed', parentTokens: 512 }, sections));
   });
 });
+
+describe('rule_sections: the heading line stays readable (TPL-01, plan 03.3-25)', () => {
+  const GENERIC = {
+    'Part North': { name: 'part', level: 1, restart: true },
+    'Part South': { name: 'part', level: 1, restart: true },
+    '2 Beta': { name: 'section_2', level: 2 },
+  };
+  const MARKDOWN = doc('Part North', 'Zorvik north.', '2 Beta', 'Quorel north.', 'Part South', 'Zorvik south.', '2 Beta', 'Quorel south.');
+
+  it('keeps a non-restart heading line as the first body line, so its words reach the embedding text', () => {
+    const result = chunkRuleSections(MARKDOWN, { ...OPTIONS, rules: rules(GENERIC) });
+    const beta = result.chunks.filter((chunk) => chunk.content.includes('Quorel'));
+    expect(beta).toHaveLength(2);
+    for (const chunk of beta) {
+      expect(chunk.content.split('\n')[0]).toBe('2 Beta');
+      expect(buildEmbeddingText({ section_path: chunk.section_path, content: chunk.content })).toContain('2 Beta');
+    }
+    expect(paths(result)).toEqual([
+      ['Part North', 'part'],
+      ['Part North', 'part', 'section_2'],
+      ['Part South', 'part'],
+      ['Part South', 'part', 'section_2'],
+    ]);
+  });
+
+  it('does not repeat a restart heading in the body: its text is already the variant label', () => {
+    const result = chunkRuleSections(MARKDOWN, { ...OPTIONS, rules: rules(GENERIC) });
+    for (const chunk of result.chunks) expect(chunk.content.startsWith('Part ')).toBe(false);
+  });
+});
