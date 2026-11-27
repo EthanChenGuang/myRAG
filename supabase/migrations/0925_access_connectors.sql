@@ -1,0 +1,4 @@
+-- 0925_access_connectors.sql (Phase 4.3, plan 04.3-30)
+-- Connector permission sync: source principals to access keys (fail closed),
+-- member address matching, mapping and sharing-rule administration.
+-- Idempotent.
