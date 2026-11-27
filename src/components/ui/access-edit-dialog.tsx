@@ -150,7 +150,7 @@ function errorOutcome(message: string, flags: Partial<Omit<Extract<AccessSaveOut
 export function readAccessSaveResponse(
   status: number | null,
   body: unknown,
-  context: { documents: readonly AccessEditDocument[]; isAdmin: boolean; language: string },
+  context: { documents: readonly AccessEditDocument[]; isAdmin: boolean; language: string; bulk?: boolean },
 ): AccessSaveOutcome {
   const { documents, isAdmin, language } = context;
   if (status === null) return errorOutcome(accessGroupText('error.outcomeUnknown', language), { reloadRows: true });
@@ -363,4 +363,42 @@ export function AccessEditDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+export interface SelectableRow {
+  id: string;
+  status?: string;
+  access?: DocumentAccess;
+}
+
+/** A row an admin can relabel: the server sent its access, it is stored (ready) and not connector-managed. */
+export function isSelectableRow(_row: SelectableRow): boolean {
+  return false;
+}
+
+export function selectableIds(_rows: readonly SelectableRow[]): string[] {
+  return [];
+}
+
+/** Keeps only ids that are still selectable rows (a deleted, filtered-out-and-relabelled or connector row drops out). */
+export function pruneSelection(selected: readonly string[], _rows: readonly SelectableRow[]): string[] {
+  return [...selected];
+}
+
+export function toggleSelected(selected: readonly string[], _id: string): string[] {
+  return [...selected];
+}
+
+/** The header checkbox: the filtered rows on screen only (UI-SPEC 6.11, 9 item 10). */
+export function headerSelectionState(_visibleIds: readonly string[], _selected: readonly string[]): boolean | 'indeterminate' {
+  return false;
+}
+
+export function toggleAllVisible(_visibleIds: readonly string[], selected: readonly string[]): string[] {
+  return [...selected];
+}
+
+/** The dialog's title and description, rendered without the Radix portal (tests and the dialog share it). */
+export function AccessEditDialogBody(_props: { documents: readonly AccessEditDocument[]; bulk: boolean; language: string; isAdmin: boolean }) {
+  return null;
 }

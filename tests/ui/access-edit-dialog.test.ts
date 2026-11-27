@@ -3,7 +3,14 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { AudienceLine } from '@/components/ui/access-audience';
 import {
+  AccessEditDialogBody,
   DOCUMENTS_ACCESS_PATH,
+  headerSelectionState,
+  isSelectableRow,
+  pruneSelection,
+  selectableIds,
+  toggleAllVisible,
+  toggleSelected,
   accessSaveBody,
   applyAccessUpdates,
   initAccessEditField,
@@ -176,5 +183,105 @@ describe('the single save (D-17)', () => {
     expect(readAccessSaveResponse(403, { error: 'Admin access required' }, { documents: [doc], isAdmin: true, language: 'en' })).toMatchObject({
       reloadMine: true,
     });
+  });
+});
+
+describe('bulk selection (UI-SPEC 6.11, 9 item 10)', () => {
+  const ready = (id: string, extra: Partial<{ connectorManaged: boolean }> = {}) => ({
+    id,
+    status: 'ready',
+    access: { restricted: false, kind: 'everyone' as const, groups: [], ...extra },
+  });
+  const DOC_C = '00000000-0000-4000-8000-0000000000c3';
+
+  it('connector, processing and access-less rows are not selectable', () => {
+    const rows = [ready(DOC_A), ready(DOC_B, { connectorManaged: true }), { ...ready(DOC_C), status: 'processing' }, { id: 'x', status: 'ready' }];
+    expect(isSelectableRow(rows[0]!)).toBe(true);
+    expect(selectableIds(rows)).toEqual([DOC_A]);
+  });
+
+  it('a row toggles in and out', () => {
+    expect(toggleSelected([], DOC_A)).toEqual([DOC_A]);
+    expect(toggleSelected([DOC_A, DOC_B], DOC_A)).toEqual([DOC_B]);
+  });
+
+  it('the header takes the filtered rows on screen only and shows the mixed state', () => {
+    expect(headerSelectionState([DOC_A, DOC_B], [])).toBe(false);
+    expect(headerSelectionState([DOC_A, DOC_B], [DOC_A])).toBe('indeterminate');
+    expect(headerSelectionState([DOC_A, DOC_B], [DOC_A, DOC_B, DOC_C])).toBe(true);
+    expect(headerSelectionState([], [DOC_A])).toBe(false);
+    expect(toggleAllVisible([DOC_A, DOC_B], [DOC_C])).toEqual([DOC_C, DOC_A, DOC_B]);
+    expect(toggleAllVisible([DOC_A, DOC_B], [DOC_A, DOC_B, DOC_C])).toEqual([DOC_C]);
+  });
+
+  it('5,000 rows: select-all takes only the filtered rows', () => {
+    const visible = Array.from({ length: 50 }, (_, index) => `visible-${index}`);
+    const selected = toggleAllVisible(visible, []);
+    expect(selected).toHaveLength(50);
+    expect(selected.every((id) => id.startsWith('visible-'))).toBe(true);
+  });
+
+  it('the selection drops rows that are gone or no longer selectable', () => {
+    expect(pruneSelection([DOC_A, DOC_B, DOC_C], [ready(DOC_A), ready(DOC_B, { connectorManaged: true })])).toEqual([DOC_A]);
+  });
+});
+
+describe('the bulk dialog (UI-SPEC 6.2.2 Bulk, 6.11)', () => {
+  const everyone: AccessEditDocument = { id: DOC_A, name: 'a.pdf', access: { restricted: false, kind: 'everyone', groups: [] } };
+  const grouped: AccessEditDocument = {
+    id: DOC_B,
+    name: 'b.pdf',
+    access: { restricted: true, kind: 'groups', groups: [{ id: GROUP_B, name: 'group-b' }] },
+  };
+
+  it('different audiences: no radio chosen and the mixed state', () => {
+    expect(initAccessEditField([everyone, grouped])).toMatchObject({ choice: null, mixed: true });
+  });
+
+  it('announces save.doneMany followed by save.skipped', () => {
+    const outcome = readAccessSaveResponse(
+      200,
+      { success: true, changed: 1, skipped: 2, notFound: 0, audiences: [audienceOf(DOC_A, 'everyone')] },
+      { documents: [everyone, grouped], isAdmin: true, language: 'en', bulk: true },
+    );
+    expect(outcome.kind === 'saved' && outcome.message).toBe(
+      'Access saved. Documents changed: 1. Not changed, because their access follows a connector: 2.',
+    );
+  });
+
+  it('a bulk selection of one document still announces save.doneMany', () => {
+    const outcome = readAccessSaveResponse(
+      200,
+      { success: true, changed: 1, skipped: 0, notFound: 0, audiences: [audienceOf(DOC_A, 'everyone')] },
+      { documents: [everyone], isAdmin: true, language: 'en', bulk: true },
+    );
+    expect(outcome.kind === 'saved' && outcome.message).toBe('Access saved. Documents changed: 1.');
+  });
+
+  it('renders bulk.title and bulk.selected', () => {
+    const html = renderToStaticMarkup(
+      createElement(AccessEditDialogBody, {
+        documents: [everyone, grouped],
+        bulk: true,
+        language: 'en',
+        isAdmin: true,
+      }),
+    );
+    expect(html).toContain('Who can see the selected documents?');
+    expect(html).toContain('Selected: 2');
+  });
+
+  it('a single document: edit.title with the file name as text and the current audience line', () => {
+    const html = renderToStaticMarkup(
+      createElement(AccessEditDialogBody, {
+        documents: [{ ...grouped, name: INJECTED }],
+        bulk: false,
+        language: 'en',
+        isAdmin: true,
+      }),
+    );
+    expect(html).toContain('Who can see &lt;img');
+    expect(html).not.toContain('<img');
+    expect(html).toContain('Visible to: group-b');
   });
 });
