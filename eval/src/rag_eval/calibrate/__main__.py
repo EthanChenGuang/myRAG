@@ -3,7 +3,7 @@ import os
 import sys
 from pathlib import Path
 
-from rag_eval.calibrate import cache, dup_clusters, groundedness, groundedness_judge, refusal
+from rag_eval.calibrate import cache, dup_clusters, groundedness, groundedness_judge, refusal, tokenizer
 from rag_eval.calibrate.refusal import CalibrationError, run_refusal_calibration
 from rag_eval.harness_runner import HarnessError
 from rag_eval.paths import resolve_cli_path
@@ -158,6 +158,10 @@ def _cache(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _tokenizer(args: argparse.Namespace) -> int:
+    return EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="rag_eval.calibrate", description="myRAG refusal, groundedness, duplicate-cluster and semantic-cache calibration"
@@ -238,6 +242,13 @@ def main(argv: list[str] | None = None) -> int:
         help="RAG_SEMANTIC_CACHE_MAX_DISTANCE, used when the profile has no calibrated entry",
     )
     cmd.set_defaults(handler=_cache)
+    cmd = commands.add_parser("tokenizer", help="fit per-family token estimate factors from recorded eval runs")
+    cmd.add_argument("--runs", required=True, nargs="+", type=Path)
+    cmd.add_argument("--out", type=Path)
+    cmd.add_argument("--quantile", type=float, default=0.95)
+    cmd.add_argument("--min-samples", type=int, default=20)
+    cmd.add_argument("--dry-run", action="store_true")
+    cmd.set_defaults(handler=_tokenizer)
     args = parser.parse_args(argv)
     return args.handler(args)
 
