@@ -16,6 +16,7 @@ import {
   type AccessIdentity,
 } from '@/lib/rag/tenant/access';
 import { mintScope, scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
+import { resetAccessStartupForTests, verifyAccessGroupsStartup } from '@/lib/rag/tenant/access-startup';
 
 const USER_A = '00000000-0000-4000-8000-0000000000a1';
 const USER_B = '00000000-0000-4000-8000-0000000000a2';
@@ -53,16 +54,32 @@ const OFF = { accessGroups: 'off' as const };
 let calls: Call[];
 let warnSpy: MockInstance<typeof console.warn>;
 
-beforeEach(() => {
+function readyStartup(): Promise<unknown> {
+  const client = fakeClient((call) => {
+    if (call.fn === 'rag_access_set_enforced' || call.fn === 'rag_access_enforced') return { data: true, error: null };
+    if (call.fn === 'rag_access_readiness') return { data: [{ ready: true, reasons: [], objects: [] }], error: null };
+    return { data: [], error: null };
+  }, []);
+  return verifyAccessGroupsStartup({
+    ragEnv: () => ({ RAG_DOC_ACCESS_GROUPS: 'on' }),
+    adminClient: () => client,
+    backendCapabilities: () => ({ accessFilter: true }),
+  });
+}
+
+beforeEach(async () => {
   calls = [];
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   resetAccessScopeLogForTests();
+  resetAccessStartupForTests();
+  await readyStartup();
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   resetRagDepsForTests();
   resetRagConfigForTests();
+  resetAccessStartupForTests();
 });
 
 async function resolve(
