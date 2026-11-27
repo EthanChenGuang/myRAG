@@ -1,7 +1,9 @@
 import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import type { PGlite } from '@electric-sql/pglite';
+import path from 'node:path';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
+import { applyMigrationFiles, migrationFiles } from '../../eval/harness/migrations.mts';
 
 export const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 export const PROFILE_1024 = 'voyage-4-large-1024';
@@ -99,8 +101,17 @@ async function createOrganization(db: PGlite, ownerId: string): Promise<string> 
   return id;
 }
 
-export async function createWorld(mode: DeploymentMode): Promise<PurgeWorld> {
-  const db = (await createEmptyFixtureDatabase({ deploymentMode: mode })).db;
+export interface WorldOptions {
+  /** Apply only the migrations whose number is at most this one (e.g. '0728'), as on a trunk without later phases. */
+  migrationsThrough?: string;
+}
+
+export async function createWorld(mode: DeploymentMode, options: WorldOptions = {}): Promise<PurgeWorld> {
+  const through = options.migrationsThrough;
+  const db = (await createEmptyFixtureDatabase({ deploymentMode: mode, migrations: through === undefined })).db;
+  if (through !== undefined) {
+    await applyMigrationFiles(db, migrationFiles(mode).filter((relpath) => path.basename(relpath).slice(0, 4) <= through));
+  }
   const userA = await createUser(db);
   const userB = await createUser(db);
   await db.query('INSERT INTO admin_users (id) VALUES ($1)', [userA]);
