@@ -150,4 +150,48 @@ describe('restricted-member dense recall on pgvector (D-13, A-09)', () => {
     assert.equal(legs.meta?.denseMode, 'exact');
     assert.deepEqual(legs.dense.map((hit) => hit.chunkId), await bruteForce('small'));
   });
+
+  test('the BM25 lexical leg (RAG_LEXICAL_SCORING=bm25) keeps the access filter: no chunk outside the caller\'s groups comes back', async () => {
+    await db.exec('RESET enable_seqscan');
+    await db.exec('RESET enable_bitmapscan');
+    try {
+      const tenantKey = accessSelectiveTenantKey();
+      await db.query("UPDATE public.document_chunks SET lexical_tsv = to_tsvector('simple', content) WHERE tenant_key = $1", [tenantKey]);
+      await db.query('SELECT public.rag_lexstats_enable($1)', [tenantKey]);
+      await db.query('SELECT public.rag_lexstats_rebuild($1)', [tenantKey]);
+      const lexicalSearch = async (scope: import('@/lib/rag/tenant/scope').TenantScope, tokens = ['access', 'selective']) =>
+        backendFor(pgvectorVersion).search({
+          scope,
+          embeddingProfileId: SELECTIVE_PROFILE,
+          denseVector: null,
+          lexicalTokens: tokens,
+          lexicalLanguages: null,
+          filters: { currentOnly: true },
+          denseLimit: 0,
+          lexicalLimit: 50,
+          access: accessModule.scopeAccessFilter(scope),
+          lexicalScoring: { mode: 'bm25', k1: 1.2, b: 0.75 },
+          signal: new AbortController().signal,
+        } as import('@/lib/rag/backend/types').BackendSearchRequest);
+
+      const small = await lexicalSearch(scopeFor('small'));
+      assert.equal(small.meta?.lexicalScoring, 'bm25', 'served by the BM25 function, not the ts_rank_cd fallback');
+      assert.ok(small.lexical.length > 0, 'the member finds their own chunks');
+      assert.deepEqual([...new Set(small.lexical.map((hit) => hit.documentId))], [ACCESS_SELECTIVE_IDS.docSmall]);
+
+      const { withAccess, mintScope } = await import('@/lib/rag/tenant/scope');
+      const admin = withAccess(mintScope('personal', ACCESS_SELECTIVE_IDS.owner, null), accessModule.mintAccessScope('admin_all', []));
+      // A term only one chunk of the other group carries (its seed): the member gets nothing, an admin gets that chunk.
+      const otherOnly = ['400000'];
+      const hidden = await lexicalSearch(scopeFor('small'), otherOnly);
+      assert.equal(hidden.meta?.lexicalScoring, 'bm25');
+      assert.deepEqual(hidden.lexical, [], 'a chunk of a group the member lacks never comes back');
+      const all = await lexicalSearch(admin, otherOnly);
+      assert.equal(all.meta?.lexicalScoring, 'bm25');
+      assert.deepEqual(all.lexical.map((hit) => hit.documentId), [ACCESS_SELECTIVE_IDS.docOther], 'an admin reads the other group');
+    } finally {
+      await db.exec('SET enable_seqscan = off');
+      await db.exec('SET enable_bitmapscan = off');
+    }
+  });
 });

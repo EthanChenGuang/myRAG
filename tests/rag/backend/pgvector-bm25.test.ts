@@ -395,3 +395,47 @@ describe('pgvector backend with lexicalScoring', () => {
     expect(bm25CandidateLimit(1000)).toBe(2000);
   });
 });
+
+describe('pgvector backend with lexicalScoring and an access filter (04.3-03, 0932)', () => {
+  const GROUP = 'g:00000000-0000-4000-8000-0000000000f1';
+  const accessRequest = async (mode: 'keys' | 'admin_all', keys: string[]) => {
+    const { mintAccessScope, scopeAccessFilter } = await import('@/lib/rag/tenant/access');
+    const { withAccess } = await import('@/lib/rag/tenant/scope');
+    const scope = withAccess(mintScope('personal', USER_A, null), mintAccessScope(mode, keys));
+    return { scope, access: scopeAccessFilter(scope) };
+  };
+
+  it.each([
+    ['keys', ['all', GROUP], { p_access_keys: ['all', GROUP], p_access_all: false }],
+    ['admin_all', [], { p_access_keys: ['all'], p_access_all: true }],
+  ] as const)('the BM25 call carries the same access arguments as the dense call (%s)', async (mode, keys, expected) => {
+    const { client, calls } = fakeClient({
+      rag_lexstats_status: READY,
+      hybrid_search_chunks: () => ({ data: [row('dense', 1, 'c1')], error: null }),
+      rag_bm25_search_chunks: () => ({ data: [row('lexical', 1, 'c9')], error: null }),
+    });
+    const backend = createPgvectorBackend({ adminClient: () => client, getConfig: () => config(), pgvectorVersion: () => '0.8.0' });
+    const { scope, access } = await accessRequest(mode, [...keys]);
+    await backend.search(baseRequest({ scope, access, lexicalScoring: SCORING }));
+    const dense = calls.find((call) => call.fn === 'hybrid_search_chunks')!.args;
+    const bm25 = calls.find((call) => call.fn === 'rag_bm25_search_chunks')!.args;
+    const pick = (args: Record<string, unknown>) =>
+      Object.fromEntries(Object.entries(args).filter(([key]) => key === 'p_access_keys' || key === 'p_access_all'));
+    expect(pick(dense)).toEqual(pick(bm25));
+    expect(pick(bm25)).toEqual(expected);
+  });
+
+  it('the ts_rank_cd fallback after a BM25 failure keeps the access arguments', async () => {
+    const { client, calls } = fakeClient({
+      rag_lexstats_status: READY,
+      hybrid_search_chunks: () => ({ data: [], error: null }),
+      rag_bm25_search_chunks: () => ({ data: null, error: { message: 'statement timeout', code: '57014' } }),
+    });
+    const backend = createPgvectorBackend({ adminClient: () => client, getConfig: () => config(), pgvectorVersion: () => '0.8.0' });
+    const { scope, access } = await accessRequest('keys', ['all', GROUP]);
+    await backend.search(baseRequest({ scope, access, lexicalScoring: SCORING }));
+    const hybrid = calls.filter((call) => call.fn === 'hybrid_search_chunks');
+    expect(hybrid.length).toBe(2);
+    for (const call of hybrid) expect(call.args.p_access_keys).toEqual(['all', GROUP]);
+  });
+});
