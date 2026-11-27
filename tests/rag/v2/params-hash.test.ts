@@ -521,6 +521,13 @@ describe('requestRetrievalConfigHash with every Phase 4.2 switch off (04.2-06, D
     expect(await requestRetrievalConfigHash(off)).toBe(PINNED_REQUEST_OFF_HASH);
   });
 
+  it('the access-group settings are not inputs of the hash (04.3-01, D-09)', async () => {
+    const withAccess = requestInput({ RAG_DOC_ACCESS_GROUPS: 'on', RAG_EMBED_ACCESS_GROUP: 'group-a' });
+    expect(withAccess.config.accessGroups).toBe('on');
+    expect(withAccess.config.embedAccessGroup).toBe('group-a');
+    expect(await requestRetrievalConfigHash(withAccess)).toBe(PINNED_REQUEST_OFF_HASH);
+  });
+
   it('invalid combinations that resolve to off keep the pinned hash', async () => {
     const filterOnly = requestInput({ RAG_IDENTIFIER_FILTER: 'true' });
     const scopeWithoutLexical = { ...requestInput(), config: baseConfig({ RAG_LEXICAL_SEARCH: 'false', RAG_VERSION_SCOPE: 'true' }) };

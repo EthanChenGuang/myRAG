@@ -56,4 +56,21 @@ describe('Phase 4.3 access settings in the Config UI (UI-SPEC 6.6, 12.5)', () =>
     expect(group).toContain('>On<');
     expect(group).toContain('Access groups');
   });
+
+  it('RAG_EMBED_ACCESS_GROUP is a labelled text input in the access group with autofill, spellcheck and translation off', () => {
+    const group = accessGroup();
+    const tag = openingTag(group, 'RAG_EMBED_ACCESS_GROUP');
+    expect(tag.startsWith('<input')).toBe(true);
+    expect(attr(tag, 'type')).toBe('text');
+    expect(attr(tag, 'name')).toBe('RAG_EMBED_ACCESS_GROUP');
+    expect(attr(tag, 'autocomplete')).toBe('off');
+    expect(attr(tag, 'spellcheck')).toBe('false');
+    expect(attr(tag, 'translate')).toBe('no');
+    expect(attr(tag, 'class')).toContain('input input-bordered input-sm font-mono');
+    expect(html).toMatch(/<label\b[^>]*\bfor="RAG_EMBED_ACCESS_GROUP"/);
+    const describedBy = attr(tag, 'aria-describedby');
+    expect(describedBy).toBeTruthy();
+    expect(group).toContain(`id="${describedBy}"`);
+    expect(group).toContain('Embedded chat group');
+  });
 });

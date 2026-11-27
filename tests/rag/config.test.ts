@@ -1480,3 +1480,41 @@ describe('RAG_DOC_ACCESS_GROUPS (04.3-01, D-09)', () => {
     expect(loadRagConfig({ RAG_DOC_ACCESS_GROUPS: 'on' }).accessGroups).toBe('on');
   });
 });
+
+describe('RAG_EMBED_ACCESS_GROUP and the access_scope stage name (04.3-01, D-07, D-08)', () => {
+  test('embedAccessGroup is the trimmed value and empty when unset', () => {
+    expect(loadRagConfig({}).embedAccessGroup).toBe('');
+    resetRagConfigForTests();
+    expect(loadRagConfig({ RAG_EMBED_ACCESS_GROUP: '  group-a  ' }).embedAccessGroup).toBe('group-a');
+    resetRagConfigForTests();
+    expect(loadRagConfig({ RAG_EMBED_ACCESS_GROUP: '   ' }).embedAccessGroup).toBe('');
+  });
+
+  test('access_scope is not an optional stage', () => {
+    expect((OPTIONAL_STAGES as readonly string[]).includes('access_scope')).toBe(false);
+    expect((CORE_STAGES as readonly string[]).includes('access_scope')).toBe(false);
+  });
+
+  test('RAG_DISABLED_STAGES=access_scope is refused with the unknown-stage warning', () => {
+    const unknown = loadRagConfig({ RAG_DISABLED_STAGES: 'not_a_stage' });
+    resetRagConfigForTests();
+    const config = loadRagConfig({ RAG_DISABLED_STAGES: 'access_scope' });
+    expect([...config.disabledStages].map(String)).not.toContain('access_scope');
+    expect(config.warnings).toEqual([expect.stringContaining('Unknown stage in RAG_DISABLED_STAGES')]);
+    expect(config.warnings[0]).toContain('access_scope');
+    expect(unknown.warnings[0]!.replace('not_a_stage', 'access_scope')).toBe(config.warnings[0]);
+  });
+
+  test('access_scope has a report-only latency budget for chat, embed and voice', () => {
+    const budgets = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'eval/config/latency-budgets.json'), 'utf8'));
+    expect(budgets.profiles.chat.stages.access_scope).toBe(25);
+    expect(budgets.profiles.embed.stages.access_scope).toBe(25);
+    expect(budgets.profiles.voice.stages.access_scope).toBe(15);
+  });
+
+  test('the eval pin pins RAG_DOC_ACCESS_GROUPS off and leaves RAG_EMBED_ACCESS_GROUP out', () => {
+    const pinned = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'eval/config/rag-eval-env.json'), 'utf8'));
+    expect(pinned.RAG_DOC_ACCESS_GROUPS).toBe('off');
+    expect(pinned).not.toHaveProperty('RAG_EMBED_ACCESS_GROUP');
+  });
+});
