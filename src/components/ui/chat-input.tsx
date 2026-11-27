@@ -65,6 +65,8 @@ const VIDEO_GENERATION_ENABLED = process.env.NEXT_PUBLIC_VIDEO_GENERATION_ENABLE
 const THREE_D_GENERATION_ENABLED = process.env.NEXT_PUBLIC_3D_GENERATION_ENABLED === 'true';
 const MCP_TOOLS_LIST_ENABLED = process.env.NEXT_PUBLIC_MCP_TOOLS_LIST_ENABLED === 'true';
 const VOICE_MODE_ENABLED = process.env.NEXT_PUBLIC_VOICE_MODE_ENABLED !== 'false'; // Enabled by default if not explicitly disabled
+const COMET_TRAIL_PX = 180;
+const COMET_HEAD_PX = 28;
 
 // Compile-time default for suggestions
 const ENV_SHOW_SUGGESTIONS = env.NEXT_PUBLIC_SHOW_SUGGESTIONS === 'true';
@@ -3658,12 +3660,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
       animation: fadeIn 0.05s ease-out forwards;
     }
 
-    /* SVG Stroke Animation - Smoother cornering */
-    @keyframes svg-travel {
-      0% { stroke-dashoffset: 0; }
-      100% { stroke-dashoffset: calc(var(--perimeter) * -1px); }
-    }
-
     /* Fix for overflow issues with attachments */
     .chat-input-container .relative.px-2 {
       max-height: 400px;
@@ -4393,13 +4389,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     <>
       {/* Add animation styles */}
       <style dangerouslySetInnerHTML={{
-        __html: style + `
-        /* SVG Stroke Animation - Smoother cornering */
-        @keyframes svg-travel {
-          0% { stroke-dashoffset: 0; }
-          100% { stroke-dashoffset: calc(var(--perimeter) * -1px); }
-        }
-      `}} />
+        __html: style }} />
 
       {/* Suggestion buttons are now rendered in the main page component for proper layout */}
 
@@ -4450,47 +4440,27 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               } as React.CSSProperties}
             >
               {(perimeter > 0 && borderEnabled) && (
-                <svg
-                  className="w-full h-full"
-                  style={{
-                    overflow: 'visible',
-                    filter: `
-                      drop-shadow(0 0 1.5px rgba(255,100,23,0.8))
-                      drop-shadow(0 0 3px rgba(255,100,23,0.5))
-                      drop-shadow(0 0 5px rgba(255,100,23,0.25))
-                    `,
-                    opacity: 0.85
-                  }}
-                >
-                  {/* Primary comet */}
+                <svg className="chat-composer-comet__svg" aria-hidden="true" focusable="false">
+                  {/* One faint trail with a brighter head at its leading end */}
                   <rect
-                    x="1.25" y="1.25"
-                    width="calc(100% - 2.5px)" height="calc(100% - 2.5px)"
+                    className="chat-composer-comet__trail"
+                    x="0.5" y="0.5"
+                    width="calc(100% - 1px)" height="calc(100% - 1px)"
                     rx="24" ry="24"
-                    fill="none"
-                    stroke="#FF6417"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
                     style={{
-                      strokeDasharray: `220 ${Math.max(0, perimeter - 220)}`,
-                      animation: 'svg-travel 14s linear infinite',
-                    }}
+                      strokeDasharray: `${COMET_TRAIL_PX} ${Math.max(0, perimeter - COMET_TRAIL_PX)}`,
+                      '--comet-from': '0px',
+                    } as React.CSSProperties}
                   />
-
-                  {/* Secondary comet (opposite side) */}
                   <rect
-                    x="1.25" y="1.25"
-                    width="calc(100% - 2.5px)" height="calc(100% - 2.5px)"
+                    className="chat-composer-comet__head"
+                    x="0.5" y="0.5"
+                    width="calc(100% - 1px)" height="calc(100% - 1px)"
                     rx="24" ry="24"
-                    fill="none"
-                    stroke="#FF6417"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
                     style={{
-                      strokeDasharray: `160 ${Math.max(0, perimeter - 160)}`,
-                      strokeDashoffset: `calc(var(--perimeter) * -0.5px)`, // Start halfway, using pixels
-                      animation: 'svg-travel 14s linear infinite',
-                    }}
+                      strokeDasharray: `${COMET_HEAD_PX} ${Math.max(0, perimeter - COMET_HEAD_PX)}`,
+                      '--comet-from': `${COMET_HEAD_PX - COMET_TRAIL_PX}px`,
+                    } as React.CSSProperties}
                   />
                 </svg>
               )}
