@@ -952,7 +952,8 @@ describe('Phase 5.2.1 calculation and prompt-budget inputs of the retrieval conf
     expect(component({})).toBeNull();
     expect(hashOf(component({}))).toBe(PINNED_DEFAULT_HASH);
     expect(hashOf(component({}, { calcLimitsVersion: 'limits-v2', promptBudgetConfigVersion: 'budget-v2' }))).toBe(PINNED_DEFAULT_HASH);
-    for (const on of [{ RAG_CALC_TOOL: 'true' }, { RAG_PROMPT_BUDGET: 'true' }]) {
+    const onEnvs: Array<Record<string, string>> = [{ RAG_CALC_TOOL: 'true' }, { RAG_PROMPT_BUDGET: 'true' }];
+    for (const on of onEnvs) {
       const base = hashOf(component(on));
       expect(hashOf(component(on, { calcLimitsVersion: 'limits-v2' }))).not.toBe(base);
       expect(hashOf(component(on, { promptBudgetConfigVersion: 'budget-v2' }))).not.toBe(base);
