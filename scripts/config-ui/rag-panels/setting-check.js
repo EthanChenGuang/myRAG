@@ -331,10 +331,6 @@ function settingCheckGates() {
   return require('./gates-ui.js');
 }
 
-function settingCheckHas(obj, key) {
-  return Boolean(obj) && Object.prototype.hasOwnProperty.call(obj, key);
-}
-
 function settingCheckMessage(key, locale, vars) {
   const g = settingCheckGates();
   if (g.gatesUiTemplateFrom && g.gatesUiTemplateFrom(SETTING_CHECK_LABELS, key, locale) === null) return g.gatesUiMessage(key, locale, vars);
@@ -526,7 +522,7 @@ function settingCheckDialogView(input) {
     title: settingCheckLabel(state.titleKey, locale),
     lead: settingCheckLead(i.phase, check, locale, i),
     changed,
-    layers: layers.map(({ checks: _checks, ...rest }) => rest),
+    layers: layers.map((l) => ({ layer: l.layer, label: l.label, result: l.result, reason: l.reason })),
     evidence: settingCheckEvidence(layers, locale),
     notCovered: notCoveredNames.length > 0 ? settingCheckMessage('notCovered', locale, { names: notCoveredNames.join(', ') }) : null,
     untested:
