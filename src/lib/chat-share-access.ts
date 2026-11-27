@@ -25,8 +25,15 @@ export interface ShareAccessDeps {
   signal?: AbortSignal;
 }
 
+interface ShareQuery extends PromiseLike<QueryResult> {
+  select(columns: string): ShareQuery;
+  eq(column: string, value: unknown): ShareQuery;
+  in(column: string, values: readonly unknown[]): ShareQuery;
+  abortSignal(signal: AbortSignal): ShareQuery;
+}
+
 export interface ShareAccessDb {
-  from(table: string): any;
+  from(table: string): ShareQuery;
 }
 
 /** The chat row as the share and read paths load it. */

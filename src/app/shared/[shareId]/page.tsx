@@ -106,9 +106,9 @@ export default async function Page({
     }
 
     // Ensure messages is always an array
-    const { id: _id, ...shown } = chat as typeof chat & { id?: unknown };
     safeChat = {
-      ...shown,
+      created_at: chat.created_at,
+      updated_at: chat.updated_at,
       title: chat.title ?? 'Shared Chat',
       messages: Array.isArray(chat.messages) ? chat.messages : []
     };
