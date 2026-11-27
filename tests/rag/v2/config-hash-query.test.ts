@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadRagConfig, resetRagConfigForTests } from '@/lib/rag/config';
-import { queryLayerHashComponent, queryPromptVersions } from '@/lib/rag/query/hash-part';
+import { queryLayerHashComponent, queryPromptVersions, SWITCH_GATED_PROMPT_IDS } from '@/lib/rag/query/hash-part';
 import { effectiveQueryParams } from '@/lib/rag/query/query-params';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 import { computeRetrievalConfigHash, type RetrievalConfigHashInput, type RetrievalConfigHashQueryLayer } from '@/lib/rag/v2/config-hash';
@@ -98,10 +98,12 @@ describe('queryLayerHashComponent', () => {
     const dir = path.join(process.cwd(), 'src/lib/rag/query/prompts');
     const files = readdirSync(dir).filter((name) => name.endsWith('.json'));
     const expected = Object.fromEntries(
-      files.map((name) => {
-        const file = JSON.parse(readFileSync(path.join(dir, name), 'utf8')) as { id: string; version: number };
-        return [file.id, file.version];
-      }),
+      files
+        .map((name) => {
+          const file = JSON.parse(readFileSync(path.join(dir, name), 'utf8')) as { id: string; version: number };
+          return [file.id, file.version] as const;
+        })
+        .filter(([id]) => !SWITCH_GATED_PROMPT_IDS.has(id)),
     );
     expect(queryPromptVersions()).toEqual(expected);
   });

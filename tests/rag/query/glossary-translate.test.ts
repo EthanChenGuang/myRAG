@@ -5,7 +5,8 @@ import { loadRagConfig, resetRagConfigForTests } from '@/lib/rag/config';
 import { setRagDepsForTests } from '@/lib/rag/deps';
 import type { TenantGlossary } from '@/lib/rag/query/glossary';
 import { resetKbLanguageCacheForTests } from '@/lib/rag/query/kb-languages';
-import { translateRequests } from '@/lib/rag/query/llamaindex/translate';
+import { nativeTranslate, translateRequests } from '@/lib/rag/query/llamaindex/translate';
+import transformsTable from '../../../eval/fixtures/query-llm/transforms.json';
 import type { QueryLlm, QueryLlmRequest } from '@/lib/rag/query/llm';
 import { resetTranslatorForTests } from '@/lib/rag/query/translate';
 import { invalidateTerminologyCache } from '@/lib/rag/terminology/load';
@@ -271,6 +272,36 @@ describe('the glossary block of the retrieval-config hash', () => {
     const v4 = computeRetrievalConfigHash({ ...base, glossary: glossaryHashBlock({ enabled: true, version: 's1.w4' }) });
     expect(v3).not.toBe(computeRetrievalConfigHash(base));
     expect(v4).not.toBe(v3);
-    expect(glossaryHashBlock({ enabled: true, version: null })).toEqual({ version: GLOSSARY_UNAVAILABLE });
+    expect(glossaryHashBlock({ enabled: true, version: null })).toEqual({ version: GLOSSARY_UNAVAILABLE, prompt_version: 1 });
+  });
+});
+
+describe('the committed fake-LLM glossary scripts show the enforcement effect', () => {
+  const pairs: TenantGlossary = {
+    tenantKey: 's:default',
+    version: 's1',
+    pairs: [
+      { entryId: '00000000-0000-4000-8000-0000000000c1', sourceLanguage: 'en', targetLanguage: 'zh', sources: ['quartz relay unit'], target: '石英中继单元' },
+      { entryId: '00000000-0000-4000-8000-0000000000c2', sourceLanguage: 'zh', targetLanguage: 'en', sources: ['星桥模块'], target: 'Starbridge Module' },
+      { entryId: '00000000-0000-4000-8000-0000000000c3', sourceLanguage: 'it', targetLanguage: 'en', sources: ['unità di raccordo'], target: 'junction unit' },
+    ],
+  };
+
+  it.each([
+    ['How often does the quartz relay unit report its status?', 'en', 'zh', null],
+    ['星桥模块的状态多久报告一次？', 'zh', 'en', 'How often does the Starbridge Module report its status?'],
+    ["Ogni quanto l'unità di raccordo riporta lo stato?", 'it', 'en', null],
+  ] as const)('%s', async (query, language, target, expected) => {
+    const llm = createFakeQueryLlm({ table: transformsTable as never });
+    const signal = new AbortController().signal;
+    const off = await nativeTranslate({ query, language, targets: [target], protectedTokens: [], signal, deps: { queryLlm: () => llm } });
+    const on = await nativeTranslate({ query, language, targets: [target], protectedTokens: [], signal, glossary: pairs, deps: { queryLlm: () => llm } });
+    expect(off.variants).toHaveLength(1);
+    if (expected === null) {
+      expect(on.variants).toEqual([]);
+      expect(on.skipped).toEqual([{ kind: 'translate', target, reason: 'glossary_term_lost' }]);
+    } else {
+      expect(on.variants.map((variant) => variant.text)).toEqual([expected]);
+    }
   });
 });

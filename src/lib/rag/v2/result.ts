@@ -30,9 +30,11 @@ import {
   answerRulesHashComponent,
   calcBudgetHashComponent,
   terminologyHashBlock,
+  glossaryHashBlock,
   type AnswerRulesHashConfig,
   type CalcBudgetHashConfig,
   type AttributeFilterHashStage,
+  type GlossaryHashStage,
   type RetrievalConfigHashQueryLayer,
   type TerminologyHashStage,
 } from './config-hash';
@@ -98,6 +100,8 @@ export interface BuildV2ResultInput {
   lexicalStamp?: LexicalStamp;
   /** D-30: how the attribute_resolve stage ended; absent reads as disabled. */
   attributeFilter?: AttributeFilterHashStage;
+  /** D-14: the glossary state; absent reads as switch off. */
+  glossary?: GlossaryHashStage;
 }
 
 export interface RequestConfigHashInput {
@@ -120,6 +124,8 @@ export interface RequestConfigHashInput {
   lexicalStamp?: LexicalStamp;
   /** D-30: how the attribute_resolve stage ended; absent reads as disabled, so the hash is the value before the filter. */
   attributeFilter?: AttributeFilterHashStage;
+  /** D-14: the glossary state; absent reads as switch off, so the hash keeps its value. */
+  glossary?: GlossaryHashStage;
 }
 
 /** The request's retrieval-config hash; the result and the semantic-cache key both use it, so they never disagree. */
@@ -176,6 +182,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
     ...(terminology ? { terminology } : {}),
     ...(attributeFilter ? { attributeFilter } : {}),
     lexicalScoring: lexicalScoringHashBlock(config),
+    glossary: glossaryHashBlock(ctx.glossary ?? { enabled: false }),
   });
 }
 
@@ -345,6 +352,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(ctx.terminology ? { terminology: ctx.terminology } : {}),
     ...(ctx.lexicalStamp ? { lexicalStamp: ctx.lexicalStamp } : {}),
     ...(ctx.attributeFilter ? { attributeFilter: ctx.attributeFilter } : {}),
+    ...(ctx.glossary ? { glossary: ctx.glossary } : {}),
   });
 
   const base = {

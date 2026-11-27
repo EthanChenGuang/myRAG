@@ -11,6 +11,8 @@ import { groupDeadlineMs, groupDeadlineSignal, transformAbortReason, transformSi
 import type { NativeTransformSkip } from './llamaindex/call';
 import type { PostCheckLimits, PostCheckSkip, PostCheckSkipReason } from './post-checks';
 import { getKbLanguageShares, translationTargets, type KbLanguageShares } from './kb-languages';
+import type { GlossaryHashStage } from '../v2/config-hash';
+import { loadTenantGlossary } from './glossary';
 import type { TranslateSkip } from './llamaindex/translate';
 import { buildQueryPlan, planToVariants, type SkippedTransform } from './plan';
 import { effectiveQueryParams } from './query-params';
@@ -48,7 +50,6 @@ import { resolveFinalResultCount } from '../config';
 import { effectiveVersionScope } from './filters';
 import { collectRequiredTerms, type RequiredTerm } from './completeness';
 import { loadTenantDocTypes, loadTenantVocabulary } from './tenant-vocabulary';
-import { getLanguageSettings } from '../lang/settings';
 import type { SubqFilterContext } from './llamaindex/decompose';
 import { terminologyMatcherFor } from '../terminology/load';
 import { terminologyParams } from '../terminology/expand';
@@ -97,6 +98,8 @@ export interface QueryLayerInput {
   cache?: SemanticCacheSeam;
   /** D-15 (Phase 4.1.1): run after the parallel group has joined and before semantic_cache, on the standalone query. */
   afterTransforms?: (standalone: string) => Promise<void>;
+  /** D-14: told the glossary state for the config hash, before semantic_cache builds its key; never called with the switch off. */
+  onGlossary?: (stage: GlossaryHashStage) => void;
 }
 
 const NO_LAYER_OUTCOME: Readonly<QueryLayerOutcome> = Object.freeze({
@@ -321,7 +324,7 @@ function isPlanLanguage(language: string): language is Lang {
 }
 
 function translateSkipReason(reason: TranslateSkip['reason']): SkippedTransform['reason'] {
-  if (reason === 'protected_token_lost' || reason === 'length' || reason === 'cap') return reason;
+  if (reason === 'protected_token_lost' || reason === 'length' || reason === 'cap' || reason === 'glossary_term_lost') return reason;
   if (reason === 'aborted') return 'timeout';
   return 'error';
 }
@@ -720,6 +723,9 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   let translateReported: Lang | null = null;
   const runTranslate = handledTranslate && routed.has('translate');
   const translateTargets: Lang[] = runTranslate ? translationTargets(translateSource, kbShares) : [];
+  // D-14: the glossary is read (4.1.1 per-tenant loader, whatever RAG_TERMINOLOGY says) only when translate has targets.
+  const glossaryOn = config.queryAdditions.effective.translationGlossary;
+  if (glossaryOn) ctx.onGlossary?.({ enabled: true, version: null });
 
   const tasks: [
     Promise<TransformOutcome<NormalizedDates>> | null,
@@ -790,7 +796,9 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
             collector,
             detail: (value) => (translateTargets.length === 0 ? 'no_targets' : `targets=${translateTargets.join(',')} variants=${value.length}`),
           },
-          (stageSignal) => {
+          async (stageSignal) => {
+            const glossary = glossaryOn && ctx.scope && translateTargets.length > 0 ? await loadTenantGlossary(ctx.scope, { signal: stageSignal }) : null;
+            if (glossaryOn && glossary) ctx.onGlossary?.({ enabled: true, version: glossary.version });
             const translateCtx: QueryLayerTranslateContext = {
               signal: stageSignal,
               sourceLanguage: translateSource,
@@ -798,6 +806,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
               protectedTokens: gate.protectedTokens,
               maxItems: params.max_translations,
               limits,
+              ...(glossary ? { glossary } : {}),
               transformer,
               onSkip: (entry) => translateSkips.push(entry),
               onSourceLanguage: (language) => {
