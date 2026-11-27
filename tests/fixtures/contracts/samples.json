@@ -1630,6 +1630,209 @@
         "s:default"
       ]
     },
+    "DefaultsDecision": {
+      "backend": "pgvector",
+      "backend_comparison": {
+        "incumbent": "pgvector",
+        "reason": "no_backend_beyond_ci",
+        "results": [
+          {
+            "backend": "qdrant",
+            "band": null,
+            "ci_high": null,
+            "ci_low": null,
+            "config_name": "qdrant-best",
+            "cost_note": "one self-hosted node",
+            "delta": null,
+            "invalid_reason": "backend_impl_fake",
+            "operational_note": "a second store to run, sync and reconcile",
+            "valid": false
+          }
+        ],
+        "winner": "pgvector"
+      },
+      "config_hashes": {
+        "ablate-context-tagging": "8888888888888888888888888888888888888888888888888888888888888888",
+        "incumbent": "7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      "cost": {
+        "basis": {
+          "document_sample": 20,
+          "kind": "estimated",
+          "price_table_sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+          "query_sample": 20
+        },
+        "per_1000_documents": [
+          {
+            "backend": "pgvector",
+            "config_name": null,
+            "documents": {
+              "embedding": {
+                "reason": null,
+                "usd": 0.02
+              },
+              "enrichment": {
+                "reason": "not_provided",
+                "usd": null
+              },
+              "external_store": {
+                "reason": null,
+                "usd": 0.0
+              },
+              "parse": {
+                "reason": null,
+                "usd": 1.2
+              }
+            },
+            "embedding_profile": "openai-3-small-1536",
+            "queries": null
+          }
+        ],
+        "per_1000_queries": [
+          {
+            "backend": null,
+            "config_name": "ablate-context-tagging",
+            "documents": null,
+            "embedding_profile": null,
+            "queries": {
+              "external_store": {
+                "reason": "not_measured",
+                "usd": null
+              },
+              "generation": {
+                "reason": null,
+                "usd": 1.5
+              },
+              "query_embedding": {
+                "reason": null,
+                "usd": 0.001
+              },
+              "rerank": {
+                "reason": null,
+                "usd": 0.0
+              }
+            }
+          }
+        ]
+      },
+      "decided_at": "2026-01-05T06:00:00Z",
+      "defaults": {
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_PIPELINE": "v2"
+      },
+      "embedding_profile": "openai-3-small-1536",
+      "incumbent": {
+        "RAG_CONTEXT_TAGGING": "false",
+        "RAG_PIPELINE": "v2"
+      },
+      "incumbent_source": {
+        "path": "eval/decisions/04.1-retrieval-defaults.json",
+        "sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+      },
+      "latency": {
+        "budgets_sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+        "entries": [
+          {
+            "channel": "chat",
+            "config_name": "ablate-context-tagging",
+            "values": [
+              {
+                "budget_p50_ms": 1500.0,
+                "budget_p95_ms": 3000.0,
+                "p50_ms": 800.0,
+                "p95_ms": 1600.0,
+                "report_only": false,
+                "stage": "total",
+                "within_budget": true
+              },
+              {
+                "budget_p50_ms": null,
+                "budget_p95_ms": null,
+                "p50_ms": 40.0,
+                "p95_ms": 90.0,
+                "report_only": true,
+                "stage": "rerank",
+                "within_budget": null
+              }
+            ]
+          }
+        ]
+      },
+      "per_language": [
+        {
+          "band": 0.02,
+          "baseline": 0.79,
+          "below_baseline": false,
+          "difference": 0.01,
+          "language": "zh",
+          "metric": "recall_at_10",
+          "n": 12,
+          "reason": null,
+          "value": 0.8
+        },
+        {
+          "band": 0.02,
+          "baseline": 0.75,
+          "below_baseline": null,
+          "difference": 0.0,
+          "language": "en",
+          "metric": "recall_at_10",
+          "n": 4,
+          "reason": "too_small",
+          "value": 0.75
+        }
+      ],
+      "plan_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "primary_metric": "recall_at_10+correct_refusal_rate",
+      "provisional": null,
+      "reranker": "none",
+      "schema_version": 1,
+      "ship_check_ref": {
+        "baseline_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+        "candidate_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "ci_high": 0.05,
+        "ci_low": 0.01,
+        "gate_population": "real",
+        "manifest_hash": null,
+        "passed": true,
+        "reasons": [],
+        "resamples": 10000,
+        "schema_version": 1,
+        "seed": 0,
+        "target_delta": 0.03,
+        "target_metric": "recall_at_10"
+      },
+      "test_split_uses": [
+        {
+          "config_name": "incumbent",
+          "plan_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+          "reason": null,
+          "registered": true,
+          "run_id": "run-0001",
+          "used_at": "2026-01-05T06:00:00Z"
+        }
+      ],
+      "verdicts": [
+        {
+          "band": 0.02,
+          "ci_high": 0.01,
+          "ci_low": -0.01,
+          "decision": "adopt",
+          "delta": 0.0,
+          "gated_slices_ok": true,
+          "injection_asr": 0.0,
+          "latency_ok": true,
+          "p_holm": 1.0,
+          "p_value": 0.5,
+          "reason": "security_wins_ties",
+          "switch": "RAG_CONTEXT_TAGGING",
+          "too_small_slices": [
+            "category:table"
+          ],
+          "value": "true"
+        }
+      ]
+    },
     "DetectVlmRequest": {
       "attempt_no": 1,
       "pages": [
@@ -14921,6 +15124,41 @@
       },
       "schema_version": 1
     },
+    "RegressionPlan": {
+      "alpha": 0.05,
+      "configs": [
+        {
+          "env": {
+            "RAG_PIPELINE": "v2"
+          },
+          "name": "incumbent",
+          "overrides": {}
+        },
+        {
+          "env": {
+            "RAG_CONTEXT_TAGGING": "true"
+          },
+          "name": "ablate-context-tagging",
+          "overrides": {
+            "judge_runs": 3
+          }
+        }
+      ],
+      "created_at": "2026-01-05T06:00:00Z",
+      "gated_slice_prefixes": [
+        "overall",
+        "language:",
+        "category:cross_lingual",
+        "category:injection"
+      ],
+      "incumbent_config": "incumbent",
+      "min_gate_n": 10,
+      "primary_metric": "recall_at_10+correct_refusal_rate",
+      "schema_version": 1,
+      "split": "test",
+      "stage": "b",
+      "test_split_budget": 3
+    },
     "ReleaseGateConfig": {
       "config_hash": null,
       "provenance": {
@@ -16013,6 +16251,48 @@
       "more_pending": false,
       "upserted": 3
     },
+    "VendorDataFlow": {
+      "schema_version": 1,
+      "vendors": [
+        {
+          "content": [
+            "query",
+            "chunk_text"
+          ],
+          "hosts": [
+            "api.example.com"
+          ],
+          "multi_tenant": "allowed",
+          "name": "Example reranker",
+          "opt_in": true,
+          "providers": [
+            "example"
+          ],
+          "retention": "to_verify",
+          "switch": "RAG_RERANKER",
+          "training": "to_verify",
+          "vendor": "example-reranker"
+        },
+        {
+          "ack_switch": "RAG_EXAMPLE_MULTI_TENANT_ACK",
+          "content": [
+            "vectors",
+            "lexical_text"
+          ],
+          "hosts": [
+            "store.example.net"
+          ],
+          "multi_tenant": "requires_ack",
+          "name": "Example vector store",
+          "opt_in": true,
+          "providers": [],
+          "retention": "to_verify",
+          "switch": "RAG_RETRIEVAL_BACKEND",
+          "training": "to_verify",
+          "vendor": "example-store"
+        }
+      ]
+    },
     "VersionConflict": {
       "document_ids": [
         "doc-0001",
@@ -16557,6 +16837,84 @@
           "Annual leave"
         ],
         "strategy": "chunk-alias"
+      }
+    },
+    "DefaultsDecision:provisional_fixtures": {
+      "model": "DefaultsDecision",
+      "value": {
+        "backend": "pgvector",
+        "backend_comparison": {
+          "incumbent": "pgvector",
+          "reason": "no_backend_beyond_ci",
+          "results": [
+            {
+              "backend": "qdrant",
+              "band": null,
+              "ci_high": null,
+              "ci_low": null,
+              "config_name": "qdrant-best",
+              "cost_note": "one self-hosted node",
+              "delta": null,
+              "invalid_reason": "backend_impl_fake",
+              "operational_note": "a second store to run, sync and reconcile",
+              "valid": false
+            }
+          ],
+          "winner": "pgvector"
+        },
+        "config_hashes": {
+          "ablate-context-tagging": "8888888888888888888888888888888888888888888888888888888888888888",
+          "incumbent": "7777777777777777777777777777777777777777777777777777777777777777"
+        },
+        "decided_at": "2026-01-05T06:00:00Z",
+        "defaults": {
+          "RAG_CONTEXT_TAGGING": "true",
+          "RAG_PIPELINE": "v2"
+        },
+        "embedding_profile": "openai-3-small-1536",
+        "incumbent": {
+          "RAG_CONTEXT_TAGGING": "false",
+          "RAG_PIPELINE": "v2"
+        },
+        "incumbent_source": {
+          "path": "eval/decisions/04.1-retrieval-defaults.json",
+          "sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+        },
+        "plan_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+        "primary_metric": "recall_at_10+correct_refusal_rate",
+        "provisional": "fixtures",
+        "reranker": "none",
+        "schema_version": 1,
+        "test_split_uses": [
+          {
+            "config_name": "incumbent",
+            "plan_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+            "reason": null,
+            "registered": true,
+            "run_id": "run-0001",
+            "used_at": "2026-01-05T06:00:00Z"
+          }
+        ],
+        "verdicts": [
+          {
+            "band": 0.02,
+            "ci_high": 0.01,
+            "ci_low": -0.01,
+            "decision": "adopt",
+            "delta": 0.0,
+            "gated_slices_ok": true,
+            "injection_asr": 0.0,
+            "latency_ok": true,
+            "p_holm": 1.0,
+            "p_value": 0.5,
+            "reason": "security_wins_ties",
+            "switch": "RAG_CONTEXT_TAGGING",
+            "too_small_slices": [
+              "category:table"
+            ],
+            "value": "true"
+          }
+        ]
       }
     },
     "EvalReport:answer_rules": {

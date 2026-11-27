@@ -268,6 +268,13 @@ from rag_sidecar.contracts.monitor import (
     default_monitor_alerts,
 )
 from rag_sidecar.contracts.judge_calibration import JudgeCalibration, JudgeCalibrationCell, JudgeSeedCase
+from rag_sidecar.contracts.release import (
+    DefaultsDecision,
+    LanguageQuality,
+    RegressionPlan,
+    RegressionRunConfig,
+    VendorDataFlow,
+)
 from rag_sidecar.contracts.release_gate import ReleaseGatePart, ReleaseGateResult, default_release_gate
 from rag_sidecar.contracts.config_change import (
     ConfigChangeRecord,
@@ -3857,6 +3864,197 @@ def _phase52_eval_variants() -> dict[str, Any]:
     }
 
 
+_P7_SHA_PLAN = "7" * 64
+_P7_SHA_INCUMBENT = "8" * 64
+_P7_SHA_TABLE = "9" * 64
+
+
+def _p7_regression_plan() -> RegressionPlan:
+    return RegressionPlan(
+        stage="b",
+        split="test",
+        primary_metric="recall_at_10+correct_refusal_rate",
+        configs=[
+            RegressionRunConfig(name="incumbent", env={"RAG_PIPELINE": "v2"}),
+            RegressionRunConfig(name="ablate-context-tagging", env={"RAG_CONTEXT_TAGGING": "true"}, overrides={"judge_runs": 3}),
+        ],
+        incumbent_config="incumbent",
+        gated_slice_prefixes=["overall", "language:", "category:cross_lingual", "category:injection"],
+        test_split_budget=3,
+        created_at="2026-01-05T06:00:00Z",
+    )
+
+
+def _p7_amount(usd: float | None, reason: str | None = None) -> dict[str, Any]:
+    return {"usd": usd} if reason is None else {"usd": None, "reason": reason}
+
+
+def _p7_defaults_decision(*, provisional: bool = False) -> DefaultsDecision:
+    data: dict[str, Any] = {
+        "provisional": "fixtures" if provisional else None,
+        "decided_at": "2026-01-05T06:00:00Z",
+        "plan_sha256": _P7_SHA_PLAN,
+        "primary_metric": "recall_at_10+correct_refusal_rate",
+        "incumbent_source": {"path": "eval/decisions/04.1-retrieval-defaults.json", "sha256": _P7_SHA_INCUMBENT},
+        "incumbent": {"RAG_PIPELINE": "v2", "RAG_CONTEXT_TAGGING": "false"},
+        "defaults": {"RAG_PIPELINE": "v2", "RAG_CONTEXT_TAGGING": "true"},
+        "embedding_profile": "openai-3-small-1536",
+        "reranker": "none",
+        "backend": "pgvector",
+        "verdicts": [
+            {
+                "switch": "RAG_CONTEXT_TAGGING",
+                "value": "true",
+                "delta": 0.0,
+                "ci_low": -0.01,
+                "ci_high": 0.01,
+                "band": 0.02,
+                "p_value": 0.5,
+                "p_holm": 1.0,
+                "gated_slices_ok": True,
+                "too_small_slices": ["category:table"],
+                "latency_ok": True,
+                "injection_asr": 0.0,
+                "decision": "adopt",
+                "reason": "security_wins_ties",
+            }
+        ],
+        "backend_comparison": {
+            "results": [
+                {
+                    "backend": "qdrant",
+                    "config_name": "qdrant-best",
+                    "valid": False,
+                    "invalid_reason": "backend_impl_fake",
+                    "cost_note": "one self-hosted node",
+                    "operational_note": "a second store to run, sync and reconcile",
+                }
+            ],
+            "winner": "pgvector",
+            "reason": "no_backend_beyond_ci",
+        },
+        "config_hashes": {"incumbent": _P7_SHA_PLAN, "ablate-context-tagging": _P7_SHA_INCUMBENT},
+        "test_split_uses": [
+            {
+                "run_id": "run-0001",
+                "config_name": "incumbent",
+                "plan_sha256": _P7_SHA_PLAN,
+                "used_at": "2026-01-05T06:00:00Z",
+                "registered": True,
+            }
+        ],
+    }
+    if not provisional:
+        data["ship_check_ref"] = ShipCheckResult(
+            passed=True,
+            target_metric="recall_at_10",
+            target_delta=0.03,
+            ci_low=0.01,
+            ci_high=0.05,
+            baseline_hash=_FL_SHA_A,
+            candidate_hash=_FL_SHA_B,
+            gate_population="real",
+        ).model_dump(mode="json")
+        data["cost"] = {
+            "per_1000_documents": [
+                {
+                    "embedding_profile": "openai-3-small-1536",
+                    "backend": "pgvector",
+                    "documents": {
+                        "parse": _p7_amount(1.2),
+                        "embedding": _p7_amount(0.02),
+                        "enrichment": _p7_amount(None, "not_provided"),
+                        "external_store": _p7_amount(0.0),
+                    },
+                }
+            ],
+            "per_1000_queries": [
+                {
+                    "config_name": "ablate-context-tagging",
+                    "queries": {
+                        "query_embedding": _p7_amount(0.001),
+                        "rerank": _p7_amount(0.0),
+                        "generation": _p7_amount(1.5),
+                        "external_store": _p7_amount(None, "not_measured"),
+                    },
+                }
+            ],
+            "basis": {"price_table_sha256": _P7_SHA_TABLE, "document_sample": 20, "query_sample": 20, "kind": "estimated"},
+        }
+        data["latency"] = {
+            "budgets_sha256": _P7_SHA_TABLE,
+            "entries": [
+                {
+                    "config_name": "ablate-context-tagging",
+                    "channel": "chat",
+                    "values": [
+                        {
+                            "stage": "total",
+                            "p50_ms": 800.0,
+                            "p95_ms": 1600.0,
+                            "budget_p50_ms": 1500.0,
+                            "budget_p95_ms": 3000.0,
+                            "within_budget": True,
+                        },
+                        {"stage": "rerank", "p50_ms": 40.0, "p95_ms": 90.0, "within_budget": None, "report_only": True},
+                    ],
+                }
+            ],
+        }
+        data["per_language"] = [
+            LanguageQuality(
+                language=LANGUAGE_CODES[0], metric="recall_at_10", n=12, value=0.8, baseline=0.79, difference=0.01,
+                band=0.02, below_baseline=False,
+            ).model_dump(mode="json"),
+            LanguageQuality(
+                language=LANGUAGE_CODES[1], metric="recall_at_10", n=4, value=0.75, baseline=0.75, difference=0.0,
+                band=0.02, below_baseline=None, reason="too_small",
+            ).model_dump(mode="json"),
+        ]
+    return DefaultsDecision.model_validate(data)
+
+
+def _p7_vendor_data_flow() -> VendorDataFlow:
+    return VendorDataFlow.model_validate(
+        {
+            "vendors": [
+                {
+                    "vendor": "example-reranker",
+                    "name": "Example reranker",
+                    "hosts": ["api.example.com"],
+                    "content": ["query", "chunk_text"],
+                    "switch": "RAG_RERANKER",
+                    "opt_in": True,
+                    "multi_tenant": "allowed",
+                    "retention": "to_verify",
+                    "training": "to_verify",
+                    "providers": ["example"],
+                },
+                {
+                    "vendor": "example-store",
+                    "name": "Example vector store",
+                    "hosts": ["store.example.net"],
+                    "content": ["vectors", "lexical_text"],
+                    "switch": "RAG_RETRIEVAL_BACKEND",
+                    "opt_in": True,
+                    "multi_tenant": "requires_ack",
+                    "ack_switch": "RAG_EXAMPLE_MULTI_TENANT_ACK",
+                    "retention": "to_verify",
+                    "training": "to_verify",
+                },
+            ]
+        }
+    )
+
+
+def _phase7_release_models() -> dict[str, Any]:
+    return {
+        "DefaultsDecision": _p7_defaults_decision(),
+        "RegressionPlan": _p7_regression_plan(),
+        "VendorDataFlow": _p7_vendor_data_flow(),
+    }
+
+
 def build_samples() -> dict[str, dict[str, Any]]:
     models = {
         **_models(),
@@ -3867,6 +4065,7 @@ def build_samples() -> dict[str, dict[str, Any]]:
         **_finetune_models(),
         **_phase52_models(),
         **_phase53_models(),
+        **_phase7_release_models(),
     }
     samples = {name: model.model_dump(mode="json") for name, model in models.items()}
     variants: dict[str, dict[str, Any]] = {
@@ -3999,4 +4198,8 @@ def build_samples() -> dict[str, dict[str, Any]]:
     variants.update(_phase33_variants())
     variants.update(_phase52_variants())
     variants.update(_phase52_eval_variants())
+    variants["DefaultsDecision:provisional_fixtures"] = {
+        "model": "DefaultsDecision",
+        "value": _p7_defaults_decision(provisional=True).model_dump(mode="json"),
+    }
     return {"samples": samples, "variants": variants}

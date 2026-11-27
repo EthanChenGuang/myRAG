@@ -266,6 +266,57 @@ ctx.addIssue({
 }), "purpose": z.enum(["private","deployment"]), "run_id": z.string().regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")), "split_rule": z.literal("ft-sha256-first8hex-mod100-80-10-10"), "tenant_keys": z.array(z.string().regex(new RegExp("^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"))).min(1) }).strict()
 export type DatasetManifest = z.infer<typeof DatasetManifestSchema>
 
+export const DefaultsDecisionSchema = z.object({ "backend": z.enum(["pgvector","weaviate","qdrant"]), "backend_comparison": z.object({ "incumbent": z.literal("pgvector").default("pgvector"), "reason": z.string().regex(new RegExp("^[a-z0-9_]+$")), "results": z.array(z.object({ "backend": z.enum(["pgvector","weaviate","qdrant"]), "band": z.union([z.number().gte(0), z.null()]).default(null), "ci_high": z.union([z.number(), z.null()]).default(null), "ci_low": z.union([z.number(), z.null()]).default(null), "config_name": z.string().regex(new RegExp("^[a-z0-9][a-z0-9_.:-]{0,127}$")), "cost_note": z.string().min(1).max(1000), "delta": z.union([z.number(), z.null()]).default(null), "invalid_reason": z.union([z.string().regex(new RegExp("^[a-z0-9_]+$")), z.null()]).default(null), "operational_note": z.string().min(1).max(1000), "valid": z.boolean() }).strict()).min(1), "winner": z.enum(["pgvector","weaviate","qdrant"]) }).strict(), "config_hashes": z.record(z.string(), z.string().regex(new RegExp("^[a-f0-9]{64}$"))).superRefine((value, ctx) => {
+for (const key in value) {
+if (key.match(new RegExp("^[a-z0-9][a-z0-9_.:-]{0,127}$"))) {
+const result = z.string().regex(new RegExp("^[a-f0-9]{64}$")).safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}), "cost": z.object({ "basis": z.object({ "document_sample": z.number().int().gte(0), "kind": z.enum(["measured","estimated"]), "price_table_sha256": z.string().regex(new RegExp("^[a-f0-9]{64}$")), "query_sample": z.number().int().gte(0) }).strict(), "per_1000_documents": z.array(z.object({ "backend": z.union([z.enum(["pgvector","weaviate","qdrant"]), z.null()]).default(null), "config_name": z.union([z.string().regex(new RegExp("^[a-z0-9][a-z0-9_.:-]{0,127}$")), z.null()]).default(null), "documents": z.union([z.object({ "embedding": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict(), "enrichment": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict(), "external_store": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict(), "parse": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict() }).strict(), z.null()]).default(null), "embedding_profile": z.union([z.string().min(1).max(128), z.null()]).default(null), "queries": z.union([z.object({ "external_store": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict(), "generation": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict(), "query_embedding": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict(), "rerank": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict() }).strict(), z.null()]).default(null) }).strict().describe("Cost per 1,000 documents ingested (per embedding profile and backend) or per 1,000 queries (per configuration).")).min(1), "per_1000_queries": z.array(z.object({ "backend": z.union([z.enum(["pgvector","weaviate","qdrant"]), z.null()]).default(null), "config_name": z.union([z.string().regex(new RegExp("^[a-z0-9][a-z0-9_.:-]{0,127}$")), z.null()]).default(null), "documents": z.union([z.object({ "embedding": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict(), "enrichment": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict(), "external_store": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict(), "parse": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict() }).strict(), z.null()]).default(null), "embedding_profile": z.union([z.string().min(1).max(128), z.null()]).default(null), "queries": z.union([z.object({ "external_store": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict(), "generation": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict(), "query_embedding": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict(), "rerank": z.object({ "reason": z.union([z.enum(["not_measured","not_provided"]), z.null()]).default(null), "usd": z.union([z.number().gte(0), z.null()]) }).strict() }).strict(), z.null()]).default(null) }).strict().describe("Cost per 1,000 documents ingested (per embedding profile and backend) or per 1,000 queries (per configuration).")).min(1) }).strict().optional(), "decided_at": z.string().regex(new RegExp("^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})?)?$")), "defaults": z.record(z.string(), z.string()).superRefine((value, ctx) => {
+for (const key in value) {
+if (key.match(new RegExp("^[A-Z][A-Z0-9_]{0,127}$"))) {
+const result = z.string().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}), "embedding_profile": z.string().min(1).max(128), "incumbent": z.record(z.string(), z.string()).superRefine((value, ctx) => {
+for (const key in value) {
+if (key.match(new RegExp("^[A-Z][A-Z0-9_]{0,127}$"))) {
+const result = z.string().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}), "incumbent_source": z.object({ "path": z.literal("eval/decisions/04.1-retrieval-defaults.json"), "sha256": z.string().regex(new RegExp("^[a-f0-9]{64}$")) }).strict(), "latency": z.object({ "budgets_sha256": z.string().regex(new RegExp("^[a-f0-9]{64}$")), "entries": z.array(z.object({ "channel": z.enum(["chat","voice"]), "config_name": z.string().regex(new RegExp("^[a-z0-9][a-z0-9_.:-]{0,127}$")), "values": z.array(z.object({ "budget_p50_ms": z.union([z.number().gte(0), z.null()]).default(null), "budget_p95_ms": z.union([z.number().gte(0), z.null()]).default(null), "p50_ms": z.union([z.number().gte(0), z.null()]), "p95_ms": z.union([z.number().gte(0), z.null()]), "report_only": z.boolean().default(false), "stage": z.string().regex(new RegExp("^[a-z0-9_]+$")), "within_budget": z.union([z.boolean(), z.null()]) }).strict()).min(1) }).strict()).min(1) }).strict().optional(), "per_language": z.array(z.object({ "band": z.number().gte(0), "baseline": z.union([z.number(), z.null()]), "below_baseline": z.union([z.boolean(), z.null()]), "difference": z.union([z.number(), z.null()]), "language": z.string().regex(new RegExp("^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$")), "metric": z.string().regex(new RegExp("^[a-z][a-z0-9_@.+]{0,127}$")), "n": z.number().int().gte(0), "reason": z.union([z.string().regex(new RegExp("^[a-z0-9_]+$")), z.null()]).default(null), "value": z.union([z.number(), z.null()]) }).strict().describe("One enabled language: the adopted configuration's primary metric against the incumbent's (ADM-02).")).optional(), "plan_sha256": z.string().regex(new RegExp("^[a-f0-9]{64}$")), "primary_metric": z.string().regex(new RegExp("^[a-z][a-z0-9_@.+]{0,127}$")), "provisional": z.union([z.literal("fixtures"), z.null()]), "reranker": z.string().min(1).max(64), "schema_version": z.literal(1).default(1), "ship_check_ref": z.object({ "baseline_hash": z.string().regex(new RegExp("^[a-f0-9]{64}$")), "candidate_hash": z.string().regex(new RegExp("^[a-f0-9]{64}$")), "ci_high": z.union([z.number(), z.null()]).default(null), "ci_low": z.union([z.number(), z.null()]).default(null), "gate_population": z.enum(["all","production","real"]), "manifest_hash": z.union([z.string().regex(new RegExp("^[a-f0-9]{64}$")), z.null()]).default(null), "passed": z.boolean(), "reasons": z.array(z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,63}$"))).refine((arr) => arr.every((item, i) => arr.indexOf(item) == i), "All items must be unique!").optional(), "resamples": z.number().int().gte(1).default(10000), "schema_version": z.literal(1).default(1), "seed": z.number().int().default(0), "target_delta": z.union([z.number(), z.null()]).default(null), "target_metric": z.string().regex(new RegExp("^[a-z][a-z0-9_@.]{0,63}$")) }).strict().describe("D-24 ship rule result; passed exactly when no reason code is listed.").optional(), "test_split_uses": z.array(z.object({ "config_name": z.string().regex(new RegExp("^[a-z0-9][a-z0-9_.:-]{0,127}$")), "plan_sha256": z.string().regex(new RegExp("^[a-f0-9]{64}$")), "reason": z.union([z.string().min(10).max(500), z.null()]).default(null), "registered": z.boolean(), "run_id": z.string().min(1).max(128), "used_at": z.string().regex(new RegExp("^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})?)?$")) }).strict().describe("One line of the test-split ledger; an unregistered run names its reason (Pitfall 12).")).optional(), "verdicts": z.array(z.object({ "band": z.number().gte(0), "ci_high": z.union([z.number(), z.null()]), "ci_low": z.union([z.number(), z.null()]), "decision": z.enum(["adopt","keep_incumbent"]), "delta": z.union([z.number(), z.null()]), "gated_slices_ok": z.boolean(), "injection_asr": z.union([z.number().gte(0).lte(1), z.null()]), "latency_ok": z.boolean(), "p_holm": z.union([z.number().gte(0).lte(1), z.null()]), "p_value": z.union([z.number().gte(0).lte(1), z.null()]), "reason": z.string().regex(new RegExp("^[a-z0-9_]+$")), "switch": z.string().regex(new RegExp("^[A-Z][A-Z0-9_]{0,127}$")), "too_small_slices": z.array(z.string()).optional(), "value": z.string() }).strict()).optional() }).strict().describe("D-18 record in eval/config/release-defaults.json; code defaults follow only a non-provisional one.")
+export type DefaultsDecision = z.infer<typeof DefaultsDecisionSchema>
+
 export const DetectVlmRequestSchema = z.object({ "attempt_no": z.number().int().gte(1), "pages": z.array(z.object({ "page": z.number().int().gte(1), "png_base64": z.string().min(1) }).strict()).min(1).max(20), "worker_id": z.string().min(1).max(128) }).strict()
 export type DetectVlmRequest = z.infer<typeof DetectVlmRequestSchema>
 
@@ -824,6 +875,41 @@ export type RefusalFeedbackRequest = z.infer<typeof RefusalFeedbackRequestSchema
 export const RefusalThresholdsSchema = z.object({ "cells": z.array(z.object({ "config_hash": z.string().regex(new RegExp("^[a-f0-9]{64}$")), "dev": z.object({ "answerable_count": z.number().int().gte(0), "correct_refusal_rate": z.number().gte(0).lte(1), "false_refusal_rate": z.number().gte(0).lte(1), "false_refusal_rate_upper_bound": z.number().gte(0).lte(1), "no_answer_count": z.number().int().gte(0) }).strict(), "embedding_model": z.string().min(1).optional(), "holdout": z.object({ "answerable_count": z.number().int().gte(0), "correct_refusal_rate": z.number().gte(0).lte(1), "false_refusal_rate": z.number().gte(0).lte(1), "false_refusal_rate_upper_bound": z.number().gte(0).lte(1), "no_answer_count": z.number().int().gte(0) }).strict(), "holdout_evaluations": z.number().int().gte(0), "key": z.string().min(1), "mode": z.enum(["strict","balanced","flexible"]).optional(), "model": z.string().min(1), "pairing": z.enum(["same","cross"]), "provider": z.string().min(1), "query_language": z.enum(["zh","en","it"]), "recorded_at": z.string(), "rerank_text_version": z.number().int().gte(0), "source": z.enum(["fixture","live"]), "status": z.enum(["calibrated","uncalibrated","insufficient_data","failed_holdout"]), "threshold": z.union([z.number(), z.null()]).default(null), "tokenizer_version": z.number().int().gte(0) }).strict()).optional(), "config_hash": z.union([z.string().regex(new RegExp("^[a-f0-9]{64}$")), z.null()]).default(null), "provenance": z.object({ "source": z.enum(["defaults","sweep","calibration","fixture","live"]) }).strict().optional(), "schema_version": z.union([z.literal(1), z.literal(2)]).default(1) }).strict()
 export type RefusalThresholds = z.infer<typeof RefusalThresholdsSchema>
 
+export const RegressionPlanSchema = z.object({ "alpha": z.number().gt(0).lt(1).default(0.05), "configs": z.array(z.object({ "env": z.record(z.string(), z.string()).superRefine((value, ctx) => {
+for (const key in value) {
+if (key.match(new RegExp("^[A-Z][A-Z0-9_]{0,127}$"))) {
+const result = z.string().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).optional(), "name": z.string().regex(new RegExp("^[a-z0-9][a-z0-9_.:-]{0,127}$")), "overrides": z.record(z.string(), z.union([z.string(), z.number().int(), z.number(), z.boolean()])).superRefine((value, ctx) => {
+for (const key in value) {
+if (key.match(new RegExp("^[a-z0-9_]+$"))) {
+const result = z.union([z.string(), z.number().int(), z.number(), z.boolean()]).safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).optional() }).strict()).min(1), "created_at": z.string().regex(new RegExp("^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})?)?$")), "gated_slice_prefixes": z.array(z.string()).min(1), "incumbent_config": z.string().regex(new RegExp("^[a-z0-9][a-z0-9_.:-]{0,127}$")), "min_gate_n": z.number().int().gte(1).default(10), "primary_metric": z.string().regex(new RegExp("^[a-z][a-z0-9_@.+]{0,127}$")), "schema_version": z.literal(1).default(1), "split": z.enum(["dev","test"]), "stage": z.enum(["a","b"]), "test_split_budget": z.number().int().gte(0) }).strict().describe("A-10 pre-registration, written before the first test-split run; its canonical hash is the record's plan_sha256.")
+export type RegressionPlan = z.infer<typeof RegressionPlanSchema>
+
 export const ReleaseGateConfigSchema = z.object({ "config_hash": z.union([z.string().regex(new RegExp("^[a-f0-9]{64}$")), z.null()]).default(null), "provenance": z.object({ "source": z.enum(["defaults","sweep","calibration","fixture","live"]) }).strict(), "required_parts": z.array(z.enum(["nightly_absolute","judge_floors","ship_check","pr_smoke"])).min(1), "schema_version": z.literal(1).default(1), "status_context": z.literal("rag-release-gate") }).strict()
 export type ReleaseGateConfig = z.infer<typeof ReleaseGateConfigSchema>
 
@@ -1060,6 +1146,9 @@ export type VectorFileHeader = z.infer<typeof VectorFileHeaderSchema>
 
 export const VectorSyncSliceReportSchema = z.object({ "budget_ms": z.number().int().gte(0), "claimed": z.number().int().gte(0), "dead": z.number().int().gte(0), "deleted": z.number().int().gte(0), "elapsed_ms": z.number().int().gte(0), "failed": z.number().int().gte(0), "lag_seconds": z.number().gte(0), "mode": z.enum(["drain","reconcile"]), "more_pending": z.boolean(), "upserted": z.number().int().gte(0) }).strict()
 export type VectorSyncSliceReport = z.infer<typeof VectorSyncSliceReportSchema>
+
+export const VendorDataFlowSchema = z.object({ "schema_version": z.literal(1).default(1), "vendors": z.array(z.object({ "ack_switch": z.string().regex(new RegExp("^[A-Z][A-Z0-9_]{0,127}$")).optional(), "content": z.array(z.enum(["query","chunk_text","answer","vectors","lexical_text","file_bytes","traces"])).min(1), "hosts": z.array(z.string().regex(new RegExp("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$")).max(253)).min(1), "multi_tenant": z.enum(["allowed","requires_ack","blocked"]), "name": z.string().min(1).max(128), "opt_in": z.boolean(), "providers": z.array(z.string().regex(new RegExp("^[a-z0-9][a-z0-9_.-]{0,63}$"))).optional(), "retention": z.string().min(1).max(1000), "switch": z.union([z.string().regex(new RegExp("^[A-Z][A-Z0-9_]{0,127}$")), z.null()]), "training": z.string().min(1).max(1000), "vendor": z.string().regex(new RegExp("^[a-z0-9][a-z0-9_.-]{0,63}$")) }).strict()).min(1) }).strict().describe("D-20 inventory in config/rag/vendor-data-flow.json; retention and training read to_verify until checked.")
+export type VendorDataFlow = z.infer<typeof VendorDataFlowSchema>
 
 export const VersionConflictSchema = z.object({ "document_ids": z.array(z.string().min(1)).min(2).refine((arr) => arr.every((item, i) => arr.indexOf(item) == i), "All items must be unique!"), "group_rule": z.enum(["supersession_link","supersession_candidate","title_match"]), "latest_document_id": z.string().min(1), "mixed_versions": z.boolean().default(false) }).strict()
 export type VersionConflict = z.infer<typeof VersionConflictSchema>
