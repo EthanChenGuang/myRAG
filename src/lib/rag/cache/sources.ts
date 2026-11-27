@@ -69,15 +69,23 @@ export function withCurrentSources(answer: CachedAnswer, resolved: ReadonlyMap<s
 
 export type HitResolution = { kind: 'hit'; hit: CacheHit } | { kind: 'unresolved' };
 
-/** W6: a hit's citations are re-resolved under the request's TenantScope; a hit without citations makes no call. */
+/**
+ * W6, CACHE-01: every document a hit names (citations, sources and source versions) is re-resolved under the request's TenantScope,
+ * so a hit naming a document that is not a current, ready document of the request's tenant is unresolved whatever the backend returned.
+ * Version freshness stays with the backends (rag_cache_sources_current). A hit naming no document makes no call.
+ */
 export async function resolveHitSources(scope: TenantScope, hit: CacheHit, options: ResolveSourcesOptions): Promise<HitResolution> {
-  const citations = hit.answer.citations ?? [];
-  if (citations.length === 0) return { kind: 'hit', hit };
-  const resolved = await resolveCachedSources(
-    scope,
-    citations.map((citation) => citation.documentId),
-    options,
-  );
-  const answer = withCurrentSources(hit.answer, resolved);
-  return answer ? { kind: 'hit', hit: { ...hit, answer } } : { kind: 'unresolved' };
+  const answer = hit.answer;
+  const ids = [
+    ...new Set([
+      ...(answer.citations ?? []).map((citation) => citation.documentId),
+      ...(answer.sources ?? []).map((source) => source.document_id),
+      ...(answer.source_versions ?? []).map((source) => source.document_id),
+    ]),
+  ];
+  if (ids.length === 0) return { kind: 'hit', hit };
+  const resolved = await resolveCachedSources(scope, ids, options);
+  if (ids.some((id) => !resolved.has(id))) return { kind: 'unresolved' };
+  const current = withCurrentSources(answer, resolved);
+  return current ? { kind: 'hit', hit: { ...hit, answer: current } } : { kind: 'unresolved' };
 }
