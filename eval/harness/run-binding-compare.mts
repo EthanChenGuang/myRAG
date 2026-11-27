@@ -7,6 +7,11 @@
  * Fake mode (default) installs fixture embedders for every catalog model and never reads a vendor key. --live requires VOYAGE_API_KEY
  * (presence only, never printed), prints each candidate's re-embed dry-run cost and stops with exit 4 unless --confirm-cost is given.
  *
+ * --base-url <app> (quick-311) runs against a real deployment instead: no fixture database and no fake for any profile, the scoped re-embed
+ * through npm run rag:reembed on the real project, the arms through run-eval --base-url, see binding-compare-live.mts. It needs --golden,
+ * --candidates and RAG_EVAL_SECRET (32+ characters, never generated here) and writes a population=real comparison only when the doc-type
+ * slice holds production or human items alone.
+ *
  * Exit codes: 0 comparison written, 2 bad arguments, 3 failure, 4 cost not confirmed.
  */
 import { spawnSync } from 'node:child_process';
@@ -61,6 +66,10 @@ export interface BindingCompareArgs {
   /** Record the domain-pack baseline (D-24): this many --baseline-only runs in separate processes, then rag_eval.baseline record-reports. */
   recordBaseline: string | null;
   runs: number;
+  /** Real-deployment mode (quick-311): the app the arms run against. */
+  baseUrl: string | null;
+  organizationId: string | null;
+  userId: string | null;
 }
 
 export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
@@ -78,6 +87,9 @@ export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
         'baseline-only': { type: 'boolean', default: false },
         'record-baseline': { type: 'string' },
         runs: { type: 'string' },
+        'base-url': { type: 'string' },
+        org: { type: 'string' },
+        user: { type: 'string' },
       },
       strict: true,
     });
@@ -103,6 +115,15 @@ export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
         .filter(Boolean)
     : null;
   if (candidates !== null && candidates.length === 0) throw new UsageError('--candidates names no profile');
+  const baseUrl = values['base-url']?.trim() || null;
+  if (baseUrl === null && (values.org || values.user)) throw new UsageError('--org and --user scope a --base-url run only');
+  if (baseUrl !== null) {
+    if (baselineMode) throw new UsageError('the baseline modes record the fixture baseline; they take no --base-url');
+    if (values.live) throw new UsageError('--base-url is always live; drop --live');
+    if (!values.golden) throw new UsageError('--base-url needs --golden <real golden file>: the fixture golden points at fixture documents');
+    if (candidates === null) throw new UsageError('--base-url needs --candidates <profileId,...>');
+    if (values.org && values.user) throw new UsageError('--org and --user are exclusive');
+  }
   return {
     docType: docType === '' ? null : (docType as BindingCompareArgs['docType'] & string),
     candidates,
@@ -113,6 +134,9 @@ export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
     baselineOnly,
     recordBaseline,
     runs,
+    baseUrl,
+    organizationId: values.org?.trim() || null,
+    userId: values.user?.trim() || null,
   };
 }
 
@@ -270,10 +294,45 @@ function recordDomainBaseline(args: BindingCompareArgs, out: string): number {
   return runPython('rag_eval.baseline', ['record-reports', ...reports.flatMap((report) => ['--report', report]), '--out', out]);
 }
 
+/** --base-url: nothing below this point of main() runs, so no fixture database, fixture env or fixture embedder is ever installed. */
+async function liveDeploymentMain(args: BindingCompareArgs): Promise<number> {
+  const { config: loadDotenv } = await import('dotenv');
+  loadDotenv({ path: path.join(REPO_ROOT, '.env.local'), quiet: true });
+  if ((process.env.RAG_EVAL_SECRET ?? '').length < 32) {
+    console.error('[Binding Compare] --base-url needs RAG_EVAL_SECRET (32+ characters, the deployment\'s value; presence is checked, the value is never printed)');
+    return EXIT_USAGE;
+  }
+  const live = await import('./binding-compare-live.mts');
+  const { assertSafeBaseUrl } = await import('./run-eval.mts');
+  assertSafeBaseUrl(args.baseUrl as string);
+  try {
+    return await live.runLiveDeploymentCompare(
+      {
+        docType: args.docType as string,
+        candidates: args.candidates ?? [],
+        golden: args.golden as string,
+        outDir: args.outDir,
+        baseUrl: args.baseUrl as string,
+        confirmCost: args.confirmCost,
+        organizationId: args.organizationId,
+        userId: args.userId,
+      },
+      await live.defaultLiveDeps(runPython),
+    );
+  } catch (error) {
+    if (error instanceof live.LiveCompareError) {
+      console.error(`[Binding Compare] ${error.message}`);
+      return error.exitCode;
+    }
+    throw error;
+  }
+}
+
 async function main(argv: string[]): Promise<number> {
   const args = parseBindingCompareArgs(argv);
   fs.mkdirSync(args.outDir, { recursive: true });
   if (args.recordBaseline !== null) return recordDomainBaseline(args, args.recordBaseline);
+  if (args.baseUrl !== null) return liveDeploymentMain(args);
 
   // Live mode only: the key must be present. Its value is kept in memory and never printed; fake mode never reads it.
   let liveVoyageKey: string | null = null;
