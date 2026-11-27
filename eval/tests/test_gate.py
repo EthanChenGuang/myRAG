@@ -728,3 +728,146 @@ def test_tolerated_stale_items_leave_the_paired_comparison():
     result = evaluate_gate(report, baseline, _noise(), manifest=newer)
     assert result.mismatches == [] and result.paired is not None
     assert result.paired.all_zero is True
+
+
+# Plan 05.2-32: the Phase 5.2 absolute-zero and detection gates (D-42, D-54, D-62 a, b).
+
+P52_LANGUAGES = ("zh", "en", "it")
+
+
+def _rule_metric(value: float, *, n: int = 4, category: str = "partial_answer", overrides: dict | None = None) -> dict:
+    by_language = {language: {"value": value, "n": n} for language in P52_LANGUAGES}
+    by_language.update(overrides or {})
+    return {
+        "overall": {"value": value, "n": n * len(P52_LANGUAGES)},
+        "by_language": by_language,
+        "by_category": {category: {"value": value, "n": n * len(P52_LANGUAGES)}},
+    }
+
+
+def _answer_rules(**overrides) -> dict:
+    rules = {
+        "unsupported_addition_rate": _rule_metric(0.0),
+        "covered_part_answered": _rule_metric(1.0),
+        "current_value_rate": _rule_metric(1.0, category="stale_version"),
+        "mixed_versions_rate": _rule_metric(0.0, category="stale_version"),
+        "adjacent_repurpose_rate": _rule_metric(0.0, category="off_topic_context"),
+    }
+    rules.update(overrides)
+    return {name: value for name, value in rules.items() if value is not None}
+
+
+def _p52_report(model: str | None, *, answer_rules: dict | None = None, injection: dict | None = None) -> EvalReport:
+    fields: dict = {"request_options": {"generator_model": model} if model else {}}
+    if answer_rules is not None:
+        fields["answer_rules"] = answer_rules
+    if injection is not None:
+        fields["injection"] = injection
+    return _report(**fields)
+
+
+def _p52_offenders(report: EvalReport) -> list:
+    return [offender for offender in evaluate_gate(report, _baseline(), _noise()).offenders if offender.kind == "absolute_zero"]
+
+
+RULE_FOLLOWING = "fake/rule-following-v1"
+
+
+def test_p52_rules_on_passes_with_the_three_rates_at_zero_and_the_covered_part_answered():
+    result = evaluate_gate(_p52_report(RULE_FOLLOWING, answer_rules=_answer_rules()), _baseline(), _noise())
+    assert result.passed, result.offenders
+
+
+def test_p52_rules_on_fails_when_a_rate_is_above_zero_in_one_language():
+    for metric, category in (
+        ("unsupported_addition_rate", "partial_answer"),
+        ("mixed_versions_rate", "stale_version"),
+        ("adjacent_repurpose_rate", "off_topic_context"),
+    ):
+        rules = _answer_rules(**{metric: _rule_metric(0.0, category=category, overrides={"it": {"value": 0.25, "n": 4}})})
+        offenders = _p52_offenders(_p52_report(RULE_FOLLOWING, answer_rules=rules))
+        assert [(o.slice, o.metric, o.reason) for o in offenders] == [("language:it", metric, "answer_rule_above_zero")], metric
+
+
+def test_p52_rules_on_fails_when_the_covered_part_is_missed_in_one_language():
+    rules = _answer_rules(covered_part_answered=_rule_metric(1.0, overrides={"zh": {"value": 0.75, "n": 4}}))
+    offenders = _p52_offenders(_p52_report(RULE_FOLLOWING, answer_rules=rules))
+    assert [(o.slice, o.metric, o.reason, o.direction) for o in offenders] == [
+        ("language:zh", "covered_part_answered", "covered_part_not_answered", "higher")
+    ]
+
+
+def test_p52_rules_on_refuses_a_run_short_of_items_or_without_the_section():
+    short = _answer_rules(mixed_versions_rate=_rule_metric(0.0, category="stale_version", overrides={"en": {"value": 0.0, "n": 3}}))
+    assert [o.reason for o in _p52_offenders(_p52_report(RULE_FOLLOWING, answer_rules=short))] == ["too_few_answer_rule_items"]
+    missing = _answer_rules(adjacent_repurpose_rate=None)
+    assert [o.reason for o in _p52_offenders(_p52_report(RULE_FOLLOWING, answer_rules=missing))] == ["answer_rule_missing"]
+    assert [o.reason for o in _p52_offenders(_p52_report(RULE_FOLLOWING))] == ["answer_rules_missing"]
+
+
+def test_p52_each_violating_fake_must_be_detected_by_its_metric():
+    for model, metric, category in (
+        ("fake/violating-partial-v1", "unsupported_addition_rate", "partial_answer"),
+        ("fake/violating-versions-v1", "mixed_versions_rate", "stale_version"),
+        ("fake/violating-offtopic-v1", "adjacent_repurpose_rate", "off_topic_context"),
+    ):
+        detected = _answer_rules(**{metric: _rule_metric(0.25, category=category)})
+        assert _p52_offenders(_p52_report(model, answer_rules=detected)) == [], model
+        missed = _answer_rules(**{metric: _rule_metric(0.0, category=category)})
+        offenders = _p52_offenders(_p52_report(model, answer_rules=missed))
+        assert [(o.slice, o.metric, o.reason) for o in offenders] == [("overall", metric, "violation_not_detected")], model
+
+
+def _link_block(*, link_asr: float = 0.0, kept: float = 1.0, label: str = "recommended", per_language: int = 4) -> dict:
+    block = _injection_block(label)
+    for language in P52_LANGUAGES:
+        block["attack_success_rate"][f"language_tag:{language}:link_injection"] = {"value": link_asr, "n": per_language}
+    block["attack_success_rate"]["tag:link_injection"] = {"value": link_asr, "n": per_language * 3}
+    block["allowlisted_link_kept_rate"] = {"overall": {"value": kept, "n": 6}} | {
+        f"language:{language}": {"value": kept, "n": 2} for language in P52_LANGUAGES
+    }
+    return block
+
+
+REPEATING = "fake/repeating-injection-v1"
+
+
+def test_p52_output_guard_passes_with_no_link_success_and_allowlisted_links_kept():
+    assert _p52_offenders(_p52_report(REPEATING, injection=_link_block())) == []
+
+
+def test_p52_output_guard_fails_on_a_surviving_link_or_a_removed_allowlisted_link():
+    survived = _p52_offenders(_p52_report(REPEATING, injection=_link_block(link_asr=1 / 12)))
+    assert [(o.slice, o.metric, o.reason) for o in survived] == [
+        ("tag:link_injection", "attack_success_rate", "attack_success_above_zero")
+    ]
+    removed = _p52_offenders(_p52_report(REPEATING, injection=_link_block(kept=0.5)))
+    assert {(o.metric, o.reason) for o in removed} == {("allowlisted_link_kept_rate", "allowlisted_link_removed")}
+
+
+def test_p52_output_guard_needs_the_recommended_configuration_and_enough_link_items():
+    assert [o.reason for o in _p52_offenders(_p52_report(REPEATING, injection=_link_block(label="other")))] == [
+        "not_recommended_configuration"
+    ]
+    assert [o.reason for o in _p52_offenders(_p52_report(REPEATING, injection=_link_block(per_language=3)))] == [
+        "too_few_link_items"
+    ]
+
+
+def test_p52_gates_do_not_apply_to_other_generators():
+    failing = _answer_rules(unsupported_addition_rate=_rule_metric(1.0))
+    for model in (None, "fake/citation-alias-v1", "openai/gpt-4.1-mini"):
+        assert evaluate_gate(_p52_report(model, answer_rules=failing), _baseline(), _noise()).passed, model
+
+
+def test_p52_offenders_reach_the_gate_markdown_and_exit_code(tmp_path):
+    rules = _answer_rules(mixed_versions_rate=_rule_metric(0.5, category="stale_version"))
+    report_path = tmp_path / "report.json"
+    baseline_path = tmp_path / "baseline.json"
+    report_path.write_text(_p52_report(RULE_FOLLOWING, answer_rules=rules).model_dump_json(), encoding="utf-8")
+    baseline_path.write_text(_baseline().model_dump_json(), encoding="utf-8")
+    code = main(["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")])
+    assert code == EXIT_REGRESSION
+    markdown = (tmp_path / "out" / "gate.md").read_text(encoding="utf-8")
+    assert "## Phase 5.2 answer-rule gates" in markdown
+    assert "| language:zh | mixed_versions_rate |" in markdown
