@@ -88,18 +88,42 @@ describe('local test-rag gate mode follows the measured tier (O-1, H-10)', () =>
     }
   });
 
-  test('the bare local defaults are report for prechunked and enforce for ingest on the committed record', () => {
+  test('the bare local defaults follow the committed record: prechunked enforces all but false refusal, ingest enforces all', () => {
     expect(resolveGatesMode(undefined, { fixtureMode: 'prechunked', live: false })).toEqual({
-      mode: measured.get('smoke')?.mode,
+      mode: 'enforce',
       source: 'measured_tier',
       tier: 'smoke',
+      reportOnly: ['false_refusal_rate'],
     });
-    expect(resolveGatesMode(undefined, { fixtureMode: 'ingest', live: false }).mode).toBe(measured.get('smoke-ingest')?.mode);
+    expect(measured.get('smoke')?.reportOnly).toEqual(['false_refusal_rate']);
+    expect(resolveGatesMode(undefined, { fixtureMode: 'ingest', live: false })).toEqual({
+      mode: 'enforce',
+      source: 'measured_tier',
+      tier: 'smoke-ingest',
+      reportOnly: [],
+    });
     expect(measured.get('smoke-ingest')?.mode).toBe('enforce');
   });
 
+  test.each(invocations.map((run) => [run.out, run] as const))('%s: local report-only checks equal what pr-smoke passes (gap 3)', (_out, run) => {
+    const passed = /--gates-report-only\s+(\S+)/.exec(run.args)?.[1]?.split(',') ?? [];
+    const tier = byOut.get(run.out);
+    if (!tier) return;
+    expect(passed).toEqual(tier.reportOnly);
+    if (run.explicit === undefined && !run.live && !run.customInputs) {
+      const local = resolveGatesMode(undefined, { fixtureMode: run.fixtureMode, live: run.live, customInputs: run.customInputs });
+      expect(local.reportOnly).toEqual(passed);
+    }
+  });
+
   test('an explicit flag wins over the measured tier', () => {
-    expect(resolveGatesMode('enforce', { fixtureMode: 'prechunked', live: false })).toEqual({ mode: 'enforce', source: 'flag', tier: null });
+    expect(resolveGatesMode('enforce', { fixtureMode: 'prechunked', live: false })).toEqual({ mode: 'enforce', source: 'flag', tier: null, reportOnly: [] });
+    expect(resolveGatesMode(undefined, { fixtureMode: 'prechunked', live: false }, undefined, ['false_refusal_rate'])).toEqual({
+      mode: 'enforce',
+      source: 'flag',
+      tier: null,
+      reportOnly: ['false_refusal_rate'],
+    });
     expect(resolveGatesMode('report', { fixtureMode: 'ingest', live: false }).mode).toBe('report');
   });
 
@@ -112,6 +136,7 @@ describe('local test-rag gate mode follows the measured tier (O-1, H-10)', () =>
       mode: undefined,
       source: 'gate_default',
       tier: 'smoke',
+      reportOnly: [],
     });
   });
 

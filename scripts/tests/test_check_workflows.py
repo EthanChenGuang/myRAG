@@ -1310,8 +1310,43 @@ class AbsoluteGatesTest(unittest.TestCase):
 
     def test_report_only_tiers_come_from_the_measurement_record(self):
         tiers = check_workflows.report_only_outs(check_workflows.MEASUREMENT)
-        self.assertIn("eval/out/smoke", tiers)
+        self.assertIn("eval/out/negative", tiers)
         self.assertNotIn("eval/out/smoke-ingest", tiers)
+
+    # Gap 3 (quick-53): the prechunked tiers enforce every check except the report-only ceilings the record lists.
+    def test_report_only_checks_come_from_the_measurement_record(self):
+        listed = check_workflows.report_only_checks_by_out(check_workflows.MEASUREMENT)
+        expected = ["false_refusal_rate"]
+        self.assertEqual(
+            listed, {"eval/out/smoke": expected, "eval/out/smoke-legacy": expected, "eval/out/smoke-sec": expected}
+        )
+        self.assertNotIn("eval/out/smoke", check_workflows.report_only_outs(check_workflows.MEASUREMENT))
+
+    def test_a_prechunked_step_without_its_report_only_list_is_reported(self):
+        pr, nightly = self.workflows()
+        step = self.step(pr, "eval-smoke", "npm run test-rag -- --out eval/out/smoke ")
+        step["run"] = step["run"].replace(" --gates-report-only false_refusal_rate", "")
+        errors = self.errors_for(pr, nightly)
+        self.assertTrue(any("eval/out/smoke " in f"{e} " and "--gates-report-only false_refusal_rate" in e for e in errors), errors)
+
+    def test_a_different_report_only_list_is_reported(self):
+        pr, nightly = self.workflows()
+        step = self.step(pr, "eval-smoke", "--out eval/out/smoke-sec")
+        step["run"] = step["run"].replace("--gates-report-only false_refusal_rate", "--gates-report-only false_refusal_rate,false_answer_rate")
+        errors = self.errors_for(pr, nightly)
+        self.assertTrue(any("eval/out/smoke-sec" in e and "--gates-report-only" in e for e in errors), errors)
+
+    def test_a_report_only_list_on_a_fully_enforced_tier_is_reported(self):
+        pr, nightly = self.workflows()
+        self.step(pr, "eval-smoke", "--fixture-mode ingest --out eval/out/smoke-ingest")["run"] += " --gates-report-only false_refusal_rate"
+        errors = self.errors_for(pr, nightly)
+        self.assertTrue(any("eval/out/smoke-ingest" in e and "--gates-report-only" in e for e in errors), errors)
+
+    def test_report_mode_on_a_prechunked_tier_is_reported(self):
+        pr, nightly = self.workflows()
+        self.step(pr, "eval-smoke", "--out eval/out/smoke-legacy ")["run"] += " --gates-mode report"
+        errors = self.errors_for(pr, nightly)
+        self.assertTrue(any("eval/out/smoke-legacy" in e and "report" in e for e in errors), errors)
 
     def test_an_ungated_smoke_step_is_reported(self):
         pr, nightly = self.workflows()

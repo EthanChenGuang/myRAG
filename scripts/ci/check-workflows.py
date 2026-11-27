@@ -1554,6 +1554,11 @@ def latest_tier_modes(measurement_path: Path = MEASUREMENT) -> dict[str, str]:
     return {str(entry["out"]): str(entry.get("mode") or "") for _, entry in latest.values() if entry.get("out")}
 
 
+def report_only_checks_by_out(measurement_path: Path = MEASUREMENT) -> dict[str, list[str]]:
+    """Gap 3: the report-only ceilings of each measured tier's latest stage, keyed by --out (stub, see the GREEN commit)."""
+    return {}
+
+
 def report_only_outs(measurement_path: Path = MEASUREMENT) -> set[str]:
     return {out for out, mode in latest_tier_modes(measurement_path).items() if mode == "report"}
 
