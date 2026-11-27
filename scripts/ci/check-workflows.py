@@ -53,7 +53,7 @@ TS_JOB_NEEDLES = {
 # job -> the shard flag its test command must take from matrix.shard
 TS_SHARDED = {"ts-vitest": "--shard=", "ts-db": "--test-shard="}
 TS_TIMEOUT_MAX = 25
-PR_JOBS = [*TS_JOB_NEEDLES, "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build", "next-build"]
+PR_JOBS = [*TS_JOB_NEEDLES, "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "eval-smoke-p52", "gate-negative-control", "docker-build", "next-build"]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
 VERSION_COMMENT_RE = re.compile(r"^\s+#\s*v\d+(\.\d+){0,2}\s*$")
@@ -68,6 +68,17 @@ PRIVATE_FLAG = "HAS_PRIVATE_EVAL"
 WEEKLY_SKIP_NOTICE = "::notice::no private eval data on this runner, skipping weekly report"
 SEC_SMOKE_STEP = "npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec"
 SEC_NIGHTLY_STEP = "run-nightly.mts --sec-matrix --generator live"
+P52_SMOKE_STEP = "npm run test-rag -- --phase52 --out eval/out/smoke-p52"
+P52_NIGHTLY_STEP = "run-nightly.mts --phase52 --generator live --out eval/out/nightly-p52"
+P52_JUDGE_STEP = "rag_eval.judge.run"
+P52_SKIP_NOTICE = "::notice::judge key not configured, skipping Phase 5.2 answer-rule runs"
+# 05.2-32 (D-12): every generated file the schema-parity job regenerates is in its drift check.
+DRIFT_PATHS = (
+    "rag-sidecar/schemas",
+    "src/lib/rag-eval/contracts.generated.ts",
+    "src/lib/rag/lang/texts.generated.ts",
+    "tests/fixtures/contracts/samples.json",
+)
 FRAMEWORKS_STEP = "uv run --directory eval python -m rag_eval.compare frameworks --fixtures"
 CACHE_PAIRS_STEP = "npm run test-rag -- --run-config eval/config/runs/query-layer-llamaindex.json --cache-pairs"
 CACHE_CHECK_STEP = "python -m rag_eval.calibrate cache --check"
@@ -247,6 +258,7 @@ def check_pr(errors: list[str]) -> None:
         if body.find("--degrade drop_top_candidate") > body.find("--max-results 1"):
             errors.append("pr-smoke: the degrade step must run before the max_results control")
     check_eval_smoke(jobs.get("eval-smoke"), errors)
+    check_eval_smoke_p52(jobs.get("eval-smoke-p52"), errors)
     # every job that runs eval pytest or the harness must sync eval with all extras
     for jname, job in jobs.items():
         body = step_text(job)
@@ -289,7 +301,11 @@ def check_pr(errors: list[str]) -> None:
         body = step_text(sp)
         if "npm run gen:schemas" not in body or "git diff --exit-code" not in body:
             errors.append("pr-smoke: schema-parity must regenerate then git diff --exit-code")
-    for jname in (*TS_JOB_NEEDLES, "schema-parity", "eval-smoke", "gate-negative-control"):
+        drift = next((str(step.get("run", "")) for step in all_steps(sp) if "git diff --exit-code" in str(step.get("run", ""))), "")
+        for needle in DRIFT_PATHS:
+            if needle not in drift:
+                errors.append(f"pr-smoke: the schema-parity drift check must include {needle}")
+    for jname in (*TS_JOB_NEEDLES, "schema-parity", "eval-smoke", "eval-smoke-p52", "gate-negative-control"):
         job = jobs.get(jname)
         if job is not None and "npm ci" not in step_text(job):
             errors.append(f"pr-smoke: job {jname} must install with npm ci")
@@ -443,6 +459,67 @@ def check_eval_smoke(job: dict | None, errors: list[str]) -> None:
     if not any("eval/out/smoke-sec" in str((step.get("with") or {}).get("path", "")) for step in uploads):
         errors.append("pr-smoke: job eval-smoke must upload eval/out/smoke-sec")
     check_query_layer_gates(steps, runs, errors)
+
+
+def check_eval_smoke_p52(job: dict | None, errors: list[str]) -> None:
+    """05.2-32 (D-42, D-54, D-62): the Phase 5.2 tier gates every pull request and fails the job on any gate."""
+    if job is None:
+        return
+    steps = all_steps(job)
+    runs = [str(step.get("run", "")) for step in steps]
+    tier = [index for index, run in enumerate(runs) if "--phase52" in run]
+    if len(tier) != 1 or P52_SMOKE_STEP not in runs[tier[0]]:
+        errors.append(f"pr-smoke: job eval-smoke-p52 must run '{P52_SMOKE_STEP}' once")
+    else:
+        body = runs[tier[0]]
+        if "--no-gate" in body or "|| true" in body or "continue-on-error" in str(steps[tier[0]]):
+            errors.append("pr-smoke: the Phase 5.2 tier step must gate and fail the job")
+    timeout = job.get("timeout-minutes")
+    if not isinstance(timeout, int) or timeout > TS_TIMEOUT_MAX:
+        errors.append(f"pr-smoke: job eval-smoke-p52 must set timeout-minutes <= {TS_TIMEOUT_MAX}, got {timeout!r}")
+    if "python3 scripts/ci/fill-tiktoken-cache.py" not in step_text(job):
+        errors.append("pr-smoke: job eval-smoke-p52 must fill the tiktoken cache")
+    uploads = [step for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact@")]
+    if not any("eval/out/smoke-p52" in str((step.get("with") or {}).get("path", "")) for step in uploads):
+        errors.append("pr-smoke: job eval-smoke-p52 must upload eval/out/smoke-p52")
+
+
+def check_answer_rules_nightly(data: dict, errors: list[str]) -> None:
+    """05.2-32 (D-54): the live Phase 5.2 slices and their judge run nightly behind the judge keys, measured only."""
+    job = (data.get("jobs") or {}).get("answer-rules")
+    if job is None:
+        errors.append("nightly: job 'answer-rules' missing")
+        return
+    flag = "HAS_JUDGE_KEYS"
+    flag_expr = str((job.get("env") or {}).get(flag, ""))
+    for secret in ("OPENROUTER_API_KEY", "OPENAI_API_KEY"):
+        if f"secrets.{secret} != ''" not in flag_expr:
+            errors.append(f"nightly: answer-rules job env {flag} must require secrets.{secret}")
+    steps = all_steps(job)
+    ungated = [s for s in steps if f"{flag} == 'true'" not in str(s.get("if", ""))]
+    if (
+        len(ungated) != 1
+        or P52_SKIP_NOTICE not in str(ungated[0].get("run", ""))
+        or f"{flag} != 'true'" not in str(ungated[0].get("if", ""))
+    ):
+        errors.append(f"nightly: only the skip-notice step of answer-rules may run without the {flag} == 'true' condition")
+    for needle, secrets in ((P52_NIGHTLY_STEP, ("OPENROUTER_API_KEY",)), (P52_JUDGE_STEP, ("OPENROUTER_API_KEY", "OPENAI_API_KEY"))):
+        matching = [s for s in steps if needle in str(s.get("run", ""))]
+        if len(matching) != 1:
+            errors.append(f"nightly: answer-rules must run '{needle}' once")
+            continue
+        step_env = matching[0].get("env") or {}
+        for secret in secrets:
+            if str(step_env.get(secret)) != f"${{{{ secrets.{secret} }}}}":
+                errors.append(f"nightly: answer-rules must pass {secret} from repository secrets by name through step env")
+    if "uv sync --directory eval --locked --all-extras" not in step_text(job):
+        errors.append("nightly: answer-rules must sync eval with --locked --all-extras")
+    for step in steps:
+        run = str(step.get("run", ""))
+        if "secrets." in run:
+            errors.append("nightly: answer-rules secrets must be passed through step env, not interpolated into run")
+        if re.search(r"\becho\b.*\bKEY\b", run):
+            errors.append("nightly: an answer-rules step appears to echo a key")
 
 
 def check_query_layer_gates(steps: list[dict], runs: list[str], errors: list[str]) -> None:
@@ -688,6 +765,7 @@ def check_nightly(errors: list[str]) -> None:
     check_online_judge(data, errors)
     check_real_docling(data, errors)
     check_injection_sec(data, errors)
+    check_answer_rules_nightly(data, errors)
     check_weekly_report(data, errors)
     job = (data.get("jobs") or {}).get("judge")
     if job is None:

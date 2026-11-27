@@ -8,6 +8,7 @@ import { dropTableSplitItems } from './table-split.mts';
 import { runEval, type EvalRequestOptions } from './run-eval.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, loadRunConfig, RunConfigError } from './run-config.mts';
 import { loadEnvOverlay, OverlayError, writeOverlayReport, type EnvOverlay } from './env-overlay.mts';
+import { phase52TierExitCode, runPhase52Tier } from './phase52-tier.mts';
 import type { DeploymentMode, FixtureMode } from './pglite-supabase.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -67,9 +68,27 @@ async function main(): Promise<number> {
       answers: { type: 'boolean', default: false },
       'no-answers': { type: 'boolean', default: false },
       'env-overlay': { type: 'string' },
+      phase52: { type: 'boolean', default: false },
     },
     strict: true,
   });
+
+  // 05.2-32 (D-42, D-54, D-62 a, b): --phase52 runs p52-all-off, p52-rules-on, p52-violating-partial, p52-violating-versions,
+  // p52-violating-offtopic and p52-sec-output-guard, one child run each, and fails when any of their gates fails.
+  if (values.phase52) {
+    const conflicting = ['run-config', 'base-url', 'golden', 'env-overlay', 'baseline', 'no-gate'].filter(
+      (name) => values[name as keyof typeof values] !== undefined && values[name as keyof typeof values] !== false,
+    );
+    if (conflicting.length > 0 || values['fixture-mode'] !== 'prechunked') {
+      console.error(`[Eval Harness] --phase52 runs its own configurations on the prechunked fixtures; omit ${conflicting.join(', ') || '--fixture-mode'}`);
+      return 2;
+    }
+    const results = runPhase52Tier({ repoRoot: REPO_ROOT, outDir: path.resolve(values.out as string), deploymentMode: values['deployment-mode'] });
+    for (const result of results) {
+      console.log(`[Eval Harness] Phase 5.2 ${result.name}: ${result.code === 0 ? 'PASS' : `FAIL (exit ${result.code}${result.reason ? `, ${result.reason}` : ''})`}`);
+    }
+    return phase52TierExitCode(results);
+  }
 
   // D-06, O-1: a gated run always adds the absolute gates (default eval/config/quality-gates.json, --gates names another file) to the
   // noise-band gate; only --no-gate leaves them out. --gates-mode report prints them without changing the exit code.

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { GoldenItemSchema, RagTraceSchema, type GoldenItem } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { runEval } from '../../eval/harness/run-eval.mts';
 import { loadRunConfig } from '../../eval/harness/run-config.mts';
+import { fixedText } from '../../src/lib/rag/lang/texts.ts';
 
 /**
  * 05.2-31 Task 3: the two gated Phase 5.2 run configs execute end to end on fixtures through the fake edge, which serves the
@@ -99,5 +100,19 @@ describe('Phase 5.2 gated run configs on fixtures (05.2-31)', () => {
       assert.deepEqual(trace.residual_output_findings, { links: 0, credential_matches: 0, rule_ids: [] });
       assert.ok((trace.answer_rules_parts ?? []).includes('output_policy'));
     }
+  });
+
+  test('p52-rules-on through the CLI, which answers every item by default: the rule-following fake answers the Phase 5.2 items', () => {
+    // 05.2-32: the answers-on smoke default must still hand a run config's Phase 5.2 fake its golden item
+    const { traces } = runCli('p52-rules-on.json', ['en-partial-answer-001', 'en-stale-version-001']);
+    const byId = new Map(traces.map((trace) => [trace.item_id, trace]));
+    const partial = byId.get('en-partial-answer-001');
+    assert.ok(partial?.answer?.includes(fixedText('labels.not_covered', 'en')), partial?.answer ?? 'no answer');
+    const [stale] = goldenItems(['en-stale-version-001']);
+    const versions = stale.versions!;
+    const label = fixedText('labels.version', 'en', { version: versions.current.version_label });
+    const answer = byId.get('en-stale-version-001')?.answer ?? '';
+    assert.ok(answer.includes(versions.current.value) && answer.includes(label), answer);
+    assert.ok(!answer.includes(versions.stale.value), answer);
   });
 });
