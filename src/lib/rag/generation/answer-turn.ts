@@ -5,6 +5,7 @@ import { buildAnswerChecksInput, type AnswerChecksInput } from './answer-checks'
 import { createAnswerCollector, type AnswerCollector } from './answer-collector';
 import { composeAnswerRules, composedPartIds, type AnswerRuleId } from './answer-rules';
 import { buildAnswerTransforms, guardSlot } from './answer-transforms';
+import type { CalcBlockOptions } from './calc-block';
 import { emitNotice } from './notices';
 import { decideOutputCap as decideCap, effectiveMaxOutputTokens, type OutputCapDecision } from './output-cap';
 import { sentinelTransform } from './sentinel';
@@ -115,6 +116,8 @@ export interface AnswerTransformOptions {
   aliases?: () => ReadonlySet<string>;
   /** D-37: the turn's allow evidence for the output guard; read only while RAG_OUTPUT_GUARD is not off. */
   guard?: OutputGuardTurnSources;
+  /** Phase 5.2.1 D-72: the calculation-block transform options; absent adds no slot. */
+  calcBlock?: CalcBlockOptions | null;
 }
 
 const BodyChannelSchema = z.enum(['web', 'whatsapp']);
@@ -140,6 +143,8 @@ export interface ComposeSystemPromptOptions {
   webSearchOffered: boolean;
   /** RAG_CONTEXT_TAGGING; read from the security config when absent, so the chat route never reads the switch. */
   contextTagging?: boolean;
+  /** Phase 5.2.1 D-70, D-72: part 6, only on a turn where the calculation is offered. */
+  calculation?: { mode: 'tool' | 'trailing_block' } | null;
 }
 
 export interface AnswerTurnInput {
@@ -227,8 +232,8 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
         channel: input.channel,
         webSearchOffered: options.webSearchOffered,
         capApplies: capDecision?.concise ?? false,
-        calcOffered: false,
         contextTagging: options.contextTagging ?? readSecurityConfig().contextTagging,
+        ...(options.calculation ? { calculation: options.calculation } : {}),
       };
       const composed = composeAnswerRules(rulesInput, { log: !logged });
       if (composed !== prompt) {
@@ -244,8 +249,9 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
     transforms(citationTransforms: Array<StreamTextTransform<ToolSet>>, options: AnswerTransformOptions = {}) {
       if (chain) return chain;
       if (options.guard) guard.setSources(options.guard);
+      const calcBlock = options.calcBlock ? { calcBlock: options.calcBlock } : {};
       if (!input.config.anyNonDefault) {
-        chain = buildAnswerTransforms({ citationTransforms });
+        chain = buildAnswerTransforms({ citationTransforms, ...calcBlock });
         return chain;
       }
       const active = createAnswerCollector({
@@ -263,7 +269,7 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
               onStripped: (count) => active.countStripped(count),
             })
           : null;
-      chain = buildAnswerTransforms({ citationTransforms, sentinel, guard: guard.transform(), noticeCollector: active.transforms() });
+      chain = buildAnswerTransforms({ citationTransforms, sentinel, ...calcBlock, guard: guard.transform(), noticeCollector: active.transforms() });
       return chain;
     },
     finishMetadata() {

@@ -17,6 +17,8 @@ export interface ClaudeTurnFacts {
   reasoning: boolean;
   /** The question carries image parts; the direct request sends the question as text only. */
   attachments?: boolean;
+  /** 05.2.1 D-71: the calculation is offered on this turn (tool or trailing block). */
+  calculation?: boolean;
 }
 
 export interface CitationTurn {
@@ -41,6 +43,7 @@ export type ClaudeIneligibleReason =
   | 'multi_step'
   | 'web_search'
   | 'attachments'
+  | 'calculation'
   | 'reasoning_unsupported';
 
 export type ClaudeTurnEligibility =
@@ -52,6 +55,9 @@ export type ClaudeTurnEligibility =
  * to citations, but only the live spike in plan 05-26 may open this, by recording real coexistence.
  */
 export const CLAUDE_WEB_SEARCH_ELIGIBLE = false;
+
+/** 05.2.1 D-71: calculation turns stay on chunk-alias until the D-10 proof covers tool turns; flipping this needs that evidence. */
+export const CLAUDE_CALC_TOOL_ELIGIBLE = false;
 
 /** What the session needs from a strategy; both strategies normalize to CitationRecord. */
 export interface CitationStrategy {
@@ -82,6 +88,7 @@ export function claudeTurnEligibility(input: ClaudeTurnEligibilityInput): Claude
   if (facts.multiStep) return { eligible: false, reason: 'multi_step' };
   if (facts.webSearch && !CLAUDE_WEB_SEARCH_ELIGIBLE) return { eligible: false, reason: 'web_search' };
   if (facts.attachments) return { eligible: false, reason: 'attachments' };
+  if (facts.calculation && !CLAUDE_CALC_TOOL_ELIGIBLE) return { eligible: false, reason: 'calculation' };
   if (facts.reasoning && !claudeReasoningEligibility(anthropicId).eligible) {
     return { eligible: false, reason: 'reasoning_unsupported' };
   }
