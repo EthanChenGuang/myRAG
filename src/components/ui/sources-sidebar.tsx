@@ -43,7 +43,7 @@ function WithdrawnFrame({ label }: { label: string }) {
   return (
     <p className="mt-2 flex items-start gap-2 rounded-lg border border-dashed border-gray-300 px-4 py-2 text-sm text-gray-700 dark:border-white/15 dark:text-gray-300">
       <FileX aria-hidden="true" className="h-5 w-4 flex-shrink-0" />
-      <span>{label}</span>
+      <span className="min-w-0 break-words">{label}</span>
     </p>
   );
 }
