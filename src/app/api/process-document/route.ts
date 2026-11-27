@@ -23,6 +23,7 @@ import {
   resolveAdminWorkspaceScope,
   resolveTenantScope,
   validateUploadReplaces,
+  checkUploadAccess,
   validateUploadScopes,
   attributesFormField,
   uploadAttributesRefusal,
@@ -776,6 +777,10 @@ async function uploadThroughIngest(input: {
       : NextResponse.json({ success: false, error: replacesCheck.reason }, { status: 400 });
   }
 
+  // D-16: the optional access label, limited to the uploader's own groups (an admin: any group of the workspace), before anything is stored.
+  const accessCheck = await checkUploadAccess({ scope, raw: input.formData.get('access'), uploaderId: userId, signal: req.signal });
+  if (!accessCheck.ok) return NextResponse.json({ error: accessCheck.error }, { status: accessCheck.status });
+
   const bytes = new Uint8Array(await file.arrayBuffer());
   const deadlineMs = Math.max(MIN_INGEST_BUDGET_MS, UPLOAD_BUDGET_MS - (Date.now() - input.startedAt));
 
@@ -791,6 +796,7 @@ async function uploadThroughIngest(input: {
     ...(scopeCheck.scopes ? { scopes: scopeCheck.scopes } : {}),
     ...(attributeCheck.attributes !== undefined ? { attributes: attributeCheck.attributes } : {}),
     ...(replacesCheck.replacesDocumentId ? { replacesDocumentId: replacesCheck.replacesDocumentId } : {}),
+    ...(accessCheck.keys ? { accessKeys: accessCheck.keys } : {}),
     signal: req.signal,
     deadlineMs,
   };

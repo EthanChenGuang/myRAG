@@ -129,6 +129,24 @@ async function resolveUploadScope(
   return { scope: tenant.scope };
 }
 
+/**
+ * D-16: the optional access field, checked before any file is stored. Absent: keys undefined and no lookup, so the request is handled as
+ * before. A refusal answers 400 group_not_allowed or invalid_access, or 503 access_unavailable, and nothing is uploaded.
+ */
+async function checkUploadAccessField(
+  scope: TenantScope,
+  formData: FormData,
+  uploaderId: string,
+  signal: AbortSignal,
+): Promise<{ keys: string[] | undefined } | { response: NextResponse }> {
+  const raw = formData.get('access');
+  if (raw === null) return { keys: undefined };
+  const { checkUploadAccess } = await import('@/lib/rag');
+  const check = await checkUploadAccess({ scope, raw, uploaderId, signal });
+  if (!check.ok) return { response: NextResponse.json({ error: check.error }, { status: check.status }) };
+  return { keys: check.keys ?? undefined };
+}
+
 interface PendingImage {
   name: string;
   type: string;
@@ -195,6 +213,7 @@ export async function POST(request: NextRequest) {
     let uploadScopes: string[] | undefined;
     let uploadAttributes: Record<string, string | string[]> | undefined;
     let uploadReplaces: string | undefined;
+    let uploadAccessKeys: string[] | undefined;
     if (pipeline === 'unified') {
       const resolved = await resolveUploadScope(request, formData, sessionUser);
       if ('response' in resolved) return resolved.response;
@@ -233,6 +252,10 @@ export async function POST(request: NextRequest) {
           : NextResponse.json({ success: false, error: replacesCheck.reason }, { status: 400 });
       }
       uploadReplaces = replacesCheck.replacesDocumentId;
+      // D-16: the chosen access label, checked against the uploader's own groups (an admin: any group) before any file is stored.
+      const accessResult = await checkUploadAccessField(ingestScope, formData, sessionUser.id, request.signal);
+      if ('response' in accessResult) return accessResult.response;
+      uploadAccessKeys = accessResult.keys;
     } else if (formData.get('attributes') !== null) {
       // D-22a: attributes count only where the unified pipeline ingests; elsewhere they are refused, never dropped.
       console.warn('[Ingest] upload attributes refused', { reason: 'attributes_not_enabled' });
@@ -335,7 +358,7 @@ export async function POST(request: NextRequest) {
 
     let queuedIngest: EnqueueResult[] | null = null;
     if (ingestScope && pendingImages.length > 0) {
-      queuedIngest = await scheduleImageIngest(ingestScope, sessionUser.id, pendingImages, imageContext || undefined, startedAt, uploadScopes, uploadReplaces, uploadAttributes);
+      queuedIngest = await scheduleImageIngest(ingestScope, sessionUser.id, pendingImages, imageContext || undefined, startedAt, uploadScopes, uploadReplaces, uploadAttributes, uploadAccessKeys);
     }
 
     (async () => {
@@ -435,6 +458,7 @@ async function scheduleImageIngest(
   scopes?: string[],
   replacesDocumentId?: string,
   attributes?: Record<string, string | string[]>,
+  accessKeys?: string[],
 ): Promise<EnqueueResult[] | null> {
   const deadlineAt = startedAt + INGEST_BUDGET_MS;
 
@@ -446,6 +470,7 @@ async function scheduleImageIngest(
     ...(scopes ? { scopes } : {}),
     ...(attributes !== undefined ? { attributes } : {}),
     ...(replacesDocumentId ? { replacesDocumentId } : {}),
+    ...(accessKeys ? { accessKeys } : {}),
     file: image.bytes,
     filename: image.name,
     mimeType: image.type,
