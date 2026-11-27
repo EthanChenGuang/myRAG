@@ -17,6 +17,7 @@ const TRACKED = [
 ];
 const MANIFEST = 'scripts/rag/env-manifest.json';
 const GENERATED = 'src/lib/rag/config-gate/rag-affecting.generated.json';
+const VENDOR_INVENTORY = 'config/rag/vendor-data-flow.json';
 
 function run(root) {
   const result = spawnSync(process.execPath, [SCRIPT, '--root', root], { encoding: 'utf8' });
@@ -31,7 +32,7 @@ function write(root, relative, text) {
 
 function copyRealTree() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-config-'));
-  for (const relative of [...TRACKED, MANIFEST, GENERATED]) {
+  for (const relative of [...TRACKED, MANIFEST, GENERATED, VENDOR_INVENTORY]) {
     const source = path.join(REPO, relative);
     if (fs.existsSync(source)) write(root, relative, fs.readFileSync(source, 'utf8'));
   }
@@ -1445,4 +1446,80 @@ test('metadata: every managed entry of the real manifest is complete and on/off 
   assert.deepEqual(byName.get('RAG_PARSE_ESCALATION').options, ['on', 'off']);
   assert.match(byName.get('RAG_EVAL_ENDPOINT_ENABLED').help, /document content/);
   assert.match(byName.get('RAG_INJECTION_LAKERA').help, /third party/);
+});
+
+function vendorEntry(overrides = {}) {
+  return {
+    vendor: 'other-vendor',
+    name: 'Other vendor',
+    hosts: ['api.example.com'],
+    content: ['query'],
+    switch: null,
+    opt_in: true,
+    multi_tenant: 'allowed',
+    retention: 'to_verify',
+    training: 'to_verify',
+    providers: [],
+    ...overrides,
+  };
+}
+
+const acmeKey = { name: 'RAG_ACME_API_KEY', group: 'retrieval', label: 'Acme key', type: 'secret', requires: [], default: '', provider: 'acme' };
+const acmeUrl = { name: 'RAG_ACME_URL', group: 'retrieval', label: 'Acme URL', type: 'url', requires: [], default: '', provider: 'acme' };
+
+function inventoryRun(entries, vendors) {
+  const root = metaTree(entries);
+  if (vendors !== undefined) write(root, VENDOR_INVENTORY, JSON.stringify({ schema_version: 1, vendors }));
+  try {
+    return run(root);
+  } finally {
+    cleanup(root);
+  }
+}
+
+test('vendor inventory: a managed secret whose provider has no inventory entry is reported (D-20)', () => {
+  const { code, out } = inventoryRun([acmeKey], [vendorEntry()]);
+  assert.equal(code, 1, out);
+  assert.match(out, /RAG_ACME_API_KEY \[manifest\] provider acme has no vendor data-flow entry/);
+});
+
+test('vendor inventory: a managed url is checked too, and a missing inventory reports the provider', () => {
+  const { code, out } = inventoryRun([acmeUrl]);
+  assert.equal(code, 1, out);
+  assert.match(out, /RAG_ACME_URL \[manifest\] provider acme has no vendor data-flow entry/);
+});
+
+test('vendor inventory: an entry naming the provider as its vendor id or in providers passes', () => {
+  assert.equal(inventoryRun([acmeKey, acmeUrl], [vendorEntry({ vendor: 'acme' })]).code, 0);
+  const viaProviders = inventoryRun([acmeKey], [vendorEntry({ providers: ['acme'] })]);
+  assert.equal(viaProviders.code, 0, viaProviders.out);
+});
+
+test('vendor inventory: in-deployment providers (app, sidecar, webhook) need no entry', () => {
+  for (const provider of ['app', 'sidecar', 'webhook']) {
+    const { code, out } = inventoryRun([{ ...acmeKey, provider }], [vendorEntry()]);
+    assert.equal(code, 0, `${provider}: ${out}`);
+  }
+});
+
+test('vendor inventory: an unreadable inventory is a violation', () => {
+  const root = metaTree([acmeKey]);
+  write(root, VENDOR_INVENTORY, '{ not json');
+  try {
+    const { code, out } = run(root);
+    assert.equal(code, 1);
+    assert.match(out, /vendor-data-flow\.json is not valid JSON/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('vendor inventory: every managed url and secret provider of the real repository has an entry', () => {
+  const root = copyRealTree();
+  try {
+    const { out } = run(root);
+    assert.doesNotMatch(out, /has no vendor data-flow entry/);
+  } finally {
+    cleanup(root);
+  }
 });
