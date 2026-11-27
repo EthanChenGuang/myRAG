@@ -42,6 +42,11 @@ export interface EnqueueRunOptions extends RunDeps {
   snapshot?: () => QueueConfig;
   /** ingest for the run, dry_run for the sample of D-33 step 2. */
   kind?: 'ingest' | 'dry_run';
+  /**
+   * D-16 (--access-groups): the label every document of the batch gets. Absent: the label the batch's existing ingest jobs carry (a resumed
+   * batch keeps the label it was started with), else untouched.
+   */
+  accessKeys?: readonly string[];
 }
 
 export interface EnqueueRunResult {
@@ -109,6 +114,14 @@ interface BatchRow {
 }
 
 type JobRow = Record<string, unknown>;
+
+/** The access label stored in a job's settings snapshot, or null. */
+function jobAccessKeys(job: JobRow): string[] | null {
+  const settings = job.settings;
+  if (!settings || typeof settings !== 'object') return null;
+  const keys = (settings as Record<string, unknown>).access_keys;
+  return Array.isArray(keys) && keys.length > 0 && keys.every((key) => typeof key === 'string') ? (keys as string[]) : null;
+}
 
 function rpcOf(deps: RunDeps): RpcClient {
   const rpc = deps.rpc ?? getIngestDeps().db();
@@ -206,8 +219,10 @@ export async function enqueueRun(batch: BackfillBatchRef, entries: readonly RunE
   const kind = options.kind ?? 'ingest';
 
   const existingKeys = new Set<string>();
+  let batchAccessKeys: string[] | null = options.accessKeys && options.accessKeys.length > 0 ? [...options.accessKeys] : null;
   for await (const job of batchJobs(rpc, batch.id, signal)) {
     if (job.kind === kind && typeof job.source_key === 'string') existingKeys.add(job.source_key);
+    if (batchAccessKeys === null && options.accessKeys === undefined && job.kind === 'ingest') batchAccessKeys = jobAccessKeys(job);
   }
 
   const queueConfig = (options.snapshot ?? queueConfigFromProcessEnv)();
@@ -230,6 +245,7 @@ export async function enqueueRun(batch: BackfillBatchRef, entries: readonly RunE
         ingestConfig,
         languageSettings: ingestLanguageSettings(ingestConfig),
         hiddenTextCheck: ingestConfig.hiddenTextCheck,
+        ...(kind === 'ingest' && batchAccessKeys ? { accessKeys: batchAccessKeys } : {}),
       });
       settingsByType.set(docType, settings);
     }

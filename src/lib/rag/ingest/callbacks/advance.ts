@@ -16,6 +16,7 @@ import { originFields } from '../origin';
 import { getProcessingProfile, profileFor, type DocType } from '../profiles/load';
 import { finishQueueIngestTrace } from '../queue-trace';
 import { uploadScopesEnabled, writeUploadScopes } from '../scopes/upload';
+import { writeUploadAccess } from '../access-label';
 import { docAttributesEnabled } from '../attributes/schema';
 import { writeDocumentAttributes } from '../attributes/apply';
 import { readParseResultForJob } from '../parse-cache';
@@ -373,6 +374,10 @@ async function startProgressiveFinal(
   if (record.scopes && record.scopes.length > 0 && uploadScopesEnabled(ingestConfig)) {
     await writeUploadScopes(db, tenantKey, begun.documentId, record.scopes, signal);
   }
+  // D-16: the final version is inherited from the lineage (D-19) at begin; an explicit label is applied again so it never depends on that.
+  if (record.accessKeys && record.accessKeys.length > 0) {
+    await writeUploadAccess(versionWriter, begun.documentId, record.accessKeys, null);
+  }
   // D-23: explicit values from the record, else the lineage's current value (the first version, published by now).
   if (docAttributesEnabled(ingestConfig)) {
     await writeDocumentAttributes(db, tenantKey, begun.documentId, record.attributes, signal);
@@ -447,6 +452,8 @@ async function beginBackfillDocument(job: IngestionJob, workerId: string, scope:
     filename: job.filename ?? baseName(job.source_key),
     mimeType: job.mime_type ?? 'application/octet-stream',
     docType: job.settings.doc_type,
+    // D-16: the batch's --access-groups label, frozen on the job; set on the version before anything else is written.
+    ...(job.settings.access_keys ? { accessKeys: job.settings.access_keys } : {}),
     file: original.bytes,
     signal,
   };

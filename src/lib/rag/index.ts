@@ -42,6 +42,95 @@ export type { AccessStartupStatus, AccessStartupVerdict } from './tenant/access-
 export { createCitationRecheck, recordSecurityEvent, scheduleSecurityEvent, visibleChunkIds, visibleDocumentIds } from './access/visibility';
 export type { SecurityEventInput, VisibilityOptions, VisibilityResult } from './access/visibility';
 export { UNKNOWN_ACCESS_SET, accessSetsFor } from './access/sets';
+export { ACCESS_GROUPS_REASONS, AccessGroupsError, accessReasonOf } from './access/errors';
+export type { AccessGroupsReason, AccessServiceDeps } from './access/errors';
+export {
+  ACCESS_CANDIDATES_MAX,
+  ACCESS_GROUP_KEY_RE,
+  ACCESS_GROUP_NAME_MAX,
+  ACCESS_GROUPS_PAGE_SIZE,
+  addMember,
+  createGroup,
+  deleteGroup,
+  groupImpact,
+  listGroups,
+  listMembers,
+  memberCandidates,
+  myGroups,
+  removeMember,
+  renameGroup,
+} from './access/groups';
+export type {
+  AccessGroup,
+  AccessGroupDeleteResult,
+  AccessGroupImpact,
+  AccessGroupListItem,
+  AccessGroupMember,
+  AccessGroupPage,
+  AccessGroupRef,
+  AccessGroupSource,
+  AccessMemberCandidate,
+  MyAccessGroups,
+} from './access/groups';
+export {
+  ACCESS_DOCUMENTS_MAX_IDS,
+  ACCESS_DOCUMENTS_PAGE_SIZE,
+  documentAccessCounts,
+  documentAudiences,
+  listAccessDocuments,
+  setDocumentsAccess,
+  setUploadAccess,
+} from './access/documents';
+export type {
+  AccessAudienceKind,
+  AccessDocumentCounts,
+  AccessDocumentFilter,
+  AccessDocumentPage,
+  DocumentAudience,
+  DocumentsAccessInput,
+  SetDocumentsAccessResult,
+  UploadAccessOutcome,
+} from './access/documents';
+export {
+  UPLOAD_ACCESS_FIELD,
+  UPLOAD_ACCESS_MAX_GROUPS,
+  accessKeysForGroupKeys,
+  checkUploadAccess,
+  parseUploadAccessField,
+} from './access/upload';
+export type { CheckUploadAccessInput, GroupKeysResult, ParsedUploadAccessField, UploadAccessCheck, UploadAccessField } from './access/upload';
+export { accessStatus, runAccessDrift, syncAccessStatus } from './access/status';
+export type { AccessDriftRow, AccessEmbedGroupStatus, AccessStatus, AccessStatusDeps } from './access/status';
+export {
+  applyConnectorAccess,
+  connectorFailClosedCounts,
+  deleteConnectorMap,
+  listConnectorMap,
+  listSharingRules,
+  matchConnectorMembers,
+  setConnectorMap,
+  setSharingRule,
+  CONNECTOR_MAX_ADDRESSES,
+  CONNECTOR_MAX_PRINCIPALS,
+  CONNECTOR_PROVIDERS,
+} from './access/connector';
+export type {
+  ApplyConnectorAccessInput,
+  ConnectorAccessReason,
+  ConnectorAccessResult,
+  ConnectorFailClosedCount,
+  ConnectorMapKind,
+  ConnectorMapOutcome,
+  ConnectorMapPage,
+  ConnectorMapRow,
+  ConnectorPrincipal,
+  ConnectorProvider,
+  SetConnectorMapInput,
+  SetSharingRuleInput,
+  SharingRuleKind,
+  SharingRuleOutcome,
+  SharingRuleRow,
+} from './access/connector';
 export type {
   AccessIdentity,
   AccessScopeRefusalReason,
