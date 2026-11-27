@@ -64,7 +64,7 @@
       "no_slice_drop_exclude": ["category:identifier_near_miss"]
     },
     "table": {
-      "decision": "ROADMAP-4.2-SC3",
+      "decision": "ROADMAP-4.2-SC5",
       "description": "Every item tagged feature:table_lookup keeps a chunk for every gold unit and its gold candidate carries the table:0 list in its fused ranks; no slice drops",
       "run": "v2-table-lookup-on",
       "reference": "v2-default",
@@ -74,7 +74,7 @@
       "no_slice_drop_exclude": []
     },
     "versions": {
-      "decision": "ROADMAP-4.2-SC5",
+      "decision": "ROADMAP-4.2-SC3",
       "description": "Every item tagged feature:versions hits every evidence group; its superseded kept chunks carry is_current false and a document_version (at least one superseded chunk kept); in the reference run those items keep no superseded chunk; no slice drops",
       "run": "v2-version-scope-on",
       "reference": "v2-default",
