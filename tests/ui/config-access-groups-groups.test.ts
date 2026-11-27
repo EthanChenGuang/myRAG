@@ -746,3 +746,159 @@ describe('Members region and member search (D-01, D-04, UI-SPEC decision 21)', (
     expect(page.doc.innerHtmlWrites).toBe(0);
   });
 });
+
+describe('Counted delete dialog (D-18, UI-SPEC decision 10)', () => {
+  async function openDelete(options: PageOptions = {}) {
+    const page = loadPage(options);
+    await page.init();
+    const opener = button(page.row(ID_A), 'Delete group');
+    opener.click();
+    await flush();
+    expect(page.dialog(), 'the delete dialog is open').not.toBeNull();
+    return { page, opener };
+  }
+
+  function confirmButton(page: ReturnType<typeof loadPage>): FakeElement {
+    return page.dialog()!.querySelector('[data-access-groups-confirm-delete]')!;
+  }
+
+  it('opens with delete.counting, Delete group disabled and the default focus on Keep group', async () => {
+    const { page } = await openDelete({ hold: ['impact'] });
+    const dialog = page.dialog()!;
+    expect(dialog.className).toContain('modal');
+    expect(dialog.open).toBe(true);
+    expect(dialog.textContent).toContain('Delete group-a?');
+    expect(dialog.textContent).toContain('Counting affected documents…');
+    expect(confirmButton(page).disabled).toBe(true);
+    expect(page.doc.activeElement!.textContent).toBe('Keep group');
+    expect(dialog.getAttribute('aria-labelledby')).toBeTruthy();
+    expect(page.doc.getElementById(dialog.getAttribute('aria-labelledby')!)!.textContent).toBe('Delete group-a?');
+    page.release('impact', { status: 200, body: { success: true, impact: { onlyCount: 7, sharedCount: 5, memberCount: 4, mappingCount: 0 } } });
+    await flush();
+    expect(confirmButton(page).disabled).toBe(false);
+  });
+
+  it('shows the three counts right-aligned in tabular-nums and the body', async () => {
+    const { page } = await openDelete();
+    const dialog = page.dialog()!;
+    expect(dialog.querySelectorAll('dt').map((d) => d.textContent)).toEqual([
+      'Documents restricted to this group alone',
+      'Documents that stay visible to their other groups',
+      'Members who lose access through this group',
+    ]);
+    const dd = dialog.querySelectorAll('dd');
+    expect(dd.map((d) => d.textContent)).toEqual(['7', '5', '4']);
+    for (const d of dd) expect(d.className).toContain('tabular-nums');
+    for (const d of dd) expect(d.className).toContain('text-right');
+    expect(dialog.textContent).toContain("Documents restricted to this group alone become visible to their uploader and admins only, never to everyone. This can't be undone.");
+    expect(dialog.textContent).not.toContain('Connector mappings removed with it');
+  });
+
+  it('zero documents and zero members show three zeros; mappings show when they point at the group', async () => {
+    const { page } = await openDelete({ replies: { impact: { status: 200, body: { success: true, impact: { onlyCount: 0, sharedCount: 0, memberCount: 0, mappingCount: 2 } } } } });
+    expect(page.dialog()!.querySelectorAll('dd').map((d) => d.textContent)).toEqual(['0', '0', '0']);
+    expect(page.dialog()!.textContent).toContain('Connector mappings removed with it: 2');
+    expect(confirmButton(page).disabled).toBe(false);
+  });
+
+  it('a failed count shows delete.countUnavailable with Count again, and Delete group stays disabled', async () => {
+    const { page } = await openDelete({
+      replies: { impact: [{ status: 503, body: { success: false, error: 'access_groups_unavailable' } }, { status: 200, body: { success: true, impact: { onlyCount: 1, sharedCount: 0, memberCount: 2, mappingCount: 0 } } }] },
+    });
+    const dialog = page.dialog()!;
+    expect(dialog.textContent).toContain('The affected documents could not be counted, so the group cannot be deleted now. Select Count again.');
+    expect(confirmButton(page).disabled).toBe(true);
+    confirmButton(page).click();
+    await flush();
+    expect(page.count('delete')).toBe(0);
+    button(dialog, 'Count again').click();
+    await flush();
+    expect(page.count('impact')).toBe(2);
+    expect(dialog.querySelectorAll('dd').map((d) => d.textContent)).toEqual(['1', '0', '2']);
+    expect(confirmButton(page).disabled).toBe(false);
+  });
+
+  it('sends the count with the delete, announces how many documents fell back and focuses the status region', async () => {
+    const { page } = await openDelete();
+    confirmButton(page).click();
+    await flush();
+    expect(page.count('delete')).toBe(1);
+    expect(page.last('delete').path.split('?')[0]).toBe('/api/rag/access-groups/' + ID_A);
+    expect(page.body('delete')).toEqual({ expectedCount: 7 });
+    expect(page.dialog()).toBeNull();
+    expect(page.statusRegion().textContent).toBe('Group group-a deleted. Documents now visible to their uploader and admins only: 7.');
+    expect(page.doc.activeElement).toBe(page.statusRegion());
+    expect(page.rows().map((r) => r.getAttribute('data-access-groups-row'))).toEqual([ID_B]);
+  });
+
+  it('a 409 count_required recounts and shows the new numbers before Delete group is enabled again', async () => {
+    const { page } = await openDelete({
+      hold: ['delete'],
+      replies: {
+        impact: [
+          { status: 200, body: { success: true, impact: { onlyCount: 7, sharedCount: 5, memberCount: 4, mappingCount: 0 } } },
+          { status: 200, body: { success: true, impact: { onlyCount: 9, sharedCount: 5, memberCount: 4, mappingCount: 0 } } },
+        ],
+      },
+    });
+    confirmButton(page).click();
+    await flush();
+    expect(confirmButton(page).disabled).toBe(true);
+    page.release('delete', { status: 409, body: { success: false, error: 'count_required', count: 9 } });
+    await flush();
+    expect(page.count('impact')).toBe(2);
+    expect(page.dialog()).not.toBeNull();
+    expect(page.dialog()!.querySelectorAll('dd').map((d) => d.textContent)).toEqual(['9', '5', '4']);
+    expect(confirmButton(page).disabled).toBe(false);
+    confirmButton(page).click();
+    await flush();
+    page.release('delete', { status: 200, body: { success: true, fellBack: 9, relabelled: 14 } });
+    await flush();
+    expect(JSON.parse(String(page.calls.filter((c) => c.route === 'delete')[1]!.init.body))).toEqual({ expectedCount: 9 });
+    expect(page.statusRegion().textContent).toContain('Documents now visible to their uploader and admins only: 9.');
+  });
+
+  it('Keep group closes without deleting and returns focus to Delete group; Escape is refused while the delete runs', async () => {
+    const { page, opener } = await openDelete({ hold: ['delete'] });
+    button(page.dialog()!, 'Keep group').click();
+    await flush();
+    expect(page.dialog()).toBeNull();
+    expect(page.count('delete')).toBe(0);
+    expect(page.doc.activeElement).toBe(opener);
+    opener.click();
+    await flush();
+    confirmButton(page).click();
+    await flush();
+    const cancel = page.dialog()!.dispatch('cancel');
+    expect(cancel.defaultPrevented).toBe(true);
+    button(page.dialog()!, 'Keep group').click();
+    expect(page.dialog()).not.toBeNull();
+    page.release('delete', { status: 200, body: { success: true, fellBack: 7, relabelled: 12 } });
+    await flush();
+    expect(page.dialog()).toBeNull();
+  });
+
+  it('a 404 closes the dialog, says error.changed and reloads the list', async () => {
+    const { page } = await openDelete({ replies: { delete: { status: 404, body: { success: false, error: 'not_found' } } } });
+    const before = page.count('list');
+    confirmButton(page).click();
+    await flush();
+    expect(page.dialog()).toBeNull();
+    expect(page.statusRegion().textContent).toContain('This item was changed by someone else.');
+    expect(page.count('list')).toBe(before + 1);
+  });
+
+  it('a long name without spaces breaks in the dialog title; markup in it creates no element', async () => {
+    const long = 'g'.repeat(120);
+    const page = loadPage({ replies: { list: { status: 200, body: listBody([group(ID_A, { name: long + XSS_PAYLOAD })]) } } });
+    await page.init();
+    button(page.row(ID_A), 'Delete group').click();
+    await flush();
+    expect(page.dialog(), 'the delete dialog is open').not.toBeNull();
+    const title = page.doc.getElementById(page.dialog()!.getAttribute('aria-labelledby')!)!;
+    expect(title.className).toContain('break-words');
+    expect(title.textContent).toContain(XSS_PAYLOAD);
+    expect(page.row(ID_A).querySelector('[data-access-groups-name]')!.className).toContain('break-words');
+    expect(injectedElements(page.doc)).toEqual([]);
+  });
+});
