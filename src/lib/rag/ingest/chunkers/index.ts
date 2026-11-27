@@ -1,6 +1,7 @@
 import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
 import { blockSplitterForIngest, legacyBlockSplitter, type BlockSplitter } from '@/lib/rag/lang/sentences';
 import type { ProcessingProfile } from '../profiles/load';
+import { outlineMarkdown, sectionOutlineStamp, type SectionOutlineInput } from '../outline';
 import { effectiveTableHeader } from '../routing/effective-settings';
 import type { ChunkDraft, ChunkResult } from '../types';
 import { chunkImageCaption } from './image-caption';
@@ -82,6 +83,8 @@ export interface ChunkDocumentOptions {
   languageAwareIngest?: 'off' | 'on';
   /** RAG_TABLE_HEADER_REPEAT: `always` repeats every table's header and carries it onto header-less continuations; `profile` (or absent) reads the profile flag. */
   tableHeaderRepeat?: 'profile' | 'always';
+  /** RAG_SECTION_OUTLINES: the loaded outlines and the document's tenant key; absent or null is today's chunking. */
+  sectionOutline?: SectionOutlineInput | null;
 }
 
 /** The chunker config with the effective header flag (D-19); the profile's own object when nothing changes, so profile mode is today's call. */
@@ -93,20 +96,35 @@ export function withEffectiveHeader(chunker: ChunkerConfig, mode: ChunkDocumentO
 /**
  * Chunks a parsed document by the profile's chunker kind. Docling's chunks are used as they are (headings as
  * section_path, pages, is_table, plain text) for markdown_sections and table_aware; legal_clauses always chunks
- * the Markdown, because Docling's heading inference does not know clause numbering.
+ * the Markdown, because Docling's heading inference does not know clause numbering. A section outline that applies
+ * replaces Docling's chunks with the Markdown chunkers run on the outline-normalized Markdown.
  */
 export function chunkDocument(chunker: ChunkerConfig, parse: ChunkSource, options: ChunkDocumentOptions = {}): ChunkResult {
   const chunk = CHUNKERS[chunker.kind];
   if (!chunk) throw new ChunkerUnavailableError(chunker.kind);
+  const outlined = outlineMarkdown(parse.markdown, chunker.kind, options.sectionOutline);
+  if (outlined.report !== null) {
+    const result = chunkMarkdown(chunk, chunker, outlined.markdown, options);
+    const stamp = sectionOutlineStamp(outlined.report);
+    return {
+      ...result,
+      chunks: result.chunks.map((draft) => ({ ...draft, metadata: { ...draft.metadata, section_outline: stamp } })),
+      sectionOutline: outlined.report,
+    };
+  }
   // Docling's chunks keep their own splitting here; the sidecar applies the language rule to them (plan 03.2-23).
   if (DOCLING_KINDS.has(chunker.kind) && parse.chunks && parse.chunks.length > 0) {
     return { chunks: fromDocling(parse.chunks), warnings: [] };
   }
+  return chunkMarkdown(chunk, chunker, parse.markdown, options);
+}
+
+function chunkMarkdown(chunk: Chunker, chunker: ChunkerConfig, markdown: string, options: ChunkDocumentOptions): ChunkResult {
   const config = withEffectiveHeader(chunker, options.tableHeaderRepeat);
   const sentences = blockSplitterForIngest(options.languageAwareIngest);
-  if (!effectiveTableHeader(options.tableHeaderRepeat, chunker).carryTableHeader) return chunk(parse.markdown, config, sentences);
+  if (!effectiveTableHeader(options.tableHeaderRepeat, chunker).carryTableHeader) return chunk(markdown, config, sentences);
   // D-20: header-less continuation tables take the previous table's header before any chunker cuts them.
-  const carry = carryTableHeaders(parse.markdown);
+  const carry = carryTableHeaders(markdown);
   const result = chunk(carry.markdown, config, sentences);
   return { ...result, chunks: markCarriedChunks(result.chunks, carry) };
 }

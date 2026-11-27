@@ -7,6 +7,7 @@ import type { IngestDeps } from './deps';
 import type { DocType, ProcessingProfile } from './profiles/load';
 import type { StateStore } from './state-store';
 import type { IngestWriter } from './writer';
+import type { SectionOutlineReport } from './outline/schema';
 
 export type { DocType, ProcessingProfile };
 
@@ -284,6 +285,8 @@ export interface ChunkResult {
   warnings: string[];
   /** The document is one image whose caption the images stage turns into its single chunk; no text chunk is expected. */
   captionOnly?: boolean;
+  /** RAG_SECTION_OUTLINES: set only when an outline cut the Markdown. */
+  sectionOutline?: SectionOutlineReport;
 }
 
 export interface IngestIdentity {
