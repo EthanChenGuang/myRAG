@@ -425,7 +425,7 @@ function loadPage(options: { locale?: string; reduceMotion?: boolean; pipeline?:
     note: (key) => doc.querySelector(`[data-rag-tuning-note="${key}"]`)!,
     input: (id) => doc.getElementById(id)!,
   };
-  const section = doc.getElementById('rag-administration-identifiers')! as FakeElement & { scrollIntoView?: (o: unknown) => void };
+  const section = doc.getElementById('rag-administration-identifiers') as unknown as { scrollIntoView: (o: unknown) => void };
   section.scrollIntoView = (o: unknown) => {
     page.scrolls.push(o);
   };
