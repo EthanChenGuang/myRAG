@@ -4,8 +4,11 @@ import { createBgeM3Provider } from './bge-m3';
 import type { EmbeddingProvider } from './types';
 import { BGE_M3_MODEL_ID, BGE_M3_NATIVE_DIMS } from './types';
 
-/** The same bar as the fine-tune probe: below it the route does not serve the weights the stored vectors came from. */
-export const ROUTE_MIN_COSINE = 0.999;
+/** The D-26 tolerance: below it the route does not serve the weights the stored vectors came from. */
+export const ROUTE_MIN_COSINE = 0.9999;
+
+/** D-26: every component of the L2-normalized vectors within this absolute difference. */
+export const ROUTE_MAX_COMPONENT_DELTA = 1e-3;
 
 /** Fixed probe texts; changing them changes the reference file a comparison needs. */
 export const ROUTE_PROBE_TEXTS: readonly string[] = [
@@ -35,6 +38,8 @@ export interface RouteComparison {
   against: string;
   cosines: number[];
   minCosine: number;
+  /** Largest absolute component difference over all probes, after L2 normalization; NaN when a vector is missing or zero. */
+  maxComponentDelta: number;
 }
 
 export interface RouteVerifyReport {
@@ -44,6 +49,7 @@ export interface RouteVerifyReport {
   comparison: RouteComparison | null;
   verdict: 'match' | 'mismatch' | 'not_compared';
   minCosineRequired: number;
+  maxComponentDeltaRequired: number;
 }
 
 export function sha256Text(text: string): string {
@@ -86,10 +92,36 @@ async function embedSide(route: string, provider: EmbeddingProvider, texts: read
   }
 }
 
+function unitVector(vector: readonly number[]): number[] | null {
+  const norm = Math.sqrt(vector.reduce((sum, x) => sum + x * x, 0));
+  return norm === 0 || !Number.isFinite(norm) ? null : vector.map((x) => x / norm);
+}
+
+function maxDelta(a: readonly number[], b: readonly number[]): number {
+  const ua = unitVector(a);
+  const ub = unitVector(b);
+  if (!ua || !ub || ua.length !== ub.length || ua.length === 0) return Number.NaN;
+  let max = 0;
+  for (let i = 0; i < ua.length; i += 1) max = Math.max(max, Math.abs(ua[i]! - ub[i]!));
+  return max;
+}
+
 function compare(against: string, candidate: number[][], reference: number[][]): RouteComparison {
   const cosines = candidate.map((vector, index) => cosine(vector, reference[index] ?? []));
   const minCosine = cosines.reduce((min, value) => (Number.isNaN(value) ? Number.NaN : Math.min(min, value)), 1);
-  return { against, cosines, minCosine };
+  const maxComponentDelta = candidate.reduce(
+    (max, vector, index) => {
+      const delta = maxDelta(vector, reference[index] ?? []);
+      return Number.isNaN(max) || Number.isNaN(delta) ? Number.NaN : Math.max(max, delta);
+    },
+    candidate.length === reference.length ? 0 : Number.NaN,
+  );
+  return { against, cosines, minCosine, maxComponentDelta };
+}
+
+/** NaN fails both comparisons, so a missing or zero vector is never a match. */
+function withinTolerance(comparison: RouteComparison): boolean {
+  return comparison.minCosine >= ROUTE_MIN_COSINE && comparison.maxComponentDelta <= ROUTE_MAX_COMPONENT_DELTA;
 }
 
 export function referenceVectors(reference: RouteReference, texts: readonly string[]): number[][] {
@@ -136,8 +168,16 @@ export async function verifyBgeM3Route(input: VerifyRouteInput): Promise<RouteVe
   }
 
   const comparison = openrouter.status === 'ok' && baseline ? compare(baseline.against, openrouter.vectors, baseline.vectors) : null;
-  const verdict = comparison === null ? 'not_compared' : comparison.minCosine >= ROUTE_MIN_COSINE ? 'match' : 'mismatch';
-  return { model: BGE_M3_MODEL_ID, probes: texts.length, sides, comparison, verdict, minCosineRequired: ROUTE_MIN_COSINE };
+  const verdict = comparison === null ? 'not_compared' : withinTolerance(comparison) ? 'match' : 'mismatch';
+  return {
+    model: BGE_M3_MODEL_ID,
+    probes: texts.length,
+    sides,
+    comparison,
+    verdict,
+    minCosineRequired: ROUTE_MIN_COSINE,
+    maxComponentDeltaRequired: ROUTE_MAX_COMPONENT_DELTA,
+  };
 }
 
 /** A reference file from one route's vectors, so a later run compares without calling that route again. */
