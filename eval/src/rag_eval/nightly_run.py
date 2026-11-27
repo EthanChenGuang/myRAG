@@ -32,7 +32,9 @@ JUDGE_FAILED = "judge_failed"
 FLOOR_NOT_MET = "floor_not_met"
 COMPOSITION = "composition"
 STALE_SHARE_EXCEEDED = "stale_share_exceeded"
-COMPOSITION_FAILURES = frozenset({"no_answer_share_below_min", "required_no_answer_kind_missing"})
+COMPOSITION_FAILURES = frozenset(
+    {"no_answer_share_below_min", "required_no_answer_kind_missing"}
+)
 NIGHTLY_ROLE = "nightly"
 
 Runner = Callable[..., subprocess.CompletedProcess]
@@ -55,7 +57,10 @@ def _part(name: str, result: str, reason: str | None = None) -> ReleaseGatePart:
 
 
 def _both(result: str, reason: str) -> tuple[ReleaseGatePart, ...]:
-    return (_part("nightly_absolute", result, reason), _part("judge_floors", result, reason))
+    return (
+        _part("nightly_absolute", result, reason),
+        _part("judge_floors", result, reason),
+    )
 
 
 def running_fingerprint() -> str | None:
@@ -103,13 +108,20 @@ def _item_count(report_json: Path) -> int | None:
     return len(items) if isinstance(items, list) else None
 
 
-def _absolute_parts(code: int, absolute_json: Path) -> tuple[tuple[ReleaseGatePart, ...], tuple[str, ...]]:
+def _absolute_parts(
+    code: int, absolute_json: Path
+) -> tuple[tuple[ReleaseGatePart, ...], tuple[str, ...]]:
     data = _read_json(absolute_json)
     if code not in (0, EXIT_ABSOLUTE, EXIT_COMPOSITION) or not isinstance(data, dict):
         return _both("failed", INTERNAL_ERROR), (INTERNAL_ERROR,)
-    failed = [str(entry) for entry in data.get("failed") or [] if isinstance(entry, str)]
+    failed = [
+        str(entry) for entry in data.get("failed") or [] if isinstance(entry, str)
+    ]
     checks = [row for row in data.get("checks") or [] if isinstance(row, dict)]
-    floor_failed = any(str(row.get("check", "")).startswith("floor_") and row.get("result") == "failed" for row in checks)
+    floor_failed = any(
+        str(row.get("check", "")).startswith("floor_") and row.get("result") == "failed"
+        for row in checks
+    )
     absolute_codes: list[str] = []
     for entry in failed:
         if entry == FLOOR_NOT_MET:
@@ -120,9 +132,19 @@ def _absolute_parts(code: int, absolute_json: Path) -> tuple[tuple[ReleaseGatePa
             absolute_codes.append(entry)
     if code != 0 and not absolute_codes and not floor_failed:
         return _both("failed", INTERNAL_ERROR), (INTERNAL_ERROR,)
-    absolute = _part("nightly_absolute", "failed", _join(absolute_codes)) if absolute_codes else _part("nightly_absolute", "passed")
-    floors = _part("judge_floors", "failed", FLOOR_NOT_MET) if floor_failed else _part("judge_floors", "passed")
-    names = tuple(dict.fromkeys([*absolute_codes, *([FLOOR_NOT_MET] if floor_failed else [])]))
+    absolute = (
+        _part("nightly_absolute", "failed", _join(absolute_codes))
+        if absolute_codes
+        else _part("nightly_absolute", "passed")
+    )
+    floors = (
+        _part("judge_floors", "failed", FLOOR_NOT_MET)
+        if floor_failed
+        else _part("judge_floors", "passed")
+    )
+    names = tuple(
+        dict.fromkeys([*absolute_codes, *([FLOOR_NOT_MET] if floor_failed else [])])
+    )
     return (absolute, floors), names
 
 
@@ -158,7 +180,9 @@ def run_nightly_tier(
             return -1
         return int(completed.returncode)
 
-    def finish(parts: tuple[ReleaseGatePart, ...], failed: tuple[str, ...] = ()) -> NightlyOutcome:
+    def finish(
+        parts: tuple[ReleaseGatePart, ...], failed: tuple[str, ...] = ()
+    ) -> NightlyOutcome:
         counts: dict[str, int] = {}
         items = _item_count(paths["report"])
         if items is not None:
@@ -174,9 +198,30 @@ def run_nightly_tier(
         )
 
     if base_url:
-        harness = ["npx", "tsx", str(LIVE_HARNESS), "--base-url", base_url, "--golden", str(golden_path), "--out", str(out), "--no-gate"]
+        harness = [
+            "npx",
+            "tsx",
+            str(LIVE_HARNESS),
+            "--base-url",
+            base_url,
+            "--golden",
+            str(golden_path),
+            "--out",
+            str(out),
+            "--no-gate",
+        ]
     else:
-        harness = ["npx", "tsx", str(NIGHTLY_HARNESS), "--generator", generator, "--golden", str(golden_path), "--out", str(out)]
+        harness = [
+            "npx",
+            "tsx",
+            str(NIGHTLY_HARNESS),
+            "--generator",
+            generator,
+            "--golden",
+            str(golden_path),
+            "--out",
+            str(out),
+        ]
     code = call(harness)
     if code == EXIT_GENERATOR_KEY:
         return finish(_both("skipped", JUDGE_KEYS_MISSING))
