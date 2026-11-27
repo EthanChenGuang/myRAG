@@ -242,6 +242,27 @@ export function matchRelativeTime(q: string): RelativeTimeMatch[] {
     .map((span) => span.match);
 }
 
+/**
+ * The R2 spans as they read in the gate-normalized text (longest of overlapping spans kept), for the decomposition
+ * completeness check (D-03); matchRelativeTime returns lexicon entries, whose term is not the text for an N-count phrase.
+ */
+export function relativeTimeSpanTexts(q: string): string[] {
+  const normalized = normalizeText(q);
+  const spans = scanRelativeTime(normalized);
+  return spans
+    .filter(
+      (span) =>
+        !spans.some(
+          (other) =>
+            other !== span &&
+            other.length > span.length &&
+            other.index < span.index + span.length &&
+            span.index < other.index + other.length
+        )
+    )
+    .map((span) => normalized.slice(span.index, span.index + span.length));
+}
+
 const WORD = /[\p{L}\p{N}_]+/gu;
 const LATIN_OR_DIGIT_RUN = /[\p{Script=Latin}\p{N}_]+/gu;
 const QUESTION_MARK = /[?？]/g;

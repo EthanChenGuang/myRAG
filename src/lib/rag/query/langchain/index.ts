@@ -156,7 +156,8 @@ export function createLangChainTransformer(options: CreateLangChainTransformerOp
   /**
    * LangChain's query-decomposition prompt (vendored) as a literal system message, the query as the human message, and
    * withStructuredOutput SubQuestions. The shared finisher validates the wire bound and applies the D-15 cut to
-   * max_sub_questions, so a longer list is cut, never discarded. A failure is a skip; an abort propagates.
+   * max_sub_questions, so a longer list is cut, never discarded. With required terms in the input (D-03/D-04) the same
+   * finisher runs checkDecompositionCompleteness, so both frameworks repair one way. A failure is a skip; an abort propagates.
    */
   async function decompose(input: TransformDecomposeInput): Promise<DecomposeResult> {
     const { query, language, protectedTokens, signal } = input;

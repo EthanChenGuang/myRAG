@@ -170,6 +170,7 @@
       "(?<![\\p{L}\\p{N}])\\d{1,2}\\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\\s+\\d{4}(?![\\p{N}])",
       "(?<![\\p{L}])(?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2},?\\s+\\d{4}(?![\\p{N}])"
     ],
-    "version": "(?<![\\p{L}\\p{N}])[vV]\\d{1,6}(?:\\.\\d{1,6}){1,3}(?![\\p{N}])|(?<![\\p{L}\\p{N}.])\\d{1,6}\\.\\d{1,6}\\.\\d{1,6}(?![\\p{N}])"
+    "version": "(?<![\\p{L}\\p{N}])[vV]\\d{1,6}(?:\\.\\d{1,6}){1,3}(?![\\p{N}])|(?<![\\p{L}\\p{N}.])\\d{1,6}\\.\\d{1,6}\\.\\d{1,6}(?![\\p{N}])",
+    "year": "(?<![\\p{N}])(?:19\\d{2}|20\\d{2}|2100)(?![\\p{N}])"
   }
 }
