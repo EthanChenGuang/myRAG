@@ -45,3 +45,7 @@ refusal-calibration, setting-check. embedding-profiles, refusal-calibration and 
 ## Visual
 
 No new component, colour or spacing: the existing `#toast` (`toast toast-top toast-end`, `z-index: 1100`, `alert alert-success`).
+Two fixes to that toast, found in review: the alert wraps (`whitespace-normal break-words`, at most `min(28rem, 100vw - 2rem)`)
+because DaisyUI's `.toast` is `nowrap` and panel sentences run longer than the page's old toasts; and a newer toast restarts the
+3-second hide timer instead of being hidden early by the previous one. The status region keeps the sentence after the toast is gone,
+so the short display time costs nothing (WCAG 2.2.1).
