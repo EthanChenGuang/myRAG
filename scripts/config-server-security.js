@@ -78,7 +78,14 @@ function maskConfig(config) {
       visible[name] = value;
     }
   }
-  return { config: visible, secretsSet };
+  return { config: visible, secretsSet, secretHints: {} };
+}
+
+/** The text a masked secret field may carry; it never replaces a stored value. */
+const SECRET_MASK_PLACEHOLDER = '********';
+
+function mergeSecretUpdate(current, submitted) {
+  return { ...submitted };
 }
 
 function startsWith(bytes, signature, offset = 0) {
@@ -127,11 +134,13 @@ function hasEnvLineBreak(value) {
 module.exports = {
   CSRF_HEADER,
   LOGO_TYPES,
+  SECRET_MASK_PLACEHOLDER,
   MAX_IMAGE_BYTES,
   hasEnvLineBreak,
   isAllowedHost,
   isSecretConfigEntry,
   maskConfig,
+  mergeSecretUpdate,
   securityMiddleware,
   sniffImageKind,
   toEnvLineValue,
