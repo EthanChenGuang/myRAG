@@ -410,6 +410,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
           versionScope: search.versionScope,
           queryLanguage: query.queryLanguage,
           ...(search.tableRows ? { tableRows: search.tableRows } : {}),
+          variants: query.variants,
           ...(searchIdentifiers?.notFound
             ? { identifierSuggestionLine: identifierSuggestionMessage(query.queryLanguage ?? 'en', searchIdentifiers.suggestions) }
             : {}),
