@@ -1,6 +1,7 @@
 import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
 import type { Profile } from '../types';
 import { detectLanguageWithConfidence } from './detect';
+import { requestLanguageId } from './langid-client';
 
 export type QueryLanguageSource = NonNullable<QueryPlan['language_detection']>['source'];
 
@@ -27,6 +28,8 @@ export interface ResolveQueryLanguageInput {
   profile: Profile;
   params: ResolveQueryLanguageParams;
   signal?: AbortSignal;
+  /** Chain step 1 (D-17): RAG_LANGID_SIDECAR with the sidecar configured; `request` is a test seam. */
+  sidecar?: { enabled: boolean; request?: typeof requestLanguageId } | null;
 }
 
 const DOMINANT_SCRIPT_SHARE = 0.7;
