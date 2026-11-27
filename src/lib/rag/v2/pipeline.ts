@@ -17,6 +17,7 @@ import type { Candidate, InjectionSummary, Profile, RetrievalResult, RunRetrieva
 import { evalRetrievalOverrides } from './overrides';
 import { effectiveRetrievalParams } from './retrieval-params';
 import { evalFinalTopK, evalResultCap, runContextStages } from './stages/context';
+import { documentBudgetOf } from '../context/pack';
 import { runQueryStages } from './stages/query';
 import { runRankStages } from './stages/rank';
 import { embedForRetrieval, embedVariantTexts, runSearchStages, type QueryLexicalOptions, type SearchIdentifiers } from './stages/search';
@@ -101,6 +102,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let voice: VoiceResults | null = null;
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
+  let packing: RetrievalResult['packing'];
   let bindingPlan: BindingLegsPlan | null = null;
   let queryPlan: RetrievalResult['queryPlan'] | null = null;
   let layerTranslate = false;
@@ -376,11 +378,23 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         const assembled = await runStage(
           spec('assemble', 'skip'),
           signal,
-          () => assembleVoiceResults({ query: input.query, chunks: voiceChunks, matchCount }),
+          () =>
+            assembleVoiceResults({
+              query: input.query,
+              chunks: voiceChunks,
+              matchCount,
+              documentTokenBudget: documentBudgetOf(input.options?.documentTokenBudget),
+            }),
           collector,
           { candidatesIn: voiceChunks.length, candidatesOut: (value) => value.results.length },
         );
-        voice = assembled.skipped ? { results: [], source_images: [] } : assembled.value;
+        if (assembled.skipped) {
+          voice = { results: [], source_images: [] };
+        } else {
+          const { packing: voicePacking, ...payload } = assembled.value;
+          voice = payload;
+          packing = voicePacking;
+        }
         if (security.contextTagging && !assembled.skipped) {
           const context = voiceContext(voice.results, flaggedForRender);
           if (context !== null) voice = { ...voice, context };
@@ -410,6 +424,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         candidates = context.candidates;
         injection = context.injection;
         injectionStalled = context.injectionStalled ?? false;
+        packing = context.packing;
       }
       if (profile === 'eval' && rank.decision.decision === 'refuse') {
         const dropped = new Set(injection?.droppedChunkIds ?? []);
@@ -474,6 +489,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     injection,
     injectionStalled,
     security,
+    ...(packing ? { packing } : {}),
     ...(bindingPlan ? { bindingHash: bindingHashFields(bindingPlan) } : {}),
     ...(translationPlan ? { translationHash: translationHashFields(translationPlan, params) } : {}),
     queryPlan,

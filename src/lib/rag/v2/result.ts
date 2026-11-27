@@ -13,7 +13,7 @@ import type { RefusalRecord } from '../refusal/types';
 import { describeReranker } from '../rerank/select';
 import { RERANK_TEXT_VERSION } from '../rerank/types';
 import type { TraceCollector } from '../trace/collector';
-import type { Candidate, InjectionSummary, Profile, RetrievalResult, RunRetrievalInput, StageRecord } from '../types';
+import type { Candidate, InjectionSummary, PackingSummary, Profile, RetrievalResult, RunRetrievalInput, StageRecord } from '../types';
 import type { CacheHit, CacheTicket } from '../cache/types';
 import type { TemporalQueryContext } from '../query/temporal-query-detector';
 import { isMultiTenant } from '@/lib/deployment-mode';
@@ -66,6 +66,8 @@ export interface BuildV2ResultInput {
   /** The injection_check summary; absent when RAG_INJECTION_CHECK is off. */
   injection?: InjectionSummary;
   injectionStalled?: boolean;
+  /** D-86: the packing summary; set only when the request gave documentTokenBudget. */
+  packing?: PackingSummary;
   /** The request's security config; defaults to RagDeps.securityConfig(). */
   security?: SecurityConfig;
   /** The planned binding legs (bindingHashFields); empty when none is planned. */
@@ -351,6 +353,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(injection ? { injection } : {}),
     ...(queryPlan ? { queryPlan } : {}),
     ...(ctx.cacheTicket && profile !== 'voice' ? { cacheTicket: ctx.cacheTicket } : {}),
+    ...(ctx.packing ? { packing: ctx.packing } : {}),
   };
 
   let result: RetrievalResult;
