@@ -753,3 +753,11 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - W-4 and the plan-15 live items go to the owner desk/human.
   - Archived.
 - 22:36Z quick-deps-switches archived on retry. Its branch is at 2ad05b48 and its table test covers all 12 switches, including routing and decomposed.
+- 22:37Z VERIFY 4.3: FAIL (verify/04.3). The pgvector core passes (523+260+481). Restricted content still leaks through derived stores. Access must stay OFF in prod.
+  - NF-1 SEVERE, live on main and prod today: the chats RLS SELECT allows shared=true for anon and authenticated, so anyone with the anon key can list every tenant's shared chats.
+    - Hotfix: session ...sj4GLH, branch fix/nf1-shared-chats-rls, migration 0989, standalone PR. Prod SQL goes through the owner desk.
+  - G5 (Langfuse export and cache hits) and G6 (review chunk route needs a live visibility check) -> quick-access-derived-stores (...shwYjn).
+  - G1: migration numbers are now 0986 doc-types, 0987 scope-access, 0988 review-writers, 0989 NF-1. Train-40 builder told to renumber and to add a CI check that migration numbers are unique.
+  - G7 (merge 04.3-52, run the switch-on smoke, add it to pr-smoke) and G8 (the 53 apply test and its list are stale) are pending. Low items are pending.
+  - Note: the verifier calls 0983 EXEMPT acceptable, but quick-scope-access (0987) hardens it anyway.
+  - Archived.
