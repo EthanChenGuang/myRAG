@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { RetrievalFilters } from '../backend/types';
-import { scopeAccessFilter } from '../tenant/access';
-import type { TenantScope } from '../tenant/scope';
+import type { ScopeAccessFilter } from '../tenant/access';
 import type { CacheKeyParts } from './types';
 
 const KEY_PARTS: readonly (keyof CacheKeyParts)[] = [
@@ -24,11 +23,10 @@ function sha256Hex(text: string): string {
 }
 
 /**
- * D-23, A-05: the access key part. The set hash of the caller's effective keys, the constant admin_all for an admin and off while the
- * switch is off; a scope never resolved for access while the switch is on throws, so no key is built for it.
+ * D-23, A-05: the access key part of a scope's access filter: the set hash of the caller's effective keys, the constant admin_all for an
+ * admin and off while the switch is off. Pure; cacheAccessKeyPart in ./access-key reads the filter from a TenantScope.
  */
-export function cacheAccessKeyPart(scope: TenantScope): string {
-  const filter = scopeAccessFilter(scope);
+export function accessKeyPartOf(filter: ScopeAccessFilter): string {
   if (filter.mode === 'keys') return filter.setHash;
   return filter.mode;
 }

@@ -37,7 +37,7 @@ import type { QueryEmbedding } from '../embeddings/query-embedding';
 import { env } from '@/lib/env';
 import { checkBypassReason, type CacheRetrievalOptions, type TurnFacts } from '../cache/bypass';
 import { resolveHitSources } from '../cache/sources';
-import { cacheAccessKeyPart } from '../cache/keys';
+import { cacheAccessKeyPart } from '../cache/access-key';
 import { effectiveCacheThreshold } from '../cache/threshold';
 import type { CacheHit, CacheKeyParts, CacheTicket, EntryProfile } from '../cache/types';
 import { resolveFinalResultCount } from '../config';

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { cacheAccessKeyPart, computeCacheKeyHash, hashSystemPromptTemplate } from '@/lib/rag/cache/keys';
+import { cacheAccessKeyPart } from '@/lib/rag/cache/access-key';
+import { accessKeyPartOf, computeCacheKeyHash, hashSystemPromptTemplate } from '@/lib/rag/cache/keys';
 import type { CacheKeyParts } from '@/lib/rag/cache/types';
 import { resetRagConfigForTests } from '@/lib/rag/config';
 import { resetRagDepsForTests, setRagDepsForTests } from '@/lib/rag/deps';
@@ -135,6 +136,19 @@ describe('accessGroupSetHash key part (04.3-12, D-23, A-05)', () => {
     expect(hashOf(other)).not.toBe(hashOf(a));
     expect(hashOf(a)).not.toBe(computeCacheKeyHash(BASE));
     expect(computeCacheKeyHash({ ...BASE, accessGroupSetHash: 'admin_all' })).not.toBe(computeCacheKeyHash(BASE));
+  });
+
+  it('accessKeyPartOf maps the three filter shapes', () => {
+    expect(accessKeyPartOf({ mode: 'off' })).toBe('off');
+    expect(accessKeyPartOf({ mode: 'admin_all' })).toBe('admin_all');
+    expect(accessKeyPartOf({ mode: 'keys', keys: ['all'], setHash: 'f'.repeat(64) })).toBe('f'.repeat(64));
+  });
+
+  it('keeps src/lib/rag/cache/keys.ts free of runtime imports from the tenant, config and deps modules', async () => {
+    const fs = await import('node:fs');
+    const source = fs.readFileSync(new URL('../../../src/lib/rag/cache/keys.ts', import.meta.url), 'utf8');
+    const runtimeImports = source.split('\n').filter((line) => /^import (?!type )/.test(line));
+    expect(runtimeImports).toEqual(["import { createHash } from 'node:crypto';"]);
   });
 });
 
