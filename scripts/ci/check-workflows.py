@@ -53,7 +53,18 @@ TS_JOB_NEEDLES = {
 # job -> the shard flag its test command must take from matrix.shard
 TS_SHARDED = {"ts-vitest": "--shard=", "ts-db": "--test-shard="}
 TS_TIMEOUT_MAX = 25
-PR_JOBS = [*TS_JOB_NEEDLES, "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build", "next-build"]
+PR_JOBS = [
+    *TS_JOB_NEEDLES,
+    "sibling-types",
+    "voice-agent",
+    "schema-parity",
+    "python",
+    "eval-smoke",
+    "gate-negative-control",
+    "docker-build",
+    "next-build",
+    "backend-canary",
+]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
 VERSION_COMMENT_RE = re.compile(r"^\s+#\s*v\d+(\.\d+){0,2}\s*$")
@@ -295,6 +306,7 @@ def check_pr(errors: list[str]) -> None:
             errors.append(f"pr-smoke: job {jname} must install with npm ci")
     check_next_build(jobs.get("next-build"), errors)
     check_docker_build(jobs.get("docker-build"), errors)
+    check_backend_canary(jobs.get("backend-canary"), errors)
 
 
 def check_python_job(job: dict | None, errors: list[str]) -> None:
@@ -348,9 +360,90 @@ def check_docker_build(job: dict | None, errors: list[str]) -> None:
 COMPOSE_BACKENDS = ROOT / "docker-compose.backends.yml"
 
 
+CANARY_BACKENDS = "pgvector,weaviate,qdrant"
+CANARY_SUITES = ("tests/rag/canary", "tests/rag/backend-conformance")
+CANARY_IMAGES = ("qdrant/qdrant", "semitechnologies/weaviate")
+CANARY_IMAGE_RE = re.compile(
+    r"(?<![\w./-])(?:[\w.-]+/)?(?P<repo>qdrant/qdrant|semitechnologies/weaviate)(?::[\w.-]+)?(?:@sha256:(?P<digest>[0-9a-f]{64}))?"
+)
+PULL_RETRY_RE = re.compile(r"for\s+\w+\s+in\s+(?:1\s+2\s+3|\$\(seq\s+1\s+3\))\s*;?\s*(?:\n\s*)?do\b")
+
+
+def compose_digests(compose_path: Path) -> dict[str, set[str]]:
+    """The image digests docker-compose.backends.yml pins, by repository."""
+    found: dict[str, set[str]] = {}
+    if not compose_path.exists():
+        return found
+    data = yaml.safe_load(compose_path.read_text(encoding="utf-8")) or {}
+    for service in (data.get("services") or {}).values():
+        match = CANARY_IMAGE_RE.search(str((service or {}).get("image", "")))
+        if match and match.group("digest"):
+            found.setdefault(match.group("repo"), set()).add(match.group("digest"))
+    return found
+
+
 def check_backend_canary(job: dict | None, errors: list[str], compose_path: Path = COMPOSE_BACKENDS) -> None:
-    """D-12, A-9: the backend-canary job (rules land with the job)."""
-    return
+    """D-12, A-9, research Pitfalls 10 and 11: the canary runs on real stores on every run and cannot pass by skipping."""
+    if job is None:
+        errors.append("pr-smoke: job backend-canary missing")
+        return
+    if "if" in job:
+        errors.append("pr-smoke: job backend-canary must run on every pull request and push, without an if condition")
+    if "continue-on-error" in str(job):
+        errors.append("pr-smoke: job backend-canary must not use continue-on-error")
+    timeout = job.get("timeout-minutes")
+    if not isinstance(timeout, int) or timeout > TS_TIMEOUT_MAX:
+        errors.append(f"pr-smoke: job backend-canary must set timeout-minutes <= {TS_TIMEOUT_MAX}, got {timeout!r}")
+    if (job.get("strategy") or {}).get("matrix"):
+        errors.append("pr-smoke: job backend-canary must not use a matrix")
+
+    pinned = compose_digests(compose_path)
+    for repo in CANARY_IMAGES:
+        if len(pinned.get(repo, set())) != 1:
+            errors.append(f"pr-smoke: docker-compose.backends.yml must pin exactly one {repo} digest")
+    seen: dict[str, set[str]] = {}
+    for match in CANARY_IMAGE_RE.finditer(json.dumps(job)):
+        repo, digest = match.group("repo"), match.group("digest")
+        if digest is None:
+            errors.append(f"pr-smoke: job backend-canary references {match.group(0)!r} without an @sha256 digest")
+            continue
+        seen.setdefault(repo, set()).add(digest)
+    for repo in CANARY_IMAGES:
+        if not seen.get(repo):
+            errors.append(f"pr-smoke: job backend-canary must pull {repo} by its @sha256 digest")
+        elif pinned.get(repo) and seen[repo] != pinned[repo]:
+            errors.append(f"pr-smoke: job backend-canary {repo} digest differs from docker-compose.backends.yml")
+
+    steps = all_steps(job)
+    pulls = [str(step.get("run", "")) for step in steps if "docker pull" in str(step.get("run", ""))]
+    if not pulls:
+        errors.append("pr-smoke: job backend-canary must docker pull both images")
+    for body in pulls:
+        if not PULL_RETRY_RE.search(body) or "sleep" not in body:
+            errors.append("pr-smoke: job backend-canary must retry docker pull three times with a backoff sleep")
+    body = step_text(job)
+    if "npm ci --ignore-scripts" not in body:
+        errors.append("pr-smoke: job backend-canary must install with npm ci --ignore-scripts")
+    if "openssl rand" not in body:
+        errors.append("pr-smoke: job backend-canary must generate per-run keys with openssl rand")
+    for path in ("/readyz", "/v1/.well-known/ready"):
+        if path not in body:
+            errors.append(f"pr-smoke: job backend-canary must wait for {path} before the tests")
+
+    job_env = job.get("env") or {}
+    runs = [step for step in steps if "npx vitest run" in str(step.get("run", ""))]
+    if len(runs) != 1:
+        errors.append("pr-smoke: job backend-canary must have exactly one npx vitest run step")
+        return
+    command = str(runs[0].get("run", ""))
+    for suite in CANARY_SUITES:
+        if suite not in command.split():
+            errors.append(f"pr-smoke: job backend-canary vitest step must run {suite}")
+    env = {**job_env, **(runs[0].get("env") or {})}
+    if str(env.get("RAG_CANARY_BACKENDS", "")) != CANARY_BACKENDS:
+        errors.append(f"pr-smoke: job backend-canary must set RAG_CANARY_BACKENDS: {CANARY_BACKENDS}, got {env.get('RAG_CANARY_BACKENDS')!r}")
+    if str(env.get("CI_BACKEND_CANARY", "")) != "1":
+        errors.append(f"pr-smoke: job backend-canary must set CI_BACKEND_CANARY: '1', got {env.get('CI_BACKEND_CANARY')!r}")
 
 
 def sidecar_config_copies() -> list[str]:

@@ -432,3 +432,85 @@ jobs:
           test "$ready" = "200"
           test "$anon" = "401"
           test "$authed" = "200"
+
+  # D-12, A-9: the canary and the Phase 4 conformance suite on real Weaviate and Qdrant next to pgvector. The images are pinned by
+  # the digests in docker-compose.backends.yml (check-workflows.py keeps them equal); keys are random per run, no secret is read.
+  backend-canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      QDRANT_IMAGE: qdrant/qdrant:v1.20.2@sha256:d277592721d2e3b73f9b797b53cf05e6a5bb2134f6d13fdbda4ca51782afbcac
+      WEAVIATE_IMAGE: semitechnologies/weaviate:1.40.7@sha256:1373d227ef808c95601b79be75d5e613c04c5ad33a1a2e91ed91a5e6c2748144
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Node runtime check
+        run: node scripts/ci/check-node-runtime.mjs
+      - name: Generate per-run backend keys
+        run: |
+          for name in QDRANT_API_KEY QDRANT_READ_API_KEY WEAVIATE_API_KEY WEAVIATE_READ_API_KEY; do
+            key="$(openssl rand -hex 24)"
+            echo "::add-mask::$key"
+            echo "$name=$key" >> "$GITHUB_ENV"
+          done
+      - name: Pull the backend images by digest (three attempts; Docker Hub, then its mirror at the same digest)
+        run: |
+          pull() {
+            local name="$1" image="$2"
+            local mirror="mirror.gcr.io/${image%%[:@]*}@${image##*@}"
+            for attempt in 1 2 3; do
+              for ref in "$image" "$mirror"; do
+                if docker pull "$ref"; then
+                  echo "$name=$ref" >> "$GITHUB_ENV"
+                  return 0
+                fi
+              done
+              if [ "$attempt" -eq 3 ]; then return 1; fi
+              sleep $((attempt * 20))
+            done
+          }
+          pull QDRANT_RUN_IMAGE "$QDRANT_IMAGE"
+          pull WEAVIATE_RUN_IMAGE "$WEAVIATE_IMAGE"
+      - name: Start Qdrant and Weaviate
+        run: |
+          docker run -d --name qdrant -p 127.0.0.1:6333:6333 \
+            -e QDRANT__SERVICE__API_KEY="$QDRANT_API_KEY" \
+            -e QDRANT__SERVICE__READ_ONLY_API_KEY="$QDRANT_READ_API_KEY" \
+            -e QDRANT__TELEMETRY_DISABLED=true \
+            "$QDRANT_RUN_IMAGE"
+          docker run -d --name weaviate -p 127.0.0.1:8080:8080 -p 127.0.0.1:50051:50051 \
+            -e AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=false \
+            -e AUTHENTICATION_APIKEY_ENABLED=true \
+            -e AUTHENTICATION_APIKEY_ALLOWED_KEYS="$WEAVIATE_API_KEY,$WEAVIATE_READ_API_KEY" \
+            -e AUTHENTICATION_APIKEY_USERS=writer,reader \
+            -e AUTHORIZATION_ADMINLIST_ENABLED=true \
+            -e AUTHORIZATION_ADMINLIST_USERS=writer \
+            -e AUTHORIZATION_ADMINLIST_READONLY_USERS=reader \
+            -e PERSISTENCE_DATA_PATH=/var/lib/weaviate \
+            -e CLUSTER_HOSTNAME=node1 \
+            -e DEFAULT_VECTORIZER_MODULE=none \
+            -e DISABLE_TELEMETRY=true \
+            "$WEAVIATE_RUN_IMAGE"
+      - name: Wait for Qdrant /readyz and Weaviate /v1/.well-known/ready
+        # The Qdrant image has no curl or wget, so readiness is polled from the runner.
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf http://127.0.0.1:6333/readyz > /dev/null && curl -sf -o /dev/null http://127.0.0.1:8080/v1/.well-known/ready; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs --tail 50 qdrant || true
+          docker logs --tail 50 weaviate || true
+          exit 1
+      - name: Canary and conformance suites on pgvector, Weaviate and Qdrant
+        run: npx vitest run tests/rag/canary tests/rag/backend-conformance
+        env:
+          CI_BACKEND_CANARY: '1'
+          RAG_CANARY_BACKENDS: pgvector,weaviate,qdrant
+          QDRANT_URL: http://127.0.0.1:6333
+          WEAVIATE_URL: http://127.0.0.1:8080
