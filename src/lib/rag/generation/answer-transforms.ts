@@ -5,6 +5,7 @@ import type { AnswerChannel } from './answer-turn';
 import { emitNotice } from './notices';
 import { applySentinelToText } from './sentinel';
 import type { AnswerConfig } from './answer-config';
+import { calcBlockTransform, extractCalcBlocks, type CalcBlockExtraction, type CalcBlockOptions } from './calc-block';
 import { guardWholeText, type OutputGuardLinkSummary, type OutputGuardPolicy } from '../security/output-guard';
 import { outputGuardTransform, type OutputGuardTransformOptions } from '../security/output-guard-stream';
 
@@ -13,8 +14,8 @@ type Transform = StreamTextTransform<ToolSet>;
 export interface AnswerTransformParts {
   citationTransforms: readonly Transform[];
   sentinel?: Transform | null;
-  /** Reserved for Phase 5.2.1's calculation-block transform. */
-  calcBlock?: Transform | null;
+  /** Phase 5.2.1 D-72: the calculation-block transform, or its options (the builder then makes it); absent: no slot. */
+  calcBlock?: Transform | CalcBlockOptions | null;
   /** The output guard (05.2-13); see guardSlot. */
   guard?: Transform | null;
   /** The notice transform and the collector, in that order; always last (RESEARCH Pitfall 22). */
@@ -27,7 +28,8 @@ export interface AnswerTransformParts {
  */
 export function buildAnswerTransforms(parts: AnswerTransformParts): Transform[] {
   const rest: Transform[] = [];
-  for (const slot of [parts.sentinel, parts.calcBlock, parts.guard]) if (slot) rest.push(slot);
+  const calcBlock = parts.calcBlock && typeof parts.calcBlock === 'object' ? calcBlockTransform(parts.calcBlock) : parts.calcBlock;
+  for (const slot of [parts.sentinel, calcBlock, parts.guard]) if (slot) rest.push(slot);
   if (parts.noticeCollector) rest.push(...parts.noticeCollector);
   if (rest.length === 0) return parts.citationTransforms as Transform[];
   return [...parts.citationTransforms, ...rest];
@@ -48,6 +50,8 @@ export interface AnswerTextPipelineOptions {
   notices?: boolean;
   /** D-35: the output guard's whole-text function with this policy, after the sentinel; absent or null: no guard. */
   guard?: OutputGuardPolicy | null;
+  /** Phase 5.2.1 D-72: removes the trailing calculation block after the sentinel and before the guard; absent: no extraction. */
+  calcBlock?: CalcBlockOptions | null;
 }
 
 export interface AnswerTextPipelineResult {
@@ -58,6 +62,8 @@ export interface AnswerTextPipelineResult {
   truncated: boolean;
   /** The guard's summary; absent when no guard ran. */
   outputGuard?: OutputGuardLinkSummary;
+  /** The extraction (raw text, traces, invalid blocks); absent when no calcBlock input was given. */
+  calcBlock?: Omit<CalcBlockExtraction, 'visibleText'>;
 }
 
 /**
@@ -75,6 +81,12 @@ export function applyAnswerPipelineToText(text: string | readonly string[], opti
     refused = sentinel.refused;
     strippedCount = sentinel.strippedCount;
   }
+  let calcBlock: AnswerTextPipelineResult['calcBlock'];
+  if (options.calcBlock) {
+    const extraction = extractCalcBlocks(out, options.calcBlock);
+    out = extraction.visibleText;
+    calcBlock = { rawText: extraction.rawText, traces: extraction.traces, invalid: extraction.invalid };
+  }
   const state = createNoticeState({ language: options.language, channel: options.channel });
   let outputGuard: OutputGuardLinkSummary | undefined;
   if (options.guard) {
@@ -89,7 +101,7 @@ export function applyAnswerPipelineToText(text: string | readonly string[], opti
     out = guarded.text;
     outputGuard = guarded.summary;
   }
-  const guardField = outputGuard ? { outputGuard } : {};
+  const guardField = { ...(outputGuard ? { outputGuard } : {}), ...(calcBlock ? { calcBlock } : {}) };
   if (options.notices === false) return { text: out, refused, strippedCount, notices: [], truncated: false, ...guardField };
   if (refused) state.markRefused();
   const appended = state.atFinal(options.finishReason ?? 'stop');

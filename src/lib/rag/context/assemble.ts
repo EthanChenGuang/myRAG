@@ -2,6 +2,7 @@ import type { ExtractedURL } from '@/lib/url-extractor';
 import { formatGuardedLinks } from '../security/link-section';
 import { readAnswerConfig } from '../generation/answer-config';
 import { neutralizeSentinel } from '../generation/sentinel';
+import { calcTagNeutralizationOn, neutralizeCalcTags } from '../calc/block-tag';
 import { renderReferencedSection } from '../refs/resolve';
 import type { InjectionMarks } from '../security/injection-check';
 import { legacyKeepReason, legacyQueryTerms } from './relevance';
@@ -136,6 +137,8 @@ export interface AssembleOutput<C extends AssemblyCandidate = AssemblyCandidate>
   blocks: ContextBlock[];
   /** Sentinel tokens neutralized in the context (a rule switch on); absent when none was found. */
   neutralizedSentinels?: number;
+  /** Phase 5.2.1: calculation block tags neutralized in the context (a calculation switch on); absent when none was found. */
+  calcTagsNeutralized?: number;
   /** D-52: the version conflicts among the blocks; absent without one or while RAG_VERSION_LABELS is off. */
   versionConflict?: VersionConflict;
 }
@@ -664,30 +667,48 @@ export function buildContext<C extends AssemblyCandidate>(
     blocks: labeller.blocks,
     ...(versionConflict ? { versionConflict } : {}),
     ...(sentinel.count > 0 ? { neutralizedSentinels: sentinel.count } : {}),
+    ...(sentinel.calcCount > 0 ? { calcTagsNeutralized: sentinel.calcCount } : {}),
   };
 }
 
 /**
  * RESEARCH Pitfall 13: with RAG_CONTEXT_RELEVANCE_RULE or RAG_PARTIAL_ANSWER_RULE on, the no-answer sentinel is
- * neutralized in retrieved text so a document cannot make the model refuse; with both off every text is returned as is.
+ * neutralized in retrieved text so a document cannot make the model refuse; with RAG_CALC_TOOL or RAG_CALC_CHECK on, the
+ * calculation block tags are neutralized the same way (05.2.1 D-72). With all four off every text is returned as is.
  */
 function sentinelNeutralizer() {
   const config = readAnswerConfig();
-  const on = config.contextRelevanceRule || config.partialAnswerRule;
-  const state = { count: 0 };
+  const sentinelOn = config.contextRelevanceRule || config.partialAnswerRule;
+  const calcOn = calcTagNeutralizationOn(config);
+  const on = sentinelOn || calcOn;
+  const state = { count: 0, calcCount: 0 };
+  const apply = (text: string, counted: boolean): string => {
+    let out = text;
+    if (sentinelOn) {
+      const result = neutralizeSentinel(out);
+      if (counted) state.count += result.count;
+      out = result.text;
+    }
+    if (calcOn) {
+      const result = neutralizeCalcTags(out);
+      if (counted) state.calcCount += result.count;
+      out = result.text;
+    }
+    return out;
+  };
   return {
     on,
     get count() {
       return state.count;
     },
+    get calcCount() {
+      return state.calcCount;
+    },
     text(text: string): string {
-      if (!on) return text;
-      const result = neutralizeSentinel(text);
-      state.count += result.count;
-      return result.text;
+      return on ? apply(text, true) : text;
     },
     quiet(text: string): string {
-      return on ? neutralizeSentinel(text).text : text;
+      return on ? apply(text, false) : text;
     },
   };
 }
