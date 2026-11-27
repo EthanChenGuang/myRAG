@@ -192,12 +192,17 @@ describe('weaviate store purge operations', () => {
 
   it('two-tenant: on a wrong-shard server a document-only filter would delete B; the store filter keeps B', async () => {
     const misroute = { [weaviateTenantName(KEY_A)]: weaviateTenantName(KEY_B) };
-    const control = await seeded({ misroute });
+    // Seeded on a healthy server; then the handle for A starts answering from B's shard.
+    const controlOptions: Parameters<typeof createFakeWeaviate>[0] = {};
+    const control = await seeded(controlOptions);
+    controlOptions.misroute = misroute;
     const handle = control.fake.collections.use(weaviateCollectionName(ACTIVE)).withTenant(weaviateTenantName(KEY_A));
     await handle.data.deleteMany(handle.filter.byProperty('document_id').containsAny([DOC_SHARED]));
     expect(docsIn(control.fake, ACTIVE, KEY_B)).toEqual([DOC_OTHER]);
 
-    const { fake, store } = await seeded({ misroute });
+    const options: Parameters<typeof createFakeWeaviate>[0] = {};
+    const { fake, store } = await seeded(options);
+    options.misroute = misroute;
     expect(await store.deleteDocuments(weaviateCollectionName(ACTIVE), KEY_A, [DOC_SHARED])).toBe(0);
     expect(docsIn(fake, ACTIVE, KEY_B)).toEqual([DOC_SHARED, DOC_OTHER].sort());
     expect(await store.countDocumentPoints(weaviateCollectionName(ACTIVE), KEY_A, [DOC_SHARED])).toBe(0);

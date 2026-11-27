@@ -7,6 +7,7 @@ export { qdrantErrorStatus } from './errors';
 export type QdrantApi = Pick<
   QdrantClient,
   | 'getCollection'
+  | 'getCollections'
   | 'createCollection'
   | 'createPayloadIndex'
   | 'deleteCollection'

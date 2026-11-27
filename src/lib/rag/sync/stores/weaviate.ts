@@ -45,6 +45,20 @@ const PAYLOAD_FIELDS: readonly (keyof VectorPointPayload)[] = [
   'lexical_version',
 ];
 
+/** RET-05 purges: document ids per deleteMany filter and per count. */
+const PURGE_BATCH = 100;
+const CHUNK_COLLECTION_PREFIX = 'Myrag_chunks_';
+const CHUNK_COLLECTION_RE = /^Myrag_chunks_[A-Za-z0-9_]{1,160}$/;
+
+function requireChunkCollection(name: string): string {
+  if (typeof name !== 'string' || !CHUNK_COLLECTION_RE.test(name)) throw new Error('[Vector Sync] weaviate store: not a chunk collection');
+  return name;
+}
+
+function and(filters: WeaviateFilterValue[]): WeaviateFilterValue {
+  return { operator: 'And', filters, value: null };
+}
+
 function requireKey(tenantKey: string): string {
   if (!isCanonicalTenantKey(tenantKey)) throw new Error('[Vector Sync] weaviate store: malformed tenant key');
   return tenantKey;
@@ -111,19 +125,43 @@ export function createWeaviateStore(options: WeaviateStoreOptions): VectorStore 
     }
   }
 
+  async function deleteLoop(col: WeaviateTenantCollection, filter: WeaviateFilterValue): Promise<number> {
+    let deleted = 0;
+    for (let round = 0; round < maxDeleteRounds; round += 1) {
+      const result = await col.data.deleteMany(filter, { dryRun: false, verbose: false });
+      if (result.failed > 0) throw new RetrievalBackendError('weaviate.delete', 'delete_failed');
+      deleted += result.successful;
+      if (result.matches === 0 || result.successful === 0) return deleted;
+    }
+    throw new RetrievalBackendError('weaviate.delete', 'delete_incomplete');
+  }
+
   async function deleteWhere(profileId: string, tenantKey: string, where: (col: WeaviateTenantCollection) => WeaviateFilterValue): Promise<number> {
     return orEmpty('delete', 0, async () => {
       const col = shard(profileId, tenantKey);
-      const filter = where(col);
-      let deleted = 0;
-      for (let round = 0; round < maxDeleteRounds; round += 1) {
-        const result = await col.data.deleteMany(filter, { dryRun: false, verbose: false });
-        if (result.failed > 0) throw new RetrievalBackendError('weaviate.delete', 'delete_failed');
-        deleted += result.successful;
-        if (result.matches === 0 || result.successful === 0) return deleted;
-      }
-      throw new RetrievalBackendError('weaviate.delete', 'delete_incomplete');
+      return deleteLoop(col, where(col));
     });
+  }
+
+  /** A purge names the collection by its listed name; the data path is still only the tenant handle (D-07). */
+  function namedShard(collection: string, tenantKey: string): WeaviateTenantCollection {
+    return client.collections.use(requireChunkCollection(collection)).withTenant(weaviateTenantName(requireKey(tenantKey)));
+  }
+
+  /** The tenant_key clause guards against a shard answering for another tenant; the purge ids are the document filter. */
+  function purgeFilter(col: WeaviateTenantCollection, tenantKey: string, documentIds: string[]): WeaviateFilterValue {
+    return and([col.filter.byProperty('tenant_key').equal(tenantKey), col.filter.byProperty('document_id').containsAny([...documentIds])]);
+  }
+
+  /** A missing tenant or a missing collection holds nothing for a purge. */
+  async function orZero(operation: string, run: () => Promise<number>): Promise<number> {
+    try {
+      return await run();
+    } catch (error) {
+      const mapped = mapWeaviateError(error, operation);
+      if (mapped instanceof BackendNotReadyError && (mapped.reason === 'tenant_missing' || mapped.reason === 'collection_missing')) return 0;
+      throw mapped;
+    }
   }
 
   return {
@@ -207,6 +245,38 @@ export function createWeaviateStore(options: WeaviateStoreOptions): VectorStore 
     },
     async count(profileId: string, tenantKey: string): Promise<number> {
       return orEmpty('count', 0, async () => (await shard(profileId, tenantKey).aggregate.overAll()).totalCount);
+    },
+    async listCollections(): Promise<string[]> {
+      try {
+        return (await client.collections.listAll())
+          .map((c) => c.name)
+          .filter((name) => name.startsWith(CHUNK_COLLECTION_PREFIX) && CHUNK_COLLECTION_RE.test(name))
+          .sort();
+      } catch (error) {
+        throw mapWeaviateError(error, 'list_collections');
+      }
+    },
+    async deleteDocuments(collection: string, tenantKey: string, documentIds: string[]): Promise<number> {
+      const col = namedShard(collection, tenantKey);
+      if (documentIds.length === 0) return 0;
+      return orZero('purge_delete', async () => {
+        let deleted = 0;
+        for (let i = 0; i < documentIds.length; i += PURGE_BATCH) {
+          deleted += await deleteLoop(col, purgeFilter(col, tenantKey, documentIds.slice(i, i + PURGE_BATCH)));
+        }
+        return deleted;
+      });
+    },
+    async countDocumentPoints(collection: string, tenantKey: string, documentIds: string[]): Promise<number> {
+      const col = namedShard(collection, tenantKey);
+      if (documentIds.length === 0) return 0;
+      return orZero('purge_count', async () => {
+        let total = 0;
+        for (let i = 0; i < documentIds.length; i += PURGE_BATCH) {
+          total += (await col.aggregate.overAll({ filters: purgeFilter(col, tenantKey, documentIds.slice(i, i + PURGE_BATCH)) })).totalCount;
+        }
+        return total;
+      });
     },
     searchLegs(req: StoreSearchRequest): Promise<StoreLegs> {
       return searchWeaviateLegs(client, req);
