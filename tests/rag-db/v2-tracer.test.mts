@@ -73,4 +73,40 @@ describe('v2 tracer through the eval route', () => {
       assert.equal(json.stage_status[name], undefined, `v1-only stage ${name} should not run under v2`);
     }
   });
+
+  test('a small documentTokenBudget keeps only the highest-ranked parent and reports the dropped count (D-83)', async () => {
+    const { runRetrieval } = await import('../../src/lib/rag/pipeline.ts');
+    const { mintScope } = await import('../../src/lib/rag/tenant/scope.ts');
+    const { createCitationLabeler } = await import('../../src/lib/rag/generation/citations/blocks.ts');
+    const retrieve = (documentTokenBudget?: number) =>
+      runRetrieval({
+        scope: mintScope('single', null, null),
+        query: 'What is SKU LV-RC-0030?',
+        profile: 'eval',
+        options: { ragMode: 'balanced', ...(documentTokenBudget === undefined ? {} : { documentTokenBudget }) },
+        signal: new AbortController().signal,
+        citationLabeler: createCitationLabeler(),
+      });
+
+    const plain = await retrieve();
+    assert.equal(plain.packing, undefined);
+    assert.ok(plain.kept.length >= 2, 'expected at least two kept chunks without a budget');
+
+    const roomy = await retrieve(1_000_000);
+    assert.deepEqual(
+      roomy.kept.map((row) => row.chunk_id),
+      plain.kept.map((row) => row.chunk_id),
+    );
+    assert.equal(roomy.context, plain.context);
+    const units = roomy.packing!.keptParents + roomy.packing!.droppedDocuments;
+
+    const tight = await retrieve(1);
+    assert.deepEqual(
+      tight.kept.map((row) => row.chunk_id),
+      [plain.kept[0]!.chunk_id],
+    );
+    assert.deepEqual(tight.packing, { documentBudget: 1, droppedDocuments: units - 1, keptParents: 1 });
+    const cited = new Set((tight.blocks ?? []).filter((block) => block.alias !== null).flatMap((block) => block.chunkIds));
+    for (const row of plain.kept.slice(1)) assert.equal(cited.has(row.chunk_id), false, `dropped ${row.chunk_id} must carry no alias`);
+  });
 });
