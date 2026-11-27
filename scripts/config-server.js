@@ -1205,6 +1205,10 @@ app.post('/api/upload', documentUpload.array('files'), async (req, res) => {
     if (req.body.image_context) {
       formData.append('image_context', req.body.image_context);
     }
+    // D-16: the access choice is forwarded exactly as sent; the app validates it. Absent: nothing is added.
+    if (typeof req.body.access === 'string') {
+      formData.append('access', req.body.access);
+    }
     formData.append('upload_source', 'config_upload');
 
     // Forward authentication headers (Cookie, Authorization) so the backend knows the user
@@ -4018,6 +4022,10 @@ app.post('/api/process-document', documentUpload.single('file'), async (req, res
     form.append('upload_source', 'config_upload');
     if (req.body.doc_type) {
       form.append('doc_type', req.body.doc_type);
+    }
+    // D-16: the access choice is forwarded exactly as sent; the app validates it. Absent: nothing is added.
+    if (typeof req.body.access === 'string') {
+      form.append('access', req.body.access);
     }
 
     const { client, options } = createMainAppRequest('/api/process-document', 'POST', {

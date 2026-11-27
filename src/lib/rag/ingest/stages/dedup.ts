@@ -4,6 +4,7 @@ import { HASH_NORMALIZATION_VERSION, contentHash } from '../hash';
 import { originFields } from '../origin';
 import { applyDocumentAttributes } from '../attributes/apply';
 import { applyUploadScopes } from '../scopes/upload';
+import { applyUploadAccess } from '../access-label';
 import {
   requireDocument,
   requireIdentity,
@@ -45,6 +46,8 @@ async function runFileHashDedup(ctx: StageContext): Promise<StageOutcome> {
   if (callerMetadata) await ctx.writer.setFields(begun.documentId, { metadata: callerMetadata });
   const origin = originFields(ctx.input.options);
   if (origin !== null) await ctx.writer.setFields(begun.documentId, origin);
+  // D-16: the chosen access label goes on before any chunk and long before publish, so the version is never retrievable as everyone.
+  await applyUploadAccess(ctx);
   // D-40: the uploader's tags go on the document before any chunk is written, so the chunk writers copy them to every chunk.
   await applyUploadScopes(ctx);
   // D-23: the version's attributes (explicit, staged or inherited) also go on before any chunk; applyDocumentAttributes is a no-op while off.

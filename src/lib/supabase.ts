@@ -151,8 +151,15 @@ interface DocumentSourceMetadata {
   source_connection_id?: string;
   image_url?: string;
   image_type?: string;
+  /**
+   * D-16, D-20: the access label, already checked by the caller (uploadAccessKeys, or u:<owner> from a connector). Written in the same
+   * INSERT that makes the document visible (RESEARCH Pitfall 7); absent: the column default, as before.
+   */
+  access_groups?: string[];
   [key: string]: unknown;
 }
+
+const ACCESS_KEY_PATTERN = /^(all|[gu]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
 /**
  * Store a parsed document and its chunks in Supabase
@@ -162,6 +169,12 @@ interface DocumentSourceMetadata {
  * @param metadata - Optional metadata for the document (includes source tracking)
  * @returns Promise resolving to the document ID
  */
+/** The caller's metadata copied onto each chunk, without the access label (a column the database copies from the document). */
+function chunkMetadataOf(metadata: DocumentSourceMetadata): Record<string, unknown> {
+  const { access_groups: _label, ...rest } = metadata;
+  return rest;
+}
+
 async function storeDocument(filename: string, content: string, chunks: ChunkWithEmbedding[], metadata: DocumentSourceMetadata = {}) {
   // This function should only be called server-side
   if (typeof window !== 'undefined') {
@@ -177,11 +190,14 @@ async function storeDocument(filename: string, content: string, chunks: ChunkWit
   const documentId = uuidv4();
 
   // Extract source metadata for column storage
-  const { user_id, organization_id, source, source_provider, source_file_id, source_connection_id, ...restMetadata } = metadata;
+  const { user_id, organization_id, source, source_provider, source_file_id, source_connection_id, access_groups, ...restMetadata } = metadata;
 
   // user_id is required - throw error if not provided
   if (!user_id) {
     throw new Error('user_id is required to store a document');
+  }
+  if (access_groups !== undefined && (!Array.isArray(access_groups) || access_groups.length === 0 || !access_groups.every((key) => typeof key === 'string' && ACCESS_KEY_PATTERN.test(key)))) {
+    throw new Error('access_groups must be a non-empty list of access keys');
   }
 
   // Store the document using the admin client to bypass RLS
@@ -199,6 +215,7 @@ async function storeDocument(filename: string, content: string, chunks: ChunkWit
       source_provider: source_provider || null,
       source_file_id: source_file_id || null,
       source_connection_id: source_connection_id || null,
+      ...(access_groups ? { access_groups: access_groups.includes('all') ? ['all'] : [...new Set(access_groups)].sort() } : {}),
     });
 
   if (docError) {
@@ -225,7 +242,7 @@ async function storeDocument(filename: string, content: string, chunks: ChunkWit
       embedding: chunk.embedding,
       chunk_index: index,
       metadata: {
-        ...metadata,
+        ...chunkMetadataOf(metadata),
         document_title: filename,
         chunk_index: index,
         chunk_position: index + 1,
