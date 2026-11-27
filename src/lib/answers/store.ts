@@ -12,7 +12,7 @@ import {
 
 export type AnswerGroundednessValue = AnswerRecord['groundedness'];
 export type AnswerFeedbackValue = NonNullable<AnswerRecord['feedback']>;
-export type ReviewReason = 'feedback_negative' | 'groundedness_flagged' | 'claim_unsupported';
+export type ReviewReason = 'feedback_negative' | 'groundedness_flagged' | 'claim_unsupported' | 'calc_mismatch' | 'calc_unverified';
 export type AnswerTextsSource = NonNullable<AnswerRecord['textsSource']>;
 
 export interface AnswerRecordRow {
@@ -53,6 +53,8 @@ export interface InsertAnswerRecordInput {
   /** Phase 5.2: written only when given, so an all-off insert is the Phase 5 row (D-23, D-03). */
   checks?: AnswerChecks;
   textsSource?: AnswerTextsSource;
+  /** Phase 4.3 (D-25, A-06): one access-key array per cited document; written only when given, so an access-off row is today's. */
+  accessSets?: string[][] | null;
 }
 
 export class AnswerStoreError extends Error {
@@ -69,8 +71,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MAX_ATTACH_IDS = 500;
 const MAX_CHAT_RECORDS = 500;
 const CHECKS_COLUMNS = ',checks,texts_source';
-const REVIEW_REASONS: readonly ReviewReason[] = ['feedback_negative', 'groundedness_flagged', 'claim_unsupported'];
+export const REVIEW_REASONS: readonly ReviewReason[] = ['feedback_negative', 'groundedness_flagged', 'claim_unsupported', 'calc_mismatch', 'calc_unverified'];
 const APPEND_ATTEMPTS = 5;
+const ACCESS_KEY_RE = /^(all|[gu]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+const MAX_ACCESS_SETS = 200;
 
 const InsertSchema = z.object({
   id: z.string().uuid(),
@@ -86,6 +90,7 @@ const InsertSchema = z.object({
   groundedness: AnswerRecordSchema.shape.groundedness,
   checks: AnswerChecksSchema.optional(),
   textsSource: z.enum(['registry', 'legacy']).optional(),
+  accessSets: z.array(z.array(z.string().regex(ACCESS_KEY_RE)).min(1).max(64)).max(MAX_ACCESS_SETS).optional(),
 });
 const GroundednessSchema = AnswerRecordSchema.shape.groundedness;
 const FeedbackSchema = AnswerRecordSchema.shape.feedback.removeDefault().options[0];
@@ -137,6 +142,7 @@ export async function insertAnswerRecord(admin: SupabaseClient, input: InsertAns
     groundedness: input.groundedness,
     ...(input.checks !== undefined ? { checks: input.checks } : {}),
     ...(input.textsSource !== undefined ? { textsSource: input.textsSource } : {}),
+    ...(input.accessSets ? { accessSets: input.accessSets } : {}),
   });
   const { data, error } = await admin
     .from(TABLE)
@@ -156,6 +162,7 @@ export async function insertAnswerRecord(admin: SupabaseClient, input: InsertAns
         groundedness: parsed.groundedness,
         ...(parsed.checks !== undefined ? { checks: parsed.checks } : {}),
         ...(parsed.textsSource !== undefined ? { texts_source: parsed.textsSource } : {}),
+        ...(parsed.accessSets !== undefined ? { access_sets: parsed.accessSets } : {}),
       },
       { onConflict: 'id', ignoreDuplicates: true },
     )

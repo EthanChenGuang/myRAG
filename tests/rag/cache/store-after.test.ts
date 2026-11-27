@@ -39,6 +39,7 @@ function turn(overrides: Partial<TurnFacts> = {}): TurnFacts {
 function ticket(overrides: Partial<TurnFacts> = {}): CacheTicket {
   return {
     key: {
+      accessGroupSetHash: 'off',
       answerLanguage: 'en',
       ragMode: 'strict',
       generatorModel: 'provider/model-a',

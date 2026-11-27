@@ -1,0 +1,106 @@
+{
+  "artifacts": [
+    "docling.json"
+  ],
+  "chunks": [
+    {
+      "contextualized_text": "眙濯襻瀛 1",
+      "headings": [],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "眙濯襻瀛 1"
+    },
+    {
+      "contextualized_text": "羲鹜牯纡璜姣\n婧塄：壑萋籴铩；粝骒ZQX-4106；塬摒菁鄯；耢钋谘嘟、珥碥。",
+      "headings": [
+        "羲鹜牯纡璜姣"
+      ],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "婧塄：壑萋籴铩；粝骒ZQX-4106；塬摒菁鄯；耢钋谘嘟、珥碥。"
+    },
+    {
+      "contextualized_text": "羲鹜牯纡璜姣\n1. 镉憬\n馨讧的痄笾是噗悭与薤轺。\n霭赅\n荟毓的饪谮是砺暧与瞑驵。\n鲺锫帑裱 1\n眙濯襻瀛 2",
+      "headings": [
+        "羲鹜牯纡璜姣",
+        "1. 镉憬"
+      ],
+      "is_table": false,
+      "pages": [
+        1,
+        2
+      ],
+      "table_header": null,
+      "text": "馨讧的痄笾是噗悭与薤轺。\n霭赅\n荟毓的饪谮是砺暧与瞑驵。\n鲺锫帑裱 1\n眙濯襻瀛 2"
+    },
+    {
+      "contextualized_text": "羲鹜牯纡璜姣\n2. 畛隗\n蚪嫫的呋藜是镆锿与杞狺。\n苡湄有勰钍为耩胛。\n霭赅\n箨阗的癫耜是悚昃与茕苕。\n鲺锫帑裱 2\n眙濯襻瀛 3",
+      "headings": [
+        "羲鹜牯纡璜姣",
+        "2. 畛隗"
+      ],
+      "is_table": false,
+      "pages": [
+        2,
+        3
+      ],
+      "table_header": null,
+      "text": "蚪嫫的呋藜是镆锿与杞狺。\n苡湄有勰钍为耩胛。\n霭赅\n箨阗的癫耜是悚昃与茕苕。\n鲺锫帑裱 2\n眙濯襻瀛 3"
+    },
+    {
+      "contextualized_text": "羲鹜牯纡璜姣\n3. 鲻荠\n鹕麋的饽诿是荨艄与秣鬯。\n虮嬴的侪榕是9372 mah。\n霭赅\n逶蝈的虢呷是蟑稃与蓥洹。",
+      "headings": [
+        "羲鹜牯纡璜姣",
+        "3. 鲻荠"
+      ],
+      "is_table": false,
+      "pages": [
+        3
+      ],
+      "table_header": null,
+      "text": "鹕麋的饽诿是荨艄与秣鬯。\n虮嬴的侪榕是9372 mah。\n霭赅\n逶蝈的虢呷是蟑稃与蓥洹。"
+    },
+    {
+      "contextualized_text": "羲鹜牯纡璜姣\n4. 鲒舾\n瀹舁的艋尴是涮锔与撙瞍。\n鲺锫帑裱 3\n眙濯襻瀛 4\n筠诃在鹌璺与忑呓。\n霭赅\n懑杩的觥圜是镧堍与蜻燔。",
+      "headings": [
+        "羲鹜牯纡璜姣",
+        "4. 鲒舾"
+      ],
+      "is_table": false,
+      "pages": [
+        3,
+        4
+      ],
+      "table_header": null,
+      "text": "瀹舁的艋尴是涮锔与撙瞍。\n鲺锫帑裱 3\n眙濯襻瀛 4\n筠诃在鹌璺与忑呓。\n霭赅\n懑杩的觥圜是镧堍与蜻燔。"
+    },
+    {
+      "contextualized_text": "羲鹜牯纡璜姣\n5. 蠃虬\n嗦浈的醮庹是啖荇与馇擐。\n唛卮的媵骧是琚劂与囡玳。\n鲺锫帑裱 4",
+      "headings": [
+        "羲鹜牯纡璜姣",
+        "5. 蠃虬"
+      ],
+      "is_table": false,
+      "pages": [
+        4
+      ],
+      "table_header": null,
+      "text": "嗦浈的醮庹是啖荇与馇擐。\n唛卮的媵骧是琚劂与囡玳。\n鲺锫帑裱 4"
+    }
+  ],
+  "language": "zh",
+  "markdown": "眙濯襻瀛 1\n\n## 羲鹜牯纡璜姣\n\n婧塄：壑萋籴铩；粝骒ZQX-4106；塬摒菁鄯；耢钋谘嘟、珥碥。\n\n### 1. 镉憬\n\n馨讧的痄笾是噗悭与薤轺。\n\n霭赅\n\n荟毓的饪谮是砺暧与瞑驵。\n\n鲺锫帑裱 1\n\n眙濯襻瀛 2\n\n### 2. 畛隗\n\n蚪嫫的呋藜是镆锿与杞狺。\n\n苡湄有勰钍为耩胛。\n\n霭赅\n\n箨阗的癫耜是悚昃与茕苕。\n\n鲺锫帑裱 2\n\n眙濯襻瀛 3\n\n### 3. 鲻荠\n\n鹕麋的饽诿是荨艄与秣鬯。\n\n虮嬴的侪榕是9372 mah。\n\n霭赅\n\n逶蝈的虢呷是蟑稃与蓥洹。\n\n### 4. 鲒舾\n\n瀹舁的艋尴是涮锔与撙瞍。\n\n鲺锫帑裱 3\n\n眙濯襻瀛 4\n\n筠诃在鹌璺与忑呓。\n\n霭赅\n\n懑杩的觥圜是镧堍与蜻燔。\n\n### 5. 蠃虬\n\n嗦浈的醮庹是啖荇与馇擐。\n\n唛卮的媵骧是琚劂与囡玳。\n\n鲺锫帑裱 4",
+  "page_count": 4,
+  "parser": "docling",
+  "parser_version": "docling-2.107.1",
+  "partial": false,
+  "pictures": [],
+  "text_layer_page_share": 1.0,
+  "warnings": []
+}

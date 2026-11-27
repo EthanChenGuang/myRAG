@@ -15,6 +15,9 @@ const state = {
   inserts: [] as Array<{ table: string; rows: Row[] }>,
   admins: [] as string[],
   readOnly: false,
+  title: 'ok' as 'ok' | 'unavailable' | 'throws',
+  titleCalls: [] as Array<{ model: string }>,
+  directOpenAiCalls: 0,
 };
 
 function writeAdmin() {
@@ -85,7 +88,30 @@ async function loadPost(): Promise<(req: Request) => Promise<Response>> {
   vi.doMock('@supabase/supabase-js', () => ({ createClient: () => writeAdmin() }));
   vi.doMock('openai', () => ({
     default: class FakeOpenAI {
-      chat = { completions: { create: async () => ({ choices: [{ message: { content: 'Placeholder Title' } }] }) } };
+      chat = {
+        completions: {
+          create: async () => {
+            state.directOpenAiCalls += 1;
+            return { choices: [{ message: { content: 'Direct Provider Title' } }] };
+          },
+        },
+      };
+    },
+  }));
+  vi.doMock('@/lib/openrouter', () => ({
+    getOpenRouterClient: () => {
+      if (state.title === 'unavailable') return null;
+      return {
+        chat: {
+          completions: {
+            create: async (params: { model: string }) => {
+              state.titleCalls.push({ model: params.model });
+              if (state.title === 'throws') throw new Error('provider stopped by test');
+              return { choices: [{ message: { content: 'Placeholder Routed Title' } }] };
+            },
+          },
+        },
+      };
     },
   }));
   const embedder = fakeEmbedder().embedder;
@@ -117,6 +143,9 @@ describe('ai-to-rag route', () => {
     state.inserts = [];
     state.admins = [];
     state.readOnly = false;
+    state.title = 'ok';
+    state.titleCalls = [];
+    state.directOpenAiCalls = 0;
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -128,6 +157,7 @@ describe('ai-to-rag route', () => {
     vi.doUnmock('@/lib/rag');
     vi.doUnmock('@supabase/supabase-js');
     vi.doUnmock('openai');
+    vi.doUnmock('@/lib/openrouter');
   });
 
   it('refuses a request with no session and writes nothing', async () => {
@@ -235,5 +265,42 @@ describe('ai-to-rag route', () => {
     const POST = await loadPost();
     await POST(request({}));
     expect(JSON.stringify(logs.mock.calls)).not.toContain('placeholder paragraph');
+  });
+
+  describe('title generation', () => {
+    const filename = () => String(writesOf('documents')[0]?.filename ?? '');
+
+    it('asks OpenRouter with the configured title model and never the direct provider', async () => {
+      state.session = { id: USER_A };
+      const POST = await loadPost();
+      const { env } = await import('@/lib/env');
+      const response = await POST(request({}));
+      expect(response.status).toBe(200);
+      expect(state.titleCalls).toEqual([{ model: env.CHAT_TITLE_MODEL }]);
+      expect(state.directOpenAiCalls).toBe(0);
+      expect(filename().startsWith('Placeholder Routed Title - ')).toBe(true);
+    });
+
+    it('falls back to the first line when OpenRouter is not configured', async () => {
+      state.session = { id: USER_A };
+      state.title = 'unavailable';
+      const POST = await loadPost();
+      const response = await POST(request({}));
+      expect(response.status).toBe(200);
+      expect(state.directOpenAiCalls).toBe(0);
+      expect(filename().startsWith('First placeholder paragraph. - ')).toBe(true);
+    });
+
+    it('falls back to the first line when the title call fails and still writes the document', async () => {
+      state.session = { id: USER_A };
+      state.title = 'throws';
+      const POST = await loadPost();
+      const response = await POST(request({}));
+      expect(response.status).toBe(200);
+      expect(state.titleCalls).toHaveLength(1);
+      expect(state.directOpenAiCalls).toBe(0);
+      expect(filename().startsWith('First placeholder paragraph. - ')).toBe(true);
+      expect(writesOf('document_chunks')).toHaveLength(1);
+    });
   });
 });

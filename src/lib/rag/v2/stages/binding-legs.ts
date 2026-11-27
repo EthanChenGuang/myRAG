@@ -7,6 +7,7 @@ import { getEffectiveBindings, type EffectiveBinding } from '../../embeddings/bi
 import { EmbeddingProfileMismatch } from '../../embeddings/mrl';
 import { embedQueryForEvalProfile, type QueryEmbedding } from '../../embeddings/query-embedding';
 import type { RankedList } from '../../fusion/rrf';
+import { scopeAccessFilter, type ScopeAccessFilter } from '../../tenant/access';
 import { scopeKey, type TenantScope } from '../../tenant/scope';
 import type { Profile, RetrievalOptions } from '../../types';
 
@@ -224,6 +225,8 @@ export interface RunBindingLegsInput {
   chunkingProfileOverride?: Record<string, string>;
   /** D-31: normalized identifiers each leg is filtered to; absent sends no filter. */
   identifiersNorm?: string[];
+  /** D-05: the request's access filter; absent reads it from the scope. */
+  access?: ScopeAccessFilter;
 }
 
 export interface BindingLegsOutput {
@@ -244,6 +247,7 @@ function withoutSimilarity(hits: readonly RankedHit[]): RankedHit[] {
 export async function runBindingLegs(input: RunBindingLegsInput): Promise<BindingLegsOutput> {
   const { backend, scope, filters, params, plan, embeds, globalEmbedding, signal, timeoutMs } = input;
   const weight = params.leg_weights?.domain ?? 1;
+  const access = input.access ?? scopeAccessFilter(scope);
 
   const search = (docType: string, profileId: string, vector: number[]) =>
     raceWithTimeout(
@@ -255,6 +259,7 @@ export async function runBindingLegs(input: RunBindingLegsInput): Promise<Bindin
           lexicalTokens: [],
           lexicalLanguages: null,
           filters: { ...filters, docTypes: [docType] },
+          access,
           denseLimit: params.candidate_pool_size,
           lexicalLimit: 0,
           signal: legSignal,

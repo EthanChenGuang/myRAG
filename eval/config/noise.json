@@ -5,15 +5,21 @@
     "language:",
     "category:cross_lingual",
     "pair:",
-    "category:table_split"
+    "category:table_split",
+    "category:version_compare",
+    "category:scoped_compound"
   ],
   "k": 3,
   "metrics": {
+    "all_evidence_recall_at_10": "higher",
+    "all_evidence_recall_at_5": "higher",
     "correct_refusal_rate": "higher",
     "false_refusal_rate": "lower",
     "mrr": "higher",
     "recall_at_10": "higher",
-    "recall_at_5": "higher"
+    "recall_at_5": "higher",
+    "subq_coverage_at_10": "higher",
+    "subq_coverage_at_5": "higher"
   },
   "schema_version": 1
 }

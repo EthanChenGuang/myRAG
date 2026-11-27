@@ -85,7 +85,7 @@ describe('Config UI: answer rules and output safety card (UI-SPEC 6.12, 12.3)', 
     expect(html).not.toContain('id="WHATSAPP_LINK_PREVIEW_HOSTS"');
   });
 
-  it('groups the switches under the eight headings in order, with the Phase 5.2.1 groups empty', () => {
+  it('groups the switches under the eight headings in order, with the Phase 5.2.1 switches in their two groups', () => {
     const markup = card();
     const positions = GROUPS.map(([key, title]) => {
       const heading = `id="rag-answer-rules-group-${key}" class="text-base font-semibold mt-6 mb-2 text-balance" data-rag-i18n="group.${key}">${title}</h4>`;
@@ -93,11 +93,40 @@ describe('Config UI: answer rules and output safety card (UI-SPEC 6.12, 12.3)', 
       return markup.indexOf(heading);
     });
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    const expected: Record<string, string[]> = {
+      calc: ['RAG_CALC_TOOL', 'RAG_CALC_CHECK'],
+      budget: ['RAG_PROMPT_BUDGET', 'RAG_CONTEXT_OVERFLOW'],
+    };
     for (const key of ['calc', 'budget']) {
       const section = markup.slice(markup.indexOf(`data-answer-rules-group="${key}"`));
       const body = section.slice(0, section.indexOf('</section>'));
-      expect(body).not.toMatch(/<(input|select|button)\b/);
+      expect(body).not.toMatch(/data-answer-rules-group="[a-z]+" hidden/);
+      expect([...body.matchAll(/<(?:input|select)\b[^>]*\bid="([A-Z_]+)"/g)].map((m) => m[1])).toEqual(expected[key]);
+      expect(body).not.toMatch(/<button\b/);
       expect(body).toContain(`id="rag-answer-rules-${key}"`);
+    }
+  });
+
+  it('renders the four Phase 5.2.1 switches with ids equal to the env names (05.2.1 D-88, UI-SPEC 14.3)', () => {
+    const markup = card();
+    for (const name of ['RAG_CALC_TOOL', 'RAG_CALC_CHECK', 'RAG_PROMPT_BUDGET', 'RAG_CONTEXT_OVERFLOW']) {
+      expect(html.match(new RegExp(`\\bid="${name}"`, 'g')), name).toHaveLength(1);
+      const tag = tagOf(markup, name);
+      expect(tag).toContain(`name="${name}"`);
+      expect(tag).toContain(`aria-describedby="${name}-help"`);
+      expect(markup).toContain(`<code translate="no">${name}</code>`);
+    }
+    for (const name of ['RAG_CALC_TOOL', 'RAG_CALC_CHECK', 'RAG_PROMPT_BUDGET']) {
+      expect(tagOf(markup, name)).toContain('type="checkbox"');
+      expect(tagOf(markup, name)).toContain('class="checkbox checkbox-primary"');
+    }
+    expect(optionValues(markup, 'RAG_CONTEXT_OVERFLOW')).toEqual([
+      ['truncate', 'Keep the highest-ranked documents'],
+      ['refine', 'Answer over several calls'],
+    ]);
+    for (const id of ['rag-answer-rules-calc-limits', 'rag-answer-rules-budget-unknown', 'rag-answer-rules-budget-estimate']) {
+      const line = markup.match(new RegExp(`<p id="${id}"[^>]*></p>`));
+      expect(line, id).not.toBeNull();
     }
   });
 

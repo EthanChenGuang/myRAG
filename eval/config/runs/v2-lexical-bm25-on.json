@@ -1,0 +1,15 @@
+{
+  "name": "v2-lexical-bm25-on",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_LEXICAL_SEARCH": "true",
+    "RAG_RERANKER": "auto",
+    "RAG_REFUSAL_THRESHOLD": "true",
+    "RAG_REFUSAL_FLOOR": "legacy_rule",
+    "COHERE_API_KEY": "",
+    "RAG_LEXICAL_SCORING": "bm25",
+    "RAG_LEXICAL_BM25_K1": "1.2",
+    "RAG_LEXICAL_BM25_B": "0.75"
+  },
+  "overrides": null
+}

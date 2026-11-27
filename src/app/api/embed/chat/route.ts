@@ -25,6 +25,8 @@ import {
   effectiveLogMode,
   finishTrace,
   isQueryLayerEnabled,
+  queryTurnInputs,
+  ragTurnMetadataFromPlan,
   isSmallTalkResult,
   isV2Pipeline,
   createAnswerTurn,
@@ -68,9 +70,13 @@ console.log('EMBED API: OpenRouter provider initialized:',
 const embedChatSchema = z.object({
   messages: z.array(z.object({
     role: z.enum(['user', 'assistant', 'system']),
-    content: z.string()
+    content: z.string(),
+    // D-22: the previous turn's rag; validated by queryTurnInputs with the generated schema, never a 400
+    metadata: z.unknown().optional(),
   })),
-  model: z.string().optional()
+  model: z.string().optional(),
+  // D-17: the window's UI language; used only when it is an enabled language
+  language: z.unknown().optional(),
 });
 
 // D-11: read only while the query layer is on, so the body is handled exactly as before with it off
@@ -394,6 +400,7 @@ export async function POST(request: NextRequest) {
             history: buildHistoryWindow(messages),
             classification: classifyQuery(queryText),
             ...(clientTimeZone ? { timeZone: clientTimeZone } : {}),
+            ...queryTurnInputs({ messages, uiLanguage: parsed.language }),
           }
         : {};
       // CACHE-01: passed only while the semantic cache can run; the pipeline derives the embed entry profile
@@ -470,7 +477,12 @@ export async function POST(request: NextRequest) {
         finishPendingTrace();
         const stream = createUIMessageStream({
           execute: async ({ writer }) => {
-            streamCachedAnswer(cacheHit, { writer, startMetadata: feedbackToken ? { feedbackToken } : {} });
+            const rag = ragTurnMetadataFromPlan(result.queryPlan);
+            streamCachedAnswer(cacheHit, {
+              writer,
+              startMetadata: feedbackToken ? { feedbackToken } : {},
+              ...(rag ? { finishMetadata: { rag } } : {}),
+            });
           },
         });
         return createUIMessageStreamResponse({ stream: timeFirstText(stream, collector), headers: streamHeaders() });
@@ -611,14 +623,24 @@ export async function POST(request: NextRequest) {
 
       // D-11: only with the embed rating enabled and a logged row to rate; otherwise the stream is unchanged
       const feedbackToken = await embedFeedbackToken();
+      // D-22, P-22: the standalone query rides on the finish part only when retrieval produced a query plan
+      const ragTurn = ragTurnMetadataFromPlan(retrievalResult?.queryPlan);
+      const streamOptions: Parameters<typeof result.toUIMessageStream>[0] =
+        feedbackToken || ragTurn
+          ? {
+              messageMetadata: ({ part }) => {
+                if (part.type === 'start' && feedbackToken) return { feedbackToken };
+                if (part.type === 'finish' && ragTurn) return { rag: ragTurn };
+                return undefined;
+              },
+            }
+          : {};
 
       // Return the AI SDK stream directly (SAME AS MAIN CHAT API)
       // Same composition as result.toUIMessageStreamResponse, with the first text delta observed
       return createUIMessageStreamResponse({
         stream: timeFirstText(
-          result.toUIMessageStream(
-            feedbackToken ? { messageMetadata: ({ part }) => (part.type === 'start' ? { feedbackToken } : undefined) } : {},
-          ),
+          result.toUIMessageStream(streamOptions),
           timingCollector,
         ),
         headers: streamHeaders(),

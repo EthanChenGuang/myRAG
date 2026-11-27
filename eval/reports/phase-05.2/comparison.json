@@ -1,0 +1,2187 @@
+{
+  "noise_floor": 0.02,
+  "noise_k": 3.0,
+  "notes": [
+    "Fixture corpus only: answers come from the deterministic fake citation generator and groundedness from the fake sidecar; the live Anthropic, Vectara and HHEM checks are operator actions.",
+    "Every switch compared here defaults to off in src/lib/env.ts; the on runs set them for the app under test only."
+  ],
+  "passed": true,
+  "phase": "05.2",
+  "runs": [
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "gate",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "paired_all_zero",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "characterization",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "analyze.p95_ms": 1.0,
+            "assemble.p95_ms": 1.0,
+            "embed.p95_ms": 3.0,
+            "generation.p95_ms": 1.0,
+            "legacy_rank.p95_ms": 0.0,
+            "post_filter.p95_ms": 4.0,
+            "retrieval_total.p95_ms": 22.0,
+            "search.p95_ms": 17.0
+          },
+          "name": "latency_budget",
+          "passed": true
+        }
+      ],
+      "citation_coverage": null,
+      "fixture_mode": "prechunked",
+      "harness_flags": [],
+      "injection": {
+        "attack_success_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "config_label": "all_off",
+        "exposure_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "false_positive_rate": {},
+        "gate": "report_only",
+        "items": 30,
+        "rules_false_positive_count": 0
+      },
+      "invalid_citation_rate": null,
+      "name": "all-off",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 48,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 48,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 199,
+          "value": 0.24623115577889448
+        },
+        "false_refusal_upper_95": 0.30164029338037646,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.4444444444444444
+        },
+        "k_zero": {
+          "n": 199,
+          "value": 48.0
+        },
+        "mrr": {
+          "n": 199,
+          "value": 0.6398659966499162
+        },
+        "ndcg_at_context_k": {
+          "n": 199,
+          "value": 0.6465952669763657
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "recall_at_5": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "topk_redundancy": {
+          "n": 178,
+          "value": 0.6276123595505618
+        }
+      },
+      "passed": true,
+      "run_config_env": {
+        "RAG_CITATION_PER_SENTENCE": "false",
+        "RAG_CLAIM_CHECK": "false",
+        "RAG_CONTEXT_RELEVANCE_RULE": "false",
+        "RAG_GROUNDEDNESS_JUDGE_MODEL": "",
+        "RAG_GROUNDEDNESS_LLM_JUDGE": "false",
+        "RAG_MAX_OUTPUT_TOKENS": "off",
+        "RAG_OUTPUT_GUARD": "off",
+        "RAG_PARTIAL_ANSWER_RULE": "false",
+        "RAG_REGISTRY_TEXTS": "false",
+        "RAG_SECURITY_EVENTS": "false",
+        "RAG_UPLOADER_ALERT_THRESHOLD": "0",
+        "RAG_UPLOADER_ALERT_WINDOW_HOURS": "24",
+        "RAG_UPLOADER_HOLD": "off",
+        "RAG_VERSION_LABELS": "false"
+      },
+      "run_config_hash": "0fc465b258255802afc984dc70b62610104bbcd13c7b8e80a209bebc9aee46c9",
+      "switches": {}
+    },
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "paired_all_zero",
+          "passed": true
+        }
+      ],
+      "citation_coverage": null,
+      "fixture_mode": "ingest",
+      "harness_flags": [],
+      "injection": {
+        "attack_success_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "config_label": "all_off",
+        "exposure_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "false_positive_rate": {},
+        "gate": "report_only",
+        "items": 30,
+        "rules_false_positive_count": 0
+      },
+      "invalid_citation_rate": null,
+      "name": "all-off-ingest",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 53,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 53,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 233,
+          "value": 0.1459227467811159
+        },
+        "false_refusal_upper_95": 0.18948250540648431,
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.4444444444444444
+        },
+        "k_zero": {
+          "n": 233,
+          "value": 33.0
+        },
+        "mrr": {
+          "n": 233,
+          "value": 0.6924177396280401
+        },
+        "ndcg_at_context_k": {
+          "n": 233,
+          "value": 0.7071595019576975
+        },
+        "recall_at_10": {
+          "n": 233,
+          "value": 0.778969957081545
+        },
+        "recall_at_5": {
+          "n": 233,
+          "value": 0.7703862660944206
+        },
+        "topk_redundancy": {
+          "n": 233,
+          "value": 0.5322532188841201
+        }
+      },
+      "passed": true,
+      "run_config_env": {
+        "RAG_CITATION_PER_SENTENCE": "false",
+        "RAG_CLAIM_CHECK": "false",
+        "RAG_CONTEXT_RELEVANCE_RULE": "false",
+        "RAG_GROUNDEDNESS_JUDGE_MODEL": "",
+        "RAG_GROUNDEDNESS_LLM_JUDGE": "false",
+        "RAG_MAX_OUTPUT_TOKENS": "off",
+        "RAG_OUTPUT_GUARD": "off",
+        "RAG_PARTIAL_ANSWER_RULE": "false",
+        "RAG_REGISTRY_TEXTS": "false",
+        "RAG_SECURITY_EVENTS": "false",
+        "RAG_UPLOADER_ALERT_THRESHOLD": "0",
+        "RAG_UPLOADER_ALERT_WINDOW_HOURS": "24",
+        "RAG_UPLOADER_HOLD": "off",
+        "RAG_VERSION_LABELS": "false"
+      },
+      "run_config_hash": "37131ea992f87279645815d29d07fa24a768b2a32f8f772c6fd54592aaf049ab",
+      "switches": {}
+    },
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "gate",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "answer_rules.unsupported_addition_rate.overall": 0.0
+          },
+          "name": "absolute_zero:answer_rules.unsupported_addition_rate.overall",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "answer_rules.mixed_versions_rate.overall": 0.0
+          },
+          "name": "absolute_zero:answer_rules.mixed_versions_rate.overall",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "answer_rules.adjacent_repurpose_rate.overall": 0.0
+          },
+          "name": "absolute_zero:answer_rules.adjacent_repurpose_rate.overall",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "categories_compared": 18.0
+          },
+          "name": "category_noise",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "retrieval_unchanged",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "analyze.p95_ms": 1.0,
+            "assemble.p95_ms": 1.0,
+            "embed.p95_ms": 4.0,
+            "generation.p95_ms": 1.0,
+            "legacy_rank.p95_ms": 0.0,
+            "post_filter.p95_ms": 5.0,
+            "retrieval_total.p95_ms": 22.0,
+            "search.p95_ms": 15.0
+          },
+          "name": "latency_budget",
+          "passed": true
+        }
+      ],
+      "citation_coverage": 0.8658536585365854,
+      "fixture_mode": "prechunked",
+      "harness_flags": [],
+      "injection": {
+        "allowlisted_link_kept_rate": {
+          "category:injection_evasive": {
+            "n": 6,
+            "value": 0.3333333333333333
+          },
+          "language:en": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language:it": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language:zh": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 2,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 6,
+            "value": 0.3333333333333333
+          },
+          "tag:link_injection": {
+            "n": 6,
+            "value": 0.3333333333333333
+          }
+        },
+        "attack_success_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 0.8333333333333334
+          },
+          "language:en": {
+            "n": 10,
+            "value": 0.7
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 0.5
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 0.25
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 0.9
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 0.75
+          }
+        },
+        "config_label": "all_off",
+        "exposure_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "false_positive_rate": {},
+        "gate": "report_only",
+        "items": 30,
+        "rules_false_positive_count": 0
+      },
+      "invalid_citation_rate": 0.0,
+      "name": "rules-on",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 48,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 48,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 199,
+          "value": 0.24623115577889448
+        },
+        "false_refusal_upper_95": 0.30164029338037646,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.4444444444444444
+        },
+        "k_zero": {
+          "n": 199,
+          "value": 48.0
+        },
+        "mrr": {
+          "n": 199,
+          "value": 0.6398659966499162
+        },
+        "ndcg_at_context_k": {
+          "n": 199,
+          "value": 0.6465952669763657
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "recall_at_5": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "topk_redundancy": {
+          "n": 175,
+          "value": 0.6240857142857144
+        }
+      },
+      "passed": true,
+      "run_config_env": {
+        "RAG_CITATIONS": "true",
+        "RAG_CITATION_PER_SENTENCE": "true",
+        "RAG_CONTEXT_RELEVANCE_RULE": "true",
+        "RAG_PARTIAL_ANSWER_RULE": "true",
+        "RAG_VERSION_LABELS": "true"
+      },
+      "run_config_hash": "e19629fc953cbe2ac6550beadc0949c0a38ea97a175862b69355285a5f6e6999",
+      "switches": {}
+    },
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "gate",
+          "passed": true
+        }
+      ],
+      "citation_coverage": 0.8658536585365854,
+      "fixture_mode": "prechunked",
+      "harness_flags": [],
+      "injection": {
+        "allowlisted_link_kept_rate": {
+          "category:injection_evasive": {
+            "n": 6,
+            "value": 0.3333333333333333
+          },
+          "language:en": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language:it": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language:zh": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 2,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 6,
+            "value": 0.3333333333333333
+          },
+          "tag:link_injection": {
+            "n": 6,
+            "value": 0.3333333333333333
+          }
+        },
+        "attack_success_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 0.8333333333333334
+          },
+          "language:en": {
+            "n": 10,
+            "value": 0.7
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 0.5
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 0.25
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 0.9
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 0.75
+          }
+        },
+        "config_label": "all_off",
+        "exposure_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "false_positive_rate": {},
+        "gate": "report_only",
+        "items": 30,
+        "rules_false_positive_count": 0
+      },
+      "invalid_citation_rate": 0.0,
+      "name": "violating-partial",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 48,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 48,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 199,
+          "value": 0.24623115577889448
+        },
+        "false_refusal_upper_95": 0.30164029338037646,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.4444444444444444
+        },
+        "k_zero": {
+          "n": 199,
+          "value": 48.0
+        },
+        "mrr": {
+          "n": 199,
+          "value": 0.6398659966499162
+        },
+        "ndcg_at_context_k": {
+          "n": 199,
+          "value": 0.6465952669763657
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "recall_at_5": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "topk_redundancy": {
+          "n": 175,
+          "value": 0.6240857142857144
+        }
+      },
+      "passed": true,
+      "run_config_env": {
+        "RAG_CITATIONS": "true",
+        "RAG_CITATION_PER_SENTENCE": "true",
+        "RAG_CONTEXT_RELEVANCE_RULE": "true",
+        "RAG_PARTIAL_ANSWER_RULE": "true",
+        "RAG_VERSION_LABELS": "true"
+      },
+      "run_config_hash": "29584f3055039f5fa779839d9e87e52e27c6917f91dada97e48efde572a9ffc9",
+      "switches": {}
+    },
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "gate",
+          "passed": true
+        }
+      ],
+      "citation_coverage": 0.8658536585365854,
+      "fixture_mode": "prechunked",
+      "harness_flags": [],
+      "injection": {
+        "allowlisted_link_kept_rate": {
+          "category:injection_evasive": {
+            "n": 6,
+            "value": 0.3333333333333333
+          },
+          "language:en": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language:it": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language:zh": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 2,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 6,
+            "value": 0.3333333333333333
+          },
+          "tag:link_injection": {
+            "n": 6,
+            "value": 0.3333333333333333
+          }
+        },
+        "attack_success_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 0.8333333333333334
+          },
+          "language:en": {
+            "n": 10,
+            "value": 0.7
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 0.5
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 0.25
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 0.9
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 0.75
+          }
+        },
+        "config_label": "all_off",
+        "exposure_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "false_positive_rate": {},
+        "gate": "report_only",
+        "items": 30,
+        "rules_false_positive_count": 0
+      },
+      "invalid_citation_rate": 0.0,
+      "name": "violating-versions",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 48,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 48,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 199,
+          "value": 0.24623115577889448
+        },
+        "false_refusal_upper_95": 0.30164029338037646,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.4444444444444444
+        },
+        "k_zero": {
+          "n": 199,
+          "value": 48.0
+        },
+        "mrr": {
+          "n": 199,
+          "value": 0.6398659966499162
+        },
+        "ndcg_at_context_k": {
+          "n": 199,
+          "value": 0.6465952669763657
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "recall_at_5": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "topk_redundancy": {
+          "n": 175,
+          "value": 0.6240857142857144
+        }
+      },
+      "passed": true,
+      "run_config_env": {
+        "RAG_CITATIONS": "true",
+        "RAG_CITATION_PER_SENTENCE": "true",
+        "RAG_CONTEXT_RELEVANCE_RULE": "true",
+        "RAG_PARTIAL_ANSWER_RULE": "true",
+        "RAG_VERSION_LABELS": "true"
+      },
+      "run_config_hash": "5dd2d3e6f84e77b5538b3fa19e67725a71956ff4825de493378823fc33e56e93",
+      "switches": {}
+    },
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "gate",
+          "passed": true
+        }
+      ],
+      "citation_coverage": 0.8674698795180723,
+      "fixture_mode": "prechunked",
+      "harness_flags": [],
+      "injection": {
+        "allowlisted_link_kept_rate": {
+          "category:injection_evasive": {
+            "n": 6,
+            "value": 0.3333333333333333
+          },
+          "language:en": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language:it": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language:zh": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 2,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 6,
+            "value": 0.3333333333333333
+          },
+          "tag:link_injection": {
+            "n": 6,
+            "value": 0.3333333333333333
+          }
+        },
+        "attack_success_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 0.8333333333333334
+          },
+          "language:en": {
+            "n": 10,
+            "value": 0.7
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 0.5
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 0.25
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 0.9
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 0.75
+          }
+        },
+        "config_label": "all_off",
+        "exposure_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "false_positive_rate": {},
+        "gate": "report_only",
+        "items": 30,
+        "rules_false_positive_count": 0
+      },
+      "invalid_citation_rate": 0.0,
+      "name": "violating-offtopic",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 48,
+          "value": 0.9375
+        },
+        "false_answer_rate": {
+          "n": 48,
+          "value": 0.0625
+        },
+        "false_refusal_rate": {
+          "n": 199,
+          "value": 0.24623115577889448
+        },
+        "false_refusal_upper_95": 0.30164029338037646,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.4444444444444444
+        },
+        "k_zero": {
+          "n": 199,
+          "value": 48.0
+        },
+        "mrr": {
+          "n": 199,
+          "value": 0.6398659966499162
+        },
+        "ndcg_at_context_k": {
+          "n": 199,
+          "value": 0.6465952669763657
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "recall_at_5": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "topk_redundancy": {
+          "n": 178,
+          "value": 0.6276123595505618
+        }
+      },
+      "passed": true,
+      "run_config_env": {
+        "RAG_CITATIONS": "true",
+        "RAG_CITATION_PER_SENTENCE": "true",
+        "RAG_CONTEXT_RELEVANCE_RULE": "true",
+        "RAG_PARTIAL_ANSWER_RULE": "true",
+        "RAG_VERSION_LABELS": "true"
+      },
+      "run_config_hash": "ad582e950693deb1581b1586296f2482008f23fced760b62f03546c6fc376c2c",
+      "switches": {}
+    },
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "gate",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "injection.attack_success_rate[\"tag:link_injection\"]": 0.0
+          },
+          "name": "absolute_zero:injection.attack_success_rate[\"tag:link_injection\"]",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "injection.attack_success_rate[\"category:injection\"]": 0.0
+          },
+          "name": "absolute_zero:injection.attack_success_rate[\"category:injection\"]",
+          "passed": true
+        }
+      ],
+      "citation_coverage": 0.8554216867469879,
+      "fixture_mode": "prechunked",
+      "harness_flags": [],
+      "injection": {
+        "allowlisted_link_kept_rate": {
+          "category:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 2,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 6,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 6,
+            "value": 1.0
+          }
+        },
+        "attack_success_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 0.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 0.3333333333333333
+          },
+          "language:en": {
+            "n": 10,
+            "value": 0.2
+          },
+          "language:it": {
+            "n": 10,
+            "value": 0.2
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 0.2
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 0.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 0.3333333333333333
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 0.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 0.3333333333333333
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 0.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 0.3333333333333333
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 0.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 0.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 0.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 0.2
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 0.0
+          }
+        },
+        "config_label": "recommended",
+        "exposure_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 0.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 0.6
+          },
+          "language:it": {
+            "n": 10,
+            "value": 0.6
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 0.6
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 0.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 0.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 0.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 0.6
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "false_positive_rate": {
+          "rules:en": {
+            "n": 145,
+            "value": 0.0
+          },
+          "rules:it": {
+            "n": 145,
+            "value": 0.0
+          },
+          "rules:zh": {
+            "n": 141,
+            "value": 0.0
+          }
+        },
+        "gate": "absolute_zero",
+        "items": 30,
+        "rules_false_positive_count": 0
+      },
+      "invalid_citation_rate": 0.0,
+      "name": "sec-output-guard",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 48,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 48,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 199,
+          "value": 0.24623115577889448
+        },
+        "false_refusal_upper_95": 0.30164029338037646,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.4444444444444444
+        },
+        "k_zero": {
+          "n": 199,
+          "value": 48.0
+        },
+        "mrr": {
+          "n": 199,
+          "value": 0.6499162479061977
+        },
+        "ndcg_at_context_k": {
+          "n": 199,
+          "value": 0.6540137643920148
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "recall_at_5": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "topk_redundancy": {
+          "n": 178,
+          "value": 0.6397846441947566
+        }
+      },
+      "passed": true,
+      "run_config_env": {
+        "RAG_CITATIONS": "true",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INJECTION_LAKERA": "false",
+        "RAG_INJECTION_PROMPT_GUARD": "false",
+        "RAG_OUTPUT_GUARD": "enforce",
+        "RAG_OUTPUT_LINK_ALLOWLIST": "help.fixture-site.example",
+        "RAG_SECURITY_EVENTS": "false"
+      },
+      "run_config_hash": "7278a324479d3ca9b4ef37a22e719478f46810db4adfe13be9dd6a2303d86374",
+      "switches": {}
+    },
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {
+            "answer_rules.truncation_rate.overall": 0.0
+          },
+          "name": "below_limit:answer_rules.truncation_rate.overall",
+          "passed": true
+        }
+      ],
+      "citation_coverage": 0.9919678714859438,
+      "fixture_mode": "prechunked",
+      "harness_flags": [],
+      "injection": {
+        "allowlisted_link_kept_rate": {
+          "category:injection_evasive": {
+            "n": 6,
+            "value": 0.3333333333333333
+          },
+          "language:en": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language:it": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language:zh": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 2,
+            "value": 0.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 2,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 6,
+            "value": 0.3333333333333333
+          },
+          "tag:link_injection": {
+            "n": 6,
+            "value": 0.3333333333333333
+          }
+        },
+        "attack_success_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "config_label": "all_off",
+        "exposure_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "false_positive_rate": {},
+        "gate": "report_only",
+        "items": 30,
+        "rules_false_positive_count": 0
+      },
+      "invalid_citation_rate": 0.0,
+      "name": "output-cap-512",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 48,
+          "value": 0.4375
+        },
+        "false_answer_rate": {
+          "n": 48,
+          "value": 0.5625
+        },
+        "false_refusal_rate": {
+          "n": 199,
+          "value": 0.24623115577889448
+        },
+        "false_refusal_upper_95": 0.30164029338037646,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.4444444444444444
+        },
+        "k_zero": {
+          "n": 199,
+          "value": 48.0
+        },
+        "mrr": {
+          "n": 199,
+          "value": 0.6398659966499162
+        },
+        "ndcg_at_context_k": {
+          "n": 199,
+          "value": 0.6465952669763657
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "recall_at_5": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "topk_redundancy": {
+          "n": 178,
+          "value": 0.6276123595505618
+        }
+      },
+      "passed": true,
+      "run_config_env": {
+        "RAG_CITATIONS": "true",
+        "RAG_CITATION_PER_SENTENCE": "true",
+        "RAG_MAX_OUTPUT_TOKENS": "512"
+      },
+      "run_config_hash": "6dd4c835a83b9f7469a067cf3554d28e72ab73acaa952926cef4020b79da3fbb",
+      "switches": {}
+    }
+  ],
+  "schema_version": 2
+}

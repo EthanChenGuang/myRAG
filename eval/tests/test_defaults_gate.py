@@ -20,7 +20,7 @@ from rag_eval.defaults_gate import (
     evaluate_defaults_gate,
     main,
 )
-from rag_eval.paired import item_metrics
+from rag_eval.paired import SUBQ_METRICS, item_metrics
 
 REPO = Path(__file__).resolve().parents[2]
 METRICS = ("recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate")
@@ -624,6 +624,5 @@ def test_the_committed_criteria_validate_and_name_existing_run_configs():
     assert criteria.absolute is not None
     for name in [*criteria.configuration_names(), criteria.legacy_run_config]:
         assert (REPO / "eval" / "config" / "runs" / f"{name}.json").is_file(), name
-    assert criteria.gated_metrics == NoiseConfig.model_validate_json(
-        (REPO / criteria.noise_path).read_text(encoding="utf-8")
-    ).metrics
+    noise = NoiseConfig.model_validate_json((REPO / criteria.noise_path).read_text(encoding="utf-8")).metrics
+    assert criteria.gated_metrics == {metric: direction for metric, direction in noise.items() if metric not in SUBQ_METRICS}

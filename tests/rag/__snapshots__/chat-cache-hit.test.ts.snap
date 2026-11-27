@@ -9,7 +9,7 @@ data: {"type":"text-delta","id":"fake-text","delta":"A neutral placeholder answe
 
 data: {"type":"text-end","id":"fake-text"}
 
-data: {"type":"finish","messageMetadata":{"ragTraceId":"<trace>"}}
+data: {"type":"finish","messageMetadata":{"ragTraceId":"<trace>","rag":{"queryLanguage":"en","standaloneQuery":"What does the placeholder section describe?"}}}
 
 data: [DONE]
 

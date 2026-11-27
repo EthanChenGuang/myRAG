@@ -4,7 +4,7 @@ import type { SemanticCacheBackend, SemanticCacheConfig } from '../config';
 import { scopeKey, type TenantScope } from '../tenant/scope';
 import { createPgvectorSemanticCache } from './pgvector';
 import { createRedisvlSemanticCache } from './redisvl-http';
-import type { CacheCallOptions, CacheHit, CacheQuery, SemanticCache } from './types';
+import type { CacheAccessIo, CacheCallOptions, CacheHit, CacheQuery, SemanticCache } from './types';
 import { SemanticCacheBackendError } from './wire';
 
 export type { CacheHit, CacheQuery, SemanticCache } from './types';
@@ -23,6 +23,8 @@ export interface SemanticCacheIo {
   fetch: typeof fetch;
   sidecarUrl: string;
   sidecarSecret: string;
+  /** D-23: access arguments and the source visibility recheck; absent only in tests that run without access groups. */
+  access?: CacheAccessIo;
 }
 
 export interface FailOpenOptions {
@@ -140,7 +142,7 @@ export function createSemanticCacheBackend(
   io: SemanticCacheIo,
 ): { name: BackendName; backend: SemanticCache } | null {
   if (config.backend === 'pgvector') {
-    return { name: 'pgvector', backend: createPgvectorSemanticCache({ adminClient: io.adminClient, config }) };
+    return { name: 'pgvector', backend: createPgvectorSemanticCache({ adminClient: io.adminClient, config, ...(io.access ? { access: io.access } : {}) }) };
   }
   if (config.backend === 'redisvl') {
     if (!io.sidecarUrl.trim() || !io.sidecarSecret.trim()) {
@@ -158,6 +160,7 @@ export function createSemanticCacheBackend(
         fetch: io.fetch,
         adminClient: io.adminClient,
         config,
+        ...(io.access ? { access: io.access } : {}),
       }),
     };
   }

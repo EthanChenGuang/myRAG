@@ -25,6 +25,7 @@
     "rag:chunking": "tsx src/lib/rag/chunking/cli.ts",
     "rag:relex": "tsx src/lib/rag/ingest/relex/cli.ts",
     "rag:scope-centroids": "tsx src/lib/rag/scope/rebuild/cli.ts",
+    "rag:lexstats": "tsx src/lib/rag/lexical/stats-cli.ts",
     "rag:terms:mine": "tsx src/lib/rag/terminology/mine/cli.ts",
     "rag:dup-clusters": "tsx src/lib/rag/dedupe/cli.ts",
     "rag:table-rows": "tsx src/lib/rag/tables/cli.ts",

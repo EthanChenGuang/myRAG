@@ -402,6 +402,7 @@ export const de = {
   waitingForApproval: "Warten auf Ihre Genehmigung...",
   executingTool: "Tool wird ausgeführt, bitte warten...",
   toolError: "Ein Fehler ist beim Ausführen des Tools aufgetreten.",
+  voiceUnavailable: "Sprache ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.",
   
   // Chat message action tooltips
   copyTooltip: "Kopieren",

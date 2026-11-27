@@ -211,7 +211,7 @@ async function main(): Promise<number> {
     }
   }
   if (values.phase52) {
-    if (values['sec-matrix'] || values['sec-leg'] !== undefined || values.citations || values.groundedness || values['include-drafts']) {
+    if (values['sec-matrix'] || values['sec-leg'] !== undefined || values.citations || values.groundedness || values['include-drafts'] || envOverlayFlag !== undefined) {
       throw new Error('--phase52 runs the Phase 5.2 items under p52-rules-on and takes no other run flag');
     }
     try {

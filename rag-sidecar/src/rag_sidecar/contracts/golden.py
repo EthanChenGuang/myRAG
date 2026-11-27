@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from rag_sidecar.contracts.calc import DecimalString, Unit
 from rag_sidecar.contracts.eval_run import ConversationTurn
 from rag_sidecar.contracts.ingest import has_backreference
 from rag_sidecar.contracts.retrieval import RetrievalFilters
@@ -38,6 +39,8 @@ Category = Literal[
     "partial_answer",
     "stale_version",
     "off_topic_context",
+    "multi_step_calc",
+    "context_overflow",
     "version_compare",
     "scoped_compound",
     "glossary",
@@ -217,6 +220,30 @@ class OffTopicSpec(_Contract):
         return self
 
 
+class CalcExpectation(_Contract):
+    """D-77: the value a multi_step_calc answer must state; items of one paraphrase group share it."""
+
+    expected_value: DecimalString
+    unit: Unit | None = None
+    tolerance: Annotated[str, Field(pattern=r"^[0-9]{1,30}(\.[0-9]{1,30})?$")] = "0"
+    paraphrase_group: str = Field(pattern=ITEM_ID_PATTERN)
+
+
+OverflowKind = Literal["ranked_evidence", "long_history"]
+
+
+class OverflowSpec(_Contract):
+    """D-88: evidence a context_overflow answer must keep, named by gold span quote (never by chunk id)."""
+
+    kind: OverflowKind
+    must_keep: list[GoldSpan] = Field(min_length=1, max_length=6)
+
+    @model_validator(mode="after")
+    def _check_spans(self) -> "OverflowSpec":
+        _no_repeats(self.must_keep, "must_keep spans")
+        return self
+
+
 class SubQuestionGold(_Contract):
     """D-09: the gold spans one sub-question must retrieve; each is also a gold_evidence span."""
 
@@ -272,6 +299,16 @@ class GoldenItem(_Contract):
         json_schema_extra=_optional_object_schema,
     )
     off_topic: OffTopicSpec | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_object_schema,
+    )
+    calc: CalcExpectation | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_object_schema,
+    )
+    overflow: OverflowSpec | None = Field(
         default=None,
         exclude_if=lambda value: value is None,
         json_schema_extra=_optional_object_schema,
@@ -358,9 +395,15 @@ class GoldenItem(_Contract):
             raise ValueError("versions is required exactly for stale_version items")
         if (self.category == "off_topic_context") != (self.off_topic is not None):
             raise ValueError("off_topic is required exactly for off_topic_context items")
+        if (self.category == "multi_step_calc") != (self.calc is not None):
+            raise ValueError("calc is required exactly for multi_step_calc items")
+        if (self.category == "context_overflow") != (self.overflow is not None):
+            raise ValueError("overflow is required exactly for context_overflow items")
         gold = set(self.gold_evidence)
         if self.partial is not None and any(span not in gold for span in self.partial.covered):
             raise ValueError("partial covered spans must be gold_evidence spans")
+        if self.overflow is not None and any(span not in gold for span in self.overflow.must_keep):
+            raise ValueError("overflow must_keep spans must be gold_evidence spans")
         if self.versions is not None:
             if self.versions.historical:
                 if self.versions.stale.span not in gold:

@@ -10,6 +10,7 @@ import { assembleVoiceResults, voiceContext, type VoiceResults } from '../contex
 import { validResultCount, warnInjectionCheckDisabled } from '../config';
 import { downweightOrder, failure, injectionDropped, requireValue, runInjectionStage, runStage, stageSpec, StageError } from '../pipeline';
 import { injectionItems, releasedRulesFromRows } from '../security/injection-check';
+import { scopeAccessFilter, type ScopeAccessFilter } from '../tenant/access';
 import { assertTenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
 import type { FusedHit } from '../fusion/rrf';
@@ -17,6 +18,7 @@ import type { Candidate, InjectionSummary, Profile, RetrievalResult, RunRetrieva
 import { evalRetrievalOverrides } from './overrides';
 import { effectiveRetrievalParams } from './retrieval-params';
 import { evalFinalTopK, evalResultCap, runContextStages } from './stages/context';
+import { documentBudgetOf } from '../context/pack';
 import { runQueryStages } from './stages/query';
 import { runRankStages } from './stages/rank';
 import { embedForRetrieval, embedVariantTexts, runSearchStages, type QueryLexicalOptions, type SearchIdentifiers } from './stages/search';
@@ -75,13 +77,19 @@ function queryLayerHashFor(input: RunRetrievalInput, config: ReturnType<typeof l
   return queryLayerHashComponent(effectiveQueryLayerConfig(config.queryLayer, overrides), effectiveQueryParams(profile, overrides?.queryParams));
 }
 
-export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
+export async function runV2Pipeline(
+  input: RunRetrievalInput,
+  collector: TraceCollector,
+  accessFilter?: ScopeAccessFilter,
+): Promise<RetrievalResult> {
   const deps = getRagDeps();
   const scope = input.scope;
 
   if (scope === null) {
     return failure(collector, 'empty', 'no_tenant', null);
   }
+  // D-05, D-09: computed once per request by runRetrieval; a direct caller reads it here (a missing scope throws while the switch is on).
+  const access = accessFilter ?? scopeAccessFilter(scope);
 
   const { signal, profile } = input;
   const config = loadRagConfig(deps.ragEnv());
@@ -101,6 +109,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let voice: VoiceResults | null = null;
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
+  let packing: RetrievalResult['packing'];
   let bindingPlan: BindingLegsPlan | null = null;
   let queryPlan: RetrievalResult['queryPlan'] | null = null;
   let layerTranslate = false;
@@ -298,6 +307,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       ...(query.terminology ? { terminologyDenseWeight: query.terminology.denseWeight } : {}),
       ...(queryLexical ? { lexical: queryLexical } : {}),
       ...(query.attributes ? { attributes: query.attributes } : {}),
+      access,
     });
 
     // D-31, D-51: strict with no asked identifier in the tenant answers nothing; rank and context are not run for it.
@@ -384,11 +394,23 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         const assembled = await runStage(
           spec('assemble', 'skip'),
           signal,
-          () => assembleVoiceResults({ query: input.query, chunks: voiceChunks, matchCount }),
+          () =>
+            assembleVoiceResults({
+              query: input.query,
+              chunks: voiceChunks,
+              matchCount,
+              documentTokenBudget: documentBudgetOf(input.options?.documentTokenBudget),
+            }),
           collector,
           { candidatesIn: voiceChunks.length, candidatesOut: (value) => value.results.length },
         );
-        voice = assembled.skipped ? { results: [], source_images: [] } : assembled.value;
+        if (assembled.skipped) {
+          voice = { results: [], source_images: [] };
+        } else {
+          const { packing: voicePacking, ...payload } = assembled.value;
+          voice = payload;
+          packing = voicePacking;
+        }
         if (security.contextTagging && !assembled.skipped) {
           const context = voiceContext(voice.results, flaggedForRender);
           if (context !== null) voice = { ...voice, context };
@@ -410,6 +432,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
           versionScope: search.versionScope,
           queryLanguage: query.queryLanguage,
           ...(search.tableRows ? { tableRows: search.tableRows } : {}),
+          variants: query.variants,
           ...(searchIdentifiers?.notFound
             ? { identifierSuggestionLine: identifierSuggestionMessage(query.queryLanguage ?? 'en', searchIdentifiers.suggestions) }
             : {}),
@@ -418,6 +441,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         candidates = context.candidates;
         injection = context.injection;
         injectionStalled = context.injectionStalled ?? false;
+        packing = context.packing;
       }
       if (profile === 'eval' && rank.decision.decision === 'refuse') {
         const dropped = new Set(injection?.droppedChunkIds ?? []);
@@ -482,6 +506,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     injection,
     injectionStalled,
     security,
+    ...(packing ? { packing } : {}),
     ...(bindingPlan ? { bindingHash: bindingHashFields(bindingPlan) } : {}),
     ...(translationPlan ? { translationHash: translationHashFields(translationPlan, params) } : {}),
     queryPlan,

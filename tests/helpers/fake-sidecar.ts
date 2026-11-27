@@ -109,6 +109,8 @@ export interface FakeSidecarManifest {
   fixtures: ManifestEntry[];
   /** Loaded only into the isolated table_split tenants of the ingest fixture mode (03.2-30). */
   long_table_fixtures?: ManifestEntry[];
+  /** Loaded only by an ingest-mode build with the templated option (03.3-20). */
+  templated_fixtures?: ManifestEntry[];
 }
 
 export interface FakeSidecarJobSpec {
@@ -176,6 +178,7 @@ function recordedSources(): RecordedSource[] {
   return [
     ...loadManifest().fixtures.map((entry) => ({ base: FIXTURES, entry })),
     ...(loadManifest().long_table_fixtures ?? []).map((entry) => ({ base: FIXTURES, entry })),
+    ...(loadManifest().templated_fixtures ?? []).map((entry) => ({ base: FIXTURES, entry })),
     ...chain.fixtures.map((entry) => ({ base: PARSE_FIXTURES, entry })),
   ];
 }

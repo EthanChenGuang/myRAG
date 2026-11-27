@@ -112,17 +112,20 @@ describe('Phase 4.1 defaults-gate run configs', () => {
 });
 
 describe('run-config validation', () => {
-  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the eight Phase 4.2 tuning switches, the value-constrained vendor settings, the five Phase 5.1 SEC switches, the 16 Phase 6 names, the three terminology switches, the six Phase 3.3 switches, the fourteen Phase 5.2 answer-rule switches, the twelve Phase 6.2 query-addition switches, the fixture link allowlist and the Phase 5 citations switch', () => {
+  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the eight Phase 4.2 tuning switches, the value-constrained vendor settings, the five Phase 5.1 SEC switches, the 16 Phase 6 names, the three terminology switches, the six Phase 3.3 switches, the fourteen Phase 5.2 answer-rule switches, the four Phase 5.2.1 switches, the twelve Phase 6.2 query-addition switches, the fixture link allowlist, the Phase 5 citations switch and the three Phase 4.4 lexical scoring variables', () => {
     assert.deepEqual([...RUN_CONFIG_ENV_ALLOWLIST].sort(), [
       'COHERE_API_KEY',
       'COHERE_BASE_URL',
       'RAG_ATTRIBUTE_FILTER',
       'RAG_ATTRIBUTE_HEADER',
+      'RAG_CALC_CHECK',
+      'RAG_CALC_TOOL',
       'RAG_CITATIONS',
       'RAG_CITATION_PER_SENTENCE',
       'RAG_CLAIM_CHECK',
       'RAG_CONTEXT_COMPRESSION',
       'RAG_CONTEXT_EDGE_ORDER',
+      'RAG_CONTEXT_OVERFLOW',
       'RAG_CONTEXT_RELEVANCE_RULE',
       'RAG_CONTEXT_TAGGING',
       'RAG_CONTEXT_TOKEN_BUDGET',
@@ -139,8 +142,11 @@ describe('run-config validation', () => {
       'RAG_INJECTION_LAKERA',
       'RAG_INJECTION_PROMPT_GUARD',
       'RAG_LANGID_SIDECAR',
+      'RAG_LEXICAL_BM25_B',
+      'RAG_LEXICAL_BM25_K1',
       'RAG_LEXICAL_DICTIONARY',
       'RAG_LEXICAL_QUANTITY',
+      'RAG_LEXICAL_SCORING',
       'RAG_LEXICAL_SEARCH',
       'RAG_LEXICAL_STEM_IT',
       'RAG_LEXICAL_TRANSLATION',
@@ -152,6 +158,7 @@ describe('run-config validation', () => {
       'RAG_PARENT_CHILD',
       'RAG_PARTIAL_ANSWER_RULE',
       'RAG_PIPELINE',
+      'RAG_PROMPT_BUDGET',
       'RAG_QUERY_CONDENSE',
       'RAG_QUERY_DATE_NORMALIZE',
       'RAG_QUERY_DECOMPOSE',

@@ -1,3 +1,5 @@
+import { assertAccessScope, type AccessScope } from './access-brand';
+
 declare const tenantBrand: unique symbol;
 
 export type TenantScopeKind = 'single' | 'personal' | 'org';
@@ -7,6 +9,8 @@ export interface TenantScope {
   readonly kind: TenantScopeKind;
   readonly userId: string | null;
   readonly organizationId: string | null;
+  /** D-05, A-14: the caller's access scope, attached only by withAccess inside src/lib/rag/tenant/. */
+  readonly access?: AccessScope;
 }
 
 export type TenantPredicate =
@@ -54,6 +58,20 @@ export function mintScope(kind: TenantScopeKind, userId: string | null, organiza
   }) as unknown as TenantScope;
   minted.add(scope);
   return scope;
+}
+
+/** Tenant-internal: a new frozen scope with the same kind, user and organization plus the caller's access scope. */
+export function withAccess(scope: TenantScope, access: AccessScope): TenantScope {
+  assertTenantScope(scope);
+  assertAccessScope(access);
+  const next = Object.freeze({
+    kind: scope.kind,
+    userId: scope.userId,
+    organizationId: scope.organizationId,
+    access,
+  }) as unknown as TenantScope;
+  minted.add(next);
+  return next;
 }
 
 export function isTenantScope(value: unknown): value is TenantScope {

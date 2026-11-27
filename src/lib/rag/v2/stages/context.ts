@@ -11,6 +11,7 @@ import {
 } from '../../context/assemble';
 import { selectWithinBudget, type BudgetOptions, type RenderEstimate } from '../../context/budget';
 import { compressChunks, type CompressibleChunk } from '../../context/compress';
+import { documentBudgetOf, packUnitKey } from '../../context/pack';
 import { edgeOrder } from '../../context/edge-order';
 import { fetchVersionColumns, type AssemblyRows } from '../../context/fetch-rows';
 import { fetchVersionPairs, versionConflictAttributes } from '../../context/version-conflicts';
@@ -32,13 +33,16 @@ import type { SecurityConfig } from '../../security/config';
 import { injectionItems, releasedRulesFromRows, uploadersFromRows, type InjectionMarks } from '../../security/injection-check';
 import type { TraceCollector } from '../../trace/collector';
 import { topkRedundancy } from '../diversify';
+import { subQuestionsOf } from '../subq-coverage';
 import type {
   AlsoIn,
   Candidate,
   CitationLabeler,
   InjectionSummary,
   KeptBy,
+  PackingSummary,
   Profile,
+  QueryVariant,
   ReferencedState,
   RunRetrievalInput,
   StageOverrides,
@@ -76,6 +80,8 @@ export interface ContextStagesInput {
   tableRows?: ReadonlyMap<string, TableRowAttachment>;
   /** D-31, D-51: balanced and flexible only, a missing identifier: the localized suggestion line appended after the passages. */
   identifierSuggestionLine?: string;
+  /** 06.2 D-11: the variant list the search stage received (list ids `dense:i` / `lexical:i` index into it). */
+  variants?: readonly QueryVariant[];
 }
 
 /** D-13: the assemble stage detail when the version lookup failed and the labels were skipped. */
@@ -180,6 +186,8 @@ export interface ContextStagesOutput {
   /** Present only when RAG_INJECTION_CHECK is on and the stage produced a verdict. */
   injection?: InjectionSummary;
   injectionStalled?: boolean;
+  /** D-86: present only when the request set documentTokenBudget and the assembly ran. */
+  packing?: PackingSummary;
 }
 
 function assemblyRowsFromHits(hits: FusedHit[]): AssemblyRows {
@@ -277,6 +285,7 @@ interface AssembleStageValue {
   budgetTokens: number;
   usedTokens: number;
   groups: number;
+  packing?: PackingSummary;
 }
 
 interface CompressStageValue {
@@ -306,6 +315,9 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
   const security = ctx.security ?? getRagDeps().securityConfig();
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
   const settings = v2ProfileSettings(profile, config);
+  // D-83: a caller's document budget only ever lowers the profile's; absent, every selection runs as before.
+  const documentBudget = documentBudgetOf(input.options?.documentTokenBudget);
+  const tokenBudget = documentBudget === null ? settings.tokenBudget : Math.min(settings.tokenBudget, documentBudget);
   const resultCap = evalResultCap(profile, input);
   const topHits = fusedHits.slice(0, evalFinalTopK(profile, input, params.final_top_k));
   let candidates = topHits.map((row) => fusedToCandidate(row, rerank?.scoreByChunk?.get(row.hit.chunkId)));
@@ -424,7 +436,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
         eligible: (child) => !isImageFilename(child.document_filename),
       });
       const selection =
-        expanded.fetched > 0 ? selectWithParents(expanded.candidates, settings.tokenBudget, estimateRender, budgetOptions) : null;
+        expanded.fetched > 0 ? selectWithParents(expanded.candidates, tokenBudget, estimateRender, budgetOptions) : null;
       return { selection, fetched: expanded.fetched, expanded: expanded.candidates };
     },
     collector,
@@ -480,7 +492,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
         };
         budgetInput = keep(budgetInput);
         if (expandedList && !expansion.skipped && expansion.value.fetched > 0) {
-          const selection = selectWithParents(keep(expandedList), settings.tokenBudget, estimateRender, budgetOptions);
+          const selection = selectWithParents(keep(expandedList), tokenBudget, estimateRender, budgetOptions);
           parentSelection = selection.parentIds.size ? selection : null;
         } else {
           parentSelection = null;
@@ -521,7 +533,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     spec('assemble', 'skip'),
     signal,
     (): AssembleStageValue => {
-      const selection = parentSelection ?? selectWithinBudget(budgetInput, settings.tokenBudget, estimateRender, budgetOptions);
+      const selection = parentSelection ?? selectWithinBudget(budgetInput, tokenBudget, estimateRender, budgetOptions);
 
       const chosenById = new Map(selection.selected.map((chosen) => [chosen.chunk_id, chosen]));
       const selected = candidates
@@ -602,9 +614,10 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
         groupOrder,
         blockRuns,
         blockChunkIds,
-        budgetTokens: settings.tokenBudget,
+        budgetTokens: tokenBudget,
         usedTokens: selection.usedTokens,
         groups: groupIds.length,
+        ...(documentBudget === null ? {} : { packing: packingSummary(budgetInput, selection.selected, tokenBudget) }),
       };
     },
     collector,
@@ -638,6 +651,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
   if (assembled.skipped) {
     return { assembly: null, candidates, ...injectionOut };
   }
+  const packingOut = assembled.value.packing ? { packing: assembled.value.packing } : {};
 
   const base = assembled.value;
   const compressSpec = spec('compress', 'skip');
@@ -689,12 +703,53 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
   // Labelling is the last context step: it renders the final selection once more, in the same order, with the labels.
   const labeler = input.citationLabeler;
   const line = ctx.identifierSuggestionLine ?? '';
-  if (!labeler) return { assembly: withSuggestionLine(withAlsoIn(withVersionFields(final.output, versionInfo)), line), candidates, ...injectionOut };
+  const provenance = (assembly: AssembleOutput<Candidate>) => withSubQuestionIndexes(assembly, topHits, ctx.variants);
+  if (!labeler) {
+    return { assembly: provenance(withSuggestionLine(withAlsoIn(withVersionFields(final.output, versionInfo)), line)), candidates, ...injectionOut, ...packingOut };
+  }
   const labelled = render(final.selected, base.groupOrder, { runs: base.blockRuns, chunkIds: base.blockChunkIds, labeler });
   return {
-    assembly: withSuggestionLine(withAlsoIn(withVersionFields({ ...final.output, context: labelled.context, blocks: labelled.blocks }, versionInfo)), line),
+    assembly: provenance(
+      withSuggestionLine(withAlsoIn(withVersionFields({ ...final.output, context: labelled.context, blocks: labelled.blocks }, versionInfo)), line),
+    ),
     candidates,
     ...injectionOut,
+    ...packingOut,
+  };
+}
+
+/** D-86: packing units are parents (else chunks); a unit is kept when its representative was selected. */
+function packingSummary(
+  units: ReadonlyArray<Pick<ParentBudgetCandidate, 'chunk_id' | 'document_id' | 'parent_id'>>,
+  selected: ReadonlyArray<Pick<ParentBudgetCandidate, 'chunk_id' | 'document_id' | 'parent_id'>>,
+  documentBudget: number,
+): PackingSummary {
+  const all = new Set(units.map(packUnitKey));
+  const kept = new Set(selected.map(packUnitKey).filter((key) => all.has(key)));
+  return { documentBudget, droppedDocuments: all.size - kept.size, keptParents: kept.size };
+}
+
+/**
+ * 06.2 D-11: each block's sub-questions through fusion provenance (chunk → list ids → searched variant → subQuestionIndex).
+ * Without a sub-question variant the assembly is returned as is; with one every block gets a (possibly empty) sorted list.
+ */
+function withSubQuestionIndexes(
+  assembly: AssembleOutput<Candidate>,
+  hits: readonly FusedHit[],
+  variants: readonly QueryVariant[] | undefined,
+): AssembleOutput<Candidate> {
+  if (!variants || !variants.some((variant) => variant.subQuestionIndex !== undefined)) return assembly;
+  const rowById = new Map(hits.map((row) => [row.hit.chunkId, row]));
+  return {
+    ...assembly,
+    blocks: assembly.blocks.map((block) => {
+      const found = new Set<number>();
+      for (const chunkId of block.chunkIds) {
+        const row = rowById.get(chunkId);
+        if (row) for (const index of subQuestionsOf(row, variants)) found.add(index);
+      }
+      return { ...block, subQuestionIndexes: [...found].sort((a, b) => a - b) };
+    }),
   };
 }
 

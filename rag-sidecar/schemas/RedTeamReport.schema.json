@@ -1,0 +1,173 @@
+{
+  "$defs": {
+    "RedTeamCell": {
+      "additionalProperties": false,
+      "properties": {
+        "language": {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+          "title": "Language",
+          "type": "string"
+        },
+        "n": {
+          "minimum": 1,
+          "title": "N",
+          "type": "integer"
+        },
+        "successes": {
+          "minimum": 0,
+          "title": "Successes",
+          "type": "integer"
+        },
+        "technique": {
+          "pattern": "^[a-z][a-z_]{0,28}$",
+          "title": "Technique",
+          "type": "string"
+        }
+      },
+      "required": [
+        "technique",
+        "language",
+        "n",
+        "successes"
+      ],
+      "title": "RedTeamCell",
+      "type": "object"
+    },
+    "RedTeamSuccess": {
+      "additionalProperties": false,
+      "properties": {
+        "item_id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "language": {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+          "title": "Language",
+          "type": "string"
+        },
+        "signals": {
+          "items": {
+            "enum": [
+              "canary",
+              "forbidden_claim",
+              "exposed"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Signals",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "technique": {
+          "pattern": "^[a-z][a-z_]{0,28}$",
+          "title": "Technique",
+          "type": "string"
+        },
+        "trace_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Trace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "technique",
+        "language",
+        "trace_id",
+        "signals"
+      ],
+      "title": "RedTeamSuccess",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "cells": {
+      "items": {
+        "$ref": "#/$defs/RedTeamCell"
+      },
+      "minItems": 1,
+      "title": "Cells",
+      "type": "array"
+    },
+    "config_hash": {
+      "pattern": "^[a-f0-9]{8,64}$",
+      "title": "Config Hash",
+      "type": "string"
+    },
+    "corpus_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Corpus Sha256",
+      "type": "string"
+    },
+    "finished_at": {
+      "anyOf": [
+        {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})?)?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finished At"
+    },
+    "review_items_opened": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Review Items Opened",
+      "type": "integer"
+    },
+    "run_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "skipped_reason": {
+      "anyOf": [
+        {
+          "enum": [
+            "domain_expert_review_off",
+            "review_route_unavailable"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Skipped Reason"
+    },
+    "started_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})?)?$",
+      "title": "Started At",
+      "type": "string"
+    },
+    "successes": {
+      "items": {
+        "$ref": "#/$defs/RedTeamSuccess"
+      },
+      "title": "Successes",
+      "type": "array"
+    }
+  },
+  "required": [
+    "run_id",
+    "started_at",
+    "corpus_sha256",
+    "config_hash",
+    "cells"
+  ],
+  "title": "RedTeamReport",
+  "type": "object"
+}

@@ -23,7 +23,7 @@ from rag_eval.judge.config import (
 )
 from rag_eval.judge.telemetry import check_no_results_upload
 from rag_eval.paths import resolve_cli_path
-from rag_eval.review_queue import _http_client, _parse_time, _to_item
+from rag_eval.review_queue import _decode_text, _http_client, _metadata, _parse_time, _to_item
 
 EXIT_OK, EXIT_INPUT, EXIT_API = 0, 2, 4
 METRICS = ("faithfulness", "answer_relevance")
@@ -139,8 +139,55 @@ def _collect(rows: Any) -> dict[str, ReviewQueueItem | None]:
     return found
 
 
+_LANGUAGE_CODE_RE = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
+UNDETERMINED = "und"
+
+
+def _query_languages(rows: Any) -> dict[str, str]:
+    """LANG-10: each trace's query_language from the root observation metadata the app writes; und when absent or not a code."""
+    languages: dict[str, str] = {}
+    for row in rows:
+        trace_id = row.get("traceId")
+        if not isinstance(trace_id, str) or not trace_id:
+            continue
+        value = _decode_text(_metadata(row).get("query_language"))
+        if _LANGUAGE_CODE_RE.match(value):
+            languages[trace_id] = value
+        else:
+            languages.setdefault(trace_id, UNDETERMINED)
+    return languages
+
+
+def by_language(scores: list[dict[str, Any]], languages: dict[str, str]) -> dict[str, dict[str, Any]]:
+    """Per query language: judged traces and, per metric, n and mean. Counts and means only, never text."""
+    grouped: dict[str, dict[str, list[float]]] = {}
+    traces: dict[str, set[str]] = {}
+    for entry in scores:
+        trace_id, metric, value = entry.get("traceId"), entry.get("name"), entry.get("value")
+        if not isinstance(trace_id, str) or metric not in METRICS or not isinstance(value, (int, float)):
+            continue
+        language = languages.get(trace_id, UNDETERMINED)
+        grouped.setdefault(language, {name: [] for name in METRICS})[metric].append(float(value))
+        traces.setdefault(language, set()).add(trace_id)
+    summary: dict[str, dict[str, Any]] = {}
+    for language in sorted(grouped):
+        cell: dict[str, Any] = {"traces": len(traces[language])}
+        for metric in METRICS:
+            values = grouped[language][metric]
+            cell[metric] = {"n": len(values), "mean": round(sum(values) / len(values), 4) if values else None}
+        summary[language] = cell
+    return summary
+
+
 def _summary(
-    candidates: int, sampled: int, scored: int, skipped: dict[str, int], post_status: int | str, accepted: int, rejected: int
+    candidates: int,
+    sampled: int,
+    scored: int,
+    skipped: dict[str, int],
+    post_status: int | str,
+    accepted: int,
+    rejected: int,
+    languages: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         "candidates": candidates,
@@ -150,6 +197,7 @@ def _summary(
         "post_status": post_status,
         "accepted": accepted,
         "rejected": rejected,
+        "by_language": languages or {},
     }
 
 
@@ -258,7 +306,9 @@ def main(argv: list[str] | None = None, *, judge_factory: JudgeFactory | None = 
     factory = judge_factory if judge_factory is not None else _live_factory(openrouter_key)
     try:
         with LangfuseApi(base_url, public_key, secret_key) as api:
-            candidates = _collect(api.observations(from_time, to_time))
+            rows = list(api.observations(from_time, to_time))
+            candidates = _collect(rows)
+            query_languages = _query_languages(rows)
             if not candidates:
                 print(NOTHING_NOTICE)
                 print(json.dumps(_summary(0, 0, 0, {}, "none", 0, 0), sort_keys=True))
@@ -281,7 +331,10 @@ def main(argv: list[str] | None = None, *, judge_factory: JudgeFactory | None = 
         return _fail(str(exc), EXIT_API)
 
     scored = len({entry["traceId"] for entry in scores})
-    print(json.dumps(_summary(len(candidates), len(sampled), scored, skipped, post_status, accepted, rejected), sort_keys=True))
+    summary = _summary(
+        len(candidates), len(sampled), scored, skipped, post_status, accepted, rejected, by_language(scores, query_languages)
+    )
+    print(json.dumps(summary, sort_keys=True))
     return EXIT_OK
 
 

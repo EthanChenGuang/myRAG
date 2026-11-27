@@ -84,6 +84,7 @@ function request(scope: TenantScope, over: Partial<BackendSearchRequest> = {}): 
     denseVector: CANARY_VECTOR,
     lexicalTokens: ['canary', 'marker'],
     lexicalLanguages: null,
+    access: { mode: 'off' },
     filters: { currentOnly: true },
     denseLimit: 10,
     lexicalLimit: 10,

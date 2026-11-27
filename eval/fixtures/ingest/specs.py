@@ -69,7 +69,20 @@ class ColumnParagraph:
     page: int = 1
 
 
-Block = Heading | Paragraph | ListItem | Table | Picture | ColumnParagraph
+@dataclass(frozen=True)
+class PageLine:
+    """A line Docling would leave as page structure. `label` "body" keeps it in the Markdown (the residue the boilerplate cleaner
+    targets); "page_footer" puts it in the furniture layer, which the Markdown and the chunks leave out. `role` places it on the page:
+    top (first body block), fragment (a short line between two paragraphs), bottom (last body block) or footer."""
+
+    text: str
+    page: int = 1
+    label: str = "body"
+    role: str = "top"
+
+
+
+Block = Heading | Paragraph | ListItem | Table | Picture | ColumnParagraph | PageLine
 
 
 @dataclass(frozen=True)
@@ -608,6 +621,498 @@ def all_specs() -> tuple[FixtureSpec, ...]:
     )
 
 
+# --- Templated collection (Phase 3.3, TPL-09, D-15, D-36) ---------------------------------------------------------------------
+
+TEMPLATED_LANGUAGES = ("zh", "en", "it")
+TEMPLATED_FAMILY_SIZE = 12
+TEMPLATED_PAGES = 4
+TEMPLATED_DOC_TYPE = "product_technical"
+TEMPLATED_SECTION_COUNT = 5
+TEMPLATED_VARIANTS = 3
+
+
+@dataclass(frozen=True)
+class TemplatedFrame:
+    """Structure of one language's templated collection. Every content word comes from `pool`, a list of invented words that no
+    earlier fixture or corpus document uses (zh: two-character words of characters no earlier text uses); each is used once.
+    The templates hold only short function words; `{n}` slots take pool words in order."""
+
+    language: str
+    pool: tuple[str, ...]
+    spacer: str
+    stop: str
+    tag_separator: str
+    shared: str
+    member_a: str
+    member_b: str
+    quantity: str
+    identity: str
+    designation_line: str
+    variant: str
+    code_prefix: str
+    designation_base: int
+    unit: str
+    # (spelling, canonical number, style); the member at `ambiguous_member` has one separator followed by exactly three digits.
+    quantities: tuple[tuple[str, str, str], ...]
+    ambiguous_member: int
+
+
+def _zh_pool(chars: str) -> tuple[str, ...]:
+    return tuple(chars[index : index + 2] for index in range(0, len(chars) - 1, 2))
+
+
+_TPL_POOL_EN = (
+    "gorkkarv vrovux dazqux gryrkzluk brokbyx zaskvrynd zendtrax zorkbult kizqyz snevromb zlakgarv fezplu jezbark "
+    "fivgri traxplirk bufok drikpland pluxvromb fakgind brukplaz pluplix jekgrork zlosko jevdyk zlyndkosk borvtryrv "
+    "grizagez zandderv qorvsnirv skurvji qabrilt snesnyz snumbke kykjok zluvzobaz barvskusk zekzev zendgrilt "
+    "zuvguxdra krymbderk jondskaz baztravo dundgraz kruvgisk zlombjymb jezqu dyxbirk snekrosk drirvvo vryrvqalt "
+    "draxka zlyltbok qyvvryv bryvvask troxdraz krembqusk boltgrend zleltkirv jurvdemb bevkalt zozfoz gyndgryk "
+    "kivrurk vrufizzok gembge venddomb gexvand jizdri jurksnelt tryzskyz zavqomb trivvurv grandvyv skoktrov "
+    "vrombgolt plykskerv grirkdrov snervqex bryltjov truzbre jefok vexgrund plavfu vambzle favtryrv karkzlalt "
+    "pluvkysk bendskek snendgraz drumbvond vroxzolt vuvplend griskgro plervvrok jirkbuv judindqox kumbkaz kaxplux "
+    "kuzjerk quxsnox snosnamb veltplurk skyvfak jorvvriji vezvrubre bombkirk jyvrokav derkkryrv vrixsnov jixsnik "
+    "buvqind dyvsni vikkelt krozlumb gyskzlysk divsnolt vyvgarv guskplek dukkivgix kembgrav plukbrark grykkrolt "
+    "trojibymb boltkurk kokkresk daskvryz plivskok bejysk zlovbilt gindsnurv girvtrak kykskurk zlumbgox kandvirv "
+    "vraskbru vrorkferk zliskzyrv trukvryrk bymbkrelt drevbryrk plandfuv gorksnaz zlirvkav krekromb jarkvrez "
+    "vukbruv kruvsnolt snymbjix braktraz brivdyfex fultplek kirkdrerk zlavvymb bikzoz qyjurv dervfa grexzluv "
+    "fovkazvoz qygrilt jekvylt giltvuk barkskev brexvoz bendplu gravdrav snundvylt juskdark qunddiz jymbky "
+    "zlondburk gyvskolt birvtrurk trizzlind draltbru zexkerv vrandgruk qysktri drixqyrv grysksno zyndfult bembdryrv "
+    "jultskolt plyskbro guxgrorv krendjelt zexga zixplamb brizkrylt vuvolt zizplixqo fyrvtrak qirkjax duskbruz "
+    "tryzfaz snaxko tryvfoz ferkdrerv vizqex dyvzyxvo qurkje fivqork vryltplax plytryz ferkvuxbe brezgrand fyrvvav "
+    "vrirkguk zlymbjelt snizvrumb fozplesk zembvyx gabozgamb fervkrek kovtrok kobrilt gyktryv drovdix duvplork "
+    "qokgukqez karvskumb jolttrav bandfamb qoskplilt skoskkriv skavzluv derkgov jagrarv zurvsnusk zyndvo karvvrult "
+    "snandqix dreltgiv trymbvriv gixgrev zenddrok brirkzlok bixgrurv bokvru plendbuv juskav skezzo qazgark vekdynd "
+    "tryskzylt qombkyx bruvkralt kryxsna zovryx gumbvuk bikzerk plarvkerv kaskgrox qivskok snoxkrek bryxbik "
+    "plezgork snarvkrox dyskvrev gruzbev burkkurk koskskavy trumbkumb krokzloz vrorvgrak gekfukgru jumbtryrv "
+    "beltzlav jexzult jyzult snuxjyx gambqekge grizkra trembqumb qikzlerv brambgrik jexzyk skyvtry jyktrimb "
+    "vrokgalt zlysksni zozzlimb gruplyvqu javplask vixdolt pliltplyk fuzdelt zuvikgak duxzimb zluzbav skevsnirk "
+    "krogrix fyltkugoz bervbrix gruxtruv qazbrumb bryxkisk briskuv grixtrumb kryskdisk zukurv zovrek kindkroz "
+    "drekomb dryskfux vrizvork kraske forkzluv bimbgosk trombzla qymbvomb juvfumb skeskzesk brykdav dondgy jandzosk "
+    "vixvoz vyskzilt zasnuk fykgre vrakfask snyltbusk fokramb vovsni trexzemb snyvbryz jarktrok jeskskumb qoxbomb "
+    "joskdurv zazvruz "
+)
+_TPL_POOL_IT = (
+    "moluntba musgilgli glelvasce drarlandu fidronda tustletu lunttrito fescotru tramansca finbrurfe brizaza "
+    "vintnudu tarbrarre bostmagro fontvibu tangleva mafantdu mustbeve botrilde narzegru zurvralgu tavegli dozisro "
+    "bebasva zuldrirbi zalistlu tufarge trervvemu zustgrero gralzinre dunfazi deganga brannilne lafistdro furlestgu "
+    "truscidra rirvurbro drarustlu tantelte dasfegla drutesge tentrelma gufalza bolfevu scorossca lorfirvda burusro "
+    "tenbruli borvlegu ludusgo rerlentgi mogantmo ternoba nunglida dangesni lestmevo telbeldu falgilbra glegrerno "
+    "glurdedi glarlasgo burvvulma scofeme zirmosce tasscosni forevo firbosdru voglergru tistelu fuvulglu verlantfa "
+    "denstrava vorninde tradafo runtscuze nonlesto nantforfe voscurfu fobastli gliteltri grerisdi grollibu glanelna "
+    "tesloldri voltribu dirgora dusbridru femusni fescilgro morosbre lusttrige grorzogo banbratru triszormu tovanne "
+    "torvzesca gragrelmu tezosgo gristulmo zerlisgli dirtorza vinvistbu tarscubre nirvnunve nigermu triratri "
+    "toturvbe tisvosca zusguta fibrorgo ranscinna trusleta vingasgo stresmabu dodusgu vurlaru grirnivu garzobi "
+    "lubonvu mandrenzu gagestbe ninsceszi berfistle gladirvfu zuvigo zurfibi gromostto gagrelme valantvo riscebro "
+    "rilguntmu drongono nastrunti dralolgla brarentri riglindro brilninbe moverstre rimistne sceluntbe grofuscu "
+    "figrilgla dunlentzu narvfosmu virfande dulusru nantgole funtasto gislurvna finzostmu farentvu funelza "
+    "lesnosgle grurbrelo farmirbru derdintvo fimestgra glasrolna forfirlo dinnune loltontri dutrotru bascilgo "
+    "lusgrafu lorvglubu valzurvdo gisdraszu sculrerfe mizurme bresfalnu tebrurtre mervmolgu disfaba lirvscimo "
+    "grerterro vurulni lelgrusra zeszubo dangada gildora brenzordi zurbilsca tentzutri gongobri delubra losrastma "
+    "vunzado labostdo filnigra firgrizo nuntborgo bromunbra norvtabu bangunscu tulfuste trangurto zorfurfo zoborda "
+    "birvfoza genentdru brabrisre lulgrorbu grunzaldu gorvbanfo gismirvgu drastremo guntgovo scabantfu rungolsca "
+    "misgastbo datrasmo glatisglu scololdra vervbufi gitentsci destvuto fistrente veglolbre rarosmo madasmi "
+    "zurvgirve rindrinla bergrunzo lesglirle lestrelvi vulrarze narbrodra strodirni lonbrarni tarvzerza glasnirmo "
+    "dridansca tongrengo tubrosfe trenlanu zitastgro duscistvu tisglarte draglutru vistrenme minlunzi zisscofe "
+    "strimadu giszurvda fardronve masdremu zonscanta vurzunlu nustrezo torfegi scobimo robrerbi norvvenra gruldermi "
+    "bubisco rinulni vervongu denmasttu lostbigi strulfili nistluva rosrantda trasnogle ginttulbe lasfasscu "
+    "federvza gruderdru mefunstre lugruntfi girbruva gusdati zenmolme tenodi vustmagle turtinfo dreforvzi melgrasvu "
+    "vesnontdo fertrelzu norgorvma zirulsco tostmasni dunglito scodivu tervtagru marvfinro grervervi vaglelbri "
+    "fontrascu strinditi rilfagle refardi zaltustve scuslasro zustentgu lirralra zetrirva gidantlo dornastve "
+    "glibrurbu lerzusri borvtrego lunfuntmi verrondre lesscugra dedrarna dratelfe gilglelme riszini fosbriza "
+    "gantbrege linvovi granzigre tringelro strudesco zaltadu zinnarti grenluna zeldolli mumendu toldorgri grulbirne "
+    "glerzonde nozustma mulvestvi zofolglu gerragli babrogru nisnentla galtostbe "
+)
+_TPL_POOL_ZH = (
+    "羲鹜牯纡璜姣镉憬畛隗鲻荠鲒舾蠃虬眙濯襻瀛鲺锫帑裱霭赅氡溥垌侃婧塄粝骒塬摒耢钋虮嬴侪榕馨讧痄笾噗悭薤轺荟毓饪谮砺暧瞑驵蚪嫫"
+    "呋藜镆锿杞狺箨阗癫耜悚昃茕苕鹕麋饽诿荨艄秣鬯逶蝈虢呷蟑稃蓥洹瀹舁艋尴涮锔撙瞍懑杩觥圜镧堍蜻燔嗦浈醮庹啖荇馇擐唛卮媵骧琚劂"
+    "囡玳鲕锾菁鄯珥碥瘐堠谘嘟杵愦耔蜇鲽眍铗暾鸠忉谕猃罴袤呖鳙咭劭埏黟荦鹬赈窆狩嗤饬蜊闱垸狒郐珂僭忖埯郛氍胤鲴邺笱鹚喑阪鋈阈酡"
+    "腚澶滂躞菝黩弭瘿愫葸瞠缧莜伫肫酰镤旖蓦碇珲鄱缏圊浼漪哌黯珞瘢浣劢壑萋籴铩苡湄勰钍耩胛筠诃鹌璺忑呓燧芰腩喵轹鲚燹汜缙嶷葳湮"
+    "缁踮茌臬螭缪棂蔺谲瘊瑕阋徼糍骱挈倬憩疖魅蜈跚嵫缫唏塍筢谟欤咔缭邳撄玟妁哳刭僖绲辍甍鳊钏缋娑淦璋蛩窳狍竦黥稂洚嗟鲇汨獠澧邾"
+    "戆怛蕈茈祆缈揄孬蛞缤鳄殡婀圩栀嫘儇抟恽踝猕龇泺驿嘏蓁搡钼甑迥咫胍糌鳌鲩媛螳锃窬掮炀蚧畹蜓笤悌铯芷悛澌脔赉铕泯鲢镄芈螯镒汆"
+    "戤桧柘蜿禚疠咛昊峒傧磲蟠劾赝聒蛐鳍臁刖俑薰孱噫鹈蝥幔藓扉昱梏蠖槊禊绫幞萁陟蛉潴钭煺翥溷箜枥喃夼舨洇诋疱嗄崤泔雩迳庳墉倨哔"
+    "菪憝莠瓿奕圻鳏嗍笃璀鲲贲谵谛蟆邕鲱岐芮廛蚯珈郗氲戽鐾绡诠麾偎氙樘桕蛏顸姊筮埚慝胂躜俅徉骞蒗眦夥沭镫鸹瀣亳畋膂凼哏虺蟀孢峄"
+    "瘾蝼谒趸砉椋蝰啉绀喹骁缦糈栌珩瘃鹦柃柝茛嬉螃晔褰胗蒉斐肭簪楮衩聿绔怊嫜趱镎茱缡鬈瘅婷遘酊刳踹耵痤粜搦剌垴陧厝澹谑谧煲碡沣"
+    "棣芫鲎攸掬嘞牍飨俳苈镓裢荬堀醭栾缣琦溲醐滏厍琨舡漩姗獯趔隍裼囵堇嵋胫徕蚬狃恻峋嫱哓骈熳灏惚侬钔瀚涞秫氽湫膺楸蕹蘖罅崛觎跆"
+    "迕璁讪蛑峥汊猞篝陴宓肀谡裉罡蒴岑蔌荪醵杼哧黏皎辇轫燠吖甏歃睃蚰蕨猸妣钷鼷菸渑邸锴笕儆郯靥岵焖猥邬颚骐丌嵝銎憷缯驽嗷晏鹗茆"
+    "糁骝挹佥咤烨圯碹礤揎麈黜梵悴跖崂蛲锊莘茏蚣匐擤镩饴繇褫呤铴迩毳帙挲缢夙锞滟肽芎仳"
+)
+
+TEMPLATED_FRAMES = {
+    "en": TemplatedFrame(
+        language="en",
+        pool=tuple(_TPL_POOL_EN.split()),
+        spacer=" ",
+        stop=".",
+        tag_separator=", ",
+        shared="{0} of the {1} is {2} and {3}",
+        member_a="{0} has {1} for the {2}",
+        member_b="{0} are {1} in the {2}",
+        quantity="{0} of the {1} is {value}",
+        identity="{0}: {beta}; {1} {alpha}; {2} {gamma}; {3} {tags}",
+        designation_line="{designation} is {0} and {1}",
+        variant="{0} of {designation} has {1} for the {2}",
+        code_prefix="ZQV",
+        designation_base=11,
+        unit="kHz",
+        quantities=(
+            ("47.38 kHz", "47.38", "point_space"),
+            ("52,61kHz", "52.61", "comma_tight"),
+            ("63.07 KHZ", "63.07", "point_upper"),
+            ("1'204.5 kHz", "1204.5", "apostrophe_group"),
+            ("2,317.25 kHz", "2317.25", "comma_group"),
+            ("7419 khz", "7419", "integer_lower"),
+            ("4,125 kHz", "4125", "ambiguous"),
+            ("38,9 kHz", "38.9", "comma_space"),
+            ("81.46kHz", "81.46", "point_tight"),
+            ("1588 KHZ", "1588", "integer_upper"),
+            ("26.50 kHz", "26.5", "trailing_zero"),
+            ("94,07 khz", "94.07", "comma_lower"),
+        ),
+        ambiguous_member=7,
+    ),
+    "it": TemplatedFrame(
+        language="it",
+        pool=tuple(_TPL_POOL_IT.split()),
+        spacer=" ",
+        stop=".",
+        tag_separator=", ",
+        shared="{0} del {1} è {2} e {3}",
+        member_a="{0} ha {1} per il {2}",
+        member_b="{0} è {1} nel {2}",
+        quantity="{0} del {1} è {value}",
+        identity="{0}: {beta}; {1} {alpha}; {2} {gamma}; {3} {tags}",
+        designation_line="{designation} è {0} e {1}",
+        variant="{0} di {designation} ha {1} per il {2}",
+        code_prefix="ZQW",
+        designation_base=21,
+        unit="kWh",
+        quantities=(
+            ("12,46 kWh", "12.46", "comma_space"),
+            ("15.73kWh", "15.73", "point_tight"),
+            ("3.208,5 kWh", "3208.5", "point_group"),
+            ("19,84 KWH", "19.84", "comma_upper"),
+            ("6'402,25 kWh", "6402.25", "apostrophe_group"),
+            ("8817 kwh", "8817", "integer_lower"),
+            ("27,30 kWh", "27.3", "trailing_zero"),
+            ("2.375 kWh", "2375", "ambiguous"),
+            ("31.92 kWh", "31.92", "point_space"),
+            ("44,18kWh", "44.18", "comma_tight"),
+            ("5931 KWH", "5931", "integer_upper"),
+            ("58,03 kwh", "58.03", "comma_lower"),
+        ),
+        ambiguous_member=8,
+    ),
+    "zh": TemplatedFrame(
+        language="zh",
+        pool=_zh_pool(_TPL_POOL_ZH),
+        spacer="",
+        stop="。",
+        tag_separator="、",
+        shared="{0}的{1}是{2}与{3}",
+        member_a="{0}有{1}为{2}",
+        member_b="{0}在{1}与{2}",
+        quantity="{0}的{1}是{value}",
+        identity="{0}：{beta}；{1}{alpha}；{2}{gamma}；{3}{tags}",
+        designation_line="{designation}是{0}与{1}",
+        variant="{designation}的{0}有{1}为{2}",
+        code_prefix="ZQX",
+        designation_base=31,
+        unit="mAh",
+        quantities=(
+            ("71.24 mAh", "71.24", "point_space"),
+            ("76,85mAh", "76.85", "comma_tight"),
+            ("83.19 MAH", "83.19", "point_upper"),
+            ("4'716.5 mAh", "4716.5", "apostrophe_group"),
+            ("5,629.75 mAh", "5629.75", "comma_group"),
+            ("9372 mah", "9372", "integer_lower"),
+            ("88,4 mAh", "88.4", "comma_space"),
+            ("6,840 mAh", "6840", "ambiguous"),
+            ("92.63mAh", "92.63", "point_tight"),
+            ("7204 MAH", "7204", "integer_upper"),
+            ("35.70 mAh", "35.7", "trailing_zero"),
+            ("97,58 mah", "97.58", "comma_lower"),
+        ),
+        ambiguous_member=8,
+    ),
+}
+
+
+class _WordCursor:
+    def __init__(self, frame: TemplatedFrame) -> None:
+        self.frame = frame
+        self.index = 0
+
+    def take(self, count: int) -> list[str]:
+        words = list(self.frame.pool[self.index : self.index + count])
+        if len(words) != count:
+            raise ValueError(f"{self.frame.language}: the invented word pool is too short")
+        self.index += count
+        return words
+
+
+def _cap(frame: TemplatedFrame, text: str) -> str:
+    return text if frame.spacer == "" else text[:1].upper() + text[1:]
+
+
+def _fill(frame: TemplatedFrame, template: str, words: list[str], **named: str) -> str:
+    return _cap(frame, template.format(*words, **named)) + frame.stop
+
+
+def _title(frame: TemplatedFrame, words: list[str]) -> str:
+    return frame.spacer.join(_cap(frame, word) for word in words)
+
+
+@dataclass(frozen=True)
+class TemplatedCollection:
+    """The words of one language's collection, drawn once from its frame in a fixed order."""
+
+    frame: TemplatedFrame
+    title: str
+    variant_title: str
+    headings: tuple[str, ...]
+    top: str
+    bottom: str
+    fragment: str
+    footer: str
+    identity_words: tuple[str, ...]
+    quantity_words: tuple[str, ...]
+    shared: tuple[str, ...]
+    gammas: tuple[str, str]
+    tags: tuple[str, str, str]
+    members: tuple[dict[str, Any], ...]
+    variant_doc: dict[str, Any]
+    variant_intro: tuple[str, str]
+    designations: tuple[str, ...]
+    designation_words: tuple[str, str]
+    variant_sentences: tuple[tuple[str, ...], ...]
+    variant_shared: str
+
+    def page_line(self, kind: str, page: int) -> str:
+        base = {"top": self.top, "bottom": self.bottom, "footer": self.footer}[kind]
+        return f"{base} {page}"
+
+
+def _beta(frame: TemplatedFrame, words: list[str]) -> str:
+    return (" " if frame.spacer == " " else "").join(_cap(frame, word) for word in words)
+
+
+def templated_collection(language: str) -> TemplatedCollection:
+    frame = TEMPLATED_FRAMES[language]
+    cursor = _WordCursor(frame)
+    title = _title(frame, cursor.take(3))
+    headings = tuple(f"{number}. {_cap(frame, word)}" for number, word in enumerate(cursor.take(TEMPLATED_SECTION_COUNT), start=1))
+    top = frame.spacer.join(cursor.take(2))
+    bottom = frame.spacer.join(cursor.take(2))
+    fragment = _cap(frame, frame.spacer.join(cursor.take(1 if frame.spacer == "" else 2)))
+    footer = frame.spacer.join(cursor.take(2))
+    identity_words = tuple(cursor.take(4))
+    quantity_words = tuple(cursor.take(2))
+    shared = tuple(_fill(frame, frame.shared, cursor.take(4)) for _ in range(2 * TEMPLATED_SECTION_COUNT))
+    gammas = tuple(_cap(frame, word) for word in cursor.take(2))
+    tags = tuple(cursor.take(3))
+    members = []
+    for index in range(TEMPLATED_FAMILY_SIZE):
+        number = index + 1
+        spelling, canonical, style = frame.quantities[index]
+        members.append(
+            {
+                "member": number,
+                "attributes": {
+                    "alpha_code": f"{frame.code_prefix}-{4100 + number}",
+                    "beta_label": _beta(frame, cursor.take(2)),
+                    "gamma_group": gammas[index % 2],
+                    "delta_tags": [tags[index % 3], tags[(index + 1) % 3]],
+                },
+                "sentence_a": _fill(frame, frame.member_a, cursor.take(3)),
+                "sentence_b": _fill(frame, frame.member_b, cursor.take(3)),
+                "quantity": {"spelling": spelling, "canonical": canonical, "unit": frame.unit.lower(), "style": style, "ambiguous": number == frame.ambiguous_member},
+            }
+        )
+    variant_title = _title(frame, [*title_words(title, frame)[:2], *cursor.take(1)])
+    variant_intro = (_fill(frame, frame.shared, cursor.take(4)), _fill(frame, frame.shared, cursor.take(4)))
+    stem = _cap(frame, cursor.take(1)[0])
+    designations = tuple(f"{stem}-{frame.designation_base + offset}" for offset in range(TEMPLATED_VARIANTS))
+    designation_words = tuple(cursor.take(2))
+    variant_sentences = tuple(
+        tuple(_fill(frame, frame.variant, cursor.take(3), designation=designation) for _ in range(TEMPLATED_SECTION_COUNT))
+        for designation in designations
+    )
+    variant_shared = _fill(frame, frame.shared, cursor.take(4))
+    variant_doc = {
+        "attributes": {
+            "alpha_code": f"{frame.code_prefix}-4120",
+            "beta_label": _beta(frame, cursor.take(2)),
+            "gamma_group": gammas[0],
+            "delta_tags": list(tags),
+        }
+    }
+    return TemplatedCollection(
+        frame=frame,
+        title=title,
+        variant_title=variant_title,
+        headings=headings,
+        top=_cap(frame, top),
+        bottom=_cap(frame, bottom),
+        fragment=fragment,
+        footer=_cap(frame, footer),
+        identity_words=identity_words,
+        quantity_words=quantity_words,
+        shared=shared,
+        gammas=gammas,  # type: ignore[arg-type]
+        tags=tags,  # type: ignore[arg-type]
+        members=tuple(members),
+        variant_doc=variant_doc,
+        variant_intro=variant_intro,
+        designations=designations,
+        designation_words=designation_words,  # type: ignore[arg-type]
+        variant_sentences=variant_sentences,
+        variant_shared=variant_shared,
+    )
+
+
+def title_words(title: str, frame: TemplatedFrame) -> list[str]:
+    if frame.spacer == "":
+        return [title[index : index + 2] for index in range(0, len(title), 2)]
+    return title.split(" ")
+
+
+def _identity(collection: TemplatedCollection, attributes: dict[str, Any]) -> str:
+    frame = collection.frame
+    return _fill(
+        frame,
+        frame.identity,
+        list(collection.identity_words),
+        beta=attributes["beta_label"],
+        alpha=attributes["alpha_code"],
+        gamma=attributes["gamma_group"],
+        tags=frame.tag_separator.join(attributes["delta_tags"]),
+    )
+
+
+def _quantity_sentence(collection: TemplatedCollection, member: dict[str, Any]) -> str:
+    frame = collection.frame
+    return _fill(frame, frame.quantity, list(collection.quantity_words), value=member["quantity"]["spelling"])
+
+
+def _page_lines(collection: TemplatedCollection, page: int, body: list[Block]) -> list[Block]:
+    """Top line first and bottom line last among the page's body blocks, then the page footer in the furniture layer."""
+    return [
+        PageLine(collection.page_line("top", page), page, "body", "top"),
+        *body,
+        PageLine(collection.page_line("bottom", page), page, "body", "bottom"),
+        PageLine(collection.page_line("footer", page), page, "page_footer", "footer"),
+    ]
+
+
+def _fragment(collection: TemplatedCollection, page: int) -> PageLine:
+    return PageLine(collection.fragment, page, "body", "fragment")
+
+
+def _declared(collection: TemplatedCollection) -> dict[str, Any]:
+    return {
+        "top": [collection.page_line("top", page) for page in range(1, TEMPLATED_PAGES + 1)],
+        "bottom": [collection.page_line("bottom", page) for page in range(1, TEMPLATED_PAGES + 1)],
+        "fragment": collection.fragment,
+        "footer": [collection.page_line("footer", page) for page in range(1, TEMPLATED_PAGES + 1)],
+    }
+
+
+def _heading_facts(blocks: tuple[Block, ...]) -> list[dict[str, Any]]:
+    return [{"level": block.level, "text": block.text, "page": block.page} for block in blocks if isinstance(block, Heading)]
+
+
+def _family_member(language: str, member: dict[str, Any]) -> FixtureSpec:
+    collection = templated_collection(language)
+    s = collection.shared
+    h = collection.headings
+    number = member["member"]
+    identity = _identity(collection, member["attributes"])
+    quantity = _quantity_sentence(collection, member)
+    blocks: list[Block] = []
+    blocks += _page_lines(collection, 1, [Heading(collection.title, 1, 1), Paragraph(identity, 1), Heading(h[0], 2, 1), Paragraph(s[0], 1), _fragment(collection, 1), Paragraph(s[1], 1)])
+    blocks += _page_lines(collection, 2, [Heading(h[1], 2, 2), Paragraph(s[2], 2), Paragraph(member["sentence_a"], 2), _fragment(collection, 2), Paragraph(s[3], 2)])
+    blocks += _page_lines(
+        collection,
+        3,
+        [Heading(h[2], 2, 3), Paragraph(s[4], 3), Paragraph(quantity, 3), _fragment(collection, 3), Paragraph(s[5], 3), Heading(h[3], 2, 3), Paragraph(s[6], 3)],
+    )
+    blocks += _page_lines(collection, 4, [Paragraph(member["sentence_b"], 4), _fragment(collection, 4), Paragraph(s[7], 4), Heading(h[4], 2, 4), Paragraph(s[8], 4), Paragraph(s[9], 4)])
+    spec_blocks = tuple(blocks)
+    facts = {
+        "headings": _heading_facts(spec_blocks),
+        "page_count": TEMPLATED_PAGES,
+        "templated": {
+            "kind": "family",
+            "family": f"tpl-family-{language}",
+            "member": number,
+            "page_count": TEMPLATED_PAGES,
+            "lines": _declared(collection),
+            "heading_lines": list(h),
+            "attributes": member["attributes"],
+            "identity": identity,
+            "member_sentences": {"section_2": member["sentence_a"], "section_4": member["sentence_b"]},
+            "quantity": {**member["quantity"], "sentence": quantity},
+        },
+    }
+    return FixtureSpec(f"tpl-family-{language}-{number:02d}", language, TEMPLATED_DOC_TYPE, "digital", spec_blocks, facts)
+
+
+def _variants(language: str) -> FixtureSpec:
+    collection = templated_collection(language)
+    h = collection.headings
+    attributes = collection.variant_doc["attributes"]
+    identity = _identity(collection, attributes)
+    first = [
+        Heading(collection.variant_title, 1, 1),
+        *(Paragraph(line, 1) for line in h),
+        Paragraph(identity, 1),
+        Paragraph(collection.variant_intro[0], 1),
+        _fragment(collection, 1),
+        Paragraph(collection.variant_intro[1], 1),
+    ]
+    blocks: list[Block] = list(_page_lines(collection, 1, first))
+    frame = collection.frame
+    for offset, designation in enumerate(collection.designations):
+        page = offset + 2
+        sentences = collection.variant_sentences[offset]
+        line = _fill(frame, frame.designation_line, list(collection.designation_words), designation=designation)
+        body: list[Block] = [Heading(f"{h[0]} {designation}", 2, page), Paragraph(line, page), Paragraph(sentences[0], page)]
+        body += [Heading(h[1], 2, page), Paragraph(sentences[1], page), _fragment(collection, page), Paragraph(collection.variant_shared, page)]
+        for section in range(2, TEMPLATED_SECTION_COUNT):
+            body += [Heading(h[section], 2, page), Paragraph(sentences[section], page)]
+        blocks += _page_lines(collection, page, body)
+    spec_blocks = tuple(blocks)
+    facts = {
+        "headings": _heading_facts(spec_blocks),
+        "page_count": TEMPLATED_PAGES,
+        "templated": {
+            "kind": "variants",
+            "family": f"tpl-family-{language}",
+            "page_count": TEMPLATED_PAGES,
+            "lines": _declared(collection),
+            "heading_lines": list(h),
+            "contents": list(h),
+            "restart_heading": h[0],
+            "designations": list(collection.designations),
+            "variant_sentences": {designation: list(collection.variant_sentences[offset]) for offset, designation in enumerate(collection.designations)},
+            "attributes": attributes,
+            "identity": identity,
+        },
+    }
+    return FixtureSpec(f"tpl-variants-{language}", language, TEMPLATED_DOC_TYPE, "digital", spec_blocks, facts)
+
+
+def templated_specs() -> tuple[FixtureSpec, ...]:
+    """The templated collection (D-36): per language a family of 12 near-identical members and one multi-variant file. Kept out
+    of all_specs(); ingest mode loads them only with its templated option, so every other build is unchanged."""
+    out: list[FixtureSpec] = []
+    for language in TEMPLATED_LANGUAGES:
+        collection = templated_collection(language)
+        out += [_family_member(language, member) for member in collection.members]
+        out.append(_variants(language))
+    return tuple(out)
+
+
 def all_parse_specs() -> tuple[FixtureSpec, ...]:
     import importlib.util
     from pathlib import Path
@@ -628,7 +1133,7 @@ def parse_spec_by_id(spec_id: str) -> FixtureSpec:
 
 
 def spec_by_id(spec_id: str) -> FixtureSpec:
-    for spec in (*all_specs(), *long_table_specs()):
+    for spec in (*all_specs(), *long_table_specs(), *templated_specs()):
         if spec.id == spec_id:
             return spec
     raise KeyError(spec_id)
@@ -659,4 +1164,6 @@ def render_markdown(spec: FixtureSpec) -> str:
             parts.append("\n".join(lines))
         elif isinstance(block, Picture):
             parts.append(block.caption)
+        elif isinstance(block, PageLine) and block.label == "body":
+            parts.append(block.text)
     return "\n\n".join(parts) + "\n"

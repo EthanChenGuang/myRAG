@@ -1,0 +1,28 @@
+{
+  "arms": [
+    {
+      "label": "ts_rank_cd",
+      "scoring": "ts_rank_cd"
+    },
+    {
+      "b": 0.75,
+      "k1": 1.2,
+      "label": "bm25",
+      "scoring": "bm25"
+    }
+  ],
+  "created_at": "2026-01-01T00:00:00.000Z",
+  "empty_token_items": 0,
+  "eval_set_sha256": "47eb4309c2fb709e27372c42942c11b56d84b54452e772c91951a910d87e6ff2",
+  "item_count": 7,
+  "lexical_options": {
+    "dictionary_version": null,
+    "identifier_patterns": 0,
+    "quantity": false,
+    "stem_it": false
+  },
+  "limit": 50,
+  "profile_id": "openai-3-small-1536",
+  "schema_version": 1,
+  "tenant_hash": "000000000000"
+}

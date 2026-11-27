@@ -19,6 +19,8 @@ const DENSE_ONLY = ['p_dense_limit', 'p_iterative_scan', 'p_exact_scan_cutoff'];
 const LANG_A = 'en';
 const LANG_B = 'it';
 const UND = 'und';
+const GROUP = 'g:00000000-0000-4000-8000-000000093201';
+const OTHER_GROUP = 'g:00000000-0000-4000-8000-000000093202';
 
 interface InputArg {
   name: string;
@@ -66,6 +68,7 @@ interface DocSpec {
   createdAt?: string;
   provisional?: boolean;
   id?: string;
+  accessGroups?: string[];
 }
 
 interface ChunkSpec {
@@ -91,9 +94,9 @@ async function insertDocument(db: PGlite, tenant: Tenant, doc: DocSpec, chunks: 
   const docStatus = doc.status ?? 'ready';
   await db.query(
     `INSERT INTO public.documents (id, filename, content, metadata, user_id, doc_type, language, source, supplier_name, supplier_tax_id,
-       gross_total, currency, status, is_current, lineage_id, version, superseded_by, content_hash, created_at, provisional)
+       gross_total, currency, status, is_current, lineage_id, version, superseded_by, content_hash, created_at, provisional, access_groups)
      VALUES ($1, $2, 'neutral sample', '{}'::jsonb, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::uuid, $14, $15::uuid, $16,
-       $17::timestamptz, $18)`,
+       $17::timestamptz, $18, $19::text[])`,
     [
       docId,
       `parity-${docId.slice(0, 8)}.txt`,
@@ -113,6 +116,7 @@ async function insertDocument(db: PGlite, tenant: Tenant, doc: DocSpec, chunks: 
       doc.contentHash ?? null,
       doc.createdAt ?? '2024-01-10T00:00:00Z',
       doc.provisional ?? false,
+      doc.accessGroups ?? ['all'],
     ],
   );
   const chunkIds: string[] = [];
@@ -200,6 +204,8 @@ const CASTS: Record<string, string> = {
   p_effective_on: 'date',
   p_version_scope: 'jsonb',
   p_identifiers_norm: 'text[]',
+  p_access_keys: 'text[]',
+  p_access_all: 'boolean',
 };
 
 function namedArgs(args: Record<string, unknown>, offset: number): { sql: string; params: unknown[] } {
@@ -331,6 +337,9 @@ for (const mode of MODES) {
       ids.failedChunk = (await insertDocument(db, tenant, {}, [{ status: 'failed' }, {}])).chunkIds;
       ids.staleChunk = (await insertDocument(db, tenant, {}, [{ isCurrent: false }, {}])).chunkIds;
 
+      // Phase 4.3 (0930, 0932): a document restricted to one access group; its chunks take its labels through the 0921 trigger.
+      ids.restricted = (await insertDocument(db, tenant, { accessGroups: [GROUP] }, [{}, {}])).chunkIds;
+
       await rebuildStats(db, tenant.key);
 
       cases = [
@@ -369,6 +378,11 @@ for (const mode of MODES) {
         { name: 'version scope all with doc type', args: { p_version_scope: { mode: 'all' }, p_doc_types: ['product_technical'] }, min: 4 },
         { name: 'identifiers', args: { p_identifiers_norm: ['id-a'] }, min: 2 },
         { name: 'empty identifier list', args: { p_identifiers_norm: [] }, exact: 0 },
+        { name: 'access keys, everyone only', args: { p_access_keys: ['all'] }, min: 30 },
+        { name: 'access keys, the group', args: { p_access_keys: [GROUP] }, exact: 2 },
+        { name: 'access keys, everyone and the group', args: { p_access_keys: ['all', GROUP] }, min: 32 },
+        { name: 'access keys, another group', args: { p_access_keys: [OTHER_GROUP] }, exact: 0 },
+        { name: 'access keys, admin', args: { p_access_keys: ['all'], p_access_all: true }, min: 32 },
         {
           name: 'combined',
           args: { p_doc_types: ['general'], p_languages: [LANG_A], p_date_from: '2024-01-01', p_date_to: '2024-06-30', p_include_undated: true },
@@ -428,6 +442,32 @@ for (const mode of MODES) {
       const lexB = new Set(await bm25Ids(db, tenant.key, { p_lexical_languages: [LANG_B] }));
       assert.ok(lexB.has((ids['lang-b-0'] as string[])[1] as string), 'an und chunk of a second-language document matches that language');
       assert.ok(!lexB.has((ids.undA as string[])[0] as string), 'an und chunk of a first-language document does not');
+    });
+
+    test('the BM25 leg leaves out a chunk whose access group the caller lacks, and returns it with access off', async () => {
+      const restricted = ids.restricted as string[];
+      const has = (list: string[]): boolean => restricted.every((id) => list.includes(id));
+      const none = (list: string[]): boolean => restricted.every((id) => !list.includes(id));
+      assert.ok(has(await bm25Ids(db, tenant.key, {})), 'access off: no keys, no filter');
+      assert.ok(none(await bm25Ids(db, tenant.key, { p_access_keys: ['all'] })), 'a caller outside the group');
+      assert.ok(none(await bm25Ids(db, tenant.key, { p_access_keys: ['all', OTHER_GROUP] })), 'a caller of another group');
+      assert.ok(has(await bm25Ids(db, tenant.key, { p_access_keys: ['all', GROUP] })), 'a member of the group');
+      assert.ok(has(await bm25Ids(db, tenant.key, { p_access_keys: ['all'], p_access_all: true })), 'an admin');
+      await assert.rejects(
+        db.query(
+          `SELECT * FROM public.rag_bm25_search_chunks(p_tenant_key => $1, p_profile_id => $2, p_query_embedding => NULL,
+             p_lexical_tokens => ARRAY['${TOKEN}'], p_lexical_limit => 10, p_access_keys => '{}'::text[])`,
+          [tenant.key, LEGACY],
+        ),
+        /access_keys_empty/,
+      );
+      await db.query('UPDATE public.rag_access_group_settings SET enforced = true');
+      try {
+        await assert.rejects(bm25Ids(db, tenant.key, {}), /access_scope_required/);
+        assert.ok(none(await bm25Ids(db, tenant.key, { p_access_keys: ['all'] })), 'enforced: keys still filter');
+      } finally {
+        await db.query('UPDATE public.rag_access_group_settings SET enforced = false');
+      }
     });
 
     test('quarantined, pending-review, failed and non-current chunks are in neither set under the default scope', async () => {

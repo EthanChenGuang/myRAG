@@ -19,6 +19,7 @@ const LATE = Date.parse('2026-03-14T23:30:00.000Z');
 const EARLY_NEXT = Date.parse('2026-03-15T00:30:00.000Z');
 
 const KEY_BASE: CacheKeyParts = {
+  accessGroupSetHash: 'off',
   answerLanguage: 'en',
   ragMode: 'strict',
   generatorModel: 'provider/model-a',
@@ -27,7 +28,8 @@ const KEY_BASE: CacheKeyParts = {
   entryProfile: 'chat',
   systemPromptHash: 'b'.repeat(64),
 };
-const RECORDED_KEY = 'fb53541beaa58b6af99961111e1e40dee4c9cfaaff8589eda0a31ede5985bcf6';
+// 04.3-12 added the required accessGroupSetHash part (off here), which changed every key once.
+const RECORDED_KEY = '4fb84af236bb3a6068b89d7cdba582967f568b0b991c374e9b071b5a892f5874';
 
 const HASH_BASE: RetrievalConfigHashInput = {
   backendId: 'pgvector',
@@ -77,6 +79,7 @@ async function rpcArgs(filters: RetrievalFilters): Promise<Record<string, unknow
     denseVector: [0.1],
     lexicalTokens: [],
     lexicalLanguages: null,
+    access: { mode: 'off' },
     filters,
     denseLimit: 5,
     lexicalLimit: 0,

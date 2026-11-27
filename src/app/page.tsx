@@ -22,7 +22,7 @@ import { isMultiTenant } from '@/lib/deployment-mode';
 
 import type { Chat } from '@/lib/supabase';
 import type { ExtendedMessage, APIMessage, ContentPart, DocumentContent } from '@/types/chat';
-import { toAPIMessage, toDBMessages, updateMessages, appendMessage, toExtendedMessages, fromUIMessage } from '@/types/chat';
+import { toAPIMessage, toDBMessages, updateMessages, appendMessage, toExtendedMessages, fromUIMessage, withStandaloneQueryMetadata } from '@/types/chat';
 import { extractStreamAnswerMetadata, withRefusalFeedback, type RefusalFeedbackValue, type StreamAnswerMetadata } from '@/lib/chat/answer-metadata';
 import { canSaveMessages, isPersistedChatId, useAnswerRecords } from '@/lib/chat/use-answer-records';
 import { motion, useScroll, useSpring, AnimatePresence } from 'framer-motion';
@@ -1557,8 +1557,9 @@ export default function Home() {
       }
       setInput('');
 
-      // Prepare the messages for the API call
-      const apiMessages = [...messages, initialUserMessage].map(msg => {
+      // Prepare the messages for the API call; D-22: each user turn carries its stored standalone query back
+      const requestSource = [...messages, initialUserMessage];
+      const apiMessages = withStandaloneQueryMetadata(requestSource, requestSource.map(msg => {
         const baseMsg = {
           role: msg.role,
           content: ''
@@ -1637,7 +1638,7 @@ export default function Home() {
         }
 
         return baseMsg;
-      });
+      }));
 
       // Check if the last user message contains an image (for image generation)
       const lastUserMessage = apiMessages.filter(msg => msg.role === 'user').pop();

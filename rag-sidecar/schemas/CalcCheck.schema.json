@@ -1,0 +1,141 @@
+{
+  "$defs": {
+    "CalcSpan": {
+      "additionalProperties": false,
+      "description": "UTF-16 code-unit offsets of the stated number in the answer text.",
+      "properties": {
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "CalcSpan",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "origin": {
+      "anyOf": [
+        {
+          "enum": [
+            "tool",
+            "trailing_block"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Origin"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "enum": [
+            "operand_not_located",
+            "trace_missing",
+            "trace_invalid",
+            "stated_not_found",
+            "check_error"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "recomputed": {
+      "anyOf": [
+        {
+          "pattern": "^-?[0-9]{1,30}(\\.[0-9]{1,30})?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Recomputed"
+    },
+    "stated": {
+      "anyOf": [
+        {
+          "pattern": "^-?[0-9]{1,30}(\\.[0-9]{1,30})?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stated"
+    },
+    "stated_span": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CalcSpan"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "status": {
+      "enum": [
+        "verified",
+        "corrected",
+        "not_verified"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "trace_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trace Hash"
+    },
+    "unit": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u3040-\\u30FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uAC00-\\uD7AF$\\u00A2-\\u00A5\\u20A0-\\u20CF %/._\\u00B0\\-]{1,32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Unit"
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "title": "CalcCheck",
+  "type": "object"
+}
