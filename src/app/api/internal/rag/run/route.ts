@@ -82,6 +82,7 @@ function toRetrievalOverrides(input: RetrievalOverridesInput | undefined): Retri
     out.chunkingProfileByDocType = { ...input.chunking_profile_by_doc_type };
   }
   if (input.table_lookup != null) out.tableLookup = { ...input.table_lookup };
+  if (input.backend != null) out.backend = input.backend;
   return Object.keys(out).length > 0 ? out : undefined;
 }
 

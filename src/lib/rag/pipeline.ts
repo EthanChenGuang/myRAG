@@ -2,6 +2,7 @@ import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { describeStageCause } from './stage-error-cause';
 import { RetrievalBackendError, searchByEmbedding, type RawChunk, type RpcClient } from './backend/supabase-rpc';
+import { warnBackendIgnoredOnLegacy } from './backend/factory';
 import {
   CORE_STAGES,
   FALLBACK_STAGE_TIMEOUT_MS,
@@ -900,6 +901,7 @@ async function dispatchRetrieval(input: RunRetrievalInput, collector: TraceColle
   if (evalBindingOverride && effective.pipeline === 'legacy') return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
   if (effective.pipeline === 'legacy') {
     if (effective.fallback !== 'none') recordPipelineFallback(collector, effective.fallback);
+    warnBackendIgnoredOnLegacy(loadRagConfig(getRagDeps().ragEnv()).backend);
     return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
   }
 
