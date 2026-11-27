@@ -28,15 +28,17 @@ const FOLDED_SETUP: Record<DeploymentMode, string> = {
 /**
  * Migrations whose final shape is folded into both setup files: Phase 3 (0301-0320, plans 03-47 and later), Phase 3.1 (0351-0359, and the queue
  * hardening and chunk writer fix 0420-0424 after Phase 4, plan 03.1-52), Phase 4 (0401-0413, plan 04-42) and the empty search_path rewrite 0425
- * after 0424 (plan 04-47), Phase 3.1.1 (0440-0442, plan 03.1.1-14), Phase 5 (0501-0502, plan 05-25) and Phase 5.1.1 (0531-0537, plan
- * 05.1.1-22). 0426, 0427, Phase 4.1.1, Phase 6 (plan 06-45) and the 07xx and 08xx blocks are not folded yet, so a fresh install from a setup file is completed by those migrations alone.
+ * after 0424 (plan 04-47), Phase 3.1.1 (0440-0442, plan 03.1.1-14), Phase 5 (0501-0502, plan 05-25), Phase 5.1.1 (0531-0537, plan
+ * 05.1.1-22) and Phase 4.1.1 (0471-0473, plan 04.1.1-14). 0426, 0427, Phase 6 (plan 06-45) and the 07xx and 08xx blocks are not folded yet, so a fresh
+ * install from a setup file is completed by those migrations alone.
  */
-const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-5]|044[0-2]|050[12]|053[1-7])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
+const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-5]|044[0-2]|047[1-3]|050[12]|053[1-7])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
 const PHASE4_MIGRATION = /^supabase\/migrations\/04(0[1-9]|1\d)_/;
 const PHASE31_MIGRATION = /^supabase\/migrations\/(035[1-9]|042[0-4])_/;
 const PHASE5_MIGRATION = /^supabase\/migrations\/050\d_/;
 const PHASE311_MIGRATION = /^supabase\/migrations\/044\d_/;
 const PHASE511_MIGRATION = /^supabase\/migrations\/053\d_/;
+const PHASE411_MIGRATION = /^supabase\/migrations\/047\d_/;
 const unfoldedMigrationFiles = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => !FOLDED_MIGRATION.test(file));
 
 /** Every function the Phase 4 migrations create; each one is service-role only (RET-04, D-04). */
@@ -323,6 +325,16 @@ describe('folded migration set', () => {
       ]);
       assert.deepEqual(phase511.filter((file) => !FOLDED_MIGRATION.test(file)), []);
     });
+
+    test(`every Phase 4.1.1 migration of ${mode} is folded into the setup file`, () => {
+      const phase411 = migrationFiles(mode).filter((file) => PHASE411_MIGRATION.test(file));
+      assert.deepEqual(phase411, [
+        'supabase/migrations/0471_terminology_schema.sql',
+        'supabase/migrations/0472_terminology_writers.sql',
+        'supabase/migrations/0473_terminology_mining.sql',
+      ]);
+      assert.deepEqual(phase411.filter((file) => !FOLDED_MIGRATION.test(file)), []);
+    });
   }
 });
 
@@ -513,6 +525,59 @@ async function assertFeedbackLoopSecured(db: PGlite, mode: DeploymentMode): Prom
   assert.deepEqual(expert.rows[0], { anon: false, authenticated: true, service: true }, 'rag_is_domain_expert is the RLS helper for authenticated');
 }
 
+const TERMINOLOGY_TABLES = ['rag_term_audit', 'rag_term_candidates', 'rag_term_entries', 'rag_term_layers', 'rag_term_misses'];
+const TERMINOLOGY_SERVICE_ROLE_FUNCTIONS = [
+  'rag_term_effective(text)',
+  'rag_term_upsert_entry(uuid, text, jsonb, bigint)',
+  'rag_term_delete_entry(uuid, text, uuid, bigint)',
+  'rag_term_set_suppression(uuid, text, uuid, boolean, bigint)',
+  'rag_term_apply_import(uuid, text, jsonb, text, bigint)',
+  'rag_term_list_entries(uuid, text, integer, integer, text)',
+  'rag_term_list_audit(uuid, text, integer, integer)',
+  'rag_term_record_miss(text, jsonb)',
+  'rag_term_purge_misses(integer)',
+  'rag_term_read_misses(text, integer)',
+  'rag_term_corpus_df(text, text[])',
+  'rag_term_upsert_candidates(text, jsonb)',
+  'rag_term_list_candidates(uuid, text, integer, integer)',
+  'rag_term_decide_candidate(uuid, uuid, text, uuid)',
+];
+
+/** The Phase 4.1.1 schema as a fresh install gets it (D-07): the five rag_term_ tables with RLS and no client privilege, service_role read only,
+ * every rag_term_ function closed to anon and authenticated, the callable ones granted to service_role and the rag_term__ helpers to nobody. */
+async function assertTerminologySecured(db: PGlite): Promise<void> {
+  const tables = await db.query<{ name: string; rls: boolean }>(
+    `SELECT c.relname AS name, c.relrowsecurity AS rls FROM pg_class c
+     WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r' AND c.relname LIKE 'rag\\_term\\_%' ORDER BY 1`,
+  );
+  assert.deepEqual(tables.rows, TERMINOLOGY_TABLES.map((name) => ({ name, rls: true })), 'the terminology tables exist with row level security');
+  const privileges = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'];
+  for (const table of TERMINOLOGY_TABLES) {
+    const held = await db.query<{ role: string; privilege: string }>(
+      `SELECT r.role, p.privilege FROM unnest(ARRAY['anon', 'authenticated', 'service_role']) AS r(role)
+       CROSS JOIN unnest($2::text[]) AS p(privilege) WHERE has_table_privilege(r.role, $1, p.privilege) ORDER BY 1, 2`,
+      [`public.${table}`, privileges],
+    );
+    assert.deepEqual(held.rows, [{ role: 'service_role', privilege: 'SELECT' }], `${table}: clients hold nothing, service_role may only read`);
+  }
+  const functions = await db.query<{ signature: string; helper: boolean; trigger: boolean; anon: boolean; authenticated: boolean; service: boolean }>(
+    `SELECT p.oid::regprocedure::text AS signature, p.proname LIKE 'rag\\_term\\_\\_%' AS helper, p.prorettype = 'trigger'::regtype AS trigger,
+            has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+            has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated,
+            has_function_privilege('service_role', p.oid, 'EXECUTE') AS service
+     FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname LIKE 'rag\\_term\\_%' ORDER BY 1`,
+  );
+  const present = new Set(functions.rows.map((row) => row.signature.replace(/^public\./, '')));
+  assert.deepEqual(TERMINOLOGY_SERVICE_ROLE_FUNCTIONS.filter((signature) => !present.has(signature)), [], 'every rag_term_ function is defined');
+  assert.deepEqual(functions.rows.filter((row) => row.anon || row.authenticated).map((row) => row.signature), [], 'anon and authenticated execute no rag_term_ function');
+  assert.deepEqual(
+    functions.rows.filter((row) => !row.helper && !row.trigger && !row.service).map((row) => row.signature),
+    [],
+    'service_role can execute every callable rag_term_ function',
+  );
+  assert.deepEqual(functions.rows.filter((row) => row.helper && row.service).map((row) => row.signature), [], 'the rag_term__ helpers have no grant');
+}
+
 for (const mode of MODES) {
   describe(`${mode} setup`, () => {
     test(`${mode} setup applies cleanly on fresh PGlite`, async () => {
@@ -524,6 +589,7 @@ for (const mode of MODES) {
         await assertAnswerRecordsSecured(fixture.db, mode);
         await assertDomainBindingsSecured(fixture.db);
         await assertFeedbackLoopSecured(fixture.db, mode);
+        await assertTerminologySecured(fixture.db);
         const tables = await fixture.db.query<{ name: string }>(
           `SELECT c.relname AS name FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
              AND c.relname IN ('document_parents', 'chunking_profiles', 'chunking_build_runs', 'chunking_build_gaps') ORDER BY 1`,
@@ -590,8 +656,8 @@ const PHASE_31_SECTIONS = [
 ] as const;
 const PHASE_4_HEADER = `${BAR}\n-- Phase 4: Hybrid retrieval`;
 // The empty search_path rewrite (0425, plan 04-47) runs after 0424, so its section follows the 0420-0424 section; the Phase 3.1.1 section
-// (0440-0442, plan 03.1.1-14) replaces 0425 guard and re-embed bodies, so it follows 0425; the Phase 5 section (0501-0502, plan 05-25) follows, and the Phase 5.1.1 section (0531-0537, plan
-// 05.1.1-22) closes the file.
+// (0440-0442, plan 03.1.1-14) replaces 0425 guard and re-embed bodies, so it follows 0425; the Phase 5 section (0501-0502, plan 05-25) follows, then the Phase 5.1.1 section (0531-0537, plan
+// 05.1.1-22); the Phase 4.1.1 section (0471-0473, plan 04.1.1-14, folded last) closes the file.
 const SEARCH_PATH_SECTION = {
   header: `${BAR}\n-- Phase 4 gap closure: empty search_path for SECURITY DEFINER, trigger and post-Phase-3 functions (migration 0425, plan 04-47, after 0424)\n${BAR}`,
   files: /^supabase\/migrations\/0425_/,
@@ -607,6 +673,10 @@ const PHASE_5_SECTION = {
 const PHASE_511_SECTION = {
   header: `${BAR}\n-- Phase 5.1.1: Feedback loop (migrations 0531-0537, plan 05.1.1-22, after 0502 in migration order)\n${BAR}`,
   files: /^supabase\/migrations\/053[1-7]_/,
+} as const;
+const PHASE_411_SECTION = {
+  header: `${BAR}\n-- Phase 4.1.1: Terminology dictionary (migrations 0471-0473, plan 04.1.1-14, after 0442 in migration order)\n${BAR}`,
+  files: /^supabase\/migrations\/047[1-3]_/,
 } as const;
 const OTHER_MODE: Record<DeploymentMode, DeploymentMode> = { 'single-tenant': 'multi-tenant', 'multi-tenant': 'single-tenant' };
 
@@ -695,9 +765,9 @@ for (const mode of MODES) {
       assert.ok(text.includes(`${early}\n${PHASE_4_HEADER}`), 'the 0351-0359 section sits right before the Phase 4 section');
       assert.ok(
         text.endsWith(
-          `${late}\n${foldedSection(mode, SEARCH_PATH_SECTION)}\n${foldedSection(mode, PHASE_311_SECTION)}\n${foldedSection(mode, PHASE_5_SECTION)}\n${foldedSection(mode, PHASE_511_SECTION)}`,
+          `${late}\n${foldedSection(mode, SEARCH_PATH_SECTION)}\n${foldedSection(mode, PHASE_311_SECTION)}\n${foldedSection(mode, PHASE_5_SECTION)}\n${foldedSection(mode, PHASE_511_SECTION)}\n${foldedSection(mode, PHASE_411_SECTION)}`,
         ),
-        'after Phase 4 come the 0420-0424, 0425, 0440-0442 and Phase 5 sections, then the Phase 5.1.1 section, which closes the file',
+        'after Phase 4 come the 0420-0424, 0425, 0440-0442, Phase 5 and Phase 5.1.1 sections, then the Phase 4.1.1 section, which closes the file',
       );
       assert.ok(text.indexOf(late) > text.indexOf(PHASE_4_HEADER));
     });
