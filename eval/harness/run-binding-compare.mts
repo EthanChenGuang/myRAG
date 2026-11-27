@@ -68,6 +68,8 @@ export interface BindingCompareArgs {
   runs: number;
   /** Real-deployment mode (quick-311): the app the arms run against. */
   baseUrl: string | null;
+  /** Fixture sweep only (quick-311 gap 6): leg_weights.domain sent to every arm as a retrieval override; null keeps the default 1.0. */
+  legWeightDomain: number | null;
   organizationId: string | null;
   userId: string | null;
 }
@@ -88,6 +90,7 @@ export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
         'record-baseline': { type: 'string' },
         runs: { type: 'string' },
         'base-url': { type: 'string' },
+        'leg-weight-domain': { type: 'string' },
         org: { type: 'string' },
         user: { type: 'string' },
       },
@@ -116,6 +119,14 @@ export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
     : null;
   if (candidates !== null && candidates.length === 0) throw new UsageError('--candidates names no profile');
   const baseUrl = values['base-url']?.trim() || null;
+  const rawWeight = values['leg-weight-domain'];
+  const legWeightDomain = rawWeight === undefined ? null : Number(rawWeight);
+  if (legWeightDomain !== null && !(Number.isFinite(legWeightDomain) && legWeightDomain > 0 && legWeightDomain <= 4)) {
+    throw new UsageError('--leg-weight-domain must be a number above 0 and at most 4');
+  }
+  if (legWeightDomain !== null && (baseUrl !== null || values.live || baselineMode)) {
+    throw new UsageError('--leg-weight-domain is a fixture sweep; it takes neither --base-url, --live nor the baseline modes');
+  }
   if (baseUrl === null && (values.org || values.user)) throw new UsageError('--org and --user scope a --base-url run only');
   if (baseUrl !== null) {
     if (baselineMode) throw new UsageError('the baseline modes record the fixture baseline; they take no --base-url');
@@ -135,9 +146,16 @@ export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
     recordBaseline,
     runs,
     baseUrl,
+    legWeightDomain,
     organizationId: values.org?.trim() || null,
     userId: values.user?.trim() || null,
   };
+}
+
+/** The committed dense, lexical and exact-id weights, so a domain-weight override changes the domain leg only. */
+function fixtureLegWeights(): Record<string, number> {
+  const params = JSON.parse(fs.readFileSync(RETRIEVAL_PARAMS_PATH, 'utf8')) as { leg_weights?: Record<string, number> };
+  return { dense: 1, lexical: 1, exact_id: 1, ...(params.leg_weights ?? {}) };
 }
 
 function runPython(module: string, args: string[]): number {
@@ -484,6 +502,10 @@ async function main(argv: string[]): Promise<number> {
       floor.setEvalScoreCalibration({ context_threshold: FIXTURE_CONTEXT_THRESHOLD });
     }
 
+    const weightOverride: EvalRequestOptions =
+      args.legWeightDomain === null
+        ? {}
+        : { retrieval_overrides: { leg_weights: { ...fixtureLegWeights(), domain: args.legWeightDomain } } as EvalRequestOptions['retrieval_overrides'] };
     const scoreArm = async (name: string, requestOptions: EvalRequestOptions): Promise<string> => {
       const armDir = path.join(args.outDir, name);
       const result = await runEvalModule.runEval({
@@ -492,7 +514,7 @@ async function main(argv: string[]): Promise<number> {
         outDir: armDir,
         deploymentMode: 'single-tenant',
         fixtureMode: 'ingest',
-        requestOptions,
+        requestOptions: { ...weightOverride, ...requestOptions },
         tier: 'smoke',
         ingestFixture: full,
         retainInProcess: inProcess,
@@ -566,6 +588,7 @@ async function main(argv: string[]): Promise<number> {
       '--catalog-json',
       catalogPath,
       ...(args.live ? [] : ['--fixture-embedder', '--note', FIXTURE_FLOOR_NOTE]),
+      ...(args.legWeightDomain === null ? [] : ['--note', `Fixture leg weight sweep: leg_weights.domain=${args.legWeightDomain} on every arm.`]),
       '--out',
       path.join(args.outDir, 'comparison.json'),
     ]);
