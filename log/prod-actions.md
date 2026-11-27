@@ -71,3 +71,9 @@
 - Three train-31 calls were dropped by a worker restart and re-applied after checking schema_migrations; nothing ran twice.
 - Remaining: train35 (0921, 0922, 0930, 0932, r18), train36, train37. After those: md5 fidelity check, verify, then tell the walkthrough desk.
 - The Supabase connector is temporarily authorized to the eval org (ChenGuang's Org). Switch it back to the prod org afterwards.
+- ~21:55 UTC, paused (owner usage limit). State at pause:
+  - item 2 PASS (sign-out alert included);
+  - item 1 still blocked: EVAL has trains 30–34 (0945 now present), not 35–37, so 0980 is still missing;
+  - item 3 deferred until EVAL matches main.
+  - Owner decision sent to the orchestrator: hide the sidebar footer button when unset, keeping the ability to show it later (quick task exec/quick-sidebar-hide).
+  - No database writes since the entry above.
