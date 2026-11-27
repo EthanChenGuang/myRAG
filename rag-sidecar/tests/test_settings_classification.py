@@ -103,3 +103,29 @@ def test_a_query_entry_with_a_mechanism_is_refused():
     raw["entries"] = [{"name": "RAG_NEW_THING", "side": "query", "mechanism": "reparse"}]
     with pytest.raises(ValidationError):
         SettingsClassification.model_validate(raw)
+
+
+# Quick 261127-rbm: the Phase 4.2 lookup and duplicate-cluster switches rebuild through their own backfills, never a re-parse.
+LOOKUP_MECHANISMS = {
+    "RAG_TABLE_LOOKUP": ("both", "reindex_tables"),
+    "RAG_IDENTIFIER_INDEX": ("ingestion", "reindex_identifiers"),
+    "RAG_DUP_CLUSTERS": ("ingestion", "recluster"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(LOOKUP_MECHANISMS))
+def test_lookup_switches_name_their_own_mechanism(name):
+    side, mechanism = LOOKUP_MECHANISMS[name]
+    entry = _entries()[name]
+    assert entry["side"] == side
+    assert entry["mechanism"] == mechanism
+
+
+def test_lookup_mechanisms_are_automatic_rebuilds():
+    from rag_sidecar.contracts import ingest_settings
+
+    for mechanism in ("reindex_tables", "reindex_identifiers", "recluster"):
+        assert mechanism in ingest_settings.REBUILD_MECHANISMS
+        assert mechanism in ingest_settings.AUTOMATIC_REBUILD_MECHANISMS
+        entry = {"name": "RAG_EXAMPLE_INDEX", "side": "ingestion", "mechanism": mechanism}
+        SettingsClassification.model_validate({"schema_version": 1, "entries": [entry]})
