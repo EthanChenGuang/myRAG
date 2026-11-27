@@ -720,3 +720,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   (5) Audit trains against SUMMARYs so no branch is left out.
   (6) Model roles: dev and review = Opus, ops = Sonnet, design and research = Fable.
   Parallelism stays high (plan upgraded to Ultra).
+- 22:20Z The user approved 06.2-22 to continue in its own session.
