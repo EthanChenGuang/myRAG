@@ -30,6 +30,7 @@
         }
       },
       "stages": {
+        "access_scope": 25,
         "assemble": 100,
         "compress": 50,
         "condense": 600,
@@ -63,6 +64,7 @@
         }
       },
       "stages": {
+        "access_scope": 25,
         "assemble": 100,
         "compress": 50,
         "condense": 600,
@@ -95,6 +97,7 @@
         }
       },
       "stages": {
+        "access_scope": 15,
         "assemble": 50,
         "condense": 300,
         "dedupe": 5,

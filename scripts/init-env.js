@@ -380,6 +380,7 @@ RAG_CONTEXT_TOKEN_BUDGET=6000
 # Parent chunks and pgvector scan
 RAG_PARENT_CHILD=false
 RAG_HNSW_ITERATIVE_SCAN=off
+# Document access groups: off | on (off: every member sees every document)
 RAG_DOC_ACCESS_GROUPS=off
 RAG_EXACT_SCAN_CUTOFF=0
 # Query translation before lexical tokenization
@@ -416,6 +417,8 @@ RAG_TERMINOLOGY_MINING=false
 RAG_RETRIEVAL_PARAMS_OVERRIDE=
 # Tenant for embedded chat: s:default | o:<uuid> | u:<uuid> (empty means s:default in single-tenant, fails closed in multi-tenant)
 RAG_EMBED_TENANT=
+# Access-group key embedded chat and WhatsApp answer for (empty: documents visible to everyone only)
+RAG_EMBED_ACCESS_GROUP=
 # Signing secret for voice retrieval tokens (at least 32 characters)
 RAG_VOICE_TOKEN_SECRET=
 # Lifetime of a voice retrieval token in seconds

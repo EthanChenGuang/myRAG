@@ -335,6 +335,7 @@ export interface RagEnvInput {
   RAG_PARENT_CHILD?: string;
   RAG_HNSW_ITERATIVE_SCAN?: string;
   RAG_DOC_ACCESS_GROUPS?: string;
+  RAG_EMBED_ACCESS_GROUP?: string;
   RAG_EXACT_SCAN_CUTOFF?: string;
   RAG_LEXICAL_TRANSLATION?: string;
   RAG_LEXICAL_DICTIONARY?: string;
@@ -428,6 +429,8 @@ export interface RagConfig {
   backend: BackendConfig;
   /** D-09: document access groups; anything but on resolves to off. */
   accessGroups: AccessGroupsMode;
+  /** D-07: the access-group key embedded chat and WhatsApp answer for, trimmed; empty when unset. */
+  embedAccessGroup: string;
   warnings: string[];
 }
 
@@ -1204,6 +1207,7 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_DOC_TRANSLATION ?? '',
     env.RAG_BGE_M3_SERVING ?? '',
     env.RAG_DOC_ACCESS_GROUPS ?? '',
+    (env.RAG_EMBED_ACCESS_GROUP ?? '').trim(),
     env.RAG_OUTPUT_LINK_ALLOWLIST ?? '',
     env.RAG_EMBEDDING_PROFILES ?? '',
     env.RAG_DOMAIN_EMBEDDINGS ?? '',
@@ -1338,6 +1342,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     semanticCache,
     backend: parseBackend(env, warnings),
     accessGroups: parseAccessGroups(env.RAG_DOC_ACCESS_GROUPS, warnings),
+    embedAccessGroup: (env.RAG_EMBED_ACCESS_GROUP ?? '').trim(),
     warnings,
   };
   memo.set(snapshot, config);
