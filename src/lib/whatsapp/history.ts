@@ -50,7 +50,7 @@ function ragOf(message: StoredMessage): RagTurnMetadata | undefined {
 
 /** Adds the session id and sender JID to a message before it is stored, so a later window can match it exactly. */
 export function stampWhatsAppMessage<T extends { metadata?: Record<string, unknown> }>(message: T, stamp: WhatsAppStamp): T {
-  return stamp ? message : message;
+  return { ...message, metadata: { ...(message.metadata ?? {}), whatsapp: { sessionId: stamp.sessionId, senderJid: stamp.senderJid } } };
 }
 
 /** Sets the turn's streamed standalone query (D-22) on a stored user message; an invalid value is left out. */
@@ -70,7 +70,7 @@ export function buildWhatsAppHistory(
   stamp: WhatsAppStamp,
   limits: Partial<HistoryWindowLimits> = {},
 ): WhatsAppHistoryMessage[] {
-  if (stored || !isIndividualJid(stamp.senderJid) || !Array.isArray(stored)) return [];
+  if (!isIndividualJid(stamp.senderJid) || !Array.isArray(stored)) return [];
   const own = stored.filter((message): message is StoredMessage => recordOf(message) !== null && sameStamp(message as StoredMessage, stamp));
   if (own.length === 0) return [];
   const window = buildHistoryWindow([...own, { role: 'user', content: '' }] as never, limits);

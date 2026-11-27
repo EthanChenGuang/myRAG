@@ -354,7 +354,7 @@ export class WhatsAppWebhookHandler {
     senderJid: string = conversation.whatsappJid
   ): Promise<void> {
     // D-24: with RAG_WHATSAPP_HISTORY on, every stored turn carries the session and sender it came from
-    const historyOn = false && whatsappHistoryEnabled();
+    const historyOn = whatsappHistoryEnabled();
     const stamp: WhatsAppStamp = { sessionId, senderJid };
     const message = historyOn ? stampWhatsAppMessage(incoming, stamp) : incoming;
     try {
@@ -512,7 +512,7 @@ export class WhatsAppWebhookHandler {
       const aiResponse = historyOn ? stampWhatsAppMessage(answer, stamp) : answer;
 
       // D-22: the turn's streamed standalone query is kept on its user message, as in chat
-      const storedTurn = withRagMetadata(message, undefined);
+      const storedTurn = withRagMetadata(message, streamFacts.rag);
       const finalMessages = [...existingMessages, storedTurn, aiResponse];
 
       // Update the chat with the complete conversation
