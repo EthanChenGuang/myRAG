@@ -210,6 +210,18 @@ describe('config-server /api/rag proxy', () => {
     expect(lastStub!.headers.authorization).toBe(bearer);
   });
 
+  it('forwards PATCH and DELETE for the identifier pattern routes with their method', async () => {
+    const id = 'c0000000-0000-4000-8000-000000000001';
+    for (const method of ['PATCH', 'DELETE']) {
+      lastStub = null;
+      const reply = await configCall(method, `/api/rag/admin/identifier-patterns/${id}`);
+      expect(reply.status).toBe(200);
+      expect(lastStub).not.toBeNull();
+      expect(lastStub!.method).toBe(method);
+      expect(lastStub!.url).toBe(`/api/rag/admin/identifier-patterns/${id}`);
+    }
+  });
+
   it('does not invent credentials when the browser sends none', async () => {
     lastStub = null;
     const reply = await configCall('GET', '/api/rag/admin/quarantine');
