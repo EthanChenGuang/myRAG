@@ -168,6 +168,7 @@ export type { ResolveVoiceScopeInput, VoiceScopeResult } from './tenant/voice';
 export { assembleContext } from './context/assemble';
 export type { AssembleInput, AssembleOutput, AssemblyCandidate, AssemblyDocumentRow } from './context/assemble';
 export { fetchAssemblyRows } from './context/fetch-rows';
+export { detectMixedVersions, versionConflictTrace, type VersionConflict } from './context/version-conflicts';
 export type { AssemblyRows } from './context/fetch-rows';
 export type {
   CitationLabel,
@@ -182,6 +183,7 @@ export type {
   UsedDocument,
 } from './types';
 export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
+export { untaggedVoiceContext } from './context/voice';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
 export {
@@ -220,11 +222,13 @@ export {
   parseBodyChannel,
   type AnswerChannel,
   type AnswerTurn,
+  type OutputGuardTurnSources,
   type TextsSource,
 } from './generation/answer-turn';
-export { guardChannelReply, guardSummaryText } from './security/channel-reply-guard';
+export { guardChannelReply, guardSummaryText, guardVoiceTranscript } from './security/channel-reply-guard';
 export { formatGuardedLinks, linkUsageInstructions } from './security/link-section';
-export type { ChannelReplyGuardInput, ChannelReplyGuardResult, SummaryGuardInput } from './security/channel-reply-guard';
+export type { ChannelReplyGuardInput, ChannelReplyGuardResult, SummaryGuardInput, VoiceTranscriptMessage } from './security/channel-reply-guard';
+export { recordOutputGuardEvents } from './security/security-events';
 export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource } from './lang/answer-language';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';
@@ -502,6 +506,21 @@ export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';
 export { escapeTags, REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE } from './context/wrap';
 export { readSecurityConfig } from './security/config';
+export {
+  acknowledgeSecurityAlert,
+  checkItemDetails,
+  checkReasonOf,
+  holdUploader,
+  linkPreviewStatus,
+  listSecurityAlerts,
+  listSecurityEvents,
+  listSecurityUploaders,
+  readSecuritySettings,
+  releaseUploaderHold,
+  resolveAdminTenants,
+  SECURITY_EVENT_SOURCES,
+} from './security/security-admin';
+export type { ReviewSnapshotReader, SecurityActor, SecurityAdminDb, SecurityFailure } from './security/security-admin';
 export { injectionTraceVersions } from './security/injection-check';
 export type { ToolResultGuardMode } from './security/config';
 export { escapeToolOutput, scanToolOutput, wrapToolResultsForPrompt } from './security/tool-results';
@@ -535,11 +554,14 @@ export { isMiningWindowError, miningDisabledReason, MiningError, parseMiningDate
 export { computeFeedbackLoopStats, isStatsWindowError, MAX_STATS_WINDOW_DAYS, StatsError } from './feedback-loop/stats';
 export {
   getReviewItem,
+  getReviewItemWithSource,
+  attachReviewSources,
   getReviewItemChunks,
   grantDomainExpert,
   isReviewItemId,
   listDomainExperts,
   listReviewItems,
+  listReviewItemsWithSource,
   REVIEW_PAGE_SIZE,
   ReviewListQuerySchema,
   revokeDomainExpert,

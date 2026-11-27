@@ -73,6 +73,7 @@
     <script src="rag-panels/rag-fetch.js"></script>
     <script src="rag-panels/gates-ui.js"></script>
     <script src="rag-panels/judge-calibration.js"></script>
+    <script src="rag-panels/question-sources.js"></script>
     <script src="rag-panels/rag-ui.js"></script>
     <script src="rag-panels/languages.js"></script>
     <script src="rag-panels/ingest-impact.js"></script>
@@ -92,6 +93,7 @@
     <script src="rag-panels/identifier-patterns.js"></script>
     <script src="rag-panels/injection-defense.js"></script>
     <script src="rag-panels/answer-rules.js"></script>
+    <script src="rag-panels/security-events.js"></script>
     <script src="rag-panels/review-labelling.js"></script>
     <script src="rag-panels/review-admin.js"></script>
     <script src="rag-panels/query-layer.js"></script>
@@ -2080,6 +2082,7 @@
                 <div class="p-6">
                     <div id="rag-attention-banner"></div>
                     <div id="rag-language-banner"></div>
+                    <div id="rag-security-alert-banner"></div>
 
                     <!-- Features Tab -->
                     <div class="tab-content" id="features">
@@ -6581,22 +6584,23 @@
                                             </div>
                                             <div class="form-control">
                                                 <label class="label" for="RAG_LEXICAL_SCORING"><span class="label-text"><span data-rag-i18n="RAG_LEXICAL_SCORING.label">Lexical scoring</span> (<span translate="no">RAG_LEXICAL_SCORING</span>)</span></label>
-                                                <select id="RAG_LEXICAL_SCORING" name="RAG_LEXICAL_SCORING" translate="no" aria-describedby="rag-lexical-scoring-help" class="select select-bordered w-full max-w-xs">
+                                                <select id="RAG_LEXICAL_SCORING" name="RAG_LEXICAL_SCORING" autocomplete="off" translate="no" aria-describedby="rag-lexical-scoring-help" class="select select-bordered w-full max-w-xs">
                                                     <option value="ts_rank_cd" selected>ts_rank_cd</option>
                                                     <option value="bm25">bm25</option>
                                                 </select>
                                                 <p class="label-text-alt text-base-content/70 max-w-prose mt-1" id="rag-lexical-scoring-help" data-rag-i18n="RAG_LEXICAL_SCORING.help"><code class="font-mono text-xs" translate="no">ts_rank_cd</code> keeps the current keyword ranking. <code class="font-mono text-xs" translate="no">bm25</code> ranks keyword matches by how rare each term is in this knowledge base and by text length. It needs <code class="font-mono text-xs" translate="no">RAG_LEXICAL_SEARCH</code> on and statistics built with <code class="font-mono text-xs" translate="no">npm run rag:lexstats</code>.</p>
+                                                <p class="label-text-alt text-base-content max-w-prose mt-1" id="rag-lexical-scoring-needs-lexical" role="status" data-rag-i18n="RAG_LEXICAL_SCORING.needsLexical" hidden>The lexical search leg is off, so <code class="font-mono text-xs" translate="no">bm25</code> has no effect and retrieval runs as before. Turn on <code class="font-mono text-xs" translate="no">RAG_LEXICAL_SEARCH</code> to use it.</p>
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div class="form-control">
                                                     <label class="label" for="RAG_LEXICAL_BM25_K1"><span class="label-text"><span data-rag-i18n="RAG_LEXICAL_BM25_K1.label">BM25 k1</span> (<span translate="no">RAG_LEXICAL_BM25_K1</span>)</span></label>
-                                                    <input type="number" min="0.5" max="3" step="0.05" id="RAG_LEXICAL_BM25_K1" name="RAG_LEXICAL_BM25_K1" placeholder="1.2"
+                                                    <input type="number" min="0.5" max="3" step="0.05" id="RAG_LEXICAL_BM25_K1" name="RAG_LEXICAL_BM25_K1" placeholder="1.2…"
                                                         inputmode="decimal" autocomplete="off" aria-describedby="rag-lexical-bm25-k1-help" class="input input-bordered w-full">
                                                     <p class="label-text-alt text-base-content/70 max-w-prose mt-1" id="rag-lexical-bm25-k1-help" data-rag-i18n="RAG_LEXICAL_BM25_K1.help">Term-frequency saturation, from 0.5 to 3. Used only with <code class="font-mono text-xs" translate="no">bm25</code>.</p>
                                                 </div>
                                                 <div class="form-control">
                                                     <label class="label" for="RAG_LEXICAL_BM25_B"><span class="label-text"><span data-rag-i18n="RAG_LEXICAL_BM25_B.label">BM25 b</span> (<span translate="no">RAG_LEXICAL_BM25_B</span>)</span></label>
-                                                    <input type="number" min="0" max="1" step="0.05" id="RAG_LEXICAL_BM25_B" name="RAG_LEXICAL_BM25_B" placeholder="0.75"
+                                                    <input type="number" min="0" max="1" step="0.05" id="RAG_LEXICAL_BM25_B" name="RAG_LEXICAL_BM25_B" placeholder="0.75…"
                                                         inputmode="decimal" autocomplete="off" aria-describedby="rag-lexical-bm25-b-help" class="input input-bordered w-full">
                                                     <p class="label-text-alt text-base-content/70 max-w-prose mt-1" id="rag-lexical-bm25-b-help" data-rag-i18n="RAG_LEXICAL_BM25_B.help">Length normalisation, from 0 (none) to 1 (full). Used only with <code class="font-mono text-xs" translate="no">bm25</code>.</p>
                                                 </div>
@@ -7925,6 +7929,7 @@
                                         <div id="injection-defense-summary" class="rounded-box bg-base-100 p-4 mt-4" aria-live="polite">
                                             <p class="text-sm text-base-content/70">Loading detector configuration…</p>
                                         </div>
+                                        <div id="injection-defense-events-pointer" class="mt-2 min-w-0"></div>
                                     </div>
                                 </div>
 
@@ -10468,6 +10473,18 @@
                                     </section>
                                     <!-- rag-upload-approvals:end -->
 
+                                    <!-- rag-security-events:start -->
+                                    <section id="rag-administration-security-events" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-security-events-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-security-events-title" class="text-lg font-semibold mb-2 text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-security-events-title>Security events</h3>
+                                            <p class="text-sm text-base-content/70 max-w-prose mb-4" data-security-events-description>What the upload checks, the retrieval check and the answer guard detected, and whose uploads were involved. Ids and counts only.</p>
+                                            <div data-security-events-alert class="flex flex-col gap-2 mb-4 empty:mb-0"></div>
+                                            <div data-security-events-content class="min-w-0"></div>
+                                            <div data-security-events-status class="text-sm mt-4" role="status" aria-live="polite" tabindex="-1"></div>
+                                        </div>
+                                    </section>
+                                    <!-- rag-security-events:end -->
+
                                     <!-- rag-scope-tags:start -->
                                     <section id="rag-administration-scopes" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-scope-tags-title">
                                         <div class="card-body">
@@ -10610,6 +10627,17 @@
                                             <div data-review-admin-alert class="mb-4 empty:mb-0"></div>
                                             <div data-review-admin-content></div>
                                             <div data-review-admin-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-question-sources" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-question-sources-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-question-sources-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-question-sources-title>Question sources</h3>
+                                            <p class="text-sm text-base-content/70 mb-1 max-w-prose" data-question-sources-description>Where review-queue questions come from besides failed answers: a weekly sample of real questions, pilot users, and imported past questions. For the selected workspace.</p>
+                                            <p class="text-xs text-base-content/70 mb-4 break-words" data-question-sources-workspace></p>
+                                            <div data-question-sources-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-question-sources-content></div>
+                                            <div data-question-sources-status class="text-sm mt-4" role="status" aria-live="polite"></div>
                                         </div>
                                     </section>
                                 </div>
@@ -11392,6 +11420,24 @@
                 }
             }
 
+            updateLexicalScoringControls() {
+                const scoring = document.getElementById('RAG_LEXICAL_SCORING');
+                if (!scoring) return;
+                const lexical = document.getElementById('RAG_LEXICAL_SEARCH');
+                const bm25 = scoring.value === 'bm25';
+                for (const id of ['RAG_LEXICAL_BM25_K1', 'RAG_LEXICAL_BM25_B']) {
+                    const field = document.getElementById(id);
+                    if (!field) continue;
+                    field.disabled = !bm25;
+                    if (bm25) field.removeAttribute('aria-disabled');
+                    else field.setAttribute('aria-disabled', 'true');
+                }
+                const note = document.getElementById('rag-lexical-scoring-needs-lexical');
+                if (!note) return;
+                note.hidden = !(bm25 && lexical && !lexical.checked);
+                scoring.setAttribute('aria-describedby', note.hidden ? 'rag-lexical-scoring-help' : 'rag-lexical-scoring-help rag-lexical-scoring-needs-lexical');
+            }
+
             populateFields() {
                 (this.secretsSet || new Set()).forEach((name) => {
                     const secretField = document.getElementById(name);
@@ -11439,6 +11485,8 @@
                 if (typeof updateModelCards === 'function') {
                     updateModelCards();
                 }
+
+                this.updateLexicalScoringControls();
 
                 // Initialize RAG slider values from config
                 const chunkSizeSlider = document.getElementById('LLAMACLOUD_CHUNK_SIZE');
@@ -11898,6 +11946,11 @@
                 // Initialize immediately and with a delay
                 initSaveButtons();
                 setTimeout(initSaveButtons, 500);
+
+                for (const id of ['RAG_LEXICAL_SCORING', 'RAG_LEXICAL_SEARCH']) {
+                    const field = document.getElementById(id);
+                    if (field) field.addEventListener('change', () => this.updateLexicalScoringControls());
+                }
 
                 // MCP System toggle dependency - when MCP System is toggled, also toggle MCP Tools List
                 const mcpSystemToggle = document.getElementById('NEXT_PUBLIC_MCP_SYSTEM_ENABLED');

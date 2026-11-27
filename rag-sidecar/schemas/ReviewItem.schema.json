@@ -289,7 +289,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "D-14 queue row as the review routes return it; the snapshot survives the log purge.",
+  "description": "D-14 queue row as the review routes return it; the snapshot survives the log purge.\n\nAn item raised by a check (Phase 5.2 D-55, output_guard or version_conflict) comes from no question: it has no channel and may have no\ntrace id. Phase 5.3 (0967) enqueues sampled, pilot and imported items, which may have no trace or channel; `source` is their\nrag_review_item_strata source (null for mined items).",
   "properties": {
     "answer_language": {
       "anyOf": [
@@ -326,13 +326,21 @@
       "type": "array"
     },
     "channel": {
-      "enum": [
-        "chat",
-        "embed",
-        "voice"
+      "anyOf": [
+        {
+          "enum": [
+            "chat",
+            "embed",
+            "voice"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
       ],
-      "title": "Channel",
-      "type": "string"
+      "default": null,
+      "title": "Channel"
     },
     "chunk_languages": {
       "items": {
@@ -478,16 +486,30 @@
     },
     "reasons": {
       "items": {
-        "enum": [
-          "feedback_negative",
-          "refusal_disputed",
-          "groundedness_flagged",
-          "refused_high_score",
-          "zero_results",
-          "low_score",
-          "no_source_opened"
-        ],
-        "type": "string"
+        "anyOf": [
+          {
+            "enum": [
+              "feedback_negative",
+              "refusal_disputed",
+              "groundedness_flagged",
+              "refused_high_score",
+              "zero_results",
+              "low_score",
+              "no_source_opened",
+              "representative",
+              "re_review"
+            ],
+            "type": "string"
+          },
+          {
+            "enum": [
+              "claim_unsupported",
+              "output_guard",
+              "version_conflict"
+            ],
+            "type": "string"
+          }
+        ]
       },
       "title": "Reasons",
       "type": "array",
@@ -518,6 +540,24 @@
       ],
       "default": null,
       "title": "Retrieval Log Id"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "enum": [
+            "representative",
+            "pilot",
+            "drift_fill",
+            "historical"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source"
     },
     "split": {
       "anyOf": [
@@ -573,10 +613,18 @@
       "type": "string"
     },
     "trace_id": {
-      "maxLength": 128,
-      "minLength": 1,
-      "title": "Trace Id",
-      "type": "string"
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trace Id"
     },
     "triage": {
       "items": {
@@ -597,8 +645,6 @@
   "required": [
     "id",
     "tenant_key",
-    "trace_id",
-    "channel",
     "outcome",
     "status",
     "mined_at"

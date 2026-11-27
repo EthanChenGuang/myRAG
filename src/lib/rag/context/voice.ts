@@ -90,3 +90,11 @@ export function voiceContext(results: readonly VoiceResult[], flaggedChunkIds?: 
   });
   return wrapDocuments(docs);
 }
+
+/**
+ * The context string the voice agent builds itself when the response carries none (voice-agent/src/rag_client.ts). Phase 5.2
+ * D-07 sends it with the voice block appended when tagging is off, so the agent reads the same context and needs no change.
+ */
+export function untaggedVoiceContext(results: ReadonlyArray<Pick<VoiceResult, 'document_id' | 'content'>>): string {
+  return results.map((result) => `[Context from document ${result.document_id}]: ${result.content}`).join('\n\n');
+}

@@ -14,6 +14,7 @@ const PANELS = [
   { file: 'upload-approvals.js', rootId: 'rag-administration-approvals', instance: 'uploadApprovalsPanel', deps: ['rag-ui.js'] },
   { file: 'scope-tags.js', rootId: 'rag-administration-scopes', instance: 'scopeTagsPanel', deps: ['rag-ui.js'] },
   { file: 'quarantine.js', rootId: 'rag-administration-quarantine', instance: 'quarantinePanel', deps: ['rag-ui.js'] },
+  { file: 'security-events.js', rootId: 'rag-administration-security-events', instance: 'securityEventsPanel', deps: ['rag-ui.js'] },
   { file: 'versions-dates.js', rootId: 'rag-administration-versions', instance: 'versionsDatesPanel', deps: ['rag-ui.js'] },
   { file: 'translation-targets.js', rootId: 'rag-administration-translation', instance: 'translationTargetsPanel', deps: ['rag-ui.js'] },
   { file: 'identifier-patterns.js', rootId: 'rag-administration-identifiers', instance: 'identifierPatternsPanel', deps: ['rag-ui.js'] },
@@ -21,6 +22,7 @@ const PANELS = [
   { file: 'doc-types.js', rootId: 'rag-administration-doc-types', instance: 'docTypesPanel' },
   { file: 'embedding-profiles.js', rootId: 'rag-administration-profiles', instance: 'embeddingProfilesPanel' },
   { file: 'embedding-bindings.js', rootId: 'rag-administration-bindings', instance: 'embeddingBindingsPanel' },
+  { file: 'question-sources.js', rootId: 'rag-administration-question-sources', instance: 'questionSourcesPanel', deps: ['../utils/safe-dom.js', 'gates-ui.js'] },
 ] as const;
 
 function addLink(doc: FakeDocument, label: string): FakeElement {
@@ -83,8 +85,11 @@ describe.each(PANELS)('$file starts from every RAG administration link', (panel)
     addLink(doc, 'mobile');
     doc.body.appendChild(root);
     doc.dispatch('DOMContentLoaded');
+    const once = desktop.listeners.get('click')?.length ?? 0;
     doc.dispatch('DOMContentLoaded');
-    expect(desktop.listeners.get('click')?.length ?? 0).toBeLessThanOrEqual(1);
+    const binders = 1 + deps.filter((dep) => dep === 'gates-ui.js').length;
+    expect(desktop.listeners.get('click')?.length ?? 0).toBe(once);
+    expect(once).toBeLessThanOrEqual(binders);
   });
 });
 

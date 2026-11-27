@@ -6,6 +6,7 @@
 
 const UPLOAD_APPROVALS_LABELS = {
   en: {
+    'pending.uploaderHold': 'Held because uploads from this uploader are on hold.',
     'panel.title': 'Upload approvals',
     'panel.description':
       'Uploads that wait for an admin before they can be searched. A waiting upload is fully processed and held out of answers. Follows the workspace chosen under Document Processing.',
@@ -79,6 +80,7 @@ const UPLOAD_APPROVALS_LABELS = {
       'Upload approval needs the unified ingest pipeline. With the legacy pipeline, knowledge-base uploads are refused while approval is on.',
   },
   zh: {
+    'pending.uploaderHold': '因该上传者的上传已被暂缓而等待。',
     'panel.title': '上传审批',
     'panel.description': '需要管理员批准后才能被检索的上传。等待中的上传已处理完毕，但不会进入回答。跟随“文档处理”中选择的工作区。',
     'panel.workspaceDefault': '默认工作区',
@@ -155,6 +157,7 @@ const UPLOAD_APPROVALS_LABELS = {
     'RAG_UPLOAD_APPROVAL.opt.all': '所有上传',
   },
   it: {
+    'pending.uploaderHold': 'Sospeso perché i caricamenti di questo autore sono in sospensione.',
     'panel.title': 'Approvazione dei caricamenti',
     'panel.description':
       'Caricamenti che attendono un amministratore prima di poter essere cercati. Un caricamento in attesa è già elaborato ma escluso dalle risposte. Segue lo spazio di lavoro scelto in Document Processing.',
@@ -300,6 +303,7 @@ function uploadApprovalsPendingRow(item, locale) {
     docTypeLabel: uploadApprovalsDocTypeLabel(docType, locale),
     uploadedAt: uploadApprovalsText(item.uploaded_at),
     newVersion: item.new_version === true,
+    heldByUploaderHold: item.held_by_uploader_hold === true,
   };
 }
 
@@ -725,6 +729,9 @@ class UploadApprovalsPanel {
     uploadApprovalsReadableBadge(holdLine);
     const fileCell = this.el('th', { className: 'block md:table-cell align-top font-normal min-w-0 lg:min-w-48', attrs: { scope: 'row' } }, [
       this.el('span', { className: 'block text-sm font-semibold [overflow-wrap:anywhere]', text: row.file }),
+      row.heldByUploaderHold
+        ? this.el('p', { className: 'text-xs text-base-content/70 mt-1 min-w-0 break-words', text: this.t('pending.uploaderHold'), attrs: { 'data-upload-approvals-uploader-hold': '' } })
+        : null,
       this.el('div', { className: 'mt-1' }, [holdLine]),
       this.el('div', { className: 'md:hidden mt-1 flex flex-col gap-1 text-xs text-base-content/70' }, [
         this.userEl(row.uploader),

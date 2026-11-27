@@ -13,6 +13,7 @@ import { selectWithinBudget, type BudgetOptions, type RenderEstimate } from '../
 import { compressChunks, type CompressibleChunk } from '../../context/compress';
 import { edgeOrder } from '../../context/edge-order';
 import { fetchVersionColumns, type AssemblyRows } from '../../context/fetch-rows';
+import { fetchVersionPairs, versionConflictAttributes } from '../../context/version-conflicts';
 import { readAnswerConfig } from '../../generation/answer-config';
 import { mergeAdjacent, type AdjacentChunk } from '../../context/merge-adjacent';
 import { getRagDeps } from '../../deps';
@@ -330,6 +331,8 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
         const row = rows.documents.get(documentId);
         if (row) rows.documents.set(documentId, { ...row, ...values });
       }
+      // D-52: the supersession rows between these documents, in one batched read under the request's tenant key.
+      rows.versionPairs = await fetchVersionPairs(admin, [...rows.documents.keys()], { tenantKey: scopeKey(input.scope), signal });
     }
   }
   const hitById = new Map(topHits.map((row) => [row.hit.chunkId, row.hit]));
@@ -362,6 +365,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     ...(security.contextTagging ? { contextTagging: true } : {}),
     ...(injectionMarks ? { injectionMarks } : {}),
     ...(versionLabels ? { versionLabels } : {}),
+    ...(rows.versionPairs ? { versionPairs: rows.versionPairs } : {}),
   });
 
   const render = (list: Candidate[], groupOrder: string[], blocks?: BlockShape): AssembleOutput<Candidate> => {
@@ -607,6 +611,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     {
       candidatesIn: candidates.length,
       candidatesOut: (value) => value.output.usedDocuments.length,
+      attributes: (value) => versionConflictAttributes(value.output.versionConflict),
       counts: (value) => ({
         selected: value.selected.length,
         budget_tokens: value.budgetTokens,
