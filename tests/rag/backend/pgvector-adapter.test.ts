@@ -71,6 +71,7 @@ function baseRequest(over: Partial<BackendSearchRequest> = {}): BackendSearchReq
     denseVector: [0.1, 0.2, 0.3],
     lexicalTokens: ['term'],
     lexicalLanguages: null,
+    access: { mode: 'off' },
     filters: { currentOnly: true },
     denseLimit: 5,
     lexicalLimit: 5,
@@ -143,6 +144,7 @@ describe('createPgvectorBackend', () => {
           docTypes: ['general'],
         },
         lexicalLanguages: ['zh'],
+        access: { mode: 'off' },
         chunkingProfileOverride: { general: 'legacy' },
       }),
     );
@@ -270,5 +272,62 @@ describe('retrieval backend registry', () => {
     expect(getRetrievalBackend()).toBe(custom);
     resetRetrievalBackendForTests();
     expect(getRetrievalBackend().id).toBe('pgvector');
+  });
+});
+describe('access filter arguments (04.3-03, D-05, A-14)', () => {
+  const GROUP = 'g:00000000-0000-4000-8000-0000000000f1';
+  const withKeys = async (keys: string[]) => {
+    const { mintAccessScope, scopeAccessFilter } = await import('@/lib/rag/tenant/access');
+    const { withAccess } = await import('@/lib/rag/tenant/scope');
+    const scope = withAccess(mintScope('personal', USER_A, null), mintAccessScope('keys', keys));
+    return { scope, access: scopeAccessFilter(scope) };
+  };
+
+  it('an off filter sends exactly the argument object of an unfiltered request; a keys filter adds exactly the two access arguments', async () => {
+    const off = recordingClient();
+    await createPgvectorBackend({ adminClient: () => off.client, getConfig: () => config() }).search(baseRequest());
+    const keyed = recordingClient();
+    const { scope, access } = await withKeys(['all', GROUP]);
+    await createPgvectorBackend({ adminClient: () => keyed.client, getConfig: () => config() }).search(baseRequest({ scope, access }));
+    const offArgs = off.calls[0]!.args;
+    expect('p_access_keys' in offArgs).toBe(false);
+    expect('p_access_all' in offArgs).toBe(false);
+    const { p_access_keys, p_access_all, ...rest } = keyed.calls[0]!.args;
+    expect(rest).toEqual(offArgs);
+    expect(p_access_keys).toEqual(['all', GROUP]);
+    expect(p_access_all).toBe(false);
+    expect(Object.keys(keyed.calls[0]!.args).slice(-2)).toEqual(['p_access_keys', 'p_access_all']);
+  });
+
+  it('admin_all sends p_access_all true', async () => {
+    const { mintAccessScope, scopeAccessFilter } = await import('@/lib/rag/tenant/access');
+    const { withAccess } = await import('@/lib/rag/tenant/scope');
+    const scope = withAccess(mintScope('personal', USER_A, null), mintAccessScope('admin_all', []));
+    const { client, calls } = recordingClient();
+    await createPgvectorBackend({ adminClient: () => client, getConfig: () => config() }).search(
+      baseRequest({ scope, access: scopeAccessFilter(scope) }),
+    );
+    expect(calls[0]?.args.p_access_all).toBe(true);
+    expect(calls[0]?.args.p_access_keys).toEqual(['all']);
+  });
+
+  it('refuses a request whose access differs from its scope filter, before any RPC', async () => {
+    const { scope } = await withKeys(['all', GROUP]);
+    for (const access of [
+      { mode: 'off' as const },
+      { mode: 'admin_all' as const },
+      { mode: 'keys' as const, keys: ['all'], setHash: 'forged' },
+    ]) {
+      const { client, calls } = recordingClient();
+      await expect(
+        createPgvectorBackend({ adminClient: () => client, getConfig: () => config() }).search(baseRequest({ scope, access })),
+      ).rejects.toThrow(RetrievalBackendError);
+      expect(calls).toHaveLength(0);
+    }
+    const plain = recordingClient();
+    await expect(
+      createPgvectorBackend({ adminClient: () => plain.client, getConfig: () => config() }).search(baseRequest({ access: { mode: 'admin_all' } })),
+    ).rejects.toThrow(RetrievalBackendError);
+    expect(plain.calls).toHaveLength(0);
   });
 });
