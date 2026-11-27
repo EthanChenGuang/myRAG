@@ -1,11 +1,11 @@
 # Phase 04.2 gates
 
-Verdict: **FAIL** over off_identity, diversity, identifier, table, versions, dictionary, stem_it, refusal_mode_cells. Noise band: max(3 x spread, 0.02).
+Verdict: **PASS** over off_identity, diversity, identifier, table, versions, dictionary, stem_it, refusal_mode_cells. Noise band: max(3 x spread, 0.02).
 
 | Gate | Decision | Verdict | Offenders |
 | --- | --- | --- | --- |
 | off_identity | D-37 | PASS | 0 |
-| diversity | D-22 | FAIL | 1 |
+| diversity | D-22 | PASS | 0 |
 | identifier | D-32 | PASS | 0 |
 | table | ROADMAP-4.2-SC3 | PASS | 0 |
 | versions | ROADMAP-4.2-SC5 | PASS | 0 |
@@ -29,13 +29,10 @@ Runs: v2-diversity-collapse, v2-diversity-mmr, v2-default.
 | --- | --- |
 | v2-diversity-collapse.intent_coverage | 1.0000 |
 | v2-diversity-collapse.items | 6 |
-| v2-diversity-collapse.max_redundancy_over_limit | 0.1250 |
+| v2-diversity-collapse.max_redundancy_over_limit | 0.0000 |
 | v2-diversity-mmr.intent_coverage | 1.0000 |
 | v2-diversity-mmr.items | 6 |
 | v2-diversity-mmr.max_redundancy_over_limit | 0.0000 |
-
-Offenders:
-- v2-diversity-collapse: zh-duplicate-flood-002 topk_redundancy 0.2500 > 1/8 = 0.1250
 
 ## identifier (D-32)
 

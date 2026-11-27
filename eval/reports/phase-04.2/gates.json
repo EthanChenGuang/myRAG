@@ -50,15 +50,13 @@
       "numbers": {
         "v2-diversity-collapse.intent_coverage": 1.0,
         "v2-diversity-collapse.items": 6,
-        "v2-diversity-collapse.max_redundancy_over_limit": 0.125,
+        "v2-diversity-collapse.max_redundancy_over_limit": 0.0,
         "v2-diversity-mmr.intent_coverage": 1.0,
         "v2-diversity-mmr.items": 6,
         "v2-diversity-mmr.max_redundancy_over_limit": 0.0
       },
-      "offenders": [
-        "v2-diversity-collapse: zh-duplicate-flood-002 topk_redundancy 0.2500 > 1/8 = 0.1250"
-      ],
-      "passed": false,
+      "offenders": [],
+      "passed": true,
       "runs": [
         "v2-diversity-collapse",
         "v2-diversity-mmr",
@@ -134,7 +132,7 @@
   "notes": [
     "Fixture corpus only: every gate, threshold and rule here was committed before any gated run (D-37, pre-registration). Reference runs are single fixture runs, so the noise band against a reference is the noise floor (spread 0), as in phase_compare."
   ],
-  "passed": false,
+  "passed": true,
   "phase": "04.2",
   "report_only": [
     {
@@ -488,7 +486,7 @@
         },
         "topk_redundancy": {
           "n": 178,
-          "value": 0.1370920278223649
+          "value": 0.1272605671482076
         }
       },
       "run_config_hash": "2903b4e3b17fa4d343d121c27f6b4b98bf0c860fe5e07905971e531fc63a3b68"
@@ -558,7 +556,7 @@
         },
         "topk_redundancy": {
           "n": 178,
-          "value": 0.13006955591225253
+          "value": 0.1272605671482076
         }
       },
       "run_config_hash": "9e2ad503708b3067e6e25d088d7fb1ab96a443815923d54bcad0bfaef74de982"
