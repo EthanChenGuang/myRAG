@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { traceLanguagesOf, type TraceCollector } from '@/lib/rag/trace/collector';
+import type { RetrievalResult } from '@/lib/rag/types';
 import type { AnswerNotice, AnswerSentence, OutputGuardSummary, RagTrace } from './contracts.generated';
 
 export const ENDPOINT_VERSION = 'rag-eval/1';
@@ -196,4 +198,23 @@ export function retrievalBackendTrace(stages: readonly StageAttributesLike[]): T
     fallback_reason: typeof reason === 'string' && TRACE_FALLBACKS.has(reason) ? (reason as TraceBackend['fallback_reason']) : null,
     tenant_validation_dropped: typeof dropped === 'number' && Number.isInteger(dropped) && dropped >= 0 ? dropped : 0,
   };
+}
+
+export interface EvalTraceLanguagesInput {
+  collector: Pick<TraceCollector, 'setLanguages' | 'languages'>;
+  result: RetrievalResult;
+  query: string;
+  /** The answer's language code (the chat route's rule: the detected answer, the registry refusal or the cached answer), or null. */
+  answerLanguage: string | null;
+}
+
+/**
+ * LANG-10 on the eval trace: the collector's languages block, from the FBK-01 derivation. The eval writes no retrieval log, so the
+ * answer language is put on the request's own holder first; finishTrace then reads the same block.
+ */
+export function evalTraceLanguages(input: EvalTraceLanguagesInput): Pick<RagTrace, 'languages'> {
+  if (input.result.logOutcome) input.result.logOutcome.answerLanguage = input.answerLanguage;
+  input.collector.setLanguages(traceLanguagesOf(input.result, input.query));
+  const block = input.collector.languages();
+  return block ? { languages: block } : {};
 }
