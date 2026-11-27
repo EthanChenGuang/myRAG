@@ -47,6 +47,7 @@ let store: FakeObjectStore;
 let pictures: FakePublicImageStore;
 let invalidate: ReturnType<typeof vi.fn>;
 let cacheOn: boolean;
+let onPurge: (() => void) | null = null;
 
 function rpcClient() {
   return {
@@ -58,6 +59,7 @@ function rpcClient() {
           data = [{ tenant_key: TENANT, lineage_id: lineage, is_connector: false }];
           break;
         case 'rag_purge_lineage':
+          onPurge?.();
           data = [
             {
               audit_id: AUDIT,
@@ -147,6 +149,7 @@ describe('purge objects after commit (D-15, D-37)', () => {
   });
 
   afterEach(() => {
+    onPurge = null;
     purge.resetPurgeDepsForTests();
     resetObjectStoreForTests();
     resetPublicImageStoreForTests();
@@ -284,6 +287,15 @@ describe('purge objects after commit (D-15, D-37)', () => {
     const scrubs = world.rpc.filter((call) => call.fn === 'rag_purge_scrub_chats');
     expect(scrubs).toHaveLength(1);
     expect(scrubs[0]?.args).toMatchObject({ p_tenant_key: TENANT, p_lineage_id: lineage, p_document_ids: [V1, V2] });
+  });
+
+  it('still removes the objects and stores the check when the request is aborted while the purge commits', async () => {
+    const request = new AbortController();
+    onPurge = () => request.abort();
+    const result = await purge.purgeDocumentAsAdmin({ documentId: DOC, actorUserId: ADMIN, reasonCode: 'owner_request', reasonNote: null, signal: request.signal });
+    expect(result.ok && result.check.result).toBe('verified');
+    expect(store.keys().filter((key) => key.startsWith(`${TENANT}/${lineage}/`))).toEqual([]);
+    expect(world.finishes).toHaveLength(1);
   });
 
   it('checks a connector tombstone with the tenant of the minted scope', async () => {
