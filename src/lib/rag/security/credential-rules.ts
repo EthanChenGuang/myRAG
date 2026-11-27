@@ -119,3 +119,18 @@ export function matchCredentialSentence(
   }
   return ids;
 }
+
+/** The normalised request and secret terms of the rules `ids` that occur in `sentence`; for source attribution only. */
+export function matchedCredentialTerms(
+  sentence: string,
+  ids: readonly string[],
+  rules: readonly CompiledCredentialRule[] = compileCredentialRules(),
+): string[] {
+  const text = normalise(sentence, '');
+  const terms = new Set<string>();
+  for (const rule of rules) {
+    if (!ids.includes(rule.id)) continue;
+    for (const term of [...rule.request, ...rule.secret]) if (containsTerm(text, term)) terms.add(term);
+  }
+  return [...terms];
+}

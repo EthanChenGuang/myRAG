@@ -12,7 +12,7 @@ export { buildHistoryWindow } from './query/history';
 export type { HistoryWindowLimits } from './query/history';
 export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
-export { currentLexicalVersion } from './deps';
+export { currentAttributeFilterMode, currentLexicalVersion } from './deps';
 export { createTraceCollector } from './trace/collector';
 export type { TraceCollector, StageEntry } from './trace/collector';
 export { isTraceId } from './trace/collector';
@@ -168,6 +168,7 @@ export type { ResolveVoiceScopeInput, VoiceScopeResult } from './tenant/voice';
 export { assembleContext } from './context/assemble';
 export type { AssembleInput, AssembleOutput, AssemblyCandidate, AssemblyDocumentRow } from './context/assemble';
 export { fetchAssemblyRows } from './context/fetch-rows';
+export { detectMixedVersions, versionConflictTrace, type VersionConflict } from './context/version-conflicts';
 export type { AssemblyRows } from './context/fetch-rows';
 export type {
   CitationLabel,
@@ -182,6 +183,7 @@ export type {
   UsedDocument,
 } from './types';
 export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
+export { untaggedVoiceContext } from './context/voice';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
 export {
@@ -204,7 +206,29 @@ export {
   noKnowledgeBaseResponseLanguage,
 } from './generation/messages';
 export { readAnswerConfig, type AnswerConfig } from './generation/answer-config';
-export { createAnswerTurn, type AnswerChannel, type AnswerTurn, type TextsSource } from './generation/answer-turn';
+export {
+  answerReserveTokens,
+  decideOutputCap,
+  effectiveMaxOutputTokens,
+  outputCapFloor,
+  resolveOutputCap,
+  type OutputCapDecision,
+} from './generation/output-cap';
+export { CLAUDE_MAX_OUTPUT_TOKENS } from './generation/citations/claude';
+export {
+  answerFinishFields,
+  answerTraceFields,
+  createAnswerTurn,
+  parseBodyChannel,
+  type AnswerChannel,
+  type AnswerTurn,
+  type OutputGuardTurnSources,
+  type TextsSource,
+} from './generation/answer-turn';
+export { guardChannelReply, guardSummaryText, guardVoiceTranscript } from './security/channel-reply-guard';
+export { formatGuardedLinks, linkUsageInstructions } from './security/link-section';
+export type { ChannelReplyGuardInput, ChannelReplyGuardResult, SummaryGuardInput, VoiceTranscriptMessage } from './security/channel-reply-guard';
+export { recordOutputGuardEvents } from './security/security-events';
 export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource } from './lang/answer-language';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';
@@ -477,11 +501,27 @@ export type {
   IdentifierTestMatch,
   IdentifierTestResult,
 } from './identifiers/patterns';
+export { contentIdentifierNorms } from './retrieval/identifiers';
 export { removeDocumentObjects } from './ingest/remove-document-objects';
 export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';
 export { escapeTags, REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE } from './context/wrap';
 export { readSecurityConfig } from './security/config';
+export {
+  acknowledgeSecurityAlert,
+  checkItemDetails,
+  checkReasonOf,
+  holdUploader,
+  linkPreviewStatus,
+  listSecurityAlerts,
+  listSecurityEvents,
+  listSecurityUploaders,
+  readSecuritySettings,
+  releaseUploaderHold,
+  resolveAdminTenants,
+  SECURITY_EVENT_SOURCES,
+} from './security/security-admin';
+export type { ReviewSnapshotReader, SecurityActor, SecurityAdminDb, SecurityFailure } from './security/security-admin';
 export { injectionTraceVersions } from './security/injection-check';
 export type { ToolResultGuardMode } from './security/config';
 export { escapeToolOutput, scanToolOutput, wrapToolResultsForPrompt } from './security/tool-results';
@@ -515,11 +555,14 @@ export { isMiningWindowError, miningDisabledReason, MiningError, parseMiningDate
 export { computeFeedbackLoopStats, isStatsWindowError, MAX_STATS_WINDOW_DAYS, StatsError } from './feedback-loop/stats';
 export {
   getReviewItem,
+  getReviewItemWithSource,
+  attachReviewSources,
   getReviewItemChunks,
   grantDomainExpert,
   isReviewItemId,
   listDomainExperts,
   listReviewItems,
+  listReviewItemsWithSource,
   REVIEW_PAGE_SIZE,
   ReviewListQuerySchema,
   revokeDomainExpert,
@@ -640,3 +683,52 @@ export {
   writeCheck,
 } from './config-gate/gate-core';
 export type { BuildChangeRecordInput, ChangeRecordClient, ChangeRecordRow, DecideSaveOptions, RagGateInput, SaveDecision } from './config-gate/gate-core';
+export { monitorSettings } from './monitor/config';
+export type { MonitorSettings } from './monitor/config';
+export { runDaily } from './monitor/daily';
+export type { RunDailyOptions, RunDailyResult } from './monitor/daily';
+export { deliverAlerts, deliverStoredAlerts, signWebhookBody, WEBHOOK_SIGNATURE_HEADER, WEBHOOK_TIMESTAMP_HEADER } from './monitor/deliver';
+export type { DeliveryReport, StoredDeliverySummary } from './monitor/deliver';
+export { setAlertStatus } from './monitor/alerts-store';
+export { alertForAdmin, alertFromRow, listAlerts, MAX_ALERTS_PAGE, monitorSummary } from './monitor/alerts-read';
+export type { AlertStatusFilter, ListAlertsResult, MonitorSummary } from './monitor/alerts-read';
+export {
+  addPilotUser,
+  decodePilotCursor,
+  listPilotUsers,
+  maskEmail,
+  pilotSamplingParams,
+  PilotUsersError,
+  removePilotUser,
+  PILOT_PAGE_SIZE,
+} from './monitor/pilot-users';
+export type { AddPilotUserResult, PilotUserEntry, PilotUserPage, PilotSamplingParams } from './monitor/pilot-users';
+export { loadMonitorAlertsConfig } from './monitor/alerts-config';
+export { driftLimits, isoWeekMonday, latestDrift, storeDriftReport } from './monitor/drift-store';
+export type { DriftView, StoreDriftReportResult } from './monitor/drift-store';
+export { driftInputs, DRIFT_WINDOW_DAYS } from './monitor/drift-inputs';
+export type { DriftInputs, DriftInputSlice, DriftInputCluster } from './monitor/drift-inputs';
+export { assignTestItems, MAX_ASSIGN_ITEMS, MAX_ASSIGN_QUESTION_CHARS } from './monitor/clusters';
+export type { AssignTestItemsResult, TestItemQuestion } from './monitor/clusters';
+export { allocateStrata, drawWeeklySample, loadSampleConfig, missingSamplePrerequisites, planWeeklySample, sampleStatus, sampleTenants, sampleWindow } from './monitor/sample';
+export type { DrawWeeklySampleResult, SamplePrerequisite, SampleStatus, WeeklySampleConfig } from './monitor/sample';
+export {
+  checkEvidence,
+  clearEvidence,
+  enqueueReReview,
+  MAX_DOCUMENT_NAME_CHARS,
+  MAX_EVIDENCE_SPANS,
+  MAX_QUOTE_CHARS,
+  MAX_RE_REVIEW_ITEMS,
+  MAX_REGISTER_ROWS,
+  normalizeQuote,
+  pendingEvidence,
+  quoteSha256,
+  registerEvidence,
+  weekStart,
+} from './monitor/golden-evidence';
+export type { EvidenceCheckResult, EvidenceRow, EvidenceSpanInput, EvidenceSpanResult, EvidenceStatus } from './monitor/golden-evidence';
+export { IMPORT_LIMITS, importQuestions, parseQuestionFile, prepareQuestions, QuestionsImportError } from './monitor/questions-import';
+export type { ImportCounts, PreparedQuestions, QuestionFileFormat } from './monitor/questions-import';
+export { guardAppEnvWrite, RAG_GATE_INVALID_REASON_MESSAGE, RAG_GATE_REQUIRED_MESSAGE } from './config-gate/guard';
+export type { AppGuardRoute, GuardAppEnvWriteInput, GuardAppEnvWriteResult } from './config-gate/guard';

@@ -114,6 +114,7 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
         config,
         staleDictionary: parsed.staleDictionary === true,
         attributeHeader,
+        onProgress: (line) => io.out(`[RAG Relex] ${line}`),
         ...(signal ? { signal } : {}),
       });
       io.out('[RAG Relex] dry run, nothing written');

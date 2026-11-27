@@ -174,6 +174,9 @@ def run_harness(
     ]
     if base_url:
         argv.extend(["--base-url", base_url])
+    else:
+        # 05.3-15: run-smoke answers in-process runs by default; sweeps and calibrations score retrieval only.
+        argv.append("--no-answers")
     if fixture_mode:
         argv.extend(["--fixture-mode", fixture_mode])
 

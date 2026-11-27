@@ -7,6 +7,7 @@ import { ingestModeGoldenPaths, mergeGoldenFiles, parseIngestRoutingFlags } from
 import { dropTableSplitItems } from './table-split.mts';
 import { runEval, type EvalRequestOptions } from './run-eval.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, loadRunConfig, RunConfigError } from './run-config.mts';
+import { loadEnvOverlay, OverlayError, writeOverlayReport, type EnvOverlay } from './env-overlay.mts';
 import type { DeploymentMode, FixtureMode } from './pglite-supabase.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -21,6 +22,7 @@ const DEFAULT_GOLDEN_MANIFESTS: Record<FixtureMode, string> = {
   ingest: 'eval/fixtures/ingest/golden-ingest.manifest.json',
 };
 const NOISE_PATH = path.join(REPO_ROOT, 'eval/config/noise.json');
+const DEFAULT_GATES_PATH = 'eval/config/quality-gates.json';
 const SEC_LOG_SWITCHES = ['RAG_CONTEXT_TAGGING', 'RAG_INJECTION_CHECK', 'RAG_INJECTION_PROMPT_GUARD', 'RAG_INJECTION_LAKERA', 'RAG_TOOL_RESULT_GUARD'] as const;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -62,21 +64,22 @@ async function main(): Promise<number> {
       gates: { type: 'string' },
       'gates-mode': { type: 'string' },
       'golden-manifest': { type: 'string' },
+      answers: { type: 'boolean', default: false },
+      'no-answers': { type: 'boolean', default: false },
+      'env-overlay': { type: 'string' },
     },
     strict: true,
   });
 
-  // D-06, O-1: --gates adds the absolute gate to the noise-band gate; --gates-mode report prints it without changing the exit code.
-  const gatesFile = values.gates?.trim();
-  if (gatesFile !== undefined && gatesFile === '') {
+  // D-06, O-1: a gated run always adds the absolute gates (default eval/config/quality-gates.json, --gates names another file) to the
+  // noise-band gate; only --no-gate leaves them out. --gates-mode report prints them without changing the exit code.
+  const gatesFlag = values.gates?.trim();
+  if (gatesFlag !== undefined && gatesFlag === '') {
     console.error('[Eval Harness] --gates must not be empty');
     return 2;
   }
+  const gatesFile = gatesFlag !== undefined ? path.resolve(gatesFlag) : path.join(REPO_ROOT, DEFAULT_GATES_PATH);
   const gatesMode = values['gates-mode'];
-  if (gatesMode !== undefined && gatesFile === undefined) {
-    console.error('[Eval Harness] --gates-mode needs --gates');
-    return 2;
-  }
   if (gatesMode !== undefined && gatesMode !== 'enforce' && gatesMode !== 'report') {
     console.error('[Eval Harness] --gates-mode must be enforce or report');
     return 2;
@@ -85,6 +88,38 @@ async function main(): Promise<number> {
   if (goldenManifestFlag !== undefined && goldenManifestFlag === '') {
     console.error('[Eval Harness] --golden-manifest must not be empty');
     return 2;
+  }
+
+  // D-13: --answers answers every item with the instruction-sensitive fake generator; --env-overlay runs proposed settings.
+  const envOverlayFlag = values['env-overlay']?.trim();
+  if (envOverlayFlag !== undefined && envOverlayFlag === '') {
+    console.error('[Eval Harness] --env-overlay must not be empty');
+    return 2;
+  }
+  if (envOverlayFlag !== undefined && values['base-url']) {
+    console.error('[Eval Harness] --env-overlay applies to in-process runs only; omit --base-url');
+    return 2;
+  }
+  if (values.answers && values['no-answers']) {
+    console.error('[Eval Harness] --answers and --no-answers exclude each other');
+    return 2;
+  }
+  if (values.answers && values['base-url']) {
+    console.error('[Eval Harness] --answers answers with the fake generator; omit --base-url');
+    return 2;
+  }
+  // O-1, D-54: in-process runs answer by default so false answers are scored at answer level; --no-answers is retrieval-only.
+  const answers = !values['no-answers'] && (values.answers || !values['base-url']);
+  let envOverlay: EnvOverlay | undefined;
+  if (envOverlayFlag !== undefined) {
+    try {
+      envOverlay = loadEnvOverlay(path.resolve(envOverlayFlag));
+    } catch (error) {
+      if (!(error instanceof OverlayError)) throw error;
+      console.error(error.message);
+      if (error.names.length > 0) console.error(`[Eval Harness] not allowed in --env-overlay: ${error.names.join(', ')}`);
+      return 2;
+    }
   }
 
   const deploymentMode = values['deployment-mode'];
@@ -183,6 +218,12 @@ async function main(): Promise<number> {
   const baselinePath = path.resolve(values.baseline ?? DEFAULT_BASELINES[fixtureMode]);
 
   const outDir = path.resolve(values.out as string);
+  if (envOverlay) {
+    const reportPath = writeOverlayReport(outDir, envOverlay);
+    const skipped = envOverlay.notEvaluated.map((entry) => `${entry.name} (${entry.reason})`);
+    console.log(`[Eval Harness] env overlay: ${envOverlay.evaluated.length} applied, ${skipped.length} not evaluated; ${reportPath}`);
+    if (skipped.length > 0) console.log(`[Eval Harness] not evaluated by the fixture layer: ${skipped.join(', ')}`);
+  }
   if (ingestRouting) ingestRouting.ledgerOut = path.join(outDir, 'ingest-ledger.json');
   // Ingest mode scores the golden files it names itself unless --golden says otherwise, so its ingest-only items need no change here.
   const defaultGolden = fixtureMode === 'ingest' ? ingestModeGoldenPaths() : [DEFAULT_GOLDEN];
@@ -229,6 +270,8 @@ async function main(): Promise<number> {
     // D-37: the golden cache pairs instead of the item run; cache-pairs.json feeds python -m rag_eval.calibrate cache.
     ...(values['cache-pairs'] ? { cachePairs: true } : {}),
     ...(values['allow-live-cache'] ? { allowLiveCache: true } : {}),
+    ...(answers ? { answers: true } : {}),
+    ...(envOverlay && Object.keys(envOverlay.env).length > 0 ? { envOverlay: envOverlay.env } : {}),
   });
 
   if (result.cachePairsPath) {
@@ -265,7 +308,8 @@ async function main(): Promise<number> {
     '--out',
     outDir,
     ...(goldenManifest !== undefined ? ['--manifest', goldenManifest] : []),
-    ...(gatesFile !== undefined ? ['--gates', path.resolve(gatesFile)] : []),
+    '--gates',
+    gatesFile,
     ...(gatesMode !== undefined ? ['--gates-mode', gatesMode] : []),
   ]);
   console.log(`[Eval Harness] gate: ${path.join(outDir, 'gate.md')}`);

@@ -5,6 +5,8 @@ import type { UploadApprovalMode } from '../config';
 import { currentIngestConfig } from '../current-config';
 import { getIngestDeps } from '../deps';
 import { afterPublish } from '../post-publish';
+import { activeUploaderHolds } from '../../security/uploader-hold';
+import { currentUploaderHoldMode } from './decide';
 
 /**
  * Admin service for held uploads (SEC-09, D-36, D-37, D-50). Every call names the actor the route guard verified and the workspace tenant
@@ -48,6 +50,8 @@ export interface PendingUpload {
   uploader: UserDisplay | null;
   uploadedAt: string;
   newVersion: boolean;
+  /** D-46 (Phase 5.2): the uploader has an active hold in this tenant; present only while RAG_UPLOADER_HOLD is on. */
+  heldByUploaderHold?: boolean;
 }
 
 export interface UploadExemption {
@@ -254,6 +258,11 @@ export async function listPendingUploads(input: ApprovalScopeInput & { limit?: n
     const item = pendingOf(row, names);
     if (item === null) return { ok: false, reason: 'unavailable' };
     items.push(item);
+  }
+  // D-46, UI-SPEC 6.14: one batched hold lookup for the page, with the workspace's tenant key; a failed lookup shows nobody held.
+  if (currentUploaderHoldMode() !== 'off') {
+    const held = await activeUploaderHolds(input.tenantKey, items.map((item) => item.uploader?.id ?? null), { client: getIngestDeps().db(), signal: input.signal });
+    for (const item of items) item.heldByUploaderHold = item.uploader !== null && held.has(item.uploader.id.toLowerCase());
   }
   return { ok: true, mode: currentIngestConfig().uploadApproval, items, total, limit, offset };
 }

@@ -21,11 +21,11 @@ env:
 jobs:
   ts-vitest:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        shard: ['1/2', '2/2']
+        shard: ['1/3', '2/3', '3/3']
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -56,7 +56,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: ['1/6', '2/6', '3/6', '4/6', '5/6', '6/6']
+        shard: ['1/10', '2/10', '3/10', '4/10', '5/10', '6/10', '7/10', '8/10', '9/10', '10/10']
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -83,7 +83,7 @@ jobs:
 
   ts-tsx:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -268,6 +268,10 @@ jobs:
         run: uv run --directory rag-sidecar --locked --extra chunking --extra preflight --extra hidden-text pytest -q
       - name: eval pytest
         run: uv run --directory eval pytest -q
+      - name: Golden-set manifests match the fixture golden files (an unversioned golden change fails)
+        run: |
+          uv run --directory eval python -m rag_eval.golden_set verify --golden eval/fixtures/golden.jsonl --manifest eval/fixtures/golden.manifest.json
+          uv run --directory eval python -m rag_eval.golden_set verify --golden eval/fixtures/golden.jsonl --golden eval/fixtures/ingest/golden-ingest.jsonl --manifest eval/fixtures/ingest/golden-ingest.manifest.json
 
   eval-smoke:
     runs-on: ubuntu-latest
@@ -290,19 +294,19 @@ jobs:
       - name: Fill the tiktoken encoding cache (tests never download it)
         run: python3 scripts/ci/fill-tiktoken-cache.py
       - name: Smoke tier against the committed baseline
-        run: npm run test-rag -- --out eval/out/smoke
+        run: npm run test-rag -- --out eval/out/smoke --gates-mode report
       - name: Ingest-mode smoke tier against the ingest baseline
         run: npm run test-rag -- --fixture-mode ingest --out eval/out/smoke-ingest
       - name: Legacy smoke tier, explicit RAG_PIPELINE=legacy, paired differences all zero
         run: |
-          npm run test-rag -- --run-config eval/config/runs/legacy.json --baseline eval/baselines/fixture-baseline.json --out eval/out/smoke-legacy
+          npm run test-rag -- --run-config eval/config/runs/legacy.json --baseline eval/baselines/fixture-baseline.json --out eval/out/smoke-legacy --gates-mode report
           jq -e '.paired.all_zero == true' eval/out/smoke-legacy/gate.json
       - name: Legacy ingest-mode smoke tier, explicit RAG_PIPELINE=legacy, paired differences all zero
         run: |
           npm run test-rag -- --run-config eval/config/runs/legacy.json --fixture-mode ingest --baseline eval/baselines/fixture-ingest-baseline.json --out eval/out/smoke-legacy-ingest
           jq -e '.paired.all_zero == true' eval/out/smoke-legacy-ingest/gate.json
       - name: Injection absolute-zero gate under the recommended SEC configuration
-        run: npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec
+        run: npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec --gates-mode report
       - name: Framework comparison on fixtures, LlamaIndex against LangChain with paired differences
         run: uv run --directory eval python -m rag_eval.compare frameworks --fixtures --out eval/out/frameworks
       - name: Semantic cache near-miss gate on a fresh pair run (any wrong hit fails)
@@ -346,7 +350,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          npm run test-rag -- --degrade drop_top_candidate --out eval/out/negative-degrade
+          npm run test-rag -- --degrade drop_top_candidate --out eval/out/negative-degrade --gates-mode report
           code=$?
           set -e
           echo "degrade run exit code: $code"
@@ -357,12 +361,22 @@ jobs:
         shell: bash
         run: |
           set +e
-          npm run test-rag -- --max-results 1 --out eval/out/negative
+          npm run test-rag -- --max-results 1 --out eval/out/negative --gates-mode report
           code=$?
           set -e
           echo "degraded run exit code: $code"
           test "$code" -eq 10
           jq -e '.passed == false and (.offenders | length > 0) and (.mismatches | length == 0)' eval/out/negative/gate.json
+      - name: Prompt control, a prompt without the refusal directive must fail the absolute gate with exit code 11
+        shell: bash
+        run: |
+          set +e
+          npm run test-rag -- --env-overlay eval/fixtures/controls/no-refusal-directive.overlay.json --out eval/out/negative-prompt
+          code=$?
+          set -e
+          echo "prompt control exit code: $code"
+          test "$code" -eq 11
+          jq -e '[.absolute.checks[] | select(.check == "false_answer_rate" and .slice == "overall" and .result == "failed")] | length == 1' eval/out/negative-prompt/gate.json
       - name: Upload negative-control output
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -371,6 +385,7 @@ jobs:
           path: |
             eval/out/negative
             eval/out/negative-degrade
+            eval/out/negative-prompt
           if-no-files-found: warn
 
   docker-build:

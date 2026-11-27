@@ -1006,7 +1006,11 @@ PHASE42_CORPUS_FILES_04_2_37 = {
 P52_CORPUS_FILES_05_2_28 = {
     f"{language}/{name}.{language}.md"
     for language in ("en", "it", "zh")
-    for name in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links")
+    for name in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links", "sec-link-topics")
+}
+# Plan 05.3-15 added these later; they are removed too before the pre-terms hash is compared.
+PHASE53_CORPUS_FILES = {
+    f"{language}/{name}.{language}.md" for language in ("en", "it", "zh") for name in ("access-rules", "instrument-catalog")
 }
 
 
@@ -1024,7 +1028,7 @@ def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_p
         (root / "baselines" / "history" / "fixture-ingest-baseline.pre-04.1.1-10.json").read_text(encoding="utf-8")
     )
     # The 04.1.1-10 record, kept in history when plan 04.2-37 added the Phase 4.2 items;
-    # test_the_04_2_37_baselines_add_only_phase42_items_and_move_no_old_item compares it with the committed baselines.
+    # test_the_04_2_37_baselines_add_only_phase42_items_and_move_no_old_item compares it with train 30's baselines.
     current = Baseline.model_validate_json(
         (root / "baselines" / "history" / "fixture-ingest-baseline.pre-04.2-37.json").read_text(encoding="utf-8")
     )
@@ -1036,9 +1040,9 @@ def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_p
         assert (corpus / relpath).is_file(), relpath
     without_terms = tmp_path / "corpus"
     shutil.copytree(corpus, without_terms)
-    # Without the term files, the Phase 4.2 files (04.2-37) and the 05.2-28 Phase 5.2 documents (train 30) the corpus is the one
-    # 04.1.1-10 started from.
-    for relpath in TERM_CORPUS_FILES | PHASE42_CORPUS_FILES | P52_CORPUS_FILES_05_2_28:
+    # Without the term files, the Phase 4.2 files (04.2-37), the 05.2-28 Phase 5.2 documents (train 30) and the 05.3-15
+    # documents (train 31) the corpus is the one 04.1.1-10 started from.
+    for relpath in TERM_CORPUS_FILES | PHASE42_CORPUS_FILES | P52_CORPUS_FILES_05_2_28 | PHASE53_CORPUS_FILES:
         (without_terms / relpath).unlink()
     assert corpus_sha256(without_terms) == PRE_TERMS_CORPUS_SHA256
     assert current.corpus_sha256 != previous.corpus_sha256 and current.golden_sha256 != previous.golden_sha256
@@ -1097,7 +1101,10 @@ def test_the_04_2_37_baselines_add_only_phase42_items_and_move_no_old_item(tmp_p
 
     root = Path(__file__).resolve().parents[1]
     previous = Baseline.model_validate_json((root / "baselines" / "history" / f"{name}.pre-04.2-37.json").read_text(encoding="utf-8"))
-    current = Baseline.model_validate_json((root / "baselines" / f"{name}.json").read_text(encoding="utf-8"))
+    # The train-30 record, kept in history when train 31 re-recorded both baselines with 05.3-15's answers-on smoke harness.
+    current = Baseline.model_validate_json(
+        (root / "baselines" / "history" / f"{name}.pre-05.3-15.json").read_text(encoding="utf-8")
+    )
     assert len(current.runs) >= 3
     assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
 
@@ -1111,6 +1118,9 @@ def test_the_04_2_37_baselines_add_only_phase42_items_and_move_no_old_item(tmp_p
         (without_phase42 / relpath).unlink()
     # Train 30 re-recorded both baselines with the concurrent 05.2-28 Phase 5.2 documents too, which add no golden item.
     for relpath in P52_CORPUS_FILES_05_2_28:
+        (without_phase42 / relpath).unlink()
+    # The 05.3-15 documents joined the corpus after the train-30 record.
+    for relpath in PHASE53_CORPUS_FILES:
         (without_phase42 / relpath).unlink()
     assert corpus_sha256(without_phase42) == PRE_PHASE42_CORPUS_SHA256
     assert current.corpus_sha256 != previous.corpus_sha256 and current.golden_sha256 != previous.golden_sha256
@@ -1141,6 +1151,45 @@ def test_the_04_2_37_baselines_add_only_phase42_items_and_move_no_old_item(tmp_p
             continue
         assert current.slices[slice_name] == stats, slice_name
     assert all(stat.spread == 0.0 for stats in current.slices.values() for stat in stats.values())
+
+@pytest.mark.parametrize("name", ["fixture-baseline", "fixture-ingest-baseline"])
+def test_the_train_31_baselines_add_only_phase53_items_and_move_only_refusal_rates(name):
+    """Train 31: both baselines re-recorded on top of train 30 with the 05.3-15 items and its answers-on smoke harness.
+    The added items are exactly the phase53_fixture items; an earlier item keeps its retrieval metrics, and only its
+    refusal rates may move (answers-on scoring reads refusals from the answer, 05.3-15). Train 33 re-recorded them once more
+    with the 48 Phase 5.2 items of plan 05.2-29, which are the only other additions."""
+    from pathlib import Path
+
+    from rag_sidecar.contracts.baseline import Baseline
+
+    root = Path(__file__).resolve().parents[1]
+    previous = Baseline.model_validate_json((root / "baselines" / "history" / f"{name}.pre-05.3-15.json").read_text(encoding="utf-8"))
+    current = Baseline.model_validate_json((root / "baselines" / f"{name}.json").read_text(encoding="utf-8"))
+    assert len(current.runs) >= 3
+    assert previous.items is not None and current.items is not None
+    golden = {
+        item.id: item
+        for item in (
+            GoldenItem.model_validate_json(line)
+            for line in (root / "fixtures" / "golden.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
+    }
+    phase53 = {item_id for item_id, item in golden.items() if "phase53_fixture" in item.tags}
+    phase52 = {
+        item_id
+        for item_id, item in golden.items()
+        if item.category in ("partial_answer", "stale_version", "off_topic_context") or "link_injection" in item.tags
+    }
+    assert len(phase53) == 25 and len(phase52) == 48
+    assert set(current.items) - set(previous.items) == phase53 | phase52
+    assert set(previous.items) <= set(current.items)
+    for item_id, metrics in previous.items.items():
+        for metric, values in metrics.items():
+            if current.items[item_id][metric] == values:
+                continue
+            assert metric in ("correct_refusal_rate", "false_refusal_rate"), (item_id, metric)
+
 
 def _answer_trace(item_id: str, *, refused: bool = False, answer: str | None = None) -> RagTrace:
     trace = _trace(item_id, [], refused=refused)

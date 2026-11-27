@@ -20,7 +20,7 @@ import { evalFinalTopK, evalResultCap, runContextStages } from './stages/context
 import { runQueryStages } from './stages/query';
 import { runRankStages } from './stages/rank';
 import { embedForRetrieval, embedVariantTexts, runSearchStages, type QueryLexicalOptions, type SearchIdentifiers } from './stages/search';
-import { resolveLexicalOptions } from '../lexical/resolve-options';
+import { lexicalOptionsOn, resolveLexicalOptions } from '../lexical/resolve-options';
 import {
   bindingHashFields,
   planBindingLegs,
@@ -35,7 +35,7 @@ import { queryLanguage as detectQueryLanguage } from '../query/language';
 import { effectiveQueryLayerConfig, queryLayerOverrides } from '../query/layer-config';
 import { effectiveQueryParams } from '../query/query-params';
 import { queryLayerHashComponent } from '../query/hash-part';
-import type { RetrievalConfigHashQueryLayer, TerminologyHashStage } from './config-hash';
+import { ATTRIBUTE_STATE_SKIPPED, type AttributeFilterHashStage, type RetrievalConfigHashQueryLayer, type TerminologyHashStage } from './config-hash';
 import { hasTranslationWork, planTranslationLegs, translationHashFields, type TranslationLegsPlan } from './translation-legs';
 import type { SemanticCacheSeam } from '../query/run-layer';
 import { variantDenseTexts } from '../query/variants';
@@ -109,12 +109,15 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let cacheTicket: RetrievalResult['cacheTicket'];
   // D-21: set by the terminology stage before semantic_cache builds its key; enabled but not reached reads as unavailable.
   let terminologyStage: TerminologyHashStage = spec('terminology', 'skip').enabled ? { enabled: true, version: null } : { enabled: false };
+  // D-30: set by the attribute stage before semantic_cache builds its key; enabled but not reached reads as skipped.
+  let attributeStage: AttributeFilterHashStage =
+    config.v2.attributeFilter !== 'off' && spec('attribute_resolve', 'skip').enabled ? { enabled: true, state: ATTRIBUTE_STATE_SKIPPED } : { enabled: false };
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
   // LANG-07 (D-08, D-09): the tenant's query-side lexical options, resolved once per request from the verified scope only while a
   // switch is on; the search stage and both config hashes (result and semantic-cache key) read the same resolution.
-  const lexicalSwitchOn = config.v2.lexicalDictionary || config.v2.lexicalStemIt || config.v2.identifierIndex;
+  const lexicalSwitchOn = lexicalOptionsOn(config);
   let lexicalPending: Promise<QueryLexicalOptions> | null = null;
   const resolveQueryLexical = (): Promise<QueryLexicalOptions> =>
     (lexicalPending ??= resolveLexicalOptions(scope, config, { language: detectQueryLanguage(input.query), signal }).then(
@@ -181,6 +184,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         ...(config.effectiveDates ? { effectiveOn: effectiveOnFor(config, deps.now()) } : {}),
         terminology: terminologyStage,
         ...(await lexicalStampFor()),
+        attributeFilter: attributeStage,
       }),
   };
 
@@ -196,6 +200,9 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       cache: cacheSeam,
       onTerminology: (stage) => {
         terminologyStage = stage;
+      },
+      onAttributeFilter: (stage) => {
+        attributeStage = stage;
       },
     });
     queryContext = query.queryContext;
@@ -290,6 +297,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         : {}),
       ...(query.terminology ? { terminologyDenseWeight: query.terminology.denseWeight } : {}),
       ...(queryLexical ? { lexical: queryLexical } : {}),
+      ...(query.attributes ? { attributes: query.attributes } : {}),
     });
 
     // D-31, D-51: strict with no asked identifier in the tenant answers nothing; rank and context are not run for it.
@@ -317,7 +325,15 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
             : evalFinalTopK(profile, input, params.final_top_k),
         embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
         ...(searchIdentifiers && searchIdentifiers.asked.length > 0
-          ? { identifiers: { askedNorms: searchIdentifiers.asked, patterns: searchIdentifiers.patterns } }
+          ? {
+              identifiers: {
+                askedNorms: [...new Set([...searchIdentifiers.asked, ...searchIdentifiers.found])],
+                patterns: searchIdentifiers.patterns,
+                ...(searchIdentifiers.filtered
+                  ? { filteredBy: { norms: searchIdentifiers.found, spellings: searchIdentifiers.foundSpellings } }
+                  : {}),
+              },
+            }
           : {}),
         ...(query.queryLayer
           ? {
@@ -477,6 +493,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     ...(identifierState ? { identifiers: identifierState } : {}),
     ...(identifierRefusal ? { identifierRefusal } : {}),
     ...(queryLexical ? { lexicalStamp: queryLexical.stamp } : {}),
+    attributeFilter: attributeStage,
   });
 }
 

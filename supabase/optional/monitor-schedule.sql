@@ -1,0 +1,30 @@
+-- Optional: a daily pg_cron schedule for the Phase 5.3 monitor aggregation (D-20, O-2). OPT-IN, NOT A MIGRATION.
+--
+-- No setup script, migration runner or test applies this file. Every statement below is commented out; an operator who wants the
+-- database to aggregate the retrieval log on its own copies the statement into the Supabase SQL editor after reading it.
+-- Install it only while RAG_MONITOR=true (D-21): with the switch off the schedule is not installed.
+--
+-- Aggregation only. pg_cron runs SQL, so rule evaluation, alert upserts and delivery (banner, webhook, Langfuse) still need
+-- `npm run rag:monitor` or POST /api/rag/admin/monitor/run (admin); both aggregate as well, so the schedule is never required.
+--
+-- Requirements:
+--   * the pg_cron extension (Supabase: Database > Extensions > pg_cron); jobs run as the role that schedules them (postgres);
+--   * migrations 0962 and 0971 applied (rag_monitor_daily, rag_monitor_aggregate) on top of 0531 to 0533 (rag_retrieval_log).
+--
+-- This file holds no secret: pg_cron calls the service-role function inside the database, so no key, URL or token is needed.
+-- Days are UTC. rag_monitor_aggregate(p_day) is idempotent per day, so re-aggregating the last 7 days picks up late feedback.
+
+-- 1. Daily at 01:23 UTC: re-aggregate each of the last 7 UTC days.
+--
+-- SELECT cron.schedule(
+--   'myrag-monitor-aggregate',
+--   '23 1 * * *',
+--   $job$
+--   SELECT public.rag_monitor_aggregate(((now() AT TIME ZONE 'UTC')::date - d)::date)
+--     FROM generate_series(1, 7) AS d;
+--   $job$
+-- );
+
+-- To remove the schedule:
+--
+-- SELECT cron.unschedule('myrag-monitor-aggregate');

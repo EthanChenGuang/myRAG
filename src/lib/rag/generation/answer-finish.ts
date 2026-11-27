@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AnswerGroundednessValue, InsertAnswerRecordInput, ReviewReason } from '@/lib/answers/store';
-import type { CitationRecord } from '@/lib/rag-eval/contracts.generated';
+import { AnswerChecksSchema, type AnswerChecks, type CitationRecord } from '@/lib/rag-eval/contracts.generated';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { detectLanguage } from '../lang/detect';
 import { isTenantScope, type TenantScope } from '../tenant/scope';
@@ -14,9 +14,12 @@ import { exportReviewCandidate, type ReviewCandidateInput, type ReviewExportOpti
 import { isSampled } from '../trace/sample';
 import { postLangfuseScores, type LangfuseScoreInput, type PostScoresOptions, type PostScoresResult } from '../trace/scores';
 import type { StageRunStatus } from '../types';
+import type { AnswerChecksInput } from './answer-checks';
+import type { TextsSource } from './answer-turn';
 import { readGenerationConfig, type GenerationConfig } from './config';
 import { answerGroundednessLanguage, scoreAnswerGroundedness, type AnswerGroundedness } from './groundedness';
 import { requestGroundedness } from './groundedness-client';
+import { createClaimStep, type ClaimStepOptions, type ClaimStepOutcome } from './claims';
 
 export type AnswerSwitches = Pick<GenerationConfig, 'citations' | 'claudeCitations' | 'groundedness' | 'feedback'>;
 
@@ -50,6 +53,15 @@ export interface AnswerFinishInput {
   requestLanguage: string;
   /** A semantic-cache hit: the cached groundedness is inserted unchanged and no scoring runs (06-36, plan-check W6). */
   groundedness?: AnswerGroundedness;
+  /** Phase 5.2 (set only when a 5.2 switch is on): the stream-end checks; plan 05.2-24 stores them. */
+  checks?: AnswerChecksInput;
+  /** D-22: the text part the sentence records point into (kept in memory, never stored). */
+  checksText?: string;
+  /** D-09 / D-89: the answer language of the turn. */
+  answerLanguage?: string | null;
+  textsSource?: TextsSource;
+  /** D-16: a sentinel refusal; treated like the server-side refusal (not scored). */
+  refusedByModel?: boolean;
 }
 
 export interface AnswerPendingContext {
@@ -285,6 +297,28 @@ export function createGroundednessStep(
   };
 }
 
+export interface PendingStepParts {
+  groundedness: (context: AnswerPendingContext) => Promise<AnswerGroundedness | null>;
+  claims: (context: AnswerPendingContext, options?: ClaimStepOptions) => Promise<ClaimStepOutcome | null>;
+  /** RAG_GROUNDEDNESS_TIMEOUT_MS: one deadline for the answer-level score and the claim check (D-22). */
+  timeoutMs: () => number;
+}
+
+/** The onPending continuation: the answer-level score, then the claim check on the rest of the same deadline. Never throws. */
+export function createPendingStep(parts: PendingStepParts): (context: AnswerPendingContext) => Promise<AnswerGroundedness | null> {
+  return async (context) => {
+    const deadlineAt = Date.now() + parts.timeoutMs();
+    const groundedness = await parts.groundedness(context);
+    let outcome: ClaimStepOutcome | null = null;
+    try {
+      outcome = await parts.claims(context, { deadlineAt });
+    } catch (error) {
+      console.warn('[Answer Record] Claim step failed:', { answerId: context.answerId, code: errorCode(error) });
+    }
+    return outcome?.groundedness ?? groundedness;
+  };
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SCHEDULED_LIMIT = 2048;
 const scheduled = new Set<string>();
@@ -294,7 +328,11 @@ const defaultDeps: AnswerFinishDeps = {
   insert: async (admin, input) => (await import('@/lib/answers/store')).insertAnswerRecord(admin, input),
   schedule: scheduleAfterResponse,
   readConfig: () => readGenerationConfig(),
-  onPending: createGroundednessStep(),
+  onPending: createPendingStep({
+    groundedness: createGroundednessStep(),
+    claims: createClaimStep(),
+    timeoutMs: () => readGenerationConfig().groundednessTimeoutMs,
+  }),
 };
 
 /** Ghost chats, anonymous callers, callers without the citations capability and requests with every Phase 5 switch off persist nothing. */
@@ -367,12 +405,23 @@ async function ownedChatId(admin: SupabaseClient, input: AnswerFinishInput): Pro
   }
 }
 
+/** D-23, D-89: the stream-end checks with the language detected from the answer text; null when they fail the contract (not written). */
+function recordChecks(input: AnswerFinishInput, textLanguage: string | null): AnswerChecks | null {
+  if (!input.checks) return null;
+  const parsed = AnswerChecksSchema.safeParse({ ...input.checks, text_language: textLanguage });
+  if (parsed.success) return parsed.data;
+  console.warn('[Answer Record] Checks failed the contract; not written:', { answerId: input.answerId, issues: parsed.error.issues.length });
+  return null;
+}
+
 async function finishAnswer(input: AnswerFinishInput, deps: AnswerFinishDeps): Promise<AnswerGroundedness | null> {
   if (!isTenantScope(input.scope)) throw new Error('unminted tenant scope');
   const admin = deps.admin();
   if (!admin) throw new Error('admin client unavailable');
   const groundedness = input.groundedness ?? initialGroundedness(input, deps.readConfig().groundedness);
   const chatId = await ownedChatId(admin, input);
+  const textLanguage = detectLanguage(input.answerText);
+  const checks = recordChecks(input, textLanguage);
   const { inserted } = await deps.insert(admin, {
     id: input.answerId,
     scope: input.scope,
@@ -382,10 +431,12 @@ async function finishAnswer(input: AnswerFinishInput, deps: AnswerFinishDeps): P
     modelId: input.modelId,
     citationStrategy: input.citationStrategy,
     ragMode: input.ragMode,
-    answerLanguage: detectLanguage(input.answerText),
+    answerLanguage: typeof input.answerLanguage === 'string' && input.answerLanguage.length > 0 ? input.answerLanguage : textLanguage,
     invalidCitations: input.invalidCitations,
     citations: input.citations,
     groundedness,
+    ...(checks ? { checks } : {}),
+    ...(input.textsSource !== undefined ? { textsSource: input.textsSource } : {}),
   });
   if (!inserted) return null;
   if (groundedness.status !== 'pending') return groundedness;
@@ -428,3 +479,4 @@ export function scheduleAnswerFinish(input: AnswerFinishInput, deps: Partial<Ans
   }
   return handle;
 }
+

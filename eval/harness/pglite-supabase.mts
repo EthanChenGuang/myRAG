@@ -10,6 +10,7 @@ import { detectLanguage } from '@/lib/rag/lang/detect';
 import { LEXICAL_VERSION, chunkLexicalText } from '@/lib/rag/lexical/chunk-text';
 import { normalizeLexical } from '@/lib/rag/lexical/tokenize';
 import { runRelex } from '@/lib/rag/ingest/relex/run';
+import { contentHash } from '@/lib/rag/ingest/hash';
 import { fixtureLineageUuid, loadCorpus, type CorpusDocument } from './corpus.mts';
 import type { FakeEdge } from './fake-edge.mts';
 import { applyMigrations } from './migrations.mts';
@@ -254,6 +255,8 @@ export async function prechunkedWriter(
         ['source', 'config_upload'],
         ['source_key', `fixture-lineage:${doc.lineage.id}`],
         ['is_current', doc.lineage.version === latest],
+        // A published version always carries the content_hash_dedup hash; D-40 compares it with the successor's, and NULL on both reads as equal.
+        ['content_hash', contentHash(doc.content)],
       ];
     }
     const versionColumns: InsertColumn[] = [

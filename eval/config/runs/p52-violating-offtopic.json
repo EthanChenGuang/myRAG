@@ -1,0 +1,12 @@
+{
+  "name": "p52-violating-offtopic",
+  "env": {
+    "RAG_CITATIONS": "true",
+    "RAG_CITATION_PER_SENTENCE": "true",
+    "RAG_CONTEXT_RELEVANCE_RULE": "true",
+    "RAG_PARTIAL_ANSWER_RULE": "true",
+    "RAG_VERSION_LABELS": "true"
+  },
+  "overrides": null,
+  "generator_model": "fake/violating-offtopic-v1"
+}

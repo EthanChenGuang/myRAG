@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   buildContext,
   attachTableRow,
@@ -11,7 +12,9 @@ import {
 import { selectWithinBudget, type BudgetOptions, type RenderEstimate } from '../../context/budget';
 import { compressChunks, type CompressibleChunk } from '../../context/compress';
 import { edgeOrder } from '../../context/edge-order';
-import type { AssemblyRows } from '../../context/fetch-rows';
+import { fetchVersionColumns, type AssemblyRows } from '../../context/fetch-rows';
+import { fetchVersionPairs, versionConflictAttributes } from '../../context/version-conflicts';
+import { readAnswerConfig } from '../../generation/answer-config';
 import { mergeAdjacent, type AdjacentChunk } from '../../context/merge-adjacent';
 import { getRagDeps } from '../../deps';
 import { countTokens } from '../../ingest/text/tokens';
@@ -26,7 +29,7 @@ import { resolveFinalResultCount, type RagConfig, type StageName } from '../../c
 import { env } from '@/lib/env';
 import { documentNamesFromRows, downweightOrder, injectionDropped, runInjectionStage, runStage, stageSpec, type StageSpec } from '../../pipeline';
 import type { SecurityConfig } from '../../security/config';
-import { injectionItems, releasedRulesFromRows, type InjectionMarks } from '../../security/injection-check';
+import { injectionItems, releasedRulesFromRows, uploadersFromRows, type InjectionMarks } from '../../security/injection-check';
 import type { TraceCollector } from '../../trace/collector';
 import { topkRedundancy } from '../diversify';
 import type {
@@ -110,6 +113,19 @@ async function fetchDocumentVersions(scope: TenantScope, documentIds: string[], 
     });
   }
   return out;
+}
+
+/** D-13, D-40: a kept chunk's version under a non-current scope, from the search row first, else the document lookup. */
+function keptVersionFields(
+  hit: { isCurrent?: boolean; documentVersion?: number } | undefined,
+  info: VersionLabelInfo | undefined,
+): { isCurrent?: boolean; documentVersion?: number } {
+  const isCurrent = hit?.isCurrent ?? info?.isCurrent;
+  const documentVersion = hit?.documentVersion ?? info?.version;
+  return {
+    ...(isCurrent !== undefined ? { isCurrent } : {}),
+    ...(documentVersion !== undefined ? { documentVersion } : {}),
+  };
 }
 
 /** D-21: the assemble stage detail when the cluster source lookup failed; alsoIn then lists the dropped candidates only. */
@@ -306,6 +322,19 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     });
   }
   const rows = assemblyRowsFromHits(topHits);
+  // D-49: the hits carry no version label or dates; one batched read adds them, only while RAG_VERSION_LABELS is on.
+  if (readAnswerConfig().versionLabels && input.scope && rows.documents.size > 0) {
+    const admin = getRagDeps().adminClient() as SupabaseClient | null;
+    if (admin) {
+      const columns = await fetchVersionColumns(admin, [...rows.documents.keys()], { tenantKey: scopeKey(input.scope), signal });
+      for (const [documentId, values] of columns) {
+        const row = rows.documents.get(documentId);
+        if (row) rows.documents.set(documentId, { ...row, ...values });
+      }
+      // D-52: the supersession rows between these documents, in one batched read under the request's tenant key.
+      rows.versionPairs = await fetchVersionPairs(admin, [...rows.documents.keys()], { tenantKey: scopeKey(input.scope), signal });
+    }
+  }
   const hitById = new Map(topHits.map((row) => [row.hit.chunkId, row.hit]));
   const rankById = new Map(candidates.map((candidate, index) => [candidate.chunk_id, index + 1]));
   const keptBy: KeptBy = rerank?.ran ? 'rerank' : 'fused';
@@ -336,6 +365,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     ...(security.contextTagging ? { contextTagging: true } : {}),
     ...(injectionMarks ? { injectionMarks } : {}),
     ...(versionLabels ? { versionLabels } : {}),
+    ...(rows.versionPairs ? { versionPairs: rows.versionPairs } : {}),
   });
 
   const render = (list: Candidate[], groupOrder: string[], blocks?: BlockShape): AssembleOutput<Candidate> => {
@@ -432,6 +462,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
       // Released rule ids come only from the document rows this request's scoped search returned (D-10).
       released: releasedRulesFromRows(rows.documents),
       documentNames: documentNamesFromRows(rows.documents),
+      uploaders: uploadersFromRows(rows.documents),
     });
     injectionStalled = run.stalled;
     if (run.applied) {
@@ -471,7 +502,8 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
   }
 
   // D-13: only a non-current scope looks versions up; a current request makes no call and renders today's context.
-  if (ctx.versionScope !== undefined && ctx.versionScope !== 'current') {
+  const historyScope = ctx.versionScope !== undefined && ctx.versionScope !== 'current';
+  if (historyScope) {
     const documentIds = [...new Set(candidates.map((candidate) => candidate.document_id))].sort();
     try {
       if (!input.scope) throw new Error('[RAG Context] version labels need a tenant scope');
@@ -560,6 +592,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
           rank: rankById.get(row.chunk_id) ?? row.rank,
           ...(dupClusterId ? { dupClusterId } : {}),
           ...(alsoIn && alsoIn.length > 0 ? { alsoIn } : {}),
+          ...(historyScope ? keptVersionFields(hitById.get(row.chunk_id), versionInfo?.get(row.document_id)) : {}),
         };
       });
       return {
@@ -578,6 +611,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     {
       candidatesIn: candidates.length,
       candidatesOut: (value) => value.output.usedDocuments.length,
+      attributes: (value) => versionConflictAttributes(value.output.versionConflict),
       counts: (value) => ({
         selected: value.selected.length,
         budget_tokens: value.budgetTokens,

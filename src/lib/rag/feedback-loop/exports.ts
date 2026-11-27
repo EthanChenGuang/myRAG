@@ -281,10 +281,42 @@ const GoldenEvidenceSchema = z
   })
   .strict();
 
+export const REVIEW_SOURCES = ['representative', 'pilot', 'drift_fill', 'historical'] as const;
+const ReviewSourceSchema = z.enum(REVIEW_SOURCES);
+export type ReviewSource = (typeof REVIEW_SOURCES)[number];
+
+const MISSING_RELATION_CODES = new Set(['42P01', 'PGRST205']);
+
+/**
+ * Research X-9: rag_review_item_strata.source per exported item, read on the service-role client for exactly these ids and this
+ * tenant (filtered in SQL and again in code). An item without a strata row, or a database without 0967, has no source (null).
+ */
+async function readItemSources(admin: Client, tenantKey: string, ids: string[]): Promise<Map<string, ReviewSource>> {
+  const sources = new Map<string, ReviewSource>();
+  if (ids.length === 0) return sources;
+  const { data, error } = await admin
+    .from('rag_review_item_strata')
+    .select('review_item_id,tenant_key,source')
+    .eq('tenant_key', tenantKey)
+    .in('review_item_id', ids);
+  if (error) {
+    if (MISSING_RELATION_CODES.has(String((error as { code?: unknown }).code ?? ''))) return sources;
+    throw new Error('review_strata_read_failed');
+  }
+  const wanted = new Set(ids.map((id) => id.toLowerCase()));
+  for (const row of (data ?? []) as Row[]) {
+    const id = typeof row.review_item_id === 'string' ? row.review_item_id.toLowerCase() : '';
+    const parsed = ReviewSourceSchema.safeParse(row.source);
+    if (row.tenant_key === tenantKey && wanted.has(id) && parsed.success) sources.set(id, parsed.data);
+  }
+  return sources;
+}
+
 /**
  * One golden export line: the review item fields the promotion needs (never user, chat, trace or log ids, the expert's id or the
  * candidate snapshot), the ExpertLabel, and per evidence span the current chunk text under the item's tenant (null when the chunk is
- * no longer current, ready and non-quarantined in that tenant) with quote_verified.
+ * no longer current, ready and non-quarantined in that tenant) with quote_verified, and the item's source from
+ * rag_review_item_strata (null when it has none). Channel and reasons keep the shape of the Python twin (_GoldenExportLine).
  */
 export const GoldenExportLineSchema = ReviewItemSchema.pick({
   id: true,
@@ -301,7 +333,25 @@ export const GoldenExportLineSchema = ReviewItemSchema.pick({
   mining_window: true,
   mined_at: true,
 })
-  .extend({ label: ExpertLabelSchema, evidence: z.array(GoldenEvidenceSchema).max(20) })
+  .extend({
+    channel: z.enum(['chat', 'embed', 'voice']),
+    reasons: z.array(
+      z.enum([
+        'feedback_negative',
+        'refusal_disputed',
+        'groundedness_flagged',
+        'refused_high_score',
+        'zero_results',
+        'low_score',
+        'no_source_opened',
+        'representative',
+        're_review',
+      ]),
+    ),
+    label: ExpertLabelSchema,
+    evidence: z.array(GoldenEvidenceSchema).max(20),
+    source: ReviewSourceSchema.nullable(),
+  })
   .strict();
 export type GoldenExportLine = z.infer<typeof GoldenExportLineSchema>;
 
@@ -321,6 +371,7 @@ export async function exportGolden(admin: Client, tenantKey: string): Promise<Go
       tenantKey,
       page.flatMap((item) => (item.label.evidence ?? []).map((span) => span.chunk_id)),
     );
+    const sources = await readItemSources(admin, tenantKey, page.map((item) => item.id));
     for (const item of page) {
       const evidence = (item.label.evidence ?? []).map((span) => {
         const chunk = servable.get(span.chunk_id.toLowerCase());
@@ -353,6 +404,7 @@ export async function exportGolden(admin: Client, tenantKey: string): Promise<Go
         mined_at: item.row.mined_at,
         label: item.label,
         evidence,
+        source: sources.get(item.id.toLowerCase()) ?? null,
       };
       const parsed = GoldenExportLineSchema.safeParse(line);
       if (parsed.success) out.push(parsed.data);

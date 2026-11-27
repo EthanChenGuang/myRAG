@@ -2,13 +2,15 @@
 
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import { X, ExternalLink, FileText, Compass, Info } from 'lucide-react';
+import { X, ExternalLink, FileText, Compass, Info, Clock, History, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme-provider';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSources, type Source } from '../providers/sources-provider';
+import { useSources, type Source, type SourceProvenance } from '../providers/sources-provider';
 import { answerQualityStrings } from '@/translations/answer-quality';
+import { clientText, clientTextLanguage } from '@/lib/chat/answer-texts';
+import type { SourceCitation } from '../providers/sources-provider';
 import { useShallow } from 'zustand/react/shallow';
 import { useLanguage } from '../providers/language-provider';
 import { useChatStore } from '@/lib/chat-store';
@@ -38,17 +40,220 @@ export function sourceOpenHandlers(source: Source) {
   };
 }
 
+const ALSO_IN_RENDER_MAX = 50;
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+type VersionPhrase = 'versionOnly' | 'versionFromTo' | 'versionFrom' | 'versionUntil';
+
+export interface SourceVersionViewModel {
+  marker: 'superseded' | 'current';
+  version: number;
+  from: string | null;
+  to: string | null;
+  phrase: VersionPhrase;
+}
+
+export interface SourceAlsoInViewModel {
+  names: string[];
+  total: number;
+  more: number;
+}
+
+function provenanceOf(source: Source): SourceProvenance {
+  return source.citation ?? source;
+}
+
+function isoDateOrNull(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const match = ISO_DATE.exec(value);
+  if (!match) return null;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return date.toISOString().slice(0, 10) === value ? value : null;
+}
+
+/** UI-SPEC A.3: the version tag of a document entry, or null when the data does not support one. */
+export function sourceVersionView(source: Source, listHasSuperseded: boolean): SourceVersionViewModel | null {
+  if (source.type !== 'document') return null;
+  const fields = provenanceOf(source);
+  const version = fields.version;
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) return null;
+  if (typeof fields.isCurrent !== 'boolean') return null;
+  if (fields.isCurrent && !listHasSuperseded) return null;
+  const from = isoDateOrNull(fields.effectiveFrom);
+  const to = isoDateOrNull(fields.effectiveTo);
+  const phrase: VersionPhrase = from && to ? 'versionFromTo' : from ? 'versionFrom' : to ? 'versionUntil' : 'versionOnly';
+  return { marker: fields.isCurrent ? 'current' : 'superseded', version, from, to, phrase };
+}
+
+/** Whether any document entry on screen carries a Superseded tag (the condition for Current tags). */
+export function listHasSupersededEntry(sources: readonly Source[]): boolean {
+  return sources.some((source) => sourceVersionView(source, false)?.marker === 'superseded');
+}
+
+/** UI-SPEC A.4: the other documents of the entry's duplicate cluster, or null when there is no name to list. */
+export function sourceAlsoInView(source: Source): SourceAlsoInViewModel | null {
+  if (source.type !== 'document') return null;
+  const fields = provenanceOf(source);
+  if (!Array.isArray(fields.alsoIn)) return null;
+  const seen = new Set<string>();
+  if (source.documentId) seen.add(source.documentId);
+  const names: string[] = [];
+  for (const item of fields.alsoIn as unknown[]) {
+    if (!item || typeof item !== 'object') continue;
+    const { documentId, filename } = item as { documentId?: unknown; filename?: unknown };
+    if (typeof filename !== 'string' || filename.length === 0) continue;
+    if (typeof documentId !== 'string' || seen.has(documentId)) continue;
+    seen.add(documentId);
+    names.push(filename);
+  }
+  if (names.length === 0) return null;
+  return { names: names.slice(0, ALSO_IN_RENDER_MAX), total: names.length, more: Math.max(0, names.length - ALSO_IN_RENDER_MAX) };
+}
+
+function formatDate(iso: string, language: string): string {
+  const date = new Date(`${iso}T00:00:00Z`);
+  try {
+    return new Intl.DateTimeFormat(language, { dateStyle: 'medium', timeZone: 'UTC' }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' }).format(date);
+  }
+}
+
+function formatCount(n: number, language: string): string {
+  try {
+    return new Intl.NumberFormat(language).format(n);
+  } catch {
+    return new Intl.NumberFormat('en').format(n);
+  }
+}
+
+export function SourceVersionTag({ view, language }: { view: SourceVersionViewModel; language: string }) {
+  const strings = answerQualityStrings(language);
+  const parts = strings[view.phrase](view.version).split(/(\{from\}|\{to\})/).filter((part) => part.length > 0);
+  return (
+    <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+      {view.marker === 'superseded' ? (
+        <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-300">
+          <History aria-hidden="true" className="h-3.5 w-3.5 flex-shrink-0" />
+          {strings.versionSuperseded}
+        </span>
+      ) : (
+        <span className="font-medium text-gray-700 dark:text-gray-300">{strings.versionCurrent}</span>
+      )}
+      <span className="min-w-0 break-words">
+        {parts.map((part, index) => {
+          const iso = part === '{from}' ? view.from : part === '{to}' ? view.to : undefined;
+          if (iso === undefined) return <React.Fragment key={index}>{part}</React.Fragment>;
+          if (iso === null) return null;
+          return (
+            <time key={index} dateTime={iso}>
+              {formatDate(iso, language)}
+            </time>
+          );
+        })}
+      </span>
+    </p>
+  );
+}
+
+const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6417]/60 dark:focus-visible:ring-[#FF8A4D]/60';
+
+export function SourceAlsoIn({ view, language, className }: { view: SourceAlsoInViewModel; language: string; className: string }) {
+  const strings = answerQualityStrings(language);
+  return (
+    <details className={cn('group', className)}>
+      <summary
+        className={cn(
+          'flex cursor-pointer list-none items-center gap-1 rounded py-1 text-xs font-medium text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100 [&::-webkit-details-marker]:hidden',
+          FOCUS_RING,
+        )}
+      >
+        <ChevronRight
+          aria-hidden="true"
+          className="h-3.5 w-3.5 flex-shrink-0 transition-transform duration-150 motion-reduce:transition-none group-open:rotate-90"
+        />
+        <span>{strings.alsoInSummary(formatCount(view.total, language), view.total)}</span>
+      </summary>
+      <ul
+        tabIndex={0}
+        aria-label={strings.alsoInListLabel}
+        className={cn('mt-1 max-h-40 space-y-1 overflow-y-auto rounded pl-4 text-xs text-gray-600 dark:text-gray-300', FOCUS_RING)}
+      >
+        {view.names.map((name, index) => (
+          <li key={index} className="break-words" translate="no">
+            {name}
+          </li>
+        ))}
+        {view.more > 0 && <li className="text-gray-500 dark:text-gray-400">{strings.alsoInMore(formatCount(view.more, language))}</li>}
+      </ul>
+    </details>
+  );
+}
+
 export interface CitationSourceEntryProps {
   source: Source;
   language: string;
   focused?: boolean;
+  listHasSuperseded?: boolean;
+}
+
+const VERSION_LABEL_MAX = 40;
+
+/** The primary subtag of the UI language, for deciding whether a text needs its own lang attribute. */
+function uiBase(language: string | null | undefined): string {
+  return (language ?? '').split('-')[0]!.toLowerCase();
+}
+
+/** `{date}` in a registry text split around the date, so the date can sit in a time element. */
+function aroundDate(template: string): [string, string] {
+  const at = template.indexOf('{date}');
+  return at < 0 ? [`${template} `, ''] : [template.slice(0, at), template.slice(at + '{date}'.length)];
+}
+
+/** GEN-14 (UI-SPEC 6.7): version, effective date and older-version parts; null when the citation carries none. */
+function CitationVersionLine({ citation, uiLanguage, hideDate = false }: { citation: SourceCitation; uiLanguage: string; hideDate?: boolean }) {
+  const language = clientTextLanguage(citation.answerLanguage ?? uiLanguage);
+  const version =
+    citation.versionLabel ??
+    (citation.olderVersion && typeof citation.documentVersion === 'number'
+      ? clientText('labels.version', language).replace('{version}', String(citation.documentVersion))
+      : null);
+  const date = hideDate ? null : (citation.effectiveFrom ?? null);
+  const older = citation.olderVersion ? clientText('labels.older_version', language) : '';
+  if (!version && !date && !older) return null;
+  const [beforeDate, afterDate] = date ? aroundDate(clientText('labels.effective_from', language)) : ['', ''];
+  const long = version !== null && version.length > VERSION_LABEL_MAX;
+  return (
+    <p
+      data-citation-version=""
+      lang={language === uiBase(uiLanguage) ? undefined : language}
+      className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400"
+    >
+      {version && (long ? <span className="min-w-0 max-w-full truncate" title={version}>{version}</span> : <span>{version}</span>)}
+      {date && (
+        <span>
+          {beforeDate}
+          <time dateTime={date} className="tabular-nums">{date}</time>
+          {afterDate}
+        </span>
+      )}
+      {older && (
+        <span className="inline-flex items-center gap-1">
+          <Clock aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+          {older}
+        </span>
+      )}
+    </p>
+  );
 }
 
 /** One citation in the sources panel, rendered from its snapshot as plain text nodes. */
-export function CitationSourceEntry({ source, language, focused = false }: CitationSourceEntryProps) {
+export function CitationSourceEntry({ source, language, focused = false, listHasSuperseded = false }: CitationSourceEntryProps) {
   const citation = source.citation;
   if (!citation) return null;
   const strings = answerQualityStrings(language);
+  const versionView = sourceVersionView(source, listHasSuperseded);
+  const alsoInView = sourceAlsoInView(source);
   const location = [
     citation.page !== null ? strings.pageLabel(citation.page) : null,
     citation.sectionPath && citation.sectionPath.length > 0 ? citation.sectionPath.join(' › ') : null,
@@ -76,18 +281,21 @@ export function CitationSourceEntry({ source, language, focused = false }: Citat
         </span>
         <div className="min-w-0 flex-1">
           <h4 className="break-words text-sm font-medium text-gray-900 dark:text-gray-100">{source.title}</h4>
+          <CitationVersionLine citation={citation} uiLanguage={language} hideDate={versionView !== null} />
           {location.length > 0 && (
             <p className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">{location.join(' · ')}</p>
           )}
+          {versionView && <SourceVersionTag view={versionView} language={language} />}
           <blockquote className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-[#FF6417]/5 px-3 py-2 text-sm leading-relaxed text-gray-700 dark:bg-[#FF8A4D]/10 dark:text-gray-300">
             {citation.quote}
           </blockquote>
-          {citation.unavailable && (
+          {citation.unavailable && versionView?.marker !== 'superseded' && (
             <p className="mt-3 flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300">
               <Info aria-hidden="true" className="mt-px h-3.5 w-3.5 flex-shrink-0" />
               <span>{strings.documentUpdatedOrRemoved}</span>
             </p>
           )}
+          {alsoInView && <SourceAlsoIn view={alsoInView} language={language} className="mt-2" />}
         </div>
       </div>
     </div>
@@ -135,6 +343,7 @@ export function SourcesSidebar({
   const citationEntries = Array.isArray(sources) ? sources.filter((s) => s.type === 'document' && s.citation) : [];
   const listedSources = citationEntries.length > 0 ? sources.filter((s) => !s.citation) : sources;
   const qualityStrings = answerQualityStrings(language);
+  const listHasSuperseded = Array.isArray(sources) && listHasSupersededEntry(sources);
   const isFocused = (source: Source) =>
     Boolean(focus && source.citation && focus.n === source.citation.n && focus.messageId === source.citation.messageId);
 
@@ -376,6 +585,7 @@ export function SourcesSidebar({
                         source={source}
                         language={language}
                         focused={isFocused(source)}
+                        listHasSuperseded={listHasSuperseded}
                       />
                     ))}
                   </section>
@@ -387,6 +597,8 @@ export function SourcesSidebar({
                     
                     // Determine if this source has a clickable URL
                     const hasUrl = Boolean(source.url);
+                    const versionView = sourceVersionView(source, listHasSuperseded);
+                    const alsoInView = sourceAlsoInView(source);
                     
                     // Create the content for the source card
                     const sourceContent = (
@@ -430,6 +642,7 @@ export function SourcesSidebar({
                               </a>
                             )}
                           </div>
+                          {versionView && <SourceVersionTag view={versionView} language={language} />}
                           {source.type === 'web' && source.date && (
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                               {new Date(source.date).toLocaleDateString()}
@@ -448,6 +661,7 @@ export function SourcesSidebar({
                           <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                             {source.type === 'document' ? 'Document Source' : source.provider || 'Unknown Source'}
                           </p>
+                          {!hasUrl && alsoInView && <SourceAlsoIn view={alsoInView} language={language} className="mt-2" />}
                         </div>
                       </div>
                     );
@@ -470,6 +684,7 @@ export function SourcesSidebar({
                             {sourceContent}
                           </div>
                         )}
+                        {hasUrl && alsoInView && <SourceAlsoIn view={alsoInView} language={language} className="px-5 pt-2" />}
                       </div>
                     );
                   })
@@ -511,3 +726,4 @@ export function SourcesSidebar({
     </>
   );
 } 
+

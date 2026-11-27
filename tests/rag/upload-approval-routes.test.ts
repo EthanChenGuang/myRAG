@@ -306,6 +306,23 @@ describe('upload approval routes: deployment admin', () => {
     expect(logs).not.toContain(UPLOADER_EMAIL);
   });
 
+  it('plan 05.2-17: with RAG_UPLOADER_HOLD on, a pending row carries held_by_uploader_hold; off, the key is absent', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_active_uploader_holds = { data: [UPLOADER_ID] as unknown as Row[], error: null };
+    try {
+      vi.stubEnv('RAG_UPLOADER_HOLD', 'manual');
+      const held = await (await loaded.list.GET(req('/api/rag/admin/upload-approvals'))).json();
+      expect(held.items[0].held_by_uploader_hold).toBe(true);
+      expect(state.rpcCalls).toContainEqual({ fn: 'rag_active_uploader_holds', args: { p_tenant_key: 's:default', p_user_ids: [UPLOADER_ID] } });
+      vi.stubEnv('RAG_UPLOADER_HOLD', 'off');
+      const off = await (await loaded.list.GET(req('/api/rag/admin/upload-approvals'))).json();
+      expect('held_by_uploader_hold' in off.items[0]).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('shows the uploader id when the user lookup has no answer', async () => {
     const loaded = await load();
     state.session = { id: ADMIN_ID };

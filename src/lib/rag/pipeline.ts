@@ -20,6 +20,8 @@ import {
   type FilteredCandidates,
 } from './context/assemble';
 import { fetchAssemblyRows, type AssemblyRows } from './context/fetch-rows';
+import { recordAnswerConflict, versionConflictAttributes } from './context/version-conflicts';
+import { readAnswerConfig } from './generation/answer-config';
 import { formatImageContext, formatVideoContext } from './context/media';
 import {
   OVERVIEW_MATCH_COUNT,
@@ -52,9 +54,13 @@ import {
   applyInjectionAction,
   injectionDetectorsFor,
   injectionItems,
+  injectionSecurityEvents,
   injectionVersions,
   releasedRulesFromRows,
   logInjectionSummary,
+  recordInjectionEvents,
+  securityEventsOn,
+  uploadersFromRows,
   runInjectionCheck,
   runInjectionDetectors,
   type ActiveInjectionMode,
@@ -66,6 +72,7 @@ import {
   type ItemCandidate,
   type ReleasedRules,
 } from './security/injection-check';
+import { securitySpanAttributes } from './security/security-events';
 import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
 import { hybridRerank } from './rerank/local-hybrid';
 import { assertTenantScope, scopeKey, type TenantScope } from './tenant/scope';
@@ -109,6 +116,8 @@ export interface StageRunOptions<T> {
   status?: (value: T) => Extract<StageRecord['status'], 'ok' | 'degraded'>;
   /** Detail recorded when the stage fails (reason failed), e.g. search_delegate_error. */
   failureDetail?: (error: unknown) => string | undefined;
+  /** Scalar span metadata for the stage record; omitted from the record when the function returns undefined. */
+  attributes?: (value: T) => Record<string, string | number | boolean> | undefined;
 }
 
 export class StageError extends Error {
@@ -178,6 +187,7 @@ export async function runStage<T>(
     const value = await runAgainstSignal(signal, fn);
     signal.throwIfAborted();
     const counts = options.counts ? sanitizeStageCounts(options.counts(value)) : undefined;
+    const attributes = options.attributes ? options.attributes(value) : undefined;
     collector.record({
       name: spec.name,
       status: options.status ? options.status(value) : 'ok',
@@ -188,6 +198,7 @@ export async function runStage<T>(
       ...(counts !== undefined ? { counts } : {}),
       ...(options.rules ? { rules: options.rules(value) } : {}),
       ...(options.versions ? { versions: options.versions(value) } : {}),
+      ...(attributes !== undefined ? { attributes } : {}),
       detail: options.detail ? options.detail(value) : undefined,
     });
     return { skipped: false, value };
@@ -290,6 +301,8 @@ export interface InjectionStageInput<C extends ItemCandidate> {
   released?: ReleasedRules;
   /** Document filenames from the same rows, recorded on the summary's item records. */
   documentNames?: ReadonlyMap<string, string>;
+  /** Document id to uploader from the same rows (present only while RAG_SECURITY_EVENTS is on, D-44). */
+  uploaders?: ReadonlyMap<string, string | null>;
 }
 
 export interface InjectionStageRun<C extends ItemCandidate> {
@@ -317,6 +330,11 @@ export async function runInjectionStage<C extends ItemCandidate>(input: Injectio
   const { spec, items, mode } = input;
   const deps = getRagDeps();
   const versions = injectionVersions(injectionDetectorsFor(input.profile, input.security));
+  // D-43/D-44: with RAG_SECURITY_EVENTS on, flagged items become events with their uploader; off, nothing below changes.
+  const securityTenant = input.scope && securityEventsOn() ? scopeKey(input.scope) : null;
+  const securityContext = securityTenant
+    ? { tenantKey: securityTenant, traceId: input.collector.traceId, ...(input.uploaders ? { uploaders: input.uploaders } : {}) }
+    : null;
   let held: InjectionApplied<C> | null = null;
   const apply = (verdicts: InjectionVerdicts) =>
     applyInjectionAction({
@@ -360,11 +378,17 @@ export async function runInjectionStage<C extends ItemCandidate>(input: Injectio
       versions: () => versions,
       status: (value) => (value.summary.detectorsUnavailable.length > 0 ? 'degraded' : 'ok'),
       detail: (value) => (value.summary.detectorsUnavailable.length > 0 ? INJECTION_DETECTOR_UNAVAILABLE : undefined),
+      ...(securityContext
+        ? { attributes: (value: InjectionApplied<C>) => securitySpanAttributes(securityContext.tenantKey, injectionSecurityEvents(value.summary, securityContext)) }
+        : {}),
     },
   );
   const applied: InjectionApplied<C> | null = checked.skipped ? held : checked.value;
   const stalled = checked.skipped && applied !== null;
-  if (applied) logInjectionSummary(applied.summary, applied.counts, { traceId: input.collector.traceId, stalled });
+  if (applied && securityContext) {
+    const events = recordInjectionEvents(applied.summary, { ...securityContext, profile: input.profile });
+    logInjectionSummary(applied.summary, applied.counts, { traceId: input.collector.traceId, stalled, security: { tenant: securityContext.tenantKey, events } });
+  } else if (applied) logInjectionSummary(applied.summary, applied.counts, { traceId: input.collector.traceId, stalled });
   return { applied, stalled };
 }
 
@@ -398,11 +422,12 @@ export function downweightOrder<C extends { chunk_id: string }>(candidates: read
 const ASSEMBLY_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval'];
 const EMPTY_ROWS: AssemblyRows = { documents: new Map(), chunkMetadata: new Map() };
 
-async function loadRows(candidates: Candidate[], signal: AbortSignal): Promise<AssemblyRows> {
+async function loadRows(candidates: Candidate[], signal: AbortSignal, tenantKey?: string): Promise<AssemblyRows> {
   if (candidates.length === 0) return EMPTY_ROWS;
   const adminClient = getRagDeps().adminClient();
   if (!adminClient) throw new Error('[RAG Assemble] admin client unavailable');
-  return fetchAssemblyRows(candidates, { adminClient, signal });
+  const withPairs = tenantKey !== undefined && readAnswerConfig().versionLabels;
+  return fetchAssemblyRows(candidates, { adminClient, signal, ...(withPairs ? { tenantKey } : {}) });
 }
 
 function requireAdminSearchClient(deps: RagDeps): RpcClient {
@@ -694,6 +719,7 @@ async function runOverviewPipeline(
         referenced,
         released: releasedRulesFromRows(documentRows),
         documentNames: documentNamesFromRows(documentRows),
+        uploaders: uploadersFromRows(documentRows),
       });
       injectionStalled = run.stalled;
       if (run.applied) {
@@ -1006,6 +1032,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         citationLabeler: input.citationLabeler,
         ...(security.contextTagging ? { contextTagging: true } : {}),
         ...(injectionMarks ? { injectionMarks } : {}),
+        ...(rows.versionPairs ? { versionPairs: rows.versionPairs } : {}),
       });
 
       let rows: AssemblyRows | null = null;
@@ -1015,7 +1042,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         spec('post_filter', 'skip'),
         signal,
         async (stageSignal) => {
-          const loaded = await loadRows(candidates, stageSignal);
+          const loaded = await loadRows(candidates, stageSignal, scopeKey(scope));
           const result = filterCandidates(assemblyInput(loaded, true));
           rows = loaded;
           filtered = result;
@@ -1043,6 +1070,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
           referenced,
           released: releasedRulesFromRows(loadedRows?.documents),
           documentNames: documentNamesFromRows(loadedRows?.documents),
+          uploaders: uploadersFromRows(loadedRows?.documents),
         });
         injectionStalled = run.stalled;
         if (run.applied) {
@@ -1060,7 +1088,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         spec('assemble', 'skip'),
         signal,
         async (stageSignal) => {
-          const loaded: AssemblyRows = rows ?? (await loadRows(candidates, stageSignal));
+          const loaded: AssemblyRows = rows ?? (await loadRows(candidates, stageSignal, scopeKey(scope)));
           const applyRelevanceFilter = !postFilter.skipped;
           const state = filtered ?? filterCandidates(assemblyInput(loaded, applyRelevanceFilter));
           return buildContext(state, assemblyInput(loaded, applyRelevanceFilter));
@@ -1069,6 +1097,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         {
           candidatesIn: (filtered as FilteredCandidates<Candidate> | null)?.relevantChunks.length ?? candidates.length,
           candidatesOut: (value) => value.usedDocuments.length,
+          attributes: (value) => versionConflictAttributes(value.versionConflict),
         },
       );
       assembly = assembled.skipped ? null : assembled.value;
@@ -1109,6 +1138,9 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
 
   const base = { ...failure(collector, status, reason, queryContext), ...(injection ? { injection } : {}) };
   if (!assembly) return { ...base, candidates };
+  if (assembly.versionConflict && profile !== 'eval') {
+    recordAnswerConflict({ tenantKey: scopeKey(scope), conflict: assembly.versionConflict, traceId: collector.traceId });
+  }
 
   return {
     ...base,
@@ -1122,6 +1154,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
     queryTerms: assembly.queryTerms,
     refusalCandidate: assembly.refusalCandidate,
     blocks: assembly.blocks,
+    ...(assembly.versionConflict ? { versionConflict: assembly.versionConflict } : {}),
   };
 }
 

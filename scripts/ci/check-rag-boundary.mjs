@@ -18,6 +18,9 @@ export const ALLOWLIST = [
 // Dependency-free CommonJS files the config server requires (Phase 5.3 O-3 item 5); app code uses @/lib/rag.
 export const SHARED_CJS = /^config-gate\/[a-z0-9-]+\.cjs$/;
 
+// Generated, data-only modules the browser reads (Phase 5.2 D-12); importing the index from a client component would bundle the pipeline.
+export const CLIENT_DATA_MODULES = ['lang/texts.generated'];
+
 export const RETIRED_MODULES = [
   'enhanced-rag-retrieval',
   'retrieval-strategies',
@@ -32,7 +35,16 @@ export const RETIRED_MODULES = [
   'thinking-rag-enhancer',
 ];
 
-export const VECTOR_OR_RERANK_PACKAGES = ['weaviate-client', '@qdrant/js-client-rest', 'cohere-ai', 'voyageai'];
+export const VECTOR_OR_RERANK_PACKAGES = ['cohere-ai', 'voyageai'];
+export const VECTOR_STORE_PACKAGES = [
+  '@weaviate/node',
+  '@weaviate/core',
+  '@weaviate/web',
+  'weaviate-client',
+  'weaviate-ts-client',
+  '@qdrant/js-client-rest',
+  '@qdrant/qdrant-js',
+];
 export const AI_SDK_BANNED_EXPORTS = ['embed', 'embedMany', 'rerank'];
 
 export const WRITER_RPCS = [
@@ -101,6 +113,8 @@ const outsideRerankHttp = (rel) => inSrcOrScripts(rel) && !rel.startsWith(RERANK
 const LAKERA_ADAPTER = 'src/lib/rag/security/lakera.ts';
 const outsideLakeraAdapter = (rel) => rel !== LAKERA_ADAPTER;
 const outsideTenant = (rel) => !rel.startsWith(TENANT_DIR);
+const VECTOR_STORE_DIRS = ['src/lib/rag/backend/weaviate/', 'src/lib/rag/backend/qdrant/', 'src/lib/rag/sync/'];
+const outsideVectorStoreDirs = (rel) => !VECTOR_STORE_DIRS.some((d) => rel.startsWith(d));
 const inVoiceAgent = (rel) => rel.startsWith('voice-agent/src/');
 const isLegacyWriter = (rel, ruleId) => LEGACY_WRITERS.some((w) => w.path === rel && w.rules.includes(ruleId));
 const writerRuleApplies = (ruleId) => (rel) => !rel.startsWith(INGEST_DIR) && !isLegacyWriter(rel, ruleId);
@@ -410,13 +424,13 @@ export const RULES = [
     find: (text) =>
       importMatches(text, ({ spec }) => {
         const m = /(?:^|\/)lib\/rag\/(.+)$/.exec(specBase(spec));
-        if (!m || m[1] === 'index') return null;
+        if (!m || m[1] === 'index' || CLIENT_DATA_MODULES.includes(m[1])) return null;
         return SHARED_CJS.test(/(?:^|\/)lib\/rag\/(.+)$/.exec(spec)[1]) ? null : spec;
       }),
   },
   {
     id: 'vector-or-rerank-client',
-    description: 'vector-store or reranker client package, or AI SDK embed/embedMany/rerank, outside the pipeline',
+    description: 'reranker client package, or AI SDK embed/embedMany/rerank, outside the pipeline',
     appliesTo: outsideRag,
     find: (text) =>
       importMatches(text, ({ spec, clause }) => {
@@ -426,6 +440,15 @@ export const RULES = [
         }
         return null;
       }),
+  },
+  {
+    id: 'vector-store-client',
+    description: 'vector-store client package outside src/lib/rag/backend/{weaviate,qdrant}/ and src/lib/rag/sync/',
+    appliesTo: outsideVectorStoreDirs,
+    find: (text) =>
+      importMatches(text, ({ spec }) =>
+        VECTOR_STORE_PACKAGES.some((p) => spec === p || spec.startsWith(`${p}/`)) ? spec : null,
+      ),
   },
   {
     id: 'mint-scope',

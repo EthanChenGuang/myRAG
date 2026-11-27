@@ -63,6 +63,10 @@ PHASE6_TAGS = frozenset(
 
 # Plan 04.1.1-10 appended the colloquial and no_answer term items, too.
 TERM_ITEM_ID = re.compile(r"^[a-z]+-(colloquial|no_answer)-term-\d{3}$")
+# Plan 05.3-15 appended the implicit_condition and near-miss no-answer items under this tag.
+PHASE53_TAG = "phase53_fixture"
+# And plan 05.2-29 the answer-rule and link-injection items.
+PHASE52_CATEGORIES = frozenset({"partial_answer", "stale_version", "off_topic_context"})
 
 
 def _added_after_snapshot(item: GoldenItem) -> bool:
@@ -71,6 +75,9 @@ def _added_after_snapshot(item: GoldenItem) -> bool:
         or item.category in CACHE_PAIR_CATEGORIES
         or bool(PHASE6_TAGS & set(item.tags))
         or bool(TERM_ITEM_ID.match(item.id))
+        or PHASE53_TAG in item.tags
+        or item.category in PHASE52_CATEGORIES
+        or "link_injection" in item.tags
     )
 
 
@@ -215,7 +222,7 @@ def test_real_mode_with_production_only_counts_production_items():
 
 def test_committed_gate_population_file_is_legacy_and_loads_with_its_sha256():
     config, digest = load_gate_population()
-    assert config == GatePopulationConfig(mode="legacy", provenances=["production", "human"], min_items=100)
+    assert config == GatePopulationConfig(mode="legacy", provenances=["production", "human", "historical"], min_items=100)
     assert digest == hashlib.sha256(GATE_POPULATION_PATH.read_bytes()).hexdigest()
     assert GATE_POPULATION_PATH == REPO_ROOT / "eval" / "config" / "gate-population.json"
 

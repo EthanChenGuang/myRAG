@@ -8,6 +8,11 @@ from typing import Any
 
 from rag_eval.draft.claude_drafter import draft_with_claude
 from rag_eval.draft.config import DEFAULT_CONFIG_PATH, load_draft_config
+from rag_eval.draft.paraphrase import (
+    PARAPHRASE_STYLES,
+    claude_paraphraser,
+    paraphrase_items,
+)
 from rag_eval.draft.ragas_drafter import GenerateFn, draft_with_ragas
 from rag_eval.draft.sources import DirectoryWorkspaceSource, SupabaseWorkspaceSource, WorkspaceDocument
 from rag_eval.draft.verify import index_documents, verify_proposal
@@ -84,6 +89,80 @@ def _load_source(args: argparse.Namespace) -> list[WorkspaceDocument] | int:
         return EXIT_INPUT
 
 
+def _paraphrase_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="rag_eval.draft paraphrase",
+        description="Add paraphrased coverage variants of approved expert-written items to a golden set in eval/golden/private/ (D-53).",
+    )
+    parser.add_argument("--set", required=True, help="golden JSONL inside eval/golden/private/; variants are written into it")
+    parser.add_argument("--styles", required=True, help=f"comma-separated styles: {', '.join(PARAPHRASE_STYLES)}")
+    parser.add_argument(
+        "--split-manifest", help="split manifest inside eval/golden/private/ (default: split-manifest.json next to the set)"
+    )
+    parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
+    return parser
+
+
+def paraphrase_main(argv: list[str], *, claude_client: Any = None) -> int:
+    args = _paraphrase_parser().parse_args(argv)
+    styles = [style.strip() for style in args.styles.split(",") if style.strip()]
+    unknown = sorted(set(styles) - set(PARAPHRASE_STYLES))
+    if not styles or unknown or len(set(styles)) != len(styles):
+        detail = f"unknown style {', '.join(unknown)}" if unknown else "list each style once"
+        print(f"--styles: {detail}; choose from {', '.join(PARAPHRASE_STYLES)}", file=sys.stderr)
+        return EXIT_INPUT
+    try:
+        config = load_draft_config(Path(args.config))
+    except (OSError, ValueError) as exc:
+        print(f"invalid draft config: {type(exc).__name__}", file=sys.stderr)
+        return EXIT_INPUT
+    try:
+        golden_set = assert_private_path(resolve_cli_path(args.set))
+        manifest = assert_private_path(
+            resolve_cli_path(args.split_manifest) if args.split_manifest else golden_set.parent / "split-manifest.json"
+        )
+    except PrivatePathError as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_PRIVATE
+    if not golden_set.is_file():
+        print("--set does not name an existing golden set", file=sys.stderr)
+        return EXIT_INPUT
+    try:
+        existing = load_golden(golden_set)
+    except ValueError as exc:
+        print(f"cannot read the golden set: {type(exc).__name__}", file=sys.stderr)
+        return EXIT_INPUT
+    if claude_client is None and not os.environ.get("ANTHROPIC_API_KEY"):
+        print("ANTHROPIC_API_KEY is not set; paraphrasing needs the Claude drafter", file=sys.stderr)
+        return EXIT_KEYS
+    if claude_client is None:
+        import anthropic
+
+        claude_client = anthropic.Anthropic()
+
+    outcome = paraphrase_items(existing, styles, claude_paraphraser(claude_client, config))
+    if not outcome.entries:
+        print(f"[Draft] paraphrase: 0 written, {len(outcome.rejected)} rejected")
+        for reason, count in sorted(Counter(outcome.rejected).items()):
+            print(f"  {count} x {reason}")
+        return EXIT_OK
+    try:
+        result = write_drafted_items(outcome.entries, golden_set, existing, manifest_path=manifest)
+    except PrivatePathError as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_PRIVATE
+    except ValueError as exc:
+        print(f"cannot write the variants: {exc}", file=sys.stderr)
+        return EXIT_INPUT
+    rejected = [*outcome.rejected, *result.invalid]
+    print(f"[Draft] paraphrase: {len(result.written)} written, {len(rejected)} rejected, {result.duplicates} duplicate")
+    for reason, count in sorted(Counter(_reason_kind(r) for r in rejected).items()):
+        print(f"  {count} x {reason}")
+    by_style = Counter(tag for item in result.written for tag in item.tags if tag.startswith("style:"))
+    print("styles: " + ", ".join(f"{k[len('style:'):]}={v}" for k, v in sorted(by_style.items())))
+    return EXIT_OK
+
+
 def _reason_kind(reason: str) -> str:
     return _QUOTED.sub("'...'", reason)
 
@@ -94,7 +173,10 @@ def main(
     claude_client: Any = None,
     ragas_generate: GenerateFn | None = None,
 ) -> int:
-    args = _parser().parse_args(argv)
+    arguments = sys.argv[1:] if argv is None else list(argv)
+    if arguments[:1] == ["paraphrase"]:
+        return paraphrase_main(arguments[1:], claude_client=claude_client)
+    args = _parser().parse_args(arguments)
     try:
         config = load_draft_config(Path(args.config))
     except (OSError, ValueError) as exc:

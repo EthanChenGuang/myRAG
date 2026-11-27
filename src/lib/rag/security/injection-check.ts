@@ -1,4 +1,5 @@
 import { isMultiTenant } from '@/lib/deployment-mode';
+import { readAnswerConfig } from '../generation/answer-config';
 import { detectLanguage } from '../lang/detect';
 import type { TenantScope } from '../tenant/scope';
 import { readSecurityConfig, type InjectionCheckMode, type SecurityConfig } from './config';
@@ -6,6 +7,7 @@ import { detectorsConfigVersion, loadInjectionDetectorConfig, type Detector, typ
 import { injectionRulesVersion, scanText } from './injection-rules';
 import { lakeraAllowed } from './lakera';
 import type { PromptGuardItem, PromptGuardOutcome } from './prompt-guard-client';
+import { buildSecurityEvent, recordSecurityEvents, type SecurityEvent } from './security-events';
 import { createVerdictCache, verdictCacheKey, type VerdictCache } from './verdict-cache';
 import type { InjectionItemRecord, InjectionSummary, Profile, ReferencedSection, ReferencedState } from '../types';
 
@@ -287,8 +289,86 @@ export function applyInjectionAction<C extends ItemCandidate>(input: {
   };
 }
 
+/** Document id to uploader (documents.user_id) from rows that carry the column; rows read without it add nothing. */
+export function uploadersFromRows(
+  rows: Iterable<{ id: string; user_id?: string | null }> | ReadonlyMap<string, { id: string; user_id?: string | null }> | null | undefined,
+): Map<string, string | null> {
+  const uploaders = new Map<string, string | null>();
+  if (!rows) return uploaders;
+  const list = rows instanceof Map ? rows.values() : (rows as Iterable<{ id: string; user_id?: string | null }>);
+  for (const row of list) {
+    if (!row || typeof row.id !== 'string' || !Object.prototype.hasOwnProperty.call(row, 'user_id')) continue;
+    uploaders.set(row.id, typeof row.user_id === 'string' ? row.user_id : null);
+  }
+  return uploaders;
+}
+
+/** RAG_SECURITY_EVENTS, read at call time; a configuration error reads as off. */
+export function securityEventsOn(): boolean {
+  try {
+    return readAnswerConfig().securityEvents;
+  } catch {
+    return false;
+  }
+}
+
+const STAGE_ACTIONS: Record<ActiveInjectionMode, SecurityEvent['action']> = { flag: 'detected', drop: 'dropped', downweight: 'downweighted' };
+
+/**
+ * D-43: one retrieval_injection event per flagged item, with the action the stage took, the flagging detector (rules when they
+ * matched), the rule ids, the item's document and first chunk, and the uploader from the document rows. Ids only.
+ */
+export function injectionSecurityEvents(
+  summary: InjectionSummary,
+  context: { tenantKey: string; traceId: string | null; uploaders?: ReadonlyMap<string, string | null> },
+): SecurityEvent[] {
+  const action = STAGE_ACTIONS[summary.mode];
+  const events: SecurityEvent[] = [];
+  for (const item of summary.items ?? []) {
+    if (!item.flagged) continue;
+    const detector = item.detectors.includes('rules') ? 'rules' : (item.detectors[0] ?? 'rules');
+    events.push(
+      buildSecurityEvent({
+        tenantKey: context.tenantKey,
+        source: 'retrieval_injection',
+        action,
+        detector,
+        ruleIds: item.ruleIds,
+        documentId: item.documentId,
+        chunkId: item.chunkIds[0] ?? null,
+        uploaderId: context.uploaders?.get(item.documentId) ?? null,
+        traceId: context.traceId,
+      }),
+    );
+  }
+  return events;
+}
+
+/**
+ * Builds the request's retrieval_injection events and records them in one call after the response (D-43); eval runs record
+ * nothing, so a fixture run never counts towards an uploader alert or hold. Returns the events for the log line.
+ */
+export function recordInjectionEvents(
+  summary: InjectionSummary,
+  context: { tenantKey: string; traceId: string | null; uploaders?: ReadonlyMap<string, string | null>; profile: Profile },
+): SecurityEvent[] {
+  const events = injectionSecurityEvents(summary, context);
+  if (events.length > 0 && context.profile !== 'eval') recordSecurityEvents({ tenantKey: context.tenantKey, events, traceId: context.traceId });
+  return events;
+}
+
+/** The security part of the injection log line, present only while RAG_SECURITY_EVENTS is on: tenant and per-event ids (D-44). */
+export interface InjectionLogSecurity {
+  tenant: string;
+  events: readonly SecurityEvent[];
+}
+
 /** One summary line per request: ids, rule ids and counts only, never chunk or query text. */
-export function logInjectionSummary(summary: InjectionSummary, counts: Record<string, number>, extra: { traceId: string; stalled?: boolean }): void {
+export function logInjectionSummary(
+  summary: InjectionSummary,
+  counts: Record<string, number>,
+  extra: { traceId: string; stalled?: boolean; security?: InjectionLogSecurity },
+): void {
   console.log('[RAG Security] Injection check', {
     traceId: extra.traceId,
     mode: summary.mode,
@@ -301,6 +381,18 @@ export function logInjectionSummary(summary: InjectionSummary, counts: Record<st
     ...(summary.detectorsDisabled ? { detectorsDisabled: summary.detectorsDisabled } : {}),
     ...(summary.detectorFailures ? { detectorFailures: summary.detectorFailures } : {}),
     ...(extra.stalled ? { stalled: true } : {}),
+    ...(extra.security
+      ? {
+          tenant: extra.security.tenant,
+          events: extra.security.events.map((event) => ({
+            document: event.document_id,
+            chunk: event.chunk_id,
+            uploader: event.uploader_id,
+            detector: event.detector,
+            action: event.action,
+          })),
+        }
+      : {}),
   });
 }
 

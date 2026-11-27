@@ -2,6 +2,8 @@ import { redisvlInvalidationTarget } from '../../cache/emit';
 import { clusterPublishedDocument, dupClustersEnabled } from '../../dedupe/cluster';
 import { scheduleAfterResponse } from '../../trace/schedule';
 import { scopeKey } from '../../tenant/scope';
+import { currentUploaderHoldMode, decideUploadApproval } from '../approval/decide';
+import { checkUploaderHold, uploaderOf } from '../approval/resolve';
 import { buildIngestFingerprint, collectFingerprintParts } from '../fingerprint';
 import { afterPublish } from '../post-publish';
 import { phase32TraceOn } from '../trace';
@@ -52,6 +54,32 @@ async function writeFingerprint(ctx: StageContext, documentId: string): Promise<
   if (phase32TraceOn(ctx.config)) ctx.state.traceFacts = { ...ctx.state.traceFacts, ingest_fingerprint: fingerprint };
 }
 
+/**
+ * D-46 (Phase 5.2): a run that passed identify before its uploader was held (a queued job whose snapshot decided at enqueue, or a long
+ * inline run) is held here the same way, with the reason uploader_hold. A type change is not an upload; a published version is never
+ * touched, since this runs before the version is made current.
+ */
+async function applyUploaderHold(ctx: StageContext): Promise<void> {
+  if (ctx.state.approval?.required === true || ctx.state.typeChange) return;
+  const holdMode = currentUploaderHoldMode();
+  const uploaderId = uploaderOf(ctx);
+  if (holdMode === 'off' || uploaderId === null) return;
+  if (!(await checkUploaderHold(ctx, holdMode, uploaderId))) return;
+  const scope = ctx.input.scope;
+  ctx.state.approval = decideUploadApproval({
+    mode: ctx.state.approval?.mode ?? ctx.config.uploadApproval,
+    scopeKind: scope.kind,
+    workspaceUserId: null,
+    uploaderId,
+    isTenantAdmin: null,
+    exemptions: [],
+    connectorRefs: [],
+    decidedAt: new Date(ctx.deps.now()).toISOString(),
+    uploaderHeld: true,
+  });
+  console.warn('[Ingest] uploader hold applied at publish', { reason: 'uploader_hold' });
+}
+
 /** D-51: the approval state of this version, while RAG_UPLOAD_APPROVAL is on (identify only records a decision then). */
 function recordApprovalState(ctx: StageContext, held: boolean): void {
   if (!ctx.state.approval) return;
@@ -77,6 +105,7 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'publish');
   await writeFingerprint(ctx, document.id);
   await recordReplacesIntent(ctx, document.id);
+  await applyUploaderHold(ctx);
   const held = ctx.state.approval?.required === true && !quarantinedByScan(ctx);
   recordApprovalState(ctx, held);
   if (held) return holdForReview(ctx, document.id, document.version);

@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
-import { KoyebWebhookPayload, WhatsAppConversation } from './types';
+import { KoyebWebhookPayload, TextMessageOptions, WhatsAppConversation } from './types';
 import { WhatsAppMessageConverter } from './message-converter';
 import { getSessionManager } from './session-manager';
 import { getWhatsAppClient } from './client-factory';
@@ -8,6 +8,17 @@ import { ExtendedMessage } from '@/types/chat';
 import { env } from '@/lib/env';
 import { nanoid } from 'nanoid';
 import { generateTitle, generateSmartTitle } from '@/lib/title-generator';
+import { guardChannelReply, readAnswerConfig } from '@/lib/rag';
+import { createChatStreamParser, type ChatStreamFacts } from './chat-stream-parser';
+
+function messageText(message: ExtendedMessage): string {
+  if (typeof message.content === 'string') return message.content;
+  if (!Array.isArray(message.content)) return '';
+  return message.content
+    .map((part) => (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n');
+}
 
 /**
  * Handles incoming webhooks from WhatsApp provider (Koyeb/Fly.io)
@@ -367,6 +378,7 @@ export class WhatsAppWebhookHandler {
       // Send the message to the chat API
       // This will use the main RAG_SYSTEM_PROMPT from .env.local
       const messagesToSend = [message];  // Always fresh context, no history
+      const answerConfig = readAnswerConfig();
       
       const response = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
@@ -391,7 +403,8 @@ export class WhatsAppWebhookHandler {
               phoneNumber: conversation.phoneNumber
             },
             // Enable RAG - will use the main system prompt with {{context}}
-            disableRAG: false
+            disableRAG: false,
+            ...(answerConfig.anyNonDefault ? { channel: 'whatsapp' as const } : {})
           }
         })
       });
@@ -406,111 +419,36 @@ export class WhatsAppWebhookHandler {
         throw new Error('No response body');
       }
 
-      let fullResponse = '';
+      // The chat route answers with UI-message SSE (data: {part} lines, then data: [DONE]); legacy 0:"text" lines still parse
+      const parser = createChatStreamParser();
       const decoder = new TextDecoder();
       let buffer = '';
+      let finished = false;
 
       logger.info('WhatsAppWebhookHandler', 'Starting to read streaming response...');
 
-      while (true) {
+      while (!finished) {
         const { done, value } = await reader.read();
         if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        buffer += chunk;
-        
-        // Log raw chunk for debugging
-        // logger.info('WhatsAppWebhookHandler', `Raw chunk received (length: ${chunk.length})`);
-        
-        // Parse streaming response - each line starts with a number followed by text
+        buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
-
-        // Keep the last incomplete line in the buffer
         buffer = lines.pop() || '';
-
         for (const line of lines) {
-          if (!line.trim()) continue;
-
-          // Debug: Log raw line to see what we're receiving
-          logger.info('WhatsAppWebhookHandler', `[STREAM DEBUG] Raw line (first 200 chars): ${line.substring(0, 200)}`);
-
-          // Try to extract content from the streaming format
-          // The Vercel AI SDK uses format: 0:"content" or 0:{"type":"text-delta","textDelta":"content"}
-          const colonIndex = line.indexOf(':');
-          if (colonIndex > 0) {
-            // Extract everything after the first colon
-            const contentPart = line.substring(colonIndex + 1);
-
-            // Check if it's a quoted string (starts with ")
-            if (contentPart.startsWith('"')) {
-              try {
-                // Parse as JSON string to handle escaped characters properly
-                const content = JSON.parse(contentPart);
-
-                // Check if it's a structured object
-                if (typeof content === 'string') {
-                  // It's a plain text string
-                  fullResponse += content;
-                  logger.info('WhatsAppWebhookHandler', `[STREAM DEBUG] Added plain text: ${content.substring(0, 100)}`);
-                } else if (content && typeof content === 'object') {
-                  // It's a structured object, check for text-delta
-                  if (content.type === 'text-delta' && content.textDelta) {
-                    fullResponse += content.textDelta;
-                    logger.info('WhatsAppWebhookHandler', `[STREAM DEBUG] Added text-delta: ${content.textDelta.substring(0, 100)}`);
-                  }
-                }
-
-                // Log if we have numbers in the content
-                const numbersFound = fullResponse.match(/\d+([,.]?\d+)*/g);
-                if (numbersFound && numbersFound.length > 0) {
-                  logger.info('WhatsAppWebhookHandler', `[STREAM DEBUG] Numbers in response: ${JSON.stringify(numbersFound.slice(0, 5))}`);
-                }
-              } catch (e) {
-                // If JSON parsing fails, log the error and the problematic content
-                logger.warn('WhatsAppWebhookHandler', `[STREAM DEBUG] Failed to parse content: ${e instanceof Error ? e.message : String(e)}`);
-                logger.warn('WhatsAppWebhookHandler', `[STREAM DEBUG] Problematic content: ${contentPart.substring(0, 100)}`);
-
-                // Try alternative parsing - remove quotes and use as-is
-                if (contentPart.startsWith('"') && contentPart.endsWith('"')) {
-                  const rawContent = contentPart.slice(1, -1)
-                    .replace(/\\n/g, '\n')
-                    .replace(/\\"/g, '"')
-                    .replace(/\\\\/g, '\\');
-                  fullResponse += rawContent;
-                  logger.info('WhatsAppWebhookHandler', `[STREAM DEBUG] Added fallback content: ${rawContent.substring(0, 100)}`);
-                }
-              }
-            }
+          if (parser.push(line) === 'done') {
+            finished = true;
+            break;
           }
         }
       }
-      
-      // Process any remaining buffer
-      if (buffer.trim()) {
-        const colonIndex = buffer.indexOf(':');
-        if (colonIndex > 0) {
-          const contentPart = buffer.substring(colonIndex + 1);
-          if (contentPart.startsWith('"')) {
-            try {
-              const content = JSON.parse(contentPart);
-              if (typeof content === 'string') {
-                fullResponse += content;
-              } else if (content && content.type === 'text-delta' && content.textDelta) {
-                fullResponse += content.textDelta;
-              }
-            } catch (e) {
-              // Fallback parsing
-              if (contentPart.startsWith('"') && contentPart.endsWith('"')) {
-                const rawContent = contentPart.slice(1, -1)
-                  .replace(/\\n/g, '\n')
-                  .replace(/\\"/g, '"')
-                  .replace(/\\\\/g, '\\');
-                fullResponse += rawContent;
-              }
-            }
-          }
-        }
+      if (finished) {
+        await reader.cancel().catch(() => undefined);
+      } else {
+        buffer += decoder.decode();
+        if (buffer.trim()) parser.push(buffer);
       }
+
+      const streamFacts = parser.result();
+      let fullResponse = streamFacts.text;
 
       logger.info('WhatsAppWebhookHandler', `Final response length: ${fullResponse.length}`);
       logger.info('WhatsAppWebhookHandler', `[DEBUG] Original AI response (first 500 chars): ${fullResponse.substring(0, 500)}`);
@@ -529,10 +467,13 @@ export class WhatsAppWebhookHandler {
       // });
 
       // Send response back via WhatsApp
-      await this.sendWhatsAppResponse(
+      fullResponse = await this.sendWhatsAppResponse(
         sessionId,
         conversation.whatsappJid,
-        fullResponse
+        fullResponse,
+        messageText(message),
+        conversation.userId,
+        streamFacts
       );
 
       // Store the AI response in the database
@@ -629,8 +570,24 @@ export class WhatsAppWebhookHandler {
   private async sendWhatsAppResponse(
     sessionId: string,
     to: string,
-    response: string
-  ): Promise<void> {
+    reply: string,
+    userMessage = '',
+    ownerUserId?: string,
+    streamFacts?: ChatStreamFacts
+  ): Promise<string> {
+    // Phase 5.2 D-40: the whole reply is filtered before it is split; previews are off per message while the guard is on
+    const guarded = await guardChannelReply({
+      text: reply,
+      userMessage,
+      ownerUserId,
+      channel: 'whatsapp',
+      webResultUrls: streamFacts?.webResultUrls,
+      webResultsFlagged: streamFacts?.injectionFlagged,
+      answerLanguage: streamFacts?.answerLanguage,
+    });
+    const response = guarded.text;
+    const sendOptions: TextMessageOptions | null = guarded.linkPreviewOff ? { linkPreview: false } : null;
+
     // Start keep-alive before processing the response
     // This prevents disconnection during long message formatting/sending
     const isFlyyoClient = 'startKeepAlive' in this.whatsappClient;
@@ -664,7 +621,9 @@ export class WhatsAppWebhookHandler {
       for (let i = 0; i < parts.length; i++) {
         logger.info('WhatsAppWebhookHandler', `[DEBUG] Sending part ${i + 1}/${parts.length}, length: ${parts[i].length}`);
         logger.info('WhatsAppWebhookHandler', `[DEBUG] Part ${i + 1} content (first 500 chars): ${parts[i].substring(0, 500)}`);
-        const result = await this.whatsappClient.sendTextMessage(sessionId, to, parts[i]);
+        const result = sendOptions
+          ? await this.whatsappClient.sendTextMessage(sessionId, to, parts[i], sendOptions)
+          : await this.whatsappClient.sendTextMessage(sessionId, to, parts[i]);
 
         // Track outgoing message
         const conversation = await this.getConversationByJid(to);
@@ -672,6 +631,7 @@ export class WhatsAppWebhookHandler {
           await this.trackMessage(conversation.id, result.messageId, 'outgoing');
         }
       }
+      return response;
     } finally {
       // Stop keep-alive after all messages are sent
       if (isFlyyoClient) {

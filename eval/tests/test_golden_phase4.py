@@ -30,12 +30,26 @@ SPLITS = ("dev", "test")
 PRE_EXISTING_COUNT = 126
 # Categories added after plan 04-38 (05.1-17 injection items, 06-39 cache pairs); test_golden_injection.py and
 # test_golden_phase6.py cover them.
-LATER_PHASE_CATEGORIES = frozenset({"injection", "injection_evasive", "small_talk", "cache_paraphrase", "cache_near_miss"})
+LATER_PHASE_CATEGORIES = frozenset(
+    {
+        "injection",
+        "injection_evasive",
+        "small_talk",
+        "cache_paraphrase",
+        "cache_near_miss",
+        # Plan 05.2-29; test_golden_phase52.py covers them.
+        "partial_answer",
+        "stale_version",
+        "off_topic_context",
+    }
+)
 # Plan 06-38 adds Phase 6 items under these tags (and small_talk); test_golden_phase6.py covers them.
 # Plan 04.2-37 adds Phase 4.2 items under the tag phase42; test_golden_phase42.py covers them.
 LATER_PHASE_TAGS = frozenset(
     {"phase6_protected_followup", "phase6_elliptical", "phase6_relative_time", "phase6_compound", "phase6_cross_lingual", "phase42"}
 )
+# Plan 05.3-15 adds implicit_condition and near-miss no-answer items under this tag; test_golden_phase53.py covers them.
+LATER_PHASE_TAGS = LATER_PHASE_TAGS | {"phase53_fixture"}
 # Plan 04.1.1-10 adds colloquial and no_answer term items under these ids; test_golden_terminology.py covers them.
 LATER_PHASE_ID = re.compile(r"^[a-z]+-(colloquial|no_answer)-term-\d{3}$")
 PRE_EXISTING_SHA256 = "78d15c174a16d1aad33814318f67cf1c9d71530813f80b777fd907e6307618dd"

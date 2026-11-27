@@ -20219,3 +20219,2760 @@ GRANT EXECUTE ON FUNCTION public.rag_cache_resolve_sources(text, uuid[]) TO serv
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;
+
+------------------------------------------
+-- Phase 4.1.1: Terminology dictionary (migrations 0471-0473, plan 04.1.1-14, after 0442 in migration order)
+------------------------------------------
+
+-- >>> supabase/migrations/0471_terminology_schema.sql
+-- 0471: Phase 4.1.1 terminology dictionary storage and the effective-dictionary read (D-01, D-02, D-04, D-06, D-07, D-22, D-32, D-35).
+-- rag_term_layers holds one row per layer ('shared' for the deployment, or a tenant key) with the version every write bumps.
+-- rag_term_entries holds the entries of every layer; a workspace row with suppresses_entry_id set hides that shared entry for its tenant.
+-- rag_term_audit is append-only. No entry id is a foreign key there, so audit rows outlive deleted entries.
+-- Languages are checked by shape only (the literal any or a lower-case code); whether a code is enabled is checked in the app (D-35).
+-- Translation pairs (kind translation) carry source_language and target_language; no other kind does (D-04, D-32).
+-- Server role only: RLS on without policies, nothing granted to PUBLIC, anon or authenticated, service_role may SELECT. Writes go through
+-- the SECURITY DEFINER writers of 0472.
+-- rag_term_effective(p_tenant_key) is SECURITY INVOKER with an empty search_path, executable by service_role only, and checks the tenant
+-- key with rag_assert_tenant_key first. It returns the enabled shared entries the tenant does not suppress plus the tenant's enabled
+-- entries, translation pairs included, with both layer versions (0 when the layer row does not exist).
+-- Idempotent: IF NOT EXISTS, guarded constraints, DROP and CREATE of the read function, then REVOKE and GRANT.
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.rag_term_layers (
+  layer_key text PRIMARY KEY
+    CONSTRAINT rag_term_layers_layer_key_check
+    CHECK (layer_key = 'shared' OR layer_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  version bigint NOT NULL DEFAULT 0 CONSTRAINT rag_term_layers_version_check CHECK (version >= 0),
+  entries_sha256 text CONSTRAINT rag_term_layers_sha_check CHECK (entries_sha256 IS NULL OR entries_sha256 ~ '^[0-9a-f]{64}$'),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid
+);
+
+CREATE TABLE IF NOT EXISTS public.rag_term_entries (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  layer_key text NOT NULL
+    CONSTRAINT rag_term_entries_layer_key_check
+    CHECK (layer_key = 'shared' OR layer_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  canonical text NOT NULL CONSTRAINT rag_term_entries_canonical_check CHECK (char_length(canonical) BETWEEN 1 AND 64),
+  variants text[] NOT NULL DEFAULT '{}'::text[],
+  normalized_variants text[] NOT NULL DEFAULT '{}'::text[],
+  language text NOT NULL
+    CONSTRAINT rag_term_entries_language_check CHECK (language = 'any' OR language ~ '^[a-z]{2,3}(-[a-z0-9]{2,8})*$'),
+  kind text NOT NULL
+    CONSTRAINT rag_term_entries_kind_check
+    CHECK (kind IN ('synonym', 'abbreviation', 'alias', 'identifier', 'translation', 'misspelling')),
+  source_language text CONSTRAINT rag_term_entries_source_language_check CHECK (source_language ~ '^[a-z]{2,3}(-[a-z0-9]{2,8})*$'),
+  target_language text CONSTRAINT rag_term_entries_target_language_check CHECK (target_language ~ '^[a-z]{2,3}(-[a-z0-9]{2,8})*$'),
+  mode text NOT NULL DEFAULT 'one_way' CONSTRAINT rag_term_entries_mode_check CHECK (mode IN ('one_way', 'equivalent')),
+  enabled boolean NOT NULL DEFAULT true,
+  note text CONSTRAINT rag_term_entries_note_check CHECK (note IS NULL OR char_length(note) <= 500),
+  suppresses_entry_id uuid REFERENCES public.rag_term_entries (id) ON DELETE CASCADE,
+  created_by uuid,
+  updated_by uuid,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  -- A suppression row lives on a tenant layer and has no variants; every other row has 1 to 16 non-empty variants.
+  CONSTRAINT rag_term_entries_suppression_check CHECK (
+    suppresses_entry_id IS NULL OR (layer_key <> 'shared' AND cardinality(variants) = 0 AND cardinality(normalized_variants) = 0)
+  ),
+  CONSTRAINT rag_term_entries_variants_check CHECK (
+    suppresses_entry_id IS NOT NULL OR (cardinality(variants) BETWEEN 1 AND 16 AND array_position(variants, NULL) IS NULL AND NOT ('' = ANY (variants)))
+  ),
+  CONSTRAINT rag_term_entries_normalized_variants_check CHECK (
+    array_position(normalized_variants, NULL) IS NULL AND NOT ('' = ANY (normalized_variants))
+  ),
+  -- Translation pair (D-04, D-32): both languages set exactly for kind translation; they differ, neither is any, the entry language is the
+  -- source language and the mode is one_way.
+  CONSTRAINT rag_term_entries_translation_check CHECK (
+    (kind <> 'translation' AND source_language IS NULL AND target_language IS NULL)
+    OR (
+      kind = 'translation'
+      AND source_language IS NOT NULL
+      AND target_language IS NOT NULL
+      AND source_language <> 'any'
+      AND target_language <> 'any'
+      AND source_language <> target_language
+      AND language = source_language
+      AND mode = 'one_way'
+    )
+  )
+);
+
+-- One non-suppression entry per layer, language, target language and canonical; one suppression per tenant layer and suppressed entry.
+CREATE UNIQUE INDEX IF NOT EXISTS rag_term_entries_canonical_key
+  ON public.rag_term_entries (layer_key, language, (COALESCE(target_language, '')), lower(canonical))
+  WHERE suppresses_entry_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS rag_term_entries_suppression_key
+  ON public.rag_term_entries (layer_key, suppresses_entry_id)
+  WHERE suppresses_entry_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS rag_term_entries_layer_idx ON public.rag_term_entries (layer_key);
+CREATE INDEX IF NOT EXISTS rag_term_entries_normalized_variants_idx ON public.rag_term_entries USING gin (normalized_variants);
+
+CREATE TABLE IF NOT EXISTS public.rag_term_audit (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  layer_key text NOT NULL
+    CONSTRAINT rag_term_audit_layer_key_check
+    CHECK (layer_key = 'shared' OR layer_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  entry_id uuid,
+  action text NOT NULL
+    CONSTRAINT rag_term_audit_action_check
+    CHECK (action IN ('create', 'update', 'delete', 'import', 'suppress', 'unsuppress', 'candidate_accept', 'candidate_dismiss')),
+  actor uuid NOT NULL,
+  before jsonb,
+  after jsonb,
+  layer_version bigint NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS rag_term_audit_layer_time_idx ON public.rag_term_audit (layer_key, created_at DESC);
+CREATE INDEX IF NOT EXISTS rag_term_audit_entry_idx ON public.rag_term_audit (entry_id);
+
+ALTER TABLE public.rag_term_layers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rag_term_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rag_term_audit ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.rag_term_layers FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON public.rag_term_entries FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON public.rag_term_audit FROM PUBLIC, anon, authenticated, service_role;
+GRANT SELECT ON public.rag_term_layers TO service_role;
+GRANT SELECT ON public.rag_term_entries TO service_role;
+GRANT SELECT ON public.rag_term_audit TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_term_audit_immutable() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $fn$
+BEGIN
+  RAISE EXCEPTION 'rag_term_audit is append-only';
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_term_audit_immutable() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS rag_term_audit_immutable ON public.rag_term_audit;
+CREATE TRIGGER rag_term_audit_immutable
+  BEFORE UPDATE OR DELETE ON public.rag_term_audit
+  FOR EACH ROW EXECUTE FUNCTION public.rag_term_audit_immutable();
+
+DROP TRIGGER IF EXISTS rag_term_audit_no_truncate ON public.rag_term_audit;
+CREATE TRIGGER rag_term_audit_no_truncate
+  BEFORE TRUNCATE ON public.rag_term_audit
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_term_audit_immutable();
+
+DROP FUNCTION IF EXISTS public.rag_term_effective(text);
+
+CREATE FUNCTION public.rag_term_effective(p_tenant_key text)
+RETURNS TABLE (
+  entry_id uuid,
+  layer text,
+  canonical text,
+  variants text[],
+  normalized_variants text[],
+  language text,
+  kind text,
+  mode text,
+  source_language text,
+  target_language text,
+  shared_version bigint,
+  tenant_version bigint
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_shared bigint;
+  v_tenant bigint;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+
+  SELECT l.version INTO v_shared FROM public.rag_term_layers l WHERE l.layer_key = 'shared';
+  SELECT l.version INTO v_tenant FROM public.rag_term_layers l WHERE l.layer_key = p_tenant_key;
+
+  RETURN QUERY
+  SELECT e.id,
+         CASE WHEN e.layer_key = 'shared' THEN 'shared' ELSE 'workspace' END,
+         e.canonical,
+         e.variants,
+         e.normalized_variants,
+         e.language,
+         e.kind,
+         e.mode,
+         e.source_language,
+         e.target_language,
+         COALESCE(v_shared, 0::bigint),
+         COALESCE(v_tenant, 0::bigint)
+    FROM public.rag_term_entries e
+   WHERE e.enabled
+     AND e.suppresses_entry_id IS NULL
+     AND (
+       e.layer_key = p_tenant_key
+       OR (
+         e.layer_key = 'shared'
+         AND NOT EXISTS (
+           SELECT 1
+             FROM public.rag_term_entries s
+            WHERE s.layer_key = p_tenant_key
+              AND s.suppresses_entry_id = e.id
+              AND s.enabled
+         )
+       )
+     )
+   ORDER BY (e.layer_key = 'shared') DESC, e.language, pg_catalog.lower(e.canonical), e.target_language NULLS FIRST, e.id;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_term_effective(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_term_effective(text) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0472_terminology_writers.sql
+-- 0472: Phase 4.1.1 terminology writers, suppression, atomic import and the admin reads (D-03, D-04, D-05, D-06, D-07, D-23, D-32, D-35).
+-- Every dictionary change goes through these functions; the tables of 0471 grant service_role SELECT only.
+-- Who may act (D-03): p_actor is the guard-verified admin id from the route layer. The shared layer needs admin_users membership; a tenant
+-- layer needs the key in rag_admin_tenant_keys(p_actor); in single-tenant mode a tenant layer is refused with workspace_layer_unavailable.
+-- An entry id of another layer answers not_found, so ids are not probed.
+-- Versions (D-05): each successful write locks the layer row, checks p_expected_version (version_conflict when stale, the current version in
+-- DETAIL), increments the version by exactly one (creating the layer row at 1), recomputes entries_sha256 and writes one rag_term_audit row
+-- per changed entry with before and after JSON and the new layer version, all in the caller's transaction.
+-- entries_sha256 is the sha256 of the layer's entries as canonical JSON without the row id, sorted, so equal content gives an equal hash.
+-- Deleting a shared entry removes every tenant suppression of it (ON DELETE CASCADE in 0471); those rows are audited as unsuppress on their
+-- tenant layer first, and each such tenant layer is bumped too.
+-- Entries (D-04, D-32): the entry JSON carries canonical, variants, normalized_variants, language, kind, mode, enabled, note,
+-- source_language and target_language. The writers do not normalize text: normalized_variants are stored as sent and must have the length of
+-- variants. A row the table CHECKs or the writer rules reject raises invalid_entry. No language code is named here (D-35).
+-- Import (D-23): all-or-nothing, keyed by (language, target_language or empty, lower(canonical)); replace also deletes absent entries.
+-- At most 5,000 rows per import and 20,000 entries per layer (limit).
+-- Errors are P0001 with the code as the whole message: not_admin, not_admin_of_layer, workspace_layer_unavailable, not_found,
+-- version_conflict, invalid_entry, limit.
+-- The six rag_term_ functions run with definer rights and are executable by service_role only. The internal rag_term__ helpers are SECURITY INVOKER
+-- with no grant at all: they run only inside those functions, as the owner. Lock order: shared layer, shared entry, tenant layers.
+-- Idempotent: CREATE OR REPLACE with fixed signatures, then REVOKE and GRANT.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_term__authorize(p_actor uuid, p_layer_key text)
+RETURNS void
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_multi_tenant boolean;
+BEGIN
+  IF p_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.admin_users a WHERE a.id = p_actor) THEN
+    RAISE EXCEPTION 'not_admin' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_layer_key = 'shared' THEN
+    RETURN;
+  END IF;
+  v_multi_tenant := EXISTS (
+    SELECT 1 FROM pg_catalog.pg_attribute
+    WHERE attrelid = 'public.documents'::pg_catalog.regclass AND attname = 'user_id' AND attnotnull AND NOT attisdropped
+  );
+  IF NOT v_multi_tenant THEN
+    RAISE EXCEPTION 'workspace_layer_unavailable' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_layer_key IS NULL OR NOT (p_layer_key = ANY (public.rag_admin_tenant_keys(p_actor))) THEN
+    RAISE EXCEPTION 'not_admin_of_layer' USING ERRCODE = 'P0001';
+  END IF;
+END
+$fn$;
+
+-- Locks the layer row (creating it at version 0), checks the expected version when p_check, and returns the incremented version.
+CREATE OR REPLACE FUNCTION public.rag_term__bump(p_layer_key text, p_actor uuid, p_expected bigint, p_check boolean DEFAULT true)
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_current bigint;
+BEGIN
+  INSERT INTO public.rag_term_layers (layer_key, version) VALUES (p_layer_key, 0) ON CONFLICT (layer_key) DO NOTHING;
+  SELECT l.version INTO v_current FROM public.rag_term_layers l WHERE l.layer_key = p_layer_key FOR UPDATE;
+  IF p_check AND (p_expected IS NULL OR p_expected <> v_current) THEN
+    RAISE EXCEPTION 'version_conflict' USING ERRCODE = 'P0001',
+      DETAIL = pg_catalog.jsonb_build_object('current_version', v_current)::text;
+  END IF;
+  UPDATE public.rag_term_layers l
+     SET version = v_current + 1, updated_at = pg_catalog.now(), updated_by = p_actor
+   WHERE l.layer_key = p_layer_key;
+  RETURN v_current + 1;
+END
+$fn$;
+
+-- The canonical JSON of one entry, used for the audit and (without id) for entries_sha256.
+CREATE OR REPLACE FUNCTION public.rag_term__entry_json(p_row public.rag_term_entries)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+  SELECT pg_catalog.jsonb_build_object(
+    'id', p_row.id,
+    'layer_key', p_row.layer_key,
+    'canonical', p_row.canonical,
+    'variants', pg_catalog.to_jsonb(p_row.variants),
+    'normalized_variants', pg_catalog.to_jsonb(p_row.normalized_variants),
+    'language', p_row.language,
+    'kind', p_row.kind,
+    'mode', p_row.mode,
+    'source_language', p_row.source_language,
+    'target_language', p_row.target_language,
+    'enabled', p_row.enabled,
+    'note', p_row.note,
+    'suppresses_entry_id', p_row.suppresses_entry_id
+  )
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_term__refresh_sha(p_layer_key text)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_sha text;
+BEGIN
+  SELECT pg_catalog.encode(
+           pg_catalog.sha256(pg_catalog.convert_to(COALESCE(pg_catalog.string_agg(c.doc, E'\n' ORDER BY c.doc COLLATE "C"), ''), 'UTF8')),
+           'hex')
+    INTO v_sha
+    FROM (
+      SELECT (public.rag_term__entry_json(e.*) - 'id')::text AS doc
+        FROM public.rag_term_entries e
+       WHERE e.layer_key = p_layer_key
+    ) c;
+  UPDATE public.rag_term_layers l SET entries_sha256 = v_sha WHERE l.layer_key = p_layer_key;
+  RETURN v_sha;
+END
+$fn$;
+
+-- Parses an entry JSON into a row (no id, no layer). Shape errors raise invalid_entry; the table CHECKs run when the row is written.
+CREATE OR REPLACE FUNCTION public.rag_term__parse_entry(p_entry jsonb)
+RETURNS public.rag_term_entries
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  r public.rag_term_entries;
+  k text;
+BEGIN
+  IF p_entry IS NULL OR pg_catalog.jsonb_typeof(p_entry) <> 'object' THEN
+    RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+  END IF;
+  FOREACH k IN ARRAY ARRAY['canonical', 'language', 'kind'] LOOP
+    IF pg_catalog.jsonb_typeof(p_entry -> k) IS DISTINCT FROM 'string' THEN
+      RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+    END IF;
+  END LOOP;
+  FOREACH k IN ARRAY ARRAY['mode', 'note', 'source_language', 'target_language'] LOOP
+    IF p_entry ? k AND pg_catalog.jsonb_typeof(p_entry -> k) NOT IN ('string', 'null') THEN
+      RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+    END IF;
+  END LOOP;
+  IF p_entry ? 'enabled' AND pg_catalog.jsonb_typeof(p_entry -> 'enabled') NOT IN ('boolean', 'null') THEN
+    RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+  END IF;
+  FOREACH k IN ARRAY ARRAY['variants', 'normalized_variants'] LOOP
+    IF pg_catalog.jsonb_typeof(p_entry -> k) IS DISTINCT FROM 'array'
+       OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(p_entry -> k) x WHERE pg_catalog.jsonb_typeof(x) <> 'string') THEN
+      RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+    END IF;
+  END LOOP;
+
+  r.canonical := p_entry ->> 'canonical';
+  r.variants := ARRAY(SELECT t.v FROM pg_catalog.jsonb_array_elements_text(p_entry -> 'variants') WITH ORDINALITY AS t(v, n) ORDER BY t.n);
+  r.normalized_variants := ARRAY(
+    SELECT t.v FROM pg_catalog.jsonb_array_elements_text(p_entry -> 'normalized_variants') WITH ORDINALITY AS t(v, n) ORDER BY t.n
+  );
+  IF pg_catalog.cardinality(r.variants) <> pg_catalog.cardinality(r.normalized_variants)
+     OR EXISTS (SELECT 1 FROM pg_catalog.unnest(r.variants) AS u(v) WHERE pg_catalog.char_length(u.v) > 64) THEN
+    RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+  END IF;
+  r.language := p_entry ->> 'language';
+  r.kind := p_entry ->> 'kind';
+  r.mode := COALESCE(p_entry ->> 'mode', 'one_way');
+  r.enabled := COALESCE((p_entry ->> 'enabled')::boolean, true);
+  r.note := p_entry ->> 'note';
+  r.source_language := p_entry ->> 'source_language';
+  r.target_language := p_entry ->> 'target_language';
+  r.suppresses_entry_id := NULL;
+  RETURN r;
+END
+$fn$;
+
+-- Refuses a layer whose entries (suppressions not counted) would exceed 20,000.
+CREATE OR REPLACE FUNCTION public.rag_term__assert_layer_size(p_layer_key text, p_adding integer)
+RETURNS void
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  IF (SELECT pg_catalog.count(*) FROM public.rag_term_entries e WHERE e.layer_key = p_layer_key AND e.suppresses_entry_id IS NULL) + p_adding > 20000 THEN
+    RAISE EXCEPTION 'limit' USING ERRCODE = 'P0001';
+  END IF;
+END
+$fn$;
+
+-- Before shared entries are deleted: audits, per tenant layer, the suppressions the cascade will remove, bumps that layer and removes them.
+CREATE OR REPLACE FUNCTION public.rag_term__release_suppressions(p_entry_ids uuid[], p_actor uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_layer text;
+  v_version bigint;
+BEGIN
+  FOR v_layer IN
+    SELECT DISTINCT s.layer_key FROM public.rag_term_entries s WHERE s.suppresses_entry_id = ANY (p_entry_ids) ORDER BY s.layer_key
+  LOOP
+    v_version := public.rag_term__bump(v_layer, p_actor, NULL, false);
+    INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+    SELECT s.layer_key, s.suppresses_entry_id, 'unsuppress', p_actor, public.rag_term__entry_json(s.*), NULL, v_version
+      FROM public.rag_term_entries s
+     WHERE s.layer_key = v_layer AND s.suppresses_entry_id = ANY (p_entry_ids)
+     ORDER BY s.id;
+    DELETE FROM public.rag_term_entries s WHERE s.layer_key = v_layer AND s.suppresses_entry_id = ANY (p_entry_ids);
+    PERFORM public.rag_term__refresh_sha(v_layer);
+  END LOOP;
+END
+$fn$;
+
+-- Creates an entry (no id in p_entry) or replaces the content of an entry of this layer (id given).
+CREATE OR REPLACE FUNCTION public.rag_term_upsert_entry(
+  p_actor uuid,
+  p_layer_key text,
+  p_entry jsonb,
+  p_expected_version bigint
+)
+RETURNS TABLE (entry_id uuid, layer_version bigint, entries_sha256 text, action text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_id uuid;
+  v_row public.rag_term_entries;
+  v_old public.rag_term_entries;
+  v_new public.rag_term_entries;
+  v_version bigint;
+  v_action text;
+  v_sha text;
+BEGIN
+  PERFORM public.rag_term__authorize(p_actor, p_layer_key);
+  IF p_entry IS NOT NULL AND pg_catalog.jsonb_typeof(p_entry) = 'object' AND p_entry ? 'id'
+     AND pg_catalog.jsonb_typeof(p_entry -> 'id') <> 'null' THEN
+    IF pg_catalog.jsonb_typeof(p_entry -> 'id') <> 'string'
+       OR (p_entry ->> 'id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+    END IF;
+    v_id := (p_entry ->> 'id')::uuid;
+  END IF;
+  v_row := public.rag_term__parse_entry(p_entry);
+  v_version := public.rag_term__bump(p_layer_key, p_actor, p_expected_version);
+
+  IF v_id IS NOT NULL THEN
+    SELECT * INTO v_old
+      FROM public.rag_term_entries e
+     WHERE e.id = v_id AND e.layer_key = p_layer_key AND e.suppresses_entry_id IS NULL
+       FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0001';
+    END IF;
+    BEGIN
+      UPDATE public.rag_term_entries e
+         SET canonical = v_row.canonical,
+             variants = v_row.variants,
+             normalized_variants = v_row.normalized_variants,
+             language = v_row.language,
+             kind = v_row.kind,
+             mode = v_row.mode,
+             enabled = v_row.enabled,
+             note = v_row.note,
+             source_language = v_row.source_language,
+             target_language = v_row.target_language,
+             updated_by = p_actor,
+             updated_at = pg_catalog.now()
+       WHERE e.id = v_id
+      RETURNING * INTO v_new;
+    EXCEPTION WHEN check_violation OR not_null_violation OR unique_violation THEN
+      RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+    END;
+    v_action := 'update';
+  ELSE
+    PERFORM public.rag_term__assert_layer_size(p_layer_key, 1);
+    BEGIN
+      INSERT INTO public.rag_term_entries
+        (layer_key, canonical, variants, normalized_variants, language, kind, mode, enabled, note, source_language, target_language,
+         created_by, updated_by)
+      VALUES
+        (p_layer_key, v_row.canonical, v_row.variants, v_row.normalized_variants, v_row.language, v_row.kind, v_row.mode, v_row.enabled,
+         v_row.note, v_row.source_language, v_row.target_language, p_actor, p_actor)
+      RETURNING * INTO v_new;
+    EXCEPTION WHEN check_violation OR not_null_violation OR unique_violation THEN
+      RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+    END;
+    v_action := 'create';
+  END IF;
+
+  INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+  VALUES (
+    p_layer_key,
+    v_new.id,
+    v_action,
+    p_actor,
+    CASE WHEN v_old.id IS NULL THEN NULL ELSE public.rag_term__entry_json(v_old) END,
+    public.rag_term__entry_json(v_new),
+    v_version
+  );
+  v_sha := public.rag_term__refresh_sha(p_layer_key);
+  RETURN QUERY SELECT v_new.id, v_version, v_sha, v_action;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_term_delete_entry(
+  p_actor uuid,
+  p_layer_key text,
+  p_entry_id uuid,
+  p_expected_version bigint
+)
+RETURNS TABLE (layer_version bigint, entries_sha256 text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_old public.rag_term_entries;
+  v_version bigint;
+  v_sha text;
+BEGIN
+  PERFORM public.rag_term__authorize(p_actor, p_layer_key);
+  v_version := public.rag_term__bump(p_layer_key, p_actor, p_expected_version);
+  SELECT * INTO v_old
+    FROM public.rag_term_entries e
+   WHERE e.id = p_entry_id AND e.layer_key = p_layer_key AND e.suppresses_entry_id IS NULL
+     FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_layer_key = 'shared' THEN
+    PERFORM public.rag_term__release_suppressions(ARRAY[p_entry_id], p_actor);
+  END IF;
+  INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+  VALUES (p_layer_key, v_old.id, 'delete', p_actor, public.rag_term__entry_json(v_old), NULL, v_version);
+  DELETE FROM public.rag_term_entries e WHERE e.id = v_old.id;
+  v_sha := public.rag_term__refresh_sha(p_layer_key);
+  RETURN QUERY SELECT v_version, v_sha;
+END
+$fn$;
+
+-- Suppresses (or unsuppresses) a shared entry for one tenant layer. The suppression row copies the shared entry's canonical, languages and
+-- kind and has no variants (the 0471 suppression CHECK). The audit row's entry_id is the shared entry id.
+CREATE OR REPLACE FUNCTION public.rag_term_set_suppression(
+  p_actor uuid,
+  p_layer_key text,
+  p_shared_entry_id uuid,
+  p_suppressed boolean,
+  p_expected_version bigint
+)
+RETURNS TABLE (layer_version bigint, entries_sha256 text, suppressed boolean)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_shared public.rag_term_entries;
+  v_old public.rag_term_entries;
+  v_new public.rag_term_entries;
+  v_version bigint;
+  v_sha text;
+BEGIN
+  PERFORM public.rag_term__authorize(p_actor, p_layer_key);
+  IF p_layer_key = 'shared' OR p_suppressed IS NULL THEN
+    RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+  END IF;
+  SELECT * INTO v_shared
+    FROM public.rag_term_entries e
+   WHERE e.id = p_shared_entry_id AND e.layer_key = 'shared' AND e.suppresses_entry_id IS NULL
+     FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0001';
+  END IF;
+  v_version := public.rag_term__bump(p_layer_key, p_actor, p_expected_version);
+  SELECT * INTO v_old
+    FROM public.rag_term_entries s
+   WHERE s.layer_key = p_layer_key AND s.suppresses_entry_id = p_shared_entry_id
+     FOR UPDATE;
+
+  IF p_suppressed THEN
+    IF v_old.id IS NULL THEN
+      INSERT INTO public.rag_term_entries
+        (layer_key, canonical, variants, normalized_variants, language, kind, mode, enabled, source_language, target_language,
+         suppresses_entry_id, created_by, updated_by)
+      VALUES
+        (p_layer_key, v_shared.canonical, '{}'::text[], '{}'::text[], v_shared.language, v_shared.kind, v_shared.mode, true,
+         v_shared.source_language, v_shared.target_language, v_shared.id, p_actor, p_actor)
+      RETURNING * INTO v_new;
+      INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+      VALUES (p_layer_key, v_shared.id, 'suppress', p_actor, NULL, public.rag_term__entry_json(v_new), v_version);
+    ELSIF NOT v_old.enabled THEN
+      UPDATE public.rag_term_entries s SET enabled = true, updated_by = p_actor, updated_at = pg_catalog.now()
+       WHERE s.id = v_old.id
+      RETURNING * INTO v_new;
+      INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+      VALUES (p_layer_key, v_shared.id, 'suppress', p_actor, public.rag_term__entry_json(v_old), public.rag_term__entry_json(v_new), v_version);
+    END IF;
+  ELSIF v_old.id IS NOT NULL THEN
+    INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+    VALUES (p_layer_key, v_shared.id, 'unsuppress', p_actor, public.rag_term__entry_json(v_old), NULL, v_version);
+    DELETE FROM public.rag_term_entries s WHERE s.id = v_old.id;
+  END IF;
+
+  v_sha := public.rag_term__refresh_sha(p_layer_key);
+  RETURN QUERY SELECT v_version, v_sha, p_suppressed;
+END
+$fn$;
+
+-- All-or-nothing import (D-23). p_rows is a JSON array of entry objects without ids; p_mode is merge or replace. A rejected row raises
+-- invalid_entry with its 1-based position as DETAIL {"row": n}; nothing is written.
+CREATE OR REPLACE FUNCTION public.rag_term_apply_import(
+  p_actor uuid,
+  p_layer_key text,
+  p_rows jsonb,
+  p_mode text,
+  p_expected_version bigint
+)
+RETURNS TABLE (layer_version bigint, entries_sha256 text, created integer, updated integer, unchanged integer, deleted integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_rows public.rag_term_entries[] := '{}'::public.rag_term_entries[];
+  v_keys text[] := '{}'::text[];
+  v_elem jsonb;
+  v_n bigint;
+  v_i integer;
+  v_row public.rag_term_entries;
+  v_old public.rag_term_entries;
+  v_new public.rag_term_entries;
+  v_key text;
+  v_version bigint;
+  v_delete uuid[];
+  v_created integer := 0;
+  v_updated integer := 0;
+  v_unchanged integer := 0;
+  v_deleted integer := 0;
+  v_sha text;
+BEGIN
+  PERFORM public.rag_term__authorize(p_actor, p_layer_key);
+  IF p_mode IS NULL OR p_mode NOT IN ('merge', 'replace') OR p_rows IS NULL OR pg_catalog.jsonb_typeof(p_rows) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+  END IF;
+  IF pg_catalog.jsonb_array_length(p_rows) > 5000 THEN
+    RAISE EXCEPTION 'limit' USING ERRCODE = 'P0001';
+  END IF;
+
+  BEGIN
+    FOR v_elem, v_n IN SELECT t.value, t.n FROM pg_catalog.jsonb_array_elements(p_rows) WITH ORDINALITY AS t(value, n) ORDER BY t.n LOOP
+      v_row := public.rag_term__parse_entry(v_elem);
+      v_key := v_row.language || E'\x1f' || COALESCE(v_row.target_language, '') || E'\x1f' || pg_catalog.lower(v_row.canonical);
+      IF v_key = ANY (v_keys) THEN
+        RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+      END IF;
+      v_keys := v_keys || v_key;
+      v_rows := v_rows || v_row;
+    END LOOP;
+    v_n := NULL;
+
+    v_version := public.rag_term__bump(p_layer_key, p_actor, p_expected_version);
+
+    FOR v_i IN 1 .. COALESCE(pg_catalog.cardinality(v_rows), 0) LOOP
+      v_n := v_i;
+      v_row := v_rows[v_i];
+      v_old := NULL;
+      SELECT * INTO v_old
+        FROM public.rag_term_entries e
+       WHERE e.layer_key = p_layer_key
+         AND e.suppresses_entry_id IS NULL
+         AND e.language = v_row.language
+         AND COALESCE(e.target_language, '') = COALESCE(v_row.target_language, '')
+         AND pg_catalog.lower(e.canonical) = pg_catalog.lower(v_row.canonical)
+         FOR UPDATE;
+      IF v_old.id IS NOT NULL THEN
+        v_row.id := v_old.id;
+        v_row.layer_key := p_layer_key;
+        IF public.rag_term__entry_json(v_row) = public.rag_term__entry_json(v_old) THEN
+          v_unchanged := v_unchanged + 1;
+          CONTINUE;
+        END IF;
+        UPDATE public.rag_term_entries e
+           SET canonical = v_row.canonical,
+               variants = v_row.variants,
+               normalized_variants = v_row.normalized_variants,
+               language = v_row.language,
+               kind = v_row.kind,
+               mode = v_row.mode,
+               enabled = v_row.enabled,
+               note = v_row.note,
+               source_language = v_row.source_language,
+               target_language = v_row.target_language,
+               updated_by = p_actor,
+               updated_at = pg_catalog.now()
+         WHERE e.id = v_old.id
+        RETURNING * INTO v_new;
+        INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+        VALUES (p_layer_key, v_new.id, 'import', p_actor, public.rag_term__entry_json(v_old), public.rag_term__entry_json(v_new), v_version);
+        v_updated := v_updated + 1;
+      ELSE
+        INSERT INTO public.rag_term_entries
+          (layer_key, canonical, variants, normalized_variants, language, kind, mode, enabled, note, source_language, target_language,
+           created_by, updated_by)
+        VALUES
+          (p_layer_key, v_row.canonical, v_row.variants, v_row.normalized_variants, v_row.language, v_row.kind, v_row.mode, v_row.enabled,
+           v_row.note, v_row.source_language, v_row.target_language, p_actor, p_actor)
+        RETURNING * INTO v_new;
+        INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+        VALUES (p_layer_key, v_new.id, 'import', p_actor, NULL, public.rag_term__entry_json(v_new), v_version);
+        v_created := v_created + 1;
+      END IF;
+    END LOOP;
+    v_n := NULL;
+  EXCEPTION
+    WHEN check_violation OR not_null_violation OR unique_violation THEN
+      IF v_n IS NULL THEN
+        RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001';
+      END IF;
+      RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('row', v_n)::text;
+    WHEN raise_exception THEN
+      IF SQLERRM = 'invalid_entry' AND v_n IS NOT NULL THEN
+        RAISE EXCEPTION 'invalid_entry' USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('row', v_n)::text;
+      END IF;
+      RAISE;
+  END;
+
+  IF p_mode = 'replace' THEN
+    SELECT pg_catalog.array_agg(e.id ORDER BY e.id) INTO v_delete
+      FROM public.rag_term_entries e
+     WHERE e.layer_key = p_layer_key
+       AND e.suppresses_entry_id IS NULL
+       AND NOT ((e.language || E'\x1f' || COALESCE(e.target_language, '') || E'\x1f' || pg_catalog.lower(e.canonical)) = ANY (v_keys));
+    IF v_delete IS NOT NULL THEN
+      PERFORM 1 FROM public.rag_term_entries e WHERE e.id = ANY (v_delete) ORDER BY e.id FOR UPDATE;
+      IF p_layer_key = 'shared' THEN
+        PERFORM public.rag_term__release_suppressions(v_delete, p_actor);
+      END IF;
+      INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+      SELECT p_layer_key, e.id, 'import', p_actor, public.rag_term__entry_json(e.*), NULL, v_version
+        FROM public.rag_term_entries e
+       WHERE e.id = ANY (v_delete)
+       ORDER BY e.id;
+      DELETE FROM public.rag_term_entries e WHERE e.id = ANY (v_delete);
+      v_deleted := pg_catalog.cardinality(v_delete);
+    END IF;
+  END IF;
+
+  PERFORM public.rag_term__assert_layer_size(p_layer_key, 0);
+  v_sha := public.rag_term__refresh_sha(p_layer_key);
+  RETURN QUERY SELECT v_version, v_sha, v_created, v_updated, v_unchanged, v_deleted;
+END
+$fn$;
+
+-- One page of a layer's entries (suppression rows included, marked by suppresses_entry_id), with the layer version and total_count before
+-- the page is cut. p_search matches canonical or any variant, case-insensitively, as a plain substring.
+CREATE OR REPLACE FUNCTION public.rag_term_list_entries(
+  p_actor uuid,
+  p_layer_key text,
+  p_limit integer DEFAULT 50,
+  p_offset integer DEFAULT 0,
+  p_search text DEFAULT NULL
+)
+RETURNS TABLE (
+  id uuid,
+  layer_key text,
+  canonical text,
+  variants text[],
+  normalized_variants text[],
+  language text,
+  kind text,
+  mode text,
+  source_language text,
+  target_language text,
+  enabled boolean,
+  note text,
+  suppresses_entry_id uuid,
+  created_by uuid,
+  updated_by uuid,
+  created_at timestamptz,
+  updated_at timestamptz,
+  layer_version bigint,
+  total_count bigint
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_page integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 100);
+  v_skip integer := GREATEST(COALESCE(p_offset, 0), 0);
+  v_search text := pg_catalog.lower(NULLIF(pg_catalog.btrim(p_search), ''));
+  v_version bigint;
+BEGIN
+  PERFORM public.rag_term__authorize(p_actor, p_layer_key);
+  SELECT l.version INTO v_version FROM public.rag_term_layers l WHERE l.layer_key = p_layer_key;
+  RETURN QUERY
+  SELECT e.id, e.layer_key, e.canonical, e.variants, e.normalized_variants, e.language, e.kind, e.mode, e.source_language,
+         e.target_language, e.enabled, e.note, e.suppresses_entry_id, e.created_by, e.updated_by, e.created_at, e.updated_at,
+         COALESCE(v_version, 0::bigint), pg_catalog.count(*) OVER ()
+    FROM public.rag_term_entries e
+   WHERE e.layer_key = p_layer_key
+     AND (
+       v_search IS NULL
+       OR pg_catalog.strpos(pg_catalog.lower(e.canonical), v_search) > 0
+       OR EXISTS (SELECT 1 FROM pg_catalog.unnest(e.variants) AS u(v) WHERE pg_catalog.strpos(pg_catalog.lower(u.v), v_search) > 0)
+     )
+   ORDER BY pg_catalog.lower(e.canonical), e.language, COALESCE(e.target_language, ''), e.id
+   LIMIT v_page OFFSET v_skip;
+END
+$fn$;
+
+-- One page of a layer's audit, newest first. Actors are ids only; nothing joins auth.users.
+CREATE OR REPLACE FUNCTION public.rag_term_list_audit(
+  p_actor uuid,
+  p_layer_key text,
+  p_limit integer DEFAULT 50,
+  p_offset integer DEFAULT 0
+)
+RETURNS TABLE (
+  id uuid,
+  layer_key text,
+  entry_id uuid,
+  action text,
+  actor uuid,
+  before jsonb,
+  after jsonb,
+  layer_version bigint,
+  created_at timestamptz,
+  total_count bigint
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_page integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 100);
+  v_skip integer := GREATEST(COALESCE(p_offset, 0), 0);
+BEGIN
+  PERFORM public.rag_term__authorize(p_actor, p_layer_key);
+  RETURN QUERY
+  SELECT a.id, a.layer_key, a.entry_id, a.action, a.actor, a.before, a.after, a.layer_version, a.created_at, pg_catalog.count(*) OVER ()
+    FROM public.rag_term_audit a
+   WHERE a.layer_key = p_layer_key
+   ORDER BY a.layer_version DESC, a.created_at DESC, a.id
+   LIMIT v_page OFFSET v_skip;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_term__authorize(uuid, text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rag_term__bump(text, uuid, bigint, boolean) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rag_term__entry_json(public.rag_term_entries) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rag_term__refresh_sha(text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rag_term__parse_entry(jsonb) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rag_term__assert_layer_size(text, integer) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rag_term__release_suppressions(uuid[], uuid) FROM PUBLIC, anon, authenticated, service_role;
+
+REVOKE ALL ON FUNCTION public.rag_term_upsert_entry(uuid, text, jsonb, bigint) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_delete_entry(uuid, text, uuid, bigint) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_apply_import(uuid, text, jsonb, text, bigint) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_list_audit(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_term_upsert_entry(uuid, text, jsonb, bigint) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_delete_entry(uuid, text, uuid, bigint) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_apply_import(uuid, text, jsonb, text, bigint) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_list_audit(uuid, text, integer, integer) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0473_terminology_mining.sql
+-- 0473: Phase 4.1.1 terminology mining: the miss log, the candidate table, corpus document frequency and candidate decisions
+-- (D-01, D-07, D-25, D-26, PO-3, PO-4).
+-- rag_term_misses holds masked missed queries per tenant (source miss_log; feedback and langfuse are reserved for Phase 5.1.1).
+-- rag_term_candidates holds mined terms per tenant, language and term; a dismissed or accepted candidate keeps its status when mined again.
+-- Retention is 30 days without any schedule (PO-4): rag_term_record_miss deletes the tenant's older rows before it inserts,
+-- rag_term_read_misses never returns older rows, rag_term_upsert_candidates clears the examples of the tenant's candidates not seen for
+-- 30 days, and rag_term_purge_misses lets the miner purge every tenant.
+-- rag_term_corpus_df counts, per token, the tenant's distinct documents with a current, ready chunk whose lexical_tsv matches, with the
+-- current-and-ready filter of the newest hybrid_search_chunks (0802: tenant_key, is_current, status ready or variant) and the same
+-- rag_lexical_tsquery builder (D-26, D-38).
+-- Candidate decisions check the actor like 0472: admin_users membership, then the candidate's tenant key in rag_admin_tenant_keys(p_actor);
+-- a candidate or entry of another tenant answers not_found. Each decision writes one candidate_accept or candidate_dismiss row to
+-- rag_term_audit with the layer's current version (a decision does not change the dictionary, so no version is bumped).
+-- Errors are P0001 with the code as the whole message: invalid_miss, invalid_window, invalid_candidate, invalid_action, not_admin,
+-- not_admin_of_layer, not_found, not_pending. A malformed or wrong-mode tenant key raises 22023 from rag_assert_tenant_key.
+-- Server role only: RLS on without policies, nothing granted to PUBLIC, anon or authenticated, service_role may SELECT; every function is
+-- SECURITY DEFINER with an empty search_path and executable by service_role only.
+-- Idempotent: IF NOT EXISTS, CREATE OR REPLACE with fixed signatures, then REVOKE and GRANT.
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.rag_term_misses (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_key text NOT NULL
+    CONSTRAINT rag_term_misses_tenant_key_check
+    CHECK (tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  source text NOT NULL DEFAULT 'miss_log'
+    CONSTRAINT rag_term_misses_source_check CHECK (source IN ('miss_log', 'feedback', 'langfuse')),
+  query_masked text NOT NULL CONSTRAINT rag_term_misses_query_check CHECK (char_length(query_masked) BETWEEN 1 AND 500),
+  language text CONSTRAINT rag_term_misses_language_check CHECK (language IS NULL OR language ~ '^[a-z]{2,3}(-[a-z0-9]{2,8})*$'),
+  status text NOT NULL CONSTRAINT rag_term_misses_status_check CHECK (status IN ('ok', 'empty', 'degraded', 'error')),
+  reason text CONSTRAINT rag_term_misses_reason_check CHECK (reason IS NULL OR char_length(reason) <= 120),
+  top_score real,
+  dictionary_version text
+    CONSTRAINT rag_term_misses_dictionary_version_check CHECK (dictionary_version IS NULL OR dictionary_version ~ '^s[0-9]+(\.w[0-9]+)?$'),
+  retrieval_config_hash text NOT NULL
+    CONSTRAINT rag_term_misses_config_hash_check CHECK (char_length(retrieval_config_hash) BETWEEN 1 AND 128),
+  profile text NOT NULL CONSTRAINT rag_term_misses_profile_check CHECK (profile IN ('chat', 'embed', 'voice')),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS rag_term_misses_tenant_time_idx ON public.rag_term_misses (tenant_key, created_at DESC);
+CREATE INDEX IF NOT EXISTS rag_term_misses_time_idx ON public.rag_term_misses (created_at);
+
+CREATE TABLE IF NOT EXISTS public.rag_term_candidates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_key text NOT NULL
+    CONSTRAINT rag_term_candidates_tenant_key_check
+    CHECK (tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  term text NOT NULL CONSTRAINT rag_term_candidates_term_check CHECK (char_length(term) BETWEEN 1 AND 64),
+  language text NOT NULL
+    CONSTRAINT rag_term_candidates_language_check CHECK (language = 'any' OR language ~ '^[a-z]{2,3}(-[a-z0-9]{2,8})*$'),
+  support integer NOT NULL DEFAULT 0 CONSTRAINT rag_term_candidates_support_check CHECK (support >= 0),
+  examples text[] NOT NULL DEFAULT '{}'::text[]
+    CONSTRAINT rag_term_candidates_examples_check CHECK (
+      cardinality(examples) <= 3
+      AND array_position(examples, NULL) IS NULL
+      AND NOT ('' = ANY (examples))
+      AND char_length(array_to_string(examples, '')) <= 1500
+    ),
+  corpus_df integer NOT NULL DEFAULT 0 CONSTRAINT rag_term_candidates_corpus_df_check CHECK (corpus_df >= 0),
+  status text NOT NULL DEFAULT 'pending'
+    CONSTRAINT rag_term_candidates_status_check CHECK (status IN ('pending', 'accepted', 'dismissed')),
+  source text NOT NULL DEFAULT 'miss_log'
+    CONSTRAINT rag_term_candidates_source_check CHECK (source IN ('miss_log', 'feedback', 'langfuse')),
+  entry_id uuid,
+  first_seen timestamptz NOT NULL DEFAULT now(),
+  last_seen timestamptz NOT NULL DEFAULT now(),
+  decided_by uuid,
+  decided_at timestamptz,
+  CONSTRAINT rag_term_candidates_accepted_check CHECK (status <> 'accepted' OR entry_id IS NOT NULL),
+  CONSTRAINT rag_term_candidates_key UNIQUE (tenant_key, language, term)
+);
+
+CREATE INDEX IF NOT EXISTS rag_term_candidates_tenant_status_idx ON public.rag_term_candidates (tenant_key, status, last_seen DESC);
+
+ALTER TABLE public.rag_term_misses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rag_term_candidates ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.rag_term_misses FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON public.rag_term_candidates FROM PUBLIC, anon, authenticated, service_role;
+GRANT SELECT ON public.rag_term_misses TO service_role;
+GRANT SELECT ON public.rag_term_candidates TO service_role;
+
+-- Inserts one miss for the tenant after deleting that tenant's rows older than 30 days. Returns the new id.
+CREATE OR REPLACE FUNCTION public.rag_term_record_miss(p_tenant_key text, p_row jsonb)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_id uuid;
+  v_query text;
+  v_profile text;
+  v_source text;
+  v_status text;
+  k text;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_row IS NULL OR pg_catalog.jsonb_typeof(p_row) <> 'object' THEN
+    RAISE EXCEPTION 'invalid_miss' USING ERRCODE = 'P0001';
+  END IF;
+  FOREACH k IN ARRAY ARRAY['query_masked', 'status', 'retrieval_config_hash', 'profile'] LOOP
+    IF pg_catalog.jsonb_typeof(p_row -> k) IS DISTINCT FROM 'string' THEN
+      RAISE EXCEPTION 'invalid_miss' USING ERRCODE = 'P0001';
+    END IF;
+  END LOOP;
+  FOREACH k IN ARRAY ARRAY['source', 'language', 'reason', 'dictionary_version'] LOOP
+    IF p_row ? k AND pg_catalog.jsonb_typeof(p_row -> k) NOT IN ('string', 'null') THEN
+      RAISE EXCEPTION 'invalid_miss' USING ERRCODE = 'P0001';
+    END IF;
+  END LOOP;
+  IF p_row ? 'top_score' AND pg_catalog.jsonb_typeof(p_row -> 'top_score') NOT IN ('number', 'null') THEN
+    RAISE EXCEPTION 'invalid_miss' USING ERRCODE = 'P0001';
+  END IF;
+
+  v_query := p_row ->> 'query_masked';
+  v_profile := p_row ->> 'profile';
+  v_status := p_row ->> 'status';
+  v_source := COALESCE(p_row ->> 'source', 'miss_log');
+  IF pg_catalog.char_length(v_query) NOT BETWEEN 1 AND 500
+     OR v_profile NOT IN ('chat', 'embed', 'voice')
+     OR v_source NOT IN ('miss_log', 'feedback', 'langfuse')
+     OR v_status NOT IN ('ok', 'empty', 'degraded', 'error') THEN
+    RAISE EXCEPTION 'invalid_miss' USING ERRCODE = 'P0001';
+  END IF;
+
+  DELETE FROM public.rag_term_misses m
+   WHERE m.tenant_key = p_tenant_key AND m.created_at < pg_catalog.now() - pg_catalog.make_interval(days => 30);
+
+  BEGIN
+    INSERT INTO public.rag_term_misses (
+      tenant_key, source, query_masked, language, status, reason, top_score, dictionary_version, retrieval_config_hash, profile
+    ) VALUES (
+      p_tenant_key,
+      v_source,
+      v_query,
+      p_row ->> 'language',
+      v_status,
+      p_row ->> 'reason',
+      (p_row ->> 'top_score')::real,
+      p_row ->> 'dictionary_version',
+      p_row ->> 'retrieval_config_hash',
+      v_profile
+    )
+    RETURNING id INTO v_id;
+  EXCEPTION WHEN check_violation OR not_null_violation OR numeric_value_out_of_range THEN
+    RAISE EXCEPTION 'invalid_miss' USING ERRCODE = 'P0001';
+  END;
+  RETURN v_id;
+END
+$fn$;
+
+-- Deletes every tenant's misses older than p_older_than_days (at least 1) and returns the count.
+CREATE OR REPLACE FUNCTION public.rag_term_purge_misses(p_older_than_days integer)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_count integer;
+BEGIN
+  IF p_older_than_days IS NULL OR p_older_than_days < 1 THEN
+    RAISE EXCEPTION 'invalid_window' USING ERRCODE = 'P0001';
+  END IF;
+  DELETE FROM public.rag_term_misses m WHERE m.created_at < pg_catalog.now() - pg_catalog.make_interval(days => p_older_than_days);
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END
+$fn$;
+
+-- The tenant's misses of the last p_window_days (1 to 30; larger windows read 30 days), newest first.
+CREATE OR REPLACE FUNCTION public.rag_term_read_misses(p_tenant_key text, p_window_days integer DEFAULT 14)
+RETURNS TABLE (
+  id uuid,
+  source text,
+  query_masked text,
+  language text,
+  status text,
+  reason text,
+  top_score real,
+  dictionary_version text,
+  retrieval_config_hash text,
+  profile text,
+  created_at timestamptz
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_days integer;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_window_days IS NULL OR p_window_days < 1 THEN
+    RAISE EXCEPTION 'invalid_window' USING ERRCODE = 'P0001';
+  END IF;
+  v_days := LEAST(p_window_days, 30);
+  RETURN QUERY
+  SELECT m.id, m.source, m.query_masked, m.language, m.status, m.reason, m.top_score, m.dictionary_version, m.retrieval_config_hash,
+         m.profile, m.created_at
+    FROM public.rag_term_misses m
+   WHERE m.tenant_key = p_tenant_key
+     AND m.created_at >= pg_catalog.now() - pg_catalog.make_interval(days => v_days)
+   ORDER BY m.created_at DESC, m.id;
+END
+$fn$;
+
+-- Per distinct token (at most 200), the number of the tenant's documents with a current, ready chunk whose lexical_tsv matches it.
+CREATE OR REPLACE FUNCTION public.rag_term_corpus_df(p_tenant_key text, p_tokens text[])
+RETURNS TABLE (token text, df bigint)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  RETURN QUERY
+  WITH toks AS (
+    SELECT DISTINCT u.tok
+      FROM pg_catalog.unnest(COALESCE(p_tokens, '{}'::text[])) AS u(tok)
+     WHERE u.tok IS NOT NULL AND u.tok <> ''
+     LIMIT 200
+  )
+  SELECT t.tok,
+         COALESCE((
+           SELECT pg_catalog.count(DISTINCT c.document_id)
+             FROM public.document_chunks c
+            WHERE c.tenant_key = p_tenant_key
+              AND c.is_current
+              AND c.status IN ('ready', 'variant')
+              AND c.lexical_tsv OPERATOR(pg_catalog.@@) public.rag_lexical_tsquery(ARRAY[t.tok])
+         ), 0::bigint)
+    FROM toks t
+   ORDER BY t.tok;
+END
+$fn$;
+
+-- Upserts mined candidates (at most 1,000 rows) keyed by (tenant, language, term). A new row is pending; an existing row keeps its status
+-- and takes the new support, examples, corpus_df and last_seen. Clears the examples of the tenant's candidates not seen for 30 days.
+CREATE OR REPLACE FUNCTION public.rag_term_upsert_candidates(p_tenant_key text, p_rows jsonb)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_row jsonb;
+  v_count integer := 0;
+  v_examples text[];
+  v_source text;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_rows IS NULL OR pg_catalog.jsonb_typeof(p_rows) <> 'array' OR pg_catalog.jsonb_array_length(p_rows) > 1000 THEN
+    RAISE EXCEPTION 'invalid_candidate' USING ERRCODE = 'P0001';
+  END IF;
+
+  UPDATE public.rag_term_candidates c
+     SET examples = '{}'::text[]
+   WHERE c.tenant_key = p_tenant_key
+     AND c.last_seen < pg_catalog.now() - pg_catalog.make_interval(days => 30)
+     AND pg_catalog.cardinality(c.examples) > 0;
+
+  FOR v_row IN SELECT x FROM pg_catalog.jsonb_array_elements(p_rows) AS x LOOP
+    IF pg_catalog.jsonb_typeof(v_row) <> 'object'
+       OR pg_catalog.jsonb_typeof(v_row -> 'term') IS DISTINCT FROM 'string'
+       OR pg_catalog.jsonb_typeof(v_row -> 'language') IS DISTINCT FROM 'string'
+       OR pg_catalog.jsonb_typeof(v_row -> 'support') IS DISTINCT FROM 'number'
+       OR (v_row ? 'corpus_df' AND pg_catalog.jsonb_typeof(v_row -> 'corpus_df') NOT IN ('number', 'null'))
+       OR (v_row ? 'source' AND pg_catalog.jsonb_typeof(v_row -> 'source') NOT IN ('string', 'null'))
+       OR (v_row ? 'status')
+       OR (v_row ? 'entry_id')
+       OR pg_catalog.jsonb_typeof(COALESCE(v_row -> 'examples', '[]'::jsonb)) <> 'array'
+       OR EXISTS (
+         SELECT 1 FROM pg_catalog.jsonb_array_elements(COALESCE(v_row -> 'examples', '[]'::jsonb)) e
+          WHERE pg_catalog.jsonb_typeof(e) <> 'string' OR pg_catalog.char_length(e #>> '{}') NOT BETWEEN 1 AND 500
+       ) THEN
+      RAISE EXCEPTION 'invalid_candidate' USING ERRCODE = 'P0001';
+    END IF;
+    v_examples := ARRAY(
+      SELECT t.v FROM pg_catalog.jsonb_array_elements_text(COALESCE(v_row -> 'examples', '[]'::jsonb)) WITH ORDINALITY AS t(v, n) ORDER BY t.n
+    );
+    v_source := COALESCE(v_row ->> 'source', 'miss_log');
+    BEGIN
+      INSERT INTO public.rag_term_candidates AS c (tenant_key, term, language, support, examples, corpus_df, source)
+      VALUES (
+        p_tenant_key,
+        v_row ->> 'term',
+        v_row ->> 'language',
+        (v_row ->> 'support')::integer,
+        v_examples,
+        COALESCE((v_row ->> 'corpus_df')::integer, 0),
+        v_source
+      )
+      ON CONFLICT ON CONSTRAINT rag_term_candidates_key DO UPDATE
+        SET support = EXCLUDED.support,
+            examples = EXCLUDED.examples,
+            corpus_df = EXCLUDED.corpus_df,
+            last_seen = pg_catalog.now();
+    EXCEPTION WHEN check_violation OR not_null_violation OR invalid_text_representation OR numeric_value_out_of_range THEN
+      RAISE EXCEPTION 'invalid_candidate' USING ERRCODE = 'P0001';
+    END;
+    v_count := v_count + 1;
+  END LOOP;
+  RETURN v_count;
+END
+$fn$;
+
+-- One page of a tenant's candidates for an admin of that tenant: pending first, then by support and recency, with total_count.
+CREATE OR REPLACE FUNCTION public.rag_term_list_candidates(
+  p_actor uuid,
+  p_layer_key text,
+  p_limit integer DEFAULT 50,
+  p_offset integer DEFAULT 0
+)
+RETURNS TABLE (
+  id uuid,
+  tenant_key text,
+  term text,
+  language text,
+  support integer,
+  examples text[],
+  corpus_df integer,
+  status text,
+  source text,
+  entry_id uuid,
+  first_seen timestamptz,
+  last_seen timestamptz,
+  decided_by uuid,
+  decided_at timestamptz,
+  total_count bigint
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_page integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 100);
+  v_skip integer := GREATEST(COALESCE(p_offset, 0), 0);
+BEGIN
+  IF p_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.admin_users a WHERE a.id = p_actor) THEN
+    RAISE EXCEPTION 'not_admin' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_layer_key IS NULL OR NOT (p_layer_key = ANY (public.rag_admin_tenant_keys(p_actor))) THEN
+    RAISE EXCEPTION 'not_admin_of_layer' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN QUERY
+  SELECT c.id, c.tenant_key, c.term, c.language, c.support,
+         CASE WHEN c.last_seen < pg_catalog.now() - pg_catalog.make_interval(days => 30) THEN '{}'::text[] ELSE c.examples END,
+         c.corpus_df, c.status, c.source, c.entry_id, c.first_seen, c.last_seen, c.decided_by, c.decided_at,
+         pg_catalog.count(*) OVER ()
+    FROM public.rag_term_candidates c
+   WHERE c.tenant_key = p_layer_key
+   ORDER BY (c.status = 'pending') DESC, c.support DESC, c.last_seen DESC, c.id
+   LIMIT v_page OFFSET v_skip;
+END
+$fn$;
+
+-- Dismisses a pending candidate, or accepts it with an entry of the candidate's tenant layer or of the shared layer; writes one audit row.
+CREATE OR REPLACE FUNCTION public.rag_term_decide_candidate(
+  p_actor uuid,
+  p_candidate_id uuid,
+  p_action text,
+  p_entry_id uuid DEFAULT NULL
+)
+RETURNS TABLE (candidate_id uuid, status text, entry_id uuid)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_keys text[];
+  v_cand public.rag_term_candidates;
+  v_after public.rag_term_candidates;
+  v_version bigint;
+BEGIN
+  IF p_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.admin_users a WHERE a.id = p_actor) THEN
+    RAISE EXCEPTION 'not_admin' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_action IS NULL OR p_action NOT IN ('dismiss', 'accept') THEN
+    RAISE EXCEPTION 'invalid_action' USING ERRCODE = 'P0001';
+  END IF;
+  v_keys := public.rag_admin_tenant_keys(p_actor);
+
+  SELECT c.* INTO v_cand FROM public.rag_term_candidates c WHERE c.id = p_candidate_id FOR UPDATE;
+  IF v_cand.id IS NULL OR NOT (v_cand.tenant_key = ANY (v_keys)) THEN
+    RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0001';
+  END IF;
+  IF v_cand.status <> 'pending' THEN
+    RAISE EXCEPTION 'not_pending' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_action = 'accept' THEN
+    IF p_entry_id IS NULL OR NOT EXISTS (
+      SELECT 1 FROM public.rag_term_entries e
+       WHERE e.id = p_entry_id AND e.suppresses_entry_id IS NULL AND (e.layer_key = v_cand.tenant_key OR e.layer_key = 'shared')
+    ) THEN
+      RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0001';
+    END IF;
+    UPDATE public.rag_term_candidates c
+       SET status = 'accepted', entry_id = p_entry_id, decided_by = p_actor, decided_at = pg_catalog.now()
+     WHERE c.id = v_cand.id
+     RETURNING c.* INTO v_after;
+  ELSE
+    UPDATE public.rag_term_candidates c
+       SET status = 'dismissed', decided_by = p_actor, decided_at = pg_catalog.now()
+     WHERE c.id = v_cand.id
+     RETURNING c.* INTO v_after;
+  END IF;
+
+  SELECT l.version INTO v_version FROM public.rag_term_layers l WHERE l.layer_key = v_cand.tenant_key;
+  INSERT INTO public.rag_term_audit (layer_key, entry_id, action, actor, before, after, layer_version)
+  VALUES (
+    v_cand.tenant_key,
+    v_after.entry_id,
+    CASE WHEN p_action = 'accept' THEN 'candidate_accept' ELSE 'candidate_dismiss' END,
+    p_actor,
+    pg_catalog.jsonb_build_object('candidate_id', v_cand.id, 'term', v_cand.term, 'language', v_cand.language, 'status', v_cand.status),
+    pg_catalog.jsonb_build_object(
+      'candidate_id', v_after.id, 'term', v_after.term, 'language', v_after.language, 'status', v_after.status, 'entry_id', v_after.entry_id
+    ),
+    COALESCE(v_version, 0::bigint)
+  );
+
+  RETURN QUERY SELECT v_after.id, v_after.status, v_after.entry_id;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_term_record_miss(text, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_purge_misses(integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_read_misses(text, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_corpus_df(text, text[]) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_upsert_candidates(text, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_list_candidates(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_term_decide_candidate(uuid, uuid, text, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_term_record_miss(text, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_purge_misses(integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_read_misses(text, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_corpus_df(text, text[]) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_upsert_candidates(text, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_list_candidates(uuid, text, integer, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_term_decide_candidate(uuid, uuid, text, uuid) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+------------------------------------------
+-- Phase 6.1: Embedding fine-tuning registry, slots, export and binding guard (migrations 0651-0654, plan 06.1-18, after 0603 in migration order)
+------------------------------------------
+
+-- >>> supabase/migrations/0651_finetune_registry.sql
+-- 0651: fine-tune consent and model registry (Phase 6.1, FT-01, FT-10, D-27..D-30, D-32).
+-- rag_finetune_consent holds one row per tenant that opted in; no row means scope none. private: the tenant's data may train a model that
+-- serves only that tenant; deployment: it may also train a model shared across the deployment. A grant needs an evidence reference (a ticket
+-- or agreement id, never contact data) and an actor. embedding_model_versions is the registry of fine-tuned model cards: ids, hashes, prompts,
+-- probe vectors and offline metrics as numbers, never chunk or query text. Setting a tenant's consent to a scope that no longer covers a
+-- version trained on it marks that version tainted in the same transaction (D-29); 0652 reacts to the taint on the slot side.
+-- Every object is service_role only: RLS on without policies, nothing granted to anon or authenticated, every function SECURITY DEFINER with
+-- an empty search_path and schema-qualified names. Tenant keys are checked by public.rag_assert_tenant_key, so a key of the other deployment
+-- mode is refused. Idempotent.
+
+BEGIN;
+
+DO $finetune_precheck$
+BEGIN
+  IF pg_catalog.to_regprocedure('public.rag_assert_tenant_key(text)') IS NULL THEN
+    RAISE EXCEPTION '0651: apply 0403 first, public.rag_assert_tenant_key(text) is missing' USING ERRCODE = '55000';
+  END IF;
+END
+$finetune_precheck$;
+
+CREATE TABLE IF NOT EXISTS public.rag_finetune_consent (
+  tenant_key text PRIMARY KEY
+    CONSTRAINT rag_finetune_consent_tenant_key_shape
+    CHECK (tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  scope text NOT NULL CONSTRAINT rag_finetune_consent_scope_check CHECK (scope IN ('none', 'private', 'deployment')),
+  evidence_ref text CONSTRAINT rag_finetune_consent_evidence_shape
+    CHECK (evidence_ref IS NULL OR (pg_catalog.length(evidence_ref) BETWEEN 1 AND 200 AND evidence_ref !~ '[@[:cntrl:]]')),
+  granted_by text,
+  granted_at timestamptz,
+  revoked_at timestamptz,
+  revoked_by text,
+  updated_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
+  CONSTRAINT rag_finetune_consent_grant_complete CHECK (
+    scope = 'none'
+    OR (COALESCE(pg_catalog.btrim(evidence_ref), '') <> '' AND COALESCE(pg_catalog.btrim(granted_by), '') <> ''
+        AND granted_at IS NOT NULL AND revoked_at IS NULL)
+  )
+);
+
+ALTER TABLE public.rag_finetune_consent ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.rag_finetune_consent FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.rag_finetune_consent TO service_role;
+
+CREATE TABLE IF NOT EXISTS public.embedding_model_versions (
+  id text PRIMARY KEY CONSTRAINT embedding_model_versions_id_shape CHECK (id ~ '^ft-[a-z0-9][a-z0-9.-]{2,58}$'),
+  base_model text NOT NULL CONSTRAINT embedding_model_versions_base_model_check CHECK (pg_catalog.btrim(base_model) <> ''),
+  base_revision text NOT NULL CONSTRAINT embedding_model_versions_base_revision_shape CHECK (base_revision ~ '^[0-9a-f]{40}$'),
+  scope text NOT NULL CONSTRAINT embedding_model_versions_scope_check CHECK (scope IN ('deployment', 'tenant')),
+  tenant_keys text[] NOT NULL,
+  dataset_manifest_sha256 text NOT NULL CONSTRAINT embedding_model_versions_manifest_shape CHECK (dataset_manifest_sha256 ~ '^[0-9a-f]{64}$'),
+  training_config_sha256 text NOT NULL CONSTRAINT embedding_model_versions_config_shape CHECK (training_config_sha256 ~ '^[0-9a-f]{64}$'),
+  offline_metrics jsonb NOT NULL,
+  probe jsonb NOT NULL,
+  query_prompt text NOT NULL,
+  document_prompt text NOT NULL,
+  dims integer NOT NULL CONSTRAINT embedding_model_versions_dims_check CHECK (dims = 1024),
+  artifact_uri text NOT NULL CONSTRAINT embedding_model_versions_artifact_uri_shape
+    CHECK (artifact_uri ~ '^[a-z][a-z0-9+.-]*://[^@?#[:space:][:cntrl:]]+$'),
+  status text NOT NULL DEFAULT 'registered'
+    CONSTRAINT embedding_model_versions_status_check CHECK (status IN ('registered', 'bound', 'retired', 'tainted')),
+  bound_slot text,
+  tainted_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
+  created_by text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
+  CONSTRAINT embedding_model_versions_tenant_keys_shape CHECK (
+    pg_catalog.cardinality(tenant_keys) >= 1
+    AND pg_catalog.array_to_string(tenant_keys, ',', '?') ~
+      '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(,(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))*$'
+  ),
+  CONSTRAINT embedding_model_versions_tenant_scope_single CHECK (scope <> 'tenant' OR pg_catalog.cardinality(tenant_keys) = 1),
+  CONSTRAINT embedding_model_versions_bound_slot CHECK (status <> 'bound' OR bound_slot IS NOT NULL)
+);
+
+CREATE INDEX IF NOT EXISTS embedding_model_versions_tenant_keys_idx ON public.embedding_model_versions USING gin (tenant_keys);
+
+ALTER TABLE public.embedding_model_versions ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.embedding_model_versions FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.embedding_model_versions TO service_role;
+
+-- Records a tenant's consent. private and deployment need an evidence reference and an actor; none needs an actor and sets revoked_at.
+-- Every version whose tenant_keys contain the tenant and that the new scope no longer covers becomes tainted in the same transaction (D-29):
+-- none taints all of them, private taints the deployment-scope ones. Returns the ids tainted by this call.
+CREATE OR REPLACE FUNCTION public.rag_finetune_set_consent(p_tenant_key text, p_scope text, p_evidence_ref text, p_actor text)
+RETURNS TABLE (tenant_key text, scope text, tainted_versions text[])
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_tainted text[] := ARRAY[]::text[];
+BEGIN
+  BEGIN
+    PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  EXCEPTION WHEN invalid_parameter_value THEN
+    RAISE EXCEPTION 'tenant_key_invalid: %', SQLERRM USING ERRCODE = '22023';
+  END;
+  IF p_scope IS NULL OR p_scope NOT IN ('none', 'private', 'deployment') THEN
+    RAISE EXCEPTION 'consent_refused: scope must be none, private or deployment' USING ERRCODE = '22023';
+  END IF;
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'consent_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_scope = 'none' THEN
+    INSERT INTO public.rag_finetune_consent AS c (tenant_key, scope, revoked_at, revoked_by, updated_at)
+    VALUES (p_tenant_key, 'none', pg_catalog.now(), p_actor, pg_catalog.now())
+    ON CONFLICT ON CONSTRAINT rag_finetune_consent_pkey DO UPDATE
+      SET scope = 'none', revoked_at = pg_catalog.now(), revoked_by = p_actor, updated_at = pg_catalog.now();
+  ELSE
+    IF p_evidence_ref IS NULL OR pg_catalog.btrim(p_evidence_ref) = '' THEN
+      RAISE EXCEPTION 'consent_refused: evidence_required' USING ERRCODE = '22023';
+    END IF;
+    IF pg_catalog.length(p_evidence_ref) > 200 OR p_evidence_ref ~ '[@[:cntrl:]]' THEN
+      RAISE EXCEPTION 'consent_refused: evidence_ref_invalid (a ticket or agreement reference of at most 200 characters, no contact data)'
+        USING ERRCODE = '22023';
+    END IF;
+    INSERT INTO public.rag_finetune_consent AS c (tenant_key, scope, evidence_ref, granted_by, granted_at, revoked_at, revoked_by, updated_at)
+    VALUES (p_tenant_key, p_scope, p_evidence_ref, p_actor, pg_catalog.now(), NULL, NULL, pg_catalog.now())
+    ON CONFLICT ON CONSTRAINT rag_finetune_consent_pkey DO UPDATE
+      SET scope = EXCLUDED.scope, evidence_ref = EXCLUDED.evidence_ref, granted_by = EXCLUDED.granted_by, granted_at = EXCLUDED.granted_at,
+          revoked_at = NULL, revoked_by = NULL, updated_at = pg_catalog.now();
+  END IF;
+
+  WITH tainted AS (
+    UPDATE public.embedding_model_versions AS v
+    SET status = 'tainted', tainted_at = pg_catalog.now(), updated_at = pg_catalog.now()
+    WHERE p_tenant_key = ANY (v.tenant_keys)
+      AND v.status <> 'tainted'
+      AND (p_scope = 'none' OR (p_scope = 'private' AND v.scope = 'deployment'))
+    RETURNING v.id
+  )
+  SELECT COALESCE(pg_catalog.array_agg(t.id ORDER BY t.id), ARRAY[]::text[]) INTO v_tainted FROM tainted AS t;
+
+  RETURN QUERY SELECT p_tenant_key, p_scope, v_tainted;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_set_consent(text, text, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_set_consent(text, text, text, text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_list_consent()
+RETURNS TABLE (
+  tenant_key text,
+  scope text,
+  evidence_ref text,
+  granted_by text,
+  granted_at timestamptz,
+  revoked_at timestamptz,
+  revoked_by text,
+  updated_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+  SELECT c.tenant_key, c.scope, c.evidence_ref, c.granted_by, c.granted_at, c.revoked_at, c.revoked_by, c.updated_at
+  FROM public.rag_finetune_consent AS c
+  ORDER BY c.tenant_key
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_list_consent() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_list_consent() TO service_role;
+
+-- Returns p_tenant_keys when every key's consent covers p_purpose, else raises consent_refused naming the first key that is not covered (D-27).
+-- private: exactly one key whose scope is private or deployment; deployment: every key has scope deployment. The consent rows are locked
+-- FOR SHARE, so a concurrent revocation waits until the caller's transaction ends.
+CREATE OR REPLACE FUNCTION public.rag_finetune_consent_for_export(p_tenant_keys text[], p_purpose text)
+RETURNS text[]
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_key text;
+  v_scope text;
+BEGIN
+  IF p_purpose IS NULL OR p_purpose NOT IN ('private', 'deployment') THEN
+    RAISE EXCEPTION 'consent_refused: purpose must be private or deployment' USING ERRCODE = '22023';
+  END IF;
+  IF p_tenant_keys IS NULL OR pg_catalog.cardinality(p_tenant_keys) = 0 THEN
+    RAISE EXCEPTION 'consent_refused: tenant_keys_empty' USING ERRCODE = '22023';
+  END IF;
+  FOREACH v_key IN ARRAY p_tenant_keys LOOP
+    BEGIN
+      PERFORM public.rag_assert_tenant_key(v_key);
+    EXCEPTION WHEN invalid_parameter_value THEN
+      RAISE EXCEPTION 'tenant_key_invalid: %', SQLERRM USING ERRCODE = '22023';
+    END;
+  END LOOP;
+  IF (SELECT pg_catalog.count(DISTINCT k) FROM pg_catalog.unnest(p_tenant_keys) AS u(k)) <> pg_catalog.cardinality(p_tenant_keys) THEN
+    RAISE EXCEPTION 'consent_refused: tenant_keys_duplicate' USING ERRCODE = '22023';
+  END IF;
+  IF p_purpose = 'private' AND pg_catalog.cardinality(p_tenant_keys) <> 1 THEN
+    RAISE EXCEPTION 'consent_refused: private_takes_one_tenant' USING ERRCODE = '22023';
+  END IF;
+
+  FOREACH v_key IN ARRAY p_tenant_keys LOOP
+    SELECT c.scope INTO v_scope FROM public.rag_finetune_consent AS c WHERE c.tenant_key = v_key FOR SHARE;
+    IF NOT FOUND OR v_scope = 'none' OR (p_purpose = 'deployment' AND v_scope <> 'deployment') THEN
+      RAISE EXCEPTION 'consent_refused: consent of % does not cover %', v_key, p_purpose USING ERRCODE = '42501';
+    END IF;
+  END LOOP;
+  RETURN p_tenant_keys;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_consent_for_export(text[], text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_consent_for_export(text[], text) TO service_role;
+
+-- Registers a model version card (D-30). Refuses a card that is not a candidate (rejected_offline: offline_gate), whose dims is not 1024,
+-- whose id exists, whose artifact_uri carries userinfo, a query string or a fragment, whose offline report holds text, whose probe is not
+-- three unit vectors of 1024 numbers computed with the card's prompts, or whose tenants' consent does not cover the card scope
+-- (tenant: exactly one tenant with private or deployment; deployment: every tenant with deployment). The consent rows are locked FOR SHARE.
+CREATE OR REPLACE FUNCTION public.rag_finetune_register_model(p_card jsonb, p_actor text)
+RETURNS TABLE (version_id text, version_status text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_id text;
+  v_scope text;
+  v_keys text[];
+  v_key text;
+  v_consent text;
+  v_probe jsonb;
+  v_offline jsonb;
+  v_vector jsonb;
+  v_norm double precision;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'register_refused: actor is required' USING ERRCODE = '22023';
+  END IF;
+  IF p_card IS NULL OR pg_catalog.jsonb_typeof(p_card) <> 'object' THEN
+    RAISE EXCEPTION 'register_refused: card must be a json object' USING ERRCODE = '22023';
+  END IF;
+
+  v_id := CASE WHEN pg_catalog.jsonb_typeof(p_card -> 'id') = 'string' THEN p_card ->> 'id' END;
+  IF v_id IS NULL OR v_id !~ '^ft-[a-z0-9][a-z0-9.-]{2,58}$' THEN
+    RAISE EXCEPTION 'register_refused: id must match ^ft-[a-z0-9][a-z0-9.-]{2,58}$' USING ERRCODE = '22023';
+  END IF;
+  IF p_card -> 'status' = '"rejected_offline"'::jsonb THEN
+    RAISE EXCEPTION 'register_refused: offline_gate (the card failed the offline evaluation)' USING ERRCODE = '22023';
+  END IF;
+  IF p_card -> 'status' IS DISTINCT FROM '"candidate"'::jsonb THEN
+    RAISE EXCEPTION 'register_refused: status must be candidate' USING ERRCODE = '22023';
+  END IF;
+  IF p_card -> 'dims' IS DISTINCT FROM '1024'::jsonb THEN
+    RAISE EXCEPTION 'register_refused: dims must be 1024' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'artifact_uri') IS DISTINCT FROM 'string'
+     OR pg_catalog.length(p_card ->> 'artifact_uri') > 2048
+     OR (p_card ->> 'artifact_uri') !~ '^[a-z][a-z0-9+.-]*://[^@?#[:space:][:cntrl:]]+$' THEN
+    RAISE EXCEPTION 'register_refused: artifact_uri must be scheme://location without userinfo, query string or fragment' USING ERRCODE = '22023';
+  END IF;
+
+  v_scope := CASE WHEN pg_catalog.jsonb_typeof(p_card -> 'scope') = 'string' THEN p_card ->> 'scope' END;
+  IF v_scope IS NULL OR v_scope NOT IN ('deployment', 'tenant') THEN
+    RAISE EXCEPTION 'register_refused: scope must be deployment or tenant' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'tenant_keys') IS DISTINCT FROM 'array'
+     OR pg_catalog.jsonb_array_length(p_card -> 'tenant_keys') = 0
+     OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(p_card -> 'tenant_keys') AS e(k) WHERE pg_catalog.jsonb_typeof(e.k) <> 'string') THEN
+    RAISE EXCEPTION 'register_refused: tenant_keys must be a non-empty array of tenant keys' USING ERRCODE = '22023';
+  END IF;
+  SELECT pg_catalog.array_agg(DISTINCT e.k ORDER BY e.k) INTO v_keys FROM pg_catalog.jsonb_array_elements_text(p_card -> 'tenant_keys') AS e(k);
+  IF pg_catalog.cardinality(v_keys) <> pg_catalog.jsonb_array_length(p_card -> 'tenant_keys') THEN
+    RAISE EXCEPTION 'register_refused: tenant_keys must not repeat a key' USING ERRCODE = '22023';
+  END IF;
+  FOREACH v_key IN ARRAY v_keys LOOP
+    BEGIN
+      PERFORM public.rag_assert_tenant_key(v_key);
+    EXCEPTION WHEN invalid_parameter_value THEN
+      RAISE EXCEPTION 'register_refused: tenant_keys hold a key this deployment cannot use (%)', SQLERRM USING ERRCODE = '22023';
+    END;
+  END LOOP;
+  IF v_scope = 'tenant' AND pg_catalog.cardinality(v_keys) <> 1 THEN
+    RAISE EXCEPTION 'register_refused: tenant_scope_single (a tenant-scope card names exactly one tenant)' USING ERRCODE = '22023';
+  END IF;
+
+  IF pg_catalog.jsonb_typeof(p_card -> 'base_model') IS DISTINCT FROM 'string'
+     OR pg_catalog.btrim(p_card ->> 'base_model') = '' OR pg_catalog.length(p_card ->> 'base_model') > 200 THEN
+    RAISE EXCEPTION 'register_refused: base_model must be a non-empty model name' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'base_revision') IS DISTINCT FROM 'string' OR (p_card ->> 'base_revision') !~ '^[0-9a-f]{40}$' THEN
+    RAISE EXCEPTION 'register_refused: base_revision must be a 40-character hex revision' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'dataset_manifest_sha256') IS DISTINCT FROM 'string'
+     OR (p_card ->> 'dataset_manifest_sha256') !~ '^[0-9a-f]{64}$'
+     OR pg_catalog.jsonb_typeof(p_card -> 'training_config_sha256') IS DISTINCT FROM 'string'
+     OR (p_card ->> 'training_config_sha256') !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'register_refused: hashes must be 64-character hex sha256 values' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'query_prompt') IS DISTINCT FROM 'string'
+     OR pg_catalog.jsonb_typeof(p_card -> 'document_prompt') IS DISTINCT FROM 'string'
+     OR pg_catalog.length(p_card ->> 'query_prompt') > 2000 OR pg_catalog.length(p_card ->> 'document_prompt') > 2000 THEN
+    RAISE EXCEPTION 'register_refused: prompts must be strings of at most 2000 characters' USING ERRCODE = '22023';
+  END IF;
+
+  v_offline := p_card -> 'offline';
+  IF pg_catalog.jsonb_typeof(v_offline) IS DISTINCT FROM 'object'
+     OR pg_catalog.jsonb_path_exists(v_offline - 'reasons', 'lax $.** ? (@.type() == "string")')
+     OR (v_offline ? 'reasons' AND (
+       pg_catalog.jsonb_typeof(v_offline -> 'reasons') <> 'array'
+       OR EXISTS (
+         SELECT 1 FROM pg_catalog.jsonb_array_elements(v_offline -> 'reasons') AS r(x)
+         WHERE pg_catalog.jsonb_typeof(r.x) <> 'string' OR (r.x #>> '{}') !~ '^[a-z][a-z0-9_]{0,63}$'
+       )
+     )) THEN
+    RAISE EXCEPTION 'register_refused: offline must be a report of numbers (reasons as enum codes only)' USING ERRCODE = '22023';
+  END IF;
+
+  v_probe := p_card -> 'probe';
+  IF pg_catalog.jsonb_typeof(v_probe) IS DISTINCT FROM 'object'
+     OR pg_catalog.jsonb_typeof(v_probe -> 'texts') IS DISTINCT FROM 'array'
+     OR pg_catalog.jsonb_typeof(v_probe -> 'vectors') IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'register_refused: probe must hold texts and vectors' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_array_length(v_probe -> 'texts') <> 3 OR pg_catalog.jsonb_array_length(v_probe -> 'vectors') <> 3
+     OR EXISTS (
+       SELECT 1 FROM pg_catalog.jsonb_array_elements(v_probe -> 'texts') AS t(x)
+       WHERE pg_catalog.jsonb_typeof(t.x) <> 'string' OR pg_catalog.btrim(t.x #>> '{}') = ''
+     )
+     OR v_probe -> 'query_prompt' IS DISTINCT FROM p_card -> 'query_prompt'
+     OR v_probe -> 'document_prompt' IS DISTINCT FROM p_card -> 'document_prompt' THEN
+    RAISE EXCEPTION 'register_refused: probe must hold three texts and the card''s prompts' USING ERRCODE = '22023';
+  END IF;
+  FOR v_vector IN SELECT e.v FROM pg_catalog.jsonb_array_elements(v_probe -> 'vectors') AS e(v) LOOP
+    IF pg_catalog.jsonb_typeof(v_vector) <> 'array' OR pg_catalog.jsonb_array_length(v_vector) <> 1024
+       OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(v_vector) AS x(n) WHERE pg_catalog.jsonb_typeof(x.n) <> 'number') THEN
+      RAISE EXCEPTION 'register_refused: probe vectors must be three arrays of 1024 numbers' USING ERRCODE = '22023';
+    END IF;
+    SELECT pg_catalog.sqrt(pg_catalog.sum((x.n)::double precision * (x.n)::double precision)) INTO v_norm
+    FROM pg_catalog.jsonb_array_elements(v_vector) AS x(n);
+    IF pg_catalog.abs(v_norm - 1) > 1e-3 THEN
+      RAISE EXCEPTION 'register_refused: probe vectors must have unit length' USING ERRCODE = '22023';
+    END IF;
+  END LOOP;
+
+  IF EXISTS (SELECT 1 FROM public.embedding_model_versions AS m WHERE m.id = v_id) THEN
+    RAISE EXCEPTION 'register_refused: duplicate (version % exists)', v_id USING ERRCODE = '23505';
+  END IF;
+
+  FOREACH v_key IN ARRAY v_keys LOOP
+    SELECT c.scope INTO v_consent FROM public.rag_finetune_consent AS c WHERE c.tenant_key = v_key FOR SHARE;
+    IF NOT FOUND OR v_consent = 'none' OR (v_scope = 'deployment' AND v_consent <> 'deployment') THEN
+      RAISE EXCEPTION 'register_refused: consent of % does not cover a % scope model', v_key, v_scope USING ERRCODE = '42501';
+    END IF;
+  END LOOP;
+
+  BEGIN
+    INSERT INTO public.embedding_model_versions (
+      id, base_model, base_revision, scope, tenant_keys, dataset_manifest_sha256, training_config_sha256, offline_metrics, probe,
+      query_prompt, document_prompt, dims, artifact_uri, status, created_by
+    )
+    VALUES (
+      v_id, p_card ->> 'base_model', p_card ->> 'base_revision', v_scope, v_keys, p_card ->> 'dataset_manifest_sha256',
+      p_card ->> 'training_config_sha256', v_offline,
+      pg_catalog.jsonb_build_object(
+        'texts', v_probe -> 'texts', 'vectors', v_probe -> 'vectors',
+        'query_prompt', v_probe -> 'query_prompt', 'document_prompt', v_probe -> 'document_prompt'
+      ),
+      p_card ->> 'query_prompt', p_card ->> 'document_prompt', 1024, p_card ->> 'artifact_uri', 'registered', p_actor
+    );
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'register_refused: duplicate (version % exists)', v_id USING ERRCODE = '23505';
+  END;
+
+  RETURN QUERY SELECT v_id, 'registered'::text;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_register_model(jsonb, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_register_model(jsonb, text) TO service_role;
+
+-- Lists the registry. Probe vectors are large, so they are returned only with p_include_probe.
+CREATE OR REPLACE FUNCTION public.rag_finetune_list_models(p_include_probe boolean DEFAULT false)
+RETURNS TABLE (
+  id text,
+  base_model text,
+  base_revision text,
+  scope text,
+  tenant_keys text[],
+  dataset_manifest_sha256 text,
+  training_config_sha256 text,
+  offline_metrics jsonb,
+  query_prompt text,
+  document_prompt text,
+  dims integer,
+  artifact_uri text,
+  status text,
+  bound_slot text,
+  tainted_at timestamptz,
+  created_at timestamptz,
+  created_by text,
+  updated_at timestamptz,
+  probe jsonb
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+  SELECT m.id, m.base_model, m.base_revision, m.scope, m.tenant_keys, m.dataset_manifest_sha256, m.training_config_sha256,
+         m.offline_metrics, m.query_prompt, m.document_prompt, m.dims, m.artifact_uri, m.status, m.bound_slot, m.tainted_at,
+         m.created_at, m.created_by, m.updated_at,
+         CASE WHEN COALESCE(p_include_probe, false) THEN m.probe END
+  FROM public.embedding_model_versions AS m
+  ORDER BY m.created_at, m.id
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_list_models(boolean) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_list_models(boolean) TO service_role;
+
+-- Operator status changes (D-30): registered to retired, and any status to tainted. Taint is final. bound and its reverse belong to the
+-- slot functions of 0652.
+CREATE OR REPLACE FUNCTION public.rag_finetune_set_model_status(p_version_id text, p_status text, p_actor text)
+RETURNS TABLE (version_id text, version_status text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_current text;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'status_refused: actor is required' USING ERRCODE = '22023';
+  END IF;
+  SELECT m.status INTO v_current FROM public.embedding_model_versions AS m WHERE m.id = p_version_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'status_refused: not_found (%)', p_version_id USING ERRCODE = 'P0002';
+  END IF;
+  IF v_current = 'tainted' THEN
+    IF p_status = 'tainted' THEN
+      RETURN QUERY SELECT p_version_id, v_current;
+      RETURN;
+    END IF;
+    RAISE EXCEPTION 'status_refused: tainted_final (a tainted version never changes status)' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_status = 'tainted' THEN
+    UPDATE public.embedding_model_versions AS m
+    SET status = 'tainted', tainted_at = pg_catalog.now(), updated_at = pg_catalog.now()
+    WHERE m.id = p_version_id;
+  ELSIF p_status = 'retired' AND v_current = 'registered' THEN
+    UPDATE public.embedding_model_versions AS m
+    SET status = 'retired', updated_at = pg_catalog.now()
+    WHERE m.id = p_version_id;
+  ELSE
+    RAISE EXCEPTION 'status_refused: transition % to % is not allowed', v_current, COALESCE(p_status, 'null') USING ERRCODE = '22023';
+  END IF;
+
+  RETURN QUERY SELECT p_version_id, p_status;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_set_model_status(text, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_set_model_status(text, text, text) TO service_role;
+
+COMMIT;
+
+-- >>> supabase/migrations/0652_finetune_slots.sql
+-- 0652: two fixed fine-tune slots, their bind/clear/release functions and the taint and evidence triggers (Phase 6.1, D-22, D-25, D-33, D-35).
+-- ft-a-1024 (provider ft_slot_a) and ft-b-1024 (provider ft_slot_b) are halfvec(1024) profiles seeded 'available' with model 'unbound',
+-- each with its own partial HNSW index; no DDL is ever generated at run time. A slot serves one registered model version (0651) at a time:
+-- rag_finetune_bind_slot sets the slot's model to the version id and its query_instruction to the card's query prompt, and
+-- rag_finetune_clear_slot deletes the slot's vectors in batches and resets it. The slot guard trigger refuses any other change of a slot's
+-- model, prompt, provider, dims or storage (the two functions set the transaction-local switch myrag.ft_slot_op around their own UPDATE and
+-- turn it off again; the switch guards against accidental writes, it is not a permission: every caller here is service_role already).
+-- The same trigger refuses evidence, backfilling and activation for a slot without a version, with a tainted version, or, while the slot is
+-- unscoped, with a tenant-scope version (a private model is never served globally, D-35; 06.1-20 binds those through scoped bindings).
+-- The version taint trigger drops the evidence of a tainted version's non-active slot, so the unchanged activation gate refuses eval_missing.
+-- rag_activate_embedding_profile, rag_rollback_embedding_profile, rag_record_eval_evidence, rag_set_embedding_profile_status and the
+-- re-embed functions are not redefined here (D-25); the triggers act on the rows they write.
+-- Server role only: every function is SECURITY DEFINER with SET search_path = '' and schema-qualified names, revoked from PUBLIC, anon and
+-- authenticated and granted to service_role. Idempotent: ON CONFLICT DO NOTHING, IF NOT EXISTS, CREATE OR REPLACE, DROP TRIGGER IF EXISTS.
+
+BEGIN;
+
+DO $finetune_slots_precheck$
+BEGIN
+  IF pg_catalog.to_regclass('public.embedding_model_versions') IS NULL THEN
+    RAISE EXCEPTION '0652: apply 0651_finetune_registry.sql first' USING ERRCODE = '55000';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_attribute
+    WHERE attrelid = pg_catalog.to_regclass('public.embedding_profiles') AND attname = 'doc_types' AND NOT attisdropped
+  ) THEN
+    RAISE EXCEPTION '0652: apply 0440_embedding_bindings.sql first' USING ERRCODE = '55000';
+  END IF;
+END
+$finetune_slots_precheck$;
+
+-- Slot guard (trigger B). Runs for every row; returns at once for a profile that is not an ft-* slot.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_slot_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_op boolean := COALESCE(pg_catalog.current_setting('myrag.ft_slot_op', true), '') = 'on';
+  v_version public.embedding_model_versions%ROWTYPE;
+  v_has_version boolean;
+  v_evidence_new boolean;
+  v_serving_new boolean;
+BEGIN
+  IF TG_OP = 'UPDATE' AND OLD.id LIKE 'ft-%' AND NEW.id IS DISTINCT FROM OLD.id THEN
+    RAISE EXCEPTION 'slot_refused: id_change' USING ERRCODE = '42501';
+  END IF;
+  IF NEW.id NOT LIKE 'ft-%' THEN
+    RETURN NEW;
+  END IF;
+
+  IF NOT v_op THEN
+    IF TG_OP = 'INSERT' THEN
+      IF NEW.model <> 'unbound' OR NEW.query_instruction IS NOT NULL THEN
+        RAISE EXCEPTION 'slot_refused: model_change_outside_bind (a slot is created unbound)' USING ERRCODE = '42501';
+      END IF;
+    ELSIF NEW.model IS DISTINCT FROM OLD.model OR NEW.query_instruction IS DISTINCT FROM OLD.query_instruction
+       OR NEW.provider IS DISTINCT FROM OLD.provider OR NEW.dims IS DISTINCT FROM OLD.dims OR NEW.storage IS DISTINCT FROM OLD.storage THEN
+      RAISE EXCEPTION 'slot_refused: model_change_outside_bind (use rag_finetune_bind_slot or rag_finetune_clear_slot)' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  SELECT * INTO v_version FROM public.embedding_model_versions AS m WHERE m.id = NEW.model;
+  v_has_version := FOUND;
+  IF NOT v_has_version AND NEW.model <> 'unbound' THEN
+    RAISE EXCEPTION 'slot_refused: unknown_version (%)', NEW.model USING ERRCODE = '22023';
+  END IF;
+
+  -- A slot leaving active whose version is tainted or gone keeps no evidence, so it can never come back without new evidence.
+  IF TG_OP = 'UPDATE' AND OLD.status = 'active' AND NEW.status <> 'active' AND (NOT v_has_version OR v_version.status = 'tainted') THEN
+    NEW.eval_evidence := NULL;
+  END IF;
+
+  v_evidence_new := NEW.eval_evidence IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.eval_evidence IS DISTINCT FROM OLD.eval_evidence);
+  v_serving_new := NEW.status IN ('backfilling', 'active') AND (TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status);
+
+  IF v_evidence_new THEN
+    IF NOT v_has_version THEN
+      RAISE EXCEPTION 'slot_refused: evidence_without_version (slot % is unbound)', NEW.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.status = 'tainted' THEN
+      RAISE EXCEPTION 'slot_refused: version_tainted (%)', v_version.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.scope = 'tenant' AND NEW.doc_types IS NULL THEN
+      RAISE EXCEPTION 'slot_refused: tenant_scope_global (a tenant-scope version is served only through scoped bindings)' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  IF v_serving_new THEN
+    IF NOT v_has_version THEN
+      RAISE EXCEPTION 'slot_refused: unbound (slot % has no model version)', NEW.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.status = 'tainted' THEN
+      RAISE EXCEPTION 'slot_refused: version_tainted (%)', v_version.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.scope = 'tenant' AND NEW.doc_types IS NULL THEN
+      RAISE EXCEPTION 'slot_refused: tenant_scope_global (a tenant-scope version is served only through scoped bindings)' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_slot_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_slot_guard() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_finetune_slot_guard ON public.embedding_profiles;
+CREATE TRIGGER rag_finetune_slot_guard
+  BEFORE INSERT OR UPDATE ON public.embedding_profiles
+  FOR EACH ROW EXECUTE FUNCTION public.rag_finetune_slot_guard();
+
+-- Slot rows and their indexes (D-22).
+
+INSERT INTO public.embedding_profiles (id, provider, model, dims, storage, status, query_instruction, score_calibration)
+VALUES
+  ('ft-a-1024', 'ft_slot_a', 'unbound', 1024, 'halfvec', 'available', NULL, '{}'::jsonb),
+  ('ft-b-1024', 'ft_slot_b', 'unbound', 1024, 'halfvec', 'available', NULL, '{}'::jsonb)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE INDEX IF NOT EXISTS chunk_embeddings_ft_a_1024_hnsw ON public.chunk_embeddings
+  USING hnsw ((embedding::public.halfvec(1024)) public.halfvec_cosine_ops) WITH (m = 64, ef_construction = 200)
+  WHERE profile_id = 'ft-a-1024';
+CREATE INDEX IF NOT EXISTS chunk_embeddings_ft_b_1024_hnsw ON public.chunk_embeddings
+  USING hnsw ((embedding::public.halfvec(1024)) public.halfvec_cosine_ops) WITH (m = 64, ef_construction = 200)
+  WHERE profile_id = 'ft-b-1024';
+
+-- Bind a registered deployment-scope version to an empty, free, unbound slot. Same table lock as the activation gate (0309), so a bind and
+-- an activation or rollback never interleave.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_bind_slot(p_slot text, p_version text, p_actor text)
+RETURNS TABLE (slot_id text, version_id text, query_instruction text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_slot public.embedding_profiles%ROWTYPE;
+  v_version public.embedding_model_versions%ROWTYPE;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'bind_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_slot IS NULL OR p_slot NOT IN ('ft-a-1024', 'ft-b-1024') THEN
+    RAISE EXCEPTION 'bind_refused: unknown_slot (%)', COALESCE(p_slot, 'null') USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_slot FROM public.embedding_profiles AS p WHERE p.id = p_slot;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'bind_refused: unknown_slot (%)', p_slot USING ERRCODE = '22023';
+  END IF;
+  IF v_slot.status = 'active' THEN
+    RAISE EXCEPTION 'bind_refused: slot_active' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_profiles AS p WHERE p.status = 'active' AND p.previous_active_id = p_slot) THEN
+    RAISE EXCEPTION 'bind_refused: rollback_target (release it with rag_finetune_release_rollback first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot) THEN
+    RAISE EXCEPTION 'bind_refused: slot_not_empty (clear it with rag_finetune_clear_slot first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_backfill_runs AS r WHERE r.profile_id = p_slot AND r.status = 'running') THEN
+    RAISE EXCEPTION 'bind_refused: reembed_running' USING ERRCODE = '55000';
+  END IF;
+  IF v_slot.model <> 'unbound' THEN
+    RAISE EXCEPTION 'bind_refused: slot_bound (slot holds %, clear it first)', v_slot.model USING ERRCODE = '55000';
+  END IF;
+
+  SELECT * INTO v_version FROM public.embedding_model_versions AS m WHERE m.id = p_version FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'bind_refused: unknown_version (%)', COALESCE(p_version, 'null') USING ERRCODE = 'P0002';
+  END IF;
+  IF v_version.status = 'bound' THEN
+    RAISE EXCEPTION 'bind_refused: version_bound (held by %)', v_version.bound_slot USING ERRCODE = '55000';
+  END IF;
+  IF v_version.status <> 'registered' THEN
+    RAISE EXCEPTION 'bind_refused: version_status (%)', v_version.status USING ERRCODE = '55000';
+  END IF;
+  IF v_version.dims <> v_slot.dims THEN
+    RAISE EXCEPTION 'bind_refused: dims_mismatch (% vs %)', v_version.dims, v_slot.dims USING ERRCODE = '22023';
+  END IF;
+  IF v_version.scope = 'tenant' THEN
+    RAISE EXCEPTION 'bind_refused: tenant_scope_requires_scoping (bind a tenant-scope version with its doc types)' USING ERRCODE = '42501';
+  END IF;
+
+  PERFORM pg_catalog.set_config('myrag.ft_slot_op', 'on', true);
+  UPDATE public.embedding_profiles AS p
+  SET model = v_version.id, query_instruction = v_version.query_prompt, eval_evidence = NULL
+  WHERE p.id = p_slot;
+  PERFORM pg_catalog.set_config('myrag.ft_slot_op', '', true);
+
+  UPDATE public.embedding_model_versions AS m
+  SET status = 'bound', bound_slot = p_slot, updated_at = pg_catalog.now()
+  WHERE m.id = v_version.id;
+
+  RETURN QUERY SELECT p_slot, v_version.id, v_version.query_prompt;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_bind_slot(text, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_bind_slot(text, text, text) TO service_role;
+
+-- Clear a free slot: delete up to p_limit of its vectors per call (slot-wide, every tenant: a slot holds one model version for the whole
+-- deployment); the call that leaves none resets the slot to unbound and retires its bound version (a tainted version stays tainted).
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_clear_slot(p_slot text, p_actor text, p_limit integer DEFAULT 1000)
+RETURNS TABLE (slot_id text, deleted bigint, remaining bigint, cleared boolean)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+SET statement_timeout = '120s'
+AS $fn$
+DECLARE
+  v_slot public.embedding_profiles%ROWTYPE;
+  v_deleted bigint;
+  v_remaining bigint;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'clear_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 10000 THEN
+    RAISE EXCEPTION 'clear_refused: invalid_limit (1 to 10000)' USING ERRCODE = '22023';
+  END IF;
+  IF p_slot IS NULL OR p_slot NOT IN ('ft-a-1024', 'ft-b-1024') THEN
+    RAISE EXCEPTION 'clear_refused: unknown_slot (%)', COALESCE(p_slot, 'null') USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_slot FROM public.embedding_profiles AS p WHERE p.id = p_slot;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'clear_refused: unknown_slot (%)', p_slot USING ERRCODE = '22023';
+  END IF;
+  IF v_slot.status = 'active' THEN
+    RAISE EXCEPTION 'clear_refused: slot_active' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_profiles AS p WHERE p.status = 'active' AND p.previous_active_id = p_slot) THEN
+    RAISE EXCEPTION 'clear_refused: rollback_target (release it with rag_finetune_release_rollback first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_backfill_runs AS r WHERE r.profile_id = p_slot AND r.status = 'running') THEN
+    RAISE EXCEPTION 'clear_refused: reembed_running' USING ERRCODE = '55000';
+  END IF;
+
+  WITH doomed AS (
+    SELECT e.chunk_id FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot ORDER BY e.chunk_id LIMIT p_limit
+  )
+  DELETE FROM public.chunk_embeddings AS e USING doomed AS d
+  WHERE e.profile_id = p_slot AND e.chunk_id = d.chunk_id;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+
+  SELECT pg_catalog.count(*) INTO v_remaining FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot;
+
+  IF v_remaining = 0 THEN
+    PERFORM pg_catalog.set_config('myrag.ft_slot_op', 'on', true);
+    UPDATE public.embedding_profiles AS p
+    SET model = 'unbound', query_instruction = NULL, eval_evidence = NULL, status = 'available'
+    WHERE p.id = p_slot;
+    PERFORM pg_catalog.set_config('myrag.ft_slot_op', '', true);
+
+    UPDATE public.embedding_model_versions AS m
+    SET status = CASE WHEN m.status = 'bound' THEN 'retired' ELSE m.status END, bound_slot = NULL, updated_at = pg_catalog.now()
+    WHERE m.id = v_slot.model;
+  END IF;
+
+  RETURN QUERY SELECT p_slot, v_deleted, v_remaining, v_remaining = 0;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) TO service_role;
+
+-- Drop the active profile's rollback target, so the older slot becomes free to clear or rebind. Needs p_ack = 'drop-rollback'.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_release_rollback(p_actor text, p_ack text)
+RETURNS TABLE (active_profile text, dropped_previous text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_active text;
+  v_previous text;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'release_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_ack IS DISTINCT FROM 'drop-rollback' THEN
+    RAISE EXCEPTION 'release_refused: ack_required (pass drop-rollback)' USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT p.id, p.previous_active_id INTO v_active, v_previous FROM public.embedding_profiles AS p WHERE p.status = 'active';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'release_refused: no_active' USING ERRCODE = '55000';
+  END IF;
+  IF v_previous IS NOT NULL THEN
+    UPDATE public.embedding_profiles AS p SET previous_active_id = NULL WHERE p.id = v_active;
+  END IF;
+
+  RETURN QUERY SELECT v_active, v_previous;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_release_rollback(text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_release_rollback(text, text) TO service_role;
+
+-- Version taint (trigger A): when a version becomes tainted, its non-active slot loses its evidence, so activation refuses eval_missing.
+-- An active slot keeps it (serving does not stop by itself; the revoke output tells the operator to roll back); the slot guard drops it
+-- when the slot leaves active and refuses new evidence and re-activation while the version is tainted.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_version_taint_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+  IF NEW.status = 'tainted' AND OLD.status IS DISTINCT FROM 'tainted' THEN
+    UPDATE public.embedding_profiles AS p
+    SET eval_evidence = NULL
+    WHERE p.id LIKE 'ft-%' AND p.model = NEW.id AND p.status <> 'active' AND p.eval_evidence IS NOT NULL;
+  END IF;
+  RETURN NULL;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_version_taint_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_version_taint_guard() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_finetune_version_taint_guard ON public.embedding_model_versions;
+CREATE TRIGGER rag_finetune_version_taint_guard
+  AFTER UPDATE OF status ON public.embedding_model_versions
+  FOR EACH ROW EXECUTE FUNCTION public.rag_finetune_version_taint_guard();
+
+COMMIT;
+
+-- >>> supabase/migrations/0653_finetune_export.sql
+-- 0653: fine-tune vector export (Phase 6.1, D-11, D-27, D-28, D-32).
+-- rag_finetune_export_vectors hands the operator CLI (npm run rag:finetune -- export-vectors) the stored vectors of one profile for the
+-- current, ready chunks of exactly one tenant, in chunk id order after a keyset cursor. The legacy_column profile reads
+-- document_chunks.embedding; every other profile reads chunk_embeddings. The tenant's consent is checked inside the function through
+-- rag_finetune_consent_for_export on every call, so a revocation between two pages or two commands stops the export.
+-- Refusals: export_refused: consent (42501), unknown_profile (P0002), unbound (55000), invalid_limit (22023); a malformed or other-mode
+-- tenant key raises tenant_key_invalid: (22023). Service role only.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_export_vectors(
+  p_tenant_key text,
+  p_purpose text,
+  p_profile_id text,
+  p_after uuid,
+  p_limit integer
+)
+RETURNS TABLE (chunk_id uuid, embedding real[], embedding_model text, dims integer)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_profile public.embedding_profiles%ROWTYPE;
+BEGIN
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 1000 THEN
+    RAISE EXCEPTION 'export_refused: invalid_limit (1 to 1000)' USING ERRCODE = '22023';
+  END IF;
+
+  BEGIN
+    PERFORM public.rag_finetune_consent_for_export(ARRAY[p_tenant_key], p_purpose);
+  EXCEPTION WHEN insufficient_privilege THEN
+    RAISE EXCEPTION 'export_refused: consent of % does not cover %', p_tenant_key, p_purpose USING ERRCODE = '42501';
+  END;
+
+  SELECT * INTO v_profile FROM public.embedding_profiles AS p WHERE p.id = p_profile_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'export_refused: unknown_profile' USING ERRCODE = 'P0002';
+  END IF;
+  IF v_profile.model = 'unbound' THEN
+    RAISE EXCEPTION 'export_refused: unbound (profile % has no model bound)', v_profile.id USING ERRCODE = '55000';
+  END IF;
+
+  IF v_profile.storage = 'legacy_column' THEN
+    RETURN QUERY
+      SELECT c.id, (c.embedding)::real[], v_profile.model, v_profile.dims
+      FROM public.document_chunks AS c
+      JOIN public.documents AS d ON d.id = c.document_id
+      WHERE c.tenant_key = p_tenant_key AND c.is_current AND c.status = 'ready' AND c.embedding IS NOT NULL
+        AND d.tenant_key = p_tenant_key AND d.is_current AND d.status = 'ready'
+        AND (p_after IS NULL OR c.id > p_after)
+      ORDER BY c.id
+      LIMIT p_limit;
+  ELSE
+    RETURN QUERY
+      SELECT c.id, ((e.embedding)::public.vector)::real[], e.embedding_model, e.dims
+      FROM public.chunk_embeddings AS e
+      JOIN public.document_chunks AS c ON c.id = e.chunk_id
+      JOIN public.documents AS d ON d.id = c.document_id
+      WHERE e.profile_id = v_profile.id AND e.tenant_key = p_tenant_key
+        AND c.tenant_key = p_tenant_key AND c.is_current AND c.status = 'ready'
+        AND d.tenant_key = p_tenant_key AND d.is_current AND d.status = 'ready'
+        AND (p_after IS NULL OR c.id > p_after)
+      ORDER BY c.id
+      LIMIT p_limit;
+  END IF;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_export_vectors(text, text, text, uuid, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_export_vectors(text, text, text, uuid, integer) TO service_role;
+
+COMMIT;
+
+-- >>> supabase/migrations/0654_finetune_binding_guard.sql
+-- 0654: fine-tune slots served through Phase 3.1.1 bindings, and the guards that keep a slot inside its consent (Phase 6.1, FT-01, FT-09,
+-- D-28, D-29, D-33, D-35).
+-- A slot becomes a scoped profile (embedding_profiles.doc_types, 0440) in two ways: rag_finetune_bind_scoped_slot binds a registered
+-- version and sets its doc types in one statement (the only way to bind a tenant-scope version), and rag_finetune_scope_slot scopes or
+-- re-scopes a slot that already holds a version. A scoped profile is never backfilling or active (0440 scope trigger), so it serves only
+-- through rows of embedding_profile_bindings. The slot guard of 0652 is replaced: doc_types of an ft-* slot change only inside these
+-- functions or the final call of rag_finetune_clear_slot (all set the transaction-local myrag.ft_slot_op), a slot holding a tenant-scope
+-- version can never go back to NULL doc_types (not even with the switch set), and such a slot never takes profile-level evidence: its
+-- evidence lives on the 3.1.1 binding. rag_finetune_clear_slot is replaced: it refuses while a binding of the slot is active or
+-- backfilling, and the call that empties the slot deletes the slot's remaining binding rows and resets doc_types, so a later version never
+-- inherits a binding made for an earlier one.
+-- Binding guard (D-33): a binding row whose profile is an ft-* slot is written only when the slot's version is not tainted and
+--   (a) tenant_key IS NULL and the version is deployment scope, or
+--   (b) the version is tenant scope and tenant_key is its single tenant, or
+--   (c) the version is deployment scope and tenant_key is one of its tenants, or any tenant of this deployment while every tenant the
+--       version was trained on currently has deployment consent (the consent rows are share-locked until the transaction ends).
+-- It runs on INSERT and on every UPDATE except a move to available or retired that keeps the key, so the 3.1.1 activation gate and the
+-- staging function re-check consent each time a binding starts serving or backfilling.
+-- Backfill-run guard: a re-embed run of a slot holding a tenant-scope version is refused unless its tenant_key is the version's tenant
+-- (reembed_refused: tenant_scope_use_binding_backfill); rag_reembed_start_run itself is not redefined.
+-- Version taint (0652 trigger A, replaced): a tainted version's slot also has every active or backfilling binding set to available (the
+-- 3.1.1 deactivation semantics: a pointer flip, no vector deleted).
+-- Server role only: the slot, scope, bind and clear functions and the two replaced 0652 triggers are SECURITY DEFINER; the doc type helper
+-- and the two new trigger functions run as the invoker (every writer of these tables is service_role). All use SET search_path = '' with
+-- schema-qualified names, are revoked from PUBLIC, anon and authenticated and granted to service_role. Idempotent: CREATE OR REPLACE, DROP TRIGGER IF EXISTS.
+
+BEGIN;
+
+DO $finetune_binding_precheck$
+BEGIN
+  IF pg_catalog.to_regprocedure('public.rag_finetune_bind_slot(text,text,text)') IS NULL THEN
+    RAISE EXCEPTION '0654: apply 0652_finetune_slots.sql first' USING ERRCODE = '55000';
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_activate_embedding_binding(uuid,text)') IS NULL
+     OR pg_catalog.to_regprocedure('public.rag_reembed_require_binding(text,text)') IS NULL THEN
+    RAISE EXCEPTION '0654: apply 0441_binding_gate.sql and 0442_reembed_scope.sql first' USING ERRCODE = '55000';
+  END IF;
+END
+$finetune_binding_precheck$;
+
+-- Slot guard (trigger B): the 0652 body plus the doc type scope rules.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_slot_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_op boolean := COALESCE(pg_catalog.current_setting('myrag.ft_slot_op', true), '') = 'on';
+  v_version public.embedding_model_versions%ROWTYPE;
+  v_has_version boolean;
+  v_evidence_new boolean;
+  v_serving_new boolean;
+BEGIN
+  IF TG_OP = 'UPDATE' AND OLD.id LIKE 'ft-%' AND NEW.id IS DISTINCT FROM OLD.id THEN
+    RAISE EXCEPTION 'slot_refused: id_change' USING ERRCODE = '42501';
+  END IF;
+  IF NEW.id NOT LIKE 'ft-%' THEN
+    RETURN NEW;
+  END IF;
+
+  IF NOT v_op THEN
+    IF TG_OP = 'INSERT' THEN
+      IF NEW.model <> 'unbound' OR NEW.query_instruction IS NOT NULL THEN
+        RAISE EXCEPTION 'slot_refused: model_change_outside_bind (a slot is created unbound)' USING ERRCODE = '42501';
+      END IF;
+      IF NEW.doc_types IS NOT NULL THEN
+        RAISE EXCEPTION 'slot_refused: scope_change_outside_bind (a slot is created unscoped)' USING ERRCODE = '42501';
+      END IF;
+    ELSE
+      IF NEW.model IS DISTINCT FROM OLD.model OR NEW.query_instruction IS DISTINCT FROM OLD.query_instruction
+         OR NEW.provider IS DISTINCT FROM OLD.provider OR NEW.dims IS DISTINCT FROM OLD.dims OR NEW.storage IS DISTINCT FROM OLD.storage THEN
+        RAISE EXCEPTION 'slot_refused: model_change_outside_bind (use rag_finetune_bind_slot or rag_finetune_clear_slot)' USING ERRCODE = '42501';
+      END IF;
+      IF NEW.doc_types IS DISTINCT FROM OLD.doc_types THEN
+        RAISE EXCEPTION 'slot_refused: scope_change_outside_bind (use rag_finetune_scope_slot, rag_finetune_bind_scoped_slot or rag_finetune_clear_slot)'
+          USING ERRCODE = '42501';
+      END IF;
+    END IF;
+  END IF;
+
+  SELECT * INTO v_version FROM public.embedding_model_versions AS m WHERE m.id = NEW.model;
+  v_has_version := FOUND;
+  IF NOT v_has_version AND NEW.model <> 'unbound' THEN
+    RAISE EXCEPTION 'slot_refused: unknown_version (%)', NEW.model USING ERRCODE = '22023';
+  END IF;
+
+  -- A slot holding a tenant-scope version never becomes unscoped again, whatever switch is set (D-35).
+  IF TG_OP = 'UPDATE' AND v_has_version AND v_version.scope = 'tenant' AND OLD.doc_types IS NOT NULL AND NEW.doc_types IS NULL THEN
+    RAISE EXCEPTION 'slot_refused: tenant_scope_global (a tenant-scope version keeps its doc types)' USING ERRCODE = '42501';
+  END IF;
+
+  -- A slot leaving active whose version is tainted or gone keeps no evidence, so it can never come back without new evidence.
+  IF TG_OP = 'UPDATE' AND OLD.status = 'active' AND NEW.status <> 'active' AND (NOT v_has_version OR v_version.status = 'tainted') THEN
+    NEW.eval_evidence := NULL;
+  END IF;
+
+  v_evidence_new := NEW.eval_evidence IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.eval_evidence IS DISTINCT FROM OLD.eval_evidence);
+  v_serving_new := NEW.status IN ('backfilling', 'active') AND (TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status);
+
+  IF v_evidence_new THEN
+    IF NOT v_has_version THEN
+      RAISE EXCEPTION 'slot_refused: evidence_without_version (slot % is unbound)', NEW.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.status = 'tainted' THEN
+      RAISE EXCEPTION 'slot_refused: version_tainted (%)', v_version.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.scope = 'tenant' AND NEW.doc_types IS NULL THEN
+      RAISE EXCEPTION 'slot_refused: tenant_scope_global (a tenant-scope version is served only through scoped bindings)' USING ERRCODE = '42501';
+    END IF;
+    IF v_version.scope = 'tenant' THEN
+      RAISE EXCEPTION 'slot_refused: tenant_scope_evidence (record the evidence on the 3.1.1 binding of the tenant)' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  IF v_serving_new THEN
+    IF NOT v_has_version THEN
+      RAISE EXCEPTION 'slot_refused: unbound (slot % has no model version)', NEW.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.status = 'tainted' THEN
+      RAISE EXCEPTION 'slot_refused: version_tainted (%)', v_version.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.scope = 'tenant' AND NEW.doc_types IS NULL THEN
+      RAISE EXCEPTION 'slot_refused: tenant_scope_global (a tenant-scope version is served only through scoped bindings)' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_slot_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_slot_guard() TO service_role;
+
+-- The doc type list a scoping call takes: non-empty, no NULL entry, sorted and without repeats (the 0440 check constraint names the values).
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_normalize_doc_types(p_doc_types text[], p_prefix text)
+RETURNS text[]
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_out text[];
+BEGIN
+  IF p_doc_types IS NULL OR pg_catalog.cardinality(p_doc_types) = 0 THEN
+    RAISE EXCEPTION '%: doc_types_empty (name at least one doc type)', p_prefix USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.array_position(p_doc_types, NULL) IS NOT NULL THEN
+    RAISE EXCEPTION '%: doc_types_invalid (a NULL doc type)', p_prefix USING ERRCODE = '22023';
+  END IF;
+  SELECT pg_catalog.array_agg(DISTINCT d ORDER BY d) INTO v_out FROM pg_catalog.unnest(p_doc_types) AS u(d);
+  RETURN v_out;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_normalize_doc_types(text[], text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_normalize_doc_types(text[], text) TO service_role;
+
+-- Bind a registered version, either scope, to an empty, free, unbound slot and scope the slot to p_doc_types in the same statement. The
+-- only way to bind a tenant-scope version (D-35). Same checks and table lock as rag_finetune_bind_slot (0652).
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_bind_scoped_slot(p_slot text, p_version text, p_doc_types text[], p_actor text)
+RETURNS TABLE (slot_id text, version_id text, version_scope text, doc_types text[], query_instruction text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_slot public.embedding_profiles%ROWTYPE;
+  v_version public.embedding_model_versions%ROWTYPE;
+  v_doc_types text[];
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'bind_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_slot IS NULL OR p_slot NOT IN ('ft-a-1024', 'ft-b-1024') THEN
+    RAISE EXCEPTION 'bind_refused: unknown_slot (%)', COALESCE(p_slot, 'null') USING ERRCODE = '22023';
+  END IF;
+  v_doc_types := public.rag_finetune_normalize_doc_types(p_doc_types, 'bind_refused');
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_slot FROM public.embedding_profiles AS p WHERE p.id = p_slot;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'bind_refused: unknown_slot (%)', p_slot USING ERRCODE = '22023';
+  END IF;
+  IF v_slot.status = 'active' THEN
+    RAISE EXCEPTION 'bind_refused: slot_active' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_profiles AS p WHERE p.status = 'active' AND p.previous_active_id = p_slot) THEN
+    RAISE EXCEPTION 'bind_refused: rollback_target (release it with rag_finetune_release_rollback first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot) THEN
+    RAISE EXCEPTION 'bind_refused: slot_not_empty (clear it with rag_finetune_clear_slot first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_backfill_runs AS r WHERE r.profile_id = p_slot AND r.status = 'running') THEN
+    RAISE EXCEPTION 'bind_refused: reembed_running' USING ERRCODE = '55000';
+  END IF;
+  IF v_slot.model <> 'unbound' THEN
+    RAISE EXCEPTION 'bind_refused: slot_bound (slot holds %, clear it first)', v_slot.model USING ERRCODE = '55000';
+  END IF;
+
+  SELECT * INTO v_version FROM public.embedding_model_versions AS m WHERE m.id = p_version FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'bind_refused: unknown_version (%)', COALESCE(p_version, 'null') USING ERRCODE = 'P0002';
+  END IF;
+  IF v_version.status = 'bound' THEN
+    RAISE EXCEPTION 'bind_refused: version_bound (held by %)', v_version.bound_slot USING ERRCODE = '55000';
+  END IF;
+  IF v_version.status <> 'registered' THEN
+    RAISE EXCEPTION 'bind_refused: version_status (%)', v_version.status USING ERRCODE = '55000';
+  END IF;
+  IF v_version.dims <> v_slot.dims THEN
+    RAISE EXCEPTION 'bind_refused: dims_mismatch (% vs %)', v_version.dims, v_slot.dims USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM pg_catalog.set_config('myrag.ft_slot_op', 'on', true);
+  UPDATE public.embedding_profiles AS p
+  SET model = v_version.id, query_instruction = v_version.query_prompt, eval_evidence = NULL, doc_types = v_doc_types
+  WHERE p.id = p_slot;
+  PERFORM pg_catalog.set_config('myrag.ft_slot_op', '', true);
+
+  UPDATE public.embedding_model_versions AS m
+  SET status = 'bound', bound_slot = p_slot, updated_at = pg_catalog.now()
+  WHERE m.id = v_version.id;
+
+  RETURN QUERY SELECT p_slot, v_version.id, v_version.scope, v_doc_types, v_version.query_prompt;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_bind_scoped_slot(text, text, text[], text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_bind_scoped_slot(text, text, text[], text) TO service_role;
+
+-- Scope (or re-scope) a slot that already holds a version. p_doc_types NULL unscopes a slot holding a deployment-scope version (it then
+-- uses the global EMB-05 path); a slot holding a tenant-scope version needs a non-empty list. The slot must be empty and free; the 0440
+-- scope trigger also refuses a scope that drops the doc type of an existing binding of the slot.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_scope_slot(p_slot text, p_doc_types text[], p_actor text)
+RETURNS TABLE (slot_id text, version_id text, version_scope text, doc_types text[])
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_slot public.embedding_profiles%ROWTYPE;
+  v_version public.embedding_model_versions%ROWTYPE;
+  v_doc_types text[];
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'scope_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_slot IS NULL OR p_slot NOT IN ('ft-a-1024', 'ft-b-1024') THEN
+    RAISE EXCEPTION 'scope_refused: unknown_slot (%)', COALESCE(p_slot, 'null') USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_slot FROM public.embedding_profiles AS p WHERE p.id = p_slot;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'scope_refused: unknown_slot (%)', p_slot USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_version FROM public.embedding_model_versions AS m WHERE m.id = v_slot.model;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'scope_refused: unbound (bind a version first)' USING ERRCODE = '55000';
+  END IF;
+  IF p_doc_types IS NULL THEN
+    IF v_version.scope = 'tenant' THEN
+      RAISE EXCEPTION 'scope_refused: tenant_scope_requires_doc_types (a tenant-scope version is served only through scoped bindings)'
+        USING ERRCODE = '42501';
+    END IF;
+    v_doc_types := NULL;
+  ELSE
+    IF pg_catalog.cardinality(p_doc_types) = 0 AND v_version.scope = 'tenant' THEN
+      RAISE EXCEPTION 'scope_refused: tenant_scope_requires_doc_types (a tenant-scope version is served only through scoped bindings)'
+        USING ERRCODE = '42501';
+    END IF;
+    v_doc_types := public.rag_finetune_normalize_doc_types(p_doc_types, 'scope_refused');
+  END IF;
+  IF v_version.status = 'tainted' THEN
+    RAISE EXCEPTION 'scope_refused: version_tainted (%)', v_version.id USING ERRCODE = '55000';
+  END IF;
+  IF v_slot.status = 'active' THEN
+    RAISE EXCEPTION 'scope_refused: slot_active' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_profiles AS p WHERE p.status = 'active' AND p.previous_active_id = p_slot) THEN
+    RAISE EXCEPTION 'scope_refused: rollback_target (release it with rag_finetune_release_rollback first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot) THEN
+    RAISE EXCEPTION 'scope_refused: slot_not_empty (clear it with rag_finetune_clear_slot first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_backfill_runs AS r WHERE r.profile_id = p_slot AND r.status = 'running') THEN
+    RAISE EXCEPTION 'scope_refused: reembed_running' USING ERRCODE = '55000';
+  END IF;
+  IF v_doc_types IS NULL AND v_slot.status = 'backfilling' THEN
+    RAISE EXCEPTION 'scope_refused: slot_backfilling' USING ERRCODE = '55000';
+  END IF;
+
+  PERFORM pg_catalog.set_config('myrag.ft_slot_op', 'on', true);
+  UPDATE public.embedding_profiles AS p SET doc_types = v_doc_types, eval_evidence = NULL, status = CASE WHEN v_doc_types IS NOT NULL AND p.status = 'backfilling' THEN 'available' ELSE p.status END
+  WHERE p.id = p_slot;
+  PERFORM pg_catalog.set_config('myrag.ft_slot_op', '', true);
+
+  RETURN QUERY SELECT p_slot, v_version.id, v_version.scope, v_doc_types;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_scope_slot(text, text[], text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_scope_slot(text, text[], text) TO service_role;
+
+-- Clear (replaces 0652): refuses while a binding of the slot is active or backfilling; the call that leaves no vector also deletes the
+-- slot's remaining binding rows and resets doc_types, so a later version never inherits a binding made for an earlier one.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_clear_slot(p_slot text, p_actor text, p_limit integer DEFAULT 1000)
+RETURNS TABLE (slot_id text, deleted bigint, remaining bigint, cleared boolean)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+SET statement_timeout = '120s'
+AS $fn$
+DECLARE
+  v_slot public.embedding_profiles%ROWTYPE;
+  v_deleted bigint;
+  v_remaining bigint;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'clear_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 10000 THEN
+    RAISE EXCEPTION 'clear_refused: invalid_limit (1 to 10000)' USING ERRCODE = '22023';
+  END IF;
+  IF p_slot IS NULL OR p_slot NOT IN ('ft-a-1024', 'ft-b-1024') THEN
+    RAISE EXCEPTION 'clear_refused: unknown_slot (%)', COALESCE(p_slot, 'null') USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+  LOCK TABLE public.embedding_profile_bindings IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_slot FROM public.embedding_profiles AS p WHERE p.id = p_slot;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'clear_refused: unknown_slot (%)', p_slot USING ERRCODE = '22023';
+  END IF;
+  IF v_slot.status = 'active' THEN
+    RAISE EXCEPTION 'clear_refused: slot_active' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_profiles AS p WHERE p.status = 'active' AND p.previous_active_id = p_slot) THEN
+    RAISE EXCEPTION 'clear_refused: rollback_target (release it with rag_finetune_release_rollback first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_backfill_runs AS r WHERE r.profile_id = p_slot AND r.status = 'running') THEN
+    RAISE EXCEPTION 'clear_refused: reembed_running' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_profile_bindings AS b WHERE b.profile_id = p_slot AND b.status IN ('active', 'backfilling')) THEN
+    RAISE EXCEPTION 'clear_refused: binding_active (deactivate the slot''s bindings first)' USING ERRCODE = '55000';
+  END IF;
+
+  WITH doomed AS (
+    SELECT e.chunk_id FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot ORDER BY e.chunk_id LIMIT p_limit
+  )
+  DELETE FROM public.chunk_embeddings AS e USING doomed AS d
+  WHERE e.profile_id = p_slot AND e.chunk_id = d.chunk_id;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+
+  SELECT pg_catalog.count(*) INTO v_remaining FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot;
+
+  IF v_remaining = 0 THEN
+    UPDATE public.embedding_profile_bindings AS b SET previous_binding_id = NULL
+    WHERE b.previous_binding_id IN (SELECT s.id FROM public.embedding_profile_bindings AS s WHERE s.profile_id = p_slot);
+    DELETE FROM public.embedding_profile_bindings AS b WHERE b.profile_id = p_slot;
+
+    PERFORM pg_catalog.set_config('myrag.ft_slot_op', 'on', true);
+    UPDATE public.embedding_profiles AS p
+    SET model = 'unbound', query_instruction = NULL, eval_evidence = NULL, status = 'available', doc_types = NULL
+    WHERE p.id = p_slot;
+    PERFORM pg_catalog.set_config('myrag.ft_slot_op', '', true);
+
+    UPDATE public.embedding_model_versions AS m
+    SET status = CASE WHEN m.status = 'bound' THEN 'retired' ELSE m.status END, bound_slot = NULL, updated_at = pg_catalog.now()
+    WHERE m.id = v_slot.model;
+  END IF;
+
+  RETURN QUERY SELECT p_slot, v_deleted, v_remaining, v_remaining = 0;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) TO service_role;
+
+-- Binding guard (D-33) on embedding_profile_bindings.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_binding_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_model text;
+  v_version public.embedding_model_versions%ROWTYPE;
+  v_key text;
+  v_scope text;
+BEGIN
+  IF NEW.profile_id NOT LIKE 'ft-%' THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'UPDATE' AND NEW.status IN ('available', 'retired')
+     AND NEW.profile_id = OLD.profile_id AND NEW.doc_type = OLD.doc_type AND NEW.tenant_key IS NOT DISTINCT FROM OLD.tenant_key THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT p.model INTO v_model FROM public.embedding_profiles AS p WHERE p.id = NEW.profile_id;
+  SELECT * INTO v_version FROM public.embedding_model_versions AS m WHERE m.id = v_model;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'binding_refused: finetune_unbound (slot % holds no model version)', NEW.profile_id USING ERRCODE = '42501';
+  END IF;
+  IF v_version.status = 'tainted' THEN
+    RAISE EXCEPTION 'binding_refused: finetune_tainted (%)', v_version.id USING ERRCODE = '42501';
+  END IF;
+
+  IF v_version.scope = 'tenant' THEN
+    IF NEW.tenant_key IS NULL THEN
+      RAISE EXCEPTION 'binding_refused: finetune_deployment_wide (a tenant-scope version is bound only for its tenant)' USING ERRCODE = '42501';
+    END IF;
+    IF NEW.tenant_key IS DISTINCT FROM v_version.tenant_keys[1] OR pg_catalog.cardinality(v_version.tenant_keys) <> 1 THEN
+      RAISE EXCEPTION 'binding_refused: finetune_tenant_mismatch (the version serves only the tenant it was trained on)' USING ERRCODE = '42501';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF NEW.tenant_key IS NULL OR NEW.tenant_key = ANY (v_version.tenant_keys) THEN
+    RETURN NEW;
+  END IF;
+  FOREACH v_key IN ARRAY v_version.tenant_keys LOOP
+    SELECT c.scope INTO v_scope FROM public.rag_finetune_consent AS c WHERE c.tenant_key = v_key FOR SHARE;
+    IF NOT FOUND OR v_scope IS DISTINCT FROM 'deployment' THEN
+      RAISE EXCEPTION 'binding_refused: finetune_consent (a trained tenant no longer grants deployment consent)' USING ERRCODE = '42501';
+    END IF;
+  END LOOP;
+  RETURN NEW;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_binding_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_binding_guard() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_finetune_binding_guard ON public.embedding_profile_bindings;
+CREATE TRIGGER rag_finetune_binding_guard
+  BEFORE INSERT OR UPDATE ON public.embedding_profile_bindings
+  FOR EACH ROW EXECUTE FUNCTION public.rag_finetune_binding_guard();
+
+-- Backfill-run guard: a run of a slot holding a tenant-scope version covers that tenant only (D-33, D-35).
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_backfill_run_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_version public.embedding_model_versions%ROWTYPE;
+BEGIN
+  IF NEW.profile_id NOT LIKE 'ft-%' THEN
+    RETURN NEW;
+  END IF;
+  SELECT m.* INTO v_version
+  FROM public.embedding_profiles AS p JOIN public.embedding_model_versions AS m ON m.id = p.model
+  WHERE p.id = NEW.profile_id;
+  IF FOUND AND v_version.scope = 'tenant'
+     AND (NEW.tenant_key IS NULL OR NEW.tenant_key IS DISTINCT FROM v_version.tenant_keys[1]) THEN
+    RAISE EXCEPTION 'reembed_refused: tenant_scope_use_binding_backfill (slot % holds a tenant-scope version: run the 3.1.1 tenant-filtered binding backfill, npm run rag:reembed -- --profile % --tenant <its tenant>, after bind-status backfilling)',
+      NEW.profile_id, NEW.profile_id
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_backfill_run_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_backfill_run_guard() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_finetune_backfill_run_guard ON public.embedding_backfill_runs;
+CREATE TRIGGER rag_finetune_backfill_run_guard
+  BEFORE INSERT ON public.embedding_backfill_runs
+  FOR EACH ROW EXECUTE FUNCTION public.rag_finetune_backfill_run_guard();
+
+-- Version taint (trigger A, replaces 0652): the 0652 evidence drop plus the deactivation of every serving binding of the version's slot.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_version_taint_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+  IF NEW.status = 'tainted' AND OLD.status IS DISTINCT FROM 'tainted' THEN
+    UPDATE public.embedding_profiles AS p
+    SET eval_evidence = NULL
+    WHERE p.id LIKE 'ft-%' AND p.model = NEW.id AND p.status <> 'active' AND p.eval_evidence IS NOT NULL;
+
+    UPDATE public.embedding_profile_bindings AS b
+    SET status = 'available'
+    WHERE b.status IN ('active', 'backfilling')
+      AND b.profile_id IN (SELECT p.id FROM public.embedding_profiles AS p WHERE p.id LIKE 'ft-%' AND p.model = NEW.id);
+  END IF;
+  RETURN NULL;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_version_taint_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_version_taint_guard() TO service_role;
+
+COMMIT;

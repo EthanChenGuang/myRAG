@@ -525,6 +525,7 @@ INJECTION_CATEGORIES = ("injection", "injection_evasive")
 RULES_DETECTOR = "rules"
 ML_DETECTOR_SWITCHES = {"prompt_guard": "RAG_INJECTION_PROMPT_GUARD", "lakera": "RAG_INJECTION_LAKERA"}
 UNKNOWN_LANGUAGE = "unknown"
+INJECTION_STAGE = "injection_check"
 _ATTACK_FIXTURE = re.compile(r"^sec-attacks\.[a-z]{2}\.md$")
 _ATTACK_DIRECTORY = "sec-attacks"
 _DOCUMENT_LANGUAGE = re.compile(r"\.(zh|en|it)\.[a-z0-9]+$")
@@ -590,7 +591,12 @@ def _chunk_language(document: str, fallback: str) -> str:
 def _detectors_run(trace: RagTrace, record: TraceInjection) -> set[str]:
     env = trace.effective_config.rag_env
     ran = {RULES_DETECTOR}
-    ran.update(name for name, switch in ML_DETECTOR_SWITCHES.items() if _env_true(env, switch))
+    counts = trace.stage_counts.get(INJECTION_STAGE, {})
+    ran.update(
+        name
+        for name, switch in ML_DETECTOR_SWITCHES.items()
+        if _env_true(env, switch) and counts.get(f"{name}_disabled", 0) == 0
+    )
     for flagged in record.flagged:
         ran.update(flagged.detectors)
     return ran - set(record.detectors_unavailable)

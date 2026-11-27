@@ -295,6 +295,7 @@ describe('automatic matching', () => {
     expect(documentCalls(calls)).toHaveLength(0);
     expect(resolved).toEqual({
       explicitIds: null,
+      explicitCappedIds: null,
       hardIds: null,
       softIds: [],
       counts: { explicitKeys: 0, matchedKeys: 0, aliasMatches: 0, ambiguous: 0, softKeys: 0 },
@@ -399,6 +400,7 @@ describe('explicit filter, merge and caps', () => {
     expect(hard.softIds).toEqual(many.slice(0, 5));
     const explicit = await resolveAttributeFilter(SCOPE_A, '', { beta_list: ['vex'] }, options(client, { config: cap }));
     expect(explicit.explicitIds).toBeNull();
+    expect(explicit.explicitCappedIds).toEqual(many.slice(0, 5));
     expect(explicit.tooBroad).toBe(true);
     expect(explicit.softIds).toEqual(many.slice(0, 5));
     const atCap = await resolveAttributeFilter(SCOPE_A, 'kappa-200', null, options(client, { config: cap }));

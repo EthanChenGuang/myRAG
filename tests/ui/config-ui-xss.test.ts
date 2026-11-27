@@ -353,3 +353,278 @@ describe('Config UI index.html renders untrusted data as text (XSS)', () => {
 });
 
 void flush;
+
+// Phase 5.2 plan 36: the answer-rules card (UI-SPEC section 11). Every server string and every page value it shows is text.
+
+const ANSWER_RULES_JS_LINK = 'javascript:PWNED(1)';
+const ANSWER_RULES_SCRIPT = `<script>PWNED(1)</script>`;
+
+function answerRulesDoc(allowlistField: string | null) {
+  const doc = new FakeDocument();
+  const card = host(doc, 'rag-answer-rules');
+  for (const id of [
+    'rag-answer-rules-alerts',
+    'rag-answer-rules-judge-calibration',
+    'rag-answer-rules-caps',
+    'rag-answer-rules-guard-now',
+    'rag-answer-rules-allowlist',
+    'rag-answer-rules-guard-rules',
+    'rag-answer-rules-events-actions',
+  ]) {
+    const el = doc.createElement('div');
+    el.id = id;
+    card.appendChild(el);
+  }
+  const amount = doc.createElement('input');
+  amount.setAttribute('data-answer-cap', 'value');
+  card.appendChild(amount);
+  const judgeModel = doc.createElement('input');
+  judgeModel.id = 'RAG_GROUNDEDNESS_JUDGE_MODEL';
+  judgeModel.value = XSS_PAYLOAD;
+  card.appendChild(judgeModel);
+  const guard = doc.createElement('select');
+  guard.id = 'RAG_OUTPUT_GUARD';
+  guard.value = 'enforce';
+  card.appendChild(guard);
+  if (allowlistField !== null) {
+    const area = doc.createElement('textarea');
+    area.id = 'RAG_OUTPUT_LINK_ALLOWLIST';
+    area.value = allowlistField;
+    doc.body.appendChild(area);
+  }
+  return doc;
+}
+
+function answerRulesSummary() {
+  return {
+    caps: [
+      { mode: 'strict', limit: null, source: 'default' },
+      { mode: 'balanced', limit: 700, source: 'sweep' },
+    ],
+    floor: 300,
+    judgeLanguages: [
+      { language: XSS_PAYLOAD, calibrated: false },
+      { language: ANSWER_RULES_JS_LINK, calibrated: true },
+    ],
+    sameFamily: true,
+    allowlist: [XSS_PAYLOAD, ANSWER_RULES_JS_LINK, ANSWER_RULES_SCRIPT],
+    rulesVersion: `${XSS_PAYLOAD}${ANSWER_RULES_JS_LINK}`,
+    ruleCounts: { zh: 1, en: 2, it: 3 },
+  };
+}
+
+async function runAnswerRules(doc: FakeDocument, reply: unknown) {
+  const context = makeContext(doc, {
+    navigator: { language: 'en-US', clipboard: { writeText: async () => {} } },
+    fetch: async () => jsonResponse(reply),
+    setTimeout,
+    clearTimeout,
+    AbortController,
+    Intl,
+    URL,
+  });
+  for (const file of ['rag-panels/rag-ui.js', 'rag-panels/answer-rules.js']) {
+    new vm.Script(fs.readFileSync(path.join(configUiDir, file), 'utf8'), { filename: file }).runInContext(context);
+  }
+  await (context.initAnswerRulesPanel as () => Promise<unknown>)();
+  await flush(10);
+}
+
+function expectAnswerRulesSafe(doc: FakeDocument) {
+  expectNoInjection(doc);
+  const all = [doc.documentElement, ...doc.documentElement.querySelectorAll('*')];
+  expect(all.filter((el) => ['a', 'img', 'script', 'iframe'].includes(el.tagName)).map((el) => el.tagName)).toEqual([]);
+  for (const el of all) {
+    for (const [name, value] of el.attributes) {
+      expect(name.startsWith('on'), `${el.tagName} ${name}`).toBe(false);
+      expect(['href', 'src', 'title', 'style'].includes(name), `${el.tagName} ${name}`).toBe(false);
+      expect(value.includes('PWNED'), `${el.tagName} ${name}=${value}`).toBe(name === 'value');
+    }
+  }
+  expect(doc.innerHtmlWrites).toBe(0);
+}
+
+describe('rag-panels/answer-rules.js renders server data and page values as text (XSS, UI-SPEC section 11)', () => {
+  it('allowlist entries, language codes and the rule-set version from the summary create no element and no link', async () => {
+    const doc = answerRulesDoc(null);
+    await runAnswerRules(doc, answerRulesSummary());
+    expectAnswerRulesSafe(doc);
+    const list = doc.getElementById('rag-answer-rules-allowlist')!;
+    expect(list.querySelectorAll('li code').map((c) => c.textContent)).toEqual([XSS_PAYLOAD, ANSWER_RULES_JS_LINK, ANSWER_RULES_SCRIPT]);
+    expect(doc.getElementById('rag-answer-rules-judge-calibration')!.textContent).toContain(ANSWER_RULES_JS_LINK);
+    expect(doc.getElementById('rag-answer-rules-guard-rules')!.textContent).toContain(XSS_PAYLOAD);
+  });
+
+  it('allowlist lines of the page field and the judge model id create no element and no link', async () => {
+    const doc = answerRulesDoc(`${XSS_PAYLOAD}\n${ANSWER_RULES_JS_LINK},${ANSWER_RULES_SCRIPT}`);
+    await runAnswerRules(doc, answerRulesSummary());
+    expectAnswerRulesSafe(doc);
+    const codes = doc.getElementById('rag-answer-rules-allowlist')!.querySelectorAll('li code').map((c) => c.textContent);
+    expect(codes).toHaveLength(3);
+    expect(codes.join(' ')).toMatch(/pwned/i);
+    expect(doc.getElementById('rag-answer-rules-alerts')!.querySelector('[data-answer-rules-warning="warn.judgeSameFamily"]')).not.toBeNull();
+  });
+
+  it('a server error message is not shown and creates nothing', async () => {
+    const doc = answerRulesDoc(null);
+    await runAnswerRules(doc, { error: XSS_PAYLOAD, code: ANSWER_RULES_JS_LINK });
+    expectNoInjection(doc, false);
+    expect(doc.body.textContent).not.toContain('PWNED');
+  });
+
+  it('answer-rules.js has no innerHTML, inline handler, anchor or link attribute in its source', () => {
+    const source = fs.readFileSync(path.join(configUiDir, 'rag-panels/answer-rules.js'), 'utf8');
+    expect(source).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function/);
+    expect(source).not.toMatch(/\bon[a-z]+\s*=|setAttribute\(\s*['"]on/i);
+    expect(source).not.toMatch(/createElement\(\s*['"]a['"]|ragUiEl\([^)]*['"]a['"]|this\.el\(\s*['"]a['"]/);
+    expect(source).not.toMatch(/['"](href|src|srcdoc|formaction)['"]\s*:|\.href\s*=|\.src\s*=|mailto:/);
+  });
+
+  it('the English copy of ANSWER_RULES_LABELS names no subject area', async () => {
+    const mod = (await import('../../scripts/config-ui/rag-panels/answer-rules.js')) as unknown as {
+      ANSWER_RULES_LABELS?: { en: Record<string, string> };
+      default?: { ANSWER_RULES_LABELS: { en: Record<string, string> } };
+    };
+    const labels = mod.ANSWER_RULES_LABELS ?? mod.default!.ANSWER_RULES_LABELS;
+    const denylist = [
+      /travel/i,
+      /lodging/i,
+      /hotel/i,
+      /accommodation/i,
+      /per diem/i,
+      /leave day/i,
+      /annual leave/i,
+      /vacation/i,
+      /salar/i,
+      /payroll/i,
+      /restaurant/i,
+      /\bmeal/i,
+      /\bvpn\b/i,
+      /password/i,
+      /branch office/i,
+      /reimburse/i,
+      /expense/i,
+    ];
+    for (const [key, value] of Object.entries(labels.en)) {
+      for (const word of denylist) expect(value, `${key} ${word}`).not.toMatch(word);
+    }
+  });
+});
+
+const SECURITY_JS_LINK = 'javascript:alert(1)';
+
+function securityEventsDoc(): FakeDocument {
+  const doc = new FakeDocument();
+  const banner = doc.createElement('div');
+  banner.id = 'rag-security-alert-banner';
+  doc.body.appendChild(banner);
+  const holder = doc.createElement('div');
+  doc.body.appendChild(holder);
+  holder.innerHTML = between(html, '<section id="rag-administration-security-events"', '<!-- rag-security-events:end -->');
+  doc.innerHtmlWrites = 0;
+  return doc;
+}
+
+function securityEventsReplies(apiPath: string): unknown {
+  const uploader = { uploader_id: 'b1000000-0000-4000-8000-000000000001', uploader_name: XSS_PAYLOAD, uploader_email: SECURITY_JS_LINK };
+  if (apiPath.startsWith('/api/rag/admin/security-events/alerts')) {
+    return {
+      success: true,
+      events_recorded: true,
+      hold_mode: 'manual',
+      alert_level: 5,
+      window_hours: 24,
+      open_count: 1,
+      next_cursor: null,
+      items: [
+        { id: 'a1000000-0000-4000-8000-000000000001', tenant_key: `o:${XSS_PAYLOAD}`, workspace_name: XSS_PAYLOAD, event_count: 7, window_hours: 24, threshold: 5, opened_at: XSS_PAYLOAD, status: 'open', held: false, ...uploader },
+        { id: 'a1000000-0000-4000-8000-000000000002', tenant_key: 's:default', workspace_name: null, event_count: 7, window_hours: 24, threshold: 5, opened_at: '2026-11-20T09:30:00.000Z', status: 'acknowledged', held: true, ...uploader },
+      ],
+    };
+  }
+  if (apiPath.startsWith('/api/rag/admin/security-events/uploaders')) {
+    return {
+      success: true,
+      events_recorded: true,
+      hold_mode: 'manual',
+      next_cursor: null,
+      items: [{ user_id: uploader.uploader_id, tenant_key: 's:default', workspace_name: XSS_PAYLOAD, display_name: XSS_PAYLOAD, email: SECURITY_JS_LINK, event_count: 2, last_event_at: XSS_PAYLOAD, held: true, held_since: XSS_PAYLOAD }],
+    };
+  }
+  if (apiPath.startsWith('/api/rag/admin/security-events/link-previews')) {
+    return { success: true, state: 'mismatch', preview_hosts: [XSS_PAYLOAD], hosts_not_allowlisted: [XSS_PAYLOAD, SECURITY_JS_LINK] };
+  }
+  return {
+    success: true,
+    events_recorded: true,
+    next_cursor: null,
+    items: [
+      { id: 'c1000000-0000-4000-8000-000000000001', tenant_key: 's:default', workspace_name: XSS_PAYLOAD, created_at: XSS_PAYLOAD, source: XSS_PAYLOAD, action: SECURITY_JS_LINK, detector: 'rules', document_id: 'd1', file_name: XSS_PAYLOAD, rule_ids: [XSS_PAYLOAD, SECURITY_JS_LINK], ...uploader },
+    ],
+  };
+}
+
+describe('rag-panels/security-events.js renders server data as text (XSS, D-57, UI-SPEC section 11)', () => {
+  it('uploader names, e-mails, workspace and file names, hosts, rule ids and codes create no element, link or title', async () => {
+    const doc = securityEventsDoc();
+    const context = makeContext(doc, {
+      navigator: { language: 'en-US' },
+      setTimeout,
+      clearTimeout,
+      AbortController,
+      Intl,
+      URL,
+      ragFetch: async (apiPath: string) => ({ ok: true, status: 200, body: securityEventsReplies(apiPath) }),
+    });
+    for (const file of ['rag-panels/rag-ui.js', 'rag-panels/security-events.js']) {
+      new vm.Script(fs.readFileSync(path.join(configUiDir, file), 'utf8'), { filename: file }).runInContext(context);
+    }
+    await (context.initSecurityEventsPanel as () => Promise<unknown>)();
+    await flush(10);
+    for (const tab of ['uploaders', 'events', 'previews']) {
+      doc.getElementById(`rag-security-events-tab-${tab}`)!.click();
+      await flush(10);
+    }
+    doc.dispatch('DOMContentLoaded');
+    await flush(10);
+    doc.getElementById('rag-security-events-tab-alerts')!.click();
+    await flush(10);
+    doc.querySelector('[data-security-hold]')!.click();
+    await flush(10);
+    expectNoInjection(doc);
+    const all = [doc.documentElement, ...doc.documentElement.querySelectorAll('*')];
+    expect(all.filter((el) => ['a', 'img', 'script', 'iframe'].includes(el.tagName)).map((el) => el.tagName)).toEqual([]);
+    for (const el of all) {
+      for (const [name, value] of el.attributes) {
+        expect(name.startsWith('on'), `${el.tagName} ${name}`).toBe(false);
+        expect(['href', 'src', 'title', 'style'].includes(name), `${el.tagName} ${name}`).toBe(false);
+        // UI-SPEC 9.11 row-action names carry the uploader ("Hold uploads: Uploader A"); setAttribute keeps them inert.
+        if (value.includes('PWNED')) expect(['value', 'aria-label'], `${el.tagName} ${name}=${value}`).toContain(name);
+      }
+    }
+    expect(doc.innerHtmlWrites).toBe(0);
+    expect(doc.body.textContent).toContain(XSS_PAYLOAD);
+    expect(doc.body.textContent).toContain(SECURITY_JS_LINK);
+  });
+
+  it('security-events.js and the panel additions have no innerHTML, inline handler, anchor or link attribute in their source', () => {
+    for (const file of ['security-events.js', 'injection-defense.js']) {
+      const source = fs.readFileSync(path.join(configUiDir, 'rag-panels', file), 'utf8');
+      expect(source, file).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function/);
+      expect(source, file).not.toMatch(/\bon[a-z]+\s*=|setAttribute\(\s*['"]on/i);
+      expect(source, file).not.toMatch(/createElement\(\s*['"]a['"]|ragUiEl\([^)]*['"]a['"]|this\.el\(\s*['"]a['"]/);
+      expect(source, file).not.toMatch(/['"](href|src|srcdoc|formaction)['"]\s*:|\.href\s*=|\.src\s*=|mailto:/);
+    }
+    for (const [file, start] of [
+      ['quarantine.js', '  uploaderNodes(item) {'],
+      ['upload-approvals.js', '  renderRow(row) {'],
+      ['versions-dates.js', '  versionLabelField() {'],
+      ['versions-dates.js', '  versionNode(view) {'],
+      ['review-labelling.js', '  renderCheckDetails() {'],
+      ['review-labelling.js', '  checkUploader(d) {'],
+    ] as const) {
+      const block = methodSource(fs.readFileSync(path.join(configUiDir, 'rag-panels', file), 'utf8'), start);
+      expect(block, `${file} ${start}`).not.toMatch(/innerHTML|['"]a['"]|href|mailto:|['"]title['"]/);
+    }
+  });
+});

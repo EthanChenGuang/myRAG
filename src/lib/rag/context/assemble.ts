@@ -1,9 +1,21 @@
-import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
+import type { ExtractedURL } from '@/lib/url-extractor';
+import { formatGuardedLinks } from '../security/link-section';
 import { readAnswerConfig } from '../generation/answer-config';
 import { neutralizeSentinel } from '../generation/sentinel';
 import { renderReferencedSection } from '../refs/resolve';
 import type { InjectionMarks } from '../security/injection-check';
 import { legacyKeepReason, legacyQueryTerms } from './relevance';
+import { fixedText } from '../lang/texts';
+import { effectiveDateOf, versionHeaderSuffix, versionLabelLanguage, versionLabelOf } from './version-labels';
+import {
+  findVersionConflicts,
+  findVersionGroups,
+  summarizeVersionConflicts,
+  versionBlockOf,
+  type VersionBlock,
+  type VersionConflict,
+  type VersionPairRow,
+} from './version-conflicts';
 import { docsFromBlocks, wrapDocuments, type WrapDoc } from './wrap';
 import type {
   CitationLabel,
@@ -34,6 +46,13 @@ export interface AssemblyDocumentRow {
   content?: string | null;
   metadata?: Record<string, any> | null;
   version?: number | null;
+  /** Selected only while RAG_SECURITY_EVENTS is on (fetchAssemblyRows). */
+  user_id?: string | null;
+  /** Selected only while RAG_VERSION_LABELS is on (fetchAssemblyRows, D-49). */
+  doc_type?: string | null;
+  doc_date?: string | null;
+  effective_from?: string | null;
+  version_label?: string | null;
 }
 
 export interface AssembleInput<C extends AssemblyCandidate = AssemblyCandidate> {
@@ -61,6 +80,8 @@ export interface AssembleInput<C extends AssemblyCandidate = AssemblyCandidate> 
   injectionMarks?: InjectionMarks | null;
   /** D-13: document id to its version line; a labelled document renders as its own section with the line before each entry. */
   versionLabels?: ReadonlyMap<string, string>;
+  /** D-52: the supersession rows between the request's documents; set (possibly empty) only while RAG_VERSION_LABELS is on. */
+  versionPairs?: readonly VersionPairRow[];
 }
 
 /** D-17: a matched table row as the table leg found it; header names key the cells. */
@@ -115,6 +136,8 @@ export interface AssembleOutput<C extends AssemblyCandidate = AssemblyCandidate>
   blocks: ContextBlock[];
   /** Sentinel tokens neutralized in the context (a rule switch on); absent when none was found. */
   neutralizedSentinels?: number;
+  /** D-52: the version conflicts among the blocks; absent without one or while RAG_VERSION_LABELS is off. */
+  versionConflict?: VersionConflict;
 }
 
 export const NO_CONTEXT_TEXT = 'No relevant context found.';
@@ -195,6 +218,12 @@ export function filterCandidates<C extends AssemblyCandidate>(input: AssembleInp
 
 type DraftBlock = Omit<ContextBlock, 'alias' | 'title'>;
 
+/** The uploader field of a block, only when its document row carries user_id, so all-off blocks stay deep-equal. */
+function uploaderOf(row: AssemblyDocumentRow | undefined): Pick<ContextBlock, 'uploaderId'> {
+  if (!row || !Object.prototype.hasOwnProperty.call(row, 'user_id')) return {};
+  return { uploaderId: typeof row.user_id === 'string' ? row.user_id : null };
+}
+
 function chunkMetadataOf(chunk: AssemblyCandidate, rows: Map<string, Record<string, any> | null>): Record<string, any> | undefined {
   let metadata = chunk.metadata ?? undefined;
   if (!metadata || !metadata.image_url) {
@@ -222,6 +251,81 @@ export function blockTitle(block: Pick<ContextBlock, 'documentName' | 'page' | '
   return `${block.documentName}${page}${section}`;
 }
 
+interface VersionView {
+  /** documentVersion from the row, null without one. */
+  documentVersion: number | null;
+  fields: Pick<ContextBlock, 'versionLabel' | 'effectiveFrom'>;
+  /** Appended to the block title and the legacy document line; empty without a version or date. */
+  suffix: string;
+}
+
+/**
+ * D-48 to D-50: null with RAG_VERSION_LABELS off, so no row is read for labels and every title stays as it was. On, each
+ * document row gives its version label, effective date and title suffix in the label language resolved from the question.
+ */
+function versionViews(
+  input: AssembleInput,
+  older: (language: string) => ReadonlySet<string> = () => new Set(),
+): ((documentId: string) => VersionView | null) | null {
+  if (!readAnswerConfig().versionLabels) return null;
+  const language = versionLabelLanguage(input.queryText);
+  const olderIds = older(language);
+  const olderLabel = olderIds.size > 0 ? ` · ${fixedText('labels.older_version', language)}` : '';
+  const cache = new Map<string, VersionView | null>();
+  return (documentId) => {
+    if (cache.has(documentId)) return cache.get(documentId)!;
+    const row = input.documents.get(documentId);
+    let view: VersionView | null = null;
+    if (row) {
+      const versionLabel = versionLabelOf(row, language);
+      const effectiveFrom = effectiveDateOf(row);
+      view = {
+        documentVersion: typeof row.version === 'number' ? row.version : null,
+        fields: {
+          ...(versionLabel !== null ? { versionLabel } : {}),
+          ...(effectiveFrom !== null ? { effectiveFrom } : {}),
+        },
+        suffix: `${versionHeaderSuffix(row, language)}${olderIds.has(documentId) ? olderLabel : ''}`,
+      };
+    }
+    cache.set(documentId, view);
+    return view;
+  };
+}
+
+/**
+ * D-52: the document texts the context will render (reference sections, then text chunks in group order), checked for version
+ * conflicts before rendering. Null unless the supersession rows were read for this request (RAG_VERSION_LABELS on).
+ */
+function contextVersionConflict<C extends AssemblyCandidate>(filtered: FilteredCandidates<C>, input: AssembleInput<C>): VersionConflict | null {
+  if (!input.versionPairs) return null;
+  const texts = new Map<string, string[]>();
+  const push = (documentId: string, text: string) => {
+    if (!texts.has(documentId)) texts.set(documentId, []);
+    texts.get(documentId)!.push(text);
+  };
+  for (const section of input.referenced?.sections ?? []) if (!section.missing) push(section.documentId, section.text);
+  if (filtered.hasQuery) {
+    const rank = new Map((input.groupOrder ?? []).map((id, index) => [id, index]));
+    const chunks = [...filtered.relevantChunks].sort(
+      (a, b) => (rank.get(a.document_id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.document_id) ?? Number.MAX_SAFE_INTEGER),
+    );
+    for (const chunk of chunks) {
+      const row = input.documents.get(chunk.document_id);
+      if (!row || IMAGE_EXTENSIONS.some((ext) => row.filename.toLowerCase().endsWith(ext))) continue;
+      if (chunkMetadataOf(chunk, input.chunkMetadata)?.image_url) continue;
+      push(chunk.document_id, chunk.content);
+    }
+  }
+  const blocks: VersionBlock[] = [];
+  for (const [documentId, list] of texts) {
+    const block = versionBlockOf(documentId, input.documents.get(documentId), list);
+    if (block) blocks.push(block);
+  }
+  if (blocks.length < 2) return null;
+  return summarizeVersionConflicts(findVersionConflicts(findVersionGroups(blocks, input.versionPairs)));
+}
+
 /** Applies the labeler to non-image blocks in order, continuing the ordinal count. */
 class BlockLabeller {
   readonly blocks: ContextBlock[] = [];
@@ -236,8 +340,8 @@ class BlockLabeller {
   readonly headers = new Map<number, string>();
 
   /** Records the block; returns its label when a labeler is set and the block is not an image. */
-  add(draft: DraftBlock): CitationLabel | null {
-    const unlabelled = { ...draft, title: this.neutralize(blockTitle(draft)) };
+  add(draft: DraftBlock, titleSuffix = ''): CitationLabel | null {
+    const unlabelled = { ...draft, title: this.neutralize(`${blockTitle(draft)}${titleSuffix}`) };
     if (!this.labeler || draft.isImage) {
       this.blocks.push({ ...unlabelled, alias: null });
       return null;
@@ -283,6 +387,8 @@ export function buildContext<C extends AssemblyCandidate>(
   }
 
   const sentinel = sentinelNeutralizer();
+  const versionConflict = readAnswerConfig().versionLabels ? contextVersionConflict(filtered, input) : null;
+  const versionOf = versionViews(input, () => new Set(versionConflict?.pairs.flatMap((pair) => pair.olderDocumentId ?? []) ?? []));
   const labeller = new BlockLabeller(input.citationLabeler, sentinel.quiet);
   const marks = input.injectionMarks ?? null;
   const entries: WrapEntry[] = [];
@@ -298,16 +404,22 @@ export function buildContext<C extends AssemblyCandidate>(
         return renderReferencedSection(section);
       }
       entries.push({ block: labeller.blocks.length, reference: true, flagged: marks?.sectionIndexes.has(sectionIndex) ?? false });
-      const label = labeller.add({
-        documentId: section.documentId,
-        documentName: section.documentName,
-        documentVersion: null,
-        chunkIds: [...section.chunkIds],
-        page: null,
-        sectionPath: null,
-        text: section.text,
-        isImage: false,
-      });
+      const version = versionOf?.(section.documentId) ?? null;
+      const label = labeller.add(
+        {
+          documentId: section.documentId,
+          documentName: section.documentName,
+          documentVersion: version?.documentVersion ?? null,
+          chunkIds: [...section.chunkIds],
+          page: null,
+          sectionPath: null,
+          text: section.text,
+          isImage: false,
+          ...uploaderOf(input.documents.get(section.documentId)),
+          ...version?.fields,
+        },
+        version?.suffix,
+      );
       return label ? renderReferencedSection({ ...section, text: label.text }, label.header) : renderReferencedSection(section);
     });
     if (input.citationLabeler) context = rendered.join('');
@@ -324,7 +436,7 @@ export function buildContext<C extends AssemblyCandidate>(
     // Sections group by file name; a version-labelled document groups by its id, so two versions of one file stay apart.
     const sectionNames = new Map<string, string>();
     const sectionKey = (documentId: string, docName: string): string => {
-      if (!input.versionLabels?.has(documentId)) return docName;
+      if (!input.versionLabels?.has(documentId) && !versionOf) return docName;
       const key = `${docName}\u0000${documentId}`;
       sectionNames.set(key, docName);
       return key;
@@ -409,7 +521,8 @@ export function buildContext<C extends AssemblyCandidate>(
         return b.similarity - a.similarity;
       });
 
-      contextParts.push(`\n--- Document: ${docName} (${chunks.length} relevant chunks) ---`);
+      const sectionVersion = versionOf?.(chunks[0]!.documentId) ?? null;
+      contextParts.push(`\n--- Document: ${docName}${sectionVersion?.suffix ?? ''} (${chunks.length} relevant chunks) ---`);
 
       const pieces = chunks.map((c) => {
         const contentMatch = c.content.match(/^Document: [^.]+\.[^.]+\. Chunk \d+ of (\d+)\. Content: (.*)$/s);
@@ -440,6 +553,7 @@ export function buildContext<C extends AssemblyCandidate>(
         }
         const group = pieces.slice(start, end);
         const documentVersion = input.documents.get(first.chunk.documentId)?.version;
+        const version = versionOf?.(first.chunk.documentId) ?? null;
         const draft: DraftBlock = {
           documentId: first.chunk.documentId,
           documentName: docName,
@@ -449,13 +563,15 @@ export function buildContext<C extends AssemblyCandidate>(
           sectionPath: sectionPathOf(first.chunk.metadata),
           text: group.map((piece) => piece.body).join('\n\n'),
           isImage: first.isImage,
+          ...uploaderOf(input.documents.get(first.chunk.documentId)),
+          ...version?.fields,
         };
         entries.push({
           block: labeller.blocks.length,
           reference: false,
           flagged: marks !== null && draft.chunkIds.some((chunkId) => marks.chunkIds.has(chunkId)),
         });
-        const label = labeller.add(draft);
+        const label = labeller.add(draft, version?.suffix);
         if (versionLine !== undefined && !draft.isImage) {
           // The line is written before the entry (and is the wrapped doc's header), never into the block text that citations quote.
           labeller.headers.set(labeller.blocks.length - 1, label ? `${versionLine}\n${label.header}` : versionLine);
@@ -471,7 +587,7 @@ export function buildContext<C extends AssemblyCandidate>(
     if (collectedURLs.length > 0) {
       const uniqueURLs = Array.from(new Map(collectedURLs.map((url) => [url.url, url])).values());
       links = uniqueURLs;
-      const urlSection = formatURLsForContext(uniqueURLs);
+      const urlSection = formatGuardedLinks(uniqueURLs);
       if (urlSection) {
         contextParts.push(urlSection);
         linksSection = urlSection;
@@ -546,6 +662,7 @@ export function buildContext<C extends AssemblyCandidate>(
     links,
     refusalCandidate,
     blocks: labeller.blocks,
+    ...(versionConflict ? { versionConflict } : {}),
     ...(sentinel.count > 0 ? { neutralizedSentinels: sentinel.count } : {}),
   };
 }

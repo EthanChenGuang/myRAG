@@ -3,9 +3,12 @@ import {
   KoyebSessionRequest,
   KoyebSessionResponse,
   KoyebMessagePayload,
+  TextMessageOptions,
   WhatsAppMediaUploadResponse,
   WhatsAppError
 } from './types';
+
+const HOST_NAME_RE = /^[a-z0-9.-]{1,253}$/i;
 
 export function toBlobPart(file: Buffer | ArrayBuffer): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(file instanceof ArrayBuffer ? new Uint8Array(file) : file);
@@ -81,7 +84,8 @@ export abstract class BaseWhatsAppClient {
   abstract sendTextMessage(
     sessionId: string,
     to: string,
-    text: string
+    text: string,
+    options?: TextMessageOptions
   ): Promise<{ messageId: string; status: string }>;
 
   /**
@@ -135,4 +139,19 @@ export abstract class BaseWhatsAppClient {
    * Health check for provider instance
    */
   abstract healthCheck(): Promise<boolean>;
+
+  /**
+   * The link preview hosts the service reports on its health endpoint (host names only); null when it does not answer.
+   */
+  async getLinkPreviewHosts(): Promise<string[] | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/health`);
+      if (!response.ok) return null;
+      const body = (await response.json()) as { linkPreviewHosts?: unknown };
+      if (!Array.isArray(body?.linkPreviewHosts)) return null;
+      return body.linkPreviewHosts.filter((host): host is string => typeof host === 'string' && HOST_NAME_RE.test(host));
+    } catch {
+      return null;
+    }
+  }
 }

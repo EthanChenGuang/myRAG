@@ -611,11 +611,26 @@ def test_every_phase42_quote_is_found_in_its_loaded_document(phase42, documents)
 # words (train 30). Both fixture baselines were re-recorded on the combined corpus with every earlier item unchanged; any
 # other shared word, or one of these four in a pre-existing document, still fails.
 CONCURRENT_P52_WORDS = {"basin", "closes", "griglia", "chiude"}
+# 05.2-29 moved the sec-links topic sections, unchanged, into sec-link-topics.
 CONCURRENT_P52_FILES = {
     f"{language}/{name}.{language}.md"
     for language in ("en", "it", "zh")
-    for name in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links")
+    for name in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links", "sec-link-topics")
 }
+# The 05.3-15 documents and items were written at the same time as these files (merged with train 30 in 05.3-16) and meet
+# them only on this word; both fixture baselines were re-recorded on the combined corpus. Any other shared word, or this one
+# in a pre-existing document, still fails.
+CONCURRENT_P53_WORDS = {"gauge"}
+CONCURRENT_P53_SOURCES = {
+    f"{language}/{name}.{language}.md" for language in ("en", "it", "zh") for name in ("access-rules", "instrument-catalog")
+}
+
+
+def _concurrent_p53(source: str | None, items) -> bool:
+    if source in CONCURRENT_P53_SOURCES:
+        return True
+    phase53 = {f"golden:{item.id}" for item in items if "phase53_fixture" in item.tags}
+    return source in phase53
 
 
 def test_new_documents_share_no_content_word_with_the_pre_existing_corpus(
@@ -643,6 +658,8 @@ def test_new_documents_share_no_content_word_with_the_pre_existing_corpus(
         body = _body(relpath)
         for word in sorted(_content_words(body)):
             if word in CONCURRENT_P52_WORDS and old_words.get(word) in CONCURRENT_P52_FILES:
+                continue
+            if word in CONCURRENT_P53_WORDS and _concurrent_p53(old_words.get(word), items):
                 continue
             assert word not in old_words, (word, relpath, old_words.get(word))
         for gram in sorted(_han_bigrams(body)):

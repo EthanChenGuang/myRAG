@@ -4,6 +4,7 @@ import {
   KoyebSessionRequest,
   KoyebSessionResponse,
   KoyebMessagePayload,
+  TextMessageOptions,
   WhatsAppError,
   WhatsAppErrorCodes,
   WhatsAppMediaUploadResponse
@@ -312,7 +313,8 @@ export class FlyioWhatsAppClient extends BaseWhatsAppClient {
   async sendTextMessage(
     sessionId: string,
     to: string,
-    text: string
+    text: string,
+    options?: TextMessageOptions
   ): Promise<{ messageId: string; status: string }> {
     logger.info('FlyioWhatsAppClient', 'Sending text message with correct format');
     logger.info('FlyioWhatsAppClient', `[DEBUG] Text to send (first 500 chars): ${text.substring(0, 500)}`);
@@ -329,7 +331,8 @@ export class FlyioWhatsAppClient extends BaseWhatsAppClient {
     const payload = {
       sessionId,
       to,
-      message: text  // Send text as-is, JSON.stringify will handle encoding
+      message: text,  // Send text as-is, JSON.stringify will handle encoding
+      ...(options?.linkPreview === false ? { linkPreview: false as const } : {})
     };
 
     const jsonPayload = JSON.stringify(payload);

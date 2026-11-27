@@ -62,6 +62,15 @@ describe('assembly lookups use a fixed number of queries', () => {
       closers.push(() => edge.close());
 
       const env = fixtureProcessEnv(edge.url);
+      // assemble.ts reaches the RAG deps through the 05.2-22 version-conflict module, and the deps read the server env at import.
+      const saved = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+      Object.assign(process.env, env);
+      closers.push(async () => {
+        for (const [key, value] of Object.entries(saved)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      });
       const adminClient = createClient(edge.url, env.SUPABASE_SERVICE_ROLE_KEY, {
         auth: { persistSession: false, autoRefreshToken: false },
       });

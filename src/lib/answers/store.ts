@@ -1,11 +1,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod/v3';
-import { isTenantScope, type TenantScope } from '@/lib/rag';
-import { AnswerRecordSchema, CitationRecordSchema, type AnswerRecord, type CitationRecord } from '@/lib/rag-eval/contracts.generated';
+import { isTenantScope, readAnswerConfig, type TenantScope } from '@/lib/rag';
+import {
+  AnswerChecksSchema,
+  AnswerRecordSchema,
+  CitationRecordSchema,
+  type AnswerChecks,
+  type AnswerRecord,
+  type CitationRecord,
+} from '@/lib/rag-eval/contracts.generated';
 
 export type AnswerGroundednessValue = AnswerRecord['groundedness'];
 export type AnswerFeedbackValue = NonNullable<AnswerRecord['feedback']>;
-export type ReviewReason = 'feedback_negative' | 'groundedness_flagged';
+export type ReviewReason = 'feedback_negative' | 'groundedness_flagged' | 'claim_unsupported';
+export type AnswerTextsSource = NonNullable<AnswerRecord['textsSource']>;
 
 export interface AnswerRecordRow {
   id: string;
@@ -24,6 +32,9 @@ export interface AnswerRecordRow {
   review_reasons: string[];
   created_at: string;
   updated_at: string;
+  /** Selected only while answerChecksColumnsEnabled() (0940). */
+  checks?: unknown;
+  texts_source?: string | null;
 }
 
 export interface InsertAnswerRecordInput {
@@ -39,6 +50,9 @@ export interface InsertAnswerRecordInput {
   invalidCitations: number;
   citations: CitationRecord[];
   groundedness: AnswerGroundednessValue;
+  /** Phase 5.2: written only when given, so an all-off insert is the Phase 5 row (D-23, D-03). */
+  checks?: AnswerChecks;
+  textsSource?: AnswerTextsSource;
 }
 
 export class AnswerStoreError extends Error {
@@ -54,7 +68,8 @@ export const ANSWER_RECORD_COLUMNS =
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ATTACH_IDS = 500;
 const MAX_CHAT_RECORDS = 500;
-const REVIEW_REASONS: readonly ReviewReason[] = ['feedback_negative', 'groundedness_flagged'];
+const CHECKS_COLUMNS = ',checks,texts_source';
+const REVIEW_REASONS: readonly ReviewReason[] = ['feedback_negative', 'groundedness_flagged', 'claim_unsupported'];
 const APPEND_ATTEMPTS = 5;
 
 const InsertSchema = z.object({
@@ -69,9 +84,21 @@ const InsertSchema = z.object({
   invalidCitations: z.number().int().gte(0),
   citations: z.array(CitationRecordSchema),
   groundedness: AnswerRecordSchema.shape.groundedness,
+  checks: AnswerChecksSchema.optional(),
+  textsSource: z.enum(['registry', 'legacy']).optional(),
 });
 const GroundednessSchema = AnswerRecordSchema.shape.groundedness;
 const FeedbackSchema = AnswerRecordSchema.shape.feedback.removeDefault().options[0];
+
+/** True while any Phase 5.2 switch is on: the chat route then passes checks and texts_source to the record (0940 required). */
+export function answerChecksColumnsEnabled(): boolean {
+  return readAnswerConfig().anyNonDefault;
+}
+
+/** ANSWER_RECORD_COLUMNS, plus checks and texts_source only while answerChecksColumnsEnabled(), so an all-off read is today's request. */
+export function answerRecordColumns(): string {
+  return answerChecksColumnsEnabled() ? `${ANSWER_RECORD_COLUMNS}${CHECKS_COLUMNS}` : ANSWER_RECORD_COLUMNS;
+}
 
 function isUuid(value: unknown): value is string {
   return typeof value === 'string' && UUID_RE.test(value);
@@ -108,6 +135,8 @@ export async function insertAnswerRecord(admin: SupabaseClient, input: InsertAns
     invalidCitations: input.invalidCitations,
     citations: input.citations,
     groundedness: input.groundedness,
+    ...(input.checks !== undefined ? { checks: input.checks } : {}),
+    ...(input.textsSource !== undefined ? { textsSource: input.textsSource } : {}),
   });
   const { data, error } = await admin
     .from(TABLE)
@@ -125,6 +154,8 @@ export async function insertAnswerRecord(admin: SupabaseClient, input: InsertAns
         invalid_citations: parsed.invalidCitations,
         citations: parsed.citations,
         groundedness: parsed.groundedness,
+        ...(parsed.checks !== undefined ? { checks: parsed.checks } : {}),
+        ...(parsed.textsSource !== undefined ? { texts_source: parsed.textsSource } : {}),
       },
       { onConflict: 'id', ignoreDuplicates: true },
     )
@@ -141,6 +172,15 @@ export async function updateAnswerGroundedness(admin: SupabaseClient, input: { i
   return Array.isArray(data) && data.length > 0;
 }
 
+/** Replaces the checks object of one answer (the claim step of 05.2-25 writes sentence support through it). */
+export async function updateAnswerChecks(admin: SupabaseClient, input: { id: string; checks: AnswerChecks }): Promise<boolean> {
+  if (!isUuid(input.id)) return false;
+  const checks = AnswerChecksSchema.parse(input.checks);
+  const { data, error } = await admin.from(TABLE).update({ checks, updated_at: nowIso() }).eq('id', input.id).select('id');
+  if (error) throw new AnswerStoreError('checks update', error.code);
+  return Array.isArray(data) && data.length > 0;
+}
+
 /** Sets the vote only on a record of this user; another user's or a missing record gives null. */
 export async function setAnswerFeedback(
   admin: SupabaseClient,
@@ -153,7 +193,7 @@ export async function setAnswerFeedback(
     .update({ feedback, updated_at: nowIso() })
     .eq('id', input.id)
     .eq('user_id', input.userId)
-    .select(ANSWER_RECORD_COLUMNS)
+    .select(answerRecordColumns())
     .maybeSingle();
   if (error) throw new AnswerStoreError('feedback update', error.code);
   return (data as AnswerRecordRow | null) ?? null;
@@ -210,7 +250,7 @@ export async function attachAnswersToChat(
 /** Reads one record through the client it is given (the session client in routes, so RLS applies) plus a user_id guard. */
 export async function readOwnedAnswerRecord(client: SupabaseClient, input: { id: string; userId: string }): Promise<AnswerRecordRow | null> {
   if (!isUuid(input.id) || !isUuid(input.userId)) return null;
-  const { data, error } = await client.from(TABLE).select(ANSWER_RECORD_COLUMNS).eq('id', input.id).eq('user_id', input.userId).maybeSingle();
+  const { data, error } = await client.from(TABLE).select(answerRecordColumns()).eq('id', input.id).eq('user_id', input.userId).maybeSingle();
   if (error) throw new AnswerStoreError('read', error.code);
   return (data as AnswerRecordRow | null) ?? null;
 }
@@ -219,7 +259,7 @@ export async function listOwnedAnswerRecordsForChat(client: SupabaseClient, inpu
   if (!isUuid(input.chatId) || !isUuid(input.userId)) return [];
   const { data, error } = await client
     .from(TABLE)
-    .select(ANSWER_RECORD_COLUMNS)
+    .select(answerRecordColumns())
     .eq('chat_id', input.chatId)
     .eq('user_id', input.userId)
     .order('created_at', { ascending: true })

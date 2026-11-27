@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import type { InProcessEval, RunEvalResult } from '../eval/harness/run-eval.mts';
+import { compactFixtureCorpus, removeCompactCorpus } from './helpers/compact-corpus.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FULL_GOLDEN_PATH = path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl');
@@ -117,13 +118,35 @@ describe('tracer retrieval through runEval', () => {
 });
 
 describe('run-smoke absolute-gate flags', () => {
-  test('--gates-mode without --gates is refused with exit 2 naming the flag', () => {
-    const result = spawnSync(process.execPath, ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--gates-mode', 'report', '--out', makeOutDir()], {
+  // D-06 (05.3-16): a gated run always carries the absolute gates of eval/config/quality-gates.json; only --no-gate leaves them out.
+  function gated(extra: string[]): { status: number | null; stderr: string; gate: { absolute?: { mode?: string; gates_config?: string } | null } | null } {
+    const out = makeOutDir();
+    const result = spawnSync(process.execPath, ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--golden', GOLDEN_PATH, '--no-answers', '--out', out, ...extra], {
       cwd: REPO_ROOT,
       encoding: 'utf8',
     });
-    expect(result.status).toBe(2);
-    expect(result.stderr).toContain('--gates-mode needs --gates');
+    const gatePath = path.join(out, 'gate.json');
+    const gate = fs.existsSync(gatePath) ? (JSON.parse(fs.readFileSync(gatePath, 'utf8')) as { absolute?: { mode?: string } | null }) : null;
+    return { status: result.status, stderr: result.stderr, gate };
+  }
+
+  test('a gated run without --gates evaluates the absolute gates in enforce mode', () => {
+    const run = gated([]);
+    expect(run.gate, run.stderr.slice(-2000)).not.toBeNull();
+    expect(run.gate?.absolute).toBeTruthy();
+    expect(run.gate?.absolute?.mode).toBe('enforce');
+  });
+
+  test('--gates-mode report without --gates runs the default absolute gates in report mode', () => {
+    const run = gated(['--gates-mode', 'report']);
+    expect(run.gate, run.stderr.slice(-2000)).not.toBeNull();
+    expect(run.gate?.absolute?.mode).toBe('report');
+  });
+
+  test('--no-gate runs neither gate', () => {
+    const run = gated(['--no-gate']);
+    expect(run.status, run.stderr.slice(-2000)).toBe(0);
+    expect(run.gate).toBeNull();
   });
 
   test('--gates-mode accepts only enforce or report', () => {
@@ -134,6 +157,51 @@ describe('run-smoke absolute-gate flags', () => {
     );
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('--gates-mode must be enforce or report');
+  });
+});
+
+describe('run-smoke answers by default (05.3-15, O-1)', () => {
+  // These runs answer one tracer item; without the 04.2-37 duplicate-passage copies the child builds its fixture database in
+  // a fraction of the time (each run took 42-48 s in CI on the full corpus, against the 60 s test timeout).
+  let corpusDir: string | undefined;
+  beforeAll(() => {
+    corpusDir = compactFixtureCorpus();
+  });
+  afterAll(() => {
+    removeCompactCorpus(corpusDir);
+  });
+
+  function smoke(extra: string[]): { status: number | null; stderr: string; generatorModel: string | null; answer: string | null } {
+    const out = makeOutDir();
+    const args = ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--golden', GOLDEN_PATH, '--corpus', corpusDir as string, '--no-gate', '--out', out, ...extra];
+    const result = spawnSync(process.execPath, args, {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+    });
+    if (result.status !== 0) return { status: result.status, stderr: result.stderr, generatorModel: null, answer: null };
+    const manifest = JSON.parse(fs.readFileSync(path.join(out, 'run.json'), 'utf8')) as { request_options: { generator_model?: string | null } };
+    const trace = JSON.parse(fs.readFileSync(path.join(out, 'traces.jsonl'), 'utf8').trim().split('\n')[0]) as { answer?: string | null };
+    return { status: 0, stderr: result.stderr, generatorModel: manifest.request_options.generator_model ?? null, answer: trace.answer ?? null };
+  }
+
+  test('a run without flags answers with the instruction-sensitive fake generator', () => {
+    const run = smoke([]);
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.generatorModel).toBe('fake/instruction-sensitive-v1');
+    expect(typeof run.answer).toBe('string');
+  });
+
+  test('--no-answers keeps the retrieval-only run', () => {
+    const run = smoke(['--no-answers']);
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.generatorModel).toBeNull();
+    expect(run.answer).toBeNull();
+  });
+
+  test('--answers together with --no-answers is refused with exit 2', () => {
+    const run = smoke(['--answers', '--no-answers']);
+    expect(run.status).toBe(2);
+    expect(run.stderr).toContain('--answers and --no-answers');
   });
 });
 

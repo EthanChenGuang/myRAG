@@ -39,7 +39,7 @@ class SecurityEvent(_Contract):
     action: SecurityAction
     detector: DetectorName
     rule_ids: list[Annotated[str, Field(min_length=1, max_length=64)]] = Field(default_factory=list)
-    document_id: str = Field(min_length=1)
+    document_id: str | None = Field(default=None, min_length=1)
     chunk_id: str | None = None
     uploader_id: UUID | None = None
     trace_id: str | None = None
@@ -116,7 +116,7 @@ class SecurityEventView(_Contract):
     action: SecurityAction
     detector: DetectorName
     rule_ids: list[str] = Field(default_factory=list)
-    document_id: str = Field(min_length=1)
+    document_id: str | None = Field(default=None, min_length=1)
     file_name: str | None = None
     uploader_id: UUID | None = None
     uploader_name: str | None = None
@@ -158,3 +158,21 @@ class LinkPreviewStatus(_Contract):
         if self.state == "mismatch" and not self.hosts_not_allowlisted:
             raise ValueError("state mismatch needs at least one host not on the allowlist")
         return self
+
+
+class ReviewCheckDocument(_Contract):
+    """One document named by a check-raised review item, with its uploader under the D-47 rules; no text."""
+
+    document_id: UUID
+    file_name: str | None = None
+    uploader_id: UUID | None = None
+    uploader_name: str | None = None
+    uploader_email: str | None = None
+
+
+class ReviewCheckDetails(_Contract):
+    """D-55: what a review item raised by output_guard or version_conflict adds to the item route; ids and names only."""
+
+    check: Literal["output_guard", "version_conflict"]
+    detector: DetectorName | None = None
+    documents: list[ReviewCheckDocument] = Field(default_factory=list, max_length=50)

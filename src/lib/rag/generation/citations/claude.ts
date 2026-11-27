@@ -1,6 +1,14 @@
 import { createHash } from 'node:crypto';
 import { createAnthropic, type AnthropicProvider } from '@ai-sdk/anthropic';
-import { streamText, type FilePart, type ModelMessage, type StreamTextResult, type TextPart, type ToolSet } from 'ai';
+import {
+  streamText,
+  type FilePart,
+  type ModelMessage,
+  type StreamTextResult,
+  type StreamTextTransform,
+  type TextPart,
+  type ToolSet,
+} from 'ai';
 import { z } from 'zod/v3';
 import { CitationRecordSchema, type CitationRecord } from '@/lib/rag-eval/contracts.generated';
 import { DEFAULT_ANTHROPIC_BASE_URL } from '../config';
@@ -55,6 +63,8 @@ export interface ClaudeCitationRequestInput {
   anthropicId: string;
   reasoning?: boolean;
   abortSignal?: AbortSignal;
+  /** Phase 5.2 D-29: the output cap of the turn; the call gets min(CLAUDE_MAX_OUTPUT_TOKENS, cap). */
+  outputCap?: number | null;
 }
 
 function documentParts(aliasMap: AliasMap): FilePart[] {
@@ -88,7 +98,7 @@ export function buildClaudeCitationRequest(input: ClaudeCitationRequestInput) {
       { role: 'user', content: [...documentParts(input.aliasMap), question] },
     ] as ModelMessage[],
     maxRetries: 0,
-    maxOutputTokens: CLAUDE_MAX_OUTPUT_TOKENS,
+    maxOutputTokens: typeof input.outputCap === 'number' ? Math.min(CLAUDE_MAX_OUTPUT_TOKENS, input.outputCap) : CLAUDE_MAX_OUTPUT_TOKENS,
     providerOptions: { anthropic: { ...thinking } },
     ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
   };
@@ -116,7 +126,11 @@ function withCitedQuotes(records: CitationRecord[], quotes: ReadonlyMap<string, 
 }
 
 export function startClaudeCitationStream(
-  input: ClaudeCitationRequestInput & { tools?: ToolSet; onError?: (error: unknown) => void },
+  input: ClaudeCitationRequestInput & {
+    tools?: ToolSet;
+    onError?: (error: unknown) => void;
+    extraTransforms?: Array<StreamTextTransform<ToolSet>>;
+  },
 ): ClaudeCitationStream {
   const { aliasMap } = input;
   const parser = createMarkerParser({ aliases: aliasMap.aliases });
@@ -172,6 +186,7 @@ export function startClaudeCitationStream(
           failed = true;
         },
       }),
+      ...(input.extraTransforms ?? []),
     ],
   }) as unknown as StreamTextResult<ToolSet, never>;
 

@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const { exec, spawn } = require('child_process');
 const multer = require('multer');
 const security = require('./config-server-security');
+const ragGate = require('./config-server-rag-gate');
 const app = express();
 const PORT = 3333;
 // Loopback only. CONFIG_UI_HOST can override it, but any other value exposes an unauthenticated .env editor to the network.
@@ -137,6 +138,10 @@ app.use(security.securityMiddleware);
 
 // Serve static files from the config-ui directory
 app.use(express.static(configUiDir));
+// The terminology import route accepts bodies up to 1.5 MB (its own cap); every other path keeps the default limit.
+const TERMINOLOGY_IMPORT_PROXY_PATH = '/api/rag/admin/terminology/import';
+const TERMINOLOGY_EXPORT_PROXY_PATH = '/api/rag/admin/terminology/export';
+app.use(TERMINOLOGY_IMPORT_PROXY_PATH, express.json({ limit: '1.5mb' }));
 app.use(express.json());
 
 // Also serve static files from the public directory
@@ -598,6 +603,9 @@ ${fullValues.RAG_EXACT_SCAN_CUTOFF !== undefined ? `RAG_EXACT_SCAN_CUTOFF=${full
 ${fullValues.RAG_LEXICAL_TRANSLATION !== undefined ? `RAG_LEXICAL_TRANSLATION=${fullValues.RAG_LEXICAL_TRANSLATION}` : 'RAG_LEXICAL_TRANSLATION=false'}
 ${fullValues.RAG_LEXICAL_DICTIONARY !== undefined ? `RAG_LEXICAL_DICTIONARY=${fullValues.RAG_LEXICAL_DICTIONARY}` : 'RAG_LEXICAL_DICTIONARY=false'}
 ${fullValues.RAG_LEXICAL_STEM_IT !== undefined ? `RAG_LEXICAL_STEM_IT=${fullValues.RAG_LEXICAL_STEM_IT}` : 'RAG_LEXICAL_STEM_IT=false'}
+${fullValues.RAG_LEXICAL_SCORING !== undefined ? `RAG_LEXICAL_SCORING=${fullValues.RAG_LEXICAL_SCORING}` : 'RAG_LEXICAL_SCORING=ts_rank_cd'}
+${fullValues.RAG_LEXICAL_BM25_K1 !== undefined ? `RAG_LEXICAL_BM25_K1=${fullValues.RAG_LEXICAL_BM25_K1}` : 'RAG_LEXICAL_BM25_K1=1.2'}
+${fullValues.RAG_LEXICAL_BM25_B !== undefined ? `RAG_LEXICAL_BM25_B=${fullValues.RAG_LEXICAL_BM25_B}` : 'RAG_LEXICAL_BM25_B=0.75'}
 ${fullValues.RAG_VERSION_SCOPE !== undefined ? `RAG_VERSION_SCOPE=${fullValues.RAG_VERSION_SCOPE}` : 'RAG_VERSION_SCOPE=false'}
 ${fullValues.RAG_EMBED_VERSION_SCOPE !== undefined ? `RAG_EMBED_VERSION_SCOPE=${fullValues.RAG_EMBED_VERSION_SCOPE}` : 'RAG_EMBED_VERSION_SCOPE=false'}
 ${fullValues.RAG_TABLE_LOOKUP !== undefined ? `RAG_TABLE_LOOKUP=${fullValues.RAG_TABLE_LOOKUP}` : 'RAG_TABLE_LOOKUP=false'}
@@ -1279,6 +1287,36 @@ app.all(/^\/api\/scrapers\//, async (req, res) => {
   }
 });
 
+// Phase 5.3 D-13, D-14: the pre-save setting check (POST /api/config/rag-gate/check, GET .../latest, GET .../:id).
+// A posted config goes through the same filtering as POST /api/config before it is compared and hashed.
+function prepareRagGateConfig(raw) {
+  const values = filterValidEnvVars(raw);
+  for (const [name, value] of Object.entries(values)) {
+    if (security.isSecretConfigEntry(name, '') && (value === '' || value === null || value === undefined)) delete values[name];
+  }
+  for (const [name, value] of Object.entries(values)) {
+    if (value === null || value === undefined) {
+      delete values[name];
+      continue;
+    }
+    const text = typeof value === 'object' ? (Array.isArray(value) ? value.join(',') : JSON.stringify(value)) : String(value);
+    const safe = security.toEnvLineValue(text);
+    if (safe === null) return null;
+    values[name] = safe;
+  }
+  return values;
+}
+
+ragGate.registerRagGateRoutes(
+  app,
+  ragGate.createRagGateRunner({
+    repoRoot: REPO_ROOT,
+    spawn,
+    prepareConfig: prepareRagGateConfig,
+    appBaseUrl: () => getMainAppBaseUrl(),
+  }),
+);
+
 // API endpoint to create a new .env.local with template
 app.post('/api/config/create', (req, res) => {
   try {
@@ -1560,6 +1598,9 @@ RAG_EXACT_SCAN_CUTOFF=${getEnvValue('RAG_EXACT_SCAN_CUTOFF') || '0'}
 RAG_LEXICAL_TRANSLATION=${getEnvValue('RAG_LEXICAL_TRANSLATION') || 'false'}
 RAG_LEXICAL_DICTIONARY=${getEnvValue('RAG_LEXICAL_DICTIONARY') || 'false'}
 RAG_LEXICAL_STEM_IT=${getEnvValue('RAG_LEXICAL_STEM_IT') || 'false'}
+RAG_LEXICAL_SCORING=${getEnvValue('RAG_LEXICAL_SCORING') || 'ts_rank_cd'}
+RAG_LEXICAL_BM25_K1=${getEnvValue('RAG_LEXICAL_BM25_K1') || '1.2'}
+RAG_LEXICAL_BM25_B=${getEnvValue('RAG_LEXICAL_BM25_B') || '0.75'}
 RAG_VERSION_SCOPE=${getEnvValue('RAG_VERSION_SCOPE') || 'false'}
 RAG_EMBED_VERSION_SCOPE=${getEnvValue('RAG_EMBED_VERSION_SCOPE') || 'false'}
 RAG_TABLE_LOOKUP=${getEnvValue('RAG_TABLE_LOOKUP') || 'false'}
@@ -2082,6 +2123,9 @@ RAG_EXACT_SCAN_CUTOFF=${getEnvValue('RAG_EXACT_SCAN_CUTOFF') || '0'}
 RAG_LEXICAL_TRANSLATION=${getEnvValue('RAG_LEXICAL_TRANSLATION') || 'false'}
 RAG_LEXICAL_DICTIONARY=${getEnvValue('RAG_LEXICAL_DICTIONARY') || 'false'}
 RAG_LEXICAL_STEM_IT=${getEnvValue('RAG_LEXICAL_STEM_IT') || 'false'}
+RAG_LEXICAL_SCORING=${getEnvValue('RAG_LEXICAL_SCORING') || 'ts_rank_cd'}
+RAG_LEXICAL_BM25_K1=${getEnvValue('RAG_LEXICAL_BM25_K1') || '1.2'}
+RAG_LEXICAL_BM25_B=${getEnvValue('RAG_LEXICAL_BM25_B') || '0.75'}
 RAG_VERSION_SCOPE=${getEnvValue('RAG_VERSION_SCOPE') || 'false'}
 RAG_EMBED_VERSION_SCOPE=${getEnvValue('RAG_EMBED_VERSION_SCOPE') || 'false'}
 RAG_TABLE_LOOKUP=${getEnvValue('RAG_TABLE_LOOKUP') || 'false'}
@@ -3150,6 +3194,223 @@ app.get('/api/config/injection-defense', (req, res) => {
   }
 });
 
+class AnswerRulesSummaryError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+const ANSWER_RULES_CAP_MODES = ['strict', 'balanced'];
+const ANSWER_RULES_MIN_FLOOR = 256;
+const ANSWER_RULES_MAX_ALLOWLIST = 500;
+const ANSWER_RULES_MAX_HOST = 253;
+const ANSWER_RULES_DEFAULT_MODELS = {
+  openrouter: DEFAULT_OPENROUTER_MODELS,
+  openai: DEFAULT_OPENAI_MODELS,
+};
+let answerRulesEncoder = null;
+
+function readAnswerRulesFile(relativePath, label) {
+  let text;
+  try {
+    text = fs.readFileSync(path.join(REPO_ROOT, relativePath), 'utf8');
+  } catch {
+    throw new AnswerRulesSummaryError(`answer_rules_${label}_missing`, `${relativePath} could not be read`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new AnswerRulesSummaryError(`answer_rules_${label}_invalid`, `${relativePath} is not valid JSON`);
+  }
+}
+
+/** Mirrors normalizeHost of src/lib/rag/security/link-allowlist.ts. */
+function answerRulesNormalizeHost(input) {
+  let value = String(input).trim();
+  if (value === '') return null;
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) value = `http://${value.replace(/^\*?\.+/, '')}`;
+  let hostname;
+  try {
+    hostname = new URL(value).hostname;
+  } catch {
+    return null;
+  }
+  if (hostname.startsWith('[')) return hostname.length <= ANSWER_RULES_MAX_HOST ? hostname.toLowerCase() : null;
+  hostname = hostname.replace(/\.+$/, '');
+  if (hostname === '') return null;
+  const ascii = require('url').domainToASCII(hostname).toLowerCase().replace(/\.+$/, '');
+  if (ascii === '' || ascii.length > ANSWER_RULES_MAX_HOST || ascii.split('.').some((label) => label === '')) return null;
+  return ascii;
+}
+
+function answerRulesAllowlist(value) {
+  const hosts = [];
+  for (const entry of String(value || '').split(',')) {
+    const host = answerRulesNormalizeHost(entry);
+    if (host && !hosts.includes(host)) hosts.push(host);
+    if (hosts.length >= ANSWER_RULES_MAX_ALLOWLIST) break;
+  }
+  return hosts;
+}
+
+function readAnswerRulesFamilies() {
+  const data = readAnswerRulesFile(path.join('config', 'rag', 'model-families.json'), 'families');
+  const providers = data && data.provider_families;
+  const valid =
+    providers && typeof providers === 'object' && Array.isArray(data.router_prefixes) && Array.isArray(data.name_patterns) &&
+    data.name_patterns.every((entry) => entry && typeof entry.pattern === 'string' && typeof entry.family === 'string');
+  if (!valid) throw new AnswerRulesSummaryError('answer_rules_families_invalid', 'config/rag/model-families.json does not match the family table contract');
+  let patterns;
+  try {
+    patterns = data.name_patterns.map((entry) => ({ pattern: new RegExp(entry.pattern, 'i'), family: entry.family }));
+  } catch {
+    throw new AnswerRulesSummaryError('answer_rules_families_invalid', 'config/rag/model-families.json has an invalid name pattern');
+  }
+  return { providers: new Map(Object.entries(providers)), routers: new Set(data.router_prefixes), patterns };
+}
+
+/** Mirrors modelFamily of src/lib/rag/generation/judge.ts (D-25): null for router, alias, conflicting or unknown ids. */
+function answerRulesModelFamily(modelId, families = readAnswerRulesFamilies()) {
+  const lowered = String(modelId || '').trim().toLowerCase();
+  const cut = lowered.lastIndexOf('/');
+  const prefix = cut === -1 ? '' : lowered.slice(0, cut);
+  const name = cut === -1 ? lowered : lowered.slice(cut + 1);
+  if (!lowered || lowered.startsWith('~') || families.routers.has(prefix) || name === 'auto' || name === '') return null;
+  const byPrefix = prefix ? families.providers.get(prefix.split('/')[0]) ?? null : null;
+  const found = families.patterns.find((entry) => entry.pattern.test(name));
+  const byName = found ? found.family : null;
+  if (byPrefix && byName && byPrefix !== byName) return null;
+  return byName ?? byPrefix;
+}
+
+/** The default chat model of the configured provider: the entry marked isDefault, else the first. */
+function answerRulesDefaultModel(values) {
+  const provider = String(values.NEXT_PUBLIC_AI_PROVIDER || 'openrouter').trim().toLowerCase();
+  const raw = values[`NEXT_PUBLIC_${provider.toUpperCase()}_MODELS`] || ANSWER_RULES_DEFAULT_MODELS[provider] || '';
+  let list;
+  try {
+    list = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(list)) return null;
+  const models = list.filter((entry) => entry && typeof entry.id === 'string' && entry.id.trim() !== '');
+  const chosen = models.find((entry) => entry.isDefault === true) || models[0];
+  return chosen ? chosen.id : null;
+}
+
+/** D-31: max(256, twice the token count of the longest notices.* text of any registry language), as outputCapFloor() of the app. */
+function answerRulesFloor(packs) {
+  const { TEXT_KEYS } = require('../config/rag/validate-language-settings.cjs');
+  if (!answerRulesEncoder) answerRulesEncoder = require('tiktoken').get_encoding('cl100k_base');
+  let longest = 0;
+  for (const pack of packs) {
+    for (const key of TEXT_KEYS) {
+      if (!key.startsWith('notices.')) continue;
+      const [group, name] = key.split('.');
+      const text = pack.texts && pack.texts[group] ? pack.texts[group][name] : null;
+      if (typeof text === 'string' && text) longest = Math.max(longest, answerRulesEncoder.encode(text).length);
+    }
+  }
+  return Math.max(ANSWER_RULES_MIN_FLOOR, 2 * longest);
+}
+
+function answerRulesCaps() {
+  const data = readAnswerRulesFile(path.join('eval', 'config', 'output-caps.json'), 'caps');
+  const cells = data && Array.isArray(data.cells) ? data.cells : null;
+  const valid =
+    cells && cells.length === ANSWER_RULES_CAP_MODES.length &&
+    ANSWER_RULES_CAP_MODES.every((mode) => cells.filter((cell) => cell && cell.mode === mode).length === 1) &&
+    cells.every(
+      (cell) =>
+        (cell.limit === null || cell.limit === undefined || (Number.isInteger(cell.limit) && cell.limit > 0)) &&
+        (cell.source === 'default' || cell.source === 'sweep'),
+    );
+  if (!valid) throw new AnswerRulesSummaryError('answer_rules_caps_invalid', 'eval/config/output-caps.json does not match the output caps contract');
+  return ANSWER_RULES_CAP_MODES.map((mode) => {
+    const cell = cells.find((entry) => entry.mode === mode);
+    return { mode, limit: cell.limit ?? null, source: cell.source };
+  });
+}
+
+/**
+ * Judge languages: the supported languages (every registry language while none is chosen) whose answers get no HHEM route,
+ * as hasHhemRoute and allowVectaraFor of the app decide. Calibrated means a calibrated cell for the configured judge model.
+ */
+function answerRulesJudgeLanguages(values, packs) {
+  const data = readAnswerRulesFile(path.join('eval', 'config', 'groundedness-judge-thresholds.json'), 'judge');
+  const cells = data && (data.cells === undefined ? [] : data.cells);
+  if (!Array.isArray(cells)) throw new AnswerRulesSummaryError('answer_rules_judge_invalid', 'eval/config/groundedness-judge-thresholds.json has no cells list');
+  const settings = languageSettings.normalizeLanguageSettings(values.RAG_SUPPORTED_LANGUAGES, values.RAG_PRIMARY_LANGUAGE, { packs });
+  const codes = settings.configured ? settings.languages : packs.map((pack) => pack.code);
+  const multiTenant = String(values.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE || '').trim() === 'multi-tenant';
+  const vectara = values.RAG_GROUNDEDNESS_VECTARA_OPT_IN === 'true' && (!multiTenant || values.RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK === 'true');
+  const judgeModel = String(values.RAG_GROUNDEDNESS_JUDGE_MODEL || '').trim();
+  return packs
+    .filter((pack) => codes.includes(pack.code))
+    .filter((pack) => !(pack.groundedness === 'hhem_2_1_open' || (pack.groundedness === 'hhem_2_3' && vectara)))
+    .map((pack) => ({
+      language: pack.code,
+      calibrated:
+        judgeModel !== '' &&
+        cells.some((cell) => cell && cell.source === 'calibrated' && cell.language === pack.code && typeof cell.judge_model === 'string' && cell.judge_model.trim() === judgeModel),
+    }));
+}
+
+function answerRulesGuard(codes) {
+  const data = readAnswerRulesFile(path.join('config', 'rag', 'output-guard-rules.json'), 'guard');
+  const rules = data && Array.isArray(data.credential_rules) ? data.credential_rules : null;
+  if (!rules || typeof data.version !== 'string' || !DETECTOR_CONFIG_VERSION.test(data.version)) {
+    throw new AnswerRulesSummaryError('answer_rules_guard_invalid', 'config/rag/output-guard-rules.json does not match the guard rules contract');
+  }
+  const counts = Object.fromEntries(codes.map((code) => [code, 0]));
+  for (const rule of rules) {
+    if (rule && Object.prototype.hasOwnProperty.call(counts, rule.language)) counts[rule.language] += 1;
+  }
+  return { version: data.version, counts };
+}
+
+/** UI-SPEC 8.1: the read-only blocks of the Answer rules card; named fields only, no threshold, metric, env value or rule id. */
+function summarizeAnswerRules() {
+  const registry = readAnswerRulesFile(path.join('config', 'rag', 'language-packs.json'), 'languages');
+  const packs = registry && Array.isArray(registry.packs) ? registry.packs : null;
+  if (!packs || packs.length === 0 || !packs.every((pack) => pack && typeof pack.code === 'string' && pack.texts && typeof pack.texts === 'object')) {
+    throw new AnswerRulesSummaryError('answer_rules_languages_invalid', 'config/rag/language-packs.json lists no language packs');
+  }
+  const values = languageSettings.readEnvFileValues(path.join(REPO_ROOT, '.env.local'));
+  const caps = answerRulesCaps();
+  const judgeLanguages = answerRulesJudgeLanguages(values, packs);
+  const families = readAnswerRulesFamilies();
+  const guard = answerRulesGuard(packs.map((pack) => pack.code));
+  const judgeFamily = answerRulesModelFamily(values.RAG_GROUNDEDNESS_JUDGE_MODEL, families);
+  const answerModel = answerRulesDefaultModel(values);
+  const answerFamily = answerModel ? answerRulesModelFamily(answerModel, families) : null;
+  return {
+    caps,
+    floor: answerRulesFloor(packs),
+    judgeLanguages,
+    sameFamily: judgeFamily === null || answerFamily === null ? null : judgeFamily === answerFamily,
+    allowlist: answerRulesAllowlist(values.RAG_OUTPUT_LINK_ALLOWLIST),
+    rulesVersion: guard.version,
+    ruleCounts: guard.counts,
+  };
+}
+
+// Read-only summary for the Answer rules and output safety card; served behind the same loopback and CSRF gate as every config endpoint.
+app.get('/api/config/answer-rules', (req, res) => {
+  try {
+    return res.json(summarizeAnswerRules());
+  } catch (error) {
+    if (error instanceof AnswerRulesSummaryError) {
+      console.error('[Answer Rules] summary unavailable:', { code: error.code });
+      return res.status(500).json({ error: error.message, code: error.code });
+    }
+    console.error('[Answer Rules] summary failed');
+    return res.status(500).json({ error: 'Answer rules summary failed', code: 'answer_rules_summary_failed' });
+  }
+});
+
 const QUERY_LAYER_PROFILE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const QUERY_LAYER_TRACING_ENV = /^(LANGSMITH_|LANGCHAIN_TRACING)/;
 
@@ -4173,7 +4434,8 @@ function isAllowedRagProxyPathname(pathname) {
 }
 
 function buildRagProxyTargetPath(pathParam, queryString) {
-  const raw = String(pathParam ?? '').replace(/^\/+/, '');
+  // Express 5 passes a named wildcard as an array of decoded segments.
+  const raw = (Array.isArray(pathParam) ? pathParam.map((p) => encodeURIComponent(String(p))).join('/') : String(pathParam ?? '')).replace(/^\/+/, '');
   const parts = raw ? raw.split('/').filter(Boolean) : [];
   for (const part of parts) {
     let decoded;
@@ -4231,6 +4493,17 @@ app.all('/api/rag/*path', async (req, res) => {
     }
     const response = await fetch(mainAppUrl, init);
     const text = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    if (logPath === TERMINOLOGY_EXPORT_PROXY_PATH && response.ok && /^text\/csv\b/i.test(contentType)) {
+      const disposition = response.headers.get('content-disposition') || '';
+      res.set({
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': /^attachment; filename="[\w.-]{1,128}"$/.test(disposition) ? disposition : 'attachment; filename="terminology.csv"',
+        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control': 'no-store',
+      });
+      return res.status(response.status).send(text);
+    }
     let body;
     try {
       body = text ? JSON.parse(text) : {};
@@ -4674,4 +4947,4 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings };
+module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings, answerRulesModelFamily };

@@ -17,13 +17,16 @@ const CLIENT_READABLE_TABLES = new Set(['rag_judge_labels']);
 /** 0966 references rag_retrieval_log(id) by foreign key and stops with 55000 without it (fail closed, plan 05.3-10). */
 const REQUIRES_RETRIEVAL_LOG = /^supabase\/migrations\/0966_/;
 
-export type Phase53FunctionKind = 'invoker' | 'trigger';
+/** definer: service-role-only readers of auth.users (0977); trigger: definer triggers; invoker: everything else. */
+export type Phase53FunctionKind = 'invoker' | 'trigger' | 'definer';
 
 /** Every function created by the 0960 to 0979 files, by regprocedure signature without the schema. */
 export const PHASE53_SERVICE_ROLE_FUNCTIONS: ReadonlyArray<{ signature: string; kind: Phase53FunctionKind }> = [
   { signature: 'rag_eval_run_request_enqueue(text,text,text)', kind: 'invoker' },
   { signature: 'rag_pilot_user_add(text,uuid,uuid)', kind: 'invoker' },
   { signature: 'rag_pilot_user_remove(text,uuid)', kind: 'invoker' },
+  { signature: 'rag_pilot_user_resolve(text,text)', kind: 'definer' },
+  { signature: 'rag_pilot_users_list(text,integer,timestampwithtimezone,uuid)', kind: 'definer' },
   { signature: 'rag_monitor_purge(integer)', kind: 'invoker' },
   { signature: 'rag_monitor_alert_upsert(jsonb)', kind: 'invoker' },
   { signature: 'rag_monitor_alert_set_status(uuid,text,uuid)', kind: 'invoker' },
@@ -39,7 +42,22 @@ export const PHASE53_SERVICE_ROLE_FUNCTIONS: ReadonlyArray<{ signature: string; 
   { signature: 'rag_golden_evidence_clear(text,text,text[])', kind: 'invoker' },
   { signature: 'rag_golden_evidence_on_documents_update()', kind: 'trigger' },
   { signature: 'rag_golden_evidence_on_documents_delete()', kind: 'trigger' },
+  {
+    signature: 'rag_monitor_alert_evidence(text,text,timestampwithtimezone,timestampwithtimezone,jsonb,integer)',
+    kind: 'invoker',
+  },
+  { signature: 'rag_monitor_cluster_shares(text,timestampwithtimezone)', kind: 'invoker' },
+  { signature: 'rag_review_items_enqueue_re_review(text,jsonb)', kind: 'invoker' },
+  { signature: 'rag_purge_hook_golden_items(text,uuid,uuid[])', kind: 'invoker' },
 ];
+
+/** Functions a 0960 to 0979 file may re-create but does not own, with the reason; left out of the phase sweep and definer check. */
+const NOT_PHASE_OWNED_FUNCTIONS = new Map<string, string>([
+  ['rag_purge_store_inventory()', 'Phase 6.3 function re-created by 0976'],
+]);
+
+/** Tables of the block that must never be folded into a setup file, checked by name as well as by the inventory diff. */
+const NOT_FOLDED_NAMES = ['rag_monitor_runs', 'rag_monitor_alert_evidence', 'rag_monitor_cluster_shares', 'rag_review_items_enqueue_re_review'];
 
 const normalise = (signature: string): string => signature.replace(/\s+/g, '');
 
@@ -110,7 +128,10 @@ for (const mode of MODES) {
       ({ db: full } = await createEmptyFixtureDatabase({ deploymentMode: mode }));
       withoutPhase = await buildWithout(mode, (file) => PHASE_FILE.test(file));
       const [a, b] = [await inventory(withoutPhase), await inventory(full)];
-      phaseFunctions = b.functions.filter((name) => !a.functions.includes(name)).map(normalise);
+      phaseFunctions = b.functions
+        .filter((name) => !a.functions.includes(name))
+        .map(normalise)
+        .filter((signature) => !NOT_PHASE_OWNED_FUNCTIONS.has(signature));
       phaseTables = b.tables.filter((name) => !a.tables.includes(name));
     });
 
@@ -156,6 +177,7 @@ for (const mode of MODES) {
     test('no table or function of the phase appears in either setup file', () => {
       const names = [...phaseTables, ...phaseFunctions.map((signature) => signature.slice(0, signature.indexOf('(')))];
       assert.ok(names.includes('rag_golden_evidence_index'));
+      for (const name of NOT_FOLDED_NAMES) assert.ok(names.includes(name), `${name} is not created by a 0960 to 0979 file`);
       for (const setup of SETUP_FILES) {
         const text = fs.readFileSync(path.join(REPO_ROOT, setup), 'utf8');
         for (const name of names) assert.ok(!new RegExp(`\\b${name}\\b`).test(text), `${name} is folded into ${setup}`);
@@ -199,7 +221,7 @@ for (const mode of MODES) {
         assert.equal(row.authenticated, false, `${signature} executable by authenticated`);
         assert.equal(row.service_role, true, `${signature} not executable by service_role`);
         assert.equal(row.public_exec, false, `${signature} executable by PUBLIC`);
-        assert.equal(row.prosecdef, kind === 'trigger', `${signature} SECURITY ${row.prosecdef ? 'DEFINER' : 'INVOKER'}`);
+        assert.equal(row.prosecdef, kind !== 'invoker', `${signature} SECURITY ${row.prosecdef ? 'DEFINER' : 'INVOKER'}`);
         assert.ok((row.proconfig ?? []).includes('search_path=""'), `${signature} search_path ${JSON.stringify(row.proconfig)}`);
       }
       await assertNoClientCallableRagFunctions(full);

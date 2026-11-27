@@ -2,9 +2,18 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { pickAnswerMetadata } from '@/lib/chat/answer-metadata';
-import { citationDisplayEntries } from '@/lib/citations/display';
+import { citationDisplayEntries, type CitationAlsoIn } from '@/lib/citations/display';
 
-export interface SourceCitation {
+/** D-13, D-21: optional provenance of a document source; absent for web and tool sources and for sources saved before Phase 4.2. */
+export interface SourceProvenance {
+  version?: number;
+  isCurrent?: boolean;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+  alsoIn?: CitationAlsoIn[];
+}
+
+export interface SourceCitation extends SourceProvenance {
   n: number;
   alias: string;
   quote: string;
@@ -12,9 +21,16 @@ export interface SourceCitation {
   sectionPath: string[] | null;
   unavailable: boolean;
   messageId?: string;
+  /** Phase 5.2 (D-50): present only while the version labels produced them. */
+  versionLabel?: string;
+  documentVersion?: number;
+  /** The older document of the answer's version conflict (checks.version_conflict). */
+  olderVersion?: true;
+  /** The answer language (metadata, else the merged record value). */
+  answerLanguage?: string;
 }
 
-export interface Source {
+export interface Source extends SourceProvenance {
   title: string;
   url?: string;
   snippet?: string;
@@ -41,14 +57,35 @@ export type AnswerDocumentStatus = Readonly<Record<string, 'current' | 'unavaila
  * `documents` is the answer record's availability map; without a record the snapshot shows without link or note.
  * Existing entries are kept (earlier citation entries are rebuilt); documents that were cited are flagged.
  */
+type CitationVersionFields = Pick<SourceCitation, 'versionLabel' | 'effectiveFrom' | 'documentVersion' | 'olderVersion' | 'answerLanguage'>;
+
+function versionFields(
+  citation: { documentId: string; documentVersion?: number | null; versionLabel?: string; effectiveFrom?: string },
+  conflict: { document_ids: string[]; latest_document_id: string } | null,
+  answerLanguage: string | undefined,
+): CitationVersionFields {
+  const fields: CitationVersionFields = {};
+  if (citation.versionLabel) fields.versionLabel = citation.versionLabel;
+  if (citation.effectiveFrom) fields.effectiveFrom = citation.effectiveFrom;
+  if (conflict && conflict.document_ids.includes(citation.documentId) && conflict.latest_document_id !== citation.documentId) {
+    fields.olderVersion = true;
+  }
+  if (Object.keys(fields).length === 0) return fields;
+  if (typeof citation.documentVersion === 'number') fields.documentVersion = citation.documentVersion;
+  if (answerLanguage) fields.answerLanguage = answerLanguage;
+  return fields;
+}
+
 export function citationSourcesFor(
   metadata: unknown,
   documents: AnswerDocumentStatus | undefined,
   existing: Source[] = [],
   messageId?: string,
 ): Source[] {
-  const citations = pickAnswerMetadata(metadata).citations;
+  const picked = pickAnswerMetadata(metadata);
+  const citations = picked.citations;
   if (!citations || citations.length === 0) return existing;
+  const conflict = picked.checks?.version_conflict ?? null;
   const sorted = [...citations].sort((a, b) => a.n - b.n);
   const entries = citationDisplayEntries(sorted, documents ?? {});
   const citationEntries: Source[] = entries.map((entry, index) => {
@@ -66,6 +103,12 @@ export function citationSourcesFor(
         sectionPath: entry.sectionPath,
         unavailable,
         ...(messageId ? { messageId } : {}),
+        ...(entry.version !== undefined ? { version: entry.version } : {}),
+        ...(entry.isCurrent !== undefined ? { isCurrent: entry.isCurrent } : {}),
+        ...(entry.effectiveFrom !== undefined ? { effectiveFrom: entry.effectiveFrom } : {}),
+        ...(entry.effectiveTo !== undefined ? { effectiveTo: entry.effectiveTo } : {}),
+        ...(entry.alsoIn ? { alsoIn: entry.alsoIn } : {}),
+        ...versionFields(sorted[index], conflict, picked.answerLanguage),
       },
     };
     if (documents && entry.linkDocumentId) source.documentId = entry.linkDocumentId;
@@ -374,3 +417,19 @@ export function debugSources() {
     });
   }
 } 
+
+/**
+ * The one place a document payload item's version and also-in fields (04.2-21 `sourceDocumentFields`) are copied onto a `Source`.
+ * Each field is copied only when present; the panel validates the values before rendering anything (UI-SPEC A.6).
+ */
+export function documentSourceFields(raw: unknown): SourceProvenance {
+  if (!raw || typeof raw !== 'object') return {};
+  const item = raw as Record<string, unknown>;
+  const fields: SourceProvenance = {};
+  if (item.version !== undefined) fields.version = item.version as number;
+  if (item.isCurrent !== undefined) fields.isCurrent = item.isCurrent as boolean;
+  if (item.effectiveFrom !== undefined) fields.effectiveFrom = item.effectiveFrom as string | null;
+  if (item.effectiveTo !== undefined) fields.effectiveTo = item.effectiveTo as string | null;
+  if (Array.isArray(item.alsoIn) && item.alsoIn.length > 0) fields.alsoIn = item.alsoIn as CitationAlsoIn[];
+  return fields;
+}

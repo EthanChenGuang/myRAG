@@ -196,6 +196,13 @@ export type RerankerKind = 'none' | 'cohere' | 'voyage' | 'local_bm25';
 export type RerankerSetting = RerankerKind | 'auto';
 export type RerankTier = 'quality' | 'fast';
 export type IterativeScanMode = 'off' | 'relaxed_order' | 'strict_order';
+export type LexicalScoringMode = 'ts_rank_cd' | 'bm25';
+export interface LexicalScoringConfig {
+  mode: LexicalScoringMode;
+  k1: number;
+  b: number;
+}
+export const LEXICAL_SCORING_DEFAULTS: Readonly<LexicalScoringConfig> = Object.freeze({ mode: 'ts_rank_cd', k1: 1.2, b: 0.75 });
 export type BgeM3Serving = 'hosted' | 'sidecar';
 
 export interface RetrievalParamsOverride {
@@ -237,6 +244,8 @@ export interface V2Config {
   iterativeScan: IterativeScanMode;
   exactScanCutoff: number;
   lexicalTranslation: boolean;
+  /** D-05: effective scoring of the lexical leg; bm25 only with RAG_PIPELINE=v2 and RAG_LEXICAL_SEARCH=true. */
+  lexicalScoring: LexicalScoringConfig;
   /** D-15: the terminology stage; acts only inside the v2 graph. */
   terminology: boolean;
   /** D-18: the dense terminology variant; requires terminology, never in voice (see terminologyDenseFor). */
@@ -329,6 +338,9 @@ export interface RagEnvInput {
   RAG_LEXICAL_TRANSLATION?: string;
   RAG_LEXICAL_DICTIONARY?: string;
   RAG_LEXICAL_STEM_IT?: string;
+  RAG_LEXICAL_SCORING?: string;
+  RAG_LEXICAL_BM25_K1?: string;
+  RAG_LEXICAL_BM25_B?: string;
   RAG_VERSION_SCOPE?: string;
   RAG_EMBED_VERSION_SCOPE?: string;
   RAG_TABLE_LOOKUP?: string;
@@ -609,6 +621,41 @@ function parseBoundedInt(
     return defaultValue;
   }
   return n;
+}
+
+function parseBoundedDecimal(
+  raw: string | undefined,
+  defaultValue: number,
+  min: number,
+  max: number,
+  name: string,
+  warnings: string[],
+): number {
+  const value = (raw ?? '').trim();
+  if (value === '') return defaultValue;
+  const n = /^\d+(\.\d+)?$|^\.\d+$/.test(value) ? Number(value) : NaN;
+  if (!Number.isFinite(n) || n < min || n > max) {
+    problem(warnings, `${name}:${value.slice(0, 32)}`, `Invalid ${name}, expected a number from ${min} to ${max}, using ${defaultValue}`, {
+      value: value.slice(0, 32),
+    });
+    return defaultValue;
+  }
+  return n;
+}
+
+/** D-05: invalid values fall back to their defaults; bm25 needs the v2 graph and the lexical leg, otherwise ts_rank_cd. */
+function parseLexicalScoring(env: RagEnvInput, pipeline: 'legacy' | 'v2', lexicalSearch: boolean, warnings: string[]): LexicalScoringConfig {
+  const requested = parseNamedChoice<LexicalScoringMode>('RAG_LEXICAL_SCORING', env.RAG_LEXICAL_SCORING, ['ts_rank_cd', 'bm25'], 'ts_rank_cd', warnings);
+  const k1 = parseBoundedDecimal(env.RAG_LEXICAL_BM25_K1, LEXICAL_SCORING_DEFAULTS.k1, 0.5, 3, 'RAG_LEXICAL_BM25_K1', warnings);
+  const b = parseBoundedDecimal(env.RAG_LEXICAL_BM25_B, LEXICAL_SCORING_DEFAULTS.b, 0, 1, 'RAG_LEXICAL_BM25_B', warnings);
+  if (requested === 'bm25' && (pipeline !== 'v2' || !lexicalSearch)) {
+    problem(warnings, 'lexical-scoring-needs-lexical', 'RAG_LEXICAL_SCORING=bm25 needs RAG_PIPELINE=v2 and RAG_LEXICAL_SEARCH=true; using ts_rank_cd', {
+      RAG_PIPELINE: pipeline,
+      RAG_LEXICAL_SEARCH: lexicalSearch ? 'true' : 'false',
+    });
+    return { mode: 'ts_rank_cd', k1, b };
+  }
+  return { mode: requested, k1, b };
 }
 
 function parseOnOff(raw: string | undefined, name: string, warnings: string[]): boolean {
@@ -1120,6 +1167,9 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_LEXICAL_TRANSLATION ?? '',
     env.RAG_LEXICAL_DICTIONARY ?? '',
     env.RAG_LEXICAL_STEM_IT ?? '',
+    env.RAG_LEXICAL_SCORING ?? '',
+    env.RAG_LEXICAL_BM25_K1 ?? '',
+    env.RAG_LEXICAL_BM25_B ?? '',
     env.RAG_VERSION_SCOPE ?? '',
     env.RAG_EMBED_VERSION_SCOPE ?? '',
     env.RAG_TABLE_LOOKUP ?? '',
@@ -1237,6 +1287,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     iterativeScan: parseIterativeScan(env.RAG_HNSW_ITERATIVE_SCAN, warnings),
     exactScanCutoff: parseNonNegativeInt(env.RAG_EXACT_SCAN_CUTOFF, 0, 100_000, 'exact-scan-cutoff', warnings),
     lexicalTranslation: gate.monolingual ? false : parseBooleanSwitch(env.RAG_LEXICAL_TRANSLATION, false, 'lexical-translation', warnings),
+    lexicalScoring: parseLexicalScoring(env, pipeline, lexicalSearch, warnings),
     terminology,
     terminologyDense: parseTerminologyDense(env, terminology, warnings),
     terminologyMining: parseBooleanSwitch(env.RAG_TERMINOLOGY_MINING, false, 'terminology-mining', warnings),

@@ -740,7 +740,8 @@
     {
       "name": "RAG_HISTORY_NOT_EVIDENCE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_HNSW_ITERATIVE_SCAN",
@@ -860,6 +861,24 @@
     },
     {
       "name": "RAG_LEXICAL_STEM_IT",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_LEXICAL_SCORING",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_LEXICAL_BM25_K1",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_LEXICAL_BM25_B",
       "status": "managed",
       "knownGaps": [],
       "ragAffecting": true

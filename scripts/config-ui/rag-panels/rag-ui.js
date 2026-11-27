@@ -377,7 +377,7 @@ function ragUiNextId(prefix) {
  */
 function ragUiSubTabs(doc, { label, idPrefix, tabs, selected, onSelect }) {
   const prefix = idPrefix || ragUiNextId('rag-tabs');
-  const tablist = ragUiEl(doc, 'div', { className: 'tabs tabs-bordered flex-wrap mb-4', attrs: { role: 'tablist', 'aria-label': label } });
+  const tablist = ragUiEl(doc, 'div', { className: 'tabs tabs-bordered flex flex-wrap mb-4', attrs: { role: 'tablist', 'aria-label': label } });
   const buttons = [];
   const panels = {};
   let current = selected || (tabs[0] && tabs[0].id);
@@ -402,7 +402,7 @@ function ragUiSubTabs(doc, { label, idPrefix, tabs, selected, onSelect }) {
     const tabId = prefix + '-tab-' + tab.id;
     const panelId = prefix + '-panel-' + tab.id;
     const button = ragUiEl(doc, 'button', {
-      className: 'tab',
+      className: 'tab h-auto min-h-8 py-1',
       id: tabId,
       text: tab.label,
       attrs: { type: 'button', role: 'tab', 'aria-controls': panelId },
@@ -430,7 +430,8 @@ function ragUiSubTabs(doc, { label, idPrefix, tabs, selected, onSelect }) {
 /**
  * Confirmation dialog (UI-SPEC 9.6, 12.1): native dialog.modal, focus on the safe "Keep…" button, Escape and the backdrop
  * cancel except while the action runs, focus returns to the opener (or fallbackFocus when the opener is gone).
- * tone 'error' only for the destructive actions. Resolves true after onConfirm ran, false when kept.
+ * tone 'error' only for the destructive actions. Resolves true after onConfirm ran, false when kept. onConfirm may return
+ * { keepOpen: true, message, focus? }: the dialog stays open with the message in its alert line (UI-SPEC 05.2 7.2).
  */
 function ragUiConfirmDialog(doc, { title, body, keepLabel, confirmLabel, runningLabel, tone, opener, fallbackFocus, onConfirm }) {
   const titleId = ragUiNextId('rag-dialog-title');
@@ -448,9 +449,11 @@ function ragUiConfirmDialog(doc, { title, body, keepLabel, confirmLabel, running
     if (typeof part === 'string') bodyEl.appendChild(ragUiEl(doc, 'p', { text: part }));
     else if (part) bodyEl.appendChild(part);
   }
+  const errorEl = ragUiEl(doc, 'p', { className: 'text-sm text-error mt-2 break-words empty:hidden', attrs: { role: 'alert', tabindex: '-1', 'data-rag-dialog-error': '' } });
   const box = ragUiEl(doc, 'div', { className: 'modal-box min-w-0 overscroll-contain' }, [
     ragUiEl(doc, 'h3', { className: 'text-base font-semibold mb-2 break-words text-balance', id: titleId, text: title }),
     bodyEl,
+    errorEl,
     ragUiEl(doc, 'div', { className: 'modal-action flex-wrap gap-2' }, [keep, confirm]),
   ]);
   const backdropButton = ragUiEl(doc, 'button', { className: 'cursor-default', text: keepLabel, attrs: { type: 'submit', tabindex: '-1' } });
@@ -480,14 +483,22 @@ function ragUiConfirmDialog(doc, { title, body, keepLabel, confirmLabel, running
     confirm.addEventListener('click', async () => {
       if (running) return;
       running = true;
+      errorEl.textContent = '';
       const restore = ragUiButtonBusy(doc, confirm, runningLabel || confirmLabel, [keep, backdropButton]);
+      let outcome;
       try {
-        if (typeof onConfirm === 'function') await onConfirm();
-        confirmed = true;
+        if (typeof onConfirm === 'function') outcome = await onConfirm();
+        confirmed = !(outcome && outcome.keepOpen);
       } finally {
         running = false;
         restore();
-        dialog.close(confirmed ? 'confirm' : 'keep');
+        if (outcome && outcome.keepOpen) {
+          errorEl.textContent = String(outcome.message || '');
+          const target = outcome.focus || errorEl;
+          if (target && typeof target.focus === 'function') target.focus();
+        } else {
+          dialog.close(confirmed ? 'confirm' : 'keep');
+        }
       }
     });
     dialog.showModal();

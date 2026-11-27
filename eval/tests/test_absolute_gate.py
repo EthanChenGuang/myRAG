@@ -463,6 +463,41 @@ def test_measure_records_wall_time_gate_exit_and_keeps_other_stages(tmp_path: Pa
     assert "wall time" in text and "| smoke | before |" in text
 
 
+def test_measure_after_marks_each_tier_enforce_or_report_and_records_unmeasured_tiers(tmp_path: Path):
+    """05.3-15 (O-1): stage after carries mode enforce when the would-be exit code is 0, report otherwise."""
+    failing = _write(tmp_path / "smoke" / "report.json", _report(overall=_slice(refused=17), languages={}).model_dump_json())
+    passing = _write(tmp_path / "ingest" / "report.json", _report().model_dump_json())
+    out = tmp_path / "measure.json"
+    markdown = tmp_path / "measure.md"
+    code = main(
+        ["measure", "--stage", "after", "--tier", f"smoke={failing}", "--tier", f"ingest={passing}",
+         "--not-measured", "nightly-live=not_measured_no_keys", "--gates", str(GATES_PATH), "--out", str(out),
+         "--markdown", str(markdown)]
+    )
+    assert code == 0
+    tiers = {entry["name"]: entry for entry in json.loads(out.read_text(encoding="utf-8"))["tiers"]}
+    assert (tiers["ingest"].get("mode"), tiers["smoke"].get("mode")) == ("enforce", "report")
+    assert tiers["smoke"]["failed"]
+    live = tiers["nightly-live"]
+    assert (live["stage"], live["mode"], live["reason"], live["exit_code"], live["out"]) == (
+        "after", "report", "not_measured_no_keys", None, None,
+    )
+    text = markdown.read_text(encoding="utf-8")
+    assert "| Mode |" in text
+    assert "- smoke: report-only; failing: false_answer_rate (overall)" in text
+    assert "- nightly-live: report-only; not measured (not_measured_no_keys)" in text
+
+
+def test_measure_before_entries_carry_no_mode_and_not_measured_needs_a_reason_code(tmp_path: Path):
+    report = _write(tmp_path / "smoke" / "report.json", _report().model_dump_json())
+    out = tmp_path / "measure.json"
+    base = ["measure", "--tier", f"smoke={report}", "--gates", str(GATES_PATH), "--out", str(out)]
+    assert main([*base, "--stage", "before"]) == 0
+    assert "mode" not in json.loads(out.read_text(encoding="utf-8"))["tiers"][0]
+    assert main([*base, "--stage", "after", "--not-measured", "nightly-live=Not A Code"]) == 2
+    assert main([*base, "--stage", "after", "--not-measured", "smoke=not_measured_no_keys"]) == 2
+
+
 def test_measure_rejects_a_wall_time_for_an_unknown_tier(tmp_path: Path):
     report = _write(tmp_path / "report.json", _report().model_dump_json())
     code = main(

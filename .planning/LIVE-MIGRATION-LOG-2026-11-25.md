@@ -1003,3 +1003,143 @@ The combined live SQL (the two files verbatim in the order above, each after a `
 - Characterization snapshots (`tests/fixtures/characterization/*.json`): regenerated with `UPDATE_CHARACTERIZATION=1` on the merged tree (04.2-37's 78fe8991 regenerated them on its own corpus, without the 05.2-28 documents). Against `origin/main` no entry is removed; legacy `chat.json`/`embed.json` only gain the 72/36 phase42 entries. Against 04.2-37's set: 05.2-28 documents enter result lists (voice 19, voice-v2 3, chat-v2-default 168, embed-v2-default 84, voice-v2-default 56), the 30 duplicate-passage copies of the nine duplicate_flood items swap order among themselves (chat 18, embed 9, legacy voice 14), voice-v2-default similarities shift with the larger candidate pool with the same order (166), six legacy voice results gain the hybrid `scoreBreakdown`, and a few v2-default contexts reorder or change tail items (chat 16, embed 8, voice-v2-default 14). All follow from the added fixture documents.
 - `tests/rag-db/fingerprint-backfill.test.mts`: 143 documents (140 of the fixture user); the superseded 04.2-37 version notes keep no fingerprint and their current versions record parser unknown. `tests/rag-db/backfill-hashes.test.mts`: the per-test reset covers every row that starts without a hash (the 04.2-37 version notes have their own source keys). Both failed on `exec/04.2-29` alone.
 - `tests/rag/p52-corpus.test.ts` "every planned off_topic_context question lands on its adjacent section": with the Phase 4.2 duplicate copies in the corpus, four planned below-threshold questions landed on a Phase 4.2 chunk. They are reworded (same languages, same adjacent sections, still below the fixture threshold): 'Can warming mats crack?' -> 'Can a warming mat go brittle?', '垫子会烫手吗？' -> '这种垫子烫手？', '桨叶会生锈吗？' -> '桨叶容易生锈？', "I fumi d'alveare disturbano le api?" -> "I fumi d'alveare infastidiscono?". Plan 05.2-29 must write its off_topic_context golden items from the reworded questions.
+
+## Train 31: 0944, 0972-0975, 0977, 1009 and 0410 r15 (to apply after train 31 reaches `origin/main`)
+
+Branch `ci/merge-train-31`, built on `ci/merge-train-30` (c9bc409a, then 5fb67954 merged in) with `origin/main` 331c4efa (PR #117, `RAG_HISTORY_NOT_EVIDENCE`) merged in. Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/05.2-06`, `05.2-07`, `05.2-09`, `05.2-10` | Phase 5.2 answer rules, Claude-path grounding text, registry texts | none |
+| `exec/05.2-14` | 05.2-14 channel reply guard and the review reasons of Phase 5.2 | 0944; 0410 entry (r15) |
+| `exec/05.2-16` | 05.2-16 one reasons check for Phase 5.2 and 5.3 (0967 list widened to the 0944 union for fresh databases) | 0967 edit |
+| `exec/05.2-17`, `05.2-20`, `05.2-24`, `05.2-30` | Phase 5.2 output cap, answer turn, answer fakes | none |
+| `exec/05.3-14` | 05.3-14 prompt directives, env overlay, settings hash | none |
+| `exec/05.3-15` | 05.3-15 implicit_condition and near-miss no-answer fixtures, answers-on smoke harness, absolute-gate measurement | none |
+| `exec/05.3-20` | Phase 5.3 | none |
+| `exec/05.3-27`, `05.3-28`, `05.3-29`, `05.3-35`, `05.3-36`, `05.3-41` | Phase 5.3 monitor evidence, cluster shares, re-review, monitor runs, alerts, golden evidence, questions import | 0972, 0973, 0974, 0975 |
+| `exec/05.3-32` | 05.3-32 pilot users and weekly sample | 0977; 0410 entries (r15) |
+| `exec/05.3-51` | 05.3-51 app env-write guard | none |
+| `exec/03.3-21` (contains 03.3-19) | 03.3-21 quantity tokens (TPL-07), off by default | none |
+| `exec/03.3-24` (contains 03.3-19) | 03.3-24 Phase 3.3 purge hook and tenant rule-data delete | 1009 |
+| `exec/04.4-01`, `exec/04.4-03` | Phase 4.4 BM25 lexical scoring (`RAG_LEXICAL_SCORING`, off by default) | none |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0944_rag_review_reasons_phase52.sql` | Sorts before the live 0960-0971. Rebuilds `rag_answer_records_review_reasons_check` (adds `claim_unsupported`) and `rag_review_items_reasons_check` as the union of the 0944 and 0967 reasons (so the live 0967 check is replaced; 0967 itself need not be re-applied), redefines `rag_mine_failed_queries` (last defined in 0537; nothing later redefines it), adds `rag_review_items.snapshot` and `rag_enqueue_review_item` (SECURITY INVOKER, service_role only). **DROP:** three `DROP CONSTRAINT IF EXISTS`, each re-added at once. |
+| 2 | `0972_rag_monitor_alert_evidence.sql` | Needs 0531 (retrieval log, guarded). One SECURITY INVOKER function, service_role only. |
+| 3 | `0973_rag_monitor_cluster_shares.sql` | Needs 0966 cluster tables (guarded). One SECURITY INVOKER function. |
+| 4 | `0974_rag_review_items_re_review.sql` | Needs `re_review` in the reasons check (0967, kept by 0944). One SECURITY INVOKER function. |
+| 5 | `0975_rag_monitor_runs.sql` | Table `rag_monitor_runs`, RLS on, no policy, service_role only. |
+| 6 | `0977_rag_pilot_user_resolve.sql` | Needs 0970 (`rag_pilot_users`). Two SECURITY DEFINER readers of `auth.users`, empty search_path, service_role only. |
+| 7 | `1009_phase33_purge.sql` | Needs 1001-1008. Two SECURITY INVOKER functions; their DELETEs run only when called. |
+| 8 | `0410_security_definer_rpc_grants.sql` (r15) | +12 lines since r14: guarded REVOKE/GRANT (service_role only) for `rag_pilot_user_resolve`, `rag_pilot_users_list` (0977) and `rag_enqueue_review_item` (0944). Grants only; run it last. |
+
+Numbers are unique across `supabase/migrations` (0944 in the 5.2 block, 0972-0977 in the 5.3 block with 0976 unused, 1009 in the 3.3 block; no 4.4 migration). No file has a mode variant or is folded into the setup files; all are idempotent (CREATE OR REPLACE, IF NOT EXISTS, DROP CONSTRAINT IF EXISTS before ADD). `supabase/optional/monitor-schedule.sql` is an opt-in pg_cron note, not a migration. The combined live SQL (the seven files verbatim in this order, each after a `-- ==== <file>` line, then the 0410 r15 delta as a `DO $r15$` block, then the DROP list) is `train31-live.sql` in the orchestrator scratchpad.
+
+### Operator actions
+- Apply train 30 first, then the table above; apply 0944 with the owner present (constraint rebuilds on `rag_answer_records` and `rag_review_items`).
+- Every new Phase 3.3, 4.4, 5.2 and 5.3 switch ships off, and so does `RAG_HISTORY_NOT_EVIDENCE` from main.
+
+### Deviations
+- Golden ids: three 05.3-15 near-miss no-answer items reused ids that 04.2-37 already holds. They are renumbered so the frozen split stays dev under the split rule: `en-no-answer-011` -> `en-no-answer-017`, `zh-no-answer-011` -> `zh-no-answer-017`, `it-no-answer-012` -> `it-no-answer-018` (-017 hashes to test). The 05.3-15 refusal outcome and `test_golden_phase53` use the new ids. Both golden-set manifests go from the train-30 version 3 to version 4 (the 25 05.3-15 items added, nothing changed); `test_golden_set` pins that history.
+- Baselines: re-recorded once on the merged tree (`RAG_PIPELINE=legacy rag_eval.baseline record --runs 3`, prechunked 308 items, ingest 369). Every 05.3-15 item scores exactly as in the 05.3-15 baselines (0 moved). Against train 30 only refusal rates move (21 prechunked and 29 ingest metric values), all from 05.3-15's answers-on smoke harness, including the six Phase 4.2 no-answer items. No retrieval metric moves, so 03.3-21 (quantity tokens) and 04.4-01 (BM25) leave the default baselines unchanged. The train-30 baselines are kept as `history/*.pre-05.3-15.json` for the historical comparisons; new test `test_the_train_31_baselines_add_only_phase53_items_and_move_only_refusal_rates`.
+- The 05.3-15 refusal calibration (`refusal-thresholds.json`, `fixture-score-calibration.json`, `eval/reports/refusal-calibration-fixture/`, retrieval sweep) was fitted on the 05.3-15 golden set, without the 36 Phase 4.2 items. It is kept as committed; recalibrating on golden-set version 4 is left to a later plan.
+- Corpus hash, both dump digests, the fingerprint backfill count (146 + 3) and the relex count (638) are re-pinned for the six 05.3-15 documents. `test_golden_phase42` allows the one word (`gauge`) the 05.3-15 instrument catalog shares with a Phase 4.2 version note; `test_draft_cli` keeps its batch-count tests to the corpus without the 05.3-15 documents.
+- Characterization snapshots regenerated with `UPDATE_CHARACTERIZATION=1`: no entry removed; the 25 05.3-15 items are added; changed entries come from the 05.3-15 documents entering result lists, the duplicate-passage copies swapping order among themselves, v2-default voice similarities shifting with the larger pool, and legacy voice tails and hybrid `scoreBreakdown` (details in the commit message).
+- Fixes: `RAG_LEXICAL_SCORING`, `RAG_LEXICAL_BM25_K1`, `RAG_LEXICAL_BM25_B` and `RAG_HISTORY_NOT_EVIDENCE` are stated `ragAffecting: true` (05.3-14 makes the flag mandatory) and `rag-affecting.generated.json` is rewritten; `golden-evidence.ts` takes the query fingerprint from `query-codes` so the chat route no longer loads the retrieval-log writer when the log is off (`routes-log.test.ts`); `run-eval.mts` reads the resolved citations flag before using it; the reprocess-documents suite in `reembed.test.mts` drops the superseded fixture version notes before setting every version to 1 (failed on train 30 too).
+- Merge conflicts (both intents kept): `src/lib/rag/index.ts` (export unions), `eval/harness/run-eval.mts` (05.2-30 `resolveAnswerGenerator` plus 05.3-14 `--answers` and `--env-overlay`), `eval/harness/fake-citation-generator.mts` (05.2-30 `contextBlocks` plus 05.3-15 unlabelled context), `feedback-loop/retrieval-log.ts` (`fingerprintMaskedQuery` kept as an alias of `queryFingerprint`), v2 `pipeline.ts`/`query.ts`/`search.ts` (query layer and attribute filter), `config-hash.ts`/`result.ts` (attribute filter and lexical scoring blocks), `src/app/api/chat/route.ts` (answer-rule block, then the history-not-evidence notice), the fixture tests and the generated `samples.json` (regenerated with `npm run gen:schemas`).
+
+## Train 32: 0978 (to apply after train 32 reaches `origin/main`)
+
+Branch `ci/merge-train-32`, built on `ci/merge-train-31` (6ec9d643, which holds train 30 and main 331c4efa; trains 30 and 31 are open PRs #116 and #120) with `origin/main` 49bdd6dc (PR #118, `page.tsx` fix) merged last. Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/03.3-20` | 03.3-20 upstream-gate hand-off (docs) | none |
+| `exec/05.2-13` (contains 05.2-10, 05.2-14) | 05.2-13 output guard stream adapter, turn guard policy, links-section narrowing, approve summary guard | none |
+| `exec/05.3-16` | 05.3-16 absolute gates in every gated smoke run, prompt control, nightly absolute gate | none |
+| `exec/05.2-35` (contains 05.2-34, 05.2-24) | 05.2-34/35 sentence marks, answer notices, citation version line, embed renderer | none |
+| `exec/05.2-36` (contains 05.2-25) | 05.2-25 claim step and judge; 05.2-36 answer-rules summary endpoint and panel | none |
+| `exec/05.3-34` (contains 05.3-32, 05.3-33) | 05.3-33 drift storage and alerts, test-item cluster assignment; 05.3-34 representativeness and drift report | 0978 |
+| `exec/06-45` | 06-45 fold of 0601-0603 into both setup files, AGENTS.md Phase 6 section | setup files only |
+| `origin/main` 49bdd6dc | PR #118 `page.tsx` fix | none |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0978_rag_monitor_alert_cluster_ids.sql` | Needs 0963 (`rag_monitor_alerts`, live). Adds `rag_monitor_alerts.cluster_ids text[] NOT NULL DEFAULT '{}'` (IF NOT EXISTS) and a guarded CHECK (at most 64 id tokens), and replaces `rag_monitor_alert_upsert` with the 0963 body plus `cluster_ids`. SECURITY INVOKER, empty search_path, revoked from PUBLIC/anon/authenticated, service_role only. **DROP:** none. |
+
+No 0410 delta: r15 stays current (0978 adds no SECURITY DEFINER function and grants its own function). Numbers are unique across `supabase/migrations` (0978 in the 5.3 block; 0976 stays unused). 0978 has no mode variant, is idempotent (ADD COLUMN IF NOT EXISTS, constraint added inside a `pg_constraint` existence check, CREATE OR REPLACE) and is not folded. The 06-45 fold of 0601-0603 (live since their train) changes only `single-tenant-setup.sql` and `multi-tenant-setup.sql` for fresh projects; nothing to apply live. The combined live SQL (0978 verbatim after a `-- ==== <file>` line) is `train32-live.sql` in the orchestrator scratchpad.
+
+### Operator actions
+- Apply train 30 and train 31 first, then 0978.
+- Every new Phase 5.2 and 5.3 switch ships off.
+
+### Deviations
+- Baselines: re-recorded once on the merged tree (`RAG_PIPELINE=legacy rag_eval.baseline record --runs 3`, prechunked 308 items, ingest 369). Against train 31, 0 item metrics and 0 slice values move; corpus and golden hashes are unchanged. Only `run_config_hash` (its `sql_sha256` input covers 0978 and the setup-file fold) and the run ids move.
+- Characterization snapshots pass unchanged; none regenerated. `gen:schemas`, `eval-env.mts --write` and `--write-rag-affecting` produce no diff.
+- Merge conflicts (both intents kept): `src/app/api/embed/chat/route.ts` (train 31's history-not-evidence import; 05.2-13 moved link instructions to `linkUsageInstructions` from `@/lib/rag`), `src/lib/rag/index.ts` (05.2-13's guard and link-section exports; train 31's monitor and config-gate exports), `tests/legacy-post-filter-sentinel.test.ts` (filterCandidates region re-pinned to the merged `assemble.ts`, `caf7a5b8...`). 05.3-16 carried the same 05.3-15 fixtures as train 31 (via its own merge of train 30), so the fixture count pins agreed and train 31's wording was kept; `test_golden_phase42` takes 05.3-16's `_concurrent_p53` (one definition), `test_golden_set` takes 05.3-16's exact `changelog[3] == phase53` check, and `test_metrics` keeps a single P52 unlink loop (the auto-merge also unlinked the 05.3-15 files twice). 05.3-16's `history/*.pre-05.3-16.json` copies are byte-identical to `*.pre-05.3-15.json` and unreferenced after the resolution, so they are not added.
+
+## Train 33: 0706, 0900-0902, 0904, 0945, 0976 and 0410 r16 (to apply after train 33 reaches `origin/main`)
+
+Branch `ci/merge-train-33`, built on `ci/merge-train-32` (6087353f, PR #122, merged into main as a3eec5bc) with `origin/main` merged last (76d027af, PR #123 batch input cleanup; 1b543eda, PR #116 train 30 and PR #124 Config UI CSS; 1483aee5, PR #125 04.2-32 with 04.1.1-14 and the 0471-0473 fold; 88cbdce1, PR #126 judge limit). Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+All 33 listed branches carry their own SUMMARY and are merged with `--no-ff` in the given order; none skipped.
+
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/04.4-02` | 04.4-02 lexical statistics store and change capture | 0900, 0901; 0410 entries (r16) |
+| `exec/04.4-04` | 04.4-04 lexical statistics maintenance RPCs | 0902 |
+| `exec/04.4-05` | 04.4-05 BM25 search function `rag_bm25_search_chunks` | 0904 |
+| `exec/04.4-06` | 04.4-06 lexical scoring controls through the frontend | none |
+| `exec/05.2-18` | 05.2-18 security-events admin routes | 0945; 0410 entries (r16) |
+| `exec/05.2-29` | 05.2-29 Phase 5.2 golden items, parity and re-baseline | none |
+| `exec/05.3-37` | 05.3-37 historical provenance and paraphrased coverage variants | none (0972-0975 already live with train 31) |
+| `exec/05.3-46` | 05.3-46 question sources panel | none (0977 already live) |
+| `exec/05.3-47` | 05.3-47 review queue answer check, tags and source summary | none |
+| `exec/05.3-52` | 05.3-52 DATA-24 purge hook for golden items | 0976 |
+| `exec/06.1-18` | 06.1-18 fold of 0651-0654 into both setup files, AGENTS.md Phase 6.1 | setup files only |
+| `exec/06.1-19` | 06.1-19 live verification record (docs) | none |
+| `exec/03.1-53`, `exec/03.1-54` | 03.1 sidecar host, live schema checks and concurrent claiming; live verification | none |
+| `exec/03.2-53` | 03.2 live verification record (docs) | none |
+| `exec/03.2.1-02` | 03.2.1 BGE-M3 served by the sidecar | none |
+| `exec/04-43` | 04 live verification summary | none |
+| `exec/04.1.1-13` | 04.1.1 terminology Config UI panel | none |
+| `exec/04.2-23`, `-25`, `-26` | 04.2 identifier patterns panel, retrieval tuning switches, version tag and also-in line | none |
+| `exec/05.1-23`, `exec/05.1.1-23` | live verification records | none |
+| `exec/05.2-15`, `-22`, `-33`, `-37` | 05.2 WhatsApp stream parser, version conflicts, embed and voice answer rules, security events panel | none (0945 via 05.2-18) |
+| `exec/05.3-22`, `-30` | 05.3 setting check runner and nightly overlay, release gate and tenant nightly runners | none |
+| `exec/07-01`, `-07`, `-08` | 07 vector-store packages gate (`@weaviate/node` 3.15.5, `@qdrant/js-client-rest` 1.20.0), Qdrant and Weaviate adapters | none |
+| `exec/07-10` | 07-10 activation gate for external backends | 0706 |
+| `origin/main` 76d027af | PR #123 batch input cleanup | none |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0706_activation_gate_external.sql` | Sorts between the live 0705 and 0707. Replaces `rag_activate_embedding_profile` (0425 body plus one condition: every enabled `rag_vector_sync_targets` target must have a ready `rag_backend_index_state` row per tenant, else `external_not_ready:<target>`, 55000); with no target enabled it is the 0425 gate. Only 0425 and 0706 define the function. SECURITY DEFINER, empty search_path, service_role only. **DROP:** none. |
+| 2 | `0900_lexical_stats_schema.sql` | Needs 0401, 0403. Tables `rag_lexical_stats_state`, `rag_lexical_stats_pending`, `rag_lexical_df`, `rag_lexical_corpus` (IF NOT EXISTS), RLS on, no policy, service_role only. **DROP:** none. |
+| 3 | `0901_lexical_stats_triggers.sql` | Needs 0900. Three statement-level triggers on `document_chunks` that only stage rows into `rag_lexical_stats_pending` while a tenant has a state row (none until `rag_lexstats_enable`). **DROP:** `DROP TRIGGER IF EXISTS` for the three triggers, each re-created at once. Apply with the owner present (DDL on `document_chunks`). |
+| 4 | `0902_lexical_stats_functions.sql` | Needs 0900, 0901. Enable, compact and rebuild functions (SECURITY INVOKER, service_role only); their DELETEs run only when called. **DROP:** none (an `ON COMMIT DROP` temp table inside a function body). |
+| 5 | `0904_bm25_search_chunks.sql` | Needs 0401, 0403, 0856, 0900. Creates `rag_bm25_search_chunks` (sibling of `hybrid_search_chunks`, which it does not touch). **DROP:** a DO block drops every existing overload of `rag_bm25_search_chunks` (none live) before CREATE. |
+| 6 | `0945_rag_security_admin_keys.sql` | Needs 0942/0943 (live). `rag_security_admin_keys`, `rag_security_uploader_in_tenant` (SECURITY INVOKER, service_role only). **DROP:** none. |
+| 7 | `0976_rag_purge_hook_golden_items.sql` | Needs 0965, 0969 (live). `rag_purge_hook_golden_items`, called by `rag_purge_foreign_stores` through `to_regprocedure`; its DELETEs run only when called. **DROP:** none. |
+| 8 | `0410_security_definer_rpc_grants.sql` (r16) | +21 lines since r15 (one comment line): guarded REVOKE/GRANT (service_role only) for `rag_lexstats_chunks_insert/update/delete` (0901) and `rag_security_admin_keys`, `rag_security_uploader_in_tenant` (0945). Grants only; run it last. |
+
+Numbers are unique across `supabase/migrations` (0706 in the 07 block, 0900-0902 and 0904 in the 4.4 block with 0903 unused, 0945 after 0944, 0976 between 0975 and 0977). No new file has a mode variant or is folded; all are idempotent (CREATE OR REPLACE, IF NOT EXISTS, DROP TRIGGER IF EXISTS before CREATE TRIGGER). The 06.1-18 fold of 0651-0654 (live since their train) only changes `single-tenant-setup.sql` and `multi-tenant-setup.sql`, after the Phase 6 section. The combined live SQL (the seven files verbatim in this order, each after a `-- ==== <file>` line, then the 0410 r16 delta as a `DO $r16$` block) is `train33-live.sql` in the orchestrator scratchpad.
+
+### Operator actions
+- Apply train 32 (0978) first if not yet live, then the table above; 0901 with the owner present.
+- Every new Phase 4.4, 5.2, 5.3, 6.1 and 7 switch ships off (`RAG_LEXICAL_SCORING`, external vector backends, fine-tune slots included). The two new npm packages are installed by `npm ci`; onnxruntime-node's CUDA download may need `--ignore-scripts` on hosts without network for it.
+
+### Deviations
+- Golden set: 05.2-29's 48 items are appended after the 05.3-15 items (the first 308 lines equal train 32's file). Both manifests are bumped from train 32's version 4 (05.3-15) to version 5 (48 added, 0 changed) with `rag_eval.golden_set bump`; `test_golden_set` pins the five-version history. `history/*.pre-05.2-29.json` now hold the train-32 baselines (main before 05.2-29), and `test_golden_phase52` pins their 308 / 369 item sets; the train-30 records stay as `*.pre-05.3-15.json`.
+- Baselines: re-recorded once on the merged tree (`RAG_PIPELINE=legacy rag_eval.baseline record --runs 3`, zero spread), prechunked 308 -> 356 items, ingest 369 -> 417. The added items are exactly the 48 Phase 5.2 items; 0 pre-existing item metrics move against train 32.
+- Characterization: regenerated with `UPDATE_CHARACTERIZATION=1`; 48 questions added per file, none removed. Changed entries come only from the 05.2-29 sec-links split (sec-link-topics enters result lists, sec-links chunk numbers drop from 8 to 4) and the duplicate-passage copies swapping order among themselves.
+- Corpus hash (f95a702d...), both phase42 dump digests and the fingerprint backfill count (149 + 3) are re-pinned for the three sec-link-topics documents. Local gates: tsc 0 errors, check-config and check-rag-boundary ok, `tests/rag-db/*.test.mts` 4087 tests, 0 failed.
+- Setup files after the PR #125 merge: main's Phase 4.1.1 section (0471-0473) follows Phase 6, then the Phase 6.1 section closes the file; `schema-equality.test.mts` and AGENTS.md list both folds.
+- Merge conflicts (both intents kept): `feedback_loop.py` / `review-access.ts` / `exports.ts` / review item route (05.2 check reasons and check_details plus 05.3 sample reasons, `source` and `getReviewItemWithSource`; golden export keeps the Python twin's channel and reason enums plus `source`); `src/lib/rag/index.ts` (union of exports); setup files (train 32's Phase 5.1.1 and Phase 6 sections, then the 06.1-18 Phase 6.1 section, header now "after 0603"); `schema-equality.test.mts`, `agents-guide.test.ts`, `AGENTS.md` (all three folds); `config-server.js` (train 32's encoded wildcard join); `sources-provider.tsx` / `sources-sidebar.tsx` (04.2-26 provenance fields and 05.2 version line both kept); `answer-checks.ts` / `answer-turn.ts` (05.2-22 version_conflict); `review-labelling.js` (both reason lists; check-raised items skip the answer check and chunks load); eval fixture count tests (sums of both additions). `ingestion-schema` replays 0706 in its 0351 re-run; `ingest-mode-routing` leaves the link-injection items out of the train-30 comparison.

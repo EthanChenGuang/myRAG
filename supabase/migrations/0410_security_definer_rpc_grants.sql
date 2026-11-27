@@ -152,6 +152,18 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_dismiss_effective_date_proposal(uuid, text, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_dismiss_effective_date_proposal(uuid, text, uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_lexstats_chunks_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_lexstats_chunks_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_lexstats_chunks_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_lexstats_chunks_insert()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_lexstats_chunks_insert() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_lexstats_chunks_insert() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_lexstats_chunks_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_lexstats_chunks_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_lexstats_chunks_update() TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_set_document_effective_dates(uuid, text, date, date, text, real, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_set_document_effective_dates(uuid, text, date, date, text, real, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_set_document_effective_dates(uuid, text, date, date, text, real, uuid) TO service_role;
@@ -391,6 +403,14 @@ BEGIN
   IF to_regprocedure('public.rag_parse_budget_month(text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_parse_budget_month(text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_parse_budget_month(text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_pilot_user_resolve(text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_pilot_user_resolve(text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_pilot_user_resolve(text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_pilot_users_list(text, integer, timestamptz, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_pilot_users_list(text, integer, timestamptz, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_pilot_users_list(text, integer, timestamptz, uuid) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_parse_cache_for_document(text, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_parse_cache_for_document(text, uuid) FROM PUBLIC, anon, authenticated;
@@ -868,6 +888,19 @@ BEGIN
   IF to_regprocedure('public.rag_finetune_scope_slot(text, text[], text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_finetune_scope_slot(text, text[], text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_finetune_scope_slot(text, text[], text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_enqueue_review_item(text, text, jsonb, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb) TO service_role;
+  END IF;
+  -- Phase 5.2, migration 0945: security-events admin tenant resolution (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_security_admin_keys(uuid, boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_security_admin_keys(uuid, boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_security_admin_keys(uuid, boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_security_uploader_in_tenant(text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_security_uploader_in_tenant(text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_security_uploader_in_tenant(text, uuid) TO service_role;
   END IF;
 END
 $service_role_only$;

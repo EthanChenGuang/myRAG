@@ -247,7 +247,8 @@ describe('the re-recorded ingest baseline (T-03.1-104)', () => {
   const ROOT = process.cwd();
   /** The ingest baseline as it was before the parse fixtures joined the corpus (03-41 shape, recorded at 925beab2). */
   const PREVIOUS = path.join(ROOT, 'eval/baselines/history/fixture-ingest-baseline.pre-03.1-47.json');
-  const CURRENT = path.join(ROOT, 'eval/baselines/fixture-ingest-baseline.json');
+  // The last baseline of this lineage before plan 05.3-15 re-recorded it with answers on and the 05.3 fixture items.
+  const CURRENT = path.join(ROOT, 'eval/baselines/history/fixture-ingest-baseline.pre-05.3-15.json');
   type Baseline = { corpus_sha256: string; runs: unknown[]; items: Record<string, Record<string, Array<number | null>>> };
   const read = (file: string) => JSON.parse(fs.readFileSync(file, 'utf8')) as Baseline;
 
@@ -317,17 +318,31 @@ describe('the re-recorded ingest baseline (T-03.1-104)', () => {
       .map((line) => JSON.parse(line) as { id: string; tags?: string[] })
       .filter((item) => (item.tags ?? []).includes('phase42'))
       .map((item) => item.id);
+    // Plan 05.2-29 added the partial_answer, stale_version and off_topic_context items and 12 link-injection
+    // injection_evasive items (tag link_injection) to golden.jsonl; CURRENT (the train-30 record) predates them.
+    const phase52Rows = fs
+      .readFileSync(path.join(ROOT, 'eval/fixtures/golden.jsonl'), 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line) as { id: string; category: string; tags?: string[] });
+    const linkIds = phase52Rows.filter((item) => (item.tags ?? []).includes('link_injection')).map((item) => item.id);
+    const phase52Ids = phase52Rows
+      .filter((item) => ['partial_answer', 'stale_version', 'off_topic_context'].includes(item.category))
+      .map((item) => item.id);
     const added = Object.keys(current.items).filter((id) => !(id in previous.items)).sort();
     assert.ok(parseIds.length >= 30);
     assert.equal(phase42Ids.length, 36);
+    assert.equal(linkIds.length, 12);
+    assert.equal(phase52Ids.length, 36);
     assert.equal(phase6Ids.length, 38);
     assert.equal(cachePairIds.length, 27);
-    assert.equal(injectionIds.length, 18);
+    assert.equal(injectionIds.length, 18 + linkIds.length);
+    const preLinkInjectionIds = injectionIds.filter((id) => !linkIds.includes(id));
     assert.equal(tableSplitIds.length, 15);
     assert.equal(termIds.length, 18);
     assert.deepEqual(
       added,
-      [...parseIds, ...injectionIds, ...tableSplitIds, ...phase6Ids, ...cachePairIds, ...termIds, ...phase42Ids].sort(),
+      [...parseIds, ...preLinkInjectionIds, ...tableSplitIds, ...phase6Ids, ...cachePairIds, ...termIds, ...phase42Ids].sort(),
     );
     assert.notEqual(current.corpus_sha256, previous.corpus_sha256, 'the parse fixtures are part of the ingest corpus hash');
   });

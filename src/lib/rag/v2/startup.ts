@@ -192,6 +192,16 @@ async function runChecks(deps: V2StartupDeps): Promise<V2StartupVerdict> {
 
   checkSwitchCombinations(env, config, reasons);
 
+  // D-30: a hard attribute filter narrows the approximate dense leg; without an exact scan or iterative scan it can come back short.
+  // A warning only: readiness and the reasons list are unchanged.
+  if (config.v2.attributeFilter === 'hard' && config.v2.exactScanCutoff === 0 && config.v2.iterativeScan === 'off') {
+    logOnce(
+      'attribute_filter_hard_approximate',
+      'warn',
+      'RAG_ATTRIBUTE_FILTER=hard with RAG_EXACT_SCAN_CUTOFF=0 and RAG_HNSW_ITERATIVE_SCAN=off: filtered dense searches can return fewer chunks than asked',
+    );
+  }
+
   verdict = {
     status: reasons.length === 0 ? 'ok' : 'degraded',
     icuAvailable,

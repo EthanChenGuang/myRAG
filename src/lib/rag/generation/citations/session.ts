@@ -2,10 +2,12 @@ import type { ModelMessage, StreamTextTransform, ToolSet } from 'ai';
 import { z } from 'zod/v3';
 import { stripCitationMarkers } from '@/lib/citations/marker-grammar';
 import { CitationRecordSchema, type CitationRecord } from '@/lib/rag-eval/contracts.generated';
-import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
+import type { ExtractedURL } from '@/lib/url-extractor';
+import { formatGuardedLinks } from '../../security/link-section';
 import { buildClaudeContextReplacement, docsFromBlocks } from '../../context/wrap';
 import { readSecurityConfig } from '../../security/config';
 import type { CitationLabeler, ContextBlock, UsedDocument } from '../../types';
+import { readAnswerConfig } from '../answer-config';
 import type { TextsSource } from '../answer-turn';
 import type { GenerationConfig } from '../config';
 import { createEnhancedRAGPrompt } from '../prompt';
@@ -13,7 +15,7 @@ import { createMarkerParser, type MarkerParser } from './marker-parser';
 import { buildAliasMap, createCitationLabeler, type AliasMap } from './blocks';
 import { createClaudeProvider, startClaudeCitationStream, type ClaudeCitationStream } from './claude';
 import type { FallbackReason } from './fallback';
-import { attachedDocumentsText, citationInstructionText } from './instructions';
+import { attachedDocumentsText, citationInstructionFor, groundingPerSentenceText } from './instructions';
 import { anthropicIdFor } from './models';
 import { buildCitationRecords, capQuotes } from './record';
 import {
@@ -42,6 +44,8 @@ export interface CitationSessionInput {
   facts?: ClaudeTurnFacts;
   /** RAG_CONTEXT_TAGGING; read from the environment when absent. */
   contextTagging?: boolean;
+  /** D-20 RAG_CITATION_PER_SENTENCE (already off when citations are off); read from the environment when absent. */
+  perSentence?: boolean;
 }
 
 export interface ClaudeStartInput {
@@ -51,8 +55,12 @@ export interface ClaudeStartInput {
   question: string;
   reasoning: boolean;
   abortSignal: AbortSignal;
+  /** Phase 5.2 D-29: the turn's output cap; absent keeps CLAUDE_MAX_OUTPUT_TOKENS. */
+  outputCap?: number | null;
   onError(error: unknown): void;
   fetch?: typeof fetch;
+  /** Phase 5.2 D-35: transforms after the marker and alias transforms (the output guard); absent adds none. */
+  extraTransforms?: Array<StreamTextTransform<ToolSet>>;
 }
 
 export interface CitationFinishMetadata {
@@ -91,6 +99,10 @@ export interface CitationSession {
   /** The validated records with full quotes, for the answer record; null when no strategy is active. */
   fullRecords(): { citations: CitationRecord[]; invalidCitations: number } | null;
   answerText(): string;
+  /** The aliases of the attached AliasMap (empty when no strategy is active); a marker for any other alias never cites. */
+  aliases(): ReadonlySet<string>;
+  /** D-33: markers cut in half at a text-part end or at the stream end; dropped, never guessed. */
+  truncatedMarkers(): number;
 }
 
 const CitationListSchema = z.array(CitationRecordSchema);
@@ -118,6 +130,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     ...(input.facts ? { facts: input.facts } : {}),
   });
   const labeler = capable ? createCitationLabeler() : undefined;
+  const perSentence = input.perSentence ?? readAnswerConfig().citationPerSentence;
 
   let strategy: CitationStrategyId | null = null;
   let fallbackReason: FallbackReason | null = null;
@@ -130,6 +143,22 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
   let finished: { citations: CitationRecord[]; invalidCitations: number } | null = null;
   let full: CitationRecord[] = [];
   let answer = '';
+  let truncated = 0;
+
+  const claudeBasePrompt = (basePrompt: string): string => {
+    const tagging = input.contextTagging ?? readSecurityConfig().contextTagging;
+    if (tagging) {
+      const context = buildClaudeContextReplacement({
+        attachedSentence: attachedDocumentsText(input.language, input.textsSource),
+        docs: docsFromBlocks(sideBlocks, { links }),
+      });
+      return createEnhancedRAGPrompt(basePrompt, context, input.ragMode);
+    }
+    const context = [attachedDocumentsText(input.language, input.textsSource), ...sideBlocks.map((block) => block.text), formatGuardedLinks(links)]
+      .filter((part) => part.trim().length > 0)
+      .join('\n\n');
+    return createEnhancedRAGPrompt(basePrompt, context, input.ragMode);
+  };
 
   const fail = (reason: string) => {
     if (failed) return;
@@ -157,6 +186,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     }
     try {
       const parsed = parser.finish();
+      truncated = parsed.truncatedMarkers ?? 0;
       const records = CitationListSchema.parse(buildCitationRecords(parsed.valid, aliasMap, strategy));
       finished = { citations: CitationListSchema.parse(capQuotes(records)), invalidCitations: parsed.invalidCitations };
       full = records;
@@ -202,21 +232,11 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     },
     decorateSystemPrompt(prompt) {
       if (strategy !== 'chunk-alias' && strategy !== 'claude-citations') return prompt;
-      return `${prompt}\n\n${citationInstructionText(input.language, input.textsSource)}`;
+      return `${prompt}\n\n${citationInstructionFor(input.language, input.textsSource, perSentence)}`;
     },
     claudeSystemPrompt(basePrompt) {
-      const tagging = input.contextTagging ?? readSecurityConfig().contextTagging;
-      if (tagging) {
-        const context = buildClaudeContextReplacement({
-          attachedSentence: attachedDocumentsText(input.language, input.textsSource),
-          docs: docsFromBlocks(sideBlocks, { links }),
-        });
-        return createEnhancedRAGPrompt(basePrompt, context, input.ragMode);
-      }
-      const context = [attachedDocumentsText(input.language, input.textsSource), ...sideBlocks.map((block) => block.text), formatURLsForContext(links)]
-        .filter((part) => part.trim().length > 0)
-        .join('\n\n');
-      return createEnhancedRAGPrompt(basePrompt, context, input.ragMode);
+      const prompt = claudeBasePrompt(basePrompt);
+      return perSentence ? `${prompt}\n\n${groundingPerSentenceText(input.language)}` : prompt;
     },
     startClaude(start) {
       if (strategy !== 'claude-citations' || !aliasMap || claude) {
@@ -238,8 +258,10 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
         question: start.question,
         anthropicId,
         reasoning: start.reasoning,
+        ...(typeof start.outputCap === 'number' ? { outputCap: start.outputCap } : {}),
         abortSignal: start.abortSignal,
         onError: start.onError,
+        ...(start.extraTransforms && start.extraTransforms.length > 0 ? { extraTransforms: start.extraTransforms } : {}),
       });
       return claude;
     },
@@ -252,6 +274,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
       finished = null;
       full = [];
       answer = '';
+      truncated = 0;
       parser = createMarkerParser({ aliases: aliasMap.aliases });
     },
     stripHistory(messages) {
@@ -304,6 +327,14 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     },
     answerText() {
       return answer;
+    },
+    aliases() {
+      return strategy && aliasMap ? aliasMap.aliases : new Set<string>();
+    },
+    truncatedMarkers() {
+      if (!strategy || strategy !== 'chunk-alias') return 0;
+      finalize();
+      return truncated;
     },
   };
 }

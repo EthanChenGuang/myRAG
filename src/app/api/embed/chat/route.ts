@@ -4,7 +4,6 @@ import { checkRateLimit, getRateLimitIdentifier } from '@/lib/embed-rate-limit';
 import { createUIMessageStream, createUIMessageStreamResponse, streamText, type ModelMessage } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { z } from 'zod/v3';
-import { createLinkUsageInstructions } from '@/lib/url-extractor';
 import { appendHistoryNotEvidence, historyNotEvidenceEnabled } from '@/lib/chat/history-not-evidence';
 import { classifyQuery } from '@/lib/query-classifier';
 import {
@@ -28,8 +27,13 @@ import {
   isQueryLayerEnabled,
   isSmallTalkResult,
   isV2Pipeline,
-  knowledgeBaseUnavailableLanguage,
-  knowledgeBaseUnavailableMessage,
+  createAnswerTurn,
+  kbUnavailableLanguage,
+  kbUnavailableText,
+  readAnswerConfig,
+  type AnswerTurn,
+  type OutputGuardTurnSources,
+  linkUsageInstructions,
   mintEmbedFeedbackToken,
   parseRetrievalFilters,
   resolveScopesFilter,
@@ -132,8 +136,24 @@ function preferredLanguage(request: NextRequest): string {
   return primary || 'en';
 }
 
-function knowledgeBaseUnavailableResponse(request: NextRequest, collector?: TraceCollector) {
-  const errorText = knowledgeBaseUnavailableMessage(preferredLanguage(request));
+/** Phase 5.2 D-07, D-09: one answer turn per embed request; the Accept-Language is the UI language step. Retrieval mode stays balanced (D-92). */
+function embedAnswerTurn(body: unknown, request: NextRequest): AnswerTurn {
+  const parsed = embedChatSchema.safeParse(body);
+  const history = parsed.success ? parsed.data.messages.filter((message) => message.role !== 'system') : [];
+  const question = [...history].reverse().find((message) => message.role === 'user')?.content ?? '';
+  return createAnswerTurn({
+    config: readAnswerConfig(),
+    question,
+    history,
+    uiLanguage: preferredLanguage(request),
+    channel: 'embed',
+    ragMode: 'balanced',
+  });
+}
+
+function knowledgeBaseUnavailableResponse(request: NextRequest, answerTurn: AnswerTurn, collector?: TraceCollector) {
+  // D-10: today's text with RAG_REGISTRY_TEXTS off, the registry text in the answer language with it on
+  const errorText = kbUnavailableText(answerTurn, preferredLanguage(request));
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
       writer.write({ type: 'error', errorText });
@@ -159,7 +179,7 @@ function embedSystemPromptTemplate(): string {
 4. Provide balanced, objective information rather than opinions
 5. For technical topics, include practical steps or examples when appropriate
 
-${createLinkUsageInstructions()}
+${linkUsageInstructions()}
 
 Context:
 {{context}}`;
@@ -274,6 +294,7 @@ export async function POST(request: NextRequest) {
     // The workspace check reads the raw body because schema parsing strips unknown keys
     const body = await request.json();
     console.log('EMBED API: Request body:', { messagesCount: body?.messages?.length, model: body?.model });
+    const answerTurn = embedAnswerTurn(body, request);
 
     // Only the v2 pipeline reads this field; under legacy the body is handled exactly as before
     let retrievalFilters: RetrievalFilterInput | undefined;
@@ -315,7 +336,7 @@ export async function POST(request: NextRequest) {
     }
     if (!embedScope.ok) {
       console.error('[Document Search] Embed knowledge base unavailable:', { status: embedScope.status, reason: embedScope.reason });
-      return knowledgeBaseUnavailableResponse(request);
+      return knowledgeBaseUnavailableResponse(request, answerTurn);
     }
 
     const streamHeaders = (): Record<string, string> => ({
@@ -363,6 +384,7 @@ export async function POST(request: NextRequest) {
     let context = '';
     let smallTalkTurn = false;
     let answerLanguage: AnswerLanguageOptions | undefined;
+    let retrievalResult: RetrievalResult | null = null;
 
     if (queryText.trim().length > 0) {
       const isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');
@@ -429,10 +451,10 @@ export async function POST(request: NextRequest) {
         console.error('[Document Search] Embed knowledge base unavailable:', { status: result.status, reason: result.reason });
         if (logContext && result.logOutcome) {
           result.logOutcome.value = 'kb_unavailable';
-          result.logOutcome.answerLanguage = knowledgeBaseUnavailableLanguage(preferredLanguage(request));
+          result.logOutcome.answerLanguage = kbUnavailableLanguage(answerTurn, preferredLanguage(request));
         }
         finishPendingTrace();
-        return knowledgeBaseUnavailableResponse(request, collector);
+        return knowledgeBaseUnavailableResponse(request, answerTurn, collector);
       }
 
       // D-32: a hit streams the cached answer with no generation call
@@ -456,6 +478,7 @@ export async function POST(request: NextRequest) {
       if (result.cacheTicket) cacheStore = { result, traceId: collector.traceId };
 
       // D-10: small talk under the query layer skipped retrieval and is answered without knowledge-base context
+      retrievalResult = result;
       smallTalkTurn = isSmallTalkResult(result);
       context = smallTalkTurn ? '' : result.context;
       answerLanguage = smallTalkTurn ? undefined : answerLanguageOptions(result);
@@ -464,6 +487,20 @@ export async function POST(request: NextRequest) {
     }
 
     const systemPrompt = embedTemplate();
+
+    // Phase 5.2 D-30: decided once before the composer; embed sends no own limit, no reasoning and no tool approval
+    if (answerTurn.config.maxOutputTokens.kind !== 'off') {
+      answerTurn.decideOutputCap({
+        knowledgeContext:
+          !smallTalkTurn &&
+          context.length > 0 &&
+          (retrievalResult?.status === 'ok' || retrievalResult?.status === 'degraded') &&
+          (retrievalResult?.blocks ?? []).some((block) => !block.isImage),
+        userMaxTokens: false,
+        reasoning: false,
+        approvalContinuation: false,
+      });
+    }
 
     // Use enhanced RAG prompt for strict RAG-only behavior (same as main chat)
     console.log('[EMBED RAG] Injecting context into system prompt...');
@@ -476,7 +513,11 @@ export async function POST(request: NextRequest) {
       ? createEnhancedRAGPrompt(systemPrompt, '', 'bypass')
       : context.length > 0
         ? appendHistoryNotEvidence(
-            createEnhancedRAGPrompt(systemPrompt, context, 'strict', answerLanguage),
+            // Phase 5.2 D-07, D-92: the strict wrapper stays; the answer rules follow the balanced retrieval mode
+            answerTurn.composeSystemPrompt(createEnhancedRAGPrompt(systemPrompt, context, 'strict', answerLanguage), {
+              mode: 'balanced',
+              webSearchOffered: false,
+            }),
             historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE),
           )
         : systemPrompt.replace('{{context}}', context);
@@ -512,13 +553,31 @@ export async function POST(request: NextRequest) {
 
     try {
       const timingCollector = pendingTrace?.collector ?? null;
+      // Phase 5.2 D-35, D-37, D-40: the guard's allow evidence; the tenant comes from the resolved embed scope only
+      const guardSources: OutputGuardTurnSources = {
+        blocks: () => (smallTalkTurn || !retrievalResult ? [] : retrievalResult.blocks ?? []),
+        serverUrls: () =>
+          retrievalResult
+            ? [
+                ...retrievalResult.usedDocuments.flatMap((doc) => [doc.external_url, doc.image_url]),
+                ...retrievalResult.sourceImages.map((image) => image.url),
+              ].filter((url): url is string => typeof url === 'string' && url !== '')
+            : [],
+        contextFlagged: () => retrievalResult?.injection?.flagged === true,
+        tenantKey: () => scopeKey(embedScope.scope),
+        trace: () => timingCollector,
+      };
+      // Empty with every Phase 5.2 switch off, so no transform is passed (as today)
+      const answerTransforms = answerTurn.transforms([], { guard: guardSources });
       await awaitPreGenerationDelay();
       timingCollector?.markGenerationStart();
       const result = await streamText({
         model: modelProvider,
         messages: messagesForModel,
         temperature: 0.1, // Use same temperature as main chat
-        maxOutputTokens: 2000,
+        // D-30: min(2000, cap) when the cap applies; 2000 otherwise
+        maxOutputTokens: answerTurn.maxOutputTokens(2000),
+        ...(answerTransforms.length > 0 ? { experimental_transform: answerTransforms } : {}),
         // Don't include tools for embed API to keep it simple
         onFinish: (event) => {
           pendingTrace?.collector.setReviewContent({ answer: event.text ?? '' });

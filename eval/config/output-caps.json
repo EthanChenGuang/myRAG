@@ -1,0 +1,19 @@
+{
+  "cells": [
+    {
+      "config_hash": null,
+      "limit": null,
+      "mode": "strict",
+      "run_ids": [],
+      "source": "default"
+    },
+    {
+      "config_hash": null,
+      "limit": null,
+      "mode": "balanced",
+      "run_ids": [],
+      "source": "default"
+    }
+  ],
+  "schema_version": 1
+}

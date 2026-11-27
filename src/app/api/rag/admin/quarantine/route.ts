@@ -92,6 +92,7 @@ export async function GET(request: Request): Promise<Response> {
       unlocated: item.unlocated,
       uploader: item.uploader ? { id: item.uploader.id, display: item.uploader.display } : null,
       pending_approval: item.pendingApproval,
+      ...(item.uploaderHeld !== undefined ? { uploader_held: item.uploaderHeld } : {}),
     })),
   });
 }

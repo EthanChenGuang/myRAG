@@ -176,6 +176,8 @@ export interface IngestTraceFacts {
   ingest_fingerprint?: string;
   /** `required`: approval applies but a scan quarantined the version, so it is not held for review. */
   approval_state?: 'not_required' | 'pending_review' | 'required';
+  /** D-46 (Phase 5.2): set only while RAG_UPLOADER_HOLD is on and the uploader is held, or the lookup failed. */
+  uploader_hold?: 'held' | 'check_failed';
 }
 
 export interface EmbedProgress {

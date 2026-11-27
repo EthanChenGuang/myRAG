@@ -8,7 +8,7 @@ from deepeval.test_case import LLMTestCase
 from pydantic import BaseModel
 from rag_sidecar.contracts.judge import JudgeConfig
 
-from rag_eval.judge.config import JudgeCase, JudgeFatalError, raise_if_fatal
+from rag_eval.judge.config import JUDGE_MAX_OUTPUT_TOKENS, JudgeCase, JudgeFatalError, raise_if_fatal
 
 Outcome = tuple[float | None, str | None]
 
@@ -84,6 +84,7 @@ class OpenRouterDeepEvalLLM(DeepEvalBaseLLM):
             "model": self._config.judge_model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": self._config.temperature,
+            "max_tokens": JUDGE_MAX_OUTPUT_TOKENS,
         }
         if schema is not None:
             request["response_format"] = schema

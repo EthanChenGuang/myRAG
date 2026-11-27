@@ -8,6 +8,7 @@ import type { QueryFramework, QueryTransformSwitches, SemanticCacheBackend, Stag
 import type { TemporalQueryContext } from './query/temporal-query-detector';
 import type { RefusalRecord } from './refusal/types';
 import type { DocType } from './ingest/profiles/load';
+import type { VersionConflict } from './context/version-conflicts';
 import type { InjectionCheckMode } from './security/config';
 import type { RerankProviderId } from './rerank/types';
 import type { TenantScope } from './tenant/scope';
@@ -54,6 +55,8 @@ export interface StageRecord {
   detail?: string;
   counts?: Record<string, number>;
   versions?: string[];
+  /** Scalar span metadata exported to Langfuse (ids and counts only); set only by the stages that need it. */
+  attributes?: Record<string, string | number | boolean>;
 }
 
 export interface UsedDocument {
@@ -97,6 +100,9 @@ export interface KeptChunk {
   dupClusterId?: string;
   /** D-21: other documents of the cluster that the diversify stage dropped, in rank order. */
   alsoIn?: AlsoIn[];
+  /** D-13, D-40: set only when the effective version scope is not current; false for a superseded version. */
+  isCurrent?: boolean;
+  documentVersion?: number;
 }
 
 /** Another document of a kept chunk's duplicate cluster (D-21): the first dropped chunk of that document. */
@@ -138,6 +144,12 @@ export interface ContextBlock {
   text: string;
   isImage: boolean;
   alias: string | null;
+  /** The document's documents.user_id; present only while RAG_SECURITY_EVENTS is on (D-44), null for a document without owner. */
+  uploaderId?: string | null;
+  /** RAG_VERSION_LABELS (D-50): documents.version_label, else the integer version in the label language; absent without either. */
+  versionLabel?: string;
+  /** RAG_VERSION_LABELS (D-50): ISO YYYY-MM-DD from effective_from, else the document date; absent without either. */
+  effectiveFrom?: string;
 }
 
 export interface CitationLabel {
@@ -374,6 +386,8 @@ export interface RetrievalResult {
   identifierSuggestions?: string[];
   /** D-31: identifier filter counts for the trace; absent while RAG_IDENTIFIER_FILTER is off or the resolve stage did not run. */
   identifierFilter?: IdentifierFilterSummary;
+  /** D-52: version conflicts among the context blocks; absent without one or while RAG_VERSION_LABELS is off. */
+  versionConflict?: VersionConflict;
 }
 
 /** D-31: counts only, never an identifier. */
