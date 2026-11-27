@@ -40,7 +40,7 @@ def _item(item_id: str, language: str, evidence_language: str | None, *, categor
     )
 
 
-def _trace(item_id: str, document: str, hit: bool) -> RagTrace:
+def _trace(item_id: str, document: str, hit: bool, *, voice: bool = False) -> RagTrace:
     kept = [
         {
             "rank": 1,
@@ -49,7 +49,7 @@ def _trace(item_id: str, document: str, hit: bool) -> RagTrace:
             "document_name": document,
             "content": f"intro {QUOTE} outro" if hit else "unrelated text",
             "similarity": 0.5,
-            "kept_by": "similarity",
+            "kept_by": "rerank" if voice else "similarity",
         }
     ]
     return RagTrace.model_validate(
@@ -71,7 +71,7 @@ def _trace(item_id: str, document: str, hit: bool) -> RagTrace:
             "refused": False,
             "refusal_reason": None,
             "citations": [],
-            "stage_latency_ms": {},
+            "stage_latency_ms": {"embed": 40.0, "search": 90.0, "rerank": 120.0} if voice else {},
             "effective_config": {
                 "rag_env": {},
                 "rag_prompt_sha256": {},
@@ -84,7 +84,7 @@ def _trace(item_id: str, document: str, hit: bool) -> RagTrace:
     )
 
 
-def _manifest() -> RunManifest:
+def _manifest(*, voice: bool = False) -> RunManifest:
     return RunManifest.model_validate(
         {
             "run_id": "run-xl",
@@ -98,7 +98,7 @@ def _manifest() -> RunManifest:
             "golden_sha256": "g" * 64,
             "golden_filter": {"review_statuses": ["approved"], "gate_split": "dev"},
             "sql_sha256": {},
-            "request_options": {"max_results": 10},
+            "request_options": {"max_results": 10, **({"entry_profile": "voice"} if voice else {})},
             "effective_config_hash": "h" * 64,
             "run_config_hash": "r" * 64,
             "item_count": 4,
@@ -107,7 +107,7 @@ def _manifest() -> RunManifest:
     )
 
 
-def _report(hit_en_zh: bool = True) -> EvalReport:
+def _report(hit_en_zh: bool = True, *, voice: bool = False) -> EvalReport:
     golden = [
         _item("xl-en-zh-01", "en", "zh"),
         _item("xl-en-zh-02", "en", "zh"),
@@ -115,12 +115,12 @@ def _report(hit_en_zh: bool = True) -> EvalReport:
         _item("en-general-001", "en", None, category="general"),
     ]
     traces = [
-        _trace("xl-en-zh-01", "doc.zh.md", hit_en_zh),
-        _trace("xl-en-zh-02", "doc.zh.md", hit_en_zh),
-        _trace("xl-it-en-01", "doc.en.md", True),
-        _trace("en-general-001", "doc.en.md", True),
+        _trace("xl-en-zh-01", "doc.zh.md", hit_en_zh, voice=voice),
+        _trace("xl-en-zh-02", "doc.zh.md", hit_en_zh, voice=voice),
+        _trace("xl-it-en-01", "doc.en.md", True, voice=voice),
+        _trace("en-general-001", "doc.en.md", True, voice=voice),
     ]
-    return build_report(_manifest(), score_items(golden=golden, traces=traces), golden)
+    return build_report(_manifest(voice=voice), score_items(golden=golden, traces=traces), golden)
 
 
 def test_build_report_slices_cross_lingual_items_by_language_pair():
@@ -176,7 +176,7 @@ def _baseline_with_pair(report: EvalReport, mean: float, spread: float) -> Basel
             "spread_kind": "stdev_ddof1",
             "tier": "smoke",
             "deployment_mode": "single",
-            "request_options": {"max_results": 10},
+            "request_options": report.request_options.model_dump(),
             "corpus_sha256": report.corpus_sha256,
             "golden_sha256": report.golden_sha256,
             "golden_filter": report.golden_filter.model_dump(),
@@ -259,3 +259,44 @@ def test_the_parallel_document_check_rejects_a_stem_that_exists_in_two_languages
         stem_languages.setdefault(doc.relpath.split("/", 1)[1].split(".", 1)[0], set()).add(doc.language)
     assert stem_languages["product-specs"] == {"zh", "en", "it"}
     assert stem_languages["refund-policy"] == {"zh", "en", "it"}
+
+
+# Phase 6.2 D-16 (XLG-07): the voice arms report the same pair slices as text chat and are gated by the same noise band.
+
+
+def test_voice_arm_report_records_the_entry_profile_and_slices_by_language_pair():
+    report = _report(voice=True)
+    assert report.request_options.entry_profile == "voice"
+    assert sorted(report.by_language_pair) == ["en->zh", "it->en"]
+    assert report.by_language_pair["en->zh"].recall_at_5.value == 1.0
+    assert report.by_language_pair["it->en"].recall_at_5.n == 1
+    text_report = _report()
+    assert text_report.request_options.entry_profile == "eval"
+    assert sorted(gate_module._report_slices(report)) == sorted(gate_module._report_slices(text_report))
+
+
+def test_voice_arm_pair_slice_is_gated_by_the_noise_band():
+    report = _report(hit_en_zh=False, voice=True)
+    failed = evaluate_gate(report, _baseline_with_pair(report, mean=0.0201, spread=0.0), _noise())
+    assert not failed.passed
+    assert [(o.slice, o.metric) for o in failed.offenders] == [("pair:en->zh", "recall_at_5")]
+    assert evaluate_gate(report, _baseline_with_pair(report, mean=0.02, spread=0.0), _noise()).passed
+
+
+def test_voice_translate_arm_pairs_against_the_no_translate_arm_per_language_pair():
+    off = _report(hit_en_zh=False, voice=True)
+    on = _report(hit_en_zh=True, voice=True)
+    baseline_items = {item.item_id: {metric: [value] * 3 for metric, value in item_metrics(item).items()} for item in off.items}
+    baseline = _baseline_with_pair(off, mean=0.0, spread=0.0).model_copy(update={"items": baseline_items})
+    paired = paired_report(on, baseline, _noise())
+    assert paired is not None and not paired.all_zero
+    assert paired.slices["pair:en->zh"]["recall_at_5"].n == 2
+    assert paired.slices["pair:en->zh"]["recall_at_5"].mean_d > 0
+    assert paired.slices["pair:it->en"]["recall_at_5"].mean_d == 0
+
+
+def test_voice_arm_markdown_renders_the_language_pair_table(tmp_path):
+    _, markdown = write_report(_report(voice=True), tmp_path / "voice")
+    text = markdown.read_text(encoding="utf-8")
+    assert "## By language pair" in text
+    assert "| en->zh |" in text and "| it->en |" in text
