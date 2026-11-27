@@ -557,3 +557,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 13:58Z PROD DEPLOY READY: main 274d0456 -> dpl_9EGFrRhYiZMrK7QgzwXjv37Nd2KV (myrag.laoxiang.app aliased). Prod = through train 36 (DB + app).
 - 13:58Z 04.3-42 DONE (52efd478) archived -> train 38. 04.3-43 launched session_01X342smu4Ho5Dm7LP3gAUmi (base exec/04.3-42).
 - Owner desk: WhatsApp live checks 05.2-15 / 06.2-33 BLOCKED (no Baileys service configured); owner asked set-up-now vs defer.
+- 13:59Z Owner DEFERRED WhatsApp live checks 05.2-15/06.2-33 until WhatsApp is provisioned. Owner desk now on Config UI walkthroughs 04.1.1-13, 04.2-23, 04.2-26.
