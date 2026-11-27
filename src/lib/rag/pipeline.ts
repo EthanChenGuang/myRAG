@@ -20,6 +20,8 @@ import {
   type FilteredCandidates,
 } from './context/assemble';
 import { fetchAssemblyRows, type AssemblyRows } from './context/fetch-rows';
+import { recordAnswerConflict, versionConflictAttributes } from './context/version-conflicts';
+import { readAnswerConfig } from './generation/answer-config';
 import { formatImageContext, formatVideoContext } from './context/media';
 import {
   OVERVIEW_MATCH_COUNT,
@@ -420,11 +422,12 @@ export function downweightOrder<C extends { chunk_id: string }>(candidates: read
 const ASSEMBLY_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval'];
 const EMPTY_ROWS: AssemblyRows = { documents: new Map(), chunkMetadata: new Map() };
 
-async function loadRows(candidates: Candidate[], signal: AbortSignal): Promise<AssemblyRows> {
+async function loadRows(candidates: Candidate[], signal: AbortSignal, tenantKey?: string): Promise<AssemblyRows> {
   if (candidates.length === 0) return EMPTY_ROWS;
   const adminClient = getRagDeps().adminClient();
   if (!adminClient) throw new Error('[RAG Assemble] admin client unavailable');
-  return fetchAssemblyRows(candidates, { adminClient, signal });
+  const withPairs = tenantKey !== undefined && readAnswerConfig().versionLabels;
+  return fetchAssemblyRows(candidates, { adminClient, signal, ...(withPairs ? { tenantKey } : {}) });
 }
 
 function requireAdminSearchClient(deps: RagDeps): RpcClient {
@@ -1029,6 +1032,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         citationLabeler: input.citationLabeler,
         ...(security.contextTagging ? { contextTagging: true } : {}),
         ...(injectionMarks ? { injectionMarks } : {}),
+        ...(rows.versionPairs ? { versionPairs: rows.versionPairs } : {}),
       });
 
       let rows: AssemblyRows | null = null;
@@ -1038,7 +1042,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         spec('post_filter', 'skip'),
         signal,
         async (stageSignal) => {
-          const loaded = await loadRows(candidates, stageSignal);
+          const loaded = await loadRows(candidates, stageSignal, scopeKey(scope));
           const result = filterCandidates(assemblyInput(loaded, true));
           rows = loaded;
           filtered = result;
@@ -1084,7 +1088,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         spec('assemble', 'skip'),
         signal,
         async (stageSignal) => {
-          const loaded: AssemblyRows = rows ?? (await loadRows(candidates, stageSignal));
+          const loaded: AssemblyRows = rows ?? (await loadRows(candidates, stageSignal, scopeKey(scope)));
           const applyRelevanceFilter = !postFilter.skipped;
           const state = filtered ?? filterCandidates(assemblyInput(loaded, applyRelevanceFilter));
           return buildContext(state, assemblyInput(loaded, applyRelevanceFilter));
@@ -1093,6 +1097,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         {
           candidatesIn: (filtered as FilteredCandidates<Candidate> | null)?.relevantChunks.length ?? candidates.length,
           candidatesOut: (value) => value.usedDocuments.length,
+          attributes: (value) => versionConflictAttributes(value.versionConflict),
         },
       );
       assembly = assembled.skipped ? null : assembled.value;
@@ -1133,6 +1138,9 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
 
   const base = { ...failure(collector, status, reason, queryContext), ...(injection ? { injection } : {}) };
   if (!assembly) return { ...base, candidates };
+  if (assembly.versionConflict && profile !== 'eval') {
+    recordAnswerConflict({ tenantKey: scopeKey(scope), conflict: assembly.versionConflict, traceId: collector.traceId });
+  }
 
   return {
     ...base,
@@ -1146,6 +1154,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
     queryTerms: assembly.queryTerms,
     refusalCandidate: assembly.refusalCandidate,
     blocks: assembly.blocks,
+    ...(assembly.versionConflict ? { versionConflict: assembly.versionConflict } : {}),
   };
 }
 

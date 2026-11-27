@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { AnswerNotice, AnswerSentence, OutputGuardSummary, RagTrace } from './contracts.generated';
 
 export const ENDPOINT_VERSION = 'rag-eval/1';
 
@@ -77,4 +78,90 @@ export function canonicalJson(value: unknown): string {
 
 export function configHash(config: unknown): string {
   return sha256Hex(canonicalJson(config));
+}
+
+type TraceResidualOutputFindings = NonNullable<RagTrace['residual_output_findings']>;
+
+const RESIDUAL_RULE_ID = /^[a-z0-9][a-z0-9._-]{1,63}$/;
+const FINISH_REASON = /^[a-z][a-z0-9_-]{0,31}$/;
+
+/** The guard counts the trace may carry; the summary's in-memory targets and phrases are never read here. */
+export interface GuardCounts {
+  mode: OutputGuardSummary['mode'];
+  rules_version: string;
+  links_checked: number;
+  links_removed: number;
+  credential_blocked: number;
+  credential_warned: number;
+  rule_ids: readonly string[];
+}
+
+/** D-41 on the eval trace: counts, rule ids and attributed chunk ids only, never a removed target or matched phrase. */
+export function outputGuardTraceSummary(summary: GuardCounts, sourceChunkIds: readonly string[] = []): OutputGuardSummary {
+  return {
+    mode: summary.mode,
+    rules_version: summary.rules_version,
+    links_checked: summary.links_checked,
+    links_removed: summary.links_removed,
+    credential_blocked: summary.credential_blocked,
+    credential_warned: summary.credential_warned,
+    rule_ids: [...summary.rule_ids],
+    source_chunk_ids: [...sourceChunkIds],
+  };
+}
+
+/** D-42: what a flag-mode guard pass still finds in the final answer, as counts and rule ids. */
+export function residualOutputFindings(summary: GuardCounts): TraceResidualOutputFindings {
+  return {
+    links: summary.links_removed,
+    credential_matches: summary.credential_blocked + summary.credential_warned,
+    rule_ids: [...new Set(summary.rule_ids.filter((id) => RESIDUAL_RULE_ID.test(id)))],
+  };
+}
+
+export interface AnswerRulesTraceInput {
+  /** Any Phase 5.2 switch is on (AnswerConfig.anyNonDefault); false gives no field at all (D-62 a). */
+  anyNonDefault: boolean;
+  answerLanguage: string | null;
+  /** The retrieval refused before generation (the server refusal). */
+  refusedByServer: boolean;
+  /** D-16: the model wrote the no-answer sentinel and the registry refusal replaced it. */
+  refusedByModel: boolean;
+  finishReason?: string | null;
+  parts?: readonly string[];
+  notices?: readonly AnswerNotice[];
+  sentences?: readonly AnswerSentence[] | null;
+  outputGuard?: OutputGuardSummary | null;
+  residual?: TraceResidualOutputFindings | null;
+  mixedVersions?: boolean | null;
+}
+
+export type AnswerRulesTraceFields = Pick<
+  RagTrace,
+  | 'answer_language'
+  | 'sentences'
+  | 'refusal_origin'
+  | 'output_guard'
+  | 'residual_output_findings'
+  | 'mixed_versions'
+  | 'finish_reason'
+  | 'answer_rules_parts'
+  | 'notices'
+>;
+
+/** The Phase 5.2 trace fields of one eval answer; each is present only when it carries something. */
+export function answerRulesTraceFields(input: AnswerRulesTraceInput): Partial<AnswerRulesTraceFields> {
+  if (!input.anyNonDefault) return {};
+  const origin = input.refusedByModel ? 'model_relevance' : input.refusedByServer ? 'server' : null;
+  return {
+    ...(input.answerLanguage ? { answer_language: input.answerLanguage } : {}),
+    ...(input.sentences ? { sentences: [...input.sentences] } : {}),
+    ...(origin ? { refusal_origin: origin } : {}),
+    ...(input.outputGuard ? { output_guard: input.outputGuard } : {}),
+    ...(input.residual ? { residual_output_findings: input.residual } : {}),
+    ...(typeof input.mixedVersions === 'boolean' ? { mixed_versions: input.mixedVersions } : {}),
+    ...(input.finishReason ? { finish_reason: FINISH_REASON.test(input.finishReason) ? input.finishReason : 'other' } : {}),
+    ...(input.parts && input.parts.length > 0 ? { answer_rules_parts: [...input.parts] } : {}),
+    ...(input.notices && input.notices.length > 0 ? { notices: input.notices.map((notice) => ({ ...notice })) } : {}),
+  };
 }

@@ -3,7 +3,7 @@ import { z } from 'zod/v3';
 import type { AnswerConfig } from './answer-config';
 import { buildAnswerChecksInput, type AnswerChecksInput } from './answer-checks';
 import { createAnswerCollector, type AnswerCollector } from './answer-collector';
-import { composeAnswerRules } from './answer-rules';
+import { composeAnswerRules, composedPartIds, type AnswerRuleId } from './answer-rules';
 import { buildAnswerTransforms, guardSlot } from './answer-transforms';
 import { emitNotice } from './notices';
 import { decideOutputCap as decideCap, effectiveMaxOutputTokens, type OutputCapDecision } from './output-cap';
@@ -16,7 +16,7 @@ import { env } from '@/lib/env';
 import { allowedImageHosts } from '@/lib/safe-image-hosts';
 import { parseLinkAllowlist } from '../security/link-allowlist';
 import type { OutputLinkPolicy, WebResultUrl } from '../security/link-targets';
-import { createOutputGuard, type OutputGuardLinkSummary, type OutputGuardPolicy } from '../security/output-guard';
+import { createOutputGuard, type OutputGuardLinkSummary, type OutputGuardNotice, type OutputGuardPolicy } from '../security/output-guard';
 import { attributeSourceChunks, recordOutputGuardEvents, type OutputGuardEventContext, type SecurityBlock } from '../security/security-events';
 import type { TraceCollector } from '../trace/collector';
 
@@ -43,6 +43,13 @@ export interface AnswerTurn {
   outputCapDecision(): OutputCapDecision | null;
   /** D-04: appends the answer-rule block to the final system prompt; returns the prompt itself when no part applies. */
   composeSystemPrompt(prompt: string, options: ComposeSystemPromptOptions): string;
+  /** The part ids of the first composition that added a part; empty before one or while no part applies. */
+  composedParts(): readonly AnswerRuleId[];
+  /**
+   * D-16: the registry refusal the sentinel streams in place of the no-answer token; null while the sentinel is not installed
+   * (neither rule on, or no answer language). The stream chain and the whole-text twin both read it here.
+   */
+  sentinelRefusalText(webSearchOffered: boolean): string | null;
   /**
    * D-35, D-16, D-11: the answer chain, built once per request. With every Phase 5.2 switch off it returns `citationTransforms`
    * unchanged; the sentinel is installed only with RAG_CONTEXT_RELEVANCE_RULE or RAG_PARTIAL_ANSWER_RULE on.
@@ -64,6 +71,13 @@ export interface AnswerTurn {
   guardPolicy(): OutputGuardPolicy | null;
   /** A separate guard transform for a stream outside the chain (the direct Claude call); null while the guard is off. */
   guardTransform(sources?: OutputGuardTurnSources): StreamTextTransform<ToolSet> | null;
+  /** The guard sources for a turn that builds no stream chain (the eval answer's whole-text twin). */
+  setGuardSources(sources: OutputGuardTurnSources): void;
+  /**
+   * D-42: a fresh policy of this turn's allow evidence in the given mode, whatever RAG_OUTPUT_GUARD says; for the flag-mode
+   * accounting pass over a final answer. It requests no notice.
+   */
+  guardPolicyFor(mode: OutputGuardPolicy['mode']): OutputGuardPolicy;
   /** The summary of the last guarded stream of this turn; null before one finished or while the guard is off. */
   outputGuardSummary(): OutputGuardLinkSummary | null;
 }
@@ -161,9 +175,14 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
   }
   let capDecision: OutputCapDecision | null = null;
   let logged = false;
+  let composedIds: readonly AnswerRuleId[] = [];
   let chain: Array<StreamTextTransform<ToolSet>> | null = null;
   let collector: AnswerCollector | null = null;
   const sentinelEnabled = (input.config.contextRelevanceRule || input.config.partialAnswerRule) && answerLanguage !== null;
+  const sentinelRefusalText = (webSearchOffered: boolean): string | null => {
+    if (!sentinelEnabled || answerLanguage === null) return null;
+    return fixedText(webSearchOffered ? 'notices.no_information_web' : 'notices.no_information', answerLanguage);
+  };
   const guard = createTurnGuard({
     mode: input.config.outputGuard,
     question: input.question,
@@ -200,23 +219,28 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
       return capDecision;
     },
     composeSystemPrompt(prompt: string, options: ComposeSystemPromptOptions): string {
-      const composed = composeAnswerRules(
-        {
-          prompt,
-          mode: options.mode,
-          language: answerLanguage,
-          config: input.config,
-          channel: input.channel,
-          webSearchOffered: options.webSearchOffered,
-          capApplies: capDecision?.concise ?? false,
-          calcOffered: false,
-          contextTagging: options.contextTagging ?? readSecurityConfig().contextTagging,
-        },
-        { log: !logged },
-      );
-      if (composed !== prompt) logged = true;
+      const rulesInput = {
+        prompt,
+        mode: options.mode,
+        language: answerLanguage,
+        config: input.config,
+        channel: input.channel,
+        webSearchOffered: options.webSearchOffered,
+        capApplies: capDecision?.concise ?? false,
+        calcOffered: false,
+        contextTagging: options.contextTagging ?? readSecurityConfig().contextTagging,
+      };
+      const composed = composeAnswerRules(rulesInput, { log: !logged });
+      if (composed !== prompt) {
+        if (!logged) composedIds = composedPartIds(rulesInput);
+        logged = true;
+      }
       return composed;
     },
+    composedParts() {
+      return composedIds;
+    },
+    sentinelRefusalText,
     transforms(citationTransforms: Array<StreamTextTransform<ToolSet>>, options: AnswerTransformOptions = {}) {
       if (chain) return chain;
       if (options.guard) guard.setSources(options.guard);
@@ -230,10 +254,11 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
         ...(options.aliases ? { aliases: options.aliases } : {}),
       });
       collector = active;
+      const refusalText = sentinelRefusalText(options.webSearchOffered === true);
       const sentinel =
-        sentinelEnabled && answerLanguage !== null
+        refusalText !== null
           ? sentinelTransform({
-              refusalText: fixedText(options.webSearchOffered ? 'notices.no_information_web' : 'notices.no_information', answerLanguage),
+              refusalText,
               onRefusal: () => active.markRefused(),
               onStripped: (count) => active.countStripped(count),
             })
@@ -245,7 +270,7 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
       return collector ? collector.finishMetadata() : {};
     },
     checksInput(retrievalResult?: unknown) {
-      return collector ? buildAnswerChecksInput({ collector, retrievalResult, outputGuard: guard.checks() }) : null;
+      return collector ? buildAnswerChecksInput({ collector, retrievalResult, outputGuard: guard.checks(), question: input.question }) : null;
     },
     refusedByModel() {
       return collector?.refusedByModel() ?? false;
@@ -262,6 +287,12 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
     guardTransform(sources?: OutputGuardTurnSources) {
       if (sources) guard.setSources(sources);
       return guard.transform();
+    },
+    setGuardSources(sources: OutputGuardTurnSources) {
+      guard.setSources(sources);
+    },
+    guardPolicyFor(mode: OutputGuardPolicy['mode']) {
+      return guard.policyFor(mode);
     },
     outputGuardSummary() {
       return guard.summary();
@@ -331,7 +362,11 @@ function createTurnGuard(input: TurnGuardInput) {
 
   const buildPolicy = (): OutputGuardPolicy | null => {
     if (input.mode === 'off') return null;
-    if (policy) return policy;
+    policy ??= policyFor(input.mode, true);
+    return policy;
+  };
+
+  function policyFor(mode: OutputGuardPolicy['mode'], notices = false): OutputGuardPolicy {
     const live = (name: 'RAG_OUTPUT_LINK_ALLOWLIST' | 'NEXT_PUBLIC_SITE_URL' | 'NEXT_PUBLIC_SUPABASE_URL') => process.env[name] ?? env[name];
     const imageHosts = allowedImageHosts({
       supabaseUrl: live('NEXT_PUBLIC_SUPABASE_URL'),
@@ -361,8 +396,8 @@ function createTurnGuard(input: TurnGuardInput) {
       userMessage: input.question,
       documentNames: [...new Set(blocks().map((block) => block.documentName).filter((name) => typeof name === 'string' && name !== ''))],
     };
-    policy = {
-      mode: input.mode,
+    return {
+      mode,
       links,
       placeholder: fixedText('notices.link_removed', input.answerLanguage ?? ''),
       language: input.answerLanguage ?? '',
@@ -375,14 +410,17 @@ function createTurnGuard(input: TurnGuardInput) {
         }
         return context || flaggedTools().size > 0;
       },
-      onNotice: (notice) => {
-        const collector = input.collector();
-        if (!collector || !noticeLanguage) return;
-        collector.addNotice(emitNotice(notice.kind, { language: noticeLanguage }));
-      },
+      ...(notices
+        ? {
+            onNotice: (notice: OutputGuardNotice) => {
+              const collector = input.collector();
+              if (!collector || !noticeLanguage) return;
+              collector.addNotice(emitNotice(notice.kind, { language: noticeLanguage }));
+            },
+          }
+        : {}),
     };
-    return policy;
-  };
+  }
 
   const onSummary = (summary: OutputGuardLinkSummary) => {
     const sent: SecurityBlock[] = blocks().map((block) => ({
@@ -463,6 +501,7 @@ function createTurnGuard(input: TurnGuardInput) {
       sources = next;
     },
     policy: buildPolicy,
+    policyFor: (mode: OutputGuardPolicy['mode']) => policyFor(mode),
     transform(): StreamTextTransform<ToolSet> | null {
       return guardSlot(input.mode, {
         createGuard: () => createOutputGuard(buildPolicy() as OutputGuardPolicy),
