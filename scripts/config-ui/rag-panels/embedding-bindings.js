@@ -571,9 +571,9 @@ class EmbeddingBindingsPanel {
             bindingsMono(row.tenant_key, 'font-mono text-sm font-normal break-words'),
           ]);
 
-    const profile = bindingsEl('td', { cls: cell + ' min-w-0' }, [
+    const profile = bindingsEl('td', { cls: cell + ' min-w-0 md:min-w-48' }, [
       label('col.profile'),
-      bindingsEl('div', null, [bindingsMono(row.profile_id)]),
+      bindingsEl('div', null, [bindingsMono(row.profile_id, 'font-mono text-sm break-words md:whitespace-nowrap')]),
       row.model ? bindingsEl('div', { cls: 'text-xs text-base-content/70 break-words', text: row.model, attrs: { translate: 'no' } }) : null,
       bindingsEl('div', { cls: 'font-mono text-xs text-base-content/70 break-words', attrs: { translate: 'no' } }, [
         bindingsEl('span', { cls: 'sr-only', text: bindingsText('row.bindingId') + ' ' }),
@@ -582,7 +582,7 @@ class EmbeddingBindingsPanel {
     ]);
 
     const evidence = bindingsEvidenceView(row, this.data.global_active);
-    const status = bindingsEl('td', { cls: cell }, [
+    const status = bindingsEl('td', { cls: cell + ' md:min-w-60' }, [
       label('col.status'),
       bindingsEl(
         'div',
@@ -606,7 +606,7 @@ class EmbeddingBindingsPanel {
     } else completeChildren = [bindingsEl('div', { cls: 'text-sm', text: view.percent }), bindingsEl('div', { cls: 'text-xs text-base-content/70', text: view.detail })];
     const complete = bindingsEl('td', { cls: cell + ' md:text-right tabular-nums' }, [label('col.complete'), ...completeChildren]);
 
-    const evidenceCell = bindingsEl('td', { cls: cell }, [label('col.evidence'), ...this.evidenceNodes(evidence)]);
+    const evidenceCell = bindingsEl('td', { cls: cell + ' md:min-w-36' }, [label('col.evidence'), ...this.evidenceNodes(evidence)]);
     const actions = bindingsEl('td', { cls: cell + ' md:text-right' }, this.actionNodes(row));
     return bindingsEl('tr', { cls: 'flex flex-col gap-2 py-2 max-md:border-b max-md:border-base-300 md:table-row md:py-0' }, [scope, profile, status, complete, evidenceCell, actions]);
   }
