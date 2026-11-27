@@ -421,11 +421,11 @@ export function downweightOrder<C extends { chunk_id: string }>(candidates: read
 const ASSEMBLY_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval'];
 const EMPTY_ROWS: AssemblyRows = { documents: new Map(), chunkMetadata: new Map() };
 
-async function loadRows(candidates: Candidate[], signal: AbortSignal): Promise<AssemblyRows> {
+async function loadRows(candidates: Candidate[], signal: AbortSignal, access: ScopeAccessFilter): Promise<AssemblyRows> {
   if (candidates.length === 0) return EMPTY_ROWS;
   const adminClient = getRagDeps().adminClient();
   if (!adminClient) throw new Error('[RAG Assemble] admin client unavailable');
-  return fetchAssemblyRows(candidates, { adminClient, signal });
+  return fetchAssemblyRows(candidates, { adminClient, signal, access });
 }
 
 function requireAdminSearchClient(deps: RagDeps): RpcClient {
@@ -616,6 +616,7 @@ export async function runRefsStage(
   scope: NonNullable<RunRetrievalInput['scope']>,
   stage: StageSpec,
   collector: TraceCollector,
+  access: ScopeAccessFilter,
 ): Promise<ReferencedState | null> {
   const documentRefs = input.documentRefs;
   if (!documentRefs || (documentRefs.mentions.length === 0 && documentRefs.documentParts.length === 0)) return null;
@@ -632,6 +633,7 @@ export async function runRefsStage(
         documentParts: documentRefs.documentParts,
         admin,
         signal: stageSignal,
+        access,
       });
     },
     collector,
@@ -647,11 +649,15 @@ export async function runRefsStage(
  * caller's scope (the ids are the scoped search results); assemble reuses them. A failed read leaves no exemption and
  * assemble reads again, so the check never fails open.
  */
-async function loadOverviewDocumentsForCheck(rawChunks: RawChunk[], signal: AbortSignal): Promise<Map<string, AssemblyDocumentRow> | null> {
+async function loadOverviewDocumentsForCheck(
+  rawChunks: RawChunk[],
+  signal: AbortSignal,
+  access: ScopeAccessFilter,
+): Promise<Map<string, AssemblyDocumentRow> | null> {
   const admin = getRagDeps().adminClient();
   if (!admin || rawChunks.length === 0) return null;
   try {
-    return await fetchOverviewDocuments(rawChunks, { admin, signal });
+    return await fetchOverviewDocuments(rawChunks, { admin, signal, access });
   } catch {
     signal.throwIfAborted();
     return null;
@@ -676,7 +682,7 @@ async function runOverviewPipeline(
   let injectionStalled = false;
 
   try {
-    let referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
+    let referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector, access);
 
     const embedding = requireValue(
       await runStage(spec('embed', 'throw'), signal, (stageSignal) => embedQuery(OVERVIEW_QUERY, stageSignal), collector, {
@@ -711,7 +717,7 @@ async function runOverviewPipeline(
     if (security.injectionCheck !== 'off') {
       const mode = security.injectionCheck;
       warnInjectionCheckDisabled(config, mode);
-      documentRows = await loadOverviewDocumentsForCheck(rawChunks, signal);
+      documentRows = await loadOverviewDocumentsForCheck(rawChunks, signal, access);
       const run = await runInjectionStage({
         spec: spec('injection_check', 'skip'),
         signal,
@@ -744,7 +750,7 @@ async function runOverviewPipeline(
       async (stageSignal) => {
         const adminClient = deps.adminClient();
         if (!adminClient) throw new Error('[RAG Overview] admin client unavailable');
-        const documents = documentRows ?? (await fetchOverviewDocuments(rawChunks, { admin: adminClient, signal: stageSignal }));
+        const documents = documentRows ?? (await fetchOverviewDocuments(rawChunks, { admin: adminClient, signal: stageSignal, access }));
         return assembleOverviewContext(rawChunks, documents, referenced?.usedDocuments ?? [], {
           ...(security.contextTagging ? { contextTagging: true } : {}),
           ...(flaggedForRender ? { flaggedChunkIds: flaggedForRender } : {}),
@@ -843,8 +849,64 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
   }
   if (input.scope !== null && access !== undefined && access.mode !== 'off') recordAccessScope(collector, input.scope);
   const result = await dispatchRetrieval(input, collector, access ?? OFF_ACCESS);
+  if (input.scope !== null && access !== undefined && access.mode !== 'off') await attachAccessLabels(result, input.scope, input.signal);
   if (ownsTrace) finishTrace(collector, result, traceOptions(input));
   return result;
+}
+
+const ACCESS_LABEL_BATCH = 100;
+
+/** Every document id the result carries: used documents, candidates, kept and relevant chunks, voice results. */
+function resultDocumentIds(result: RetrievalResult): string[] {
+  const ids = new Set<string>();
+  const add = (value: unknown) => {
+    if (typeof value === 'string' && value.length > 0) ids.add(value);
+  };
+  for (const doc of result.usedDocuments) add(doc.id);
+  for (const row of result.candidates) add(row.document_id);
+  for (const row of result.relevantChunks) add(row.document_id);
+  for (const row of result.kept) add(row.document_id);
+  for (const row of result.voice?.results ?? []) add((row as { document_id?: unknown }).document_id);
+  return [...ids].sort();
+}
+
+/**
+ * D-25, A-06: one batched documents read (service-role client, tenant key predicate) of the labels of every document the result used,
+ * for the derived stores and traces. The map is attached as a non-enumerable property so it never reaches a client payload. A failed
+ * read leaves it absent (logged with a code only); consumers treat an absent map as unknown labels.
+ */
+async function attachAccessLabels(result: RetrievalResult, scope: NonNullable<RunRetrievalInput['scope']>, signal: AbortSignal): Promise<void> {
+  const ids = resultDocumentIds(result);
+  const labels = new Map<string, readonly string[]>();
+  try {
+    if (ids.length > 0) {
+      const admin = getRagDeps().adminClient();
+      if (!admin) {
+        logger.warn('RAG Access', 'Access labels not read', { code: 'admin_client_missing' });
+        return;
+      }
+      for (let index = 0; index < ids.length; index += ACCESS_LABEL_BATCH) {
+        const batch = ids.slice(index, index + ACCESS_LABEL_BATCH);
+        const { data, error } = await admin
+          .from('documents')
+          .select('id, access_groups')
+          .eq('tenant_key', scopeKey(scope))
+          .in('id', batch)
+          .abortSignal(signal);
+        if (error) {
+          logger.warn('RAG Access', 'Access labels not read', { code: error.code ?? 'read_failed' });
+          return;
+        }
+        for (const row of (data ?? []) as Array<{ id: unknown; access_groups: unknown }>) {
+          if (typeof row.id !== 'string' || !Array.isArray(row.access_groups)) continue;
+          labels.set(row.id, Object.freeze(row.access_groups.filter((key): key is string => typeof key === 'string')));
+        }
+      }
+    }
+    Object.defineProperty(result, 'accessLabels', { value: labels, enumerable: false, writable: false, configurable: true });
+  } catch {
+    if (!signal.aborted) logger.warn('RAG Access', 'Access labels not read', { code: 'read_failed' });
+  }
 }
 
 /** A request without a tenant never reaches a leg (no_tenant); its filter is off, so no argument is sent. */
@@ -998,7 +1060,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector, 
   const security = deps.securityConfig();
 
   try {
-    referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
+    referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector, access);
 
     const analysis = await runStage(spec('analyze', 'skip'), signal, () => legacyAnalyze(input.query), collector);
     const analysed = analysis.skipped ? defaultQueryContext() : analysis.value;
@@ -1088,7 +1150,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector, 
         spec('post_filter', 'skip'),
         signal,
         async (stageSignal) => {
-          const loaded = await loadRows(candidates, stageSignal);
+          const loaded = await loadRows(candidates, stageSignal, access);
           const result = filterCandidates(assemblyInput(loaded, true));
           rows = loaded;
           filtered = result;
@@ -1134,7 +1196,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector, 
         spec('assemble', 'skip'),
         signal,
         async (stageSignal) => {
-          const loaded: AssemblyRows = rows ?? (await loadRows(candidates, stageSignal));
+          const loaded: AssemblyRows = rows ?? (await loadRows(candidates, stageSignal, access));
           const applyRelevanceFilter = !postFilter.skipped;
           const state = filtered ?? filterCandidates(assemblyInput(loaded, applyRelevanceFilter));
           return buildContext(state, assemblyInput(loaded, applyRelevanceFilter));
@@ -1258,7 +1320,7 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
     const expanded = await runStage(
       spec('voice_keyword_fallback', 'skip'),
       signal,
-      (stageSignal) => voiceKeywordFallback({ query, scope, admin: requireAdmin(), signal: stageSignal, existing: searched }),
+      (stageSignal) => voiceKeywordFallback({ query, scope, admin: requireAdmin(), signal: stageSignal, existing: searched, access }),
       collector,
       { candidatesIn: searched.length, candidatesOut: (value) => value.length },
     );

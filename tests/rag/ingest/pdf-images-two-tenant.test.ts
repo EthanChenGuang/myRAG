@@ -144,7 +144,7 @@ async function assemble(loaded: Loaded, candidates: Awaited<ReturnType<typeof re
   const { getSupabaseAdmin } = await import('@/lib/supabase');
   const { fetchAssemblyRows } = await import('@/lib/rag/context/fetch-rows');
   const { assembleContext } = await import('@/lib/rag/context/assemble');
-  const rows = await fetchAssemblyRows(candidates as never, { adminClient: getSupabaseAdmin() as never, signal: new AbortController().signal });
+  const rows = await fetchAssemblyRows(candidates as never, { access: { mode: 'off' }, adminClient: getSupabaseAdmin() as never, signal: new AbortController().signal });
   return assembleContext({
     queryText: query,
     candidates: candidates as never,

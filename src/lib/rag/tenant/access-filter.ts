@@ -36,3 +36,12 @@ export function accessTableFilter(filter: ScopeAccessFilter): readonly string[] 
   if (filter.keys.length === 0) throw new Error('[RAG Access] keys filter without keys');
   return [...filter.keys];
 }
+
+/**
+ * D-11, D-15: adds `.overlaps('access_groups', keys)` to a documents or document_chunks read when the filter has keys; off and
+ * admin_all leave the query (and so the request) unchanged.
+ */
+export function withAccessGroups<Q>(query: Q, keys: readonly string[] | null): Q {
+  if (keys === null) return query;
+  return (query as unknown as { overlaps(column: string, value: readonly string[]): Q }).overlaps('access_groups', keys);
+}

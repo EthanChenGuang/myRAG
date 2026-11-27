@@ -224,7 +224,7 @@ describe('quarantined documents never reach retrieval', () => {
     const admin = supabaseModule.getSupabaseAdmin();
     for (const [item, keyword] of marked) {
       const known = ingested.get(item.token) as { documentId: string; chunkIds: string[] };
-      const found = await voiceKeywordFallback({ query: keyword, scope, admin, signal, existing: [] });
+      const found = await voiceKeywordFallback({ access: { mode: 'off' }, query: keyword, scope, admin, signal, existing: [] });
       const foundIds = found.map((chunk) => String(chunk.id));
       if (INJECTED.includes(item)) {
         for (const chunkId of known.chunkIds) assert.ok(!foundIds.includes(chunkId), `the keyword fallback does not return a chunk of the quarantined ${item.language} document`);

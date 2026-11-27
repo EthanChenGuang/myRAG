@@ -185,6 +185,7 @@ describe('resolveDocumentRefs', () => {
     const { admin, calls } = filteringAdmin(seed());
 
     const result = await resolveDocumentRefs({
+      access: { mode: 'off' },
       scope: personalA,
       mentions: ['alpha-handbook', 'bravo-secrets'],
       documentParts: [],
@@ -210,6 +211,7 @@ describe('resolveDocumentRefs', () => {
     const { admin, calls } = filteringAdmin(seed());
 
     const result = await resolveDocumentRefs({
+      access: { mode: 'off' },
       scope: orgO,
       mentions: ['org-policy', 'alpha-handbook'],
       documentParts: [{ id: DOC_A, name: 'alpha-handbook.md' }],
@@ -234,6 +236,7 @@ describe('resolveDocumentRefs', () => {
     const { admin, calls } = filteringAdmin(seed());
 
     const result = await resolveDocumentRefs({
+      access: { mode: 'off' },
       scope: single,
       mentions: ['bravo-secrets'],
       documentParts: [],
@@ -261,6 +264,7 @@ describe('resolveDocumentRefs', () => {
     const { admin, calls } = filteringAdmin(seed());
 
     const result = await resolveDocumentRefs({
+      access: { mode: 'off' },
       scope: personalA,
       mentions: [],
       documentParts: [
@@ -288,7 +292,7 @@ describe('resolveDocumentRefs', () => {
   it('does not warn when every reference is inside the scope', async () => {
     const { admin } = filteringAdmin(seed());
 
-    await resolveDocumentRefs({ scope: personalA, mentions: [], documentParts: [{ id: DOC_A, name: 'alpha-handbook.md' }], admin, signal });
+    await resolveDocumentRefs({ access: { mode: 'off' }, scope: personalA, mentions: [], documentParts: [{ id: DOC_A, name: 'alpha-handbook.md' }], admin, signal });
 
     expect(warn.mock.calls.filter((args: unknown[]) => String(args[0]).startsWith('[RAG Tenant]'))).toHaveLength(0);
   });
@@ -297,6 +301,7 @@ describe('resolveDocumentRefs', () => {
     const { admin } = filteringAdmin(seed());
 
     const result = await resolveDocumentRefs({
+      access: { mode: 'off' },
       scope: single,
       mentions: [],
       documentParts: [{ id: DOC_A, name: 'Alpha Handbook' }],
@@ -325,6 +330,7 @@ describe('resolveDocumentRefs', () => {
     const { admin } = filteringAdmin(tables);
 
     const result = await resolveDocumentRefs({
+      access: { mode: 'off' },
       scope: single,
       mentions: [],
       documentParts: [
@@ -345,7 +351,7 @@ describe('resolveDocumentRefs', () => {
     tables.documents[0].text = 'Alpha full text column';
     const { admin } = filteringAdmin(tables);
 
-    const result = await resolveDocumentRefs({ scope: personalA, mentions: [], documentParts: [{ id: DOC_A, name: 'alpha' }], admin, signal });
+    const result = await resolveDocumentRefs({ access: { mode: 'off' }, scope: personalA, mentions: [], documentParts: [{ id: DOC_A, name: 'alpha' }], admin, signal });
 
     expect(result.context).toBe('\n\n=== DOCUMENT: "alpha" ===\nAlpha full text column\n=== END OF DOCUMENT ===\n');
   });
@@ -355,7 +361,7 @@ describe('resolveDocumentRefs', () => {
     tables.document_chunks = [];
     const { admin } = filteringAdmin(tables, { documents: ['text'] });
 
-    const result = await resolveDocumentRefs({ scope: personalA, mentions: [], documentParts: [{ id: DOC_A, name: 'alpha' }], admin, signal });
+    const result = await resolveDocumentRefs({ access: { mode: 'off' }, scope: personalA, mentions: [], documentParts: [{ id: DOC_A, name: 'alpha' }], admin, signal });
 
     expect(result.context).toBe('\n\nDocument "alpha" was referenced but no content could be retrieved.\n');
     expect(result.usedDocuments).toHaveLength(1);
@@ -367,6 +373,7 @@ describe('resolveDocumentRefs', () => {
     const { admin } = filteringAdmin(tables);
 
     const result = await resolveDocumentRefs({
+      access: { mode: 'off' },
       scope: single,
       mentions: [],
       documentParts: [
@@ -394,6 +401,7 @@ describe('resolveDocumentRefs', () => {
     tables.document_chunks = [];
     tables.documents[0].text = 'Alpha full text column';
     const fullText = await resolveDocumentRefs({
+      access: { mode: 'off' },
       scope: personalA,
       mentions: [],
       documentParts: [{ id: DOC_A, name: 'alpha' }],
@@ -405,6 +413,7 @@ describe('resolveDocumentRefs', () => {
     ]);
 
     const missing = await resolveDocumentRefs({
+      access: { mode: 'off' },
       scope: personalA,
       mentions: [],
       documentParts: [{ id: DOC_A, name: 'alpha' }],
@@ -421,7 +430,7 @@ describe('resolveDocumentRefs', () => {
     const controller = new AbortController();
     const { admin, calls } = filteringAdmin(seed());
 
-    await resolveDocumentRefs({ scope: personalA, mentions: ['alpha'], documentParts: [], admin, signal: controller.signal });
+    await resolveDocumentRefs({ access: { mode: 'off' }, scope: personalA, mentions: ['alpha'], documentParts: [], admin, signal: controller.signal });
 
     expect(calls.length).toBeGreaterThan(0);
     for (const call of calls) expect(call.signal).toBe(controller.signal);

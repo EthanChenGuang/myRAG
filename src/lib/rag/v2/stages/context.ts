@@ -333,7 +333,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
   if (readAnswerConfig().versionLabels && input.scope && rows.documents.size > 0) {
     const admin = getRagDeps().adminClient() as SupabaseClient | null;
     if (admin) {
-      const columns = await fetchVersionColumns(admin, [...rows.documents.keys()], { tenantKey: scopeKey(input.scope), signal });
+      const columns = await fetchVersionColumns(admin, [...rows.documents.keys()], { tenantKey: scopeKey(input.scope), signal, access: ctx.access });
       for (const [documentId, values] of columns) {
         const row = rows.documents.get(documentId);
         if (row) rows.documents.set(documentId, { ...row, ...values });

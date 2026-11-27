@@ -199,6 +199,7 @@ export async function runV2Pipeline(
     const query = await runQueryStages({
       input,
       scope,
+      access,
       config,
       profile,
       signal,

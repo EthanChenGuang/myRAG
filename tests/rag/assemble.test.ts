@@ -358,7 +358,7 @@ describe('fetchAssemblyRows', () => {
   it('issues exactly one documents query and one document_chunks query with de-duplicated ids and the signal', async () => {
     const { client, calls } = fakeAdmin(data);
     const controller = new AbortController();
-    const rows = await fetchAssemblyRows(candidates, { adminClient: client, signal: controller.signal });
+    const rows = await fetchAssemblyRows(candidates, { access: { mode: 'off' }, adminClient: client, signal: controller.signal });
     expect(calls.map((call) => call.table).sort()).toEqual(['document_chunks', 'documents']);
     const documents = calls.find((call) => call.table === 'documents')!;
     const chunks = calls.find((call) => call.table === 'document_chunks')!;
@@ -377,20 +377,20 @@ describe('fetchAssemblyRows', () => {
 
   it('issues no query for an empty candidate list', async () => {
     const { client, calls } = fakeAdmin(data);
-    const rows = await fetchAssemblyRows([], { adminClient: client, signal: new AbortController().signal });
+    const rows = await fetchAssemblyRows([], { access: { mode: 'off' }, adminClient: client, signal: new AbortController().signal });
     expect(calls).toEqual([]);
     expect(rows.documents.size).toBe(0);
   });
 
   it('throws on a query error', async () => {
     const { client } = fakeAdmin(data, { error: 'boom' });
-    await expect(fetchAssemblyRows(candidates, { adminClient: client, signal: new AbortController().signal })).rejects.toThrow(/boom/);
+    await expect(fetchAssemblyRows(candidates, { access: { mode: 'off' }, adminClient: client, signal: new AbortController().signal })).rejects.toThrow(/boom/);
   });
 
   it('throws when the signal is aborted after a query', async () => {
     const { client } = fakeAdmin(data);
     const controller = new AbortController();
-    const pending = fetchAssemblyRows(candidates, { adminClient: client, signal: controller.signal });
+    const pending = fetchAssemblyRows(candidates, { access: { mode: 'off' }, adminClient: client, signal: controller.signal });
     controller.abort(new Error('stop'));
     await expect(pending).rejects.toThrow();
   });

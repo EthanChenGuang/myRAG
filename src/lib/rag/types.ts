@@ -385,6 +385,12 @@ export interface RetrievalResult {
   identifierSuggestions?: string[];
   /** D-31: identifier filter counts for the trace; absent while RAG_IDENTIFIER_FILTER is off or the resolve stage did not run. */
   identifierFilter?: IdentifierFilterSummary;
+  /**
+   * D-25, A-06: server-side only. The access_groups of each document the result used, read in one batched query while
+   * RAG_DOC_ACCESS_GROUPS is on (the scope's mode is not off); absent while off or when the read failed. Set as a non-enumerable
+   * property, so neither JSON serialisation nor a spread copy carries it: read it from the object runRetrieval returned.
+   */
+  readonly accessLabels?: ReadonlyMap<string, readonly string[]>;
 }
 
 /** D-31: counts only, never an identifier. */
