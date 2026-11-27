@@ -291,6 +291,66 @@ class InjectionSecJobTest(unittest.TestCase):
         self.assertNotIn("LAKERA_GUARD_API_KEY", check_workflows.PR.read_text(encoding="utf-8"))
 
 
+class BgeM3IdentityJobTest(unittest.TestCase):
+    def nightly(self) -> dict:
+        return check_workflows.load(check_workflows.NIGHTLY)[0]
+
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_bge_m3_identity(data, errors)
+        return errors
+
+    def steps(self, data: dict) -> list[dict]:
+        return data["jobs"][check_workflows.BGE_M3_JOB]["steps"]
+
+    def hosted(self, data: dict) -> dict:
+        return next(s for s in self.steps(data) if "--mode hosted" in str(s.get("run", "")))
+
+    def test_repository_nightly_has_a_valid_bge_m3_job(self):
+        self.assertEqual(self.errors_for(self.nightly()), [])
+
+    def test_missing_job_is_reported(self):
+        data = self.nightly()
+        del data["jobs"][check_workflows.BGE_M3_JOB]
+        self.assertTrue(any("'bge-m3-identity' missing" in e for e in self.errors_for(data)))
+
+    def test_a_secret_inside_run_is_reported(self):
+        data = self.nightly()
+        step = self.hosted(data)
+        step["run"] = "DEEPINFRA_API_KEY=${{ secrets.DEEPINFRA_API_KEY }} " + step["run"]
+        self.assertTrue(any("not interpolated into run" in e for e in self.errors_for(data)))
+
+    def test_another_secret_is_reported(self):
+        data = self.nightly()
+        self.hosted(data)["env"]["OPENROUTER_API_KEY"] = "${{ secrets.OPENROUTER_API_KEY }}"
+        self.assertTrue(any("only DEEPINFRA_API_KEY" in e for e in self.errors_for(data)))
+
+    def test_an_ungated_hosted_step_is_reported(self):
+        data = self.nightly()
+        self.hosted(data).pop("if")
+        self.assertTrue(any("HAS_DEEPINFRA_KEY == 'true'" in e for e in self.errors_for(data)))
+
+    def test_a_failing_compare_is_reported(self):
+        data = self.nightly()
+        for step in self.steps(data):
+            step["run"] = str(step.get("run", "")).replace("|| status=$?", "")
+        self.assertTrue(any("report only" in e for e in self.errors_for(data)))
+
+    def test_a_sidecar_step_without_the_ready_condition_is_reported(self):
+        data = self.nightly()
+        for step in self.steps(data):
+            if "--mode sidecar" in str(step.get("run", "")):
+                step.pop("if")
+        self.assertTrue(any("must be conditioned" in e for e in self.errors_for(data)))
+
+    def test_the_build_must_skip_with_a_notice(self):
+        data = self.nightly()
+        for step in self.steps(data):
+            if step.get("id") == "bge_m3":
+                step["run"] = step["run"].replace(check_workflows.BGE_M3_SKIP_NOTICE, "echo skipping")
+        self.assertTrue(any("skips with a notice" in e for e in self.errors_for(data)))
+
+
 class RealDoclingJobTest(unittest.TestCase):
     def nightly(self) -> dict:
         return check_workflows.load(check_workflows.NIGHTLY)[0]
