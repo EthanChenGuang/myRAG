@@ -12,7 +12,7 @@ export { buildHistoryWindow } from './query/history';
 export type { HistoryWindowLimits } from './query/history';
 export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
-export { currentAttributeFilterMode, currentLexicalVersion } from './deps';
+export { currentAttributeFilterMode, currentContextTokenBudget, currentLexicalVersion } from './deps';
 export { createTraceCollector } from './trace/collector';
 export type { TraceCollector, StageEntry } from './trace/collector';
 export { isTraceId } from './trace/collector';
@@ -775,3 +775,15 @@ export type {
   ProfileStateCounts,
 } from './backend/index-compat';
 export type { VectorStore, VectorSyncTarget } from './sync/stores/types';
+// Phase 5.2.1 plan 21: the prompt budget on the chat route
+export {
+  assertQuestionLast,
+  finalizePromptBudget,
+  planPromptBudget,
+  PromptOrderError,
+  type BudgetMessage,
+  type PromptBudgetPlan,
+} from './context/prompt-budget';
+export { modelContextLength, modelFamily } from './context/model-window';
+export { composeAnswerRules } from './generation/answer-rules';
+export { fixedText } from './lang/texts';

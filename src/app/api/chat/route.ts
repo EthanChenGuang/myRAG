@@ -1,7 +1,8 @@
-import { streamText, tool, type ToolSet, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, UIMessage, stepCountIs } from 'ai';
+import { asSchema, streamText, tool, type ToolSet, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, UIMessage, stepCountIs } from 'ai';
 import { buildCtaInstruction } from '@/lib/chat/cta-instruction';
 import { buildFormattingInstruction, resolveAnswerStyle } from '@/lib/chat/answer-style';
 import { appendHistoryNotEvidence, historyNotEvidenceEnabled } from '@/lib/chat/history-not-evidence';
+import { getMaxTokensForModel } from '@/lib/chat/model-output-limit';
 import { z } from 'zod/v3';
 // Use the dedicated OpenRouter provider
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
@@ -81,6 +82,16 @@ import {
   type TraceCollector,
   type CitationLabeler,
   type ClaudeTurnFacts,
+  assertQuestionLast,
+  composeAnswerRules,
+  currentContextTokenBudget,
+  finalizePromptBudget,
+  fixedText,
+  modelContextLength,
+  modelFamily,
+  planPromptBudget,
+  type BudgetMessage,
+  type PromptBudgetPlan,
 } from '@/lib/rag';
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
@@ -121,6 +132,48 @@ const ANSWER_EVIDENCE_TOOLS = new Set(['webSearch', 'useDocument', CALCULATE_TOO
 // Phase 5.2.1 D-65: RAG_CALC_TOOL, read from the one answer-config reader once plan 05.2.1-02 adds the field; false before
 function calcToolSwitchOn(config: object): boolean {
   return (config as { readonly calcTool?: unknown }).calcTool === true;
+}
+
+const EMAIL_TOOL_PREFERENCE = '\n\nIMPORTANT: When user says "send an email", use gmail_send_email tool, NOT gmail_create_draft.';
+const WEB_SEARCH_TOOL_DESCRIPTION =
+  'Search the web for up-to-date information. Use this when you need current information about events, news, or facts that may have occurred after your training data.';
+const webSearchInputSchema = z.object({
+  query: z.string().min(1).max(100).describe('The search query to find information on the web'),
+});
+const PROMPT_BUDGET_EXCEEDED = 'prompt_budget_exceeded';
+
+// Phase 5.2.1 D-80: the tool schemas as the model receives them (name, description, JSON schema), counted on their JSON
+async function toolSchemaParts(tools: Record<string, any> | undefined): Promise<unknown[]> {
+  return Promise.all(
+    Object.entries(tools ?? {}).map(async ([name, definition]) => {
+      let parameters: unknown = null;
+      try {
+        const schema = definition?.inputSchema ?? definition?.parameters;
+        parameters = schema ? await Promise.resolve(asSchema(schema).jsonSchema) : null;
+      } catch {
+        parameters = null;
+      }
+      return { name, description: typeof definition?.description === 'string' ? definition.description : '', parameters };
+    }),
+  );
+}
+
+// D-84: the in-band error with the registry text only; the code travels in a header, never prompt sizes or text
+function promptBudgetExceededResponse(language: string): Response {
+  return new Response(formatErrorSSE(fixedText('notices.prompt_too_long', language)), {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-RAG-Error': PROMPT_BUDGET_EXCEEDED,
+    },
+  });
+}
+
+function messageContentText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  return content === undefined || content === null ? '' : JSON.stringify(content);
 }
 
 interface StepToolResult {
@@ -1990,6 +2043,108 @@ IMPORTANT:
       NEVER omit the 'instructions' field - it's essential for proper tool execution.`
     };
 
+    // System message for handling Gmail attachments
+    const gmailAttachmentSystemMessage: ExtendedMessage = {
+      id: 'system-gmail-attachment-instruction',
+      role: 'system',
+      content: `When the user asks to send an email with generated media as an attachment:
+      
+      STEP 1: Find the generated media in the conversation history
+      - Look for messages with content parts of type: 'generated_image', 'generated_video', or 'generated_3d_model'
+      - These will have URLs in fields like: generated_images array, video_url, or model_url
+      
+      STEP 2: Extract the actual URL
+      - The URL will be a Supabase storage URL like: https://...supabase.co/storage/v1/object/public/chat-images/...
+      - DO NOT use placeholder text like "[Generated Image]"
+      
+      STEP 3: Format your Gmail tool call with BOTH instructions and structured parameters:
+      {
+        "instructions": "Create a draft email to recipient@example.com with subject and body",
+        "to": "recipient@example.com",
+        "subject": "Email subject",
+        "body": "Email body text",
+        "attachment_url": "[THE ACTUAL SUPABASE URL]"
+      }
+      
+      IMPORTANT:
+      - Include BOTH the 'instructions' field AND the structured parameters
+      - The 'instructions' field should briefly describe what you're doing
+      - Send all parameters in a single object, NOT wrapped in an 'input' field
+      - The attachment_url MUST be the actual URL (starts with https://)
+      - The system will automatically convert attachment_url to the 'file' parameter
+      - DO NOT include the attachment URL in the body text
+      - Body text should be plain text (system will convert to HTML)
+      
+      If the user doesn't explicitly mention attaching the generated media but says something like "email this image" or "send this video", assume they want it as an attachment.`
+    };
+
+    // System message for handling media uploads to Google Drive
+    const mediaUploadSystemMessage: ExtendedMessage = {
+      id: 'system-media-upload-instruction',
+      role: 'system',
+      content: `🚨 CRITICAL: When the user asks to upload media (images, videos, or 3D models) to Google Drive:
+
+      ⚠️ YOU HAVE ACCESS TO THE google_drive_upload_file TOOL - USE IT IMMEDIATELY!
+      
+      DO NOT ask "Could you please provide the image you want to upload?" - The user has already provided it.
+      DO NOT respond with text only - Call the google_drive_upload_file tool.
+      
+      When the user says "Upload this image to Google Drive" or similar:
+      
+      STEP 1: Find the media in the conversation history - check BOTH generated and attached media
+      
+      FOR GENERATED MEDIA:
+      - Look for messages with content parts of type: 'generated_image', 'generated_video', or 'generated_3d_model'
+      - These will have URLs in fields like: generated_images array, video_url, or model_url
+      - For generated_image: Look for content.generated_images[0] (array of URLs)
+      - For generated_video: Look for content.video_url or content.generated_videos[0]
+      - For generated_3d_model: Look for content.model_url
+      
+      FOR ATTACHED MEDIA:
+      - Look for user messages with image attachments
+      - These appear as message content arrays with image_url parts
+      - The system will automatically provide the correct image URL during tool execution
+      - DO NOT generate placeholder URLs like "https://supabase.co/storage/v1/object/public/chat-images/abc123.png"
+      
+      STEP 2: Extract the actual URL
+      - The URL will be a Supabase storage URL like: https://...supabase.co/storage/v1/object/public/chat-images/...
+      - DO NOT use placeholder text like "[Generated Image]" or descriptions
+      - Extract the ACTUAL URL string from the content part
+      
+      STEP 3: Call google_drive_upload_file with EXACTLY these parameters:
+      {
+        "instructions": "Upload [type] to Google Drive",
+        "file": "[THE ACTUAL URL YOU EXTRACTED OR LEAVE EMPTY FOR ATTACHED IMAGES]",
+        "new_name": "descriptive-name.ext"
+      }
+      
+      CRITICAL REMINDERS FOR ATTACHED IMAGES:
+      - If the user attached an image (not generated), DO NOT provide a fake URL in the 'file' parameter
+      - For attached images, provide minimal parameters: {"instructions": "Upload image to Google Drive", "new_name": "image.png"}
+      - The system will automatically inject the correct image URL during tool execution
+      - NEVER generate placeholder URLs like "https://supabase.co/storage/v1/object/public/chat-images/abc123.png"
+      
+      CRITICAL REMINDERS FOR GENERATED MEDIA:
+      - file MUST be the actual URL (starts with https://)
+      - If you see multiple images, use the first one or ask which to upload
+      - Common URL patterns:
+        * Images: https://...supabase.co/storage/v1/object/public/chat-images/[id].png
+        * Videos: https://...supabase.co/storage/v1/object/public/chat-videos/[id].mp4
+        * 3D Models: https://...supabase.co/storage/v1/object/public/3d-models/[id].glb
+      
+      Example of CORRECT extraction from conversation:
+      User: "Generate an image of a sunset"
+      Assistant: [Shows generated image with URL https://...supabase.co/storage/v1/object/public/chat-images/abc123.png]
+      User: "Upload this image to Google Drive"
+      
+      Your tool call MUST include:
+      {
+        "instructions": "Upload the sunset image to Google Drive",
+        "file_url": "https://...supabase.co/storage/v1/object/public/chat-images/abc123.png",
+        "filename": "sunset-image.png"
+      }`
+    };
+
     // Combine messages including system messages
     const messages = [
       formattingSystemMessage,
@@ -2208,6 +2363,81 @@ Context:
           }
         : undefined;
 
+    // Phase 5.2.1 D-79, D-80, D-83: with RAG_PROMPT_BUDGET on, the whole prompt is planned against the model window before
+    // retrieval; off, nothing is computed and the request is today's
+    const promptBudgetOn = answerTurn.config.promptBudget;
+    const budgetLanguage = answerTurn.answerLanguage ?? userLanguage;
+    let promptBudgetPlan: PromptBudgetPlan | null = null;
+    let promptBudgetInput: Parameters<typeof planPromptBudget>[0] | null = null;
+    if (promptBudgetOn) {
+      const budgetWebSearch = SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY);
+      const budgetTools: Record<string, unknown> =
+        SUPPORTS_TOOLS && !modelBlocksTools(model)
+          ? {
+              useDocument: documentReferenceTool,
+              ...(budgetWebSearch ? { webSearch: { description: WEB_SEARCH_TOOL_DESCRIPTION, inputSchema: webSearchInputSchema } } : {}),
+              ...(calcMayBeOffered
+                ? { [CALCULATE_TOOL_NAME]: buildCalculateTool({ aliases: new Set<string>(), holder: createCalcTraceHolder() }) }
+                : {}),
+            }
+          : {};
+      const budgetSystem = [
+        `${createEnhancedRAGPrompt((await resolveRagSystemPrompt()).ragSystemPrompt, '', ragMode)}${EMAIL_TOOL_PREFERENCE}`,
+        ...[
+          formattingSystemMessage,
+          toolUsagePriorityMessage,
+          ctaSystemMessage,
+          documentReferenceSystemMessage,
+          toolResultSummarySystemMessage,
+          gmailGeneralSystemMessage,
+          gmailAttachmentSystemMessage,
+          mediaUploadSystemMessage,
+        ].map((message) => messageContentText(message.content)),
+      ].join('\n\n');
+      const budgetRules = composeAnswerRules(
+        {
+          prompt: '',
+          mode: ragMode,
+          language: answerTurn.answerLanguage,
+          config: answerTurn.config,
+          channel: answerTurn.channel,
+          webSearchOffered: budgetWebSearch,
+          capApplies: false,
+          contextTagging: readSecurityConfig().contextTagging,
+          ...(calcMayBeOffered ? { calculation: { mode: 'tool' as const } } : {}),
+        },
+        { log: false },
+      );
+      const budgetModelLimit = modelBlocksTools(model) ? 16384 : getMaxTokensForModel(model);
+      promptBudgetInput = {
+        window: modelContextLength(model),
+        family: modelFamily(model),
+        parts: {
+          system: budgetSystem,
+          rules: budgetRules,
+          tools: await toolSchemaParts(budgetTools as Record<string, any>),
+          question: messageContentText(originalMessages.at(-1)?.content),
+        },
+        history: originalMessages.slice(0, -1) as unknown as BudgetMessage[],
+        // D-29: the cap only lowers the model limit, so the limit is the reserve before the cap is decided
+        answerReserve: answerTurn.maxOutputTokens(budgetModelLimit),
+        documentTarget: effectiveDisableRAG ? 0 : currentContextTokenBudget(),
+        answerLanguage: budgetLanguage,
+        mcpToolReserve: useMcpForRequest,
+        overflowMode: answerTurn.config.contextOverflow,
+      };
+      promptBudgetPlan = planPromptBudget(promptBudgetInput);
+      if (promptBudgetPlan.status === 'exceeded') {
+        console.warn('[Prompt Budget] Request does not fit the model window; not sent', {
+          code: PROMPT_BUDGET_EXCEEDED,
+          window: promptBudgetPlan.trace.window,
+          windowSource: promptBudgetPlan.trace.window_source,
+        });
+        return promptBudgetExceededResponse(budgetLanguage);
+      }
+    }
+    const documentTokenBudgetOption = promptBudgetPlan ? { documentTokenBudget: promptBudgetPlan.documentBudget } : {};
+
     // Initialize variables for RAG
     let context = '';
     let retrievalResult: RetrievalResult | null = null;
@@ -2281,6 +2511,7 @@ Context:
             isGPTModel,
             ragMode,
             webSearchEnabled,
+            ...documentTokenBudgetOption,
           },
           signal: req.signal,
           trace: collector,
@@ -2313,7 +2544,7 @@ Context:
           query: queryText,
           profile: 'chat',
           documentRefs,
-          options: { generalOverview: true },
+          options: { generalOverview: true, ...documentTokenBudgetOption },
           signal: req.signal,
           trace: collector,
           ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
@@ -2772,7 +3003,7 @@ Context:
 
     // Modify the system prompt to prefer gmail_send_email over gmail_create_draft
     // Add email tool guidance to system prompt
-    let enhancedSystemPrompt = `${systemPrompt}\n\nIMPORTANT: When user says "send an email", use gmail_send_email tool, NOT gmail_create_draft.`;
+    let enhancedSystemPrompt = `${systemPrompt}${EMAIL_TOOL_PREFERENCE}`;
 
     // Add multi-step instructions if handling multi-step query
     if (isHandlingMultiStep && multiStepMetadata) {
@@ -2847,107 +3078,6 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       throw new Error('Last message must be from the user');
     }
 
-    // System message for handling Gmail attachments
-    const gmailAttachmentSystemMessage: ExtendedMessage = {
-      id: 'system-gmail-attachment-instruction',
-      role: 'system',
-      content: `When the user asks to send an email with generated media as an attachment:
-      
-      STEP 1: Find the generated media in the conversation history
-      - Look for messages with content parts of type: 'generated_image', 'generated_video', or 'generated_3d_model'
-      - These will have URLs in fields like: generated_images array, video_url, or model_url
-      
-      STEP 2: Extract the actual URL
-      - The URL will be a Supabase storage URL like: https://...supabase.co/storage/v1/object/public/chat-images/...
-      - DO NOT use placeholder text like "[Generated Image]"
-      
-      STEP 3: Format your Gmail tool call with BOTH instructions and structured parameters:
-      {
-        "instructions": "Create a draft email to recipient@example.com with subject and body",
-        "to": "recipient@example.com",
-        "subject": "Email subject",
-        "body": "Email body text",
-        "attachment_url": "[THE ACTUAL SUPABASE URL]"
-      }
-      
-      IMPORTANT:
-      - Include BOTH the 'instructions' field AND the structured parameters
-      - The 'instructions' field should briefly describe what you're doing
-      - Send all parameters in a single object, NOT wrapped in an 'input' field
-      - The attachment_url MUST be the actual URL (starts with https://)
-      - The system will automatically convert attachment_url to the 'file' parameter
-      - DO NOT include the attachment URL in the body text
-      - Body text should be plain text (system will convert to HTML)
-      
-      If the user doesn't explicitly mention attaching the generated media but says something like "email this image" or "send this video", assume they want it as an attachment.`
-    };
-
-    // System message for handling media uploads to Google Drive
-    const mediaUploadSystemMessage: ExtendedMessage = {
-      id: 'system-media-upload-instruction',
-      role: 'system',
-      content: `🚨 CRITICAL: When the user asks to upload media (images, videos, or 3D models) to Google Drive:
-
-      ⚠️ YOU HAVE ACCESS TO THE google_drive_upload_file TOOL - USE IT IMMEDIATELY!
-      
-      DO NOT ask "Could you please provide the image you want to upload?" - The user has already provided it.
-      DO NOT respond with text only - Call the google_drive_upload_file tool.
-      
-      When the user says "Upload this image to Google Drive" or similar:
-      
-      STEP 1: Find the media in the conversation history - check BOTH generated and attached media
-      
-      FOR GENERATED MEDIA:
-      - Look for messages with content parts of type: 'generated_image', 'generated_video', or 'generated_3d_model'
-      - These will have URLs in fields like: generated_images array, video_url, or model_url
-      - For generated_image: Look for content.generated_images[0] (array of URLs)
-      - For generated_video: Look for content.video_url or content.generated_videos[0]
-      - For generated_3d_model: Look for content.model_url
-      
-      FOR ATTACHED MEDIA:
-      - Look for user messages with image attachments
-      - These appear as message content arrays with image_url parts
-      - The system will automatically provide the correct image URL during tool execution
-      - DO NOT generate placeholder URLs like "https://supabase.co/storage/v1/object/public/chat-images/abc123.png"
-      
-      STEP 2: Extract the actual URL
-      - The URL will be a Supabase storage URL like: https://...supabase.co/storage/v1/object/public/chat-images/...
-      - DO NOT use placeholder text like "[Generated Image]" or descriptions
-      - Extract the ACTUAL URL string from the content part
-      
-      STEP 3: Call google_drive_upload_file with EXACTLY these parameters:
-      {
-        "instructions": "Upload [type] to Google Drive",
-        "file": "[THE ACTUAL URL YOU EXTRACTED OR LEAVE EMPTY FOR ATTACHED IMAGES]",
-        "new_name": "descriptive-name.ext"
-      }
-      
-      CRITICAL REMINDERS FOR ATTACHED IMAGES:
-      - If the user attached an image (not generated), DO NOT provide a fake URL in the 'file' parameter
-      - For attached images, provide minimal parameters: {"instructions": "Upload image to Google Drive", "new_name": "image.png"}
-      - The system will automatically inject the correct image URL during tool execution
-      - NEVER generate placeholder URLs like "https://supabase.co/storage/v1/object/public/chat-images/abc123.png"
-      
-      CRITICAL REMINDERS FOR GENERATED MEDIA:
-      - file MUST be the actual URL (starts with https://)
-      - If you see multiple images, use the first one or ask which to upload
-      - Common URL patterns:
-        * Images: https://...supabase.co/storage/v1/object/public/chat-images/[id].png
-        * Videos: https://...supabase.co/storage/v1/object/public/chat-videos/[id].mp4
-        * 3D Models: https://...supabase.co/storage/v1/object/public/3d-models/[id].glb
-      
-      Example of CORRECT extraction from conversation:
-      User: "Generate an image of a sunset"
-      Assistant: [Shows generated image with URL https://...supabase.co/storage/v1/object/public/chat-images/abc123.png]
-      User: "Upload this image to Google Drive"
-      
-      Your tool call MUST include:
-      {
-        "instructions": "Upload the sunset image to Google Drive",
-        "file_url": "https://...supabase.co/storage/v1/object/public/chat-images/abc123.png",
-        "filename": "sunset-image.png"
-      }`
-    };
 
     // Convert messages to AI SDK compatible format
     const convertedMessages = originalMessages.map(msg => {
@@ -3632,10 +3762,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           const exa = new Exa(exaApiKey);
 
           allTools['webSearch'] = tool({
-            description: 'Search the web for up-to-date information. Use this when you need current information about events, news, or facts that may have occurred after your training data.',
-            inputSchema: z.object({
-              query: z.string().min(1).max(100).describe('The search query to find information on the web'),
-            }),
+            description: WEB_SEARCH_TOOL_DESCRIPTION,
+            inputSchema: webSearchInputSchema,
             execute: async ({ query }) => {
               console.log('API ROUTE: Web search tool called with Exa, query:', query);
 
@@ -3733,67 +3861,6 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         });
       });
 
-      // Helper function to determine appropriate token limits for different models
-      function getMaxTokensForModel(modelId: string): number {
-        // Check for environment variable override
-        if (env.MAX_COMPLETION_TOKENS) {
-          const envLimit = parseInt(env.MAX_COMPLETION_TOKENS);
-          if (!isNaN(envLimit) && envLimit > 0) {
-            console.log('API ROUTE: Using MAX_COMPLETION_TOKENS from env:', envLimit);
-            return envLimit;
-          }
-        }
-
-        // Specific limits for Claude 4 models (newer generation with higher capacity)
-        if (modelId.includes('claude-sonnet-4') || modelId.includes('claude-4-sonnet')) {
-          console.log('API ROUTE: Using Claude Sonnet 4 token limit: 16384');
-          return 16384; // Conservative but sufficient for most responses (actual max is 64K)
-        }
-        if (modelId.includes('claude-opus-4') || modelId.includes('claude-4-opus')) {
-          console.log('API ROUTE: Using Claude Opus 4 token limit: 16384');
-          return 16384; // Conservative limit for Opus 4 (actual max is 32K)
-        }
-
-        // Specific limits for Claude 3.7/3.8 models
-        if (modelId.includes('claude-3.7') || modelId.includes('claude-3.8')) {
-          console.log('API ROUTE: Using Claude 3.7/3.8 token limit: 8192');
-          return 8192; // Higher limit for newer Claude 3 models
-        }
-
-        // Default for other Claude/Anthropic models
-        if (modelId.includes('claude') || modelId.includes('anthropic')) {
-          console.log('API ROUTE: Using default Claude model token limit: 4096');
-          return 4096; // Safe limit for older Claude models
-        }
-
-        // GPT models
-        if (modelId.includes('gpt-5-mini')) {
-          console.log('API ROUTE: Using GPT-5-mini token limit: 8192');
-          return 8192; // Higher limit for cheaper model
-        }
-        if (modelId.includes('gpt-5')) {
-          console.log('API ROUTE: Using GPT-5 token limit: 4096');
-          return 4096; // Conservative default
-        }
-        if (modelId.includes('gpt-4.1-mini')) {
-          console.log('API ROUTE: Using GPT-4.1-mini token limit: 8192');
-          return 8192; // Higher limit for cheaper model
-        }
-        if (modelId.includes('gpt-4.1')) {
-          console.log('API ROUTE: Using GPT-4.1 token limit: 4096');
-          return 4096; // Standard limit
-        }
-
-        // Llama models
-        if (modelId.includes('llama')) {
-          console.log('API ROUTE: Using Llama model token limit: 4096');
-          return 4096; // Standard limit for Llama
-        }
-
-        // Default for unknown models
-        console.log('API ROUTE: Using default token limit: 4096');
-        return 4096;
-      }
 
       // Debug logging for WhatsApp issue
       // console.log('[WHATSAPP DEBUG] ===== FULL PROMPT ANALYSIS =====');
