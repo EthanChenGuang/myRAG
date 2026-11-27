@@ -100,145 +100,7 @@ const BASES: Array<{ label: string; filters: RetrievalFilters }> = [
   { label: 'a base scope', filters: { currentOnly: true, scopes: ['region:south'] } },
 ];
 
-for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
-  const tenantA = mode === 'multi-tenant' ? `u:${FIXTURE_USER_ID}` : 's:default';
-
-  describe(`sub-question filters on hybrid_search_chunks (${mode})`, () => {
-    let db: PGlite;
-    let edge: FakeEdge;
-    let backend: RetrievalBackend;
-    let scopeA: TenantScope;
-    let owner: Map<string, string>;
-    let planModule: typeof import('../../src/lib/rag/query/plan.ts');
-    let subqModule: typeof import('../../src/lib/rag/query/subq-filters.ts');
-    let searchModule: typeof import('../../src/lib/rag/v2/stages/search.ts');
-    let accessModule: typeof import('../../src/lib/rag/tenant/access.ts');
-    let tokenize: typeof import('../../src/lib/rag/lexical/tokenize.ts');
-
-    before(async () => {
-      ({ db } = await createEmptyFixtureDatabase({ deploymentMode: mode }));
-      edge = await startFakeEdge({ db });
-      const env = fixtureProcessEnv(edge.url);
-      Object.assign(process.env, env);
-      const client = createClient(edge.url, env.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false, autoRefreshToken: false } });
-      const { createPgvectorBackend } = await import('../../src/lib/rag/backend/pgvector.ts');
-      const { loadRagConfig } = await import('../../src/lib/rag/config.ts');
-      const scopeModule = await import('../../src/lib/rag/tenant/scope.ts');
-      planModule = await import('../../src/lib/rag/query/plan.ts');
-      subqModule = await import('../../src/lib/rag/query/subq-filters.ts');
-      searchModule = await import('../../src/lib/rag/v2/stages/search.ts');
-      accessModule = await import('../../src/lib/rag/tenant/access.ts');
-      tokenize = await import('../../src/lib/rag/lexical/tokenize.ts');
-      const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', RAG_HNSW_ITERATIVE_SCAN: 'off', RAG_EXACT_SCAN_CUTOFF: '0' });
-      backend = createPgvectorBackend({ adminClient: () => client, getConfig: () => config, pgvectorVersion: () => null });
-      scopeA = mode === 'multi-tenant' ? scopeModule.mintScope('personal', FIXTURE_USER_ID, null) : scopeModule.mintScope('single', null, null);
-      owner = await seedRows(db, mode, tenantA, mode === 'multi-tenant' ? FIXTURE_USER_ID : null, SEEDS_A);
-      if (mode === 'multi-tenant') {
-        await db.query(
-          `INSERT INTO auth.users (id, email) VALUES ($1, 'tenant-b@example.invalid') ON CONFLICT (id) DO NOTHING`,
-          [USER_B],
-        ).catch(() => undefined);
-        for (const [chunk, key] of await seedRows(db, mode, `u:${USER_B}`, USER_B, SEEDS_B)) owner.set(chunk, key);
-      }
-    });
-
-    after(async () => {
-      await edge?.close();
-      await db?.close();
-    });
-
-    async function chunkIds(filters: RetrievalFilters, scope: TenantScope = scopeA): Promise<string[]> {
-      const legs = await backend.search({
-        scope,
-        embeddingProfileId: PROFILE,
-        denseVector: embedText(QUERY),
-        lexicalTokens: tokenize.queryLexicalTokens(QUERY),
-        lexicalLanguages: null,
-        filters,
-        denseLimit: 50,
-        lexicalLimit: 50,
-        access: accessModule.scopeAccessFilter(scope),
-        signal: new AbortController().signal,
-      } as BackendSearchRequest);
-      return [...new Set([...legs.dense, ...legs.lexical].map((hit) => hit.chunkId))].sort();
-    }
-
-    function vocabularyA() {
-      return {
-        docTypes: [...new Set(SEEDS_A.map((seed) => seed.docType))],
-        languages: ['en', 'it', 'zh'],
-        scopes: [...new Set(SEEDS_A.flatMap((seed) => seed.scopes))].map((tag) => ({ dimension: tag.split(':')[0]!, slug: tag.split(':')[1]! })),
-      };
-    }
-
-    /** The production path: narrowFilters, the plan's variant, then the search stage's intersection with the shared filters. */
-    function variantFilters(base: RetrievalFilters, proposal: SubQuestionFilter | null): { filters: RetrievalFilters; status: string } {
-      const { currentOnly: _currentOnly, ...baseInput } = base;
-      const narrowed = subqModule.narrowFilters(baseInput, proposal, vocabularyA());
-      const plan = planModule.buildQueryPlan({
-        original: QUERY,
-        gate: { rewrite: true, transforms: ['decompose'], reasons: ['compound'], lang: 'en', protectedTokens: [] } as never,
-        framework: 'llamaindex',
-        subQuestions: [`${QUERY} part`],
-        subQuestionSpecs: [{ text: `${QUERY} part`, filter: narrowed.applied }],
-      });
-      const variant = planModule.planToVariants(plan).find((item) => item.kind === 'sub_question');
-      assert.ok(variant, 'the sub-question variant is planned');
-      return { filters: searchModule.applyVariantFilters(base, variant), status: narrowed.status };
-    }
-
-    test('the fixture holds every seeded row of tenant A under its key', async () => {
-      const ids = await chunkIds({ currentOnly: true });
-      assert.equal(ids.length, SEEDS_A.length);
-      assert.ok(ids.every((id) => owner.get(id) === tenantA));
-    });
-
-    for (const base of BASES) {
-      for (const proposal of PROPOSALS) {
-        test(`${proposal.label} under ${base.label}: the narrowed result is a subset of the base result`, async () => {
-          const baseIds = await chunkIds(base.filters);
-          const { filters, status } = variantFilters(base.filters, proposal.filter);
-          const narrowedIds = await chunkIds(filters);
-          const outside = narrowedIds.filter((id) => !baseIds.includes(id));
-          assert.deepEqual(outside, [], `${status}: narrowed returned rows outside the base`);
-          assert.ok(narrowedIds.every((id) => owner.get(id) === tenantA), 'only tenant A rows');
-        });
-      }
-    }
-
-    test('a narrowing filter returns fewer rows than its base, and only the matching ones', async () => {
-      const { filters } = variantFilters({ currentOnly: true }, PROPOSALS[2]!.filter);
-      const ids = await chunkIds(filters);
-      assert.equal(ids.length, SEEDS_A.filter((seed) => seed.docType === 'contract_legal').length);
-      const rows = await db.query<{ doc_type: string }>('SELECT doc_type FROM document_chunks WHERE id = ANY($1::uuid[])', [ids]);
-      assert.ok(rows.rows.every((row) => row.doc_type === 'contract_legal'));
-    });
-
-    test("a proposal naming another tenant's doc type or scope slug is dropped for tenant A, and no foreign chunk is returned", async () => {
-      const foreign: SubQuestionFilter = { date_range: null, doc_types: ['invoice_receipt'], languages: null, scopes: { region: ['east'] } };
-      const { filters, status } = variantFilters({ currentOnly: true }, foreign);
-      assert.equal(status, 'dropped_unknown_values');
-      assert.deepEqual(filters, { currentOnly: true });
-      const ids = await chunkIds(filters);
-      assert.ok(ids.length > 0);
-      for (const id of ids) assert.equal(owner.get(id), tenantA, 'no tenant B chunk in tenant A results');
-      if (mode === 'multi-tenant') {
-        const direct = await chunkIds({ currentOnly: true, docTypes: ['invoice_receipt'], scopes: ['region:east'] });
-        assert.deepEqual(direct, [], "even a filter on tenant B's values reads only tenant A");
-      }
-    });
-
-    test('the retry filters (the shared base) never widen past the base and stay in the tenant', async () => {
-      const base: RetrievalFilters = { currentOnly: true, docTypes: ['general'] };
-      const { filters } = variantFilters(base, { date_range: { from: '1990-01-01', to: '1990-12-31' }, doc_types: null, languages: null, scopes: null });
-      assert.deepEqual(await chunkIds(filters), [], 'the filtered search is empty');
-      const retryIds = await chunkIds(base);
-      assert.ok(retryIds.length > 0);
-      assert.ok(retryIds.every((id) => owner.get(id) === tenantA));
-    });
-  });
-}
-
+// Runs first: the in-process eval route reads the process environment the per-mode suites below change.
 describe('end to end: a scripted filter-returning decomposer through the eval route (single-tenant)', () => {
   const QUESTION = `How did the ${TOKEN} ledger figures differ between 2025 and 2026?`;
   const SUB_2025 = `What were the ${TOKEN} ledger figures in 2025?`;
@@ -353,3 +215,146 @@ describe('end to end: a scripted filter-returning decomposer through the eval ro
     assert.ok(fromList(index2026).length > 0, 'the 2026 part still retrieved through the retry');
   });
 });
+
+for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
+  const tenantA = mode === 'multi-tenant' ? `u:${FIXTURE_USER_ID}` : 's:default';
+
+  describe(`sub-question filters on hybrid_search_chunks (${mode})`, () => {
+    let db: PGlite;
+    let edge: FakeEdge;
+    let backend: RetrievalBackend;
+    let scopeA: TenantScope;
+    let owner: Map<string, string>;
+    let planModule: typeof import('../../src/lib/rag/query/plan.ts');
+    let subqModule: typeof import('../../src/lib/rag/query/subq-filters.ts');
+    let searchModule: typeof import('../../src/lib/rag/v2/stages/search.ts');
+    let accessModule: typeof import('../../src/lib/rag/tenant/access.ts');
+    let tokenize: typeof import('../../src/lib/rag/lexical/tokenize.ts');
+
+    const savedEnv = { ...process.env };
+
+    before(async () => {
+      ({ db } = await createEmptyFixtureDatabase({ deploymentMode: mode }));
+      edge = await startFakeEdge({ db });
+      const env = fixtureProcessEnv(edge.url);
+      Object.assign(process.env, env);
+      const client = createClient(edge.url, env.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false, autoRefreshToken: false } });
+      const { createPgvectorBackend } = await import('../../src/lib/rag/backend/pgvector.ts');
+      const { loadRagConfig } = await import('../../src/lib/rag/config.ts');
+      const scopeModule = await import('../../src/lib/rag/tenant/scope.ts');
+      planModule = await import('../../src/lib/rag/query/plan.ts');
+      subqModule = await import('../../src/lib/rag/query/subq-filters.ts');
+      searchModule = await import('../../src/lib/rag/v2/stages/search.ts');
+      accessModule = await import('../../src/lib/rag/tenant/access.ts');
+      tokenize = await import('../../src/lib/rag/lexical/tokenize.ts');
+      const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', RAG_HNSW_ITERATIVE_SCAN: 'off', RAG_EXACT_SCAN_CUTOFF: '0' });
+      backend = createPgvectorBackend({ adminClient: () => client, getConfig: () => config, pgvectorVersion: () => null });
+      scopeA = mode === 'multi-tenant' ? scopeModule.mintScope('personal', FIXTURE_USER_ID, null) : scopeModule.mintScope('single', null, null);
+      owner = await seedRows(db, mode, tenantA, mode === 'multi-tenant' ? FIXTURE_USER_ID : null, SEEDS_A);
+      if (mode === 'multi-tenant') {
+        await db.query(
+          `INSERT INTO auth.users (id, email) VALUES ($1, 'tenant-b@example.invalid') ON CONFLICT (id) DO NOTHING`,
+          [USER_B],
+        ).catch(() => undefined);
+        for (const [chunk, key] of await seedRows(db, mode, `u:${USER_B}`, USER_B, SEEDS_B)) owner.set(chunk, key);
+      }
+    });
+
+    after(async () => {
+      await edge?.close();
+      await db?.close();
+      for (const key of Object.keys(process.env)) if (!(key in savedEnv)) delete process.env[key];
+      Object.assign(process.env, savedEnv);
+    });
+
+    async function chunkIds(filters: RetrievalFilters, scope: TenantScope = scopeA): Promise<string[]> {
+      const legs = await backend.search({
+        scope,
+        embeddingProfileId: PROFILE,
+        denseVector: embedText(QUERY),
+        lexicalTokens: tokenize.queryLexicalTokens(QUERY),
+        lexicalLanguages: null,
+        filters,
+        denseLimit: 50,
+        lexicalLimit: 50,
+        access: accessModule.scopeAccessFilter(scope),
+        signal: new AbortController().signal,
+      } as BackendSearchRequest);
+      return [...new Set([...legs.dense, ...legs.lexical].map((hit) => hit.chunkId))].sort();
+    }
+
+    function vocabularyA() {
+      return {
+        docTypes: [...new Set(SEEDS_A.map((seed) => seed.docType))],
+        languages: ['en', 'it', 'zh'],
+        scopes: [...new Set(SEEDS_A.flatMap((seed) => seed.scopes))].map((tag) => ({ dimension: tag.split(':')[0]!, slug: tag.split(':')[1]! })),
+      };
+    }
+
+    /** The production path: narrowFilters, the plan's variant, then the search stage's intersection with the shared filters. */
+    function variantFilters(base: RetrievalFilters, proposal: SubQuestionFilter | null): { filters: RetrievalFilters; status: string } {
+      const { currentOnly: _currentOnly, ...baseInput } = base;
+      const narrowed = subqModule.narrowFilters(baseInput, proposal, vocabularyA());
+      const plan = planModule.buildQueryPlan({
+        original: QUERY,
+        gate: { rewrite: true, transforms: ['decompose'], reasons: ['compound'], lang: 'en', protectedTokens: [] } as never,
+        framework: 'llamaindex',
+        subQuestions: [`${QUERY} part`],
+        subQuestionSpecs: [{ text: `${QUERY} part`, filter: narrowed.applied }],
+      });
+      const variant = planModule.planToVariants(plan).find((item) => item.kind === 'sub_question');
+      assert.ok(variant, 'the sub-question variant is planned');
+      return { filters: searchModule.applyVariantFilters(base, variant), status: narrowed.status };
+    }
+
+    test('the fixture holds every seeded row of tenant A under its key', async () => {
+      const ids = await chunkIds({ currentOnly: true });
+      assert.equal(ids.length, SEEDS_A.length);
+      assert.ok(ids.every((id) => owner.get(id) === tenantA));
+    });
+
+    for (const base of BASES) {
+      for (const proposal of PROPOSALS) {
+        test(`${proposal.label} under ${base.label}: the narrowed result is a subset of the base result`, async () => {
+          const baseIds = await chunkIds(base.filters);
+          const { filters, status } = variantFilters(base.filters, proposal.filter);
+          const narrowedIds = await chunkIds(filters);
+          const outside = narrowedIds.filter((id) => !baseIds.includes(id));
+          assert.deepEqual(outside, [], `${status}: narrowed returned rows outside the base`);
+          assert.ok(narrowedIds.every((id) => owner.get(id) === tenantA), 'only tenant A rows');
+        });
+      }
+    }
+
+    test('a narrowing filter returns fewer rows than its base, and only the matching ones', async () => {
+      const { filters } = variantFilters({ currentOnly: true }, PROPOSALS[2]!.filter);
+      const ids = await chunkIds(filters);
+      assert.equal(ids.length, SEEDS_A.filter((seed) => seed.docType === 'contract_legal').length);
+      const rows = await db.query<{ doc_type: string }>('SELECT doc_type FROM document_chunks WHERE id = ANY($1::uuid[])', [ids]);
+      assert.ok(rows.rows.every((row) => row.doc_type === 'contract_legal'));
+    });
+
+    test("a proposal naming another tenant's doc type or scope slug is dropped for tenant A, and no foreign chunk is returned", async () => {
+      const foreign: SubQuestionFilter = { date_range: null, doc_types: ['invoice_receipt'], languages: null, scopes: { region: ['east'] } };
+      const { filters, status } = variantFilters({ currentOnly: true }, foreign);
+      assert.equal(status, 'dropped_unknown_values');
+      assert.deepEqual(filters, { currentOnly: true });
+      const ids = await chunkIds(filters);
+      assert.ok(ids.length > 0);
+      for (const id of ids) assert.equal(owner.get(id), tenantA, 'no tenant B chunk in tenant A results');
+      if (mode === 'multi-tenant') {
+        const direct = await chunkIds({ currentOnly: true, docTypes: ['invoice_receipt'], scopes: ['region:east'] });
+        assert.deepEqual(direct, [], "even a filter on tenant B's values reads only tenant A");
+      }
+    });
+
+    test('the retry filters (the shared base) never widen past the base and stay in the tenant', async () => {
+      const base: RetrievalFilters = { currentOnly: true, docTypes: ['general'] };
+      const { filters } = variantFilters(base, { date_range: { from: '1990-01-01', to: '1990-12-31' }, doc_types: null, languages: null, scopes: null });
+      assert.deepEqual(await chunkIds(filters), [], 'the filtered search is empty');
+      const retryIds = await chunkIds(base);
+      assert.ok(retryIds.length > 0);
+      assert.ok(retryIds.every((id) => owner.get(id) === tenantA));
+    });
+  });
+}
