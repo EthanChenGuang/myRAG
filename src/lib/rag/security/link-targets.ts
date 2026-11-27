@@ -1,10 +1,11 @@
 import { domainToASCII } from 'node:url';
 
 import { findCitationMarkers } from '@/lib/citations/marker-grammar';
-import { OutputGuardRulesSchema, type OutputGuardRules } from '@/lib/rag-eval/contracts.generated';
+import type { OutputGuardRules } from '@/lib/rag-eval/contracts.generated';
 import { isAllowedImageUrl, type ImageHostAllowlist } from '@/lib/safe-image-hosts';
 import rawRules from '../../../../config/rag/output-guard-rules.json';
 import tldSnapshot from '../../../../config/rag/tld-snapshot.json';
+import { parseOutputGuardRules } from './credential-rules';
 import { isAllowedHost, parseLinkAllowlist } from './link-allowlist';
 
 /**
@@ -79,7 +80,7 @@ export interface CompiledOutputGuardRules {
 
 /** Validates an output-guard rules document (OutputGuardRules) and compiles its patterns; throws when it is invalid. */
 export function compileOutputGuardRules(raw: unknown): CompiledOutputGuardRules {
-  const rules = OutputGuardRulesSchema.parse(raw);
+  const rules = parseOutputGuardRules(raw);
   return {
     version: rules.version,
     rules,
