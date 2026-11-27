@@ -30,6 +30,7 @@ function request(signal: AbortSignal = new AbortController().signal, extra: Part
     denseVector: [0.1, 0.2],
     lexicalTokens: ['token'],
     lexicalLanguages: null,
+    access: { mode: 'off' },
     filters: { currentOnly: true },
     denseLimit: 5,
     lexicalLimit: 5,

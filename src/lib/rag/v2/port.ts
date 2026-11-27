@@ -6,6 +6,7 @@ import type { LexicalOptions } from '../lexical/options';
 import { queryLexicalTokens } from '../lexical/tokenize';
 import { variantDenseTexts } from '../query/variants';
 import type { RetrievalPort, RetrievalPortHit, RetrievalPortLists, RetrievalPortVariant } from '../query/port-types';
+import { scopeAccessFilter, type ScopeAccessFilter } from '../tenant/access';
 import type { TenantScope } from '../tenant/scope';
 import type { QueryVariant } from '../types';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
@@ -30,6 +31,8 @@ export interface RetrievalPortContext {
   terminologyDenseWeight?: number;
   /** LANG-07: the tenant's query-side lexical options; absent tokenizes with the defaults. */
   lexicalOptions?: LexicalOptions;
+  /** D-05: the request's access filter, computed once by runRetrieval; absent reads it from the scope. */
+  access?: ScopeAccessFilter;
 }
 
 /** Server-side view of a port: the search stage reads the collected legs; the framework only ever sees `port`. */
@@ -67,6 +70,8 @@ export function variantSearchRequest(args: {
   identifiersNorm?: string[];
   /** LANG-07: the tenant's query-side lexical options; absent tokenizes with the defaults. */
   lexicalOptions?: LexicalOptions;
+  /** D-05: absent reads scopeAccessFilter(scope). */
+  access?: ScopeAccessFilter;
 }): BackendSearchRequest {
   const { variant, embedding } = args;
   // P-6: a dense-only variant (HyDE) sends no lexical tokens, so it contributes no lexical list.
@@ -79,6 +84,7 @@ export function variantSearchRequest(args: {
     lexicalTokens: useLexical ? queryLexicalTokens(variant.text, variantLexicalOptions(args.lexicalOptions, variant)) : [],
     lexicalLanguages: lexicalLanguagesFor(variant),
     filters: args.filters,
+    access: args.access ?? scopeAccessFilter(args.scope),
     denseLimit: args.pool,
     lexicalLimit: args.pool,
     signal: args.signal,
@@ -161,6 +167,7 @@ export function createRetrievalPort(ctx: RetrievalPortContext): RetrievalPortHan
           ...(ctx.versionScope !== undefined ? { versionScope: ctx.versionScope } : {}),
           ...(ctx.identifiersNorm !== undefined ? { identifiersNorm: ctx.identifiersNorm } : {}),
           ...(ctx.lexicalOptions ? { lexicalOptions: ctx.lexicalOptions } : {}),
+          ...(ctx.access ? { access: ctx.access } : {}),
         }),
       );
       collected.set(index, legs);

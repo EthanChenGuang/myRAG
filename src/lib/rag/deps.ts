@@ -71,8 +71,15 @@ function semanticCacheIo(deps: RagDeps): SemanticCacheIo {
 }
 
 /** LangSmith/LangChain tracing switches as LangChain itself reads them (process.env); names only matter to the config check. */
+const LANGCHAIN_TRACING_NAME = /^(?:LANGSMITH_|LANGCHAIN_TRACING)/u;
+
+// Runs on every ragEnv() read: names are filtered first so only matching values are read (Object.entries on process.env reads them all).
 export function langchainTracingEnv(source: Readonly<Record<string, string | undefined>> = process.env): Record<string, string | undefined> {
-  return Object.fromEntries(Object.entries(source).filter(([name]) => /^(?:LANGSMITH_|LANGCHAIN_TRACING)/u.test(name)));
+  const out: Record<string, string | undefined> = {};
+  for (const name of Object.keys(source)) {
+    if (LANGCHAIN_TRACING_NAME.test(name)) out[name] = source[name];
+  }
+  return out;
 }
 
 function readRagEnvInput(): RagEnvInput {
@@ -83,6 +90,8 @@ function readRagEnvInput(): RagEnvInput {
     RAG_DISABLED_STAGES: process.env.RAG_DISABLED_STAGES ?? env.RAG_DISABLED_STAGES,
     RAG_STAGE_TIMEOUTS: process.env.RAG_STAGE_TIMEOUTS ?? env.RAG_STAGE_TIMEOUTS,
     RAG_EXACT_ID_LOOKUP: process.env.RAG_EXACT_ID_LOOKUP ?? env.RAG_EXACT_ID_LOOKUP,
+    RAG_DOC_ACCESS_GROUPS: process.env.RAG_DOC_ACCESS_GROUPS ?? env.RAG_DOC_ACCESS_GROUPS,
+    RAG_EMBED_ACCESS_GROUP: process.env.RAG_EMBED_ACCESS_GROUP ?? env.RAG_EMBED_ACCESS_GROUP,
     RAG_LEXICAL_SEARCH: process.env.RAG_LEXICAL_SEARCH ?? env.RAG_LEXICAL_SEARCH,
     RAG_RERANKER: process.env.RAG_RERANKER ?? env.RAG_RERANKER,
     RAG_RERANK_TIER_CHAT: process.env.RAG_RERANK_TIER_CHAT ?? env.RAG_RERANK_TIER_CHAT,

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import type { RagConfig } from '../config';
+import { accessRpcArgs, sameAccessFilter } from '../tenant/access-filter';
 import { assertTenantScope, scopeKey } from '../tenant/scope';
 import {
   EmbeddingProfileMismatchError,
@@ -50,7 +51,11 @@ interface HybridRow {
   document_version?: number | null;
 }
 
-export const PGVECTOR_CAPABILITIES: Readonly<Required<BackendCapabilities>> = Object.freeze({ versionScope: true, identifierFilter: true });
+export const PGVECTOR_CAPABILITIES: Readonly<Required<BackendCapabilities>> = Object.freeze({
+  versionScope: true,
+  identifierFilter: true,
+  accessFilter: true,
+});
 
 /** The p_version_scope argument for a scope, or null when the request reads current versions only (the argument is then left out). */
 export function versionScopeArg(scope: VersionScope | undefined): Record<string, string> | null {
@@ -161,6 +166,7 @@ function buildRpcArgs(req: BackendSearchRequest, config: RagConfig): Record<stri
     ...scopeArgs(filters),
     ...(filters.effectiveOn ? { p_effective_on: filters.effectiveOn } : {}),
     ...versionAndIdentifierArgs(req.versionScope, req.identifiersNorm),
+    ...accessRpcArgs(req.access),
   };
 }
 
@@ -273,6 +279,12 @@ export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBacke
     capabilities: PGVECTOR_CAPABILITIES,
     async search(req: BackendSearchRequest): Promise<BackendLegs> {
       assertTenantScope(req.scope);
+      // D-05: the request's filter must be the one its scope resolves to; a mismatch never reaches SQL.
+      // Loaded lazily: tenant/access reads the RAG config through deps, which modules importing this file (table-lookup) must not load.
+      const { scopeAccessFilter } = await import('../tenant/access');
+      if (!req.access || !sameAccessFilter(req.access, scopeAccessFilter(req.scope))) {
+        throw new RetrievalBackendError('hybrid_search_chunks', 'access_filter_mismatch');
+      }
       const client = deps.adminClient();
       if (!client) throw new RetrievalBackendError('hybrid_search_chunks', 'admin_unavailable');
       const config = deps.getConfig();

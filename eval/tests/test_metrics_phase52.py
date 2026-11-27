@@ -333,3 +333,16 @@ def test_the_report_groups_each_metric_by_language_and_category_and_adds_uncited
 def test_an_all_off_run_has_no_answer_rule_section():
     trace = _trace(PARTIAL.id, answer="An answer.", phase52=False)
     assert answer_rule_metrics([trace], [PARTIAL]) is None
+
+
+def test_truncation_rate_counts_answers_that_stopped_at_the_output_cap():
+    """05.2-38 (D-34, D-62 b): truncation_rate is answers with finish_reason length over answers with a finish reason."""
+    cut = _trace(PARTIAL.id, answer="A cut answer").model_copy(update={"finish_reason": "length"})
+    whole = _trace(STALE.id, answer="19:15. [S2]").model_copy(update={"finish_reason": "stop"})
+    unknown = _trace(OFF_TOPIC.id, answer="An answer.")
+    report = answer_rule_metrics([cut, whole, unknown], [PARTIAL, STALE, OFF_TOPIC])
+    assert report is not None and report.truncation_rate is not None
+    assert report.truncation_rate.overall.value == 0.5 and report.truncation_rate.overall.n == 2
+    assert report.truncation_rate.by_category["partial_answer"].value == 1.0
+    no_finish = answer_rule_metrics([unknown], [OFF_TOPIC])
+    assert no_finish is not None and no_finish.truncation_rate is None

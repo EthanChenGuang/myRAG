@@ -10,6 +10,7 @@ import { assembleVoiceResults, voiceContext, type VoiceResults } from '../contex
 import { validResultCount, warnInjectionCheckDisabled } from '../config';
 import { downweightOrder, failure, injectionDropped, requireValue, runInjectionStage, runStage, stageSpec, StageError } from '../pipeline';
 import { injectionItems, releasedRulesFromRows } from '../security/injection-check';
+import { scopeAccessFilter, type ScopeAccessFilter } from '../tenant/access';
 import { assertTenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
 import type { FusedHit } from '../fusion/rrf';
@@ -75,13 +76,19 @@ function queryLayerHashFor(input: RunRetrievalInput, config: ReturnType<typeof l
   return queryLayerHashComponent(effectiveQueryLayerConfig(config.queryLayer, overrides), effectiveQueryParams(profile, overrides?.queryParams));
 }
 
-export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
+export async function runV2Pipeline(
+  input: RunRetrievalInput,
+  collector: TraceCollector,
+  accessFilter?: ScopeAccessFilter,
+): Promise<RetrievalResult> {
   const deps = getRagDeps();
   const scope = input.scope;
 
   if (scope === null) {
     return failure(collector, 'empty', 'no_tenant', null);
   }
+  // D-05, D-09: computed once per request by runRetrieval; a direct caller reads it here (a missing scope throws while the switch is on).
+  const access = accessFilter ?? scopeAccessFilter(scope);
 
   const { signal, profile } = input;
   const config = loadRagConfig(deps.ragEnv());
@@ -298,6 +305,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       ...(query.terminology ? { terminologyDenseWeight: query.terminology.denseWeight } : {}),
       ...(queryLexical ? { lexical: queryLexical } : {}),
       ...(query.attributes ? { attributes: query.attributes } : {}),
+      access,
     });
 
     // D-31, D-51: strict with no asked identifier in the tenant answers nothing; rank and context are not run for it.

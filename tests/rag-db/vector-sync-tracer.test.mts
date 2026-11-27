@@ -64,6 +64,7 @@ function request(scope: TenantScope): BackendSearchRequest {
     denseVector: embedText(QUERY),
     lexicalTokens: queryLexicalTokens(QUERY),
     lexicalLanguages: null,
+    access: { mode: 'off' },
     filters: { currentOnly: true },
     denseLimit: 50,
     lexicalLimit: 50,

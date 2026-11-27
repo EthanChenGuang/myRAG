@@ -986,8 +986,15 @@ def answer_rule_metrics(traces: list[RagTrace], golden: list[GoldenItem], *, rag
             rows["mixed_versions_rate"].append((item, mixed_versions(trace, item)))
         elif item.category == OFF_TOPIC_CONTEXT and item.off_topic is not None:
             rows["adjacent_repurpose_rate"].append((item, adjacent_repurpose(trace, item, rag_mode)))
+    truncation: list[tuple[GoldenItem, float]] = []
+    for trace in traces:
+        item = items.get(trace.item_id) if trace.item_id is not None else None
+        # D-34: the output-cap sweep's rule; answers with a finish reason, 1 when the model stopped at the cap.
+        if item is not None and trace.answer is not None and trace.finish_reason is not None:
+            truncation.append((item, 1.0 if trace.finish_reason == "length" else 0.0))
     fields = {name: _rule_metric(values) for name, values in rows.items()}
     fields["uncited_sentence_rate"] = _rule_metric(uncited)
+    fields["truncation_rate"] = _rule_metric(truncation)
     return AnswerRulesReport(**{name: metric for name, metric in fields.items() if metric is not None})
 
 

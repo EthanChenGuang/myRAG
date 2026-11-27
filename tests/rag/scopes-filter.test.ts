@@ -54,6 +54,7 @@ function baseRequest(filters: RetrievalFilters): BackendSearchRequest {
     denseVector: [0.1, 0.2, 0.3],
     lexicalTokens: ['term'],
     lexicalLanguages: null,
+    access: { mode: 'off' },
     filters,
     denseLimit: 5,
     lexicalLimit: 7,
