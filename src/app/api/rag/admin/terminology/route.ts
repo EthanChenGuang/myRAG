@@ -22,6 +22,9 @@ export async function GET(request: Request): Promise<Response> {
     limit: query.limit ?? undefined,
     offset: query.offset ?? undefined,
     search: query.search ?? null,
+    kind: query.kind ?? null,
+    sourceLanguage: query.source_language ?? null,
+    targetLanguage: query.target_language ?? null,
     signal: request.signal,
   });
   if (!result.ok) return failure(result);

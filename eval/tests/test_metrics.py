@@ -1006,7 +1006,7 @@ PHASE42_CORPUS_FILES_04_2_37 = {
 P52_CORPUS_FILES_05_2_28 = {
     f"{language}/{name}.{language}.md"
     for language in ("en", "it", "zh")
-    for name in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links")
+    for name in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links", "sec-link-topics")
 }
 # Plan 05.3-15 added these later; they are removed too before the pre-terms hash is compared.
 PHASE53_CORPUS_FILES = {
@@ -1156,7 +1156,8 @@ def test_the_04_2_37_baselines_add_only_phase42_items_and_move_no_old_item(tmp_p
 def test_the_train_31_baselines_add_only_phase53_items_and_move_only_refusal_rates(name):
     """Train 31: both baselines re-recorded on top of train 30 with the 05.3-15 items and its answers-on smoke harness.
     The added items are exactly the phase53_fixture items; an earlier item keeps its retrieval metrics, and only its
-    refusal rates may move (answers-on scoring reads refusals from the answer, 05.3-15)."""
+    refusal rates may move (answers-on scoring reads refusals from the answer, 05.3-15). Train 33 re-recorded them once more
+    with the 48 Phase 5.2 items of plan 05.2-29; train 36 adds the 03.3-20 templated items to the ingest baseline."""
     from pathlib import Path
 
     from rag_sidecar.contracts.baseline import Baseline
@@ -1175,8 +1176,23 @@ def test_the_train_31_baselines_add_only_phase53_items_and_move_only_refusal_rat
         )
     }
     phase53 = {item_id for item_id, item in golden.items() if "phase53_fixture" in item.tags}
-    assert len(phase53) == 25
-    assert set(current.items) - set(previous.items) == phase53
+    phase52 = {
+        item_id
+        for item_id, item in golden.items()
+        if item.category in ("partial_answer", "stale_version", "off_topic_context") or "link_injection" in item.tags
+    }
+    assert len(phase53) == 25 and len(phase52) == 48
+    # Train 36: 03.3-20 re-recorded the ingest baseline with its templated collection (ids ingest-tpl-*), the only other addition there.
+    templated = (
+        {
+            json.loads(line)["id"]
+            for line in (root / "fixtures" / "ingest" / "golden-ingest.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip() and json.loads(line)["id"].startswith("ingest-tpl-")
+        }
+        if name == "fixture-ingest-baseline"
+        else set()
+    )
+    assert set(current.items) - set(previous.items) == phase53 | phase52 | templated
     assert set(previous.items) <= set(current.items)
     for item_id, metrics in previous.items.items():
         for metric, values in metrics.items():
@@ -1295,3 +1311,13 @@ def test_without_statuses_nothing_is_excluded_for_lifecycle():
     rows = [_answerable_row(f"en-a-{i:03d}") for i in range(3)]
     exclusions = aggregate(rows)["population_exclusions"]
     assert exclusions == {"coverage_only": 0, "stale_count": 0, "retired_count": 0, "stale_share": 0.0}
+
+
+def test_topk_redundancy_reads_the_app_trace_value_when_present():
+    """04.2-32: the app computes the measure per (cluster id, value signature); the scorer uses that one value."""
+    item = _item("en-a-001", [(DOC, "gold sentence")])
+    clustered = _with_clusters(_trace("en-a-001", _filler(8)), ["c1", "c1"] + [None] * 6)
+    (cluster_only,) = score_items([clustered], [item])
+    assert cluster_only.topk_redundancy == 0.25
+    (from_app,) = score_items([clustered.model_copy(update={"topk_redundancy": 0.125})], [item])
+    assert from_app.topk_redundancy == 0.125

@@ -1,3 +1,4 @@
+import '../helpers/next-async-storage.mts';
 /**
  * D-26, D-55 (F-18): the pre-generation latency gate. The chat route, the embed route and the voice-rag handler run against the
  * fixture database with a fake model behind the OpenRouter URL, on the real clock. One warm-up turn per channel is excluded, and the

@@ -3,6 +3,7 @@
   "mode": "legacy",
   "provenances": [
     "production",
-    "human"
+    "human",
+    "historical"
   ]
 }

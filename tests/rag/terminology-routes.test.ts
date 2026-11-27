@@ -359,7 +359,49 @@ describe('validation and status mapping (D-24, D-35)', () => {
     expect(write.args).toMatchObject({ p_actor: ADMIN_ID, p_layer_key: 'shared' });
   });
 
-  it('answers 422 invalid_language for a language that is not enabled, and invalid_translation for equal languages', async () => {
+  it('fills the source language and one_way for a glossary pair that names only its language and target (06.2 D-13)', async () => {
+    const response = await (await load()).list.POST(
+      req(BASE, {
+        method: 'POST',
+        token: ADMIN,
+        body: entryBody({ canonical: 'term alpha beta', variants: ['术语甲乙丙'], language: HAN, kind: 'translation', target_language: LATIN }),
+      }),
+    );
+    expect(response.status).toBe(201);
+    const write = state.rpcCalls.find((call) => call.fn === 'rag_term_upsert_entry')!;
+    expect(write.args.p_entry).toMatchObject({ kind: 'translation', mode: 'one_way', source_language: HAN, target_language: LATIN });
+  });
+
+  it('answers 422 target_language_required for a glossary pair without a target and writes nothing', async () => {
+    const response = await (await load()).list.POST(
+      req(BASE, { method: 'POST', token: ADMIN, body: entryBody({ canonical: 'term alpha beta', variants: ['术语甲乙丙'], language: HAN, kind: 'translation' }) }),
+    );
+    expect(response.status).toBe(422);
+    expect((await response.json()).issues.map((issue: { code: string }) => issue.code)).toContain('target_language_required');
+    expect(state.rpcCalls.some((call) => call.fn === 'rag_term_upsert_entry')).toBe(false);
+  });
+
+  it('passes the Glossary filters to the list read and returns target_language null where a row has none (06.2 D-15)', async () => {
+    state.layers.shared!.rows = [stored('shared', 'term alpha beta', ['termalpha'])];
+    const response = await (await load()).list.GET(req(`${BASE}?layer=shared&kind=translation&source_language=${HAN}&target_language=${LATIN}`, { token: ADMIN }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.items[0]).toMatchObject({ target_language: null });
+    expect(state.rpcCalls[0]!.args).toMatchObject({ p_kind: 'translation', p_source_language: HAN, p_target_language: LATIN });
+
+    state.rpcCalls = [];
+    await (await load()).list.GET(req(`${BASE}?layer=shared`, { token: ADMIN }));
+    expect(state.rpcCalls[0]!.args).toMatchObject({ p_kind: null, p_source_language: null, p_target_language: null });
+  });
+
+  it('answers 400 for an unknown kind or a malformed language filter', async () => {
+    const loaded = await load();
+    expect((await loaded.list.GET(req(`${BASE}?kind=glossary`, { token: ADMIN }))).status).toBe(400);
+    expect((await loaded.list.GET(req(`${BASE}?target_language=EN%20US`, { token: ADMIN }))).status).toBe(400);
+    expect((await loaded.list.GET(req(`${BASE}?source_language=${'x'.repeat(40)}`, { token: ADMIN }))).status).toBe(400);
+  });
+
+  it('answers 422 invalid_language for a language that is not enabled, and target_language_same for equal languages', async () => {
     state.languages = [LATIN];
     const loaded = await load();
     const notEnabled = await loaded.list.POST(
@@ -377,7 +419,7 @@ describe('validation and status mapping (D-24, D-35)', () => {
       req(BASE, { method: 'POST', token: ADMIN, body: entryBody({ kind: 'translation', source_language: LATIN, target_language: LATIN }) }),
     );
     expect(equal.status).toBe(422);
-    expect((await equal.json()).issues.map((issue: { code: string }) => issue.code)).toContain('invalid_translation');
+    expect((await equal.json()).issues.map((issue: { code: string }) => issue.code)).toContain('target_language_same');
   });
 
   it('answers 409 with current_version for a stale PATCH', async () => {

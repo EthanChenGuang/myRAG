@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { accessGroupsEnabled, listReviewItems, openReviewSession, REVIEW_NO_STORE, ReviewListQuerySchema, reviewUnavailable } from '@/lib/rag';
+import { accessGroupsEnabled, listReviewItemsWithSource, openReviewSession, REVIEW_NO_STORE, ReviewListQuerySchema, reviewUnavailable } from '@/lib/rag';
 
 export const runtime = 'nodejs';
 
-/** D-16: the caller's visible review items, newest first, at most 50 per page. Filters: status, reason, language; no tag filter (D-29). */
+/** D-16: the caller's visible review items, newest first, at most 50 per page. Filters: status, reason, language and the strata source; no tag filter (D-29).
+ * Each item carries its rag_review_item_strata source, read with the admin client for the visible items only. */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await openReviewSession();
   if (!session.ok) return session.response;
@@ -25,13 +26,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    let masked: { admin: NonNullable<ReturnType<typeof getSupabaseAdmin>>; userId: string } | undefined;
-    if (accessGroupsEnabled()) {
-      const admin = getSupabaseAdmin();
-      if (!admin) return reviewUnavailable();
-      masked = { admin, userId: session.userId };
-    }
-    const result = await listReviewItems(session.ssr, parsed.data, masked);
+    const admin = getSupabaseAdmin();
+    if (!admin) return reviewUnavailable();
+    const masked = accessGroupsEnabled() ? { admin, userId: session.userId } : undefined;
+    const result = await listReviewItemsWithSource(session.ssr, admin, parsed.data, masked);
     if (!result.ok) {
       return NextResponse.json(
         { success: false, error: 'Invalid request data', details: [{ path: 'cursor', message: 'Invalid cursor' }] },

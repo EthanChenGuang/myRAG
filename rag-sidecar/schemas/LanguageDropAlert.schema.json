@@ -1,0 +1,107 @@
+{
+  "$defs": {
+    "LanguageWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "since": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "title": "Since",
+          "type": "string"
+        },
+        "until": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "title": "Until",
+          "type": "string"
+        }
+      },
+      "required": [
+        "since",
+        "until"
+      ],
+      "title": "LanguageWindow",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "LANG-10 alert: one language drops while the overall average holds; ids and counts only.",
+  "properties": {
+    "baseline_events": {
+      "minimum": 0,
+      "title": "Baseline Events",
+      "type": "integer"
+    },
+    "baseline_total": {
+      "minimum": 0,
+      "title": "Baseline Total",
+      "type": "integer"
+    },
+    "events": {
+      "minimum": 0,
+      "title": "Events",
+      "type": "integer"
+    },
+    "language": {
+      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+      "title": "Language",
+      "type": "string"
+    },
+    "metric": {
+      "enum": [
+        "refusal_rate",
+        "not_helpful_rate",
+        "kb_unavailable_rate",
+        "low_confidence_rate"
+      ],
+      "title": "Metric",
+      "type": "string"
+    },
+    "rule_id": {
+      "pattern": "^[a-z0-9_]+$",
+      "title": "Rule Id",
+      "type": "string"
+    },
+    "sample_trace_ids": {
+      "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+        "type": "string"
+      },
+      "maxItems": 10,
+      "title": "Sample Trace Ids",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "tenant_key": {
+      "anyOf": [
+        {
+          "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tenant Key"
+    },
+    "total": {
+      "minimum": 0,
+      "title": "Total",
+      "type": "integer"
+    },
+    "window": {
+      "$ref": "#/$defs/LanguageWindow"
+    }
+  },
+  "required": [
+    "rule_id",
+    "metric",
+    "language",
+    "events",
+    "total",
+    "baseline_events",
+    "baseline_total",
+    "window"
+  ],
+  "title": "LanguageDropAlert",
+  "type": "object"
+}

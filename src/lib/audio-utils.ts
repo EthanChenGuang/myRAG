@@ -573,6 +573,26 @@ async function appendChunkToSourceBuffer(chunk: Uint8Array): Promise<void> {
   });
 }
 
+export class VoiceUnavailableError extends Error {
+  readonly code = 'voice_unavailable';
+  constructor(message = 'Voice is temporarily unavailable.') {
+    super(message);
+    this.name = 'VoiceUnavailableError';
+  }
+}
+
+export function isVoiceUnavailableError(error: unknown): error is VoiceUnavailableError {
+  return error instanceof VoiceUnavailableError;
+}
+
+async function throwIfVoiceUnavailable(response: Response): Promise<void> {
+  if (response.status !== 503) return;
+  const body = await response.clone().json().catch(() => null) as { error?: unknown; message?: unknown } | null;
+  if (body?.error === 'voice_unavailable') {
+    throw new VoiceUnavailableError(typeof body.message === 'string' ? body.message : undefined);
+  }
+}
+
 export async function textToSpeech(text: string, onComplete?: () => void, options?: { provider?: string; voiceId?: string }): Promise<Blob> {
   // Debug: Starting Text-to-Speech
 
@@ -628,7 +648,16 @@ export async function textToSpeech(text: string, onComplete?: () => void, option
       console.log('[Audio] Using direct URL streaming for mobile (Fastest)');
 
       // Start playing immediately
-      await playAudio(getUrl);
+      try {
+        await playAudio(getUrl);
+      } catch (playError) {
+        const probe = await fetch(getUrl).catch(() => null);
+        if (probe) {
+          await throwIfVoiceUnavailable(probe);
+          await probe.body?.cancel().catch(() => {});
+        }
+        throw playError;
+      }
 
       // Return a dummy blob to satisfy type signature
       return new Blob([], { type: 'audio/mpeg' });
@@ -653,6 +682,7 @@ export async function textToSpeech(text: string, onComplete?: () => void, option
       body: formData,
     });
 
+    await throwIfVoiceUnavailable(response);
     if (!response.ok || !response.body) {
       throw new Error('Failed to convert text to speech');
     }
@@ -1027,6 +1057,7 @@ export async function speechToText(audioBlob: Blob, options?: { provider?: strin
     body: formData
   });
 
+  await throwIfVoiceUnavailable(response);
   if (!response.ok) {
     throw new Error('Failed to convert speech to text');
   }

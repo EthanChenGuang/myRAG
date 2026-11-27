@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { readAnswerConfig } from '../generation/answer-config';
 import { accessTableFilter, withAccessGroups, type ScopeAccessFilter } from '../tenant/access-filter';
 import type { AssemblyCandidate, AssemblyDocumentRow } from './assemble';
+import { fetchVersionPairs, type VersionPairRow } from './version-conflicts';
 
 export interface AssemblyRows {
   /**
@@ -11,6 +12,8 @@ export interface AssemblyRows {
    */
   documents: Map<string, AssemblyDocumentRow>;
   chunkMetadata: Map<string, Record<string, any> | null>;
+  /** D-52: the supersession rows between the request's documents; present only while RAG_VERSION_LABELS is on with a tenant key. */
+  versionPairs?: VersionPairRow[];
 }
 
 export interface FetchAssemblyRowsOptions {
@@ -18,6 +21,8 @@ export interface FetchAssemblyRowsOptions {
   signal: AbortSignal;
   /** D-11: the request's access filter; a restricted document or chunk row is never read back for a caller without its group. */
   access: ScopeAccessFilter;
+  /** The request's tenant key; the supersession rows are read only with it (T-05.2-223). */
+  tenantKey?: string;
 }
 
 const DOCUMENT_BASE_SELECT = 'id, filename, created_at, content, metadata';
@@ -66,7 +71,7 @@ function unique(values: string[]): string[] {
 
 export async function fetchAssemblyRows(
   candidates: AssemblyCandidate[],
-  { adminClient, signal, access }: FetchAssemblyRowsOptions,
+  { adminClient, signal, access, tenantKey }: FetchAssemblyRowsOptions,
 ): Promise<AssemblyRows> {
   const documents = new Map<string, AssemblyDocumentRow>();
   const chunkMetadata = new Map<string, Record<string, any> | null>();
@@ -98,6 +103,10 @@ export async function fetchAssemblyRows(
     chunkMetadata.set(row.id, row.metadata ?? null);
   }
 
+  if (tenantKey !== undefined && readAnswerConfig().versionLabels) {
+    const versionPairs = await fetchVersionPairs(adminClient, [...documents.keys()], { tenantKey, signal });
+    return { documents, chunkMetadata, versionPairs };
+  }
   return { documents, chunkMetadata };
 }
 

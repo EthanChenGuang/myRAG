@@ -29,6 +29,8 @@ from rag_sidecar.contracts.report import (
 
 from rag_eval.metrics import (
     POPULATION_EXCLUSIONS,
+    TEMPLATED_CATEGORY,
+    answer_rule_metrics,
     aggregate,
     citation_metrics,
     citation_run,
@@ -41,6 +43,8 @@ from rag_eval.metrics import (
     slices_by,
     strategy_key,
     table_split_report,
+    templated_boilerplate_share,
+    uncited_sentence_rate,
 )
 from rag_eval.native_review import MIN_GATED_ITEMS, REVIEWED_LANGUAGES, counts_in_gated_slices, review_backlog
 from rag_eval.paths import REPO_ROOT
@@ -268,11 +272,13 @@ def compute_strategy_slices(
         if faithfulness is not None:
             values = [faithfulness[t.item_id] for t in members if t.item_id is not None and t.item_id in faithfulness]
             faith = MetricValue(value=math.fsum(values) / len(values) if values else None, n=len(values))
+        uncited = uncited_sentence_rate(members)
         slices[key] = StrategySlice(
             items=len(members),
             generation_latency=_latency_stat(_generation_values(members)),
             faithfulness=faith,
             **metrics,
+            **({"uncited_sentence_rate": uncited} if uncited is not None else {}),
         )
     return slices
 
@@ -593,6 +599,17 @@ def skip_monolingual_slices(aggregated: dict[str, object], languages: tuple[str,
     )
 
 
+def _set_boilerplate_share(aggregated: dict[str, object], golden: list[GoldenItem], traces: list[RagTrace] | None) -> None:
+    """D-36: the boilerplate token share goes on the templated_collection category slice, only when the set holds such items."""
+    by_category = aggregated["by_category"]
+    if not traces or not any(item.category == TEMPLATED_CATEGORY for item in golden):
+        return
+    if not isinstance(by_category, dict) or TEMPLATED_CATEGORY not in by_category:
+        return
+    share = templated_boilerplate_share(traces)
+    by_category[TEMPLATED_CATEGORY] = by_category[TEMPLATED_CATEGORY].model_copy(update={"boilerplate_token_share": share})
+
+
 def build_report(
     manifest: RunManifest,
     results: list[ItemResult],
@@ -633,6 +650,7 @@ def build_report(
     skipped_note = skip_monolingual_slices(aggregated, languages)
     if skipped_note is not None:
         notes.append(skipped_note)
+    _set_boilerplate_share(aggregated, golden, traces)
     answer_fields: dict[str, object] = {}
     if traces:
         if citation_run(traces, requested=manifest.request_options.citations):
@@ -641,6 +659,9 @@ def build_report(
         answer_fields["groundedness_labels"] = groundedness_label_counts(traces, golden)
         answer_fields["groundedness_latency"] = compute_groundedness_latency(traces)
         answer_fields["injection"] = build_injection_report(golden, traces)
+        answer_rules = answer_rule_metrics(traces, golden, rag_mode=manifest.rag_mode)
+        if answer_rules is not None:
+            answer_fields["answer_rules"] = answer_rules
         if budgets is None and any(trace.query_plan is not None for trace in traces):
             budgets = load_latency_budgets()
         answer_fields["query_layer"] = build_query_layer_report(traces, results, budgets)
@@ -686,6 +707,12 @@ def _bound_cell(value: float | None) -> str:
 
 NDCG_LABEL = "nDCG@k"
 K_ZERO_LABEL = "k = 0"
+_SUBQ_COLUMNS = (
+    ("All-evidence@5", "all_evidence_recall_at_5"),
+    ("All-evidence@10", "all_evidence_recall_at_10"),
+    ("Sub-q coverage@5", "subq_coverage_at_5"),
+    ("Sub-q coverage@10", "subq_coverage_at_10"),
+)
 
 
 def _k_zero_cell(metric: MetricValue | None) -> str:
@@ -697,6 +724,9 @@ def _table(first_column: str, rows: dict[str, SliceMetrics]) -> list[str]:
     with_ndcg = any(metrics.ndcg_at_context_k is not None for metrics in rows.values())
     if with_ndcg:
         labels += [NDCG_LABEL, K_ZERO_LABEL]
+    with_subq = any(metrics.subq_coverage_at_10 is not None for metrics in rows.values())
+    if with_subq:
+        labels += [label for label, _ in _SUBQ_COLUMNS]
     header = "| " + " | ".join([first_column, *labels]) + " |"
     divider = "|" + "|".join(["---"] * (len(labels) + 1)) + "|"
     lines = [header, divider]
@@ -706,6 +736,8 @@ def _table(first_column: str, rows: dict[str, SliceMetrics]) -> list[str]:
         if with_ndcg:
             cells.append(_optional_cell(metrics.ndcg_at_context_k))
             cells.append(_k_zero_cell(metrics.k_zero))
+        if with_subq:
+            cells.extend(_optional_cell(getattr(metrics, field)) for _, field in _SUBQ_COLUMNS)
         lines.append("| " + " | ".join([name, *cells]) + " |")
     return lines
 
@@ -877,6 +909,48 @@ CONVERSATIONAL_NOTE = (
 )
 
 
+TEMPLATED_NOTE = (
+    "Templated collection (D-36): named-document recall at rank 5 and the wrong-document rate at rank 1 over "
+    "feature:attribute_named items, variant accuracy at rank 1, the quantity match rate at lexical rank 1, the attribute "
+    "filter fallback rate over items with a hard filter attempted, and the boilerplate token share of indexed templated chunks."
+)
+_TEMPLATED_RATES = (
+    ("Named-document recall@5", "named_document_recall"),
+    ("Wrong document @1", "wrong_document_at_1"),
+    ("Variant accuracy", "variant_accuracy"),
+    ("Quantity match rate", "quantity_match_rate"),
+    ("Filter fallback rate", "attribute_filter_fallback_rate"),
+)
+_TEMPLATED_ITEM_FIELDS = (
+    "named_document_hit",
+    "wrong_document_at_1",
+    "variant_correct",
+    "quantity_matched",
+    "attribute_filter_fallback",
+)
+
+
+def _templated_section(report: EvalReport) -> list[str]:
+    items = [item for item in report.items if any(getattr(item, field) is not None for field in _TEMPLATED_ITEM_FIELDS)]
+    share = report.by_category.get(TEMPLATED_CATEGORY)
+    share_metric = share.boilerplate_token_share if share is not None else None
+    if not items and share_metric is None:
+        return []
+    lines = [
+        "## Templated collection",
+        "",
+        TEMPLATED_NOTE,
+        "",
+        "| Slice | " + " | ".join(label for label, _ in _TEMPLATED_RATES) + " |",
+        "|" + "|".join(["---"] * (len(_TEMPLATED_RATES) + 1)) + "|",
+    ]
+    for name, metrics in (_per_language_rows(items) if items else {}).items():
+        cells = [_optional_cell(getattr(metrics, field)) for _, field in _TEMPLATED_RATES]
+        lines.append("| " + " | ".join([name, *cells]) + " |")
+    lines.extend(["", _metric_line("Boilerplate token share (category:templated_collection)", share_metric), ""])
+    return lines
+
+
 def _conversational_section(report: EvalReport) -> list[str]:
     items = [item for item in report.items if item.conversational_ok is not None]
     if not items:
@@ -915,7 +989,11 @@ def _strategy_section(report: EvalReport) -> list[str]:
         "| Strategy | Items | Invalid citation rate | Citation coverage | Cited gold hit | Dropped markers | "
         "Generation p50 (ms) | Generation p95 (ms) | Faithfulness |"
     )
-    lines = ["## By citation strategy (report-only)", "", STRATEGY_NOTE, "", header, "|" + "|".join(["---"] * 9) + "|"]
+    uncited = any(row.uncited_sentence_rate is not None for row in report.by_strategy.values())
+    columns = 9 + (1 if uncited else 0)
+    if uncited:
+        header += " Uncited sentence rate |"
+    lines = ["## By citation strategy (report-only)", "", STRATEGY_NOTE, "", header, "|" + "|".join(["---"] * columns) + "|"]
     judged = any(row.faithfulness is not None for row in report.by_strategy.values())
     for name, row in report.by_strategy.items():
         latency = row.generation_latency
@@ -930,6 +1008,8 @@ def _strategy_section(report: EvalReport) -> list[str]:
             _ms(latency.p95_ms if latency else None),
             faith,
         ]
+        if uncited:
+            cells.append(_optional_cell(row.uncited_sentence_rate))
         lines.append("| " + " | ".join([name, *cells]) + " |")
     lines.append("")
     if not judged:
@@ -1005,10 +1085,49 @@ def _injection_section(report: EvalReport) -> list[str]:
         success = block.attack_success_rate.get(key)
         lines.append(f"| {key} | {_optional_cell(exposure)} | {_optional_cell(success)} |")
     lines.append("")
+    if block.allowlisted_link_kept_rate:
+        lines.extend(["| Slice | allowlisted_link_kept_rate |", "|---|---|"])
+        lines.extend(f"| {key} | {_cell(value)} |" for key, value in block.allowlisted_link_kept_rate.items())
+        lines.append("")
     if block.false_positive_rate:
         lines.extend(["| Detector:language | False-positive rate |", "|---|---|"])
         lines.extend(f"| {key} | {_cell(value)} |" for key, value in block.false_positive_rate.items())
         lines.append("")
+    return lines
+
+
+ANSWER_RULES_NOTE = (
+    "D-21, D-54: read from each trace's sentence records and answer, never re-split here. uncited_sentence_rate is "
+    "factual sentences without a valid citation over factual sentences (report-only). unsupported_addition_rate and "
+    "covered_part_answered score partial_answer items, current_value_rate (the requested version's value and label) and "
+    "mixed_versions_rate (both values, a failure) stale_version items, adjacent_repurpose_rate off_topic_context items. "
+    "The smoke gate holds the three failure rates at 0 and covered_part_answered at 1 under the rule-following fake and "
+    "proves each violating fake is detected (D-54, D-62 b)."
+)
+ANSWER_RULE_FIELDS = (
+    "uncited_sentence_rate",
+    "unsupported_addition_rate",
+    "covered_part_answered",
+    "current_value_rate",
+    "mixed_versions_rate",
+    "adjacent_repurpose_rate",
+    "truncation_rate",
+)
+
+
+def _answer_rules_section(report: EvalReport) -> list[str]:
+    block = report.answer_rules
+    if block is None:
+        return []
+    lines = ["## Answer rules (Phase 5.2)", "", ANSWER_RULES_NOTE, "", "| Metric | Slice | Value |", "|---|---|---|"]
+    for name in ANSWER_RULE_FIELDS:
+        metric = getattr(block, name)
+        if metric is None:
+            continue
+        lines.append(f"| {name} | overall | {_optional_cell(metric.overall)} |")
+        lines.extend(f"| {name} | language:{key} | {_optional_cell(value)} |" for key, value in metric.by_language.items())
+        lines.extend(f"| {name} | category:{key} | {_optional_cell(value)} |" for key, value in metric.by_category.items())
+    lines.append("")
     return lines
 
 
@@ -1377,10 +1496,12 @@ def _render_markdown(
     lines.extend(_strategy_section(report))
     lines.extend(_groundedness_section(report, budgets))
     lines.extend(_injection_section(report))
+    lines.extend(_answer_rules_section(report))
     lines.extend(_table_split_section(report))
     lines.extend(_duplicate_flood_section(report))
     lines.extend(_identifier_section(report))
     lines.extend(_conversational_section(report))
+    lines.extend(_templated_section(report))
     lines.extend(_query_layer_section(report))
     lines.extend(_semantic_cache_section(report))
     lines.extend(_backlog_section(report))

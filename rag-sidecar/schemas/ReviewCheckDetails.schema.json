@@ -1,0 +1,107 @@
+{
+  "$defs": {
+    "ReviewCheckDocument": {
+      "additionalProperties": false,
+      "description": "One document named by a check-raised review item, with its uploader under the D-47 rules; no text.",
+      "properties": {
+        "document_id": {
+          "format": "uuid",
+          "title": "Document Id",
+          "type": "string"
+        },
+        "file_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "File Name"
+        },
+        "uploader_email": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uploader Email"
+        },
+        "uploader_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uploader Id"
+        },
+        "uploader_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uploader Name"
+        }
+      },
+      "required": [
+        "document_id"
+      ],
+      "title": "ReviewCheckDocument",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "D-55: what a review item raised by output_guard or version_conflict adds to the item route; ids and names only.",
+  "properties": {
+    "check": {
+      "enum": [
+        "output_guard",
+        "version_conflict"
+      ],
+      "title": "Check",
+      "type": "string"
+    },
+    "detector": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Detector"
+    },
+    "documents": {
+      "items": {
+        "$ref": "#/$defs/ReviewCheckDocument"
+      },
+      "maxItems": 50,
+      "title": "Documents",
+      "type": "array"
+    }
+  },
+  "required": [
+    "check"
+  ],
+  "title": "ReviewCheckDetails",
+  "type": "object"
+}

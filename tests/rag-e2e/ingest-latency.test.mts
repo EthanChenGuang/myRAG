@@ -1,3 +1,4 @@
+import '../helpers/next-async-storage.mts';
 /**
  * D-45, SC4, SC5: the upload latency target, measured from the 202 of the upload route to a ready status read, with fake providers
  * and the always-on worker loop of the real sidecar app (uvicorn, RAG_INGEST_WORKER=on, concurrency 2, recorded converter).

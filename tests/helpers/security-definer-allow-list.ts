@@ -20,6 +20,9 @@ import type { AllowListEntry } from './sql-function-acl';
  * The 0654 binding-route functions (rag_finetune_bind_scoped_slot, rag_finetune_scope_slot, rag_finetune_normalize_doc_types, the replaced
  * rag_finetune_clear_slot) and trigger functions (rag_finetune_binding_guard, rag_finetune_backfill_run_guard) are service_role only;
  * tests/rag-db/finetune-binding.test.mts asserts they never appear here.
+ * The 0901 lexical statistics trigger functions rag_lexstats_chunks_insert(), rag_lexstats_chunks_update() and rag_lexstats_chunks_delete()
+ * are service_role-only definers (trigger function; writer roles have no grant on the pending table), revoked in 0901 itself;
+ * tests/rag-db/lexical-stats-triggers.test.mts asserts that PUBLIC, anon and authenticated cannot execute them.
  */
 export const AUTHENTICATED_ALLOW_LIST: Record<string, AllowListEntry> = {
   'delete_folder(uuid,boolean)': { anon: false, reason: 'called with the user session from chat-store.ts and /api/folders/[id]; checks auth.uid() ownership' },
@@ -37,6 +40,9 @@ export const AUTHENTICATED_ALLOW_LIST: Record<string, AllowListEntry> = {
   'rag_caller_reads_access_sets(text,jsonb)': { anon: false, reason: 'RLS helper in the restrictive access_sets policies of rag_review_items and rag_retrieval_log (TO authenticated, 0934); answers only for auth.uid(), fails closed on malformed sets' },
   'rag_is_domain_expert(text)': { anon: false, reason: 'RLS helper in the rag_review_items policies (TO authenticated); answers only for auth.uid() against rag_domain_experts or, single-tenant, admin_users for s:default' },
   'rag_ingest_realtime_topic_allowed(text)': { anon: false, reason: 'RLS helper in the realtime.messages policy for ingestion job topics; reads auth.uid() and realtime.topic()' },
+  'rag_access_enforced()': { anon: true, reason: 'RLS helper in the restrictive rag_access_groups_restrict policies (0926, TO anon, authenticated); returns the deployment-wide enforced flag only' },
+  'rag_caller_access_keys()': { anon: true, reason: 'RLS helper in the restrictive rag_access_groups_restrict policies (0926, TO anon, authenticated); no argument, returns the access keys of auth.uid() only' },
+  'rag_caller_is_access_admin()': { anon: true, reason: 'single-tenant RLS helper in the restrictive rag_access_groups_restrict policies (0926, TO anon, authenticated); no argument, checks auth.uid() in admin_users, false for anon' },
 };
 
 /** Lowercases and strips the schema, quotes and blanks from a `name(arg,arg)` signature, as `regprocedure::text` and `signatureKey` print it. */

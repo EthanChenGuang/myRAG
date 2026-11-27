@@ -1,0 +1,72 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "default_window": {
+      "minimum": 1024,
+      "title": "Default Window",
+      "type": "integer"
+    },
+    "margin_ratio": {
+      "maximum": 0.5,
+      "minimum": 0,
+      "title": "Margin Ratio",
+      "type": "number"
+    },
+    "margin_tokens": {
+      "minimum": 0,
+      "title": "Margin Tokens",
+      "type": "integer"
+    },
+    "mcp_tool_reserve": {
+      "minimum": 0,
+      "title": "Mcp Tool Reserve",
+      "type": "integer"
+    },
+    "near_limit_ratio": {
+      "maximum": 1,
+      "minimum": 0.5,
+      "title": "Near Limit Ratio",
+      "type": "number"
+    },
+    "refine_max_calls": {
+      "maximum": 4,
+      "minimum": 1,
+      "title": "Refine Max Calls",
+      "type": "integer"
+    },
+    "version": {
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "voice_answer_reserve": {
+      "minimum": 0,
+      "title": "Voice Answer Reserve",
+      "type": "integer"
+    },
+    "voice_document_budget": {
+      "minimum": 0,
+      "title": "Voice Document Budget",
+      "type": "integer"
+    },
+    "voice_system_reserve": {
+      "minimum": 0,
+      "title": "Voice System Reserve",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "default_window",
+    "margin_ratio",
+    "margin_tokens",
+    "near_limit_ratio",
+    "mcp_tool_reserve",
+    "voice_document_budget",
+    "voice_system_reserve",
+    "voice_answer_reserve",
+    "refine_max_calls"
+  ],
+  "title": "PromptBudgetConfig",
+  "type": "object"
+}

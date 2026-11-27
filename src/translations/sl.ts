@@ -394,6 +394,7 @@ export const sl = {
   waitingForApproval: "Čakanje na vašo odobritev...",
   executingTool: "Izvajanje orodja, prosimo počakajte...",
   toolError: "Med izvajanjem orodja je prišlo do napake.",
+  voiceUnavailable: "Glas začasno ni na voljo. Poskusite znova pozneje.",
 
   // Chat message action tooltips
   copyTooltip: "Kopiraj",

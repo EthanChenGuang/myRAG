@@ -86,6 +86,20 @@
       "title": "History Turns",
       "type": "integer"
     },
+    "langid_timeout_ms": {
+      "default": 30,
+      "maximum": 60000,
+      "minimum": 1,
+      "title": "Langid Timeout Ms",
+      "type": "integer"
+    },
+    "language_confidence_threshold": {
+      "default": 0.6,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Language Confidence Threshold",
+      "type": "number"
+    },
     "max_llm_variants": {
       "default": 2,
       "maximum": 2,
@@ -120,10 +134,24 @@
     "query_budget_ms": {
       "$ref": "#/$defs/QueryBudgetMs"
     },
+    "routing_fast_max_context_tokens": {
+      "default": 2000,
+      "maximum": 200000,
+      "minimum": 1,
+      "title": "Routing Fast Max Context Tokens",
+      "type": "integer"
+    },
     "schema_version": {
       "const": 1,
       "default": 1,
       "title": "Schema Version",
+      "type": "integer"
+    },
+    "subq_filter_vocab_cap": {
+      "default": 20,
+      "maximum": 200,
+      "minimum": 1,
+      "title": "Subq Filter Vocab Cap",
       "type": "integer"
     },
     "variant_max_chars": {

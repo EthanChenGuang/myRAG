@@ -5,7 +5,7 @@ import type { PGlite } from '@electric-sql/pglite';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { createFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 
-// Phase 4.3 plan 05 (SEC-12, SEC-13): the service-role functions of 0922 in both deployment modes. Caller resolution (D-04, D-05, D-08,
+// Phase 4.3 plan 05 (SEC-12, SEC-13): the service-role functions of 0923 part 2 (first written into 0922) in both deployment modes. Caller resolution (D-04, D-05, D-08,
 // A-05), the embed group lookup (D-07), the audited lineage-wide label setter (D-02, D-17, A-07), the batched visibility checks (D-12, D-15,
 // D-26, D-27), the enforcement flag writer (A-03) and the security event writer (D-26). Fixtures are neutral synthetic sentences.
 
@@ -64,7 +64,7 @@ async function asRole<T>(db: PGlite, role: Role, userId: string | null, run: () 
   }
 }
 
-const service = <T>(db: PGlite, run: () => Promise<T>): Promise<T> => asRole(db, 'service_role', null, run);
+const service = <T,>(db: PGlite, run: () => Promise<T>): Promise<T> => asRole(db, 'service_role', null, run);
 
 async function rejects(run: () => Promise<unknown>, pattern: RegExp, label: string): Promise<void> {
   await assert.rejects(run, (error: unknown) => {
@@ -549,7 +549,7 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       await rejects(() => record(multi ? 's:default' : `o:${ORG}`, 'citation_access_violation'), /tenant key/, 'tenant key of the other mode');
     });
 
-    test('every 0922 function is executable by service_role only', async () => {
+    test('every 0923 resolution function is executable by service_role only (rag_access_enforced also by the client roles, 0926)', async () => {
       const rows = await db.query<{ sig: string; anon: boolean; auth: boolean; svc: boolean; pub: boolean }>(
         `SELECT p.oid::regprocedure::text AS sig,
                 has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
@@ -574,7 +574,9 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       );
       assert.equal(rows.rows.length, 9, 'nine functions');
       for (const row of rows.rows) {
-        assert.deepEqual({ sig: row.sig, anon: row.anon, auth: row.auth, svc: row.svc, pub: row.pub }, { sig: row.sig, anon: false, auth: false, svc: true, pub: false });
+        // rag_access_enforced() is also an allow-listed helper of the 0926 restrictive read policies (04.3-06), so anon and authenticated may run it.
+        const client = row.sig === 'rag_access_enforced()';
+        assert.deepEqual({ sig: row.sig, anon: row.anon, auth: row.auth, svc: row.svc, pub: row.pub }, { sig: row.sig, anon: client, auth: client, svc: true, pub: false });
       }
       await rejects(
         () => asRole(db, 'authenticated', MEMBER_A, () => db.query('SELECT * FROM public.rag_resolve_access_scope($1, $2)', [fx.tenantKey, MEMBER_A])),

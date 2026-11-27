@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "phase": "04.4",
+  "noise": "eval/config/noise.json",
+  "budgets": "eval/config/latency-budgets.json",
+  "baselines": {
+    "prechunked": "eval/baselines/fixture-baseline.json",
+    "ingest": "eval/baselines/fixture-ingest-baseline.json"
+  },
+  "off_env": {
+    "RAG_LEXICAL_SCORING": "ts_rank_cd",
+    "RAG_LEXICAL_BM25_K1": "1.2",
+    "RAG_LEXICAL_BM25_B": "0.75"
+  },
+  "runs": [
+    {"name": "off-prechunked", "base": null, "fixture_mode": "prechunked", "phase44_off": true},
+    {"name": "off-ingest", "base": null, "fixture_mode": "ingest", "phase44_off": true},
+    {"name": "v2-default-prechunked", "base": "eval/config/runs/v2-default.json", "fixture_mode": "prechunked", "phase44_off": true},
+    {"name": "v2-lexical-bm25-on-prechunked", "base": "eval/config/runs/v2-lexical-bm25-on.json", "fixture_mode": "prechunked"},
+    {"name": "v2-default-ingest", "base": "eval/config/runs/v2-default.json", "fixture_mode": "ingest", "phase44_off": true},
+    {"name": "v2-lexical-bm25-on-ingest", "base": "eval/config/runs/v2-lexical-bm25-on.json", "fixture_mode": "ingest"},
+    {"name": "v2-default-rerank-none-prechunked", "base": "eval/config/runs/v2-default.json", "fixture_mode": "prechunked", "phase44_off": true, "env": {"RAG_RERANKER": "none"}},
+    {"name": "v2-lexical-bm25-on-rerank-none-prechunked", "base": "eval/config/runs/v2-lexical-bm25-on.json", "fixture_mode": "prechunked", "env": {"RAG_RERANKER": "none"}}
+  ],
+  "gates": {
+    "off_identity": {
+      "decision": "D-36 (a)",
+      "description": "The three lexical scoring variables at their defaults, in both fixture modes: zero paired differences (retrieval and refusal) against the committed baseline of the mode, the characterization command passes, and every stage p95 and the retrieval total p95 stay within the chat latency budget",
+      "runs": ["off-prechunked", "off-ingest"],
+      "commands": ["characterization"],
+      "latency_profile": "chat"
+    },
+    "on": {
+      "decision": "D-36 (b)",
+      "description": "v2-lexical-bm25-on against the reference run v2-default (ts_rank_cd) in both fixture modes: no overall, language or category slice beyond the noise band on Recall@5, Recall@10 and MRR, zero paired differences on correct and false refusal, and the chat latency budget",
+      "pairs": [
+        {"run": "v2-lexical-bm25-on-prechunked", "reference": "v2-default-prechunked"},
+        {"run": "v2-lexical-bm25-on-ingest", "reference": "v2-default-ingest"}
+      ],
+      "refusal_paired_zero": true,
+      "latency_profile": "chat"
+    },
+    "cap_agreement": {
+      "decision": "D-36 (c)",
+      "description": "Mean overlap@10 between the capped (bm25CandidateLimit) and the uncapped (p_candidate_limit 0) BM25 lexical top 10 over the fixture questions, read from lexical-bm25-overlap.json of each bm25 run, is at least 0.95",
+      "runs": ["v2-lexical-bm25-on-prechunked", "v2-lexical-bm25-on-ingest"],
+      "k": 10,
+      "min_mean_overlap": 0.95
+    }
+  },
+  "report_only": [
+    {
+      "run": "v2-lexical-bm25-on-rerank-none-prechunked",
+      "reference": "v2-default-rerank-none-prechunked",
+      "note": "RAG_RERANKER=none on both arms (plan-check finding 8): the default fixture reranker partly hides a change in lexical order, so this pair shows the fused order without it. Reported, never gated."
+    }
+  ],
+  "commands": {
+    "characterization": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/rag/characterize-chat.test.ts",
+      "tests/rag/characterize-chat-overview.test.ts",
+      "tests/rag/characterize-embed.test.ts",
+      "tests/rag/characterize-voice.test.ts",
+      "tests/chat-strict.test.ts",
+      "tests/chat-websearch.test.ts",
+      "tests/chat-source-images.test.ts",
+      "tests/rag/v2/search-lexical-scoring.test.ts",
+      "tests/rag/lexical-stats-hooks.test.ts"
+    ]
+  },
+  "notes": [
+    "Pre-registered by plan 04.4-13 before any on-run result was looked at (T-04.4-41); plan 04.4-14 runs it with python -m rag_eval.phase44_gate --spec eval/config/phase44-comparison.json --out eval/reports/phase-04.4.",
+    "Off runs use no base run config, so they run the legacy pipeline the committed baselines were recorded with; the v2 reference runs set the same three variables explicitly to ts_rank_cd, 1.2 and 0.75 (D-36).",
+    "No tool of this phase writes eval/config/retrieval-params.json, eval/config/refusal-thresholds.json or a refusal threshold (D-35)."
+  ]
+}

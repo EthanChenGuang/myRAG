@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "section_rule_sets": [],
+  "boilerplate_rules": [
+    {
+      "name": "templated page line zh",
+      "kind": "line",
+      "doc_type": "product_technical",
+      "enabled": true,
+      "pattern": "^(?:眙濯襻瀛|鲺锫帑裱) \\d+$",
+      "flags": "u"
+    },
+    {
+      "name": "templated page line en",
+      "kind": "line",
+      "doc_type": "product_technical",
+      "enabled": true,
+      "pattern": "^(?:Kizqyz snevromb|Zlakgarv fezplu) \\d+$",
+      "flags": "u"
+    },
+    {
+      "name": "templated page line it",
+      "kind": "line",
+      "doc_type": "product_technical",
+      "enabled": true,
+      "pattern": "^(?:Tramansca finbrurfe|Brizaza vintnudu) \\d+$",
+      "flags": "u"
+    },
+    {
+      "name": "templated short fragment",
+      "kind": "fragment",
+      "doc_type": "product_technical",
+      "enabled": true,
+      "max_length": 24,
+      "min_page_share": 0.75
+    }
+  ]
+}

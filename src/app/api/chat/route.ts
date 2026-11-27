@@ -16,6 +16,18 @@ import {
   CLAUDE_FIRST_TOKEN_TIMEOUT_MS,
   buildHistoryWindow,
   createCitationSession,
+  buildAliasMap,
+  buildCalculateTool,
+  CALCULATE_TOOL_NAME,
+  createCalcTraceHolder,
+  createCalcCheckSink,
+  type CalcCheckSink,
+  createCitationLabeler,
+  isServerCalculateTool,
+  mayOfferCalc,
+  modelBlocksTools,
+  shouldOfferCalcTool,
+  turnCanUseTools,
   createEnhancedRAGPrompt,
   answerLanguageOptions,
   appendAnswerLanguage,
@@ -28,7 +40,10 @@ import {
   detectLanguage,
   finishTrace,
   isSmallTalkResult,
+  isQueryLayerEnabled,
   isV2Pipeline,
+  queryTurnInputs,
+  ragTurnMetadataFromPlan,
   answerFinishFields,
   answerTraceFields,
   CLAUDE_MAX_OUTPUT_TOKENS,
@@ -64,6 +79,7 @@ import {
   resolveAccessScope,
   runRetrieval,
   scheduleAnswerFinish,
+  scheduleCalcReviewEnqueue,
   scopeKey,
   shouldPersistAnswer,
   type LogContext,
@@ -72,6 +88,8 @@ import {
   type RetrievalResult,
   type TenantScope,
   type TraceCollector,
+  type CitationLabeler,
+  type ClaudeTurnFacts,
 } from '@/lib/rag';
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
@@ -108,7 +126,12 @@ interface StepToolCall {
 }
 
 // Tool results that are evidence the answer may rely on; anything else (MCP) skips groundedness
-const ANSWER_EVIDENCE_TOOLS = new Set(['webSearch', 'useDocument']);
+const ANSWER_EVIDENCE_TOOLS = new Set(['webSearch', 'useDocument', CALCULATE_TOOL_NAME]);
+
+// Phase 5.2.1 D-65: RAG_CALC_TOOL, read from the one answer-config reader once plan 05.2.1-02 adds the field; false before
+function calcToolSwitchOn(config: object): boolean {
+  return (config as { readonly calcTool?: unknown }).calcTool === true;
+}
 
 interface StepToolResult {
   type: string;
@@ -150,6 +173,12 @@ function withToolResultGuard(
 }
 
 /** D-10: tool results are data; the sentence joins the reference notice when the context is tagged. */
+/** A refusal's start metadata with the turn's rag field added; null when neither is present, so the stream is unchanged. */
+function withRagTurn(metadata: Record<string, unknown> | null, ragField: { rag?: unknown }): Record<string, unknown> | null {
+  if (!ragField.rag) return metadata;
+  return { ...(metadata ?? {}), ...ragField };
+}
+
 function withToolResultNotice(prompt: string): string {
   const tagged = `${REFERENCE_NOTICE}\n<documents>`;
   if (prompt.includes(tagged)) return prompt.replace(tagged, () => `${REFERENCE_NOTICE}\n${TOOL_RESULT_SENTENCE}\n<documents>`);
@@ -2002,6 +2031,14 @@ IMPORTANT:
       reasoningSettings?.enabled !== false &&
       Boolean(reasoningSettings?.enabled || reasoningSettings?.effort || reasoningSettings?.maxOutputTokens);
     const citationRecheck = citationRecheckFor(scope);
+    // The session reads these facts when it picks the strategy after retrieval; `calculation` is set there (05.2.1 D-71)
+    const citationFacts: ClaudeTurnFacts = {
+      mcp: useMcpForRequest || lastAssistantHasToolCall(rawMessages),
+      multiStep: isHandlingMultiStep,
+      webSearch: webSearchEnabled,
+      reasoning: reasoningRequested,
+      attachments: hasAttachedImage,
+    };
     const citationSession = createCitationSession({
       capabilities: citationCapabilities,
       ragMode,
@@ -2009,15 +2046,17 @@ IMPORTANT:
       language: registryAnswerLanguage ?? userLanguage,
       ...(registryAnswerLanguage ? { textsSource: answerTurn.textsSource } : {}),
       config: generationConfig,
-      facts: {
-        mcp: useMcpForRequest || lastAssistantHasToolCall(rawMessages),
-        multiStep: isHandlingMultiStep,
-        webSearch: webSearchEnabled,
-        reasoning: reasoningRequested,
-        attachments: hasAttachedImage,
-      },
+      facts: citationFacts,
       ...(citationRecheck ? { recheck: citationRecheck } : {}),
     });
+    // Phase 5.2.1 D-65, D-66: a turn that may get the calculation labels its blocks, so chunk operands can name an alias
+    const calcQuestion = getLastUserText(rawMessages);
+    const calcMayBeOffered =
+      calcToolSwitchOn(answerTurn.config) && ragMode !== 'bypass' && mayOfferCalc(calcQuestion, answerTurn.answerLanguage);
+    const retrievalLabeler: CitationLabeler | undefined =
+      citationSession.labeler ?? (calcMayBeOffered ? createCitationLabeler() : undefined);
+    const calcHolder = createCalcTraceHolder();
+    let calcOffer: { mode: 'tool' | 'trailing_block'; aliases: ReadonlySet<string>; stripMarkers: boolean } | null = null;
 
     // Only web-chat answers of a signed-in user outside ghost chats get an answerId and a record
     let answerUserId: string | null = null;
@@ -2241,6 +2280,8 @@ Context:
         history: buildHistoryWindow(originalMessages),
         classification: queryClassification,
         ...(clientTimeZone ? { timeZone: clientTimeZone } : {}),
+        // D-17, D-22: the previous turn's standalone query and the UI language, read only while the layer is on
+        ...(isQueryLayerEnabled() ? queryTurnInputs({ messages: rawMessages, uiLanguage: data?.settings?.language }) : {}),
       };
 
       // Then perform semantic search for the query text
@@ -2263,7 +2304,7 @@ Context:
           signal: req.signal,
           trace: collector,
           ...(retrievalFilters ? { retrievalFilters } : {}),
-          ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
+          ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
           ...queryLayerInputs,
           ...(cacheContext ? { cacheContext } : {}),
         });
@@ -2294,7 +2335,7 @@ Context:
           options: { generalOverview: true },
           signal: req.signal,
           trace: collector,
-          ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
+          ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
           ...queryLayerInputs,
           ...(cacheContext ? { cacheContext } : {}),
         });
@@ -2435,6 +2476,12 @@ Context:
 
     } // End of RAG processing (skipped when disableRAG is true)
 
+    // D-22, P-22: the turn's standalone query rides on the assistant message only when retrieval produced a query plan
+    const ragTurnField = (): { rag?: NonNullable<ReturnType<typeof ragTurnMetadataFromPlan>> } => {
+      const rag = ragTurnMetadataFromPlan(retrievalResult?.queryPlan);
+      return rag ? { rag } : {};
+    };
+
     // D-32: a semantic-cache hit streams the cached answer through the normal UI stream, with no generation call
     const cacheHit = retrievalResult && isCacheHitResult(retrievalResult) ? retrievalResult.cacheHit : undefined;
     if (cacheHit) {
@@ -2450,7 +2497,7 @@ Context:
           streamCachedAnswer(cacheHit, {
             writer,
             startMetadata: { ...answerFields, ...(cached.is_refusal ? { refusal: true } : {}) },
-            finishMetadata: answerFields,
+            finishMetadata: { ...answerFields, ...ragTurnField() },
           });
         },
         onFinish: ({ isAborted }) => {
@@ -2509,7 +2556,7 @@ Context:
 
       if (strictWithoutWebSearch) {
         setRagLogOutcome('kb_unavailable', kbUnavailableLanguage(answerTurn, fallbackLanguage));
-        const refusalMetadata = refusalStartMetadata();
+        const refusalMetadata = withRagTurn(refusalStartMetadata(), ragTurnField());
         finishRagTrace();
         const errorText = kbUnavailableText(answerTurn, fallbackLanguage);
         const stream = createUIMessageStream({
@@ -2551,7 +2598,7 @@ Context:
         : noInformationText(answerTurn, fallbackLanguage);
       ragTrace?.collector.setReviewContent({ answer: responseText, context });
       setRagLogOutcome('refused_no_context', noInformationLanguage(answerTurn, fallbackLanguage));
-      const refusalMetadata = refusalStartMetadata();
+      const refusalMetadata = withRagTurn(refusalStartMetadata(), ragTurnField());
       const refusalTraceId = ragTrace?.collector.traceId;
       finishRagTrace();
       if (retrievalResult?.cacheTicket && refusalTraceId) {
@@ -2582,7 +2629,41 @@ Context:
       return createUIMessageStreamResponse({ stream: timeFirstText(stream) });
     }
 
-    citationSession.attach(retrievalFailed || effectiveDisableRAG || smallTalkTurn ? null : retrievalResult);
+    const knowledgeContextAttached = !(retrievalFailed || effectiveDisableRAG || smallTalkTurn);
+    // Phase 5.2.1 D-70, D-72: offered on a knowledge turn whose question or blocks carry the signal; the mode follows the tool rule
+    let calcMode: 'tool' | 'trailing_block' | null = null;
+    if (calcMayBeOffered && knowledgeContextAttached && context.length > 0) {
+      const decision = shouldOfferCalcTool({
+        question: calcQuestion,
+        blockTexts: (retrievalResult?.blocks ?? []).filter((block) => !block.isImage).map((block) => block.text),
+        language: answerTurn.answerLanguage,
+      });
+      if (decision.offer) {
+        calcMode = turnCanUseTools({ provider: AI_PROVIDER, modelId: model }) ? 'tool' : 'trailing_block';
+        citationFacts.calculation = true;
+        console.log('[Calc]', { offered: true, mode: calcMode, reason: decision.reason });
+      }
+    }
+
+    citationSession.attach(knowledgeContextAttached ? retrievalResult : null);
+
+    if (calcMode) {
+      let aliases: ReadonlySet<string> = new Set<string>();
+      if (citationSession.strategy) {
+        aliases = citationSession.aliases();
+      } else {
+        try {
+          aliases = buildAliasMap(retrievalResult?.blocks, retrievalResult?.usedDocuments).aliases;
+        } catch {
+          console.warn('[Calc]', { offered: true, aliases: 'unavailable' });
+        }
+      }
+      // No strategy renders citations on this turn, so the block markers the calculation needs are removed from the visible text
+      calcOffer = { mode: calcMode, aliases, stripMarkers: citationSession.strategy === null };
+    }
+    // Phase 5.2.1 D-73: RAG_CALC_CHECK checks the answer at the end of a stream that offered the calculation
+    const calcCheckSink: CalcCheckSink | null = calcOffer && answerTurn.config.calcCheck ? createCalcCheckSink() : null;
+    const calcEvidenceBlocks = calcCheckSink ? (retrievalResult?.blocks ?? []).filter((block) => !block.isImage && block.alias) : [];
 
     const resolvedSystemPrompt = await resolveRagSystemPrompt();
     let ragSystemPrompt = resolvedSystemPrompt.ragSystemPrompt;
@@ -2639,6 +2720,7 @@ Context:
       const answerRuleOptions = {
         mode: ragMode,
         webSearchOffered: SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY),
+        ...(calcOffer ? { calculation: { mode: calcOffer.mode } } : {}),
       };
       const historyNotEvidence = ragMode !== 'bypass' && historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE);
       systemPrompt = appendHistoryNotEvidence(
@@ -3608,6 +3690,15 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         }
       }
 
+      // Phase 5.2.1 D-65: our calculate tool, never over a tool of the same name (T-05.2.1-28)
+      if (calcOffer?.mode === 'tool') {
+        if (Object.prototype.hasOwnProperty.call(allTools, CALCULATE_TOOL_NAME)) {
+          console.log('[Calc]', { origin: 'tool', offered: false, reason: 'name_collision' });
+        } else {
+          allTools[CALCULATE_TOOL_NAME] = buildCalculateTool({ aliases: calcOffer.aliases, holder: calcHolder });
+        }
+      }
+
       const toolResultGuard = readSecurityConfig().toolResultGuard;
       const flaggedToolResults = new Set<string>();
       if (toolResultGuard !== 'off') {
@@ -3621,7 +3712,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           console.warn('[RAG Security] Tool result flagged; passed on escaped', { tool: toolName, ruleIds, traceId: collector?.traceId ?? null });
         };
         for (const toolName of Object.keys(allTools)) {
-          if (toolName === 'useDocument') continue;
+          if (toolName === 'useDocument' || isServerCalculateTool(allTools[toolName])) continue;
           allTools[toolName] = withToolResultGuard(allTools[toolName], toolName, toolResultGuard, recordToolResultFlag);
         }
       }
@@ -3811,11 +3902,12 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       }
 
       // Special handling for Claude Sonnet 4
-      const isClaudeSonnet4 = safeModelId.includes('claude-sonnet-4') ||
-        safeModelId.includes('claude-4-sonnet') ||
-        safeModelId.includes('anthropic/claude-sonnet-4');
+      const isClaudeSonnet4 = modelBlocksTools(safeModelId);
 
-      const resultToolsReachModel = SUPPORTS_TOOLS && !isClaudeSonnet4 && Object.keys(allTools).some((toolName) => toolName !== 'useDocument');
+      const resultToolsReachModel =
+        SUPPORTS_TOOLS &&
+        !isClaudeSonnet4 &&
+        Object.keys(allTools).some((toolName) => toolName !== 'useDocument' && !isServerCalculateTool(allTools[toolName]));
       if (toolResultGuard !== 'off' && resultToolsReachModel) {
         const contextIndex = messagesForModel.findIndex((message) => message.id === systemContextMessage.id);
         if (contextIndex >= 0) {
@@ -3961,16 +4053,41 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           webSearchOffered: SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY),
           aliases: () => citationSession.aliases(),
           guard: outputGuardSources,
+          // Phase 5.2.1 D-72: the trailing block in block mode; in tool mode only the marker stripping, when it is needed
+          ...(calcOffer?.mode === 'trailing_block'
+            ? { calcBlock: { onTrace: calcHolder.recordBlock, stripMarkers: calcOffer.stripMarkers } }
+            : calcOffer?.stripMarkers
+              ? { calcBlock: { stripMarkers: true } }
+              : {}),
+          ...(calcCheckSink
+            ? {
+                calcCheck: {
+                  holder: calcHolder,
+                  blocks: calcEvidenceBlocks.map((block) => ({ alias: block.alias ?? '', text: block.text })),
+                  question: calcQuestion,
+                  offered: true,
+                  sink: calcCheckSink,
+                },
+              }
+            : {}),
         });
         return citationTransforms.length > 0 ? { experimental_transform: citationTransforms } : {};
       };
+
+      // D-65, Pitfall C1: tools that run on the server without approval; calculate only as our own tool object
+      const isServerExecutedTool = (toolName: string | undefined): boolean =>
+        toolName === 'webSearch' ||
+        toolName === 'query_documents' ||
+        (toolName === CALCULATE_TOOL_NAME && isServerCalculateTool(allTools[toolName]));
+      const isAnswerEvidenceTool = (toolName: string): boolean =>
+        toolName === CALCULATE_TOOL_NAME ? isServerExecutedTool(toolName) : ANSWER_EVIDENCE_TOOLS.has(toolName);
 
       const startOpenRouterStream = () => streamText({
         ...streamParams,
         ...citationTransformParams(),
         onStepFinish: async (params: { text?: string; toolCalls?: StepToolCall[]; toolResults?: StepToolResult[] }) => {
           let { text, toolCalls = [] as StepToolCall[], toolResults = [] as StepToolResult[] } = params;
-          if (Array.isArray(toolResults) && toolResults.some((item) => typeof item?.toolName === 'string' && !ANSWER_EVIDENCE_TOOLS.has(item.toolName))) {
+          if (Array.isArray(toolResults) && toolResults.some((item) => typeof item?.toolName === 'string' && !isAnswerEvidenceTool(item.toolName))) {
             answerToolOutputUsed = true;
           }
 
@@ -4172,7 +4289,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             console.log('API ROUTE: Clearing auto-generated results to force explicit approval');
             toolResults.forEach(result => {
               // Clear all tool results except document sources and safe tools which don't need approval
-              if (result && result.toolName !== 'query_documents' && result.toolName !== 'webSearch') {
+              if (result && !isServerExecutedTool(result.toolName)) {
                 console.log(`API ROUTE: Clearing result for ${result.toolName} to force explicit approval`);
                 // Set result to null to prevent auto-execution
                 result.output = null;
@@ -4188,7 +4305,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             // Check if we already have a result for this tool call
             // This happens for tools that execute immediately (like webSearch or query_documents)
             const existingResult = toolResults.find(r => r.toolCallId === call.toolCallId);
-            const isAllowedTool = call.toolName === 'webSearch' || call.toolName === 'query_documents';
+            const isAllowedTool = isServerExecutedTool(call.toolName);
             const hasResultPayload = existingResult?.output !== undefined;
 
             // If we have a result AND it's an allowed tool, we treat it as already approved/executed
@@ -4360,6 +4477,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         if (!answerRecordPending || !answerId || !scope || !answerUserId) return null;
         answerRecordPending = false;
         const records = citationSession.fullRecords();
+        const calcRun = calcCheckSink?.result() ?? null;
         const premiseBlocks =
           !retrievalFailed && !effectiveDisableRAG && retrievalResult?.blocks
             ? retrievalResult.blocks.filter((block) => !block.isImage).map((block) => ({ alias: block.alias ?? '', text: block.text }))
@@ -4394,6 +4512,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           requestLanguage: userLanguage,
           ...(answerTurn.config.anyNonDefault ? answerFinishFields(answerTurn, retrievalResult) : {}),
           ...(citedAccessSets && citedAccessSets.length > 0 ? { accessSets: citedAccessSets } : {}),
+          ...(calcRun ? { calc: { primary: calcRun.primary, items: calcRun.checks, reviewReasons: calcRun.reviewReasons } } : {}),
         });
       };
 
@@ -4429,6 +4548,18 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
         if (isClaudeSonnet4 && usedDocuments && usedDocuments.length > 0) {
           metadata.documentSources = buildDocumentSources(usedDocuments);
+        }
+
+        // Phase 5.2.1 D-75: both values and the status of every checked calculation, only when the check ran
+        const calcRun = calcCheckSink?.result();
+        if (calcRun) {
+          metadata.calc = calcRun.checks.map((check) => ({
+            status: check.status,
+            stated: check.stated,
+            recomputed: check.recomputed,
+            unit: check.unit,
+            ...(check.reason ? { reason: check.reason } : {}),
+          }));
         }
 
         return metadata;
@@ -4469,7 +4600,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               return undefined;
             }
             if (part.type !== 'finish') return undefined;
-            const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata(), ...answerTurn.finishMetadata() };
+            const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata(), ...answerTurn.finishMetadata(), ...ragTurnField() };
             if (!ragTraceId && !answerId && injectionFlagged === undefined && Object.keys(finishMetadata).length === 0) return undefined;
             return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...injectionFlaggedField, ...finishMetadata };
           };
@@ -4532,6 +4663,21 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               ...(rules.length > 0 ? { rules } : {}),
               ...(counts ? { counts } : {}),
             });
+            // D-75, D-61: the calculation check as its own span, status counts and duration only
+            const calcRun = calcCheckSink?.result();
+            if (calcRun) {
+              const endedAt = ragTrace.collector.now();
+              const counts: Record<string, number> = { calc_checks: calcRun.checks.length };
+              for (const check of calcRun.checks) counts[`calc_${check.status}`] = (counts[`calc_${check.status}`] ?? 0) + 1;
+              ragTrace.collector.record({
+                name: 'calc_check',
+                status: calcRun.checks.some((check) => check.reason === 'check_error') ? 'error' : 'ok',
+                startedAt: endedAt - calcRun.durationMs,
+                endedAt,
+                counts,
+                attributes: { duration_ms: calcRun.durationMs },
+              });
+            }
           }
           finishRagTrace();
           // D-26: a citation the caller may not see leaves an id-only security event, written after the response
@@ -4549,7 +4695,20 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             .join('');
           const turnAborted = isAborted || req.signal.aborted;
           const turnFailed = generationFailed || finishReason === 'error';
+          const answerRecordWrites = answerRecordPending && answerId !== null && Boolean(scope) && Boolean(answerUserId);
           const groundednessHandle = answerRecordPending ? finishAnswerRecord(responseText, turnAborted, turnFailed) : null;
+          // D-55: a turn without an answer record hands its calculation reasons to the review queue directly; ghost chats never
+          const calcRunAtFinish = calcCheckSink?.result();
+          if (calcRunAtFinish && !answerRecordWrites && scope && calcRunAtFinish.reviewReasons.length > 0) {
+            scheduleCalcReviewEnqueue({
+              tenantKey: scopeKey(scope),
+              reasons: calcRunAtFinish.reviewReasons,
+              sourceChunkIds: [...new Set(calcEvidenceBlocks.flatMap((block) => block.chunkIds))],
+              documentIds: [...new Set(calcEvidenceBlocks.map((block) => block.documentId))],
+              traceId: ragTraceId ?? null,
+              ghost: typeof data?.chatId === 'string' && data.chatId.startsWith('ghost-'),
+            });
+          }
           const cacheTicket = retrievalResult?.cacheTicket;
           if (cacheTicket && ragTraceId && !turnAborted && !turnFailed) {
             // D-32/D-33: stored after the response, chained to this request's Phase 5 groundedness label

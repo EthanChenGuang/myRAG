@@ -37,7 +37,8 @@ def email_violations(text: str) -> list[str]:
 
 INGEST_FIXTURES = FIXTURES / "ingest"
 PARSE_FIXTURES = FIXTURES / "parse"
-INGEST_FILE_COUNT = 54
+# 54 before plan 03.3-20, which added 39 recorded parse results, 39 Docling JSON files and the five templated rule data files.
+INGEST_FILE_COUNT = 54 + 2 * 39 + 5
 
 
 def _ingest_files():
@@ -48,6 +49,7 @@ def _ingest_files():
         *sorted((INGEST_FIXTURES / "text").glob("*.md")),
         INGEST_FIXTURES / "manifest.json",
         *sorted((INGEST_FIXTURES / "recorded").glob("*.json")),
+        *sorted((INGEST_FIXTURES / "templated").glob("*.json")),
     ]
 
 
@@ -63,14 +65,17 @@ def _parse_files():
 
 def _fixture_files():
     corpus = sorted((FIXTURES / "corpus").rglob("*.md")) + [FIXTURES / "golden.jsonl", FIXTURES / "split-manifest.json"]
-    # 34 documents, golden.jsonl and the split manifest, plus the 22 Phase 4.2 files of plan 04.2-37 (templates included)
-    # and the six 05.3-15 documents.
-    assert len(corpus) == 36 + 22 + 6
+    # 37 documents (05.2-29 split sec-links), golden.jsonl and the split manifest, plus the 22 Phase 4.2 files of plan
+    # 04.2-37 (templates included) and the six 05.3-15 documents.
+    assert len(corpus) == 39 + 22 + 6
     ingest = _ingest_files()
     assert len(ingest) == INGEST_FILE_COUNT
     parse_files = _parse_files()
     assert len(parse_files) >= 13
-    return corpus + ingest + parse_files
+    # 06.2-34: the twelve q62 documents of the isolated Phase 6.2 tenant and their manifest.
+    q62 = sorted((FIXTURES / "q62-corpus").rglob("*.md")) + [FIXTURES / "q62-corpus" / "manifest.json"]
+    assert len(q62) == 12 + 1
+    return corpus + ingest + parse_files + q62
 
 
 def test_fixture_text_has_only_reserved_phone_numbers():

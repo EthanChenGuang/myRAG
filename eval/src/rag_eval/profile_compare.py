@@ -9,6 +9,7 @@ from rag_sidecar.contracts.profiles import (
     PreMigrationSlice,
     ProfileComparisonEntry,
     ProfileMetricBlocks,
+    ServingModeMeasurement,
 )
 from rag_sidecar.contracts.report import EvalReport, ItemResult, SliceMetrics
 
@@ -17,7 +18,40 @@ from rag_eval.metrics import CROSS_LINGUAL, aggregate
 from rag_eval.paired import item_metrics
 
 MULTILINGUAL_PROFILE_PREFIXES = ("voyage-", "qwen3-")
-METRICS = ("recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate")
+METRICS = (
+    "recall_at_5",
+    "recall_at_10",
+    "mrr",
+    "correct_refusal_rate",
+    "false_refusal_rate",
+)
+BGE_M3_PROFILE = "bge-m3-1024"
+SERVING_MODES = ("hosted", "sidecar")
+NOT_MEASURED = "not measured"
+WIRING_PROOF_LABEL = "wiring proof: fixture embedder; the numbers prove the comparison runs, not how the profiles rank"
+
+
+WIRING_PROOF_NOTE = "wiring proof: no verdict on fixture numbers"
+
+
+class FixtureEvidenceRefused(ValueError):
+    """A wiring-proof comparison never becomes activation evidence."""
+
+
+def serving_blocks(
+    profile_id: str, measured: list[ServingModeMeasurement] | None
+) -> list[ServingModeMeasurement] | None:
+    """The BGE-M3 arm always carries one block per serving mode; a mode without measurements is an explicit unmeasured block."""
+    if profile_id != BGE_M3_PROFILE and not measured:
+        return None
+    by_mode: dict[str, ServingModeMeasurement] = {}
+    for block in measured or []:
+        if block.mode in by_mode:
+            raise ValueError(f"duplicate serving mode {block.mode} for {profile_id}")
+        by_mode[block.mode] = block
+    return [by_mode.get(mode) or ServingModeMeasurement(mode=mode, measured=False) for mode in SERVING_MODES]
+
+
 FAKE_EMBEDDER_NOTE = (
     "Fixture embedders are not multilingual; this run proves comparison and activation wiring only, not real ranking."
 )
@@ -90,7 +124,11 @@ def _is_multilingual(profile_id: str) -> bool:
     return profile_id.startswith(MULTILINGUAL_PROFILE_PREFIXES)
 
 
-def default_candidate(profile_id: str, entry: ProfileComparisonEntry, baseline_entry: ProfileComparisonEntry) -> bool | None:
+def default_candidate(
+    profile_id: str,
+    entry: ProfileComparisonEntry,
+    baseline_entry: ProfileComparisonEntry,
+) -> bool | None:
     if profile_id == baseline_entry.profile_id:
         return None
     if not _is_multilingual(profile_id):
@@ -127,6 +165,8 @@ def build_comparison(
     noise: NoiseConfig,
     pre_migration_items: list[ItemResult],
     backfill_run_id: str | None,
+    serving: dict[str, list[ServingModeMeasurement]] | None = None,
+    wiring_proof: bool = False,
 ) -> EmbeddingProfileComparison:
     active_gated, active_candidates = active_reports
     baseline_entry = ProfileComparisonEntry(
@@ -140,8 +180,22 @@ def build_comparison(
         gate_passed = gate_passed and profile_pair_gate_passed(active_gated, gated_report, noise)
         entry = ProfileComparisonEntry(
             profile_id=profile_id,
-            metrics=ProfileMetricBlocks(gated=_slice_block(gated_report), candidates=_slice_block(candidate_report)),
+            metrics=ProfileMetricBlocks(
+                gated=_slice_block(gated_report),
+                candidates=_slice_block(candidate_report),
+            ),
+            serving=serving_blocks(profile_id, (serving or {}).get(profile_id)),
         )
+        if wiring_proof:
+            profiles.append(
+                entry.model_copy(
+                    update={
+                        "default_candidate": None,
+                        "default_candidate_note": WIRING_PROOF_NOTE,
+                    }
+                )
+            )
+            continue
         verdict = default_candidate(profile_id, entry, baseline_entry)
         profiles.append(
             entry.model_copy(
@@ -163,7 +217,9 @@ def build_comparison(
     pre_migration = _pre_migration_slice(pre_migration_items)
     notes = [FAKE_EMBEDDER_NOTE]
     if pre_migration.n < 1:
-        notes.append("pre_migration slice is empty; activation should refuse until documents exist before the backfill run.")
+        notes.append(
+            "pre_migration slice is empty; activation should refuse until documents exist before the backfill run."
+        )
 
     return EmbeddingProfileComparison(
         baseline_profile=baseline_profile,
@@ -173,6 +229,8 @@ def build_comparison(
         gate_passed=gate_passed and pre_migration.passed and pre_migration.n >= 1,
         backfill_run_id=backfill_run_id,
         notes=notes,
+        wiring_proof=wiring_proof,
+        label=WIRING_PROOF_LABEL if wiring_proof else None,
     )
 
 
@@ -182,6 +240,10 @@ def comparison_to_activation_evidence(
     target_profile: str,
     recorded_at: str,
 ) -> ActivationEvidence:
+    if comparison.wiring_proof:
+        raise FixtureEvidenceRefused(
+            "evidence_refused: fixture_evidence (a wiring-proof comparison is not activation evidence)"
+        )
     if comparison.backfill_run_id is None:
         raise ValueError("comparison lacks backfill_run_id")
     return ActivationEvidence(
@@ -192,3 +254,70 @@ def comparison_to_activation_evidence(
         backfill_run_id=comparison.backfill_run_id,
         recorded_at=recorded_at,
     )
+
+
+def _number(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:g}"
+
+
+def _slice_rows(block: ComparisonSliceBlock) -> list[tuple[str, SliceMetrics]]:
+    rows: list[tuple[str, SliceMetrics]] = [("overall", block.overall)]
+    rows += [(f"language:{key}", value) for key, value in sorted(block.by_language.items())]
+    rows += [(f"category:{key}", value) for key, value in sorted(block.by_category.items())]
+    rows += [(f"pair:{key}", value) for key, value in sorted(block.by_language_pair.items())]
+    return rows
+
+
+def _serving_line(block: ServingModeMeasurement) -> str:
+    if not block.measured:
+        return f"  serving {block.mode}: {NOT_MEASURED}"
+    throughput = (
+        NOT_MEASURED
+        if block.ingest_chunks_per_second is None
+        else f"{_number(block.ingest_chunks_per_second)} chunks/s"
+    )
+    if block.query_embed_p50_ms is None and block.query_embed_p95_ms is None:
+        latency = NOT_MEASURED
+    else:
+        latency = f"p50 {_number(block.query_embed_p50_ms)} ms, p95 {_number(block.query_embed_p95_ms)} ms"
+    price = (
+        NOT_MEASURED
+        if block.usd_per_million_tokens is None
+        else f"{_number(block.usd_per_million_tokens)} USD/1M tokens"
+    )
+    run_cost = NOT_MEASURED if block.run_cost_usd is None else f"{_number(block.run_cost_usd)} USD"
+    source = f" [{block.source}]" if block.source else ""
+    return (
+        f"  serving {block.mode}{source}: ingest {throughput}; query embed {latency}; cost {price}, this run {run_cost}"
+    )
+
+
+def render_comparison(comparison: EmbeddingProfileComparison) -> str:
+    """Plain-text report: every arm with every slice (pairs as query->document language), serving-mode figures for arms that have them."""
+    lines: list[str] = []
+    if comparison.wiring_proof and comparison.label:
+        lines.append(comparison.label)
+    lines.append(f"active profile: {comparison.active_profile}; gate passed: {comparison.gate_passed}")
+    header = "  " + "slice".ljust(28) + "  ".join(name.rjust(10) for name in ("recall@5", "recall@10", "mrr", "n"))
+    for entry in comparison.profiles:
+        lines.append(f"== {entry.profile_id}")
+        for block_name, block in (
+            ("gated", entry.metrics.gated),
+            ("candidates", entry.metrics.candidates),
+        ):
+            lines.append(f" {block_name}")
+            lines.append(header)
+            for row, metrics in _slice_rows(block):
+                values = (
+                    metrics.recall_at_5.value,
+                    metrics.recall_at_10.value,
+                    metrics.mrr.value,
+                )
+                cells = [_number(None if value is None else round(value, 4)).rjust(10) for value in values]
+                lines.append("  " + row.ljust(28) + "  ".join([*cells, str(metrics.recall_at_10.n).rjust(10)]))
+        for serving_block in entry.serving or []:
+            lines.append(_serving_line(serving_block))
+        if not comparison.wiring_proof and entry.profile_id != comparison.baseline_profile:
+            verdict = {True: "yes", False: "no", None: "n/a"}[entry.default_candidate]
+            lines.append(f"  default candidate: {verdict} ({entry.default_candidate_note or ''})")
+    return "\n".join(lines) + "\n"

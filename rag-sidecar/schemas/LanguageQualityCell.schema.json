@@ -1,0 +1,92 @@
+{
+  "$defs": {
+    "LanguageWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "since": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "title": "Since",
+          "type": "string"
+        },
+        "until": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "title": "Until",
+          "type": "string"
+        }
+      },
+      "required": [
+        "since",
+        "until"
+      ],
+      "title": "LanguageWindow",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One per-language row of rag_language_quality_cells (plan 07-46); tenant_key None means all tenants.",
+  "properties": {
+    "kb_unavailable": {
+      "minimum": 0,
+      "title": "Kb Unavailable",
+      "type": "integer"
+    },
+    "language": {
+      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+      "title": "Language",
+      "type": "string"
+    },
+    "low_confidence": {
+      "minimum": 0,
+      "title": "Low Confidence",
+      "type": "integer"
+    },
+    "refused": {
+      "minimum": 0,
+      "title": "Refused",
+      "type": "integer"
+    },
+    "retrievals": {
+      "minimum": 0,
+      "title": "Retrievals",
+      "type": "integer"
+    },
+    "tenant_key": {
+      "anyOf": [
+        {
+          "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tenant Key"
+    },
+    "votes_down": {
+      "minimum": 0,
+      "title": "Votes Down",
+      "type": "integer"
+    },
+    "votes_up": {
+      "minimum": 0,
+      "title": "Votes Up",
+      "type": "integer"
+    },
+    "window": {
+      "$ref": "#/$defs/LanguageWindow"
+    }
+  },
+  "required": [
+    "language",
+    "window",
+    "retrievals",
+    "refused",
+    "kb_unavailable",
+    "votes_up",
+    "votes_down",
+    "low_confidence"
+  ],
+  "title": "LanguageQualityCell",
+  "type": "object"
+}

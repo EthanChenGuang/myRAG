@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 const html = fs.readFileSync('scripts/config-ui/index.html', 'utf8');
 
-const SELECTS = ['RAG_PIPELINE', 'RAG_RERANKER', 'RAG_REFUSAL_FLOOR', 'RAG_RERANK_TIER_CHAT', 'RAG_RERANK_TIER_VOICE', 'RAG_HNSW_ITERATIVE_SCAN'];
+// RAG_PIPELINE moved to the generated RAG pipeline section (plan 07-20); its row is asserted in config-rag-pipeline-panel.test.ts.
+const SELECTS = ['RAG_RERANKER', 'RAG_REFUSAL_FLOOR', 'RAG_RERANK_TIER_CHAT', 'RAG_RERANK_TIER_VOICE', 'RAG_HNSW_ITERATIVE_SCAN'];
 const TEXT_INPUTS = ['RAG_RERANK_VOYAGE_MODEL_BY_LANG', 'COHERE_API_KEY', 'COHERE_BASE_URL', 'RAG_RETRIEVAL_PARAMS_OVERRIDE'];
 const NUMBER_INPUTS = ['RAG_CONTEXT_TOKEN_BUDGET', 'RAG_EXACT_SCAN_CUTOFF'];
 const CHECKBOXES = ['RAG_LEXICAL_SEARCH', 'RAG_REFUSAL_THRESHOLD', 'RAG_CONTEXT_EDGE_ORDER', 'RAG_CONTEXT_COMPRESSION', 'RAG_PARENT_CHILD', 'RAG_LEXICAL_TRANSLATION'];
@@ -53,7 +54,7 @@ describe('Phase 4 retrieval switches in the Config UI (web-design-guidelines, pl
   });
 
   it('help text is tied to its control and code tokens are not machine-translated', () => {
-    for (const id of ['RAG_PIPELINE', 'RAG_RERANK_VOYAGE_MODEL_BY_LANG', 'RAG_REFUSAL_FLOOR']) {
+    for (const id of ['RAG_RERANK_VOYAGE_MODEL_BY_LANG', 'RAG_REFUSAL_FLOOR']) {
       const describedBy = attr(openingTag(id), 'aria-describedby');
       expect(describedBy, id).toBeTruthy();
       expect(html).toContain(`id="${describedBy}"`);
@@ -80,5 +81,10 @@ describe('Phase 4 retrieval switches in the Config UI (web-design-guidelines, pl
 
   it('the switch group heading wraps evenly', () => {
     expect(html).toMatch(/<h4 class="[^"]*\btext-balance\b[^"]*">Phase 4 retrieval switches/);
+  });
+
+  it('the pipeline selector is no longer a static input (plan 07-20 generates it)', () => {
+    expect(html).not.toMatch(/<(input|select)\b[^>]*\bid="RAG_PIPELINE"/);
+    expect(html).not.toContain('id="rag-pipeline-help"');
   });
 });

@@ -133,7 +133,6 @@ describe('chat route: the answer-rule block (D-04, D-07)', () => {
       channel: 'web',
       webSearchOffered: false,
       capApplies: false,
-      calcOffered: false,
       contextTagging: false,
     }, { log: false });
     expect(added.startsWith('\n\n[rule:')).toBe(true);

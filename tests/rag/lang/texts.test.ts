@@ -79,11 +79,12 @@ describe('fixedText (D-08)', () => {
   });
 
   it('serves every key in every shipped language', () => {
-    const keys = Object.entries(raw().packs[0].texts).flatMap(([group, texts]) =>
-      Object.keys(texts as Record<string, string>).map((name) => `${group}.${name}`),
-    );
-    expect(keys).toHaveLength(39);
-    const params = { value: 'V', version: 'N', date: 'D', sentinel: 'S', not_covered: 'C', general_knowledge: 'G', from_documents: 'FD', from_web: 'FW' };
+    // The optional query_layer group (Phase 6.2) is read outside fixedText and is not a fixed-text key.
+    const keys = Object.entries(raw().packs[0].texts)
+      .filter(([group]) => group !== 'query_layer')
+      .flatMap(([group, texts]) => Object.keys(texts as Record<string, string>).map((name) => `${group}.${name}`));
+    expect(keys).toHaveLength(42);
+    const params = { value: 'V', version: 'N', date: 'D', sentinel: 'S', not_covered: 'C', general_knowledge: 'G', from_documents: 'FD', from_web: 'FW', open: 'O', close: 'C' };
     for (const pack of getLanguageRegistry().packs) {
       for (const key of keys) {
         const text = fixedText(key as TextKey, pack.code, params);
@@ -95,7 +96,7 @@ describe('fixedText (D-08)', () => {
   });
 
   it('every key has the same placeholders in every language', () => {
-    const placeholders = (text: string) => [...text.matchAll(/\{([A-Za-z_]+)\}/g)].map((m) => m[1]).sort();
+    const placeholders = (text: string | null) => [...(text ?? '').matchAll(/\{([A-Za-z_]+)\}/g)].map((m) => m[1]).sort();
     const [first, ...rest] = raw().packs;
     for (const [group, texts] of Object.entries(first.texts as Record<string, Record<string, string>>)) {
       for (const [name, text] of Object.entries(texts)) {
@@ -105,7 +106,7 @@ describe('fixedText (D-08)', () => {
   });
 
   it('TEXT_KEYS lists exactly the keys of the generated contract', () => {
-    const groups = LanguagePackSchema.shape.texts.shape;
+    const { query_layer: _optionalGroup, ...groups } = LanguagePackSchema.shape.texts.shape;
     const fromSchema = Object.entries(groups).flatMap(([group, schema]) => Object.keys(schema.shape).map((name) => `${group}.${name}`));
     expect([...TEXT_KEYS].sort()).toEqual(fromSchema.sort());
   });
@@ -134,7 +135,7 @@ describe('FIXED_TEXTS client subset (D-12)', () => {
 
   it('every value equals fixedText for the same key and language', () => {
     const keys = TEXT_KEYS.filter((key) => !key.startsWith('instructions.'));
-    expect(keys).toHaveLength(26);
+    expect(keys).toHaveLength(28);
     for (const [code, entry] of Object.entries(FIXED_TEXTS)) {
       for (const key of keys) {
         const [group, name] = key.split('.') as ['notices' | 'labels', string];

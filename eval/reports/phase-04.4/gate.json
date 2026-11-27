@@ -1,0 +1,654 @@
+{
+  "gates": [
+    {
+      "decision": "D-36 (a)",
+      "name": "off_identity",
+      "numbers": {
+        "command.characterization.exit_code": 0,
+        "off-ingest.nonzero_cells": 0,
+        "off-ingest.retrieval_total.p95_ms": 40.0,
+        "off-prechunked.nonzero_cells": 0,
+        "off-prechunked.retrieval_total.p95_ms": 31.0
+      },
+      "offenders": [],
+      "passed": true,
+      "runs": [
+        "off-prechunked",
+        "off-ingest"
+      ]
+    },
+    {
+      "decision": "D-36 (b)",
+      "name": "on",
+      "numbers": {
+        "v2-default-ingest.mrr": 0.6821173104434907,
+        "v2-default-ingest.recall_at_10": 0.7510729613733905,
+        "v2-default-prechunked.mrr": 0.6370184254606365,
+        "v2-default-prechunked.recall_at_10": 0.7211055276381909,
+        "v2-lexical-bm25-on-ingest.mrr": 0.6821173104434907,
+        "v2-lexical-bm25-on-ingest.recall_at_10": 0.7489270386266095,
+        "v2-lexical-bm25-on-ingest.refusal_differences": 0,
+        "v2-lexical-bm25-on-ingest.retrieval_total.p95_ms": 82.0,
+        "v2-lexical-bm25-on-prechunked.mrr": 0.6395309882747069,
+        "v2-lexical-bm25-on-prechunked.recall_at_10": 0.7185929648241206,
+        "v2-lexical-bm25-on-prechunked.refusal_differences": 0,
+        "v2-lexical-bm25-on-prechunked.retrieval_total.p95_ms": 68.0
+      },
+      "offenders": [
+        "v2-lexical-bm25-on-prechunked: category:duplicate_flood:recall_at_5 dropped beyond the noise band (0.7500 < 0.9800, v2-default-prechunked 1.0000)",
+        "v2-lexical-bm25-on-prechunked: category:duplicate_flood:recall_at_10 dropped beyond the noise band (0.9167 < 0.9800, v2-default-prechunked 1.0000)",
+        "v2-lexical-bm25-on-ingest: category:duplicate_flood:recall_at_5 dropped beyond the noise band (0.6667 < 0.8967, v2-default-ingest 0.9167)",
+        "v2-lexical-bm25-on-ingest: category:duplicate_flood:recall_at_10 dropped beyond the noise band (0.8333 < 0.8967, v2-default-ingest 0.9167)"
+      ],
+      "passed": false,
+      "runs": [
+        "v2-lexical-bm25-on-prechunked",
+        "v2-default-prechunked",
+        "v2-lexical-bm25-on-ingest",
+        "v2-default-ingest"
+      ]
+    },
+    {
+      "decision": "D-36 (c)",
+      "name": "cap_agreement",
+      "numbers": {
+        "v2-lexical-bm25-on-ingest.mean_overlap_at_k": 1.0,
+        "v2-lexical-bm25-on-ingest.measured": 392,
+        "v2-lexical-bm25-on-ingest.min_overlap_at_k": 1.0,
+        "v2-lexical-bm25-on-prechunked.mean_overlap_at_k": 1.0,
+        "v2-lexical-bm25-on-prechunked.measured": 342,
+        "v2-lexical-bm25-on-prechunked.min_overlap_at_k": 1.0
+      },
+      "offenders": [],
+      "passed": true,
+      "runs": [
+        "v2-lexical-bm25-on-prechunked",
+        "v2-lexical-bm25-on-ingest"
+      ]
+    }
+  ],
+  "noise_floor": 0.02,
+  "noise_k": 3.0,
+  "notes": [
+    "Fixture corpus only: every gate and threshold here was committed before any on-run result was looked at (D-36, pre-registration). Reference runs are single fixture runs, so the noise band against a reference is the noise floor (spread 0), as in phase_compare. The default fixture reranker partly hides a change in lexical order, so the fixture shows the absence of a regression, not the size of an effect; the reranker-none pair is reported, not gated.",
+    "Pre-registered by plan 04.4-13 before any on-run result was looked at (T-04.4-41); plan 04.4-14 runs it with python -m rag_eval.phase44_gate --spec eval/config/phase44-comparison.json --out eval/reports/phase-04.4.",
+    "Off runs use no base run config, so they run the legacy pipeline the committed baselines were recorded with; the v2 reference runs set the same three variables explicitly to ts_rank_cd, 1.2 and 0.75 (D-36).",
+    "No tool of this phase writes eval/config/retrieval-params.json, eval/config/refusal-thresholds.json or a refusal threshold (D-35)."
+  ],
+  "passed": false,
+  "phase": "04.4",
+  "report_only": [
+    {
+      "moves": [
+        "category:multi_turn:recall_at_5 dropped beyond the noise band (0.4375 < 0.4800, v2-default-rerank-none-prechunked 0.5000)"
+      ],
+      "note": "RAG_RERANKER=none on both arms (plan-check finding 8): the default fixture reranker partly hides a change in lexical order, so this pair shows the fused order without it. Reported, never gated.",
+      "numbers": {
+        "v2-default-rerank-none-prechunked.mrr": 0.6279373055754965,
+        "v2-default-rerank-none-prechunked.recall_at_10": 0.7185929648241206,
+        "v2-default-rerank-none-prechunked.recall_at_5": 0.7085427135678392,
+        "v2-lexical-bm25-on-rerank-none-prechunked.mrr": 0.6393634840871022,
+        "v2-lexical-bm25-on-rerank-none-prechunked.recall_at_10": 0.7211055276381909,
+        "v2-lexical-bm25-on-rerank-none-prechunked.recall_at_5": 0.7110552763819096
+      },
+      "reference": "v2-default-rerank-none-prechunked",
+      "run": "v2-lexical-bm25-on-rerank-none-prechunked"
+    }
+  ],
+  "runs": [
+    {
+      "env": {
+        "RAG_LEXICAL_BM25_B": "0.75",
+        "RAG_LEXICAL_BM25_K1": "1.2",
+        "RAG_LEXICAL_SCORING": "ts_rank_cd"
+      },
+      "fixture_mode": "prechunked",
+      "name": "off-prechunked",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 48,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 48,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 199,
+          "value": 0.24623115577889448
+        },
+        "false_refusal_upper_95": 0.30164029338037646,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.4444444444444444
+        },
+        "k_zero": {
+          "n": 199,
+          "value": 48.0
+        },
+        "mrr": {
+          "n": 199,
+          "value": 0.6398659966499162
+        },
+        "ndcg_at_context_k": {
+          "n": 199,
+          "value": 0.6465952669763657
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "recall_at_5": {
+          "n": 199,
+          "value": 0.6708542713567839
+        },
+        "topk_redundancy": {
+          "n": 178,
+          "value": 0.6276123595505618
+        }
+      },
+      "run_config_hash": "159433c21225c3ad70820ba41f91d46c420fa2e9b7df224032e342c40f429e25"
+    },
+    {
+      "env": {
+        "RAG_LEXICAL_BM25_B": "0.75",
+        "RAG_LEXICAL_BM25_K1": "1.2",
+        "RAG_LEXICAL_SCORING": "ts_rank_cd"
+      },
+      "fixture_mode": "ingest",
+      "name": "off-ingest",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 53,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 53,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 233,
+          "value": 0.1459227467811159
+        },
+        "false_refusal_upper_95": 0.18948250540648431,
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.4444444444444444
+        },
+        "k_zero": {
+          "n": 233,
+          "value": 33.0
+        },
+        "mrr": {
+          "n": 233,
+          "value": 0.6924177396280401
+        },
+        "ndcg_at_context_k": {
+          "n": 233,
+          "value": 0.7071595019576975
+        },
+        "recall_at_10": {
+          "n": 233,
+          "value": 0.778969957081545
+        },
+        "recall_at_5": {
+          "n": 233,
+          "value": 0.7703862660944206
+        },
+        "topk_redundancy": {
+          "n": 233,
+          "value": 0.5322532188841201
+        }
+      },
+      "run_config_hash": "83a758ea395ca5d901ba8324cc1ff55a6fbfe05eb3dedd9c69545f440d5baee4"
+    },
+    {
+      "env": {
+        "COHERE_API_KEY": "",
+        "RAG_LEXICAL_BM25_B": "0.75",
+        "RAG_LEXICAL_BM25_K1": "1.2",
+        "RAG_LEXICAL_SCORING": "ts_rank_cd",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_PIPELINE": "v2",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_RERANKER": "auto"
+      },
+      "fixture_mode": "prechunked",
+      "name": "v2-default-prechunked",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 48,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 48,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 199,
+          "value": 0.24623115577889448
+        },
+        "false_refusal_upper_95": 0.30164029338037646,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.6666666666666666
+        },
+        "k_zero": {
+          "n": 199,
+          "value": 48.0
+        },
+        "mrr": {
+          "n": 199,
+          "value": 0.6370184254606365
+        },
+        "ndcg_at_context_k": {
+          "n": 199,
+          "value": 0.650609495064458
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 199,
+          "value": 0.7211055276381909
+        },
+        "recall_at_5": {
+          "n": 199,
+          "value": 0.7110552763819096
+        },
+        "topk_redundancy": {
+          "n": 178,
+          "value": 0.12640449438202248
+        }
+      },
+      "run_config_hash": "a820381624f9f67edc95d76fc1b1ea1b8255a675d0434f6fb92e7609f19a6259"
+    },
+    {
+      "env": {
+        "COHERE_API_KEY": "",
+        "RAG_LEXICAL_BM25_B": "0.75",
+        "RAG_LEXICAL_BM25_K1": "1.2",
+        "RAG_LEXICAL_SCORING": "bm25",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_PIPELINE": "v2",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_RERANKER": "auto"
+      },
+      "fixture_mode": "prechunked",
+      "name": "v2-lexical-bm25-on-prechunked",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 48,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 48,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 199,
+          "value": 0.24623115577889448
+        },
+        "false_refusal_upper_95": 0.30164029338037646,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.5555555555555556
+        },
+        "k_zero": {
+          "n": 199,
+          "value": 48.0
+        },
+        "mrr": {
+          "n": 199,
+          "value": 0.6395309882747069
+        },
+        "ndcg_at_context_k": {
+          "n": 199,
+          "value": 0.6500707284528375
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 199,
+          "value": 0.7185929648241206
+        },
+        "recall_at_5": {
+          "n": 199,
+          "value": 0.7035175879396985
+        },
+        "topk_redundancy": {
+          "n": 178,
+          "value": 0.12640449438202248
+        }
+      },
+      "run_config_hash": "47948afd8235803b521b793e945b4de2706b22227e9a446ae21d33f1dcc9edd2"
+    },
+    {
+      "env": {
+        "COHERE_API_KEY": "",
+        "RAG_LEXICAL_BM25_B": "0.75",
+        "RAG_LEXICAL_BM25_K1": "1.2",
+        "RAG_LEXICAL_SCORING": "ts_rank_cd",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_PIPELINE": "v2",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_RERANKER": "auto"
+      },
+      "fixture_mode": "ingest",
+      "name": "v2-default-ingest",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 53,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 53,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 233,
+          "value": 0.2145922746781116
+        },
+        "false_refusal_upper_95": 0.26359163818929543,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.5555555555555556
+        },
+        "k_zero": {
+          "n": 233,
+          "value": 49.0
+        },
+        "mrr": {
+          "n": 233,
+          "value": 0.6821173104434907
+        },
+        "ndcg_at_context_k": {
+          "n": 233,
+          "value": 0.6873225604401492
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 233,
+          "value": 0.7510729613733905
+        },
+        "recall_at_5": {
+          "n": 233,
+          "value": 0.7424892703862661
+        },
+        "topk_redundancy": {
+          "n": 213,
+          "value": 0.12617370892018778
+        }
+      },
+      "run_config_hash": "a5026bda525be1ba4fa9e5884ce6ea0a7795405499d4a94cc964207882f7d639"
+    },
+    {
+      "env": {
+        "COHERE_API_KEY": "",
+        "RAG_LEXICAL_BM25_B": "0.75",
+        "RAG_LEXICAL_BM25_K1": "1.2",
+        "RAG_LEXICAL_SCORING": "bm25",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_PIPELINE": "v2",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_RERANKER": "auto"
+      },
+      "fixture_mode": "ingest",
+      "name": "v2-lexical-bm25-on-ingest",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 53,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 53,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 233,
+          "value": 0.2145922746781116
+        },
+        "false_refusal_upper_95": 0.26359163818929543,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.4444444444444444
+        },
+        "k_zero": {
+          "n": 233,
+          "value": 49.0
+        },
+        "mrr": {
+          "n": 233,
+          "value": 0.6821173104434907
+        },
+        "ndcg_at_context_k": {
+          "n": 233,
+          "value": 0.6852784196584283
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 233,
+          "value": 0.7489270386266095
+        },
+        "recall_at_5": {
+          "n": 233,
+          "value": 0.7360515021459227
+        },
+        "topk_redundancy": {
+          "n": 213,
+          "value": 0.12617370892018778
+        }
+      },
+      "run_config_hash": "040cb288e1062809eb727f646ebbc2bc533bd9881858ec2ee548646791524f6c"
+    },
+    {
+      "env": {
+        "COHERE_API_KEY": "",
+        "RAG_LEXICAL_BM25_B": "0.75",
+        "RAG_LEXICAL_BM25_K1": "1.2",
+        "RAG_LEXICAL_SCORING": "ts_rank_cd",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_PIPELINE": "v2",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_RERANKER": "none"
+      },
+      "fixture_mode": "prechunked",
+      "name": "v2-default-rerank-none-prechunked",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 48,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 48,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 199,
+          "value": 0.24623115577889448
+        },
+        "false_refusal_upper_95": 0.30164029338037646,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.3333333333333333
+        },
+        "k_zero": {
+          "n": 199,
+          "value": 48.0
+        },
+        "mrr": {
+          "n": 199,
+          "value": 0.6279373055754965
+        },
+        "ndcg_at_context_k": {
+          "n": 199,
+          "value": 0.6427456785076259
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 199,
+          "value": 0.7185929648241206
+        },
+        "recall_at_5": {
+          "n": 199,
+          "value": 0.7085427135678392
+        },
+        "topk_redundancy": {
+          "n": 178,
+          "value": 0.12640449438202248
+        }
+      },
+      "run_config_hash": "acba8225f1a5d874fad8e492e8214779548a6fee65111b2c170360c8986f9b37"
+    },
+    {
+      "env": {
+        "COHERE_API_KEY": "",
+        "RAG_LEXICAL_BM25_B": "0.75",
+        "RAG_LEXICAL_BM25_K1": "1.2",
+        "RAG_LEXICAL_SCORING": "bm25",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_PIPELINE": "v2",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_RERANKER": "none"
+      },
+      "fixture_mode": "prechunked",
+      "name": "v2-lexical-bm25-on-rerank-none-prechunked",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 48,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 48,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 199,
+          "value": 0.24623115577889448
+        },
+        "false_refusal_upper_95": 0.30164029338037646,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.4444444444444444
+        },
+        "k_zero": {
+          "n": 199,
+          "value": 48.0
+        },
+        "mrr": {
+          "n": 199,
+          "value": 0.6393634840871022
+        },
+        "ndcg_at_context_k": {
+          "n": 199,
+          "value": 0.6529839587887175
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 199,
+          "value": 0.7211055276381909
+        },
+        "recall_at_5": {
+          "n": 199,
+          "value": 0.7110552763819096
+        },
+        "topk_redundancy": {
+          "n": 178,
+          "value": 0.12640449438202248
+        }
+      },
+      "run_config_hash": "5ed23e8382bd22a81b93af3eb20d5ca1c78644c68fe28c08c6e1c6b0438e9c70"
+    }
+  ],
+  "schema_version": 1,
+  "selected": [
+    "off_identity",
+    "on",
+    "cap_agreement"
+  ]
+}

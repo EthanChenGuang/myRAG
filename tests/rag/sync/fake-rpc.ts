@@ -19,7 +19,7 @@ export function fakeClock(start = Date.parse('2026-01-01T00:00:00Z')): FakeClock
 export interface FakeOutboxRow {
   id: number;
   target: string;
-  entity: 'chunk' | 'document' | 'profile' | 'tenant';
+  entity: 'chunk' | 'document' | 'profile' | 'tenant' | 'purge';
   entity_id: string;
   tenant_key: string | null;
   profile_id: string | null;
@@ -62,6 +62,18 @@ export interface FakeIndexState {
   last_error: string | null;
 }
 
+/** 0740: one purge ledger row with its per-target status. */
+export interface FakePurge {
+  id: string;
+  tenant_key: string;
+  lineage_id: string;
+  document_ids: string[];
+  requested_at: number;
+  targets: Map<string, 'pending' | 'done'>;
+  collections_checked: number | null;
+  points_deleted: number | null;
+}
+
 export interface FakeCall {
   fn: string;
   args: Record<string, unknown>;
@@ -77,6 +89,9 @@ export interface FakeRpc {
   /** 0707: enabled targets (default: the fake's own target) and index state keyed `target|profile|tenant`. */
   enabledTargets: Set<string>;
   indexState: Map<string, FakeIndexState>;
+  purges: Map<string, FakePurge>;
+  /** Adds a purge ledger row for the fake's target ('pending' writes its outbox row, as rag_vector_sync_enqueue_purge does). */
+  addPurge(purge: { tenant_key: string; lineage_id: string; document_ids: string[]; status?: 'pending' | 'done' }): FakePurge;
   enqueue(row: Pick<FakeOutboxRow, 'entity' | 'entity_id' | 'tenant_key'> & Partial<FakeOutboxRow>): FakeOutboxRow;
   addDocument(doc: Partial<FakeDocument> & { id: string; tenant_key: string }, chunks: FakeChunk[]): void;
   /** Called after each RPC with its name; tests use it to move the clock or inject failures. */
@@ -109,7 +124,23 @@ export function createFakeRpc(clock: FakeClock, options: { target?: string } = {
     profiles: [{ profile_id: 'p1', dims: 3, storage: 'halfvec' }],
     enabledTargets: new Set([target]),
     indexState: new Map(),
+    purges: new Map(),
     onCall: null,
+    addPurge(purge) {
+      const full: FakePurge = {
+        id: crypto.randomUUID(),
+        tenant_key: purge.tenant_key,
+        lineage_id: purge.lineage_id,
+        document_ids: [...new Set(purge.document_ids.map((id) => id.toLowerCase()))].sort(),
+        requested_at: clock.now(),
+        targets: new Map([[target, purge.status ?? 'pending']]),
+        collections_checked: null,
+        points_deleted: null,
+      };
+      state.purges.set(full.id, full);
+      if ((purge.status ?? 'pending') === 'pending') state.enqueue({ entity: 'purge', entity_id: full.id, tenant_key: full.tenant_key });
+      return full;
+    },
     enqueue(row) {
       const full: FakeOutboxRow = {
         id: nextId++,
@@ -348,6 +379,52 @@ export function createFakeRpc(clock: FakeClock, options: { target?: string } = {
       }
       return n;
     },
+    rag_vector_sync_purge_row(args) {
+      const p = state.purges.get(String(args.p_purge_id));
+      return p ? [{ purge_id: p.id, tenant_key: p.tenant_key, lineage_id: p.lineage_id, document_ids: [...p.document_ids] }] : [];
+    },
+    rag_vector_sync_purge_complete(args) {
+      const p = state.purges.get(String(args.p_purge_id));
+      if (!p) throw Object.assign(new Error('unknown_purge'), { code: '22023' });
+      const t = String(args.p_target);
+      if (!p.targets.has(t)) return false;
+      p.targets.set(t, 'done');
+      p.collections_checked = Number(args.p_collections);
+      p.points_deleted = Number(args.p_points);
+      return true;
+    },
+    rag_vector_sync_purged_documents(args) {
+      const t = String(args.p_target);
+      const limit = Number(args.p_limit);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw Object.assign(new Error('invalid_limit'), { code: '22023' });
+      const after = (args.p_after as string | null) ?? null;
+      const latest = new Map<string, FakePurge>();
+      for (const p of state.purges.values()) {
+        if (p.tenant_key !== args.p_tenant_key || !p.targets.has(t)) continue;
+        for (const id of p.document_ids) {
+          const seen = latest.get(id);
+          if (!seen || p.requested_at > seen.requested_at) latest.set(id, p);
+        }
+      }
+      return [...latest.entries()]
+        .filter(([id]) => after === null || id > after)
+        .sort(([a], [b]) => (a < b ? -1 : 1))
+        .slice(0, limit)
+        .map(([id, p]) => ({ document_id: id, purge_id: p.id, lineage_id: p.lineage_id }));
+    },
+    rag_vector_sync_purge_reopen(args) {
+      const p = state.purges.get(String(args.p_purge_id));
+      if (!p) throw Object.assign(new Error('unknown_purge'), { code: '22023' });
+      const t = String(args.p_target);
+      const current = p.targets.get(t);
+      if (!current) throw Object.assign(new Error('unknown_purge_target'), { code: '22023' });
+      if (current === 'pending') return false;
+      p.targets.set(t, 'pending');
+      p.collections_checked = null;
+      p.points_deleted = null;
+      enqueueDedupe('purge', p.id, p.tenant_key, null);
+      return true;
+    },
     rag_vector_sync_chunk_row(args) {
       const chunk = state.chunks.get(String(args.p_chunk_id));
       return chunk && servable(chunk, String(args.p_tenant_key)) ? [toRow(chunk)] : [];
@@ -388,3 +465,31 @@ export function createFakeRpc(clock: FakeClock, options: { target?: string } = {
 }
 
 export { NIL };
+
+/**
+ * The same client, but every scalar answer comes back as one row keyed by the function name, as the PGlite fake edge sends it
+ * (`SELECT * FROM fn(...)`); real PostgREST sends the bare value. Product code must read both.
+ */
+export function keyedScalarClient(client: RpcClient): RpcClient {
+  return {
+    rpc(fn: string, args: Record<string, unknown>): RpcRequest {
+      const inner = client.rpc(fn, args);
+      const request: RpcRequest = {
+        abortSignal(signal) {
+          inner.abortSignal(signal);
+          return request;
+        },
+        then(onFulfilled, onRejected) {
+          return Promise.resolve(inner)
+            .then((response): RpcResponse => {
+              const { data } = response;
+              const scalar = data !== null && data !== undefined && typeof data !== 'object';
+              return scalar ? { ...response, data: [{ [fn]: data }] } : response;
+            })
+            .then(onFulfilled, onRejected);
+        },
+      };
+      return request;
+    },
+  };
+}

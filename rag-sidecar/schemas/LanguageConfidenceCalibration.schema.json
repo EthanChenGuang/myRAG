@@ -1,0 +1,165 @@
+{
+  "$defs": {
+    "CalibrationBin": {
+      "additionalProperties": false,
+      "properties": {
+        "confident": {
+          "title": "Confident",
+          "type": "boolean"
+        },
+        "correct": {
+          "minimum": 0,
+          "title": "Correct",
+          "type": "integer"
+        },
+        "length_bucket": {
+          "enum": [
+            "short",
+            "medium",
+            "long"
+          ],
+          "title": "Length Bucket",
+          "type": "string"
+        },
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "script_class": {
+          "enum": [
+            "single",
+            "mixed"
+          ],
+          "title": "Script Class",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "calibrated",
+            "mapped_fallback"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "value": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "confident",
+        "length_bucket",
+        "script_class",
+        "n",
+        "correct",
+        "value",
+        "source"
+      ],
+      "title": "CalibrationBin",
+      "type": "object"
+    },
+    "CalibrationInput": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "^[^\\s].*$",
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "title": "CalibrationInput",
+      "type": "object"
+    },
+    "CalibrationLengthBuckets": {
+      "additionalProperties": false,
+      "description": "Query length in characters: short up to short_max_chars, medium up to medium_max_chars, long above.",
+      "properties": {
+        "medium_max_chars": {
+          "minimum": 2,
+          "title": "Medium Max Chars",
+          "type": "integer"
+        },
+        "short_max_chars": {
+          "minimum": 1,
+          "title": "Short Max Chars",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "short_max_chars",
+        "medium_max_chars"
+      ],
+      "title": "CalibrationLengthBuckets",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "eval/config/language-confidence-calibration.json, written only by the calibration tool (plan 07-41).",
+  "properties": {
+    "bins": {
+      "items": {
+        "$ref": "#/$defs/CalibrationBin"
+      },
+      "maxItems": 12,
+      "minItems": 12,
+      "title": "Bins",
+      "type": "array"
+    },
+    "detector": {
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "title": "Detector",
+      "type": "string"
+    },
+    "generated_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})?)?$",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "inputs": {
+      "items": {
+        "$ref": "#/$defs/CalibrationInput"
+      },
+      "minItems": 1,
+      "title": "Inputs",
+      "type": "array"
+    },
+    "length_buckets": {
+      "$ref": "#/$defs/CalibrationLengthBuckets"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "smoothing": {
+      "const": "laplace",
+      "default": "laplace",
+      "title": "Smoothing",
+      "type": "string"
+    }
+  },
+  "required": [
+    "detector",
+    "generated_at",
+    "length_buckets",
+    "inputs",
+    "bins"
+  ],
+  "title": "LanguageConfidenceCalibration",
+  "type": "object"
+}

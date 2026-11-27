@@ -211,4 +211,29 @@ describe('review routes with two tenants (multi-tenant)', () => {
     expect((await chunks.GET(get(`/api/rag/review/items/${itemA}/chunks`), params(itemA))).status).toBe(404);
     expect(calls).toEqual([]);
   });
+
+  it("returns each item's strata source on the list and item routes, filters on it, and never shows B's (Phase 5.3)", async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const strata = 'INSERT INTO rag_review_item_strata (review_item_id, tenant_key, source, stratum, sampling_weight) VALUES ($1, $2, $3, $4, 1)';
+    await db.query(strata, [itemA, TENANT_A, 'historical', 'cluster:1|en|chat']);
+    await db.query(strata, [itemB, TENANT_B, 'pilot', 'cluster:1|en|chat']);
+    try {
+      session.userId = EXPERT_A;
+      const { list, item } = await loadRoutes();
+      const listed = ReviewItemListResponseSchema.parse(await (await list.GET(get('/api/rag/review/items'))).json());
+      expect(listed.items.map((entry) => [entry.id, entry.source])).toEqual([[itemA, 'historical']]);
+      const filtered = ReviewItemListResponseSchema.parse(await (await list.GET(get('/api/rag/review/items?source=historical'))).json());
+      expect(filtered.items.map((entry) => entry.id)).toEqual([itemA]);
+      const pilot = ReviewItemListResponseSchema.parse(await (await list.GET(get('/api/rag/review/items?source=pilot'))).json());
+      expect(pilot.items).toEqual([]);
+      expect((await list.GET(get('/api/rag/review/items?source=mined'))).status).toBe(400);
+      const opened = ReviewItemSchema.parse(await (await item.GET(get(`/api/rag/review/items/${itemA}`), params(itemA))).json());
+      expect(opened.source).toBe('historical');
+      calls.length = 0;
+      expect((await item.GET(get(`/api/rag/review/items/${itemB}`), params(itemB))).status).toBe(404);
+      expect(calls.filter((c) => c === 'admin:rag_review_item_strata')).toEqual([]);
+    } finally {
+      await db.query('DELETE FROM rag_review_item_strata');
+    }
+  });
 });

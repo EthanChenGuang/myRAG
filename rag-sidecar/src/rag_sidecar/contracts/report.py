@@ -53,6 +53,11 @@ class SliceMetrics(_Contract):
     attribute_filter_fallback_rate: MetricValue | None = _optional_metric()
     false_answer_rate: MetricValue | None = _optional_metric()
     conversational_rate: MetricValue | None = _optional_metric()
+    # Phase 6.2 D-10: all-evidence recall and sub-question coverage; absent on reports recorded before it.
+    all_evidence_recall_at_5: MetricValue | None = _optional_metric()
+    all_evidence_recall_at_10: MetricValue | None = _optional_metric()
+    subq_coverage_at_5: MetricValue | None = _optional_metric()
+    subq_coverage_at_10: MetricValue | None = _optional_metric()
 
 
 class ItemResult(_Contract):
@@ -97,6 +102,9 @@ class ItemResult(_Contract):
         default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
     )
     conversational_ok: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    subq_total: int | None = Field(default=None, ge=0, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    subq_hit_at_5: int | None = Field(default=None, ge=0, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    subq_hit_at_10: int | None = Field(default=None, ge=0, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
 
 
 class NativeReviewBacklogEntry(_Contract):
@@ -163,6 +171,10 @@ class InjectionReport(_Contract):
     false_positive_rate: dict[str, MetricValue] = Field(default_factory=dict)
     rules_false_positive_count: int = Field(ge=0)
     gate: Literal["absolute_zero", "report_only"]
+    # D-42: the share of allowlisted-link items whose allowlisted link is still in the accounted answer.
+    allowlisted_link_kept_rate: dict[str, MetricValue] | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
 
 
 class TransformOutcomeCounts(_Contract):

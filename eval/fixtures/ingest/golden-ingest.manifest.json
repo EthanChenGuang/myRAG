@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "set_id": "fixture-ingest",
-  "version": 4,
+  "version": 6,
   "items": [
     {
       "id": "en-ambiguous-001",
@@ -454,6 +454,42 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "en-injection-evasive-003",
+      "item_sha256": "9eead921a45b65d25e28049c226cbf40eae462fc65652c25e70abf668f824c30",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-injection-evasive-004",
+      "item_sha256": "6083722ecfe9d4e7188ae90d764772e8501258acea4b89e4fac865fb056933b0",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-injection-evasive-005",
+      "item_sha256": "e011fd35cf1ed04bae111b6b91fc225e4d819db4379c5550a5cff34df0588c4e",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-injection-evasive-006",
+      "item_sha256": "336fc685152fe11c87e9b2f2d28fde4efeca2f7eaea63407f29f83f09582d48c",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "en-multi-turn-001",
       "item_sha256": "e01b206830da1392089e0c920b6b3e8ea18ff51af1e01fe31ebb23d6cfe0fec5",
       "status": "active",
@@ -697,6 +733,78 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "en-off-topic-context-001",
+      "item_sha256": "72e450e12cc5fbfee5588a77d1e29ef0e49ae9f435d1fdc05e8c5ea339a9771c",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-off-topic-context-002",
+      "item_sha256": "3794c3ef7a50d3bce1aeaa15d6fc6ee8a1ea4c423f3813218bed5b0f64808324",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-off-topic-context-003",
+      "item_sha256": "5b184624b34d4e0f566951d19d6bbaa32df2aa3aa7bbbdc655110c3e303c0d3d",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-off-topic-context-004",
+      "item_sha256": "b378880e2f5eb255cea737da0405e54a52bc2f0106dcb4a7dd061f0eb19ad070",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-partial-answer-001",
+      "item_sha256": "f1755813c3d31dbc321bf40a80e02cdc19f92ab32bd54027249c365f5ae1e03b",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-partial-answer-002",
+      "item_sha256": "39a5887960ae0a953952c6d9112243971ae4d26b4635b38abf4fa2d61d31fba2",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-partial-answer-003",
+      "item_sha256": "2b6d88639f1559d52afb061f02361ee68c602ecb2229cbc54b7ce5c6e2c8f6e3",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-partial-answer-004",
+      "item_sha256": "698f3f16b514e42d5a8b7798961c7c72b8a9948de8a4c07e335be9febade2229",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "en-scanned-001",
       "item_sha256": "ae44dd16db0546806da99b98ab05270523397e39bd2c8ee1c078b4be482f95b8",
       "status": "active",
@@ -767,6 +875,42 @@
       "stale_since": null,
       "retire_reason": null,
       "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "en-stale-version-001",
+      "item_sha256": "5e8ac4a2450f4e3590f6c29cded24753c9c57d219eaf8bf06472a60d4688fd2e",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-stale-version-002",
+      "item_sha256": "0fdb11f6bd454cfc91711f3be19ad7ddc71fbd8d392dbed65673ac588c01a634",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-stale-version-003",
+      "item_sha256": "e8848493643d479d4a9a40ed9a6e9fd4a4353a5e125cb629b0ed045693a112e9",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-stale-version-004",
+      "item_sha256": "9e694c9a3ec362de00f109bd80d2f2fa3a85c766d282678116fd00a846f98da0",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
     },
     {
       "id": "en-table-001",
@@ -1100,6 +1244,753 @@
       "stale_since": null,
       "retire_reason": null,
       "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "ingest-tpl-attribute-en-01",
+      "item_sha256": "ee70727c8570bfea793113f3e3f66fb61fdab7703baec8f19884b5cb843bb636",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-en-02",
+      "item_sha256": "5832871bcdc0a6b0ff5e6db23fbc319e1998815d2ce10c6f3f444fb22b573a8f",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-en-03",
+      "item_sha256": "5fa5ae50f00a8233b2389644cef62ec0677e7f29220ff81158df0af8a4063fdb",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-en-04",
+      "item_sha256": "3c49d487d2dbfa48b783d450e1542c1dc9238e2438b7b7597f24e28793944a87",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-en-05",
+      "item_sha256": "a10c4d0deb8cb344dfe1b99ca147116e2cdd88318db46d3bd809c622234a7606",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-en-06",
+      "item_sha256": "73f3586341735a64687169eafbb25247d67fbe5f273fcf11eb79fc389f181f6b",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-en-07",
+      "item_sha256": "137d34b15f2aa3b1b1ff3060e8fee68243bddb4bb3b0bd950f89d3309bd89e66",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-en-08",
+      "item_sha256": "a0ad79470064135c9d428982942c8d9c211117522f21c1301c384e2330057e08",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-it-01",
+      "item_sha256": "225fd35c5ab719fd785874e3a6a47cd87b6e8a8f868e14601c6e0962f1ca0f89",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-it-02",
+      "item_sha256": "8883d6f2c579d6b18bf61bee245102264397a33eceb7ff6eadebd65ccc83f156",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-it-03",
+      "item_sha256": "9c69e349a296164cdb654572a5ddb6750cd8fad94d7a72cb0228966580ea1b20",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-it-04",
+      "item_sha256": "8cecf9b9e3bd8c951790b8dd59a7fc6e64053a3668a3b61398ab07e5b4534ca5",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-it-05",
+      "item_sha256": "2e8f99cc33242ef2f3d81746544c57355334a7670970893da0a995bfa0cede9d",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-it-06",
+      "item_sha256": "f40ccf9921ca97535ffaec1423a722999f6046228c1900896dc6f84953ba21cc",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-it-07",
+      "item_sha256": "c0a20e28a63e07a2adc89c166c48ed6c11a193338354dd61050d42dc29c3bd2e",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-it-08",
+      "item_sha256": "a36e0f24a182c1b129528a98bed9abf8e3d21b84d51186113f74b7caf5c361f9",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-zh-01",
+      "item_sha256": "b5a85896b69a27779c040e21d626cc1027b5f2e23c81a6d3300208b91a3a2290",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-zh-02",
+      "item_sha256": "015300fbd2e89b795ed96717c67cb901c6846c406738f84bf0775082e43d8cac",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-zh-03",
+      "item_sha256": "34a86d3e6e2e8e5366d9fec39a3ba35d1f901e48f25734970bc8239d065ec56f",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-zh-04",
+      "item_sha256": "72cb57c538f4aa890783041378b8ced592c3fa47aad74b0729f4e663b572ae6a",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-zh-05",
+      "item_sha256": "02d72ea9e7476366a0f01055dc38e123f5e62a0d2049b86d44ef7c62c074cba4",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-zh-06",
+      "item_sha256": "910326e4e476e6f4bc730fe94682cbc03f77f5f697006a5358592a0718365636",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-zh-07",
+      "item_sha256": "3a83c73502affc4e60992f8dd5fe19246cd659c15fd426784cdac5d5baab946e",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-attribute-zh-08",
+      "item_sha256": "b37a4160274376c028f5eeb267362d6425222f4817c92112e6cccb06a2457f53",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-en-01",
+      "item_sha256": "df69cb58e95c325ebd7734e22ab5eba8b7ba4f7bac9da11ca466d303adfd82d9",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-en-02",
+      "item_sha256": "d7e736bf50752c25919f2b5f9e32e51b4cf24d461378b682e12f31de55993e05",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-en-03",
+      "item_sha256": "bd5a6261fe9d36d7934ffb7e55563cd33b12bc09523b018ded30b454344908f3",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-en-04",
+      "item_sha256": "b550847f0fe4d43c0579df5c5196d8039aef41c18ac0b5d2dc2ae6f55fa50c07",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-en-05",
+      "item_sha256": "d288798195d3016376e571f1de1abe19af8dfa35ffb85af703925ad08f5a6786",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-en-06",
+      "item_sha256": "dea49c5a0ca4af968556e5d288b69c072eb903059f2906ffda0427865a0846e5",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-it-01",
+      "item_sha256": "e662a05fe4e678e27a0231fba6ab723136d5914b231f38ea49c97eb054f9de45",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-it-02",
+      "item_sha256": "944ad5bc91e34db6aef2918823ae170df47c96839aa006e688b958debeb33e7f",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-it-03",
+      "item_sha256": "71083d530cbf8f6e69859c962d53e93f5a966792ead9250b38d21b34d6d52eb0",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-it-04",
+      "item_sha256": "5f0d1c32a82684a010130d050f3e52b2708950ccf4f73deb61986f5bc703c407",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-it-05",
+      "item_sha256": "3c27b80592070a58d11f3dac7a2f970ca135546996c4a332f07b508fd1407258",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-it-06",
+      "item_sha256": "49b5c663be55d069f346764a8825b746f9f095d046be935042e1d250e7e0275e",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-zh-01",
+      "item_sha256": "8db9989669d29980a13115a4f62b2308fddc8e3bf17c756c2d88fa8d841ee4f7",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-zh-02",
+      "item_sha256": "b876bd2d040b42f0f66f88ba82a69cd27a91a492de07b149df5a53b26162c20f",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-zh-03",
+      "item_sha256": "1e8d5b54521b881810ad4de3c353fc9f401d9c27567572c8eb91fb2746cdf6b9",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-zh-04",
+      "item_sha256": "814f108a9329db7fbca69043fffbb2763486a78f63528ca154e3fcaa1c9b2abb",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-zh-05",
+      "item_sha256": "def09b12a25c657ae971bd16ab36dcbab4d0ac2d3df158432c4532fb20b6ea36",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-boilerplate-zh-06",
+      "item_sha256": "bc02209f691deef8a462b678f5e38ab142d746ca10544cc81873836245bd1895",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-no-answer-en-01",
+      "item_sha256": "c8ef4692c99902ecde56fc1bb823c721ada8daf5152d4cc3ddf25db5259fce08",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-no-answer-en-03",
+      "item_sha256": "0714d25177b10a04fb0ccdad2649e26f9bda28a8ca28bde2d371fc32d5f73331",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-no-answer-it-03",
+      "item_sha256": "7b76ad8f398f7431bd9ea5ecabc6d0e0989ead9957844fd2f970af086320e6f2",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-no-answer-it-04",
+      "item_sha256": "266a2536a9b391b0f36e99e9f43ed9f2b7760ae00ee103b72d53d43b2eb88d8e",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-no-answer-zh-01",
+      "item_sha256": "6060c4b10ae9843bb055b69af66eeece268c9721af09db3c51b672f32cbf3a16",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-en-01",
+      "item_sha256": "a17dce580e71d55c87559cc0cf006341d2f16e319cd9ee3089cafb405e824f78",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-en-02",
+      "item_sha256": "ac57ec0ea1db0d9cf122687839e9209aec3b546405c6cf3af1ea33d6816ba1e2",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-en-03",
+      "item_sha256": "18304029d81d10097282d0cb8091a27cff17193cc300950ced1aa75da088bf46",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-en-04",
+      "item_sha256": "0cd1a7cd85549853a07a75f28f8a6d907218a72a2bbb15759bb2113c0b1993bb",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-en-05",
+      "item_sha256": "98d46ef7203703091559f6443245ad59c083033e34e4ad9c1f91d73c4ff22174",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-en-06",
+      "item_sha256": "9cfa4f062e62d1f8765ab10d63aad1cc66509cb8fe1a48129d70c17dfae3b938",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-it-01",
+      "item_sha256": "b7bbccaeb40aaf2db46951415a770c414e318cb1d44c6f002eb571d9b334e8fa",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-it-02",
+      "item_sha256": "74542c2679058d250e9b72c8fc74dc4b67a63bcbc564098e621f15af104951b2",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-it-03",
+      "item_sha256": "4a5fa5dc566e6ee5a4ec09c5174ae143d3fb9452a7db45b74be3908c4a6642b2",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-it-04",
+      "item_sha256": "f65c4e995507fc42025241796398359c922421526c8dffa125b0dc4d9be6db0d",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-it-05",
+      "item_sha256": "1e6546f850489d17b78deafc002b9962b7c427be03479d4812b21b770ac20aad",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-it-06",
+      "item_sha256": "a8385fae06ab1450e5c98d2fb405295b38b59cdf6fd859928b767588a774e423",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-zh-01",
+      "item_sha256": "5fc89d48717982cdd4f78478f3438a36b97ee56d76364589c40d21d846a1f706",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-zh-02",
+      "item_sha256": "ec2fa623c4107fe7890993626b531bb40a40184cab44fbd95e1138d4a213b453",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-zh-03",
+      "item_sha256": "b2e319b1357b3c384829f3447435b3518aba2cd0ea6c54d0e73976faa7c6acf2",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-zh-04",
+      "item_sha256": "876ebf22aaa05bd6e8796bffcd6f730cc23b7b42c1aeaa502d0585427b7d34ab",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-zh-05",
+      "item_sha256": "e4c1beb3aabff1373200fd484d68a88f1b8b9be1c8a18a712e76aeb952e55b92",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-quantity-zh-06",
+      "item_sha256": "cb84e262b89270e5733a1e1365d236a7688bc57ba8a8ab8f8529b2dd76121225",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-en-01",
+      "item_sha256": "9eb922387538b9db981522143fba1a0fe43c1530a7a6ab263851597fba668f4e",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-en-02",
+      "item_sha256": "e3fb9eb02c7ef161b4d43eacb88ee7e848ce564ffa74856d0a89f6efba0a41ef",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-en-03",
+      "item_sha256": "0609b1175dad221d9066c79d4422da59f605bff7a3faaa12362c21261644c595",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-en-04",
+      "item_sha256": "f8f09f7288408cd7087d9a1adc360890141c01471fcf1c1dcf57f35a1f5d6b29",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-en-05",
+      "item_sha256": "fa846ba33dfefa3cd3c40170ad9cc5462970545161129a3d1961a8b92d374086",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-en-06",
+      "item_sha256": "3cd24246dde990fc50da3af4226a7c143af2cb216ddf41900006d1dc11a64de1",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-it-01",
+      "item_sha256": "4c2acd3c5032fa6b27174314e0041640b7be724f84e59c3ce318f398602ca714",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-it-02",
+      "item_sha256": "edfabab4114c866b8fd4907a39e8ddbf9484a8f2231d720e2460ce0ca76c26ce",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-it-03",
+      "item_sha256": "94dc94d1a022dc6a86cf1e3ddd5b6d5088d8abae57f087b9345651596b4acff3",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-it-04",
+      "item_sha256": "ee48b02b799846a13eaa97c54f25f2b91abb55307c876eca3ffa3edf055ba864",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-it-05",
+      "item_sha256": "f53c4f6c37a9f12d4ecfdeecb4ea1f28095ad4421eb747704bb476f112ed7cc0",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-it-06",
+      "item_sha256": "a6c229bd653c4f00fb38a46d9dbe72500a8c386335db9b6f0e62e3fad4bc215d",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-zh-01",
+      "item_sha256": "a287864e780147f1ec74a7052a7ab7f6da2a1b038bc20b822eb8f47b493d9891",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-zh-02",
+      "item_sha256": "99e2473700554cbc611f9a49331534414f0949bbff6e28cfd81671599160a62b",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-zh-03",
+      "item_sha256": "8fecc796eeac3074732d1a8d101019d935f16d31b6303108854a72c2274646c2",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-zh-04",
+      "item_sha256": "904acd4ad4082396c1bd2b901ff65340781ee79832c86287a68802c6be9fba97",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-zh-05",
+      "item_sha256": "9b3f874e1ee80b666024add98e67a303efd442667e9990972bcffc3ff52506f6",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-variant-zh-06",
+      "item_sha256": "ff688bd20eaedf9263816b873b8403ecfd957f916bf3d9e2432f8c7186f40a1b",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
     },
     {
       "id": "it-ambiguous-001",
@@ -1579,6 +2470,42 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "it-injection-evasive-003",
+      "item_sha256": "0b9a511187e3eccfe2a0acad3806af2056558e90de77199ab629641024db3060",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-injection-evasive-004",
+      "item_sha256": "2064b0905d80bd42c9824f5813721da37c004b180736f6d140eeff6e4814e118",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-injection-evasive-005",
+      "item_sha256": "aa81c0d25f80f94878e9c2f247d7a7140c1ee54b0eadb13dcf3dfb1824f059f9",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-injection-evasive-006",
+      "item_sha256": "b63046caa63c2aa08ac82b79b0f7023fe413195a12f60483c4b9466027669ad4",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "it-multi-turn-001",
       "item_sha256": "97cd36c1a72df083259ac23eabbafc7deecafceabb1f6ce04f61499185a4593d",
       "status": "active",
@@ -1813,6 +2740,78 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "it-off-topic-context-001",
+      "item_sha256": "1bcd5fd624427d33ed16155d316525b352eef6b9115e2bed9a141e70c5fdec6f",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-off-topic-context-002",
+      "item_sha256": "9a515211bc00caef87f6c59dc42986d00a96f7e14be5a6ec7b1ce5236f641f79",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-off-topic-context-003",
+      "item_sha256": "bfa6f3370f7036909dc2bce83610be7438f304c6bfa091a477ba58ed6711666c",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-off-topic-context-004",
+      "item_sha256": "cdd4efb4602593bc02dc9eeade38059b8bc1d394e223a132cc99efb9a8d53f93",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-partial-answer-001",
+      "item_sha256": "d30d992f906fca2c8cbebcae1e9a339ef88bb7c21d7eb09226107380ad6a608c",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-partial-answer-002",
+      "item_sha256": "ebc43a193607be597966739224fdfaf8154d51c3bb8bd0d9a3ef467e87e3af34",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-partial-answer-003",
+      "item_sha256": "ffb4e6dad9a862494036139dd5667da151ae9dc96ef26ed12ebab72e5b975282",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-partial-answer-004",
+      "item_sha256": "9f1a8e3b657177d3fb03e5458678ffe5e1ebe95186f89a6c315965cc403822e1",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "it-scanned-001",
       "item_sha256": "93cf1d0476ad033785545ae123959db93bd7cbdeed2968a3d63b9e624d36b31c",
       "status": "active",
@@ -1883,6 +2882,42 @@
       "stale_since": null,
       "retire_reason": null,
       "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "it-stale-version-001",
+      "item_sha256": "52c473fc32a5d845763537b0b297e8284a53333ff558f866fa9b3e1dbd933568",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-stale-version-002",
+      "item_sha256": "e12dde5ef1761618b0e81cf607d32e1dd948f21fe70f08ed863b1ebf1ffd74b4",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-stale-version-003",
+      "item_sha256": "f59ce52c9fe5c2759e37419f2f73942adef23f3c1d2d3a0ea63ae1ca198292e7",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-stale-version-004",
+      "item_sha256": "224ef8025c7c98b694db5e85b92937dd0391ec933de7cf8c9feb8797290003d7",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
     },
     {
       "id": "it-table-001",
@@ -2965,6 +4000,42 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "zh-injection-evasive-003",
+      "item_sha256": "d0c7b47d5961619931939dccf3fda306e7da5ab04713646681b032bd8d73c290",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-injection-evasive-004",
+      "item_sha256": "fb0cdee4580f108b4186f94fb1a21d7d98dff7959600a196c8caaad986a0c0b0",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-injection-evasive-005",
+      "item_sha256": "d76b533f7459ed0db01e13f4e8b2528668557eb2951cc47e91b363d0def15f65",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-injection-evasive-006",
+      "item_sha256": "dfa75f5f0b3705a797230d7c9332377176cccfcdce418cdf6c22cad6e58cabce",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "zh-multi-turn-001",
       "item_sha256": "ffe1fef7bd1cc457b046f7f53ba243c67a23e7ac03987f1c50b9ca2907b5d25f",
       "status": "active",
@@ -3199,6 +4270,78 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "zh-off-topic-context-001",
+      "item_sha256": "c9be65788d5e7ee730c97aa1768c657d02f2d467eb2a10c70a080a007cd6f318",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-off-topic-context-002",
+      "item_sha256": "76c677ef34bb40cc5f777a02c5f02ebc9754f4365b67d1b31620ba6a799be714",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-off-topic-context-003",
+      "item_sha256": "64baaddbb299181ae66b74fa953fad25897fb64bb940780203575bbf8603c7cb",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-off-topic-context-004",
+      "item_sha256": "e1d0df1ef9838aa04acf146692995f89d6b38fb056661f8e1d1750c0cb3d3ab3",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-partial-answer-001",
+      "item_sha256": "7d39f05b4a337a946040b8a29a61c446e11349842af3647196df01e54031b4fb",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-partial-answer-002",
+      "item_sha256": "013846f623a62bf3861400a089fe5ca0e6f5424354a21b28ab780f02c643547a",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-partial-answer-003",
+      "item_sha256": "10928cef4e332a4ed830d3cbe19b36b2703eb16d0eed306a04d1da2f9f2eadf6",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-partial-answer-004",
+      "item_sha256": "e0239d791429c9599c1852d259f71ad7467d062bea46f2ad43613d92a4d67003",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "zh-scanned-001",
       "item_sha256": "1501eb0577f578c1c13fa2c583b988aad6dbde739719bcccb2b63733c755c8ea",
       "status": "active",
@@ -3269,6 +4412,42 @@
       "stale_since": null,
       "retire_reason": null,
       "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "zh-stale-version-001",
+      "item_sha256": "1608d0fa6126979bd0949b3fa2e5820c08b2fd68f23fbe1c8386a9ae5c5dedb1",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-stale-version-002",
+      "item_sha256": "e1d723afe4346ad0c42e3af35ae78fca01bf97deba645e473e3ede7b8a63f7f3",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-stale-version-003",
+      "item_sha256": "176aecfddf8efd4fe989741d8af1619c262ccaab355e7370cbb7baa6053fadfa",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-stale-version-004",
+      "item_sha256": "9d79a5c568916146b657e7cd6e4c4de8dab6840c94dccd1cbaa088ad9da6b435",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
     },
     {
       "id": "zh-table-001",
@@ -3736,7 +4915,156 @@
       "changed": [],
       "retired": [],
       "stale": []
+    },
+    {
+      "version": 5,
+      "date": "2026-11-27",
+      "added": [
+        "en-injection-evasive-003",
+        "en-injection-evasive-004",
+        "en-injection-evasive-005",
+        "en-injection-evasive-006",
+        "en-off-topic-context-001",
+        "en-off-topic-context-002",
+        "en-off-topic-context-003",
+        "en-off-topic-context-004",
+        "en-partial-answer-001",
+        "en-partial-answer-002",
+        "en-partial-answer-003",
+        "en-partial-answer-004",
+        "en-stale-version-001",
+        "en-stale-version-002",
+        "en-stale-version-003",
+        "en-stale-version-004",
+        "it-injection-evasive-003",
+        "it-injection-evasive-004",
+        "it-injection-evasive-005",
+        "it-injection-evasive-006",
+        "it-off-topic-context-001",
+        "it-off-topic-context-002",
+        "it-off-topic-context-003",
+        "it-off-topic-context-004",
+        "it-partial-answer-001",
+        "it-partial-answer-002",
+        "it-partial-answer-003",
+        "it-partial-answer-004",
+        "it-stale-version-001",
+        "it-stale-version-002",
+        "it-stale-version-003",
+        "it-stale-version-004",
+        "zh-injection-evasive-003",
+        "zh-injection-evasive-004",
+        "zh-injection-evasive-005",
+        "zh-injection-evasive-006",
+        "zh-off-topic-context-001",
+        "zh-off-topic-context-002",
+        "zh-off-topic-context-003",
+        "zh-off-topic-context-004",
+        "zh-partial-answer-001",
+        "zh-partial-answer-002",
+        "zh-partial-answer-003",
+        "zh-partial-answer-004",
+        "zh-stale-version-001",
+        "zh-stale-version-002",
+        "zh-stale-version-003",
+        "zh-stale-version-004"
+      ],
+      "changed": [],
+      "retired": [],
+      "stale": []
+    },
+    {
+      "version": 6,
+      "date": "2026-11-27",
+      "added": [
+        "ingest-tpl-attribute-en-01",
+        "ingest-tpl-attribute-en-02",
+        "ingest-tpl-attribute-en-03",
+        "ingest-tpl-attribute-en-04",
+        "ingest-tpl-attribute-en-05",
+        "ingest-tpl-attribute-en-06",
+        "ingest-tpl-attribute-en-07",
+        "ingest-tpl-attribute-en-08",
+        "ingest-tpl-attribute-it-01",
+        "ingest-tpl-attribute-it-02",
+        "ingest-tpl-attribute-it-03",
+        "ingest-tpl-attribute-it-04",
+        "ingest-tpl-attribute-it-05",
+        "ingest-tpl-attribute-it-06",
+        "ingest-tpl-attribute-it-07",
+        "ingest-tpl-attribute-it-08",
+        "ingest-tpl-attribute-zh-01",
+        "ingest-tpl-attribute-zh-02",
+        "ingest-tpl-attribute-zh-03",
+        "ingest-tpl-attribute-zh-04",
+        "ingest-tpl-attribute-zh-05",
+        "ingest-tpl-attribute-zh-06",
+        "ingest-tpl-attribute-zh-07",
+        "ingest-tpl-attribute-zh-08",
+        "ingest-tpl-boilerplate-en-01",
+        "ingest-tpl-boilerplate-en-02",
+        "ingest-tpl-boilerplate-en-03",
+        "ingest-tpl-boilerplate-en-04",
+        "ingest-tpl-boilerplate-en-05",
+        "ingest-tpl-boilerplate-en-06",
+        "ingest-tpl-boilerplate-it-01",
+        "ingest-tpl-boilerplate-it-02",
+        "ingest-tpl-boilerplate-it-03",
+        "ingest-tpl-boilerplate-it-04",
+        "ingest-tpl-boilerplate-it-05",
+        "ingest-tpl-boilerplate-it-06",
+        "ingest-tpl-boilerplate-zh-01",
+        "ingest-tpl-boilerplate-zh-02",
+        "ingest-tpl-boilerplate-zh-03",
+        "ingest-tpl-boilerplate-zh-04",
+        "ingest-tpl-boilerplate-zh-05",
+        "ingest-tpl-boilerplate-zh-06",
+        "ingest-tpl-no-answer-en-01",
+        "ingest-tpl-no-answer-en-03",
+        "ingest-tpl-no-answer-it-03",
+        "ingest-tpl-no-answer-it-04",
+        "ingest-tpl-no-answer-zh-01",
+        "ingest-tpl-quantity-en-01",
+        "ingest-tpl-quantity-en-02",
+        "ingest-tpl-quantity-en-03",
+        "ingest-tpl-quantity-en-04",
+        "ingest-tpl-quantity-en-05",
+        "ingest-tpl-quantity-en-06",
+        "ingest-tpl-quantity-it-01",
+        "ingest-tpl-quantity-it-02",
+        "ingest-tpl-quantity-it-03",
+        "ingest-tpl-quantity-it-04",
+        "ingest-tpl-quantity-it-05",
+        "ingest-tpl-quantity-it-06",
+        "ingest-tpl-quantity-zh-01",
+        "ingest-tpl-quantity-zh-02",
+        "ingest-tpl-quantity-zh-03",
+        "ingest-tpl-quantity-zh-04",
+        "ingest-tpl-quantity-zh-05",
+        "ingest-tpl-quantity-zh-06",
+        "ingest-tpl-variant-en-01",
+        "ingest-tpl-variant-en-02",
+        "ingest-tpl-variant-en-03",
+        "ingest-tpl-variant-en-04",
+        "ingest-tpl-variant-en-05",
+        "ingest-tpl-variant-en-06",
+        "ingest-tpl-variant-it-01",
+        "ingest-tpl-variant-it-02",
+        "ingest-tpl-variant-it-03",
+        "ingest-tpl-variant-it-04",
+        "ingest-tpl-variant-it-05",
+        "ingest-tpl-variant-it-06",
+        "ingest-tpl-variant-zh-01",
+        "ingest-tpl-variant-zh-02",
+        "ingest-tpl-variant-zh-03",
+        "ingest-tpl-variant-zh-04",
+        "ingest-tpl-variant-zh-05",
+        "ingest-tpl-variant-zh-06"
+      ],
+      "changed": [],
+      "retired": [],
+      "stale": []
     }
   ],
-  "manifest_sha256": "7065ec0ea808425a78bc3769df8efb34b34db9efcf8e90182523745fcc299235"
+  "manifest_sha256": "138fd2e7da8f14a8a8797e23cffc08d139b72bffac5b7328e8b2e1e8f939a548"
 }

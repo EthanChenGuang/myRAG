@@ -1,0 +1,137 @@
+{
+  "$defs": {
+    "RegressionRunConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "env": {
+          "patternProperties": {
+            "^[A-Z][A-Z0-9_]{0,127}$": {
+              "type": "string"
+            }
+          },
+          "title": "Env",
+          "type": "object"
+        },
+        "name": {
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,127}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "overrides": {
+          "patternProperties": {
+            "^[a-z0-9_]+$": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          },
+          "title": "Overrides",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "RegressionRunConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A-10 pre-registration, written before the first test-split run; its canonical hash is the record's plan_sha256.",
+  "properties": {
+    "alpha": {
+      "default": 0.05,
+      "exclusiveMaximum": 1,
+      "exclusiveMinimum": 0,
+      "title": "Alpha",
+      "type": "number"
+    },
+    "configs": {
+      "items": {
+        "$ref": "#/$defs/RegressionRunConfig"
+      },
+      "minItems": 1,
+      "title": "Configs",
+      "type": "array"
+    },
+    "created_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})?)?$",
+      "title": "Created At",
+      "type": "string"
+    },
+    "gated_slice_prefixes": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Gated Slice Prefixes",
+      "type": "array"
+    },
+    "incumbent_config": {
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{0,127}$",
+      "title": "Incumbent Config",
+      "type": "string"
+    },
+    "min_gate_n": {
+      "default": 10,
+      "minimum": 1,
+      "title": "Min Gate N",
+      "type": "integer"
+    },
+    "primary_metric": {
+      "pattern": "^[a-z][a-z0-9_@.+]{0,127}$",
+      "title": "Primary Metric",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "split": {
+      "enum": [
+        "dev",
+        "test"
+      ],
+      "title": "Split",
+      "type": "string"
+    },
+    "stage": {
+      "enum": [
+        "a",
+        "b"
+      ],
+      "title": "Stage",
+      "type": "string"
+    },
+    "test_split_budget": {
+      "minimum": 0,
+      "title": "Test Split Budget",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "stage",
+    "split",
+    "primary_metric",
+    "configs",
+    "incumbent_config",
+    "gated_slice_prefixes",
+    "test_split_budget",
+    "created_at"
+  ],
+  "title": "RegressionPlan",
+  "type": "object"
+}

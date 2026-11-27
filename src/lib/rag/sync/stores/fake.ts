@@ -26,6 +26,8 @@ export interface FakeVectorStore extends VectorStore {
   points(profileId: string, tenantKey: string): VectorPoint[];
 }
 
+const FAKE_COLLECTION_PREFIX = 'myrag_chunks_';
+
 function requireKey(tenantKey: string): string {
   if (!isCanonicalTenantKey(tenantKey)) throw new Error('[Vector Sync] fake store: malformed tenant key');
   return tenantKey;
@@ -88,6 +90,13 @@ export function createFakeVectorStore(target: VectorSyncTarget = 'qdrant'): Fake
       col.tenants.set(key, part);
     }
     return part ?? null;
+  }
+
+  /** A purge names collections by their store name; the fake names each profile's collection `myrag_chunks_<profile>`. */
+  function namedPartition(name: string, tenantKey: string): Map<string, VectorPoint> | null {
+    const key = requireKey(tenantKey);
+    if (!name.startsWith(FAKE_COLLECTION_PREFIX)) throw new Error('[Vector Sync] fake store: not a chunk collection');
+    return collections.get(name.slice(FAKE_COLLECTION_PREFIX.length))?.tenants.get(key) ?? null;
   }
 
   function sorted(part: Map<string, VectorPoint> | null): VectorPoint[] {
@@ -163,6 +172,30 @@ export function createFakeVectorStore(target: VectorSyncTarget = 'qdrant'): Fake
     },
     async count(profileId: string, tenantKey: string): Promise<number> {
       return partition(profileId, tenantKey)?.size ?? 0;
+    },
+    async listCollections(): Promise<string[]> {
+      return [...collections.keys()].map((profileId) => `${FAKE_COLLECTION_PREFIX}${profileId}`).sort();
+    },
+    async deleteDocuments(collection: string, tenantKey: string, documentIds: string[]): Promise<number> {
+      const part = namedPartition(collection, tenantKey);
+      if (!part || documentIds.length === 0) return 0;
+      const wanted = new Set(documentIds);
+      let n = 0;
+      for (const [id, point] of part) {
+        if (wanted.has(point.payload.document_id)) {
+          part.delete(id);
+          n += 1;
+        }
+      }
+      return n;
+    },
+    async countDocumentPoints(collection: string, tenantKey: string, documentIds: string[]): Promise<number> {
+      const part = namedPartition(collection, tenantKey);
+      if (!part || documentIds.length === 0) return 0;
+      const wanted = new Set(documentIds);
+      let n = 0;
+      for (const point of part.values()) if (wanted.has(point.payload.document_id)) n += 1;
+      return n;
     },
     async searchLegs(req: StoreSearchRequest): Promise<StoreLegs> {
       const tenantKey = canonicalTenantKey(req.scope);

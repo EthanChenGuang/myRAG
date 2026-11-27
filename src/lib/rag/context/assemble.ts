@@ -2,10 +2,21 @@ import type { ExtractedURL } from '@/lib/url-extractor';
 import { formatGuardedLinks } from '../security/link-section';
 import { readAnswerConfig } from '../generation/answer-config';
 import { neutralizeSentinel } from '../generation/sentinel';
+import { calcTagNeutralizationOn, neutralizeCalcTags } from '../calc/block-tag';
 import { renderReferencedSection } from '../refs/resolve';
 import type { InjectionMarks } from '../security/injection-check';
 import { legacyKeepReason, legacyQueryTerms } from './relevance';
+import { fixedText } from '../lang/texts';
 import { effectiveDateOf, versionHeaderSuffix, versionLabelLanguage, versionLabelOf } from './version-labels';
+import {
+  findVersionConflicts,
+  findVersionGroups,
+  summarizeVersionConflicts,
+  versionBlockOf,
+  type VersionBlock,
+  type VersionConflict,
+  type VersionPairRow,
+} from './version-conflicts';
 import { docsFromBlocks, wrapDocuments, type WrapDoc } from './wrap';
 import type {
   CitationLabel,
@@ -70,6 +81,8 @@ export interface AssembleInput<C extends AssemblyCandidate = AssemblyCandidate> 
   injectionMarks?: InjectionMarks | null;
   /** D-13: document id to its version line; a labelled document renders as its own section with the line before each entry. */
   versionLabels?: ReadonlyMap<string, string>;
+  /** D-52: the supersession rows between the request's documents; set (possibly empty) only while RAG_VERSION_LABELS is on. */
+  versionPairs?: readonly VersionPairRow[];
 }
 
 /** D-17: a matched table row as the table leg found it; header names key the cells. */
@@ -124,6 +137,10 @@ export interface AssembleOutput<C extends AssemblyCandidate = AssemblyCandidate>
   blocks: ContextBlock[];
   /** Sentinel tokens neutralized in the context (a rule switch on); absent when none was found. */
   neutralizedSentinels?: number;
+  /** Phase 5.2.1: calculation block tags neutralized in the context (a calculation switch on); absent when none was found. */
+  calcTagsNeutralized?: number;
+  /** D-52: the version conflicts among the blocks; absent without one or while RAG_VERSION_LABELS is off. */
+  versionConflict?: VersionConflict;
 }
 
 export const NO_CONTEXT_TEXT = 'No relevant context found.';
@@ -249,9 +266,14 @@ interface VersionView {
  * D-48 to D-50: null with RAG_VERSION_LABELS off, so no row is read for labels and every title stays as it was. On, each
  * document row gives its version label, effective date and title suffix in the label language resolved from the question.
  */
-function versionViews(input: AssembleInput): ((documentId: string) => VersionView | null) | null {
+function versionViews(
+  input: AssembleInput,
+  older: (language: string) => ReadonlySet<string> = () => new Set(),
+): ((documentId: string) => VersionView | null) | null {
   if (!readAnswerConfig().versionLabels) return null;
   const language = versionLabelLanguage(input.queryText);
+  const olderIds = older(language);
+  const olderLabel = olderIds.size > 0 ? ` · ${fixedText('labels.older_version', language)}` : '';
   const cache = new Map<string, VersionView | null>();
   return (documentId) => {
     if (cache.has(documentId)) return cache.get(documentId)!;
@@ -266,12 +288,45 @@ function versionViews(input: AssembleInput): ((documentId: string) => VersionVie
           ...(versionLabel !== null ? { versionLabel } : {}),
           ...(effectiveFrom !== null ? { effectiveFrom } : {}),
         },
-        suffix: versionHeaderSuffix(row, language),
+        suffix: `${versionHeaderSuffix(row, language)}${olderIds.has(documentId) ? olderLabel : ''}`,
       };
     }
     cache.set(documentId, view);
     return view;
   };
+}
+
+/**
+ * D-52: the document texts the context will render (reference sections, then text chunks in group order), checked for version
+ * conflicts before rendering. Null unless the supersession rows were read for this request (RAG_VERSION_LABELS on).
+ */
+function contextVersionConflict<C extends AssemblyCandidate>(filtered: FilteredCandidates<C>, input: AssembleInput<C>): VersionConflict | null {
+  if (!input.versionPairs) return null;
+  const texts = new Map<string, string[]>();
+  const push = (documentId: string, text: string) => {
+    if (!texts.has(documentId)) texts.set(documentId, []);
+    texts.get(documentId)!.push(text);
+  };
+  for (const section of input.referenced?.sections ?? []) if (!section.missing) push(section.documentId, section.text);
+  if (filtered.hasQuery) {
+    const rank = new Map((input.groupOrder ?? []).map((id, index) => [id, index]));
+    const chunks = [...filtered.relevantChunks].sort(
+      (a, b) => (rank.get(a.document_id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.document_id) ?? Number.MAX_SAFE_INTEGER),
+    );
+    for (const chunk of chunks) {
+      const row = input.documents.get(chunk.document_id);
+      if (!row || IMAGE_EXTENSIONS.some((ext) => row.filename.toLowerCase().endsWith(ext))) continue;
+      if (chunkMetadataOf(chunk, input.chunkMetadata)?.image_url) continue;
+      push(chunk.document_id, chunk.content);
+    }
+  }
+  const blocks: VersionBlock[] = [];
+  for (const [documentId, list] of texts) {
+    const block = versionBlockOf(documentId, input.documents.get(documentId), list);
+    if (block) blocks.push(block);
+  }
+  if (blocks.length < 2) return null;
+  return summarizeVersionConflicts(findVersionConflicts(findVersionGroups(blocks, input.versionPairs)));
 }
 
 /** Applies the labeler to non-image blocks in order, continuing the ordinal count. */
@@ -335,7 +390,8 @@ export function buildContext<C extends AssemblyCandidate>(
   }
 
   const sentinel = sentinelNeutralizer();
-  const versionOf = versionViews(input);
+  const versionConflict = readAnswerConfig().versionLabels ? contextVersionConflict(filtered, input) : null;
+  const versionOf = versionViews(input, () => new Set(versionConflict?.pairs.flatMap((pair) => pair.olderDocumentId ?? []) ?? []));
   const labeller = new BlockLabeller(input.citationLabeler, sentinel.quiet);
   const marks = input.injectionMarks ?? null;
   const entries: WrapEntry[] = [];
@@ -609,31 +665,50 @@ export function buildContext<C extends AssemblyCandidate>(
     links,
     refusalCandidate,
     blocks: labeller.blocks,
+    ...(versionConflict ? { versionConflict } : {}),
     ...(sentinel.count > 0 ? { neutralizedSentinels: sentinel.count } : {}),
+    ...(sentinel.calcCount > 0 ? { calcTagsNeutralized: sentinel.calcCount } : {}),
   };
 }
 
 /**
  * RESEARCH Pitfall 13: with RAG_CONTEXT_RELEVANCE_RULE or RAG_PARTIAL_ANSWER_RULE on, the no-answer sentinel is
- * neutralized in retrieved text so a document cannot make the model refuse; with both off every text is returned as is.
+ * neutralized in retrieved text so a document cannot make the model refuse; with RAG_CALC_TOOL or RAG_CALC_CHECK on, the
+ * calculation block tags are neutralized the same way (05.2.1 D-72). With all four off every text is returned as is.
  */
 function sentinelNeutralizer() {
   const config = readAnswerConfig();
-  const on = config.contextRelevanceRule || config.partialAnswerRule;
-  const state = { count: 0 };
+  const sentinelOn = config.contextRelevanceRule || config.partialAnswerRule;
+  const calcOn = calcTagNeutralizationOn(config);
+  const on = sentinelOn || calcOn;
+  const state = { count: 0, calcCount: 0 };
+  const apply = (text: string, counted: boolean): string => {
+    let out = text;
+    if (sentinelOn) {
+      const result = neutralizeSentinel(out);
+      if (counted) state.count += result.count;
+      out = result.text;
+    }
+    if (calcOn) {
+      const result = neutralizeCalcTags(out);
+      if (counted) state.calcCount += result.count;
+      out = result.text;
+    }
+    return out;
+  };
   return {
     on,
     get count() {
       return state.count;
     },
+    get calcCount() {
+      return state.calcCount;
+    },
     text(text: string): string {
-      if (!on) return text;
-      const result = neutralizeSentinel(text);
-      state.count += result.count;
-      return result.text;
+      return on ? apply(text, true) : text;
     },
     quiet(text: string): string {
-      return on ? neutralizeSentinel(text).text : text;
+      return on ? apply(text, false) : text;
     },
   };
 }

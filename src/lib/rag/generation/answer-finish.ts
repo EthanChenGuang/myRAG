@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AnswerGroundednessValue, InsertAnswerRecordInput, ReviewReason } from '@/lib/answers/store';
-import { AnswerChecksSchema, type AnswerChecks, type CitationRecord } from '@/lib/rag-eval/contracts.generated';
+import { AnswerChecksSchema, type AnswerChecks, type CalcCheck, type CitationRecord } from '@/lib/rag-eval/contracts.generated';
+import type { CalcReviewReason } from '../calc/check-step';
+import { enqueueReviewItem } from '../feedback-loop/enqueue-item';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { detectLanguage } from '../lang/detect';
 import { isTenantScope, type TenantScope } from '../tenant/scope';
@@ -64,6 +66,14 @@ export interface AnswerFinishInput {
   refusedByModel?: boolean;
   /** Phase 4.3 (D-25, A-06): the access-key arrays of the cited documents; set only while access groups are on (plan 14 computes it). */
   accessSets?: string[][] | null;
+  /** Phase 5.2.1 D-75: the calculation check of the answer; stored as checks.calc and checks.calc_items, reasons appended. */
+  calc?: AnswerCalcInput;
+}
+
+export interface AnswerCalcInput {
+  primary: CalcCheck | null;
+  items: CalcCheck[];
+  reviewReasons: CalcReviewReason[];
 }
 
 export interface AnswerPendingContext {
@@ -79,6 +89,8 @@ export interface AnswerFinishDeps {
   readConfig: () => Pick<GenerationConfig, 'groundedness'>;
   /** Continues with scoring when the record was inserted as pending; resolves with the label it produced. */
   onPending?: (context: AnswerPendingContext) => Promise<AnswerGroundedness | null | void>;
+  /** D-55: appends a review reason to the inserted record (the calculation reasons of D-75). */
+  appendReviewReason?: (admin: SupabaseClient, input: { id: string; reason: ReviewReason }) => Promise<boolean>;
 }
 
 export interface GroundednessStepDeps {
@@ -335,6 +347,7 @@ const defaultDeps: AnswerFinishDeps = {
     claims: createClaimStep(),
     timeoutMs: () => readGenerationConfig().groundednessTimeoutMs,
   }),
+  appendReviewReason: async (admin, input) => (await import('@/lib/answers/store')).appendReviewReason(admin, input),
 };
 
 /** Ghost chats, anonymous callers, callers without the citations capability and requests with every Phase 5 switch off persist nothing. */
@@ -409,11 +422,70 @@ async function ownedChatId(admin: SupabaseClient, input: AnswerFinishInput): Pro
 
 /** D-23, D-89: the stream-end checks with the language detected from the answer text; null when they fail the contract (not written). */
 function recordChecks(input: AnswerFinishInput, textLanguage: string | null): AnswerChecks | null {
-  if (!input.checks) return null;
-  const parsed = AnswerChecksSchema.safeParse({ ...input.checks, text_language: textLanguage });
+  if (!input.checks && !input.calc) return null;
+  const base = input.checks ?? { truncated: false, finish_reason: null };
+  const calc = input.calc ? { ...(input.calc.primary ? { calc: input.calc.primary } : {}), calc_items: input.calc.items } : {};
+  const parsed = AnswerChecksSchema.safeParse({ ...base, ...calc, text_language: textLanguage });
   if (parsed.success) return parsed.data;
   console.warn('[Answer Record] Checks failed the contract; not written:', { answerId: input.answerId, issues: parsed.error.issues.length });
   return null;
+}
+
+/** D-55, D-75: calc_mismatch and calc_unverified on the inserted record; failures are logged with ids only and never throw. */
+async function appendCalcReasons(input: AnswerFinishInput, admin: SupabaseClient, deps: AnswerFinishDeps): Promise<void> {
+  const append = deps.appendReviewReason;
+  if (!input.calc || !append) return;
+  for (const reason of input.calc.reviewReasons) {
+    try {
+      await withTimeout(append(admin, { id: input.answerId, reason }), UPDATE_TIMEOUT_MS, 'review reason');
+    } catch (error) {
+      console.warn('[Answer Record] Review reason append failed:', { answerId: input.answerId, reason, code: errorCode(error) });
+    }
+  }
+}
+
+export interface CalcReviewEnqueueInput {
+  /** From the resolved scope, never from the request body. */
+  tenantKey: string;
+  reasons: readonly CalcReviewReason[];
+  sourceChunkIds: readonly string[];
+  documentIds: readonly string[];
+  traceId?: string | null;
+  /** Ghost chats store and enqueue nothing (D-23). */
+  ghost: boolean;
+}
+
+export interface CalcReviewEnqueueDeps {
+  enqueue: typeof enqueueReviewItem;
+  schedule: (task: () => Promise<void>) => void;
+}
+
+/**
+ * D-55, D-75: the immediate route into the review queue for a turn that writes no answer record (WhatsApp and other chat-route
+ * callers without one). Ids only; after the response; never throws. Returns whether anything was scheduled.
+ */
+export function scheduleCalcReviewEnqueue(input: CalcReviewEnqueueInput, deps: Partial<CalcReviewEnqueueDeps> = {}): boolean {
+  if (input.ghost || input.reasons.length === 0) return false;
+  const enqueue = deps.enqueue ?? enqueueReviewItem;
+  const schedule = deps.schedule ?? scheduleAfterResponse;
+  try {
+    schedule(async () => {
+      for (const reason of input.reasons) {
+        await enqueue({
+          tenantKey: input.tenantKey,
+          reason,
+          sourceChunkIds: input.sourceChunkIds,
+          documentIds: input.documentIds,
+          detector: 'calc_check',
+          traceId: input.traceId ?? null,
+        });
+      }
+    });
+    return true;
+  } catch (error) {
+    console.warn('[Review] calc enqueue scheduling failed', { reasons: input.reasons.length, code: errorCode(error) });
+    return false;
+  }
 }
 
 async function finishAnswer(input: AnswerFinishInput, deps: AnswerFinishDeps): Promise<AnswerGroundedness | null> {
@@ -442,6 +514,7 @@ async function finishAnswer(input: AnswerFinishInput, deps: AnswerFinishDeps): P
     ...(input.accessSets ? { accessSets: input.accessSets } : {}),
   });
   if (!inserted) return null;
+  await appendCalcReasons(input, admin, deps);
   if (groundedness.status !== 'pending') return groundedness;
   if (!deps.onPending) return null;
   try {

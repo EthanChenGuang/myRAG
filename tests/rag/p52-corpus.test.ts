@@ -15,7 +15,7 @@ const CORPUS_DIR = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const GOLDEN_PATH = path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl');
 const LANGUAGE_PACKS_PATH = path.join(REPO_ROOT, 'config/rag/language-packs.json');
 const LANGUAGES: CorpusLanguage[] = ['zh', 'en', 'it'];
-const NEW_FILE_RE = /^(?:p52-answers|p52-rules-v1|p52-rules-v2|sec-links)\.(?:zh|en|it)\.md$/;
+const NEW_FILE_RE = /^(?:p52-answers|p52-rules-v1|p52-rules-v2|sec-links|sec-link-topics)\.(?:zh|en|it)\.md$/;
 
 const tempDirs: string[] = [];
 
@@ -259,11 +259,11 @@ function hostsIn(text: string): string[] {
 }
 
 describe('documents', () => {
-  test('all twelve files exist, three per kind, one per language', () => {
+  test('all fifteen files exist, three per kind, one per language', () => {
     const names = newDocuments().map((doc) => path.posix.basename(doc.relpath)).sort();
-    expect(names).toHaveLength(12);
+    expect(names).toHaveLength(15);
     for (const language of LANGUAGES) {
-      for (const kind of ['p52-answers', 'p52-rules-v1', 'p52-rules-v2', 'sec-links']) expect(names).toContain(`${kind}.${language}.md`);
+      for (const kind of ['p52-answers', 'p52-rules-v1', 'p52-rules-v2', 'sec-links', 'sec-link-topics']) expect(names).toContain(`${kind}.${language}.md`);
     }
   });
 
@@ -314,12 +314,22 @@ describe('documents', () => {
     }
   });
 
-  test.each(LANGUAGES)('%s: sec-links plants at least 4 reserved-host links with a credential request and 4 allowlisted links', (language) => {
-    const doc = documentFor(`sec-links.${language}.md`);
-    const planted = doc.chunks.filter((chunk) => hostsIn(chunk.text).some((host) => host.endsWith('.test')));
-    const allowlisted = doc.chunks.filter((chunk) => hostsIn(chunk.text).includes(ALLOWLISTED_HOST));
+  // The planted notices (the attack document) and the topic sections with allowlisted links (the gold document) are two
+  // files, so a link-injection item's attack and gold evidence never share a document (GoldenItem attack rule).
+  test.each(LANGUAGES)('%s: sec-links plants at least 4 reserved-host links with a credential request; sec-link-topics has 4 allowlisted links', (language) => {
+    const attack = documentFor(`sec-links.${language}.md`);
+    const topics = documentFor(`sec-link-topics.${language}.md`);
+    const planted = attack.chunks.filter((chunk) => hostsIn(chunk.text).some((host) => host.endsWith('.test')));
+    const allowlisted = topics.chunks.filter((chunk) => hostsIn(chunk.text).includes(ALLOWLISTED_HOST));
+    expect(planted).toHaveLength(attack.chunks.length);
+    expect(allowlisted).toHaveLength(topics.chunks.length);
     expect(planted.length).toBeGreaterThanOrEqual(4);
     expect(allowlisted.length).toBeGreaterThanOrEqual(4);
+    expect(attack.chunks).toHaveLength(topics.chunks.length);
+    for (const [index, notice] of attack.chunks.entries()) {
+      expect(notice.section.startsWith(topics.chunks[index].section), notice.section).toBe(true);
+      expect(notice.section.length, notice.section).toBeGreaterThan(topics.chunks[index].section.length);
+    }
     for (const chunk of planted) {
       expect(CREDENTIAL_WORDS[language].test(chunk.text), chunk.section).toBe(true);
       expect(hostsIn(chunk.text), chunk.section).not.toContain(ALLOWLISTED_HOST);
@@ -380,7 +390,7 @@ describe('isolation and score bands', () => {
   test('for every existing golden item, the top-k above the refusal threshold keeps its top chunk and every gold rank', () => {
     const all = loadCorpus(CORPUS_DIR).documents;
     const before = all.filter((doc) => !NEW_FILE_RE.test(path.posix.basename(doc.relpath)));
-    expect(all.length - before.length).toBe(12);
+    expect(all.length - before.length).toBe(15);
     const oldPool = chunkVectors(before);
     const newPool = chunkVectors(all);
     const threshold = refusalThreshold();
@@ -388,7 +398,10 @@ describe('isolation and score bands', () => {
       .readFileSync(GOLDEN_PATH, 'utf8')
       .split('\n')
       .filter((line) => line.trim() !== '')
-      .map((line) => JSON.parse(line) as GoldenLine);
+      .map((line) => ({ line, item: JSON.parse(line) as GoldenLine }))
+      // Items written on the Phase 5.2 documents (plan 05.2-29) are not existing items.
+      .filter(({ line }) => ![...line.matchAll(/"document": ?"([^"]+)"/g)].some((match) => NEW_FILE_RE.test(match[1])))
+      .map(({ item }) => item);
     const changed: string[] = [];
     for (const item of items) {
       const gold = new Set(
@@ -416,6 +429,24 @@ describe('isolation and score bands', () => {
       if (planned.band === 'above_threshold') expect(best.score, planned.question).toBeGreaterThanOrEqual(threshold);
       else expect(best.score, planned.question).toBeLessThan(threshold);
     }
+  });
+
+  test('the golden off_topic_context items are the planned questions, with the planned adjacent section and score band', () => {
+    const items = fs
+      .readFileSync(GOLDEN_PATH, 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line) as GoldenLine & { category: string; language: CorpusLanguage; off_topic?: { adjacent_quotes: Array<{ section: string }>; score_band: string } })
+      .filter((item) => item.category === 'off_topic_context');
+    const fromGolden = items.map((item) => ({
+      language: item.language,
+      question: item.question,
+      adjacent: item.off_topic?.adjacent_quotes.map((span) => span.section),
+      band: item.off_topic?.score_band,
+    }));
+    const planned = OFF_TOPIC_QUESTIONS.map((entry) => ({ language: entry.language, question: entry.question, adjacent: [entry.adjacent], band: entry.band }));
+    const key = (entry: { language: string; question: string }) => `${entry.language}|${entry.question}`;
+    expect([...fromGolden].sort((a, b) => key(a).localeCompare(key(b)))).toEqual([...planned].sort((a, b) => key(a).localeCompare(key(b))));
   });
 
   test.each(LANGUAGES)('%s: at least 4 off_topic_context questions, split half below and half above the threshold', (language) => {

@@ -140,7 +140,7 @@ describe('voice profile with the query layer stays inside its budget (D-27, D-29
       const delay = 100 + Math.round((index * 400) / (RUNS - 1));
       harness.setLlm(
         createFakeQueryLlm({
-          table: { version: 1, entries: [{ transform: 'condense', query: FOLLOW_UP, delay_ms: delay, output: { standalone: STANDALONE, unchanged: false } }] },
+          table: { version: 1, entries: [{ transform: 'condense', query: FOLLOW_UP, delay_ms: delay, output: { standalone: STANDALONE, unchanged: false, language: null } }] },
         }),
       );
       harness.embedded.length = 0;

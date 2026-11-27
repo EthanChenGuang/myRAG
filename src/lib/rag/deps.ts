@@ -81,8 +81,15 @@ function semanticCacheIo(deps: RagDeps): SemanticCacheIo {
 }
 
 /** LangSmith/LangChain tracing switches as LangChain itself reads them (process.env); names only matter to the config check. */
+const LANGCHAIN_TRACING_NAME = /^(?:LANGSMITH_|LANGCHAIN_TRACING)/u;
+
+// Runs on every ragEnv() read: names are filtered first so only matching values are read (Object.entries on process.env reads them all).
 export function langchainTracingEnv(source: Readonly<Record<string, string | undefined>> = process.env): Record<string, string | undefined> {
-  return Object.fromEntries(Object.entries(source).filter(([name]) => /^(?:LANGSMITH_|LANGCHAIN_TRACING)/u.test(name)));
+  const out: Record<string, string | undefined> = {};
+  for (const name of Object.keys(source)) {
+    if (LANGCHAIN_TRACING_NAME.test(name)) out[name] = source[name];
+  }
+  return out;
 }
 
 function readRagEnvInput(): RagEnvInput {
@@ -113,6 +120,9 @@ function readRagEnvInput(): RagEnvInput {
     RAG_LEXICAL_TRANSLATION: process.env.RAG_LEXICAL_TRANSLATION ?? env.RAG_LEXICAL_TRANSLATION,
     RAG_LEXICAL_DICTIONARY: process.env.RAG_LEXICAL_DICTIONARY ?? env.RAG_LEXICAL_DICTIONARY,
     RAG_LEXICAL_STEM_IT: process.env.RAG_LEXICAL_STEM_IT ?? env.RAG_LEXICAL_STEM_IT,
+    RAG_LEXICAL_SCORING: process.env.RAG_LEXICAL_SCORING ?? env.RAG_LEXICAL_SCORING,
+    RAG_LEXICAL_BM25_K1: process.env.RAG_LEXICAL_BM25_K1 ?? env.RAG_LEXICAL_BM25_K1,
+    RAG_LEXICAL_BM25_B: process.env.RAG_LEXICAL_BM25_B ?? env.RAG_LEXICAL_BM25_B,
     RAG_TERMINOLOGY: process.env.RAG_TERMINOLOGY,
     RAG_TERMINOLOGY_DENSE: process.env.RAG_TERMINOLOGY_DENSE,
     RAG_TERMINOLOGY_MINING: process.env.RAG_TERMINOLOGY_MINING,

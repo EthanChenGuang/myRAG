@@ -15,6 +15,7 @@ import {
   type SyncProfile,
 } from './claim';
 import { logVectorSync, type VectorSyncLogSink } from './log';
+import { PurgeError, processPurgeGroup } from './purge';
 import { planChunkSync, planDocumentSync, type SyncPlan } from './servable';
 import type { VectorStore } from './stores/types';
 import { traceVectorSync, type VectorSyncTraceOptions } from './trace';
@@ -103,7 +104,7 @@ function parseDocumentCursor(cursor: string | null): { profileId: string; after:
 
 function codeOf(error: unknown): string {
   let code = 'store_error';
-  if (error instanceof DrainError) code = error.code;
+  if (error instanceof DrainError || error instanceof PurgeError) code = error.code;
   else if (error instanceof RetrievalBackendError) code = `${error.rpc}:${error.code ?? 'rpc_error'}`.toLowerCase();
   else if (error instanceof BackendNotReadyError) code = `backend_not_ready:${error.reason}`;
   return ERROR_CODE_RE.test(code) ? code : 'drain_error';
@@ -275,6 +276,11 @@ export async function drainSlice(options: DrainSliceOptions): Promise<VectorSync
     if (!store) throw new DrainError('target_unavailable');
     const row = group.head;
     if (row.profile_id && !(await syncedProfiles()).some((p) => p.profile_id === row.profile_id)) return 'done';
+    if (row.entity === 'purge') {
+      const outcome = await processPurgeGroup({ store, rpc, target: row.target, row });
+      counts.deleted += outcome.deleted;
+      return 'done';
+    }
     try {
       if (row.entity === 'tenant' || row.entity === 'profile') return await expand(store, group);
       if (row.entity === 'document') return await syncDocument(store, group);

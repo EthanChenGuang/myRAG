@@ -605,6 +605,10 @@ export async function main(
       const { ActivationEvidenceSchema, EmbeddingProfileComparisonSchema } = await import('@/lib/rag-eval/contracts.generated');
       const raw = JSON.parse(readFileSync(parsed.evidencePath, 'utf8')) as unknown;
       const comparison = EmbeddingProfileComparisonSchema.safeParse(raw);
+      if (comparison.success && comparison.data.wiring_proof === true) {
+        io.err('[Embedding] evidence_refused: fixture_evidence (a wiring-proof comparison is not activation evidence)');
+        return 1;
+      }
       const evidenceInput = comparison.success
         ? {
             target_profile: parsed.profileId,

@@ -28,6 +28,9 @@ import {
 } from './shared';
 
 const API_BASE = 'https://api.cloud.llamaindex.ai';
+
+/** The LlamaCloud API origin the parser calls; the Test-connection probe reads it (D-15). */
+export const LLAMA_CLOUD_API_BASE = API_BASE;
 const UPLOAD_PATH = '/api/v2/parse/upload';
 const JOB_PATH = '/api/v2/parse';
 const EXPAND = 'markdown,items,images_content_metadata';

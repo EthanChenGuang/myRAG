@@ -58,7 +58,7 @@ function citation(documentId: string) {
   };
 }
 
-const PENDING = { status: 'pending', scorer: null, score: null, label: null, threshold: null, thresholdSource: null, reason: null, truncated: false, latencyMs: null, checkedAt: null };
+const PENDING = { status: 'pending' as const, scorer: null, score: null, label: null, threshold: null, thresholdSource: null, reason: null, truncated: false, latencyMs: null, checkedAt: null };
 
 for (const mode of MODES) {
   const multi = mode === 'multi-tenant';

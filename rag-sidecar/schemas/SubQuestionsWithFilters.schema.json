@@ -1,0 +1,166 @@
+{
+  "$defs": {
+    "SubQuestionDateRange": {
+      "additionalProperties": false,
+      "description": "D-05: a sub-question's period; no include flags (the undated rule stays the request's own).",
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "title": "SubQuestionDateRange",
+      "type": "object"
+    },
+    "SubQuestionFilter": {
+      "additionalProperties": false,
+      "description": "D-05, T-06.2-01: the only narrowing a decomposer may propose. No tenant, document, source, version or include\nfield; every field is required and nullable for strict structured output (A-5). Plan 06.2-25 adds versions.",
+      "properties": {
+        "date_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubQuestionDateRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "doc_types": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "general",
+                  "financial_report",
+                  "contract_legal",
+                  "invoice_receipt",
+                  "product_technical",
+                  "scanned_image"
+                ],
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Doc Types"
+        },
+        "languages": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "zh",
+                  "en",
+                  "it"
+                ],
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Languages"
+        },
+        "scopes": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "items": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              },
+              "propertyNames": {
+                "enum": [
+                  "region",
+                  "legal_entity",
+                  "department"
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scopes"
+        }
+      },
+      "required": [
+        "date_range",
+        "scopes",
+        "doc_types",
+        "languages"
+      ],
+      "title": "SubQuestionFilter",
+      "type": "object"
+    },
+    "SubQuestionSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubQuestionFilter"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "filter"
+      ],
+      "title": "SubQuestionSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "P-18: the decomposer output used only with RAG_QUERY_SUBQ_FILTERS on; SubQuestions stays the default.",
+  "properties": {
+    "questions": {
+      "items": {
+        "$ref": "#/$defs/SubQuestionSpec"
+      },
+      "maxItems": 4,
+      "title": "Questions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "questions"
+  ],
+  "title": "SubQuestionsWithFilters",
+  "type": "object"
+}

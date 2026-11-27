@@ -396,6 +396,48 @@ describe('fake edge (PostgREST shim plus /v1/embeddings)', () => {
     }
   });
 
+  test('Phase 5.2 reads: the version and uploader columns and the batched supersession read are served (05.2-31)', async () => {
+    const e = await startFakeEdge({ db: (await createdFixture()).db });
+    try {
+      const docs = loadCorpus(REAL_CORPUS).documents.slice(0, 2).map((d) => d.id);
+      const ids = docs.join(',');
+      const columns = await fetch(
+        `${e.url}/rest/v1/documents?select=id,filename,created_at,content,metadata,user_id,version,doc_type,doc_date,effective_from,version_label&id=in.(${ids})`,
+      );
+      assert.equal(columns.status, 200, JSON.stringify(e.errors));
+      const versions = await fetch(
+        `${e.url}/rest/v1/documents?select=id,version,doc_type,doc_date,effective_from,version_label&tenant_key=eq.s:default&id=in.(${ids})`,
+      );
+      assert.equal(versions.status, 200, JSON.stringify(e.errors));
+      assert.equal(((await versions.json()) as unknown[]).length, 2);
+      const pairs = await fetch(
+        `${e.url}/rest/v1/rag_supersession_candidates?select=document_id,candidate_document_id,status&tenant_key=eq.s:default&document_id=in.(${ids})&candidate_document_id=in.(${ids})&status=in.(pending,confirmed)`,
+      );
+      assert.equal(pairs.status, 200, JSON.stringify(e.errors));
+      assert.deepEqual(await pairs.json(), []);
+      assert.deepEqual(e.errors, []);
+    } finally {
+      await e.close();
+    }
+  });
+
+  test('Phase 5.2 opt-ins stay narrow: other supersession columns, filters and status values are rejected and recorded', async () => {
+    const e = await startFakeEdge({ db: (await createdFixture()).db });
+    try {
+      const doc = loadCorpus(REAL_CORPUS).documents[0]!.id;
+      const statuses = await Promise.all([
+        fetch(`${e.url}/rest/v1/rag_supersession_candidates?select=reason`).then((r) => r.status),
+        fetch(`${e.url}/rest/v1/rag_supersession_candidates?select=status&decided_by=eq.${doc}`).then((r) => r.status),
+        fetch(`${e.url}/rest/v1/rag_supersession_candidates?select=status&status=in.(pending;drop)`).then((r) => r.status),
+        fetch(`${e.url}/rest/v1/documents?select=id,doc_date_extra`).then((r) => r.status),
+      ]);
+      for (const status of statuses) assert.equal(status, 400);
+      assert.equal(e.errors.length, statuses.length);
+    } finally {
+      await e.close();
+    }
+  });
+
   test('ten concurrent rpc calls return the same rows as one sequential call', async () => {
     const e = await getEdge();
     const call = async () => (await post(e, '/rest/v1/rpc/match_document_chunks', rpcArgs(TRACER_QUESTION))).json();

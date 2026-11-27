@@ -1,0 +1,16 @@
+{
+  "name": "tpl-only-identifier-feed",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_LEXICAL_SEARCH": "true",
+    "RAG_EXACT_SCAN_CUTOFF": "5000",
+    "RAG_SECTION_RULES": "off",
+    "RAG_PAGE_BOILERPLATE": "off",
+    "RAG_DOC_ATTRIBUTES": "true",
+    "RAG_ATTRIBUTE_HEADER": "false",
+    "RAG_ATTRIBUTE_FILTER": "off",
+    "RAG_LEXICAL_QUANTITY": "false",
+    "RAG_IDENTIFIER_INDEX": "true"
+  },
+  "overrides": null
+}

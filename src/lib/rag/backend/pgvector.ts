@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import type { RagConfig } from '../config';
-import { accessRpcArgs, sameAccessFilter, scopeAccessFilter } from '../tenant/access';
+import { dropLexstatsReady, lexstatsReady } from '../lexical/stats';
+import { accessRpcArgs, sameAccessFilter, type ScopeAccessFilter } from '../tenant/access-filter';
 import { assertTenantScope, scopeKey } from '../tenant/scope';
 import {
   EmbeddingProfileMismatchError,
@@ -15,6 +16,8 @@ import type {
   BackendCapabilities,
   BackendSearchRequest,
   BackendTranslationSearchRequest,
+  LexicalScoringOutcome,
+  LexicalScoringRequest,
   RankedHit,
   RetrievalBackend,
   TranslationHit,
@@ -24,6 +27,8 @@ import type {
 export interface PgvectorBackendDeps {
   adminClient: () => RpcClient | SupabaseClient | null;
   getConfig: () => RagConfig;
+  /** The pgvector version from the startup verdict; null while unknown. */
+  pgvectorVersion?: () => string | null;
 }
 
 interface HybridRow {
@@ -114,7 +119,43 @@ function mapRow(row: HybridRow): RankedHit {
   };
 }
 
-function splitLegs(rows: HybridRow[]): BackendLegs {
+/** D-13, A-09: the floor of the exact-scan cutoff for a restricted caller. */
+export const ACCESS_EXACT_SCAN_CUTOFF = 1000;
+
+export interface DenseScanArgs {
+  iterativeScan: RagConfig['v2']['iterativeScan'];
+  exactScanCutoff: number;
+  /** Set for a keys filter: the values it sent, recorded on the leg meta and never in the config hash. */
+  forced?: { accessExactCutoff: number; accessIterativeScan: RagConfig['v2']['iterativeScan'] };
+}
+
+function versionAtLeast(version: string, required: string): boolean {
+  const left = version.split('.').map((part) => Number.parseInt(part, 10));
+  const right = required.split('.').map((part) => Number.parseInt(part, 10));
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const a = Number.isFinite(left[index]) ? left[index]! : 0;
+    const b = Number.isFinite(right[index]) ? right[index]! : 0;
+    if (a !== b) return a > b;
+  }
+  return true;
+}
+
+/**
+ * A-09 (fixed rule): a keys filter raises the exact-scan cutoff to at least 1000 and, when the configured iterative scan is off and
+ * pgvector is 0.8.0 or newer, asks for relaxed_order. off and admin_all send the configured values.
+ */
+export function denseScanArgs(access: ScopeAccessFilter, config: RagConfig, pgvectorVersion: string | null): DenseScanArgs {
+  const configured = { iterativeScan: config.v2.iterativeScan, exactScanCutoff: config.v2.exactScanCutoff };
+  if (access.mode !== 'keys') return configured;
+  const exactScanCutoff = Math.max(configured.exactScanCutoff, ACCESS_EXACT_SCAN_CUTOFF);
+  const iterativeScan =
+    configured.iterativeScan === 'off' && pgvectorVersion !== null && versionAtLeast(pgvectorVersion, '0.8.0')
+      ? 'relaxed_order'
+      : configured.iterativeScan;
+  return { iterativeScan, exactScanCutoff, forced: { accessExactCutoff: exactScanCutoff, accessIterativeScan: iterativeScan } };
+}
+
+function splitLegs(rows: HybridRow[], forced?: DenseScanArgs['forced']): BackendLegs {
   const dense: RankedHit[] = [];
   const lexical: RankedHit[] = [];
   let denseMode: BackendLegsMeta['denseMode'] = null;
@@ -127,6 +168,7 @@ function splitLegs(rows: HybridRow[]): BackendLegs {
       lexical.push(hit);
     }
   }
+  if (forced) return { dense, lexical, meta: { denseMode, ...forced } };
   return { dense, lexical, meta: denseMode ? { denseMode } : undefined };
 }
 
@@ -139,7 +181,7 @@ function scopeArgs(filters: BackendSearchRequest['filters']): Record<string, unk
   };
 }
 
-function buildRpcArgs(req: BackendSearchRequest, config: RagConfig): Record<string, unknown> {
+function buildRpcArgs(req: BackendSearchRequest, config: RagConfig, scan: DenseScanArgs): Record<string, unknown> {
   const filters = req.filters;
   return {
     p_tenant_key: scopeKey(req.scope),
@@ -154,8 +196,8 @@ function buildRpcArgs(req: BackendSearchRequest, config: RagConfig): Record<stri
     p_document_ids: nullIfEmpty(filters.documentIds),
     p_doc_types: nullIfEmpty(filters.docTypes),
     p_languages: nullIfEmpty(filters.languages),
-    p_iterative_scan: config.v2.iterativeScan,
-    p_exact_scan_cutoff: config.v2.exactScanCutoff,
+    p_iterative_scan: scan.iterativeScan,
+    p_exact_scan_cutoff: scan.exactScanCutoff,
     p_lexical_languages: nullIfEmpty(req.lexicalLanguages ?? undefined),
     p_supplier: filters.invoice?.supplier ?? null,
     p_amount_min: filters.invoice?.amountMin ?? null,
@@ -169,6 +211,23 @@ function buildRpcArgs(req: BackendSearchRequest, config: RagConfig): Record<stri
     ...accessRpcArgs(req.access),
   };
 }
+
+/** D-26: the BM25 first-pass candidate cap, min(2000, max(500, 5 x lexical limit)). */
+export function bm25CandidateLimit(lexicalLimit: number): number {
+  return Math.min(2000, Math.max(500, 5 * lexicalLimit));
+}
+
+/** Dense-only arguments that rag_bm25_search_chunks does not take; every other hybrid argument (filters included) is carried over. */
+const DENSE_ONLY_ARGS = ['p_dense_limit', 'p_iterative_scan', 'p_exact_scan_cutoff'] as const;
+
+/** D-22: derived from the hybrid_search_chunks arguments, so a filter argument added there reaches the BM25 call without another edit. */
+export function bm25ArgsFrom(hybridArgs: Record<string, unknown>, scoring: LexicalScoringRequest, lexicalLimit: number): Record<string, unknown> {
+  const args: Record<string, unknown> = { ...hybridArgs };
+  for (const key of DENSE_ONLY_ARGS) delete args[key];
+  return { ...args, p_k1: scoring.k1, p_b: scoring.b, p_candidate_limit: bm25CandidateLimit(lexicalLimit) };
+}
+
+const BM25_RPC = 'rag_bm25_search_chunks';
 
 interface TranslationRow {
   leg: unknown;
@@ -245,7 +304,7 @@ function mapTranslationRow(row: TranslationRow): TranslationHit {
 }
 
 /** hybrid_search_translations takes the hybrid_search_chunks filter arguments unchanged, without the exact-scan and lexical-language ones. */
-function buildTranslationArgs(req: BackendTranslationSearchRequest, config: RagConfig): Record<string, unknown> {
+function buildTranslationArgs(req: BackendTranslationSearchRequest, config: RagConfig, access: ScopeAccessFilter): Record<string, unknown> {
   const filters = req.filters;
   return {
     p_tenant_key: scopeKey(req.scope),
@@ -270,8 +329,76 @@ function buildTranslationArgs(req: BackendTranslationSearchRequest, config: RagC
     ...(filters.dateRange?.includeUndated === true ? { p_include_undated: true } : {}),
     ...scopeArgs(filters),
     ...(filters.effectiveOn ? { p_effective_on: filters.effectiveOn } : {}),
-    ...accessRpcArgs(scopeAccessFilter(req.scope)),
+    ...accessRpcArgs(access),
   };
+}
+
+async function hybridRows(client: RpcClient, args: Record<string, unknown>, req: BackendSearchRequest): Promise<HybridRow[]> {
+  const response = await client.rpc('hybrid_search_chunks', args).abortSignal(req.signal);
+  req.signal.throwIfAborted();
+  if (response.error) {
+    if (response.error.message.includes('embedding_profile_mismatch')) {
+      throw new EmbeddingProfileMismatchError(mismatchKindOf(response.error.message), { profile: req.embeddingProfileId });
+    }
+    logger.error('Document Search', 'hybrid_search_chunks failed', { rpc: 'hybrid_search_chunks', code: response.error.code ?? null });
+    throw new RetrievalBackendError('hybrid_search_chunks', response.error.code ?? null);
+  }
+  return (response.data ?? []) as HybridRow[];
+}
+
+function withScoring(legs: BackendLegs, outcome: LexicalScoringOutcome): BackendLegs {
+  return { ...legs, meta: { denseMode: legs.meta?.denseMode ?? null, ...legs.meta, lexicalScoring: outcome } };
+}
+
+type Bm25Outcome = { rows: HybridRow[] } | { fallback: 'stats_unavailable' | 'bm25_failed' };
+
+async function bm25Rows(client: RpcClient, args: Record<string, unknown>, req: BackendSearchRequest, tenantKey: string): Promise<Bm25Outcome> {
+  try {
+    const response = await client.rpc(BM25_RPC, args).abortSignal(req.signal);
+    if (req.signal.aborted) return { fallback: 'bm25_failed' };
+    if (!response.error) return { rows: (response.data ?? []) as HybridRow[] };
+    if (response.error.message.includes('lexical_stats_not_ready')) {
+      dropLexstatsReady(tenantKey);
+      return { fallback: 'stats_unavailable' };
+    }
+    logger.error('Document Search', `${BM25_RPC} failed`, { rpc: BM25_RPC, code: response.error.code ?? null });
+    return { fallback: 'bm25_failed' };
+  } catch (error) {
+    if (req.signal.aborted) return { fallback: 'bm25_failed' };
+    const code = error instanceof Error ? error.name : null;
+    logger.error('Document Search', `${BM25_RPC} failed`, { rpc: BM25_RPC, code });
+    return { fallback: 'bm25_failed' };
+  }
+}
+
+/**
+ * D-22, D-25, D-26: the dense hybrid call (lexical limit 0) and the BM25 call run in parallel. A tenant without ready statistics, or a
+ * failed BM25 call, is served by the unchanged ts_rank_cd leg of hybrid_search_chunks; that is degraded scoring, never an error.
+ */
+async function searchWithBm25(
+  client: RpcClient,
+  args: Record<string, unknown>,
+  req: BackendSearchRequest,
+  scoring: LexicalScoringRequest,
+  forced?: DenseScanArgs['forced'],
+): Promise<BackendLegs> {
+  const tenantKey = String(args.p_tenant_key);
+  const ready = await lexstatsReady(client, tenantKey, Date.now(), req.signal);
+  req.signal.throwIfAborted();
+  if (!ready) return withScoring(splitLegs(await hybridRows(client, args, req), forced), 'stats_unavailable');
+
+  const denseWanted = typeof args.p_dense_limit === 'number' && args.p_dense_limit > 0;
+  const densePending = denseWanted ? hybridRows(client, { ...args, p_lexical_limit: 0 }, req) : Promise.resolve([] as HybridRow[]);
+  const bm25Pending = bm25Rows(client, bm25ArgsFrom(args, scoring, req.lexicalLimit), req, tenantKey);
+  // Both are awaited; a dense failure first must not leave the BM25 promise unobserved (it never rejects).
+  const [denseRows, bm25] = await Promise.all([densePending, bm25Pending]);
+  req.signal.throwIfAborted();
+  const dense = splitLegs(denseRows, forced);
+  if ('rows' in bm25) {
+    return withScoring({ ...dense, lexical: splitLegs(bm25.rows).lexical }, 'bm25');
+  }
+  const lexical = splitLegs(await hybridRows(client, { ...args, p_dense_limit: 0 }, req)).lexical;
+  return withScoring({ ...dense, lexical }, bm25.fallback);
 }
 
 export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBackend {
@@ -281,6 +408,8 @@ export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBacke
     async search(req: BackendSearchRequest): Promise<BackendLegs> {
       assertTenantScope(req.scope);
       // D-05: the request's filter must be the one its scope resolves to; a mismatch never reaches SQL.
+      // Loaded lazily: tenant/access reads the RAG config through deps, which modules importing this file (table-lookup) must not load.
+      const { scopeAccessFilter } = await import('../tenant/access');
       if (!req.access || !sameAccessFilter(req.access, scopeAccessFilter(req.scope))) {
         throw new RetrievalBackendError('hybrid_search_chunks', 'access_filter_mismatch');
       }
@@ -288,24 +417,24 @@ export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBacke
       if (!client) throw new RetrievalBackendError('hybrid_search_chunks', 'admin_unavailable');
       const config = deps.getConfig();
       const rpcClient = client as RpcClient;
-      const response = await rpcClient.rpc('hybrid_search_chunks', buildRpcArgs(req, config)).abortSignal(req.signal);
-      req.signal.throwIfAborted();
-      if (response.error) {
-        if (response.error.message.includes('embedding_profile_mismatch')) {
-          throw new EmbeddingProfileMismatchError(mismatchKindOf(response.error.message), { profile: req.embeddingProfileId });
-        }
-        logger.error('Document Search', 'hybrid_search_chunks failed', { rpc: 'hybrid_search_chunks', code: response.error.code ?? null });
-        throw new RetrievalBackendError('hybrid_search_chunks', response.error.code ?? null);
+      // Lazy for the same reason as tenant/access: v2/startup reads the RAG config through deps.
+      const version = deps.pgvectorVersion ? deps.pgvectorVersion() : (await import('../v2/startup')).getV2StartupVerdict().pgvectorVersion;
+      const scan = denseScanArgs(req.access, config, version);
+      const args = buildRpcArgs(req, config, scan);
+      if (!req.lexicalScoring || req.lexicalLimit <= 0 || req.lexicalTokens.length === 0) {
+        return splitLegs(await hybridRows(rpcClient, args, req), scan.forced);
       }
-      return splitLegs((response.data ?? []) as HybridRow[]);
+      return searchWithBm25(rpcClient, args, req, req.lexicalScoring, scan.forced);
     },
     async searchTranslations(req: BackendTranslationSearchRequest): Promise<TranslationHit[]> {
       assertTenantScope(req.scope);
       const client = deps.adminClient();
       if (!client) throw new RetrievalBackendError('hybrid_search_translations', 'admin_unavailable');
       const rpcClient = client as RpcClient;
+      // D-11: the translation leg filters by the scope's access like the chunk legs; loaded lazily as in search().
+      const { scopeAccessFilter } = await import('../tenant/access');
       const response = await rpcClient
-        .rpc('hybrid_search_translations', buildTranslationArgs(req, deps.getConfig()))
+        .rpc('hybrid_search_translations', buildTranslationArgs(req, deps.getConfig(), scopeAccessFilter(req.scope)))
         .abortSignal(req.signal);
       req.signal.throwIfAborted();
       if (response.error) {

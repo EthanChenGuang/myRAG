@@ -50,7 +50,7 @@ async function asRole<T>(db: PGlite, role: Role, userId: string | null, run: () 
   }
 }
 
-const service = <T>(db: PGlite, run: () => Promise<T>): Promise<T> => asRole(db, 'service_role', null, run);
+const service = <T,>(db: PGlite, run: () => Promise<T>): Promise<T> => asRole(db, 'service_role', null, run);
 
 async function rejects(run: () => Promise<unknown>, pattern: RegExp, label: string): Promise<void> {
   await assert.rejects(run, (error: unknown) => {
@@ -361,7 +361,7 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       await db.query('DELETE FROM rag_connector_sharing_rules WHERE tenant_key = $1', [fx.tenantKey]);
     });
 
-    interface MapRow {
+    type MapRow = {
       id: string | null;
       provider: string;
       kind: string;
@@ -369,15 +369,15 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       group_id: string | null;
       documents: number;
       total: number;
-    }
-    interface RuleRow {
+    };
+    type RuleRow = {
       id: string | null;
       provider: string;
       kind: string;
       domain: string | null;
       enabled: boolean;
       documents: number;
-    }
+    };
 
     const call = async <T extends Record<string, unknown>>(name: string, sql: string, params: unknown[]): Promise<T[]> => {
       await assertFunction(db, name);

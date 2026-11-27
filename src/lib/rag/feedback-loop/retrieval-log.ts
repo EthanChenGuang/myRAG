@@ -3,8 +3,8 @@ import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { RetrievalLogEntry } from '@/lib/rag-eval/contracts.generated';
 import { getRagDeps } from '../deps';
-import { detectLanguageWithConfidence, type LanguageDetection } from '../lang/detect';
 import { maskPII } from '../trace/mask';
+import { logLanguageCodes } from './log-languages';
 import { queryFingerprint, toLanguageCode } from './query-codes';
 import { topkRedundancy } from '../v2/diversify';
 import type { Candidate, LogChannel, LogContext, LogOutcomeValue, RagMode, RetrievalResult } from '../types';
@@ -13,6 +13,7 @@ import { effectiveLogMode, type EffectiveLogModeDeps } from './settings';
 
 export type { LogContext } from '../types';
 export { queryFingerprint, toLanguageCode } from './query-codes';
+export { logLanguageCodes, queryLanguageConfidence, type LogLanguageCodes } from './log-languages';
 
 export type RetrievalLogRow = Omit<RetrievalLogEntry, 'id' | 'tenant_key' | 'created_at'>;
 type LogCandidate = NonNullable<RetrievalLogRow['candidates']>[number];
@@ -41,14 +42,6 @@ const ERROR_CODE = /^[A-Za-z0-9_]{1,32}$/;
 const CHANNELS: readonly LogChannel[] = ['chat', 'embed', 'voice'];
 const RAG_MODES: readonly RagMode[] = ['strict', 'balanced', 'flexible', 'bypass'];
 const OUTCOMES: readonly LogOutcomeValue[] = ['answered', 'refused_no_context', 'kb_unavailable', 'degraded_answer', 'unknown'];
-const UNDETERMINED = 'und';
-
-/** The single mapping from the detector to a stored confidence; Phase 7 may replace it with a calibrated score. */
-export function queryLanguageConfidence(detection: LanguageDetection, storedLanguage: string | null): number | null {
-  const detected = toLanguageCode(detection.language);
-  if (detected === null || detected !== storedLanguage) return null;
-  return detection.confident ? 1 : 0.5;
-}
 
 function uuidOrNull(value: unknown): string | null {
   return typeof value === 'string' && UUID.test(value) ? value : null;
@@ -84,22 +77,6 @@ function logCandidate(item: Candidate, rank: number, keptIds: ReadonlySet<string
   return entry;
 }
 
-function chunkLanguages(result: RetrievalResult): string[] {
-  const languageById = new Map<string, string | null>();
-  for (const item of result.candidates) {
-    if (!languageById.has(String(item.chunk_id))) languageById.set(String(item.chunk_id), toLanguageCode(item.language));
-  }
-  const ordered = result.kept
-    .map((chunk, index) => ({ chunk, index }))
-    .sort((a, b) => (finite(a.chunk.rank) && finite(b.chunk.rank) ? a.chunk.rank - b.chunk.rank : 0) || a.index - b.index);
-  const languages: string[] = [];
-  for (const { chunk } of ordered) {
-    const language = languageById.get(String(chunk.chunk_id)) ?? UNDETERMINED;
-    if (!languages.includes(language)) languages.push(language);
-  }
-  return languages;
-}
-
 function topScore(result: RetrievalResult): number | null {
   const first = result.candidates[0];
   if (!first) return null;
@@ -127,8 +104,7 @@ export function buildRetrievalLogRow(input: BuildRetrievalLogRowInput): Retrieva
     if (entry) candidates.push(entry);
   });
 
-  const detection = detectLanguageWithConfidence(query);
-  const queryLanguage = toLanguageCode(result.queryLanguage) ?? toLanguageCode(detection.language);
+  const languages = logLanguageCodes(result, query);
 
   let queryMasked: string | null = null;
   let fingerprint: string | null = null;
@@ -157,10 +133,10 @@ export function buildRetrievalLogRow(input: BuildRetrievalLogRowInput): Retrieva
     rag_mode: ragMode,
     pipeline: holder?.pipeline === 'v2' ? 'v2' : 'legacy',
     retrieval_config_hash: configHash,
-    query_language: queryLanguage,
-    query_language_confidence: queryLanguageConfidence(detection, queryLanguage),
-    chunk_languages: chunkLanguages(result),
-    answer_language: toLanguageCode(holder?.answerLanguage),
+    query_language: languages.query_language,
+    query_language_confidence: languages.query_language_confidence,
+    chunk_languages: languages.chunk_languages,
+    answer_language: languages.answer_language,
     query_masked: queryMasked,
     query_fingerprint: fingerprint,
     status: result.status,

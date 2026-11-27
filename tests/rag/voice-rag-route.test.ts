@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
@@ -433,6 +435,66 @@ describe('voice-rag route with signed scope tokens', () => {
       }
     });
   });
+
+  describe('calculation offer (D-76)', () => {
+    const personalA = () => token(mintScope('personal', TWO_TENANT_IDS.userA, null));
+    const QUANTITY_QUERY = `${QUERY} 2`;
+    const INTENT_QUERY = `${QUERY} in total`;
+    const calcSchema = JSON.parse(fs.readFileSync(path.resolve('rag-sidecar/schemas/CalcRequest.schema.json'), 'utf8')) as unknown;
+
+    afterEach(() => {
+      delete process.env.RAG_CALC_TOOL;
+      delete process.env.RAG_CALC_CHECK;
+      delete process.env.RAG_CONTEXT_TAGGING;
+    });
+
+    it('with RAG_CALC_TOOL off a quantity question answers exactly the keys of today', async () => {
+      const { POST } = await loadRoute();
+      const body = (await (await POST(request(QUANTITY_QUERY, personalA()))).json()) as VoiceBody;
+      expect(Object.keys(body).sort()).toEqual(['results', 'source_images', 'traceId']);
+    });
+
+    it('with the switch on a quantity question gains calc with aliased sources in result order and the schema', async () => {
+      process.env.RAG_CALC_TOOL = 'true';
+      const { POST } = await loadRoute();
+      const response = await POST(request(QUANTITY_QUERY, personalA()));
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as VoiceBody & { calc?: Record<string, unknown> };
+      expect(body.results?.length).toBeGreaterThan(0);
+      expect(body.calc).toEqual({
+        offered: true,
+        check: false,
+        sources: (body.results ?? []).map((result, index) => ({ alias: `S${index + 1}`, chunk_id: result.chunk_id })),
+        tool_schema: calcSchema,
+      });
+    });
+
+    it('calc.check follows RAG_CALC_CHECK, and an intent term with a context quantity also offers', async () => {
+      process.env.RAG_CALC_TOOL = 'true';
+      process.env.RAG_CALC_CHECK = 'true';
+      const { POST } = await loadRoute();
+      const body = (await (await POST(request(INTENT_QUERY, personalA()))).json()) as VoiceBody & { calc?: { offered: boolean; check: boolean } };
+      expect(body.calc).toMatchObject({ offered: true, check: true });
+    });
+
+    it('with the switch on a question without a quantity or intent term has no calc member', async () => {
+      process.env.RAG_CALC_TOOL = 'true';
+      const { POST } = await loadRoute();
+      const body = (await (await POST(request(QUERY, personalA()))).json()) as VoiceBody;
+      expect(Object.keys(body).sort()).toEqual(['results', 'source_images', 'traceId']);
+    });
+
+    it('with the switch on the tagged context labels each block with its alias; off it is unchanged', async () => {
+      process.env.RAG_CONTEXT_TAGGING = 'true';
+      const { POST } = await loadRoute();
+      const off = (await (await POST(request(QUANTITY_QUERY, personalA()))).json()) as VoiceBody;
+      expect(off.context).not.toContain('[S1]');
+      process.env.RAG_CALC_TOOL = 'true';
+      const on = (await (await POST(request(QUANTITY_QUERY, personalA()))).json()) as VoiceBody;
+      expect(on.context).toBe((off.context ?? '').replace(/^(<doc id="c1"[^\n]*>)$/m, '$1\n[S1]'));
+      expect(on.results).toEqual(off.results);
+    });
+  });
 });
 
 describe('voice-rag under the v2 query layer', () => {
@@ -488,7 +550,7 @@ describe('voice-rag under the v2 query layer', () => {
       async generate<T>(req: QueryLlmRequest<T>): Promise<T> {
         llmCalls.push({ transform: req.transform, prompt: `${req.system}\n${req.prompt}` });
         if (req.transform !== 'condense') throw new Error('unexpected transform');
-        return req.schema.parse({ standalone: req.input, unchanged: true });
+        return req.schema.parse({ standalone: req.input, unchanged: true, language: null });
       },
     };
   }

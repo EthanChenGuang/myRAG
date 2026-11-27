@@ -30,7 +30,7 @@ import {
   type TerminologyCsvRow,
 } from './csv';
 import { terminologyParams } from './expand';
-import { validateEntries } from './validate';
+import { validateEntries, withTranslationDefaults } from './validate';
 
 export type TerminologyImportMode = 'merge' | 'replace';
 export type TerminologyImportFormat = 'csv' | 'dictionary_candidates_jsonl';
@@ -239,7 +239,7 @@ export async function importTerminology(input: TerminologyImportInput): Promise<
       file.candidates && existing
         ? { ...rowOfEntry(existing), variants: [...existing.variants, ...source.variants.filter((variant) => !existing.variants.includes(variant))] }
         : source;
-    return { key, existing, candidate: candidateOf(merged, layer, seenAt === undefined ? (existing?.id ?? null) : null) };
+    return { key, existing, candidate: candidateOf(withTranslationDefaults(merged), layer, seenAt === undefined ? (existing?.id ?? null) : null) };
   });
 
   const context = {

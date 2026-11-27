@@ -49,4 +49,10 @@ describe('stage names (D-05)', () => {
       expect((OPTIONAL_STAGES as readonly string[]).includes(name)).toBe(true);
     }
   });
+
+  test('the Phase 6.2 scope_gate stage is in both sets and outside the Phase 6 query-layer group (D-26, D-29)', () => {
+    expect(generatedStageNames()).toContain('scope_gate');
+    expect([...OPTIONAL_STAGES]).toContain('scope_gate');
+    expect([...QUERY_LAYER_STAGES] as string[]).not.toContain('scope_gate');
+  });
 });

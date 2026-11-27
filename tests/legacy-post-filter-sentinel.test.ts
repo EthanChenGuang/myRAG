@@ -69,8 +69,10 @@ const PINNED_REGIONS: PinnedRegion[] = [
     label: 'assemble function bodies (filterCandidates, buildContext)',
     file: 'assemble',
     start: 'export function filterCandidates<C extends AssemblyCandidate>(',
-    end: '    ...(sentinel.count > 0 ? { neutralizedSentinels: sentinel.count } : {}),\n  };\n}',
-    sha256: 'caf7a5b85745ec2a5aa77392146d267a1d608d9fb5ceb6e7a75c52428157c2e9',
+    // 05.2.1-10 (D-72) added the calcTagsNeutralized line and the calculation tag neutralizer (inert with RAG_CALC_TOOL and
+    // RAG_CALC_CHECK off); re-pinned after the differential, legacy post-filter and chat characterization checks passed.
+    end: '    ...(sentinel.count > 0 ? { neutralizedSentinels: sentinel.count } : {}),\n    ...(sentinel.calcCount > 0 ? { calcTagsNeutralized: sentinel.calcCount } : {}),\n  };\n}',
+    sha256: '2329344e0dc1e9157f7ef46e45153bc955bf5d030fe8e493802e2d4abfa8c879',
   },
 ];
 

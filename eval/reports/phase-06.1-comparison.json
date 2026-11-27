@@ -1,0 +1,345 @@
+{
+  "schema_version": 1,
+  "phase": "06.1",
+  "plan": "06.1-18",
+  "passed": true,
+  "switches": {
+    "RAG_FINETUNE": "off (default)"
+  },
+  "notes": [
+    "Fixture runs prove wiring only. The real retrieval gain of a fine-tuned model is a live item (06.1-19: real data, real endpoint, real golden items).",
+    "Baseline: the committed fixture baselines (eval/baselines/fixture-baseline.json, fixture-ingest-baseline.json), last re-recorded on the merged train after the Phase 6 items (06-38, 06-39) and 04.1.1-10. Phase 6 is not formally closed on this base (06-44, 06-45 open), so this is the latest Phase 6 baseline.",
+    "Latency is fixture wall-clock time, not deterministic; budgets in eval/config/latency-budgets.json are report-only.",
+    "Skipped checks are slices with no refusal items (n = 0).",
+    "No chunk or query text: ids, counts, hashes and metrics only."
+  ],
+  "parity": [
+    {
+      "fixture_mode": "prechunked",
+      "baseline": "eval/baselines/fixture-baseline.json",
+      "baseline_sha256": "4eaca815dc4b74b830d4a2b94b01d68a5d4d3a5333b2e679cd5a0d9e3612dbb2",
+      "passed": true,
+      "paired_all_zero": true,
+      "paired_slices": 11,
+      "nonzero_paired_cells": 0,
+      "mismatches": 0,
+      "offenders": 0,
+      "skipped_empty_slices": [
+        "category:cross_lingual:correct_refusal_rate",
+        "pair:en->it:correct_refusal_rate",
+        "pair:en->zh:correct_refusal_rate",
+        "pair:it->en:correct_refusal_rate",
+        "pair:it->zh:correct_refusal_rate",
+        "pair:zh->en:correct_refusal_rate",
+        "pair:zh->it:correct_refusal_rate"
+      ],
+      "overall": {
+        "recall_at_5": 0.5664335664335665,
+        "recall_at_10": 0.5664335664335665,
+        "mrr": 0.5396270396270396,
+        "correct_refusal_rate": 0.68,
+        "false_refusal_rate": 0.3356643356643357
+      },
+      "n_items": 143,
+      "latency_ms": {
+        "analyze": {
+          "p50_ms": 0.0,
+          "p95_ms": 1.0,
+          "budget_p95_ms": null
+        },
+        "assemble": {
+          "p50_ms": 0.0,
+          "p95_ms": 0.0,
+          "budget_p95_ms": 100
+        },
+        "embed": {
+          "p50_ms": 1.0,
+          "p95_ms": 4.0,
+          "budget_p95_ms": 200
+        },
+        "generation": {
+          "p50_ms": 1.0,
+          "p95_ms": 4.0,
+          "budget_p95_ms": null
+        },
+        "legacy_rank": {
+          "p50_ms": 0.0,
+          "p95_ms": 0.0,
+          "budget_p95_ms": null
+        },
+        "post_filter": {
+          "p50_ms": 3.0,
+          "p95_ms": 4.0,
+          "budget_p95_ms": null
+        },
+        "retrieval_total": {
+          "p50_ms": 10.0,
+          "p95_ms": 15.0,
+          "budget_p95_ms": null
+        },
+        "search": {
+          "p50_ms": 6.0,
+          "p95_ms": 8.0,
+          "budget_p95_ms": 400
+        }
+      },
+      "pre_generation_ms": {
+        "chat": {
+          "n": 18,
+          "p50_ms": 14.0,
+          "p95_ms": 17.0
+        }
+      },
+      "run_config_hash": "250b48c26591654eef96239bf12e41821b48f8ad64743a7623d339a558ef6380"
+    },
+    {
+      "fixture_mode": "ingest",
+      "baseline": "eval/baselines/fixture-ingest-baseline.json",
+      "baseline_sha256": "f132b6386ce368528bed6acd1cf47263ceecfe695a23a6876788c53e477debf3",
+      "passed": true,
+      "paired_all_zero": true,
+      "paired_slices": 12,
+      "nonzero_paired_cells": 0,
+      "mismatches": 0,
+      "offenders": 0,
+      "skipped_empty_slices": [
+        "category:cross_lingual:correct_refusal_rate",
+        "category:table_split:correct_refusal_rate",
+        "pair:en->it:correct_refusal_rate",
+        "pair:en->zh:correct_refusal_rate",
+        "pair:it->en:correct_refusal_rate",
+        "pair:it->zh:correct_refusal_rate",
+        "pair:zh->en:correct_refusal_rate",
+        "pair:zh->it:correct_refusal_rate"
+      ],
+      "overall": {
+        "recall_at_5": 0.711864406779661,
+        "recall_at_10": 0.7231638418079096,
+        "mrr": 0.6177024482109228,
+        "correct_refusal_rate": 0.5333333333333333,
+        "false_refusal_rate": 0.192090395480226
+      },
+      "n_items": 177,
+      "latency_ms": {
+        "analyze": {
+          "p50_ms": 0.0,
+          "p95_ms": 1.0,
+          "budget_p95_ms": null
+        },
+        "assemble": {
+          "p50_ms": 0.0,
+          "p95_ms": 0.0,
+          "budget_p95_ms": 100
+        },
+        "embed": {
+          "p50_ms": 1.0,
+          "p95_ms": 4.0,
+          "budget_p95_ms": 200
+        },
+        "exact_id_lookup": {
+          "p50_ms": 0.0,
+          "p95_ms": 5.0,
+          "budget_p95_ms": null
+        },
+        "generation": {
+          "p50_ms": 1.0,
+          "p95_ms": 9.0,
+          "budget_p95_ms": null
+        },
+        "legacy_rank": {
+          "p50_ms": 0.0,
+          "p95_ms": 0.0,
+          "budget_p95_ms": null
+        },
+        "post_filter": {
+          "p50_ms": 2.0,
+          "p95_ms": 4.0,
+          "budget_p95_ms": null
+        },
+        "retrieval_total": {
+          "p50_ms": 9.0,
+          "p95_ms": 18.0,
+          "budget_p95_ms": null
+        },
+        "search": {
+          "p50_ms": 5.0,
+          "p95_ms": 7.0,
+          "budget_p95_ms": 400
+        }
+      },
+      "pre_generation_ms": {
+        "chat": {
+          "n": 18,
+          "p50_ms": 19.0,
+          "p95_ms": 31.0
+        }
+      },
+      "run_config_hash": "fcd6b9fbcf2cd1c198e2b5d9e1282c141c8ef20fde44cecd5dc64e91c6845b9c"
+    }
+  ],
+  "fixture_pipeline": {
+    "source": "06.1-16, python -m rag_eval.finetune run --fixture (re-run in 06.1-18)",
+    "fixture": true,
+    "run_id": "ft-fixture-s42",
+    "seed": 42,
+    "trainer": "fake",
+    "tenants": 2,
+    "steps": {
+      "export": 0,
+      "generate": 0,
+      "filter": 0,
+      "import-mined": 0,
+      "vectors": 0,
+      "mine": 0,
+      "kit": 0,
+      "train": 0,
+      "evaluate": 0,
+      "card": 0
+    },
+    "report_sha256": {
+      "card.json": "94a6c77bfbc4fa7274d1f43face15af763aba0f9202d13eddd5604768d79ea72",
+      "filter-report.json": "f41fdaf23065292f091b8478186c7a3be6e13b2eaff82f4273de6bf49138e850",
+      "generate-report.json": "81d79d16012f601e9db08568b17808cc7b44a6f8cfae16c2f705d25d8e73ab14",
+      "kit/training-config.json": "a5cdd515987ad121d1f903afa6445bc35db04fe46a8b4623e4af42dbb49107fa",
+      "manifest.json": "765905c41ff9304290a703dcdfc7db7c0884e59bfcc85fc3864a72c1df8ce6a4",
+      "mined-report.json": "34aa84a913fa1f8060dc4942d37214c638b182006e0843f5e66db4328d599989",
+      "mining-report.json": "502f15e73a7f4847aa338495e4cd33a6df54b791cc392828696b0184901704d5",
+      "offline-eval.json": "5bedd0cc2659c5351eec11cc24f1830aba817ce3da79aa52c66d836ec0416358"
+    },
+    "chunks_by_split": {
+      "dev": 11,
+      "test": 190,
+      "train": 43
+    },
+    "mined_counts_by_split": {
+      "dev": {
+        "mined": 1
+      },
+      "test": {
+        "mined": 40
+      },
+      "train": {
+        "mined": 8
+      }
+    },
+    "synthetic_filter": {
+      "kept": 577,
+      "dropped": {
+        "golden_overlap": 22,
+        "language": 5,
+        "low_confidence": 0,
+        "near_duplicate": 0,
+        "not_answerable": 0,
+        "shape": 0,
+        "unknown_chunk_ref": 0,
+        "verbatim_copy": 32
+      },
+      "by_language": {
+        "en": {
+          "dropped": 8,
+          "kept": 214
+        },
+        "it": {
+          "dropped": 14,
+          "kept": 190
+        },
+        "zh": {
+          "dropped": 37,
+          "kept": 173
+        }
+      }
+    },
+    "mined_import": {
+      "input_rows": 61,
+      "kept": 49,
+      "held_out": 12,
+      "dropped": {
+        "golden_overlap": 9,
+        "invalid_row": 0,
+        "language": 0,
+        "near_duplicate": 0,
+        "shape": 0,
+        "tenant_not_in_bundle": 0,
+        "unknown_chunk": 0,
+        "verbatim_copy": 3
+      },
+      "by_split": {
+        "dev": 1,
+        "test": 40,
+        "train": 8
+      },
+      "negatives": {
+        "dropped_split": 15,
+        "kept": 82
+      }
+    },
+    "mining": {
+      "miner": "vectors",
+      "pairs": 122,
+      "with_full_negatives": 120,
+      "pairs_only": 2,
+      "mean_negatives": 4.9508,
+      "fn_audit": {
+        "answerable": 0,
+        "passed": true,
+        "sampled": 50,
+        "skipped": false,
+        "upper_95": 0.058155079116972326
+      }
+    },
+    "offline_eval": {
+      "passed": false,
+      "noise_band": 0.02,
+      "reasons": [
+        "below_production_overall",
+        "language_slice_below_production",
+        "below_base"
+      ],
+      "overall": {
+        "base": {
+          "mrr_at_10": 0.2965,
+          "n": 504,
+          "ndcg_at_10": 0.3434,
+          "recall_at_10": 0.494
+        },
+        "production": {
+          "mrr_at_10": 0.3331,
+          "n": 504,
+          "ndcg_at_10": 0.3851,
+          "recall_at_10": 0.5516
+        },
+        "finetuned": {
+          "mrr_at_10": 0.2969,
+          "n": 504,
+          "ndcg_at_10": 0.3352,
+          "recall_at_10": 0.4603
+        }
+      }
+    },
+    "card_status": "rejected_offline",
+    "reading": "Fake trainer; the offline gate refuses the candidate (rejected_offline), which is the expected wiring result, not a model quality statement."
+  },
+  "lifecycle": {
+    "source": "06.1-17 and 06.1-20 tests re-run with 0651-0654 present and folded into the setup files",
+    "files": [
+      "tests/rag-db/finetune-lifecycle.test.mts",
+      "tests/rag-db/finetune-two-tenant.test.mts",
+      "tests/rag-db/finetune-binding.test.mts",
+      "tests/rag-db/finetune-revoke-prune.test.mts"
+    ],
+    "pass": 55,
+    "fail": 0,
+    "skipped": 2,
+    "skipped_reason": "single-tenant tenant-B cases (one tenant only), as in 06.1-20",
+    "parity_reference": "frozen pre-Phase-3 setup plus every migration except 0651-0654",
+    "revoke_prune": "ft-consent revoke --prune-root ran the printed prune command; the revoked tenant's own and shared bundles lost 10 text-bearing files each, manifests and reports stayed, the other tenant's bundle was untouched",
+    "finetune_train": {
+      "command": "FINETUNE_TRAIN_REQUIRED=1 pytest -m finetune_train",
+      "passed": 7,
+      "skipped": 0
+    }
+  },
+  "live_items": [
+    "06.1-19: real export and training, endpoint binding, re-embed, profile comparison on real items, EMB-05 activation"
+  ]
+}

@@ -35,7 +35,16 @@ export const RETIRED_MODULES = [
   'thinking-rag-enhancer',
 ];
 
-export const VECTOR_OR_RERANK_PACKAGES = ['weaviate-client', '@qdrant/js-client-rest', 'cohere-ai', 'voyageai'];
+export const VECTOR_OR_RERANK_PACKAGES = ['cohere-ai', 'voyageai'];
+export const VECTOR_STORE_PACKAGES = [
+  '@weaviate/node',
+  '@weaviate/core',
+  '@weaviate/web',
+  'weaviate-client',
+  'weaviate-ts-client',
+  '@qdrant/js-client-rest',
+  '@qdrant/qdrant-js',
+];
 export const AI_SDK_BANNED_EXPORTS = ['embed', 'embedMany', 'rerank'];
 
 export const WRITER_RPCS = [
@@ -104,6 +113,8 @@ const outsideRerankHttp = (rel) => inSrcOrScripts(rel) && !rel.startsWith(RERANK
 const LAKERA_ADAPTER = 'src/lib/rag/security/lakera.ts';
 const outsideLakeraAdapter = (rel) => rel !== LAKERA_ADAPTER;
 const outsideTenant = (rel) => !rel.startsWith(TENANT_DIR);
+const VECTOR_STORE_DIRS = ['src/lib/rag/backend/weaviate/', 'src/lib/rag/backend/qdrant/', 'src/lib/rag/sync/'];
+const outsideVectorStoreDirs = (rel) => !VECTOR_STORE_DIRS.some((d) => rel.startsWith(d));
 const ACCESS_DIR = 'src/lib/rag/access/';
 const outsideTenantAndAccess = (rel) => !rel.startsWith(TENANT_DIR) && !rel.startsWith(ACCESS_DIR);
 const inVoiceAgent = (rel) => rel.startsWith('voice-agent/src/');
@@ -440,7 +451,7 @@ export const RULES = [
   },
   {
     id: 'vector-or-rerank-client',
-    description: 'vector-store or reranker client package, or AI SDK embed/embedMany/rerank, outside the pipeline',
+    description: 'reranker client package, or AI SDK embed/embedMany/rerank, outside the pipeline',
     appliesTo: outsideRag,
     find: (text) =>
       importMatches(text, ({ spec, clause }) => {
@@ -450,6 +461,15 @@ export const RULES = [
         }
         return null;
       }),
+  },
+  {
+    id: 'vector-store-client',
+    description: 'vector-store client package outside src/lib/rag/backend/{weaviate,qdrant}/ and src/lib/rag/sync/',
+    appliesTo: outsideVectorStoreDirs,
+    find: (text) =>
+      importMatches(text, ({ spec }) =>
+        VECTOR_STORE_PACKAGES.some((p) => spec === p || spec.startsWith(`${p}/`)) ? spec : null,
+      ),
   },
   {
     id: 'mint-scope',

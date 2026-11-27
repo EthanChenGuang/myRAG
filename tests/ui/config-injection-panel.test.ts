@@ -330,13 +330,21 @@ describe('Config UI wiring', () => {
   const html = fs.readFileSync(path.join(repoRoot, 'scripts/config-ui/index.html'), 'utf8');
   const source = fs.readFileSync(path.join(repoRoot, 'scripts/config-ui/rag-panels/injection-defense.js'), 'utf8');
 
-  it('index.html includes the panel script and its container inside the Prompt-injection defense card', () => {
+  it('index.html includes the panel script and its container inside the Prompt-injection detectors card', () => {
     expect(html).toContain('<script src="rag-panels/injection-defense.js"></script>');
     const card = html.slice(html.indexOf('<!-- Prompt-injection defense -->'), html.indexOf('<!-- Info Box -->'));
     expect(card).toContain('id="injection-defense-summary"');
-    expect(card).toContain('id="RAG_INJECTION_CHECK"');
-    expect(card).toContain('Sends chunk text to Lakera, a third party');
-    expect(card).toMatch(/id="LAKERA_GUARD_API_KEY"[^>]*type="password"|type="password"[^>]*id="LAKERA_GUARD_API_KEY"/);
+    expect(card).toContain('>Prompt-injection detectors</h3>');
+  });
+
+  it('the switches moved to the generated RAG pipeline section with the Lakera note and a password key field (plan 07-20)', () => {
+    expect(html).not.toMatch(/<(input|select)\b[^>]*\bid="RAG_INJECTION_CHECK"/);
+    expect(html).not.toMatch(/<(input|select)\b[^>]*\bid="LAKERA_GUARD_API_KEY"/);
+    const vars = (JSON.parse(fs.readFileSync(path.join(repoRoot, 'scripts/rag/env-manifest.json'), 'utf8')) as { vars: Array<{ name: string; type?: string; help?: string; group?: string }> }).vars;
+    const byName = new Map(vars.map((v) => [v.name, v]));
+    expect(byName.get('RAG_INJECTION_CHECK')).toMatchObject({ group: 'security', type: 'enum' });
+    expect(byName.get('RAG_INJECTION_LAKERA')?.help).toContain('Sends chunk text to Lakera, a third party');
+    expect(byName.get('LAKERA_GUARD_API_KEY')?.type).toBe('secret');
   });
 
   it('the panel script never parses markup', () => {

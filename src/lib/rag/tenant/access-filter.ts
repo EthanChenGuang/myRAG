@@ -10,7 +10,8 @@ export type ScopeAccessFilter =
   | { mode: 'admin_all' }
   | { mode: 'keys'; keys: readonly string[]; setHash: string };
 
-/** Two filters describe the same access: same mode and, for keys, the same key set and set hash. */
+/** Two filters describe the same access: same mode and, for keys, the same key set and set hash (04.3-07: the set hash covers the
+ * effective keys, which can be a subset of the keys searched). */
 export function sameAccessFilter(a: ScopeAccessFilter, b: ScopeAccessFilter): boolean {
   if (a.mode !== b.mode) return false;
   if (a.mode === 'keys' && b.mode === 'keys') {

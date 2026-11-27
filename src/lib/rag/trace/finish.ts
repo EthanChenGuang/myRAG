@@ -1,6 +1,6 @@
 import { readFeedbackLoopConfig } from '../feedback-loop/config';
 import type { LogContext, RetrievalResult } from '../types';
-import type { TraceCollector } from './collector';
+import { traceLanguagesOf, type TraceCollector } from './collector';
 import { isLangfuseUsable, readLangfuseConfig, type LangfuseConfig } from './config';
 import type { CollectedTrace } from './langfuse';
 import { logRagTrace, type TraceLogSink } from './log';
@@ -54,6 +54,15 @@ function scheduleRetrievalLog(collector: TraceCollector, result: RetrievalResult
   });
 }
 
+/** LANG-10: the languages block from the FBK-01 derivation; read again at export so a later answer language is included. */
+function recordLanguages(collector: TraceCollector, result: RetrievalResult, options: FinishTraceOptions): void {
+  try {
+    collector.setLanguages(traceLanguagesOf(result, options.logQuery ?? options.query));
+  } catch {
+    // the languages block must never affect the request or the trace
+  }
+}
+
 const BASE_TAGS = ['rag-pipeline'];
 
 function collect(
@@ -78,6 +87,8 @@ function collect(
   };
   const timing = collector.timing();
   if (timing) trace.timing = timing;
+  const languages = collector.languages();
+  if (languages) trace.languages = languages;
   if (reviewCandidate) {
     trace.review = { ...(query !== undefined ? { query } : {}), ...collector.reviewContent() };
   } else if (config.captureContent) {
@@ -95,6 +106,7 @@ export function finishTrace(collector: TraceCollector, result: RetrievalResult, 
   } catch {
     // the retrieval log must never affect the request or the trace
   }
+  recordLanguages(collector, result, options);
   try {
     const config = options.config ?? readLangfuseConfig();
     const traceSampled = isSampled(collector.traceId, config.sampleRate, 'trace');
@@ -106,7 +118,8 @@ export function finishTrace(collector: TraceCollector, result: RetrievalResult, 
     scheduleAfterResponse(async () => {
       try {
         const { exportTrace } = await import('./langfuse');
-        // Built when the export runs so content recorded after the stream finished is included.
+        // Built when the export runs so content and the answer language recorded after the stream finished are included.
+        recordLanguages(collector, result, options);
         const trace = collect(collector, result, config, options.query, reviewCandidate);
         await exportTrace(trace, { config, ...(options.flushTimeoutMs !== undefined ? { flushTimeoutMs: options.flushTimeoutMs } : {}) });
       } catch {

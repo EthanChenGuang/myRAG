@@ -323,3 +323,112 @@ describe('main app proxy target (ME-01)', () => {
     expect(body).not.toContain('NEXT_PUBLIC_SITE_URL');
   });
 });
+
+describe('secret hints and the masked-save rule (07-20, D-14)', () => {
+  const security = require('../../scripts/config-server-security.js') as {
+    maskConfig: (config: Record<string, string>) => {
+      config: Record<string, string>;
+      secretsSet: string[];
+      secretHints: Record<string, { state: 'set' | 'unset'; last4?: string }>;
+    };
+    mergeSecretUpdate: (current: Record<string, string>, submitted: Record<string, unknown>) => Record<string, unknown>;
+    SECRET_MASK_PLACEHOLDER: string;
+  };
+  const LONG = 'Qx7vLm9TpR2sWn4Kd8Hjzq9w';
+  const SHORT = 'Pz3Rt6Yb1Ne';
+
+  it('last4: a secret of at least 20 characters reports set with its last four characters', () => {
+    const masked = security.maskConfig({ VOYAGE_API_KEY: LONG, OPENAI_API_KEY: SHORT, COHERE_API_KEY: '', NEXT_PUBLIC_APP_NAME: 'Demo' });
+    expect(masked.secretHints.VOYAGE_API_KEY).toEqual({ state: 'set', last4: 'zq9w' });
+    expect(masked.secretHints.OPENAI_API_KEY).toEqual({ state: 'set' });
+    expect(masked.secretHints.COHERE_API_KEY).toEqual({ state: 'unset' });
+    expect(masked.secretHints.NEXT_PUBLIC_APP_NAME).toBeUndefined();
+    expect(masked.config.NEXT_PUBLIC_APP_NAME).toBe('Demo');
+    expect(masked.secretsSet.sort()).toEqual(['OPENAI_API_KEY', 'VOYAGE_API_KEY']);
+  });
+
+  it('last4: the boundary is 20 characters', () => {
+    expect(security.maskConfig({ VOYAGE_API_KEY: 'a'.repeat(19) }).secretHints.VOYAGE_API_KEY).toEqual({ state: 'set' });
+    expect(security.maskConfig({ VOYAGE_API_KEY: 'b'.repeat(16) + 'wxyz' }).secretHints.VOYAGE_API_KEY).toEqual({ state: 'set', last4: 'wxyz' });
+  });
+
+  it('last4: no secret value and no substring of it longer than four characters appears in the masked output', () => {
+    const urlSecret = 'postgres://Uq4Ze:Vw2Km8Rq5Lt@Hd6Jm.test/Ka3';
+    const out = JSON.stringify(security.maskConfig({ VOYAGE_API_KEY: LONG, OPENAI_API_KEY: SHORT, DATABASE_URL: urlSecret }));
+    for (const value of [LONG, SHORT, urlSecret]) {
+      for (let i = 0; i + 5 <= value.length; i += 1) {
+        expect(out.includes(value.slice(i, i + 5)), `substring ${i} of a secret leaked`).toBe(false);
+      }
+    }
+  });
+
+  it('mergeSecretUpdate keeps the stored secret when the field is empty or holds the masked placeholder', () => {
+    const current = { VOYAGE_API_KEY: LONG, OPENAI_API_KEY: SHORT };
+    const merged = security.mergeSecretUpdate(current, {
+      VOYAGE_API_KEY: '',
+      OPENAI_API_KEY: security.SECRET_MASK_PLACEHOLDER,
+      NEXT_PUBLIC_APP_NAME: 'Renamed',
+    });
+    expect(merged.VOYAGE_API_KEY).toBe(LONG);
+    expect(merged.OPENAI_API_KEY).toBe(SHORT);
+    expect(merged.NEXT_PUBLIC_APP_NAME).toBe('Renamed');
+  });
+
+  it('mergeSecretUpdate replaces a secret only with a newly typed value and never invents one', () => {
+    const merged = security.mergeSecretUpdate({ VOYAGE_API_KEY: LONG }, { VOYAGE_API_KEY: 'placeholder-rotated-value', COHERE_API_KEY: null });
+    expect(merged.VOYAGE_API_KEY).toBe('placeholder-rotated-value');
+    expect(Object.prototype.hasOwnProperty.call(merged, 'COHERE_API_KEY')).toBe(false);
+  });
+
+  it('a POST with the masked placeholder in a secret field leaves the stored value and never echoes it', async () => {
+    const reply = await call('POST', '/api/config', {
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: { NEXT_PUBLIC_APP_NAME: 'Masked', OPENAI_API_KEY: security.SECRET_MASK_PLACEHOLDER } }),
+    });
+    expect(reply.status).toBe(200);
+    const written = fs.readFileSync(path.join(root, '.env.local'), 'utf8');
+    expect(written).toContain('NEXT_PUBLIC_APP_NAME=Masked');
+    expect(written).not.toContain(security.SECRET_MASK_PLACEHOLDER);
+    expect(written).toMatch(/OPENAI_API_KEY=placeholder-/);
+    expect(reply.body).not.toContain('placeholder-');
+  });
+});
+
+describe('GET /api/rag-pipeline/manifest (07-20, D-14)', () => {
+  interface ManifestEntry {
+    name: string;
+    group: string;
+    type: string;
+    label: string;
+    default: string;
+    value?: string | null;
+    secret?: { state: string; last4?: string };
+    help?: string;
+  }
+
+  it('returns every managed entry with metadata, saved values and secret hints only', async () => {
+    fs.appendFileSync(path.join(root, '.env.local'), 'VOYAGE_API_KEY=Qx7vLm9TpR2sWn4Kd8Hjzq9w\nRAG_PIPELINE=v2\n');
+    const reply = await call('GET', '/api/rag-pipeline/manifest');
+    expect(reply.status).toBe(200);
+    const data = JSON.parse(reply.body) as { success: boolean; entries: ManifestEntry[]; envModifiedAt: string };
+    const manifest = JSON.parse(fs.readFileSync('scripts/rag/env-manifest.json', 'utf8')) as { vars: Array<{ name: string; status: string }> };
+    const managed = manifest.vars.filter((v) => v.status === 'managed').map((v) => v.name);
+    expect(data.entries.map((e) => e.name)).toEqual(managed);
+    const byName = new Map(data.entries.map((e) => [e.name, e]));
+    expect(byName.get('RAG_PIPELINE')!.value).toBe('v2');
+    expect(byName.get('RAG_PIPELINE')!.group).toBe('retrieval');
+    expect(byName.get('VOYAGE_API_KEY')!.secret).toEqual({ state: 'set', last4: 'zq9w' });
+    expect(byName.get('VOYAGE_API_KEY')!.value).toBeUndefined();
+    expect(byName.get('COHERE_API_KEY')!.secret).toEqual({ state: 'unset' });
+    expect(byName.get('LAKERA_GUARD_API_KEY')!.type).toBe('secret');
+    expect(byName.get('RAG_INJECTION_LAKERA')!.help).toContain('Sends chunk text to Lakera, a third party');
+    expect(Number.isNaN(Date.parse(data.envModifiedAt))).toBe(false);
+    for (const leaked of ['Qx7vLm9TpR2sWn4Kd8Hj', 'placeholder-openai', 'placeholder-service-role', 'placeholder-pw']) {
+      expect(reply.body).not.toContain(leaked);
+    }
+  });
+
+  it('needs a loopback Host like every config route', async () => {
+    expect((await call('GET', '/api/rag-pipeline/manifest', { host: 'evil.example.test' })).status).toBe(403);
+  });
+});

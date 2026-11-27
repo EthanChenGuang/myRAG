@@ -1,0 +1,47 @@
+{
+  "additionalProperties": false,
+  "description": "D-15: one probe outcome; message is the fixed text for the code, never vendor text, a key or an address.",
+  "properties": {
+    "code": {
+      "enum": [
+        "ok",
+        "not_configured",
+        "unauthorized",
+        "timeout",
+        "unreachable",
+        "rate_limited",
+        "provider_error",
+        "bad_response"
+      ],
+      "title": "Code",
+      "type": "string"
+    },
+    "latencyMs": {
+      "minimum": 0,
+      "title": "Latencyms",
+      "type": "integer"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "provider": {
+      "const": "vectara",
+      "title": "Provider",
+      "type": "string"
+    }
+  },
+  "required": [
+    "provider",
+    "ok",
+    "latencyMs",
+    "code",
+    "message"
+  ],
+  "title": "ProviderTestResult",
+  "type": "object"
+}
