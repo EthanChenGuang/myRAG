@@ -3,7 +3,18 @@ import { createClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { isSingleTenant } from '@/lib/deployment-mode';
 import { verifyUserOrganizationAccess } from '@/lib/auth/organization-handler';
-import { isAdminUser, type RagAdminDb } from '@/lib/rag';
+import {
+  accessGroupsEnabled,
+  accessTableFilter,
+  documentAudiences,
+  isAdminUser,
+  resolveAccessScope,
+  resolveTenantScope,
+  scopeAccessFilter,
+  type DocumentAudience,
+  type RagAdminDb,
+  type TenantScope,
+} from '@/lib/rag';
 
 export const runtime = 'nodejs';
 
@@ -51,6 +62,78 @@ function pickEntries(rows: Row[], canSeeQuarantined: (row: Row) => boolean): Row
   return entries;
 }
 
+/** D-15: the caller's access for the list; null while RAG_DOC_ACCESS_GROUPS is off (today's list). */
+interface ListAccess {
+  keys: readonly string[] | null;
+  admin: boolean;
+  scope: TenantScope;
+}
+
+type AccessOutcome = { ok: true; access: ListAccess | null } | { ok: false; response: Response };
+
+const ACCESS_UNAVAILABLE = () => NextResponse.json({ error: 'access_groups_unavailable' }, { status: 503 });
+
+async function listAccess(request: NextRequest, userId: string | null, organizationId: string | null): Promise<AccessOutcome> {
+  if (!accessGroupsEnabled()) return { ok: true, access: null };
+  const tenant = await resolveTenantScope({
+    requestedOrganizationId: organizationId,
+    getUser: async () => (userId ? { id: userId } : null),
+    signal: request.signal,
+  });
+  if (!tenant.ok || !tenant.scope) return { ok: false, response: ACCESS_UNAVAILABLE() };
+  const resolved = await resolveAccessScope({
+    scope: tenant.scope,
+    identity: userId ? { kind: 'user', userId } : { kind: 'anonymous' },
+    signal: request.signal,
+  });
+  if (!resolved.ok) return { ok: false, response: ACCESS_UNAVAILABLE() };
+  const filter = scopeAccessFilter(resolved.scope);
+  return { ok: true, access: { keys: accessTableFilter(filter), admin: filter.mode === 'admin_all', scope: resolved.scope } };
+}
+
+function withAccess(scope: Scope, access: ListAccess | null): Scope {
+  const keys = access?.keys ?? null;
+  if (keys === null) return scope;
+  return (query) => scope(query).overlaps('access_groups', keys);
+}
+
+function isRestricted(groups: unknown): boolean {
+  return !(Array.isArray(groups) && groups.length === 1 && groups[0] === 'all');
+}
+
+function audienceView(audience: DocumentAudience | undefined): Row | null {
+  if (!audience) return null;
+  return {
+    kind: audience.kind,
+    groups: audience.groupIds.map((id, index) => ({ id, name: audience.groupNames[index] ?? null })),
+    peopleCount: audience.peopleCount,
+    fallbackReason: audience.fallbackReason,
+  };
+}
+
+/** D-15, UI-SPEC decision 6: `restricted` for every caller; the audience view and the connector flag for access admins only. */
+async function withAccessFields(
+  documents: Row[],
+  access: ListAccess | null,
+  admin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  signal: AbortSignal,
+): Promise<Row[]> {
+  if (!access) return documents;
+  const audiences = new Map<string, DocumentAudience>();
+  if (access.admin && documents.length > 0) {
+    const ids = documents.map((doc) => String(doc.id));
+    for (const audience of await documentAudiences(access.scope, ids, { db: () => admin as never, signal })) {
+      audiences.set(audience.documentId, audience);
+    }
+  }
+  return documents.map(({ access_groups: groups, ...doc }) => {
+    const restricted = isRestricted(groups);
+    if (!access.admin) return { ...doc, restricted };
+    const audience = audiences.get(String(doc.id).toLowerCase());
+    return { ...doc, restricted, audience: audienceView(audience), connectorManaged: audience?.connectorManaged ?? false };
+  });
+}
+
 function isImageFilename(filename: unknown): boolean {
   const lower = typeof filename === 'string' ? filename.toLowerCase() : '';
   return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
@@ -62,14 +145,18 @@ async function listDocuments(input: {
   canSeeQuarantined: (row: Row) => boolean;
   exposeOwner: boolean;
   label: string;
+  access: ListAccess | null;
+  signal: AbortSignal;
 }): Promise<Row[]> {
-  const { admin, scope, canSeeQuarantined, exposeOwner, label } = input;
+  const { admin, canSeeQuarantined, exposeOwner, label, access } = input;
+  const scope = withAccess(input.scope, access);
+  const columns = access ? `${BASE_COLUMNS}, access_groups` : BASE_COLUMNS;
   const statusFixEnabled = process.env.CONFIG_UI_STATUS_FIX !== 'false';
 
   // Current versions, plus the non-current rows a first upload can be in. Superseded ready versions are not read.
-  const currentQuery = scope(admin.from('documents').select(BASE_COLUMNS).eq('is_current', true).neq('status', 'deleted'));
+  const currentQuery = scope(admin.from('documents').select(columns).eq('is_current', true).neq('status', 'deleted'));
   const headQuery = statusFixEnabled
-    ? scope(admin.from('documents').select(BASE_COLUMNS).eq('is_current', false).in('status', ['processing', 'quarantined', 'failed']))
+    ? scope(admin.from('documents').select(columns).eq('is_current', false).in('status', ['processing', 'quarantined', 'failed']))
     : Promise.resolve({ data: [], error: null });
   const [current, head] = await Promise.all([currentQuery, headQuery]);
   for (const result of [current, head]) {
@@ -99,6 +186,7 @@ async function listDocuments(input: {
           chunk_count: 0,
           status: 'quarantined',
           quarantine: { rule_ids: ruleIdsOf(row) },
+          ...(access && { access_groups: row.access_groups }),
         };
       }
 
@@ -134,9 +222,10 @@ async function listDocuments(input: {
   }
 
   // Image documents are managed via the Image RAG section
-  return documents
+  const listed = documents
     .filter((doc) => !isImageFilename(doc.filename))
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  return withAccessFields(listed, access, admin, input.signal);
 }
 
 export async function GET(request: NextRequest) {
@@ -161,12 +250,16 @@ export async function GET(request: NextRequest) {
       } catch {
         admin = false;
       }
+      const access = await listAccess(request, userId, null);
+      if (!access.ok) return access.response;
       const documents = await listDocuments({
         admin: supabaseAdmin,
         scope: (query) => query,
         canSeeQuarantined: (row) => admin || (userId !== null && row.user_id === userId),
         exposeOwner: false,
         label: 'single-tenant',
+        access: access.access,
+        signal: request.signal,
       });
       return NextResponse.json({ documents });
     }
@@ -200,12 +293,16 @@ export async function GET(request: NextRequest) {
       scope = (query) => query.eq('organization_id', orgIdParam);
     }
 
+    const access = await listAccess(request, user.id, orgIdParam === 'null' ? null : orgIdParam);
+    if (!access.ok) return access.response;
     const documents = await listDocuments({
       admin: supabaseAdmin,
       scope,
       canSeeQuarantined: (row) => row.user_id === user.id,
       exposeOwner: true,
       label: 'multi-tenant',
+      access: access.access,
+      signal: request.signal,
     });
     return NextResponse.json({ documents });
   } catch (error) {
