@@ -577,8 +577,676 @@ function settingCheckSaveBody(button, ctx) {
   return checkId ? { check_id: checkId } : { skipped: true };
 }
 
-function settingCheckCreateGuard() {
-  return { beforeSave: async () => ({}), required: async () => ({}), saved() {}, saveFailed: async () => ({}), isOpen: () => false };
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// The dialog and the guard (UI-SPEC 6.3.1 to 6.3.4, 9)
+
+const SETTING_CHECK_API = '/api/config/rag-gate/check';
+const SETTING_CHECK_TIMEOUT_MS = 15000;
+const SETTING_CHECK_FAST_POLL_MS = 2000;
+const SETTING_CHECK_SLOW_POLL_MS = 5000;
+const SETTING_CHECK_FAST_WINDOW_MS = 30000;
+const SETTING_CHECK_DEADLINE_MS = 630000;
+const SETTING_CHECK_MAX_POLL_FAILURES = 3;
+const SETTING_CHECK_ID = 'rag-setting-check';
+
+function settingCheckEl(tag, opts, children) {
+  return settingCheckGates().gatesUiEl(tag, opts, children);
+}
+
+function settingCheckMessageEl(tag, cls, message) {
+  return settingCheckGates().gatesUiMessageEl(tag, cls, message);
+}
+
+/** The mode of the last loaded or saved configuration: off, warn or enforce. Never the unsaved select. */
+function settingCheckConfiguredMode(config) {
+  const raw = config && typeof config === 'object' ? String(config.RAG_CONFIG_GATE || '').trim().toLowerCase() : '';
+  return raw === 'warn' || raw === 'enforce' ? raw : 'off';
+}
+
+/** The body of POST /api/config/rag-gate/check for a guard request (config, prompt or models). */
+function settingCheckStartBody(request, force) {
+  const r = request || {};
+  let body;
+  if (r.kind === 'prompt') body = { kind: 'prompt', prompt: { preContext: r.preContext, postContext: r.postContext } };
+  else if (r.kind === 'models') body = { kind: 'models', models: r.models };
+  else body = { kind: 'config', config: r.config };
+  if (force) body.force = true;
+  return body;
+}
+
+function settingCheckElapsed(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  return Math.floor(total / 60) + ':' + String(total % 60).padStart(2, '0');
+}
+
+/** The visible label of the control for an env name, or null when the page has none. */
+function settingCheckPageLabel(name) {
+  if (typeof document === 'undefined' || typeof name !== 'string' || !/^[A-Z][A-Z0-9_]*$/.test(name)) return null;
+  const label = document.querySelector('label[for="' + name + '"]');
+  const value = label && typeof label.textContent === 'string' ? label.textContent.replace(/\s+/g, ' ').trim() : '';
+  return value || null;
+}
+
+function settingCheckBadgeEl(value, locale) {
+  const g = settingCheckGates();
+  const view = g.gatesUiVerdictView(value);
+  return settingCheckEl('span', { className: 'badge badge-sm gap-1 h-auto whitespace-nowrap ' + view.classes }, [g.gatesUiIcon(view.icon), g.gatesUiLabel(view.key, locale)]);
+}
+
+/** The evidence table of the dialog: Questions and Limit move under the check below 768px; the layer is a second line. */
+function settingCheckEvidenceTableEl(rows, locale) {
+  const g = settingCheckGates();
+  const caption = g.gatesUiLabel('checks.caption', locale);
+  const th = (key, extra) => settingCheckEl('th', { className: 'text-xs font-semibold ' + (extra || ''), text: g.gatesUiLabel(key, locale), attrs: { scope: 'col' } });
+  const head = settingCheckEl('tr', null, [th('col.check'), th('col.questions', 'max-md:hidden'), th('col.measured', 'text-right'), th('col.limit', 'text-right max-md:hidden'), th('col.result')]);
+  const body = settingCheckEl('tbody');
+  for (const row of rows) {
+    const cell = settingCheckMessageEl('th', 'font-normal text-sm align-top break-words', row.checkMessage);
+    cell.setAttribute('scope', 'row');
+    if (row.layerLabel) cell.appendChild(settingCheckEl('span', { className: 'block text-xs text-base-content/70', text: row.layerLabel }));
+    cell.appendChild(settingCheckEl('span', { className: 'block text-xs text-base-content/70 md:hidden', text: row.slice }));
+    cell.appendChild(settingCheckEl('span', { className: 'block text-xs text-base-content/70 md:hidden tabular-nums', text: row.limit }));
+    body.appendChild(
+      settingCheckEl('tr', null, [
+        cell,
+        settingCheckEl('td', { className: 'text-sm align-top break-words max-md:hidden', text: row.slice }),
+        settingCheckEl('td', { className: 'text-sm align-top text-right tabular-nums', text: row.measured }),
+        settingCheckEl('td', { className: 'text-sm align-top text-right tabular-nums max-md:hidden', text: row.limit }),
+        settingCheckEl('td', { className: 'align-top' }, [settingCheckBadgeEl(row.result, locale)]),
+      ]),
+    );
+  }
+  return settingCheckEl(
+    'div',
+    { className: 'overflow-x-auto rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', attrs: { tabindex: '0', role: 'region', 'aria-label': caption } },
+    [settingCheckEl('table', { className: 'table table-sm' }, [settingCheckEl('caption', { className: 'sr-only', text: caption }), settingCheckEl('thead', null, [head]), body])],
+  );
+}
+
+function settingCheckNoticeEl(heading, body, items) {
+  const g = settingCheckGates();
+  return settingCheckEl('div', { className: 'alert alert-warning items-start justify-items-start text-left mt-4' }, [
+    g.gatesUiIcon('bi-exclamation-triangle', 'mt-0.5'),
+    settingCheckEl('div', { className: 'flex flex-col gap-1 min-w-0 max-w-prose' }, [
+      settingCheckEl('p', { className: 'text-sm font-semibold', text: heading }),
+      settingCheckMessageEl('p', 'text-sm', body),
+      settingCheckEl('ul', { className: 'text-xs flex flex-col gap-1' }, items),
+    ]),
+  ]);
+}
+
+/**
+ * The guard behind window.ragSettingCheck. deps: { fetch, savedConfig() (the last loaded or saved configuration), locale, showToast,
+ * labelFor(name) }. One dialog at a time; the dialog never posts a save, it resolves the caller's decision.
+ */
+function settingCheckCreateGuard(deps) {
+  const d = deps || {};
+  const g = () => settingCheckGates();
+  const locale = () => g().gatesUiLocale(d.locale);
+  const fetcher = (url, init) => (typeof d.fetch === 'function' ? d.fetch(url, init) : window.fetch(url, init));
+  const savedConfig = () => {
+    if (typeof d.savedConfig === 'function') return d.savedConfig();
+    return typeof window !== 'undefined' && window.configManager ? window.configManager.savedConfig || null : null;
+  };
+  const labelFor = typeof d.labelFor === 'function' ? d.labelFor : settingCheckPageLabel;
+  const toast = (message, type) => {
+    if (typeof d.showToast === 'function') d.showToast(message, type);
+    else if (typeof window !== 'undefined' && typeof window.showToast === 'function') window.showToast(message, type);
+  };
+
+  let run = null;
+
+  async function call(url, init) {
+    let timer = null;
+    const timeout = new Promise((resolve) => {
+      timer = setTimeout(() => resolve({ status: 0, body: null }), SETTING_CHECK_TIMEOUT_MS);
+    });
+    const request = (async () => {
+      try {
+        const response = await fetcher(url, {
+          method: init.method,
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'x-config-ui': '1' },
+          ...(init.body ? { body: JSON.stringify(init.body) } : {}),
+        });
+        let body = null;
+        try {
+          body = await response.json();
+        } catch {
+          body = null;
+        }
+        return { status: response.status, body };
+      } catch {
+        return { status: 0, body: null };
+      }
+    })();
+    try {
+      return await Promise.race([request, timeout]);
+    } finally {
+      if (timer !== null) clearTimeout(timer);
+    }
+  }
+
+  function stopTimers() {
+    if (!run) return;
+    if (run.pollTimer !== null) clearTimeout(run.pollTimer);
+    if (run.tickTimer !== null) clearInterval(run.tickTimer);
+    run.pollTimer = null;
+    run.tickTimer = null;
+  }
+
+  function settle(decision) {
+    if (!run || !run.resolve) return;
+    const resolve = run.resolve;
+    run.resolve = null;
+    resolve(decision);
+  }
+
+  function announce(message) {
+    if (run && run.status) run.status.textContent = message;
+  }
+
+  function close(held) {
+    if (!run) return;
+    const current = run;
+    stopTimers();
+    settle({ proceed: false });
+    run = null;
+    if (current.dialog.open) current.dialog.close();
+    current.dialog.remove();
+    const fallback = typeof document !== 'undefined' ? document.querySelector('[data-action="save-config"]') : null;
+    const target = current.opener && current.opener.isConnected !== false ? current.opener : fallback;
+    if (target && typeof target.focus === 'function') target.focus();
+    if (held) toast(settingCheckLabel('outcome.held', current.locale), 'info');
+  }
+
+  function stateInput() {
+    return { mode: run.mode, phase: run.phase, check: run.check, from: run.from, pressed: run.pressed, failure: run.failure };
+  }
+
+  function reasonInfo() {
+    return settingCheckReason(run.reasonArea ? run.reasonArea.value : '', run.locale);
+  }
+
+  function updateReason() {
+    if (!run || !run.reasonArea) return;
+    const info = reasonInfo();
+    run.reasonCount.textContent = settingCheckLabel('reason.count', run.locale, { count: g().gatesUiNumber(info.length, run.locale) });
+    const showShort = run.touched && !info.valid;
+    run.reasonShort.textContent = showShort ? info.tooShort || settingCheckLabel('reason.help', run.locale) : '';
+    run.reasonShort.classList.toggle('hidden', !showShort);
+    if (showShort) run.reasonArea.setAttribute('aria-invalid', 'true');
+    else run.reasonArea.removeAttribute('aria-invalid');
+    if (showShort && !run.shortAnnounced) {
+      run.shortAnnounced = true;
+      announce(run.reasonShort.textContent);
+    }
+    if (info.valid) run.shortAnnounced = false;
+    const button = run.buttons && run.buttons.saveReason;
+    if (button && !run.saving) {
+      button.disabled = !info.valid;
+      if (info.valid) button.removeAttribute('disabled');
+      else button.setAttribute('disabled', '');
+    }
+  }
+
+  function ensureReasonField() {
+    if (run.reasonField) return run.reasonField;
+    const id = SETTING_CHECK_ID + '-reason';
+    run.reasonArea = settingCheckEl('textarea', {
+      className: 'textarea textarea-bordered textarea-sm w-full max-w-full',
+      attrs: {
+        id,
+        name: 'rag-gate-reason',
+        rows: '3',
+        required: true,
+        minlength: String(SETTING_CHECK_REASON_MIN),
+        maxlength: String(SETTING_CHECK_REASON_MAX),
+        autocomplete: 'off',
+        spellcheck: 'true',
+        'aria-describedby': id + '-help ' + id + '-short',
+      },
+      on: {
+        input: () => {
+          if (!run) return;
+          run.touched = true;
+          updateReason();
+        },
+        blur: () => {
+          if (!run) return;
+          run.touched = true;
+          updateReason();
+        },
+      },
+    });
+    run.reasonCount = settingCheckEl('p', { className: 'text-xs tabular-nums text-right text-base-content/70', attrs: { 'aria-live': 'off' } });
+    run.reasonShort = settingCheckEl('p', { className: 'text-xs text-warning hidden', attrs: { id: id + '-short' } });
+    run.reasonField = settingCheckEl('div', { className: 'form-control mt-4 gap-1' }, [
+      settingCheckEl('label', { className: 'text-sm', text: settingCheckLabel('reason.label', run.locale), attrs: { for: id } }),
+      run.reasonArea,
+      settingCheckEl('p', { className: 'text-xs text-base-content/70 max-w-prose', text: settingCheckLabel('reason.help', run.locale), attrs: { id: id + '-help' } }),
+      run.reasonCount,
+      run.reasonShort,
+    ]);
+    return run.reasonField;
+  }
+
+  function sectionHeading(text) {
+    return settingCheckEl('h4', { className: 'text-sm font-semibold mt-4', text });
+  }
+
+  function render(moveFocus) {
+    if (!run) return;
+    const locale = run.locale;
+    const state = settingCheckState(stateInput());
+    const view = settingCheckDialogView({ ...stateInput(), locale, changed: run.request.changed, labelFor, runningSince: run.runningSince });
+    run.saving = Boolean(state.saving);
+    const box = run.box;
+    const keepFocus = run.reasonArea && typeof document !== 'undefined' && document.activeElement === run.reasonArea;
+    box.replaceChildren();
+    run.title = settingCheckEl('h3', { className: 'text-base font-semibold text-balance', text: view.title, attrs: { id: SETTING_CHECK_ID + '-title', tabindex: '-1' } });
+    box.appendChild(run.title);
+    if (run.check && run.check.cached === true && ['result', 'saving', 'noResult'].includes(run.phase)) {
+      const at = g().gatesUiDate(run.check.finished_at || run.check.started_at, locale, 'time');
+      box.appendChild(settingCheckMessageEl('p', 'text-xs text-base-content/70 mt-1', settingCheckMessage('checking.cached', locale, { time: at ? { time: at } : '—' })));
+    }
+    const lead = settingCheckMessageEl('p', 'text-sm mt-2 max-w-prose', view.lead);
+    lead.setAttribute('id', SETTING_CHECK_ID + '-lead');
+    box.appendChild(lead);
+
+    if (view.changed.rows.length > 0) {
+      box.appendChild(sectionHeading(view.changed.heading));
+      const list = settingCheckEl('dl', { className: 'grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 mt-1 text-sm' });
+      for (const row of view.changed.rows) {
+        list.appendChild(settingCheckEl('dt', { className: 'min-w-0 break-words', text: row.label }));
+        list.appendChild(settingCheckEl('dd', { className: 'min-w-0' }, [settingCheckEl('code', { className: 'font-mono text-xs break-all', text: row.env, attrs: { translate: 'no' } })]));
+      }
+      box.appendChild(list);
+      if (view.changed.more) box.appendChild(settingCheckEl('p', { className: 'text-xs text-base-content/70 mt-1', text: view.changed.more }));
+    }
+
+    const checking = run.phase === 'checking' || (run.phase === 'saving' && run.from === 'checking');
+    const showResult = run.check && run.check.status === 'done' && !checking && run.phase !== 'busy';
+    if (checking) {
+      box.appendChild(settingCheckEl('progress', { className: 'progress progress-primary w-full mt-4 motion-reduce:hidden', attrs: { 'aria-label': settingCheckLabel('checking.barLabel', locale) } }));
+      const stage = run.check && typeof run.check.stage === 'string' && SETTING_CHECK_LAYERS.includes(run.check.stage) ? run.check.stage : null;
+      if (stage) box.appendChild(settingCheckEl('p', { className: 'text-sm mt-2', text: settingCheckLabel('checking.stage', locale, { layer: g().gatesUiLabel('layer.' + stage, locale) }) }));
+      run.elapsedEl = settingCheckEl('p', { className: 'text-sm tabular-nums text-base-content/70 mt-1', attrs: { 'aria-hidden': 'true' } });
+      run.elapsedEl.textContent = settingCheckLabel('checking.elapsed', locale, { time: settingCheckElapsed(Date.now() - run.startedAt) });
+      box.appendChild(run.elapsedEl);
+    } else {
+      run.elapsedEl = null;
+    }
+    if (run.phase === 'noResult' || (showResult && settingCheckOutcome(run.check) === 'error')) {
+      const reason = (run.check && typeof run.check.error_reason === 'string' && run.check.error_reason) || run.errorReason || 'no_answer';
+      box.appendChild(settingCheckEl('div', { className: 'mt-4' }, [g().gatesUiVerdict('error', locale, reason)]));
+    }
+    if (showResult && run.phase !== 'saved') {
+      box.appendChild(sectionHeading(settingCheckLabel('result.heading', locale)));
+      const list = settingCheckEl('ul', { className: 'flex flex-col gap-2 mt-1' });
+      for (const layer of view.layers) {
+        list.appendChild(
+          settingCheckEl('li', { className: 'flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm' }, [
+            settingCheckEl('span', { className: 'min-w-0 break-words', text: layer.label }),
+            g().gatesUiVerdict(layer.result, locale, layer.reason),
+          ]),
+        );
+      }
+      box.appendChild(list);
+      if (view.evidence.visible.length > 0) {
+        box.appendChild(sectionHeading(settingCheckLabel('failed.heading', locale)));
+        box.appendChild(settingCheckEl('div', { className: 'mt-1' }, [settingCheckEvidenceTableEl(view.evidence.visible, locale)]));
+      }
+      if (view.evidence.hidden.length > 0) {
+        box.appendChild(
+          settingCheckEl('details', { className: 'mt-2' }, [
+            settingCheckEl('summary', {
+              className: 'text-sm cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+              text: g().gatesUiLabel('checks.showAll', locale, { count: g().gatesUiNumber(view.evidence.hidden.length, locale) }),
+            }),
+            settingCheckEvidenceTableEl(view.evidence.hidden, locale),
+          ]),
+        );
+      }
+      if (view.notCovered) box.appendChild(settingCheckMessageEl('p', 'text-xs text-base-content/70 mt-2 break-words', view.notCovered));
+    }
+    if (showResult && run.phase !== 'saved' && view.untested) {
+      box.appendChild(
+        settingCheckNoticeEl(
+          view.untested.heading,
+          view.untested.body,
+          view.untested.items.map((item) => {
+            const li = settingCheckEl('li', { className: 'break-words' }, [
+              item.label + ' ',
+              settingCheckEl('code', { className: 'font-mono text-xs break-all', text: item.env, attrs: { translate: 'no' } }),
+              ': ',
+            ]);
+            settingCheckGates().gatesUiAppendMessage(li, item.reason);
+            return li;
+          }),
+        ),
+      );
+    }
+    if (showResult && run.phase !== 'saved' && view.uncal) {
+      const items = view.uncal.items.map((item) => settingCheckMessageEl('li', 'break-words', item));
+      if (view.uncal.more) items.push(settingCheckEl('li', { text: view.uncal.more }));
+      box.appendChild(settingCheckNoticeEl(view.uncal.heading, view.uncal.body, items));
+    }
+    if (run.phase === 'saved' && run.outcome) {
+      box.appendChild(settingCheckMessageEl('p', 'text-sm mt-4 max-w-prose', run.outcome));
+    }
+    if (run.phase === 'notSaved' && run.failureMessage) {
+      const failure = settingCheckMessageEl('p', 'text-sm text-error mt-4 max-w-prose', run.failureMessage);
+      failure.setAttribute('role', 'alert');
+      box.appendChild(failure);
+    }
+    if (state.reasonField) {
+      box.appendChild(ensureReasonField());
+    } else if (run.reasonField && run.phase === 'saved') {
+      run.reasonField = null;
+      run.reasonArea = null;
+    }
+    if (view.modeNote && run.phase !== 'saved' && run.phase !== 'notSaved') box.appendChild(settingCheckMessageEl('p', 'text-xs text-base-content/70 mt-4 max-w-prose', view.modeNote));
+    box.appendChild(run.status);
+
+    run.buttons = {};
+    const actions = settingCheckEl('div', { className: 'modal-action flex-wrap gap-2 max-md:flex-col max-md:items-stretch' });
+    for (const spec of state.buttons) {
+      const pressed = state.saving && spec.id === state.pressed;
+      const children = pressed ? [g().gatesUiSpinner(), settingCheckLabel('saving', locale)] : [settingCheckLabel(spec.labelKey, locale)];
+      const attrs = { type: 'button' };
+      if (spec.id === 'saveReason') attrs['aria-describedby'] = SETTING_CHECK_ID + '-reason-short';
+      const button = settingCheckEl('button', { className: spec.className + ' max-md:w-full', attrs, on: { click: () => onButton(spec.id) } }, children);
+      if (state.saving) {
+        button.disabled = true;
+        button.setAttribute('disabled', '');
+      }
+      run.buttons[spec.id] = button;
+      actions.appendChild(button);
+    }
+    box.appendChild(actions);
+    if (run.reasonArea) {
+      run.reasonArea.disabled = Boolean(state.saving);
+      if (state.saving) run.reasonArea.setAttribute('disabled', '');
+      else run.reasonArea.removeAttribute('disabled');
+      updateReason();
+    }
+    if (keepFocus) return;
+    if (moveFocus === 'default') {
+      const target = run.buttons[state.focus];
+      if (target) target.focus();
+    } else if (moveFocus !== false) {
+      run.title.focus();
+    }
+  }
+
+  function setPhase(phase, extra) {
+    if (!run) return;
+    Object.assign(run, extra || {});
+    run.phase = phase;
+    render(true);
+    if (phase !== 'saving') announce(run.title.textContent);
+    if (phase === 'result' && settingCheckState(stateInput()).autoSave) decide('save');
+  }
+
+  function decide(id) {
+    if (!run) return;
+    const info = run.reasonArea ? reasonInfo() : null;
+    if (id === 'saveReason' && (!info || !info.valid)) {
+      run.touched = true;
+      updateReason();
+      return;
+    }
+    const from = run.phase === 'notSaved' ? run.from || 'result' : run.phase;
+    const gate = settingCheckSaveBody(id, { checkId: run.check && run.check.check_id, reason: info ? info.value : '' });
+    stopTimers();
+    run.from = from === 'saving' ? run.from : from;
+    run.pressed = id;
+    run.phase = 'saving';
+    render(false);
+    announce(settingCheckLabel('saving', run.locale));
+    settle({ proceed: true, gate });
+  }
+
+  function onButton(id) {
+    if (!run || run.saving) return;
+    if (id === 'edit') return close(true);
+    if (id === 'close') return close(false);
+    if (id === 'rerun') return startCheck(true);
+    return decide(id);
+  }
+
+  function schedulePoll() {
+    if (!run) return;
+    const elapsed = Date.now() - run.startedAt;
+    const wait = elapsed < SETTING_CHECK_FAST_WINDOW_MS ? SETTING_CHECK_FAST_POLL_MS : SETTING_CHECK_SLOW_POLL_MS;
+    run.pollTimer = setTimeout(() => {
+      if (run) run.pollTimer = null;
+      void poll();
+    }, wait);
+  }
+
+  function giveUp(reason) {
+    stopTimers();
+    setPhase('noResult', { errorReason: reason || 'no_answer', check: run.check && run.check.status === 'done' ? run.check : null });
+  }
+
+  async function poll() {
+    if (!run || run.phase !== 'checking') return;
+    const token = run.token;
+    if (Date.now() - run.startedAt >= SETTING_CHECK_DEADLINE_MS) return giveUp('no_answer');
+    const answer = await call(SETTING_CHECK_API + '/' + encodeURIComponent(run.checkId), { method: 'GET' });
+    if (!run || run.token !== token || run.phase !== 'checking') return;
+    if (answer.status === 200 && answer.body && typeof answer.body === 'object' && answer.body.check_id) {
+      run.pollFailures = 0;
+      const previousStage = run.check ? run.check.stage : null;
+      run.check = answer.body;
+      if (answer.body.status === 'done') {
+        stopTimers();
+        return setPhase('result');
+      }
+      if (answer.body.started_at) {
+        const started = Date.parse(answer.body.started_at);
+        if (Number.isFinite(started) && started < run.startedAt) run.startedAt = started;
+      }
+      render(false);
+      if (answer.body.stage && answer.body.stage !== previousStage && SETTING_CHECK_LAYERS.includes(answer.body.stage)) {
+        announce(settingCheckLabel('checking.stage', run.locale, { layer: g().gatesUiLabel('layer.' + answer.body.stage, run.locale) }));
+      }
+    } else if (answer.status === 404) {
+      return giveUp('no_answer');
+    } else {
+      run.pollFailures += 1;
+      if (run.pollFailures >= SETTING_CHECK_MAX_POLL_FAILURES) return giveUp('no_answer');
+    }
+    if (Date.now() - run.startedAt >= SETTING_CHECK_DEADLINE_MS) return giveUp('no_answer');
+    schedulePoll();
+  }
+
+  function tick() {
+    if (!run || !run.elapsedEl) return;
+    const elapsed = Date.now() - run.startedAt;
+    run.elapsedEl.textContent = settingCheckLabel('checking.elapsed', run.locale, { time: settingCheckElapsed(elapsed) });
+    const minutes = Math.floor(elapsed / 60000);
+    if (minutes > run.announcedMinute) {
+      run.announcedMinute = minutes;
+      announce(settingCheckLabel('checking.elapsed', run.locale, { time: settingCheckElapsed(elapsed) }));
+    }
+    if (elapsed >= SETTING_CHECK_DEADLINE_MS && run.phase === 'checking') giveUp('no_answer');
+  }
+
+  async function startCheck(force) {
+    if (!run) return;
+    stopTimers();
+    run.token += 1;
+    const token = run.token;
+    run.check = null;
+    run.failure = null;
+    run.failureMessage = null;
+    run.errorReason = null;
+    run.pollFailures = 0;
+    run.startedAt = Date.now();
+    run.announcedMinute = 0;
+    run.phase = 'checking';
+    run.from = null;
+    run.pressed = null;
+    if (force) render(true);
+    const answer = await call(SETTING_CHECK_API, { method: 'POST', body: settingCheckStartBody(run.request, force) });
+    if (!run || run.token !== token) return;
+    const body = answer.body && typeof answer.body === 'object' ? answer.body : {};
+    if (answer.status === 200 && body.required === false) {
+      const current = run;
+      settle({ proceed: true });
+      run = null;
+      current.dialog.remove();
+      return;
+    }
+    if (typeof body.mode === 'string' && (body.mode === 'warn' || body.mode === 'enforce')) run.mode = body.mode;
+    if ((answer.status === 200 || answer.status === 202) && body.check_id && body.status === 'done') {
+      run.check = body;
+      return setPhase('result');
+    }
+    if (answer.status === 202 && body.check_id) {
+      run.checkId = body.check_id;
+      run.check = { check_id: body.check_id, status: 'queued' };
+      setPhase('checking');
+      run.tickTimer = setInterval(tick, 1000);
+      schedulePoll();
+      return;
+    }
+    if (answer.status === 409 && body.error === 'rag_gate_busy') {
+      return setPhase('busy', { runningSince: typeof body.running_since === 'string' ? body.running_since : null });
+    }
+    return setPhase('noResult', { errorReason: 'no_answer' });
+  }
+
+  function open(request, mode, forced) {
+    const loc = locale();
+    const status = settingCheckEl('div', { className: 'text-sm mt-4', attrs: { role: 'status', 'aria-live': 'polite' } });
+    const box = settingCheckEl('div', { className: 'modal-box w-11/12 max-w-2xl overscroll-contain' });
+    const dialog = settingCheckEl('dialog', {
+      className: 'modal',
+      attrs: { id: SETTING_CHECK_ID, 'aria-labelledby': SETTING_CHECK_ID + '-title', 'aria-describedby': SETTING_CHECK_ID + '-lead', lang: loc },
+    }, [box]);
+    const opener = typeof document !== 'undefined' ? document.activeElement : null;
+    return new Promise((resolve) => {
+      run = {
+        request,
+        mode,
+        forced,
+        locale: loc,
+        dialog,
+        box,
+        status,
+        opener,
+        resolve,
+        check: null,
+        checkId: null,
+        phase: 'starting',
+        from: null,
+        pressed: null,
+        failure: null,
+        failureMessage: null,
+        outcome: null,
+        errorReason: null,
+        runningSince: null,
+        startedAt: Date.now(),
+        announcedMinute: 0,
+        pollFailures: 0,
+        pollTimer: null,
+        tickTimer: null,
+        token: 0,
+        saving: false,
+        touched: false,
+        shortAnnounced: false,
+        reasonField: null,
+        reasonArea: null,
+        buttons: {},
+        opened: false,
+      };
+      dialog.addEventListener('cancel', (event) => {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        if (!run || run.dialog !== dialog || run.saving) return;
+        if (settingCheckState(stateInput()).buttons.some((b) => b.id === 'edit')) close(true);
+        else close(false);
+      });
+      const show = () => {
+        if (!run || run.opened) return;
+        run.opened = true;
+        document.body.appendChild(dialog);
+        if (typeof dialog.showModal === 'function') dialog.showModal();
+        else dialog.setAttribute('open', '');
+      };
+      void startCheck(false).then(() => {
+        if (run && run.dialog === dialog && !run.opened) {
+          show();
+          const state = settingCheckState(stateInput());
+          const target = run.buttons[state.focus];
+          if (target) target.focus();
+        }
+      });
+    });
+  }
+
+  function beforeSave(request) {
+    if (run) return Promise.resolve({ proceed: false, ignored: true });
+    const mode = settingCheckConfiguredMode(savedConfig());
+    if (mode === 'off') return Promise.resolve({ proceed: true });
+    const r = request && typeof request === 'object' ? request : {};
+    if (Array.isArray(r.changed) && r.changed.length === 0) return Promise.resolve({ proceed: true });
+    return open(r, mode, false);
+  }
+
+  function required(request) {
+    if (run) return Promise.resolve({ proceed: false, ignored: true });
+    const mode = settingCheckConfiguredMode(savedConfig());
+    return open(request && typeof request === 'object' ? request : {}, mode === 'warn' ? 'warn' : 'enforce', true);
+  }
+
+  function saved(body) {
+    if (!run) return;
+    const record = body && typeof body === 'object' && body.ragGate && typeof body.ragGate.record_id === 'string' ? body.ragGate.record_id : null;
+    const key = run.pressed === 'saveReason' ? 'outcome.savedOverride' : run.pressed === 'saveAnyway' ? 'outcome.savedWarn' : run.pressed === 'saveWithout' ? 'outcome.savedSkipped' : null;
+    const outcome = key && record ? settingCheckMessage(key, run.locale, { id: { mono: record } }) : null;
+    if (run.reasonArea) run.reasonArea.value = '';
+    run.reasonField = null;
+    run.reasonArea = null;
+    setPhase('saved', { outcome });
+    const target = run && run.buttons.close;
+    if (target) target.focus();
+  }
+
+  function saveFailed(status, body) {
+    if (!run) return Promise.resolve({ proceed: false });
+    const error = body && typeof body === 'object' ? body.error : null;
+    let failure = 'other';
+    let message = settingCheckMessage('error.saveFailed', run.locale, { status: String(status || '?') });
+    if (status === 409 && error === 'rag_gate_required') {
+      failure = 'changed';
+      message = settingCheckMessage('error.changed', run.locale);
+    } else if (status === 503 && error === 'rag_gate_record_failed') {
+      failure = 'recordFailed';
+      message = settingCheckMessage('error.recordFailed', run.locale);
+    }
+    return new Promise((resolve) => {
+      run.resolve = resolve;
+      if (status === 400 && error === 'invalid_reason' && run.pressed === 'saveReason') {
+        run.touched = true;
+        setPhase(run.from || 'result', { pressed: null });
+        updateReason();
+        return;
+      }
+      setPhase('notSaved', { failure, failureMessage: message });
+    });
+  }
+
+  return { beforeSave, required, saved, saveFailed, isOpen: () => run !== null };
+}
+
+if (typeof window !== 'undefined') {
+  window.SETTING_CHECK_LABELS = SETTING_CHECK_LABELS;
+  window.settingCheckLabel = settingCheckLabel;
+  window.ragSettingCheck = settingCheckCreateGuard({});
 }
 
 if (typeof module !== 'undefined' && module.exports) {
