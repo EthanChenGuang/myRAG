@@ -54,7 +54,7 @@ TS_JOB_NEEDLES = {
 # job -> the shard flag its test command must take from matrix.shard
 TS_SHARDED = {"ts-vitest": "--shard=", "ts-db": "--test-shard="}
 TS_TIMEOUT_MAX = 25
-PR_JOBS = [*TS_JOB_NEEDLES, "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build", "next-build"]
+PR_JOBS = [*TS_JOB_NEEDLES, "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build", "next-build", "pr-smoke"]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
 VERSION_COMMENT_RE = re.compile(r"^\s+#\s*v\d+(\.\d+){0,2}\s*$")
@@ -186,6 +186,43 @@ PUSH_BRANCHES = ("main", TRUNK_BRANCH)
 
 def check_pr_aggregate(data: dict, errors: list[str]) -> None:
     """D-37: the aggregate job is the one required check; only real success of every other job satisfies it."""
+    name = "pr-smoke"
+    push = triggers(data).get("push")
+    branches = (push or {}).get("branches") if isinstance(push, dict) else None
+    for branch in PUSH_BRANCHES:
+        if not isinstance(branches, list) or branch not in branches:
+            errors.append(f"{name}: on.push.branches must include '{branch}', got {branches!r}")
+    jobs = data.get("jobs") or {}
+    job = jobs.get(AGGREGATE_JOB)
+    if job is None:
+        errors.append(f"{name}: job '{AGGREGATE_JOB}' missing (the one required check, D-37)")
+        return
+    needs = job.get("needs")
+    needs_set = {needs} if isinstance(needs, str) else set(needs or [])
+    others = set(jobs) - {AGGREGATE_JOB}
+    if needs_set != others:
+        missing = sorted(others - needs_set)
+        unknown = sorted(needs_set - others)
+        errors.append(f"{name}: job '{AGGREGATE_JOB}' needs must list every other job (missing {missing}, unknown {unknown})")
+    if str(job.get("if", "")).replace(" ", "") != "always()":
+        errors.append(f"{name}: job '{AGGREGATE_JOB}' must run with if: always() so a failed or skipped job is reported")
+    if "secrets." in yaml.safe_dump(job):
+        errors.append(f"{name}: job '{AGGREGATE_JOB}' must not reference secrets.")
+    steps = all_steps(job)
+    checker = [
+        s
+        for s in steps
+        if "join(needs.*.result" in str((s.get("env") or {}).get("RESULTS", "")).replace(" ", "")
+        and re.search(r'test\s+"\$r"\s+=\s+"success"', str(s.get("run", "")))
+    ]
+    if not checker:
+        errors.append(f"{name}: job '{AGGREGATE_JOB}' needs a step that reads RESULTS from join(needs.*.result, ' ') through env and fails unless every result is success")
+    for step in steps:
+        run = str(step.get("run", ""))
+        if "skipped" in run:
+            errors.append(f"{name}: job '{AGGREGATE_JOB}' must not accept a skipped job (found 'skipped' in a run step)")
+        if "${{" in run:
+            errors.append(f"{name}: job '{AGGREGATE_JOB}' reads results only through env, found '${{{{' in a run step")
 
 
 def check_pr(errors: list[str]) -> None:
@@ -305,6 +342,7 @@ def check_pr(errors: list[str]) -> None:
             errors.append(f"pr-smoke: job {jname} must install with npm ci")
     check_next_build(jobs.get("next-build"), errors)
     check_docker_build(jobs.get("docker-build"), errors)
+    check_pr_aggregate(data, errors)
 
 
 def check_python_job(job: dict | None, errors: list[str]) -> None:

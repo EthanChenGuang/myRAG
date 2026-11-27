@@ -3,7 +3,7 @@ name: pr-smoke
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, claude/ecstatic-hamilton-86gtwv]
 
 permissions:
   contents: read
@@ -432,3 +432,17 @@ jobs:
           test "$ready" = "200"
           test "$anon" = "401"
           test "$authed" = "200"
+
+  pr-smoke:
+    if: always()
+    needs: [ts-vitest, ts-db, ts-tsx, ts-checks, next-build, sibling-types, voice-agent, schema-parity, python, eval-smoke, gate-negative-control, docker-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every needed job must have succeeded (skipped, failure and cancelled all fail)
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          test -n "$RESULTS" || { echo "no needed job results"; exit 1; }
+          for r in $RESULTS; do test "$r" = "success" || { echo "a needed job ended as: $r"; exit 1; }; done
+          echo "every needed job succeeded"
