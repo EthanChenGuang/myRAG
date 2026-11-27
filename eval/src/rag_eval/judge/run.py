@@ -29,6 +29,7 @@ from rag_eval.judge.config import (
     generator_family,
     load_judge_config,
 )
+from rag_eval.judge.openai_route import ENV_NAME, OpenAiRouteError, judge_key_names, resolve_embedding_route
 from rag_eval.judge.telemetry import check_no_results_upload
 from rag_eval.paths import REPO_ROOT, resolve_cli_path
 from rag_eval.runner import _cross_check
@@ -376,13 +377,18 @@ def main(argv: list[str] | None = None) -> int:
     except JudgeFamilyError as exc:
         return _fail(str(exc), EXIT_FAMILY)
 
-    openrouter_key = os.environ.get("OPENROUTER_API_KEY") or None
-    openai_key = os.environ.get("OPENAI_API_KEY") or None
-    for name, value in (("OPENROUTER_API_KEY", openrouter_key), ("OPENAI_API_KEY", openai_key)):
-        if value is None:
+    try:
+        key_names = judge_key_names()
+    except OpenAiRouteError as exc:
+        return _fail(str(exc), EXIT_INPUT)
+    for name in key_names:
+        if not os.environ.get(name):
             print(f"{MISSING_KEY_NOTICE}: {name} is not set", file=sys.stderr)
             return EXIT_KEY
-    assert openrouter_key is not None and openai_key is not None
+    openrouter_key = os.environ["OPENROUTER_API_KEY"]
+    embedding_route = resolve_embedding_route(config.embedding_model)
+    if embedding_route.via == "openrouter":
+        print(f"judge embeddings: {embedding_route.model} via openrouter ({ENV_NAME})", file=sys.stderr)
 
     try:
         from rag_eval.judge.deepeval_judge import OpenRouterDeepEvalLLM
@@ -394,7 +400,7 @@ def main(argv: list[str] | None = None) -> int:
             return _fail(str(exc), EXIT_INPUT)
 
         deepeval_llm = OpenRouterDeepEvalLLM(config, openrouter_key)
-        ragas_llm, ragas_embeddings = build_ragas_live(config, openrouter_key, openai_key)
+        ragas_llm, ragas_embeddings = build_ragas_live(config, openrouter_key, embedding_route)
         report = run_judge(
             traces,
             golden,

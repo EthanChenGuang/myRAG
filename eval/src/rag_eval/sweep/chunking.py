@@ -36,6 +36,7 @@ from rag_eval.bounds import upper_bound
 from rag_eval.config_files import finalize_config
 from rag_eval.golden_io import load_golden
 from rag_eval.harness_runner import HarnessError, HarnessRun, run_harness
+from rag_eval.judge.openai_route import OpenAiRouteError, judge_key_names
 from rag_eval.metrics import CLAUSE_TAG, GENERAL_DOC_TYPE, question_kind, score_items
 from rag_eval.paired import _slice_members, item_metrics
 from rag_eval.paths import REPO_ROOT, resolve_cli_path
@@ -63,7 +64,6 @@ DEFAULT_K = 10
 MAX_CHILD_TOKENS = 8191
 DEFAULT_CONTEXT_BUDGET = 6000
 EPSILON = 1e-9
-JUDGE_KEYS = ("OPENROUTER_API_KEY", "OPENAI_API_KEY")
 CHOSEN_METRICS = ("recall_at_k", "mrr", "correct_refusal_rate", "false_refusal_rate", "context_tokens", "latency_p95_ms")
 CLAUSE_CHOSEN_METRICS = ("recall_at_k", "mrr", "context_tokens")
 
@@ -274,7 +274,11 @@ def gate_against_legacy(
 
 
 def default_judge(run: HarnessRun, items: list[GoldenItem]) -> JudgeOutcome:
-    missing = [name for name in JUDGE_KEYS if not os.environ.get(name)]
+    try:
+        key_names = judge_key_names()
+    except OpenAiRouteError as exc:
+        return None, f"Judge answer correctness skipped: {exc}."
+    missing = [name for name in key_names if not os.environ.get(name)]
     if missing:
         return None, f"Judge answer correctness skipped: judge key not configured ({', '.join(missing)} not set)."
     return None, (
