@@ -1496,3 +1496,64 @@ BEGIN
 END
 $r22_service_role_only$;
 ```
+
+## Train 40: 0723, 0724, 0726, 0727, 0986, 0988 and 0410 r23 delta (to apply after train 39 is live)
+
+Branch `ci/merge-train-40`, built on `ci/merge-train-39` 6da932ba and merged forward to c6f1b3f76 (through `exec/quick-state-sync`, which is train 39 plus one commit). Train 39 (and #135) are not yet in `origin/main`. Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+Merged with `--no-ff`; each branch carries its SUMMARY. The 13 audit branches went in phase order; the orchestrator's additions followed in the order it gave (03.3-25 asked to go first arrived after ten audit branches were already in, so it went in next).
+
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/04.2-33` | 04.2 live-blocked handoff | none |
+| `exec/04.3-52` | 04.3 route access canary, access-groups-on run config | none |
+| `exec/05.2.1-16` | 05.2.1 calc tool part in the chat UI | none new (0950 already on train 39) |
+| `exec/05.3-48` | 05.3 defaults-equal-Phase-5.3 proof | none |
+| `exec/06.3-01` | 06.3 withdrawn citation contract | none |
+| `exec/06.3-02` | 06.3 source-sync settings, SharePoint/OneDrive keys, Config UI | none |
+| `exec/06.3-03` | 06.3 fake connector, default deletion characterization | none |
+| `exec/06.3-06` | 06.3 withdrawn citation UI | none |
+| `exec/06.3-07` | 06.3 source recheck stage (RET-14) | 0723; 0410 entries |
+| `exec/06.3-10` | 06.3 purge citation scrub | 0724 (common + mode files); 0410 entries |
+| `exec/03.3-25` | 03.3 fixture floor, quantity companion tokens, section-rule heading paths, AGENTS.md Phase 3.3 | none |
+| `exec/06.3-15` | 06.3 purge audit and lineage purge | 0726, 0727; 0410 entries |
+| `exec/06.3-27` | 06.3 source recheck latency budgets and voice path (brings 06.3-07) | none new |
+| `exec/07-28` | 07 semantic-cache canary on all backends (contains 07-34) | none new (0708/0709/0740/0920 already on train 39) |
+| `exec/07-34` | 07 voice and embed canaries | already inside 07-28; no separate merge commit |
+| `exec/quick-doc-types-access` | `rag_tenant_doc_types` with the access filter | 0986; 0410 entries |
+| `exec/quick-review-writers-access` | review-queue writers carry access sets | 0988 (renumbered from 0986); 0410 entries |
+| `exec/quick-composer-comet` | composer UI | none |
+| `exec/quick-it-refusal-locale` | chat-route refusal language fix | none |
+| `exec/quick-state-sync` | STATE/ROADMAP sync (brings train 39 to c6f1b3f76) | none |
+
+Notes:
+- Migration number collision: `quick-doc-types-access` and `quick-review-writers-access` both claimed 0986. Doc-types was pushed first (29f7d86a) and keeps 0986. 0987 (`quick-scope-access`) and 0989 (NF-1 hotfix) are claimed on origin, so review-writers became `0988_review_items_writers_access_sets.sql` (file, header, NOTICE tags, 0410 comment, rag-db test, golden-evidence comments and its SUMMARY updated). New CI check `scripts/ci/check-migration-numbers.mjs` (pr-smoke, RAG boundary step) fails when two migrations share a number; a common file and its mode files count as one; the shipped 0316 pair is the only allowed exception.
+- `quick-doc-types-access`: its commit message says WIP, its SUMMARY says complete; the SUMMARY is authoritative (orchestrator).
+- Access catalog sentinel: the new functions are classified EXEMPT with reasons: `rag_source_recheck` (returns a subset of ids a filtered leg returned), `rag_purge_admin_target`, `rag_purge_lineage`, `rag_purge_verify` (tenant-checked service-role purge, no retrieval caller) and `rag_withdrawn_chat_messages` (rewrites the jsonb it is passed, reads no table). `rag_scope_centroids_rebuild` was already classified on train 39.
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0723_source_recheck.sql` | New `rag_source_recheck(text, uuid[])` (DEFINER, service_role only). **DROP:** `DROP FUNCTION IF EXISTS` of that signature, re-created. |
+| 2 | `0724_purge_citation_scrub.sql` | Withdrawn-marker builders, chat-message rewriters, answer-record scrub (service_role only). No DROP. |
+| 3 | `0724_purge_citation_scrub.multi-tenant.sql` | Tenant-bounded chat scrub and leftover count for the multi-tenant chats layout. Single-tenant projects use the `.single-tenant.sql` file instead. No DROP. |
+| 4 | `0726_purge_audit.sql` | New table `rag_purge_audit` (RLS on, append-only guards) and its functions. **DROP:** triggers `rag_purge_audit_guard`, `rag_purge_audit_no_truncate` `IF EXISTS`, re-created. |
+| 5 | `0727_purge_lineage.sql` | `rag_purge_lineage`, `rag_purge_verify` (DEFINER, service_role only). After 0726. Calls 0740 and 0728 only when present. No DROP. |
+| 6 | `0986_tenant_doc_types_access.sql` | **DROP:** every overload of `rag_tenant_doc_types` by catalog lookup; one re-created with `p_access_keys text[]`, `p_access_all boolean` (defaults). Replaces `rag_access_readiness` with a superset of 0933's. After 0981 and 0933. |
+| 7 | `0988_review_items_writers_access_sets.sql` | Rebuilds `rag_review_items_enqueue` (0967) and `rag_review_items_enqueue_re_review` (0974) with access sets; same signatures. After 0967, 0974, 0984. Re-run after any later re-run of 0967 or 0974. No DROP. |
+| 8 | 0410 r23 delta | Grants only; run last. +94 lines of guarded entries for every function above. |
+
+Apply the SQL before deploying the train-40 app. Checked on PGlite (multi-tenant): the combined file applied twice on top of the full migration set; one overload of `rag_tenant_doc_types`, `rag_access_readiness()` ready, no anon/authenticated EXECUTE on the 38 functions this train adds or redefines. The combined file is `sql/train40-live.sql` on `ops/owner-actions`; the 0410 r23 delta is its last section.
+
+### Train notes (fixes made on the train)
+- `tests/rag-e2e/defaults-equal-phase53.reference.json` re-recorded (`PHASE53_RECORD_REFERENCE=1`, copy kept): 05.3-48 recorded it at 49e260b4; the train adds 57 fixture items. The 356 existing items keep refusal decision, answer hash and score sequence; 10 duplicate-flood and near-miss items only reorder chunks of equal score (04.2-32).
+- `tests/ui/__snapshots__/source-version-also-in.{citation,panel}-baseline.html` re-recorded: class order of the citation badge only (06.3-06's `cn()`), class sets equal.
+- `tests/rag/characterize-chat.test.ts`: both D-24 configurations run with the languages unset (quick-261127-irl localizes the strict refusal only while languages are configured); snapshot unchanged. Accepted by the orchestrator.
+- `tests/rag-db/eval-v2-overlay.test.mts`: the exact allow-list includes `RAG_DOC_ACCESS_GROUPS` (04.3-52, ffa1e508e).
+- `tests/rag-db/phase32-migrations-apply.test.mts`: the restore step re-runs 0986 after 0933.
+- `tests/rag-db/purge-hook-golden-items.test.mts`: the Phase 6.3 case purges as an entitled admin and needs `rag_purge_foreign_stores` (0728, plan 06.3-19); it skips on this train. Gap: until 06.3-19, `rag_purge_lineage` does not run the purge hooks, so golden evidence and other hook stores of a purged lineage stay.
+- `tests/rag/canary/{embed,voice}-scope.test.ts`: the direct `backend.search` negative controls pass `scopeAccessFilter(scope)` (4.3 D-05).
+- `tests/rag-db/access-catalog-sentinel.test.mts`: EXEMPT entries for the 06.3 functions (see above).
+- 06.3-02 `RAG_SOURCE_RECHECK` is a generated RAG Modes row (07-20 manifest), so `config-source-sync-fields.test.ts` asserts the manifest entry instead of a hand-written select.
+- Pre-existing on train 39 (same subtests fail at c6f1b3f76): `ingestion-schema` "applying 0351 twice ..." (0425 reports `match_chunks_by_profile(...7 args)` missing) and `phase32-columns-checks` "applying 0801 a second time ..." (`rag_dup_cluster_sources` definition differs), both modes. Left for the train-39 builder.
