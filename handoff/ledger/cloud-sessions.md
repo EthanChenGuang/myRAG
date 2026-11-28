@@ -1040,3 +1040,6 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 - 01:02Z 06.3-17 DONE (exec/06.3-17 fa4cc32c, SharePoint/OneDrive picker UI; design gate PASS) and archived; goes into train 42. Dispatched 06.3-18 session_01X342siQErNQ4E7G1oddo16 (base 06.3-17 + 06.3-16, base sha pinned).
 - 01:03Z 07-44 DONE (exec/07-44, tests only; real Qdrant and Weaviate canary 229 pass) and archived; goes into train 42. Root cause of the earlier block: the session fetched two branches, so FETCH_HEAD was wrong (skill updated).
 - 01:05Z PR #137 ts-db 7/12 FAIL: semantic-cache-canary subtest 11 inserts into documents as authenticated, which 0991 now blocks (42501). The test is wrong, not the product. Dispatched fix session_01X342sitZBomR6zP47Ne9BL on fix/uf1-direct-insert (it also sweeps other tests that insert as authenticated).
+- 01:11Z verify 6.1 DONE (verify/06.1 e0f8da1b) and archived. Result gaps_found: G-1 BLOCKER (FT-09/SC6), the probe prompt roles differ between train.py and finetune-slot.ts. Security SECURED 67/67.
+  - Dispatched quick-batch session_01X342sia6BZLfkkQGQc5hDa on exec/quick-61-gaps (base main a0c5ca17): G-1, W1, W2, W3, W5, IW-1 (09xx migration), IW-3, IW-4. IW-2 deferred.
+  - MORNING (owner): sign or accept 6.1 AR-1..AR-8. Live checkpoints 1-4 (06.1-LIVE-VERIFICATION.md) run after G-1.
