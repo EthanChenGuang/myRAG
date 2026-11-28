@@ -118,6 +118,28 @@ describe('fixture lexical statistics seeding (D-36)', () => {
       await session.close();
     }
   });
+  test('a bm25 run also seeds the isolated q62 and dominant-language tenants (each its own database), ready and clean', async () => {
+    const env = loadRunConfig(path.join(RUNS_DIR, 'v2-lexical-bm25-on.json')).env;
+    const session = await prepareInProcessEval({
+      corpusDir: CORPUS_DIR,
+      deploymentMode: 'single-tenant',
+      fixtureMode: 'prechunked',
+      envOverrides: env,
+      q62: true,
+      dominantLanguage: true,
+    });
+    try {
+      for (const [name, tenant] of [['q62', session.q62Tenant], ['dominant_language', session.dominantLanguageTenant]] as const) {
+        assert.ok(tenant, `${name} tenant built`);
+        const check = await tenant.db.query<{ c: { state: string | null; clean: boolean; pending: number } }>('SELECT public.rag_lexstats_check($1) AS c', [tenant.tenantKey]);
+        assert.equal(check.rows[0]!.c.state, 'ready', `${name} statistics ready`);
+        assert.equal(check.rows[0]!.c.clean, true, `${name} statistics clean`);
+        assert.ok(session.lexicalStats?.tenants.some((entry) => entry.tenant_key === tenant.tenantKey), `${name} reported`);
+      }
+    } finally {
+      await session.close();
+    }
+  });
   // The app modules keep the fake edge URL of the first session in this process, so only the bm25 session above sends requests; this
   // one checks the database a default build leaves (the no-call identity of ts_rank_cd is tests/rag-e2e/lexical-bm25-pipeline.test.mts).
   test('a run at the defaults leaves the four statistics tables empty and adds no inputs entry', async () => {
