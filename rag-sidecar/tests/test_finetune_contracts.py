@@ -49,6 +49,7 @@ def _offline(passed: bool = True) -> dict:
 def _probe() -> dict:
     return {
         "texts": list(ft.PROBE_TEXTS),
+        "roles": list(ft.PROBE_ROLES),
         "query_prompt": "query: ",
         "document_prompt": "passage: ",
         "vectors": [UNIT, UNIT, UNIT],
@@ -347,6 +348,17 @@ def test_probe_set_shape():
         ft.ProbeSet.model_validate({**_probe(), "vectors": [UNIT, UNIT, [1.0] * 1023]})
     with pytest.raises(ValidationError):
         ft.ProbeSet.model_validate({**_probe(), "vectors": [UNIT, UNIT, [0.5] + [0.0] * 1023]})
+
+
+def test_probe_roles_are_fixed_and_required():
+    assert ft.PROBE_ROLES == ("query", "document", "query")
+    for roles in (["query", "query", "query"], ["document", "query", "query"], ["query", "document"]):
+        with pytest.raises(ValidationError):
+            ft.ProbeSet.model_validate({**_probe(), "roles": roles})
+    without = _probe()
+    del without["roles"]
+    with pytest.raises(ValidationError):
+        ft.ProbeSet.model_validate(without)
 
 
 def test_probe_texts_are_the_fixed_strings():

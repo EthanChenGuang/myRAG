@@ -460,7 +460,7 @@ def test_bootstrap_interval_is_seeded():
 
 
 def _probe(spec, *, query_prompt=None):
-    from rag_sidecar.contracts.finetune import PROBE_TEXTS, ProbeSet
+    from rag_sidecar.contracts.finetune import PROBE_ROLES, PROBE_TEXTS, ProbeSet
 
     vectors = []
     for slot in range(3):
@@ -469,6 +469,7 @@ def _probe(spec, *, query_prompt=None):
         vectors.append(vector)
     return ProbeSet(
         texts=list(PROBE_TEXTS),
+        roles=PROBE_ROLES,
         query_prompt=spec.query_prompt if query_prompt is None else query_prompt,
         document_prompt=spec.document_prompt,
         vectors=vectors,

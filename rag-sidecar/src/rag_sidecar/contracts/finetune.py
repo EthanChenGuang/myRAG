@@ -25,6 +25,12 @@ PROBE_TEXTS: tuple[str, str, str] = (
     "探针句二：用于核对向量接口的一句中性短文。",
     "Frase di prova tre: una breve frase neutra per verificare l'endpoint dei vettori.",
 )
+ProbeRole = Literal["query", "document"]
+# The prompt each probe text is embedded with, by training and by the slot provider's probe check (D-24): the first and third as
+# queries, the second as a document, so a drift of either serving prompt fails the probe. The one definition; the TypeScript side
+# reads it from the generated ProbeSet schema.
+PROBE_ROLES: tuple[ProbeRole, ProbeRole, ProbeRole] = ("query", "document", "query")
+_ProbeRoles = tuple[tuple(Literal[role] for role in PROBE_ROLES)]  # type: ignore[misc]
 
 SHA256_PATTERN = r"^[a-f0-9]{64}$"
 REVISION_PATTERN = r"^[a-f0-9]{40}$"
@@ -541,6 +547,7 @@ class OfflineEvalReport(_Contract):
 
 class ProbeSet(_Contract):
     texts: list[str] = Field(min_length=3, max_length=3)
+    roles: _ProbeRoles  # type: ignore[valid-type]
     query_prompt: str = Field(max_length=1024)
     document_prompt: str = Field(max_length=1024)
     vectors: list[list[float]] = Field(min_length=3, max_length=3)

@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { env } from '@/lib/env';
+import { ProbeSetSchema, type ProbeSet } from '@/lib/rag-eval/contracts.generated';
 import { rpcRows, type RpcClient } from '../backend/supabase-rpc';
 import { countTokens } from '../ingest/text/tokens';
 import { EmbeddingProfileMismatch, truncateAndNormalize } from './mrl';
@@ -7,6 +8,7 @@ import type { EmbedOptions, EmbedOutput, EmbeddingProvider, FinetuneSlotProvider
 import { EmbeddingProviderError, FT_SLOT_DIMS, FT_SLOT_SUPPORTED_DIMS, isAbortError, toProviderError } from './types';
 
 export type FinetuneSlot = 'a' | 'b';
+type ProbeRole = ProbeSet['roles'][number];
 
 const MAX_TEXTS_PER_REQUEST = 128;
 const MAX_INPUT_TOKENS = 8192;
@@ -19,10 +21,10 @@ const LIST_MODELS_RPC = 'rag_finetune_list_models';
 export const FINETUNE_PROBE_MIN_COSINE = 0.999;
 
 /**
- * The prompt each of the three probe texts is embedded with, here and when training computes the reference vectors: the first and
- * third as queries, the second as a document, so a drift of either serving prompt fails the probe.
+ * The prompt each of the three probe texts is embedded with, here and when training computes the reference vectors. Defined once as
+ * PROBE_ROLES in rag_sidecar.contracts.finetune and read from the generated ProbeSet schema.
  */
-export const FINETUNE_PROBE_ROLES: readonly ('query' | 'document')[] = Object.freeze(['query', 'document', 'query'] as const);
+export const FINETUNE_PROBE_ROLES: readonly ProbeRole[] = Object.freeze(ProbeSetSchema.shape.roles.items.map((item) => item.value));
 
 export interface FinetuneSlotConfig {
   baseUrl: string;
@@ -193,7 +195,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function parseProbe(value: unknown): ProbeRecord | null {
   const probe = asRecord(value);
   if (!probe) return null;
-  const { texts, vectors } = probe;
+  const { texts, vectors, roles } = probe;
+  if (roles !== undefined && (!Array.isArray(roles) || roles.length !== FINETUNE_PROBE_ROLES.length || roles.some((role, index) => role !== FINETUNE_PROBE_ROLES[index]))) {
+    return null;
+  }
   if (!Array.isArray(texts) || texts.length !== FINETUNE_PROBE_ROLES.length || !texts.every((text) => typeof text === 'string' && text !== '')) {
     return null;
   }

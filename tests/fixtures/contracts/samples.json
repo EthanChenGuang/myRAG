@@ -8048,6 +8048,11 @@
       "probe": {
         "document_prompt": "passage: ",
         "query_prompt": "query: ",
+        "roles": [
+          "query",
+          "document",
+          "query"
+        ],
         "texts": [
           "Probe sentence one: a short neutral statement used to verify the embedding endpoint.",
           "探针句二：用于核对向量接口的一句中性短文。",
@@ -12213,6 +12218,11 @@
     "ProbeSet": {
       "document_prompt": "passage: ",
       "query_prompt": "query: ",
+      "roles": [
+        "query",
+        "document",
+        "query"
+      ],
       "texts": [
         "Probe sentence one: a short neutral statement used to verify the embedding endpoint.",
         "探针句二：用于核对向量接口的一句中性短文。",

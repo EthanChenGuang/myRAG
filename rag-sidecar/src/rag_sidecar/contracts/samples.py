@@ -3307,6 +3307,7 @@ def _finetune_models() -> dict[str, Any]:
     )
     probe = ft.ProbeSet(
         texts=list(ft.PROBE_TEXTS),
+        roles=ft.PROBE_ROLES,
         query_prompt="query: ",
         document_prompt="passage: ",
         vectors=[unit, unit, unit],
