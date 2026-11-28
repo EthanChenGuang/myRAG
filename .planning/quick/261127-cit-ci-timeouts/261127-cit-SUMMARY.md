@@ -32,7 +32,8 @@ The six 05.2.1-12 corpus documents on train 38 make fixture builds somewhat slow
 Estimates simulate 3 workers (the runner's node:test concurrency) per shard over the recorded durations, with files in planner order. The lint caps TS job timeouts at 25 min.
 
 ## Local shard runs (as the CI step runs them)
-- Pending: ts-tsx shard 2/3 and ts-db shard 5/12 were still running when this was written.
+- ts-tsx 2/3 (17 files): 233 s against an estimate of 5.2 min. With rag-sidecar not yet synced locally, 11 tests failed and 17 were cancelled in 6 suites, all on `Failed to download click==8.5.1`, a sidecar venv CI does sync. After `uv sync --directory rag-sidecar --locked --extra chunking --extra preflight`, those five files pass 48/48.
+- ts-db 5/12 (22 files): 464 s (7.7 min, the estimate exactly), exit 0, 332 tests, 329 pass, 0 fail, 0 cancelled.
 
 ## Overlap with ci/merge-train-38 (859c2a95, d07b59ec)
 - Train 38 raises the ts-db timeout to 40 and lets check-workflows allow it (`TS_TIMEOUT_MAX_BY_JOB`). It also raises vitest testTimeout/hookTimeout to 120 s / 180 s and the eval-corpus `TIMEOUT_MS` to 240 s.
@@ -44,7 +45,7 @@ Estimates simulate 3 workers (the runner's node:test concurrency) per shard over
 - `node --test scripts/tests/test-shards.node-test.mjs`: 9 pass.
 - `npx vitest run tests/eval-corpus.test.ts`: 6 passed.
 - `node --import tsx --test tests/rag-db/activation-gate.test.mts tests/rag-db/activation-gate-external.test.mts`: 22 + 22 pass.
-- Type-check (`npx next typegen && npx tsc --noEmit -p tsconfig.json`): pending.
+- `npx next typegen && npx tsc --noEmit -p tsconfig.json`: 0 errors.
 
 ## Follow-ups (not done here)
 - The prechunked fixture build costs ~30 s (an empty database is 3 s; the rest is the corpus load). `schema-migrations` builds one per test. Snapshotting built fixtures with PGlite `dumpDataDir`/`loadDataDir`, keyed on options, env and content hashes, would cut ts-db time broadly but changes the shared harness.
