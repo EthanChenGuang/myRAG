@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { env } from '@/lib/env';
 import { listConnectionFiles, removeOrphans, type ListableConnectionRow } from './sync-manager';
 import { connectionTenantKey, recordReconcileRun } from './source-deletions';
+import { raiseSourceAlert } from './source-alerts';
 
 type SupabaseAdmin = NonNullable<ReturnType<typeof getSupabaseAdmin>>;
 
@@ -189,8 +190,63 @@ export async function runSourceReconcile(options: SourceReconcileOptions): Promi
         await reconcileOne(admin, due[index] as ReconcileConnectionRow, listFiles, result);
     }
 
+    await alertOverdue(admin, options.connectionId, now(), configuredDays('RAG_SOURCE_RECONCILE_MAX_AGE_DAYS'), result);
+
     logger.info(SOURCE_RECONCILE, 'Run finished', { ...result });
     return result;
+}
+
+/** Whole days since the last completed reconcile, or since connected_at when there is none. */
+export function daysWithoutReconcile(row: Pick<ReconcileConnectionRow, 'last_full_reconcile_at' | 'connected_at'>, nowMs: number): number | null {
+    const reference = timeOf(row.last_full_reconcile_at) ?? timeOf(row.connected_at);
+    if (reference === null) return null;
+    return Math.max(0, Math.floor((nowMs - reference) / DAY_MS));
+}
+
+function isOverdue(days: number | null, maxAgeDays: number): boolean {
+    return days !== null && days > maxAgeDays;
+}
+
+async function scheduledAttempts(admin: SupabaseAdmin, connectionIds: readonly string[]): Promise<Set<string> | null> {
+    if (connectionIds.length === 0) return new Set();
+    const { data, error } = await admin
+        .from('rag_source_reconcile_runs')
+        .select('connection_id')
+        .eq('origin', 'scheduled')
+        .in('connection_id', [...connectionIds]);
+    if (error) {
+        logger.warn(SOURCE_RECONCILE, 'Scheduled runs not read; age not evaluated', { code: errorCode(error) });
+        return null;
+    }
+    return new Set(((data ?? []) as Array<{ connection_id: unknown }>).map((entry) => String(entry.connection_id)));
+}
+
+/**
+ * The age alert of D-10 with the first-run rule of D-39: evaluated after the reconcile loop, from a fresh read of the
+ * connections, and only for a connection that a scheduled run has already attempted. One alert per connection per run.
+ */
+async function alertOverdue(
+    admin: SupabaseAdmin,
+    connectionId: string | undefined,
+    nowMs: number,
+    maxAgeDays: number,
+    result: SourceReconcileResult
+): Promise<void> {
+    let rows: ReconcileConnectionRow[];
+    try {
+        rows = await loadConnections(admin, connectionId);
+    } catch {
+        return;
+    }
+    const aged = rows.filter((row) => isOverdue(daysWithoutReconcile(row, nowMs), maxAgeDays));
+    if (aged.length === 0) return;
+    const attempted = await scheduledAttempts(admin, aged.map((row) => row.id));
+    if (attempted === null) return;
+    for (const row of aged) {
+        if (!attempted.has(row.id)) continue;
+        await raiseSourceAlert(row, 'overdue', { days: daysWithoutReconcile(row, nowMs) ?? 0, limit: maxAgeDays }, { admin });
+        result.overdue += 1;
+    }
 }
 
 export type ReconcileState = 'in_step' | 'overdue' | 'paused' | 'failed' | 'incomplete' | 'not_run';
@@ -209,12 +265,42 @@ export interface ConnectionReconcileState {
     reason: string | null;
 }
 
+/**
+ * The reconcile state of one connection for the admin list and the app connector card (UI-SPEC 6.3, 8.1), from the
+ * connection row, its newest run and the limits. Paused comes first and can stand with overdue; overdue needs a
+ * scheduled attempt (D-39), before which the state is not_run unless a newer result says otherwise.
+ */
 export function connectionReconcileState(
-    _row: ReconcileConnectionRow,
-    _newestRun: ReconcileRunSummary | null,
-    _hasScheduledAttempt: boolean,
-    _now: number,
-    _limits: { maxAgeDays: number }
+    row: Pick<ReconcileConnectionRow, 'last_full_reconcile_at' | 'connected_at' | 'last_reconcile_status'>,
+    newestRun: ReconcileRunSummary | null,
+    hasScheduledAttempt: boolean,
+    now: number,
+    limits: { maxAgeDays: number }
 ): ConnectionReconcileState {
-    return { states: [], daysWithoutReconcile: null, reason: null };
+    const days = daysWithoutReconcile(row, now);
+    const states: ReconcileState[] = [];
+    let reason: string | null = null;
+
+    const runStatus = newestRun?.status ?? null;
+    const pausedRun = runStatus === 'awaiting_confirmation' && (timeOf(newestRun?.expires_at) ?? Number.POSITIVE_INFINITY) > now;
+    const rowStatus = newestRun === null ? row.last_reconcile_status ?? null : null;
+    if (pausedRun || rowStatus === 'paused') states.push('paused');
+    if (hasScheduledAttempt && isOverdue(days, limits.maxAgeDays)) states.push('overdue');
+    if (states.length > 0) return { states, daysWithoutReconcile: days, reason };
+
+    const status = runStatus ?? rowStatus;
+    if (status === 'failed') {
+        reason = newestRun?.error_code ?? 'listing_failed';
+        states.push('failed');
+    } else if (status === 'incomplete') {
+        reason = newestRun?.error_code ?? 'listing_incomplete';
+        states.push('incomplete');
+    } else if (!hasScheduledAttempt && (row.last_full_reconcile_at == null || isOverdue(days, limits.maxAgeDays))) {
+        states.push('not_run');
+    } else if (row.last_full_reconcile_at != null) {
+        states.push('in_step');
+    } else {
+        states.push('not_run');
+    }
+    return { states, daysWithoutReconcile: days, reason };
 }
