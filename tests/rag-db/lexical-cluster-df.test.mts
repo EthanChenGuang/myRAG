@@ -730,6 +730,30 @@ for (const mode of MODES) {
       assert.equal(Number((await verify())?.remaining), 0);
     });
 
+    test('0746 applies twice and keeps one definition of rag_purge_lineage and rag_purge_verify, service_role only', async (t) => {
+      const file = path.join(REPO_ROOT, 'supabase/migrations/0746_purge_lexical_stats.sql');
+      const present = await db.query<{ ok: boolean }>("SELECT to_regprocedure('public.rag_purge_verify(text,uuid)') IS NOT NULL AS ok");
+      if (!present.rows[0]!.ok || !fs.existsSync(file)) {
+        t.skip('Phase 6.3 purge (0727) or 0746 not on this checkout');
+        return;
+      }
+      const definitions = async () =>
+        (
+          await db.query<{ v: string }>(
+            `SELECT p.oid::regprocedure::text || ' ' || md5(pg_get_functiondef(p.oid)) || ' ' || p.prosecdef || ' ' || coalesce(p.proconfig::text, '')
+                    || ' anon=' || has_function_privilege('anon', p.oid, 'EXECUTE') || ' authenticated=' || has_function_privilege('authenticated', p.oid, 'EXECUTE')
+                    || ' service_role=' || has_function_privilege('service_role', p.oid, 'EXECUTE') AS v
+               FROM pg_proc p WHERE p.proname IN ('rag_purge_lineage', 'rag_purge_verify') ORDER BY 1`,
+          )
+        ).rows.map((row) => row.v);
+      const before = await definitions();
+      assert.equal(before.length, 2);
+      for (const line of before) assert.match(line, /anon=false authenticated=false service_role=true$/, line);
+      await db.exec(fs.readFileSync(file, 'utf8'));
+      await db.exec(fs.readFileSync(file, 'utf8'));
+      assert.deepEqual(await definitions(), before);
+    });
+
     test('the Phase 6.3 store inventory lists the six lexical statistics relations under lexical_stats', async (t) => {
       const present = await db.query<{ ok: boolean }>("SELECT to_regprocedure('public.rag_purge_store_inventory()') IS NOT NULL AS ok");
       if (!present.rows[0]!.ok) {
