@@ -355,6 +355,9 @@ describe('UI review 07 fixes', () => {
     expect(stacked).toBeTruthy();
     expect(stacked.className).toContain('md:hidden');
     expect(text(stacked).length).toBeGreaterThan(0);
+    const verdict = first.querySelector('[data-rollouts-verdict-stacked]') as FakeElement;
+    expect(verdict.className).toContain('md:hidden');
+    expect(text(verdict)).toContain('Holds');
   });
 
   it('M-3: invalid form fields get the error tint and the message is error-styled with an icon', async () => {

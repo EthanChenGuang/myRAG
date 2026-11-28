@@ -898,10 +898,12 @@ describe('UI review 06.2 fixes', () => {
     await page.open();
     const block = page.block('thresholds');
     const recordedHead = block.querySelectorAll('th').find((th) => th.textContent === 'Recorded')!;
-    expect(recordedHead.className).toContain('hidden xl:table-cell');
+    expect(recordedHead.className).toContain('max-xl:hidden');
+    expect(recordedHead.className.split(' ')).not.toContain('hidden');
     const stacked = block.querySelector('[data-scope-gate-recorded-stacked]')!;
     expect(stacked).toBeTruthy();
-    expect(stacked.className).toContain('lg:block');
+    expect(stacked.className).toContain('max-lg:hidden');
+    expect(stacked.className.split(' ')).not.toContain('hidden');
     expect(stacked.className).toContain('xl:hidden');
     expect(stacked.textContent).toContain('Recorded: ');
     const id = block.querySelector('tbody th span')!;

@@ -1276,7 +1276,7 @@ class ScopeGatePanel {
         const profile = this.el('th', { className: 'font-normal align-top min-w-0', attrs: { scope: 'row' } }, [this.el('span', { className: 'font-mono text-xs break-all md:break-words md:[overflow-wrap:anywhere]', text: row.profileId, attrs: { translate: 'no' } })]);
         if (row.active) profile.appendChild(this.el('div', { className: 'mt-1' }, [this.badge({ tone: 'success', icon: 'check-circle', word: 'badge.inUse' })]));
         if (row.recordedAt) {
-          const stacked = this.el('p', { className: 'hidden lg:block xl:hidden text-xs text-base-content/70 mt-1', attrs: { 'data-scope-gate-recorded-stacked': '' } });
+          const stacked = this.el('p', { className: 'max-lg:hidden xl:hidden text-xs text-base-content/70 mt-1', attrs: { 'data-scope-gate-recorded-stacked': '' } });
           const [before, after] = this.t('cell.recorded').split('{time}');
           stacked.append(this.doc.createTextNode(before || ''), this.time(row.recordedAt), this.doc.createTextNode(after || ''));
           profile.appendChild(stacked);
@@ -1302,7 +1302,7 @@ class ScopeGatePanel {
             this.el('td', { className: 'hidden md:table-cell text-right tabular-nums align-top', text: row.margin === null ? '—' : row.margin }),
             falseCell,
             this.el('td', { className: 'hidden lg:table-cell text-right tabular-nums align-top' }, [this.el('p', { text: row.correctRate === null ? '—' : row.correctRate }), n(row.correctN)]),
-            this.el('td', { className: 'hidden xl:table-cell align-top whitespace-nowrap' }, row.recordedAt ? [this.time(row.recordedAt)] : [this.el('span', { text: '—' })]),
+            this.el('td', { className: 'max-xl:hidden align-top whitespace-nowrap' }, row.recordedAt ? [this.time(row.recordedAt)] : [this.el('span', { text: '—' })]),
           ]),
         );
       }
@@ -1317,7 +1317,7 @@ class ScopeGatePanel {
             this.th('col.margin', 'hidden md:table-cell text-right'),
             this.th('col.falseRefusal', 'text-right'),
             this.th('col.correctRefusal', 'hidden lg:table-cell text-right'),
-            this.th('col.recorded', 'hidden xl:table-cell'),
+            this.th('col.recorded', 'max-xl:hidden'),
           ]),
         ]),
         tbody,

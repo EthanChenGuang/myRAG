@@ -583,8 +583,8 @@ function purgeOpenTab(tab) {
 function purgeReceiptNode(view, locale, checkedAt) {
   const loc = purgeLoc(locale);
   const wrap = purgeEl('div', 'min-w-0');
-  const scroll = purgeEl('div', 'overflow-x-auto');
-  const table = purgeEl('table', 'table table-sm w-auto');
+  const scroll = purgeEl('div', 'overflow-x-auto max-w-full');
+  const table = purgeEl('table', 'table table-sm w-auto max-md:[&_th]:px-1.5 max-md:[&_td]:px-1.5');
   table.appendChild(purgeEl('caption', 'sr-only', view.caption));
   const thead = document.createElement('thead');
   const head = document.createElement('tr');
@@ -1153,8 +1153,8 @@ class PurgePanel {
     detail.setAttribute('data-purge-detail', view.id);
     const cell = purgeEl('td', 'pt-0 ' + PURGE_STACK.cell + ' max-md:pb-3');
     cell.setAttribute('colspan', '5');
-    const line = purgeEl('div', 'flex flex-wrap items-start gap-2');
-    const details = purgeEl('details', 'min-w-0 flex-1');
+    const line = purgeEl('div', 'flex flex-wrap items-start gap-2 max-md:flex-col max-md:items-stretch');
+    const details = purgeEl('details', 'min-w-0 flex-1 max-md:w-full');
     if (this.openDetails.has(view.id)) details.setAttribute('open', '');
     details.addEventListener('toggle', () => {
       if (details.hasAttribute('open') || details.open) this.openDetails.add(view.id);
@@ -1162,7 +1162,7 @@ class PurgePanel {
     });
     const summary = purgeEl('summary', 'cursor-pointer text-sm rounded py-1 max-md:py-3 ' + PURGE_TOUCH + ' focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', this.t('action.details'));
     details.appendChild(summary);
-    const inner = purgeEl('div', 'mt-2 min-w-0');
+    const inner = purgeEl('div', 'mt-2 min-w-0 max-w-full');
     const narrow = purgeEl('div', 'md:hidden mb-2');
     narrow.append(...this.reasonNodes(view));
     const narrowDoc = purgeEl('div', 'lg:hidden mb-2');
@@ -1171,7 +1171,7 @@ class PurgePanel {
     if (view.receipt) inner.appendChild(purgeReceiptNode(view.receipt, this.locale, view.checkedAt));
     else inner.appendChild(purgeEl('p', 'text-sm', view.noCheck));
     details.appendChild(inner);
-    const check = purgeEl('button', 'btn btn-outline md:btn-sm ml-auto', this.t('action.verify'));
+    const check = purgeEl('button', 'btn btn-outline md:btn-sm ml-auto max-md:ml-0 max-md:self-start', this.t('action.verify'));
     check.type = 'button';
     check.setAttribute('aria-label', this.t('action.verifyAria', { id: view.idShort }));
     check.addEventListener('click', () => this.verify(view.id, check));

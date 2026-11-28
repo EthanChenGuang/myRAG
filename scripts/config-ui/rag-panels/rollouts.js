@@ -999,9 +999,10 @@ class RolloutsPanel {
               this.el('span', { className: 'block', text: rolloutsLanguageName(language.language, this.locale) }),
               this.el('span', { className: 'block text-xs font-mono text-base-content/70', text: language.language, attrs: { translate: 'no' } }),
               this.el('span', { className: 'block md:hidden mt-1 text-sm', attrs: { 'data-rollouts-measure-stacked': '' } }, [measureNode('')]),
+              this.el('span', { className: 'flex mt-1 md:hidden', attrs: { 'data-rollouts-verdict-stacked': '' } }, [this.verdictBadge(row.verdict, true)]),
             ]),
             this.el('td', { className: 'hidden md:table-cell' }, [measureNode('')]),
-            this.valueCell(row.measure, row.candidate, '', this.el('span', { className: 'flex justify-end mt-1 md:hidden' }, [this.verdictBadge(row.verdict, true)])),
+            this.valueCell(row.measure, row.candidate, 'align-top'),
             this.valueCell(row.measure, row.before, 'hidden md:table-cell'),
             this.valueCell(row.measure, row.others, 'hidden lg:table-cell'),
             this.el('td', { className: 'hidden md:table-cell' }, [this.verdictBadge(row.verdict)]),
@@ -1009,7 +1010,7 @@ class RolloutsPanel {
         );
       }
     }
-    const table = this.el('table', { className: 'table table-sm' }, [this.el('caption', { className: 'sr-only', text: caption }), head, body]);
+    const table = this.el('table', { className: 'table table-sm max-md:[&_th]:px-1.5 max-md:[&_td]:px-1.5 max-md:[&_th]:whitespace-normal' }, [this.el('caption', { className: 'sr-only', text: caption }), head, body]);
     children.push(this.el('div', { className: 'overflow-x-auto', attrs: { tabindex: '0', role: 'region', 'aria-label': caption } }, [table]));
     children.push(this.el('p', { className: 'text-xs text-base-content/70 max-w-prose', text: this.t('table.help') }));
     return this.el('div', { className: 'grid gap-2 min-w-0' }, children);
