@@ -4,6 +4,12 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { getNango, isNangoEnabled } from '@/lib/nango/client';
 import { syncDocumentsForConnection } from '@/lib/nango/sync-manager';
 import { type SupportedProvider, PROVIDER_CONFIG } from '@/lib/nango/types';
+import { isSharePointBlocked, isSharePointProvider, sharePointIntegrationKey } from '@/lib/nango/sharepoint/config';
+
+function integrationIdOf(provider: SupportedProvider): string {
+  if (isSharePointProvider(provider)) return sharePointIntegrationKey(provider);
+  return PROVIDER_CONFIG[provider]?.integrationId || provider;
+}
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minutes for large syncs
@@ -34,6 +40,10 @@ export async function POST(request: NextRequest) {
       syncAll?: boolean;
     };
 
+    if (isSharePointBlocked(provider)) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
     const supabaseAdmin = getSupabaseAdmin();
     const nango = getNango();
 
@@ -51,10 +61,11 @@ export async function POST(request: NextRequest) {
 
       const results = [];
       for (const conn of connections || []) {
+        if (isSharePointBlocked(conn.provider)) continue;
         try {
           // Trigger Nango sync first (only if configured)
           const providerConfig = PROVIDER_CONFIG[conn.provider as SupportedProvider];
-          const integrationId = providerConfig?.integrationId || conn.provider;
+          const integrationId = integrationIdOf(conn.provider as SupportedProvider);
 
           if (providerConfig?.syncName) {
             try {
@@ -104,9 +115,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (isSharePointBlocked(connRecord.provider)) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
     // Trigger Nango sync first (only if configured)
     const providerConfig = PROVIDER_CONFIG[provider];
-    const integrationId = providerConfig?.integrationId || provider;
+    const integrationId = integrationIdOf(provider);
 
     if (providerConfig?.syncName) {
       try {
