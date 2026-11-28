@@ -6,6 +6,7 @@ import {
   CALCULATE_TOOL_NAME,
   createEnhancedRAGPrompt,
   effectiveMaxOutputTokens,
+  OPENROUTER_COMPRESSION_OFF,
   type AnswerLanguageOptions,
   type CalcTraceHolder,
   type DecomposedAnswerInput,
@@ -42,6 +43,8 @@ export interface EvalConversationTurn {
 export type EvalLanguageModelFactory = ((_modelId: string) => LanguageModel) & {
   /** Harness seam (D-78): a fake registry declares a model's tool support; undefined keeps the chat route's rule. */
   canUseTools?: (_modelId: string) => boolean | undefined;
+  /** Harness seam (Phase 5.2.1 D-88): a fake registry declares a model's output limit; undefined keeps the id rule. */
+  maxOutputTokens?: (_modelId: string) => number | undefined;
 };
 
 const defaultFactory: EvalLanguageModelFactory = (modelId) => {
@@ -61,6 +64,12 @@ export function setEvalLanguageModelFactory(factory: EvalLanguageModelFactory | 
 /** The installed factory's tool-support declaration for a model id; undefined when it declares none. */
 export function evalModelToolCapability(modelId: string): boolean | undefined {
   return currentFactory.canUseTools?.(modelId);
+}
+
+/** The model's output limit: the installed factory's declaration, else the eval's id rule. */
+export function evalModelOutputLimit(modelId: string): number {
+  const declared = currentFactory.maxOutputTokens?.(modelId);
+  return typeof declared === 'number' && Number.isInteger(declared) && declared > 0 ? declared : maxOutputTokensForModel(modelId);
 }
 
 /** D-65, RESEARCH Pattern F: the eval tool loop's step limit (a calculation step, its answer, one retry). */
@@ -120,6 +129,11 @@ export function buildEvalSystemPrompt(input: {
   return SystemPromptManager.injectContext(ragSystemPrompt, context);
 }
 
+/** Phase 5.2.1 D-80: the eval system prompt with the mode wrapper and no context, as the prompt budget plans it. */
+export function buildEvalBudgetSystemPrompt(ragMode: EvalRagMode, promptEnv?: EvalPromptEnv): string {
+  return createEnhancedRAGPrompt(resolveEvalPromptTemplate(promptEnv), '', ragMode);
+}
+
 export function resolveGeneratorModel(requested?: string | null): string {
   if (requested) return requested;
   try {
@@ -161,6 +175,31 @@ export function buildEvalMessages(query: string, conversation: EvalConversationT
   return [...conversation.map((turn) => ({ role: turn.role, content: turn.content })), { role: 'user', content: query }];
 }
 
+export type EvalModelMessage = EvalConversationTurn | { role: 'system'; content: string };
+
+/** Phase 5.2.1 D-82: the budgeted request: the condensed-question note (when kept), the kept turns, the question last. */
+export function buildEvalBudgetMessages(
+  query: string,
+  conversation: EvalConversationTurn[],
+  standaloneNote: string | null,
+): EvalModelMessage[] {
+  return [...(standaloneNote ? [{ role: 'system' as const, content: standaloneNote }] : []), ...buildEvalMessages(query, conversation)];
+}
+
+/** The finished system prompt of an eval answer: the enhanced prompt, then the caller's decoration. */
+export function buildEvalAnswerSystemPrompt(
+  input: Pick<EvalAnswerInput, 'context' | 'ragMode' | 'promptEnv' | 'decorateSystemPrompt' | 'answerLanguage' | 'decomposedAnswer'>,
+): string {
+  const basePrompt = buildEvalSystemPrompt({
+    context: input.context,
+    ragMode: input.ragMode,
+    promptEnv: input.promptEnv,
+    answerLanguage: input.answerLanguage,
+    ...(input.decomposedAnswer ? { decomposedAnswer: input.decomposedAnswer } : {}),
+  });
+  return input.decorateSystemPrompt ? input.decorateSystemPrompt(basePrompt) : basePrompt;
+}
+
 export interface EvalAnswerInput {
   query: string;
   conversation?: EvalConversationTurn[];
@@ -178,6 +217,16 @@ export interface EvalAnswerInput {
   outputCap?: OutputCapDecision | null;
   /** Phase 5.2.1 D-65, D-72: the calculation offered on this turn; absent, the call is exactly the one without it (A12). */
   calc?: EvalCalcInput | null;
+  /**
+   * Phase 5.2.1 D-79, D-84: the prompt budget's request. The system prompt is the one the budget measured, the standalone note
+   * goes before the kept turns, and OpenRouter's context compression is turned off. Absent, the call is today's.
+   */
+  budget?: EvalBudgetInput | null;
+}
+
+export interface EvalBudgetInput {
+  system: string;
+  standaloneNote: string | null;
 }
 
 export interface EvalCalcInput {
@@ -207,10 +256,9 @@ export interface EvalAnswerResult {
 }
 
 export async function generateEvalAnswerDetailed(input: EvalAnswerInput): Promise<EvalAnswerResult> {
-  const { query, conversation, context, ragMode, generatorModel, signal, promptEnv, decorateSystemPrompt, answerLanguage, decomposedAnswer, outputCap, calc } = input;
-  const basePrompt = buildEvalSystemPrompt({ context, ragMode, promptEnv, answerLanguage, ...(decomposedAnswer ? { decomposedAnswer } : {}) });
-  const system = decorateSystemPrompt ? decorateSystemPrompt(basePrompt) : basePrompt;
-  const maxOutputTokens = effectiveMaxOutputTokens(maxOutputTokensForModel(generatorModel), outputCap?.applied ? outputCap.cap : null);
+  const { query, conversation, generatorModel, signal, outputCap, calc, budget } = input;
+  const system = budget ? budget.system : buildEvalAnswerSystemPrompt(input);
+  const maxOutputTokens = effectiveMaxOutputTokens(evalModelOutputLimit(generatorModel), outputCap?.applied ? outputCap.cap : null);
   const toolLoop = calc?.mode === 'tool' && calc.tool ? { tool: calc.tool, holder: calc.holder } : null;
   const stepTexts: string[] = [];
   const toolStepEnds: number[] = [];
@@ -218,10 +266,12 @@ export async function generateEvalAnswerDetailed(input: EvalAnswerInput): Promis
   const result = await generateText({
     model: currentFactory(generatorModel),
     system,
-    messages: buildEvalMessages(query, conversation),
+    messages: budget ? buildEvalBudgetMessages(query, conversation ?? [], budget.standaloneNote) : buildEvalMessages(query, conversation),
     temperature: 0.1,
     maxOutputTokens,
     abortSignal: signal,
+    // D-84, RESEARCH Pitfall B3: no provider-side truncation while the budget is on
+    ...(budget ? { providerOptions: { openrouter: { plugins: [{ ...OPENROUTER_COMPRESSION_OFF }] } } } : {}),
     ...(toolLoop
       ? {
           tools: { [CALCULATE_TOOL_NAME]: toolLoop.tool },
