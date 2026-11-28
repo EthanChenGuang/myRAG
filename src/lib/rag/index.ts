@@ -336,6 +336,7 @@ export {
   type AnswerLanguageOptions,
 } from './generation/answer-language';
 export {
+  emptyReplyText,
   kbUnavailableLanguage,
   kbUnavailableText,
   knowledgeBaseUnavailableLanguage,

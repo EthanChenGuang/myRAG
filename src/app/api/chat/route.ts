@@ -1,4 +1,5 @@
 import { asSchema, streamText, tool, type ToolSet, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, UIMessage, stepCountIs } from 'ai';
+import { guardEmptyReply, type EmptyReplyInfo } from '@/lib/chat/empty-reply';
 import { buildCtaInstruction } from '@/lib/chat/cta-instruction';
 import { buildFormattingInstruction, resolveAnswerStyle } from '@/lib/chat/answer-style';
 import { appendHistoryNotEvidence, historyNotEvidenceEnabled } from '@/lib/chat/history-not-evidence';
@@ -58,6 +59,7 @@ import {
   CLAUDE_MAX_OUTPUT_TOKENS,
   createAnswerTurn,
   parseBodyChannel,
+  emptyReplyText,
   kbUnavailableLanguage,
   kbUnavailableText,
   noInformationLanguage,
@@ -4730,6 +4732,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
       const ragTraceId = ragTrace?.collector.traceId;
       let generationFailed = false;
+      let emptyReply: EmptyReplyInfo | null = null;
 
       let answerRecordPending = answerId !== null;
       const finishAnswerRecord = (responseText: string, aborted: boolean, failed: boolean) => {
@@ -4850,6 +4853,15 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               }))
             });
           }
+          const guardAnswerStream = <T extends { type: string }>(stream: globalThis.ReadableStream<T>): globalThis.ReadableStream<T> =>
+            guardEmptyReply(stream, {
+              route: 'chat',
+              model: safeModelId,
+              message: () => emptyReplyText(answerTurn, fallbackLanguage),
+              onEmpty: (info) => {
+                emptyReply = info;
+              },
+            });
           const messageMetadata = ({ part }: { part: { type: string; providerMetadata?: Record<string, any> } }) => {
             if (part.type === 'start') {
               if (!ragTraceId && !answerId && injectionFlagged === undefined) return undefined;
@@ -4888,7 +4900,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               },
             );
             if (gate.kind === 'ok') {
-              writer.merge(gate.stream);
+              writer.merge(guardAnswerStream(gate.stream));
               return;
             }
             citationSession.fallback(gate.reason);
@@ -4898,10 +4910,10 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           }
           if (!result) return;
           // Merge AI stream
-          writer.merge(result.toUIMessageStream({
+          writer.merge(guardAnswerStream(result.toUIMessageStream({
             sendStart,
             messageMetadata,
-          }));
+          })));
         },
         onFinish: ({ isAborted, finishReason, responseMessage }) => {
           if (claudeStream) {
@@ -4909,7 +4921,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             ragTrace?.collector.setReviewContent({ answer: directText, context, model: safeModelId });
             if (ragLogContext) setRagLogOutcome(null, detectLanguage(directText));
           }
-          if (ragLogContext && (isAborted || generationFailed || finishReason === 'error')) setRagLogOutcome(null, null);
+          if (ragLogContext && (isAborted || generationFailed || emptyReply || finishReason === 'error')) setRagLogOutcome(null, null);
           // Phase 6.2 D-12: report-only structure of a decomposed answer, recorded before the trace is finished
           if (ragTrace && decomposedAnswer && !isAborted && !generationFailed && finishReason !== 'error') {
             const answerText = responseMessage.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
@@ -4928,6 +4940,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               ...answerTrace.rules,
               ...(accessCheck && accessCheck.violations > 0 ? ['access_violation'] : []),
               ...(accessCheck?.failed ? ['access_recheck_failed'] : []),
+              ...(emptyReply ? [`empty_reply:${emptyReply.finishReason ?? 'unknown'}`] : []),
             ];
             const counts = accessCheck ? { ...answerTrace.counts, access_violations: accessCheck.violations } : answerTrace.counts;
             if (accessCheck) ragTrace.collector.addAccessViolations(accessCheck.violations);

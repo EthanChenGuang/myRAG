@@ -398,6 +398,7 @@ export const lt = {
   executingTool: "Vykdomas įrankis, palaukite...",
   toolError: "Įvyko klaida vykdant įrankį.",
   voiceUnavailable: "Balsas laikinai nepasiekiamas. Bandykite vėliau.",
+  emptyReply: "Šį kartą nepavyko pateikti atsakymo. Bandykite dar kartą arba performuluokite klausimą.",
   
   // Chat message action tooltips
   copyTooltip: "Kopijuoti",

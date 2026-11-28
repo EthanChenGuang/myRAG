@@ -395,6 +395,7 @@ export const hr = {
   executingTool: "Izvršavanje alata, molimo pričekajte...",
   toolError: "Došlo je do greške pri pokretanju alata.",
   voiceUnavailable: "Glas trenutačno nije dostupan. Pokušajte ponovno kasnije.",
+  emptyReply: "Ovaj put nije bilo moguće dati odgovor. Pokušajte ponovno ili preformulirajte pitanje.",
 
   // Chat message action tooltips
   copyTooltip: "Kopiraj",
