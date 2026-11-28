@@ -1,7 +1,6 @@
 import { accessSetsFor } from '../access/sets';
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { RetrievalLogEntry } from '@/lib/rag-eval/contracts.generated';
 import { getRagDeps } from '../deps';
 import { maskPII } from '../trace/mask';
 import { logLanguageCodes } from './log-languages';
@@ -9,7 +8,15 @@ import { queryFingerprint, toLanguageCode } from './query-codes';
 import { topkRedundancy } from '../v2/diversify';
 import type { Candidate, LogChannel, LogContext, LogOutcomeValue, RagMode, RetrievalResult } from '../types';
 import type { RetrievalLogLevel } from './config';
-import type { LangConfidenceMode } from '../config';
+import { loadRagConfig, type LangConfidenceMode } from '../config';
+import { detectLanguageWithConfidence } from '../lang/detect';
+import calibrationJson from '../../../../eval/config/language-confidence-calibration.json';
+import {
+  LanguageConfidenceCalibrationSchema,
+  type LanguageConfidenceCalibration,
+  type RetrievalLogEntry,
+} from '@/lib/rag-eval/contracts.generated';
+import { calibratedQueryLanguageConfidence, loadLanguageConfidenceCalibration } from '../lang/confidence';
 import { effectiveLogMode, type EffectiveLogModeDeps } from './settings';
 
 export type { LogContext } from '../types';
@@ -97,6 +104,45 @@ function stageLatency(raw: Record<string, number>): Record<string, number> {
   return latency;
 }
 
+function languageConfidenceMode(explicit: LangConfidenceMode | undefined): LangConfidenceMode {
+  if (explicit) return explicit;
+  try {
+    return loadRagConfig(getRagDeps().ragEnv()).lang.confidence;
+  } catch {
+    return 'mapped';
+  }
+}
+
+const warnedCalibrationFiles = new Set<string>();
+let bundledCalibration: LanguageConfidenceCalibration | null | undefined;
+
+/** The committed calibration, imported so it ships with the bundle; validated once. */
+function committedCalibration(): LanguageConfidenceCalibration | null {
+  if (bundledCalibration === undefined) {
+    const parsed = LanguageConfidenceCalibrationSchema.safeParse(calibrationJson);
+    bundledCalibration = parsed.success ? parsed.data : null;
+  }
+  return bundledCalibration;
+}
+
+/**
+ * OBS-03 (plan 07-46): the calibrated bin value for RAG_LANG_CONFIDENCE=calibrated, null wherever the mapped rule gives null.
+ * A missing or invalid calibration file keeps the mapped value and logs one [Retrieval Log] warning per file.
+ */
+function calibratedConfidence(query: string, storedLanguage: string | null, mapped: number | null, file: string | undefined): number | null {
+  const calibration = file === undefined ? committedCalibration() : loadLanguageConfidenceCalibration(file);
+  if (!calibration) {
+    const key = file ?? '';
+    if (!warnedCalibrationFiles.has(key)) {
+      warnedCalibrationFiles.add(key);
+      console.warn('[Retrieval Log] language confidence calibration missing or invalid; storing the mapped confidence');
+    }
+    return mapped;
+  }
+  const value = calibratedQueryLanguageConfidence({ text: query, detection: detectLanguageWithConfidence(query), storedLanguage }, calibration);
+  return value !== null && Number.isFinite(value) && value >= 0 && value <= 1 ? value : mapped;
+}
+
 /** Pure: ids, ranks, scores, codes and counts; the masked query only in masked_query mode. Never chunk, answer or document text. */
 export function buildRetrievalLogRow(input: BuildRetrievalLogRowInput): RetrievalLogRow {
   const { result, logContext, mode } = input;
@@ -110,6 +156,10 @@ export function buildRetrievalLogRow(input: BuildRetrievalLogRowInput): Retrieva
   });
 
   const languages = logLanguageCodes(result, query);
+  const queryLanguageConfidence =
+    languageConfidenceMode(input.languageConfidence) === 'calibrated'
+      ? calibratedConfidence(query, languages.query_language, languages.query_language_confidence, input.calibrationFile)
+      : languages.query_language_confidence;
 
   let queryMasked: string | null = null;
   let fingerprint: string | null = null;
@@ -139,7 +189,7 @@ export function buildRetrievalLogRow(input: BuildRetrievalLogRowInput): Retrieva
     pipeline: holder?.pipeline === 'v2' ? 'v2' : 'legacy',
     retrieval_config_hash: configHash,
     query_language: languages.query_language,
-    query_language_confidence: languages.query_language_confidence,
+    query_language_confidence: queryLanguageConfidence,
     chunk_languages: languages.chunk_languages,
     answer_language: languages.answer_language,
     query_masked: queryMasked,
