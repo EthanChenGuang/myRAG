@@ -1050,6 +1050,18 @@
       "help": "100 to 5000 ms. A leg that runs longer is skipped."
     },
     {
+      "name": "RAG_ROLLOUTS",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Tenant or traffic-share rollouts",
+      "type": "bool",
+      "requires": [],
+      "default": "false",
+      "help": "false never reads the rollout tables; every tenant uses the globally active profiles."
+    },
+    {
       "name": "RAG_ENABLE_ADJACENT_CHUNKS",
       "status": "legacy",
       "knownGaps": [
@@ -1650,6 +1662,22 @@
       ],
       "requires": [],
       "default": "off"
+    },
+    {
+      "name": "RAG_LANG_CONFIDENCE",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true,
+      "group": "data",
+      "label": "Language confidence",
+      "type": "enum",
+      "options": [
+        "mapped",
+        "calibrated"
+      ],
+      "requires": [],
+      "default": "mapped",
+      "help": "mapped keeps the three-value query language confidence (1, 0.5, empty); calibrated uses calibrated scores."
     },
     {
       "name": "RAG_LEXICAL_SEARCH",

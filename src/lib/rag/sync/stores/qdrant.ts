@@ -46,6 +46,7 @@ export const QDRANT_PAYLOAD_KEYS = [
   'lexical_text',
   'content_hash',
   'lexical_version',
+  'access_groups',
 ] as const satisfies ReadonlyArray<keyof VectorPointPayload>;
 
 const PAGE = 256;
@@ -91,9 +92,24 @@ function documentAny(ids: string[]): QdrantFilter {
   return { must: [{ key: 'document_id', match: { any: [...ids] } }] };
 }
 
-export function qdrantPayload(payload: VectorPointPayload): Record<(typeof QDRANT_PAYLOAD_KEYS)[number], string | number | null> {
-  const out = {} as Record<(typeof QDRANT_PAYLOAD_KEYS)[number], string | number | null>;
+type QdrantPayloadValue = string | number | string[] | null;
+
+/** SEC-12: every synced point carries its access keys; one without them is refused, never written with a guessed label. */
+function requireAccessGroups(payload: VectorPointPayload): string[] {
+  const keys = payload.access_groups;
+  if (!Array.isArray(keys) || keys.length === 0 || keys.some((key) => typeof key !== 'string' || key.length === 0)) {
+    throw new Error('[Vector Sync] qdrant: point without access_groups');
+  }
+  return [...keys];
+}
+
+export function qdrantPayload(payload: VectorPointPayload): Record<(typeof QDRANT_PAYLOAD_KEYS)[number], QdrantPayloadValue> {
+  const out = {} as Record<(typeof QDRANT_PAYLOAD_KEYS)[number], QdrantPayloadValue>;
   for (const key of QDRANT_PAYLOAD_KEYS) {
+    if (key === 'access_groups') {
+      out[key] = requireAccessGroups(payload);
+      continue;
+    }
     const value = payload[key];
     out[key] = value === undefined ? null : value;
   }

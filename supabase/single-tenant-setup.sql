@@ -22037,3 +22037,1612 @@ REVOKE ALL ON FUNCTION public.rag_finetune_version_taint_guard() FROM PUBLIC, an
 GRANT EXECUTE ON FUNCTION public.rag_finetune_version_taint_guard() TO service_role;
 
 COMMIT;
+
+------------------------------------------
+-- Phase 7: Vector sync outbox, triggers, claim, reads, servable-chunk validation, activation gate and reconcile (migrations 0701-0707, plan 07-31, after 0654 in migration order; 0708 onward stay migrations)
+------------------------------------------
+
+-- >>> supabase/migrations/0701_vector_sync_outbox.sql
+-- 0701: Phase 7 vector sync change capture, tables (D-01, D-11, A-12).
+-- vector_sync_outbox is notification-only: it names what changed, never its content; the drain worker reads the current row.
+-- entity_id is text: a chunk or document UUID, a tenant key, or a prefixed profile id (embedding:<id>, chunking:<doc_type>).
+-- cursor holds the paging position of a tenant, profile or large-document row. last_error holds codes only, never content.
+-- rag_vector_sync_targets switches each backend; both are seeded disabled, which makes every 0702 trigger a no-op.
+-- rag_backend_index_state is the per (target, profile, tenant) readiness record that retrieval falls back on (RET-09).
+-- Additive and idempotent. Server role only: RLS on, no policies, no client grants.
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.vector_sync_outbox (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  target text NOT NULL,
+  entity text NOT NULL,
+  entity_id text NOT NULL,
+  tenant_key text,
+  profile_id text,
+  enqueued_at timestamptz NOT NULL DEFAULT now(),
+  attempts integer NOT NULL DEFAULT 0,
+  status text NOT NULL DEFAULT 'pending',
+  lease_until timestamptz,
+  last_error text,
+  cursor text,
+  CONSTRAINT vector_sync_outbox_target_check CHECK (target IN ('weaviate', 'qdrant')),
+  CONSTRAINT vector_sync_outbox_entity_check CHECK (entity IN ('chunk', 'document', 'profile', 'tenant')),
+  CONSTRAINT vector_sync_outbox_status_check CHECK (status IN ('pending', 'leased', 'done', 'dead')),
+  CONSTRAINT vector_sync_outbox_tenant_key_check CHECK (
+    tenant_key IS NULL OR tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'
+  ),
+  CONSTRAINT vector_sync_outbox_tenant_required CHECK (entity = 'profile' OR tenant_key IS NOT NULL),
+  CONSTRAINT vector_sync_outbox_attempts_check CHECK (attempts >= 0),
+  CONSTRAINT vector_sync_outbox_last_error_length CHECK (last_error IS NULL OR length(last_error) <= 200)
+);
+
+CREATE INDEX IF NOT EXISTS vector_sync_outbox_claim_idx ON public.vector_sync_outbox (status, lease_until, enqueued_at);
+CREATE INDEX IF NOT EXISTS vector_sync_outbox_entity_idx ON public.vector_sync_outbox (target, entity, entity_id);
+
+CREATE TABLE IF NOT EXISTS public.rag_vector_sync_targets (
+  target text PRIMARY KEY,
+  enabled boolean NOT NULL DEFAULT false,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by text,
+  CONSTRAINT rag_vector_sync_targets_target_check CHECK (target IN ('weaviate', 'qdrant'))
+);
+
+INSERT INTO public.rag_vector_sync_targets (target, enabled) VALUES ('weaviate', false), ('qdrant', false)
+ON CONFLICT (target) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS public.rag_backend_index_state (
+  target text NOT NULL,
+  profile_id text NOT NULL,
+  tenant_key text NOT NULL,
+  state text NOT NULL DEFAULT 'building',
+  last_reconciled_at timestamptz,
+  lag_seconds integer,
+  supabase_count bigint,
+  backend_count bigint,
+  last_error text,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (target, profile_id, tenant_key),
+  CONSTRAINT rag_backend_index_state_target_check CHECK (target IN ('weaviate', 'qdrant')),
+  CONSTRAINT rag_backend_index_state_state_check CHECK (state IN ('building', 'ready', 'stale', 'failed')),
+  CONSTRAINT rag_backend_index_state_tenant_key_check CHECK (
+    tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'
+  ),
+  CONSTRAINT rag_backend_index_state_last_error_length CHECK (last_error IS NULL OR length(last_error) <= 200)
+);
+
+ALTER TABLE public.vector_sync_outbox ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rag_vector_sync_targets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rag_backend_index_state ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE public.vector_sync_outbox FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.rag_vector_sync_targets FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.rag_backend_index_state FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.vector_sync_outbox TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.rag_vector_sync_targets TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.rag_backend_index_state TO service_role;
+
+DO $$
+DECLARE
+  v_seq text := pg_get_serial_sequence('public.vector_sync_outbox', 'id');
+BEGIN
+  IF v_seq IS NOT NULL THEN
+    EXECUTE format('REVOKE ALL ON SEQUENCE %s FROM PUBLIC, anon, authenticated', v_seq);
+    EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE %s TO service_role', v_seq);
+  END IF;
+END
+$$;
+
+COMMIT;
+
+-- >>> supabase/migrations/0702_vector_sync_triggers.sql
+-- 0702: Phase 7 vector sync change capture, enqueue triggers (D-01, A-7).
+-- One AFTER ... FOR EACH STATEMENT trigger per event, each reading its transition table, so a cascade that removes thousands of
+-- chunks enqueues once per document. Postgres refuses transition tables on triggers with a column list, so UPDATE triggers compare
+-- the synced columns of the OLD and NEW rows themselves and enqueue only rows that really changed.
+-- Every function returns before touching any row while no target is enabled in rag_vector_sync_targets (the default).
+-- Trigger events enqueue the document entity: under chunking profiles a chunk's servability depends on its whole document, so the
+-- worker re-syncs the whole document. Profile flips enqueue a profile row (embedding:<id>, chunking:<doc_type>).
+-- A pending row for the same target, entity, tenant and profile that no worker has tried yet absorbs a new change.
+
+BEGIN;
+
+-- Internal: one set-based insert per call, for every enabled target (or only p_target), skipping entities that already wait untried.
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_enqueue(
+  p_entity text,
+  p_entity_ids text[],
+  p_tenant_keys text[],
+  p_profile_ids text[],
+  p_target text DEFAULT NULL
+)
+RETURNS integer
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_count integer;
+BEGIN
+  IF coalesce(pg_catalog.array_length(p_entity_ids, 1), 0) = 0 THEN
+    RETURN 0;
+  END IF;
+  INSERT INTO public.vector_sync_outbox (target, entity, entity_id, tenant_key, profile_id)
+  SELECT t.target, p_entity, s.entity_id, s.tenant_key, s.profile_id
+    FROM (
+      SELECT DISTINCT u.entity_id, u.tenant_key, u.profile_id
+        FROM unnest(p_entity_ids, p_tenant_keys, p_profile_ids) AS u(entity_id, tenant_key, profile_id)
+       WHERE u.entity_id IS NOT NULL AND (u.tenant_key IS NOT NULL OR p_entity = 'profile')
+    ) s
+    CROSS JOIN public.rag_vector_sync_targets t
+   WHERE t.enabled
+     AND (p_target IS NULL OR t.target = p_target)
+     AND NOT EXISTS (
+       SELECT 1 FROM public.vector_sync_outbox o
+        WHERE o.target = t.target
+          AND o.entity = p_entity
+          AND o.entity_id = s.entity_id
+          AND o.status = 'pending'
+          AND o.attempts = 0
+          AND o.cursor IS NULL
+          AND o.tenant_key IS NOT DISTINCT FROM s.tenant_key
+          AND o.profile_id IS NOT DISTINCT FROM s.profile_id
+     );
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_vector_sync_enqueue(text, text[], text[], text[], text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_enqueue(text, text[], text[], text[], text) TO service_role;
+
+-- The trigger functions below are SECURITY DEFINER because the inserting role (an owner editing a chunk, an ingest RPC) cannot
+-- write the server-only outbox. They take no caller input: they read only transition rows and insert into the outbox.
+
+-- ---------------------------------------------------------------------------
+-- document_chunks
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_chunks_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_docs text[];
+  v_tenants text[];
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.rag_vector_sync_targets t WHERE t.enabled) THEN
+    RETURN NULL;
+  END IF;
+  SELECT pg_catalog.array_agg(k.document_id::text), pg_catalog.array_agg(k.tenant_key)
+    INTO v_docs, v_tenants
+    FROM (SELECT DISTINCT n.document_id, n.tenant_key FROM new_rows n) k;
+  PERFORM public.rag_vector_sync_enqueue('document', v_docs, v_tenants, pg_catalog.array_fill(NULL::text, ARRAY[coalesce(pg_catalog.array_length(v_docs, 1), 0)]));
+  RETURN NULL;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_chunks_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_docs text[];
+  v_tenants text[];
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.rag_vector_sync_targets t WHERE t.enabled) THEN
+    RETURN NULL;
+  END IF;
+  -- Synced columns: the D-03 payload and filter fields plus what decides servability (D-02).
+  WITH changed AS (
+    SELECT o.document_id AS old_doc, o.tenant_key AS old_tenant, n.document_id AS new_doc, n.tenant_key AS new_tenant
+      FROM old_rows o
+      FULL JOIN new_rows n ON n.id = o.id
+     WHERE o.id IS NULL OR n.id IS NULL
+        OR (o.document_id, o.tenant_key, o.organization_id, o.is_current, o.status, o.embedding::text, o.lexical_text, o.lexical_version,
+            o.content_hash, o.doc_type, o.doc_date, o.language, o.source, o.chunking_profile_id, o.parent_id)
+           IS DISTINCT FROM
+           (n.document_id, n.tenant_key, n.organization_id, n.is_current, n.status, n.embedding::text, n.lexical_text, n.lexical_version,
+            n.content_hash, n.doc_type, n.doc_date, n.language, n.source, n.chunking_profile_id, n.parent_id)
+  ), keys AS (
+    SELECT c.old_doc AS document_id, c.old_tenant AS tenant_key FROM changed c WHERE c.old_doc IS NOT NULL
+    UNION
+    SELECT c.new_doc, c.new_tenant FROM changed c WHERE c.new_doc IS NOT NULL
+  )
+  SELECT pg_catalog.array_agg(k.document_id::text), pg_catalog.array_agg(k.tenant_key)
+    INTO v_docs, v_tenants
+    FROM keys k;
+  PERFORM public.rag_vector_sync_enqueue('document', v_docs, v_tenants, pg_catalog.array_fill(NULL::text, ARRAY[coalesce(pg_catalog.array_length(v_docs, 1), 0)]));
+  RETURN NULL;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_chunks_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_docs text[];
+  v_tenants text[];
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.rag_vector_sync_targets t WHERE t.enabled) THEN
+    RETURN NULL;
+  END IF;
+  SELECT pg_catalog.array_agg(k.document_id::text), pg_catalog.array_agg(k.tenant_key)
+    INTO v_docs, v_tenants
+    FROM (SELECT DISTINCT o.document_id, o.tenant_key FROM old_rows o) k;
+  PERFORM public.rag_vector_sync_enqueue('document', v_docs, v_tenants, pg_catalog.array_fill(NULL::text, ARRAY[coalesce(pg_catalog.array_length(v_docs, 1), 0)]));
+  RETURN NULL;
+END
+$$;
+
+-- ---------------------------------------------------------------------------
+-- documents (a new document has no chunks yet, so no INSERT trigger)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_documents_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_docs text[];
+  v_tenants text[];
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.rag_vector_sync_targets t WHERE t.enabled) THEN
+    RETURN NULL;
+  END IF;
+  -- Tenant columns, is_current and status: soft delete, quarantine, release, version publish and tenant moves.
+  WITH changed AS (
+    SELECT o.id AS old_id, o.tenant_key AS old_tenant, n.id AS new_id, n.tenant_key AS new_tenant
+      FROM old_rows o
+      FULL JOIN new_rows n ON n.id = o.id
+     WHERE o.id IS NULL OR n.id IS NULL
+        OR (o.user_id, o.organization_id, o.tenant_key, o.is_current, o.status)
+           IS DISTINCT FROM (n.user_id, n.organization_id, n.tenant_key, n.is_current, n.status)
+  ), keys AS (
+    SELECT c.old_id AS document_id, c.old_tenant AS tenant_key FROM changed c WHERE c.old_id IS NOT NULL
+    UNION
+    SELECT c.new_id, c.new_tenant FROM changed c WHERE c.new_id IS NOT NULL
+  )
+  SELECT pg_catalog.array_agg(k.document_id::text), pg_catalog.array_agg(k.tenant_key)
+    INTO v_docs, v_tenants
+    FROM keys k;
+  PERFORM public.rag_vector_sync_enqueue('document', v_docs, v_tenants, pg_catalog.array_fill(NULL::text, ARRAY[coalesce(pg_catalog.array_length(v_docs, 1), 0)]));
+  RETURN NULL;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_documents_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_docs text[];
+  v_tenants text[];
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.rag_vector_sync_targets t WHERE t.enabled) THEN
+    RETURN NULL;
+  END IF;
+  SELECT pg_catalog.array_agg(k.id::text), pg_catalog.array_agg(k.tenant_key)
+    INTO v_docs, v_tenants
+    FROM (SELECT DISTINCT o.id, o.tenant_key FROM old_rows o) k;
+  PERFORM public.rag_vector_sync_enqueue('document', v_docs, v_tenants, pg_catalog.array_fill(NULL::text, ARRAY[coalesce(pg_catalog.array_length(v_docs, 1), 0)]));
+  RETURN NULL;
+END
+$$;
+
+-- ---------------------------------------------------------------------------
+-- chunk_embeddings (per-profile vectors). A row removed by a chunk cascade has no chunk left to name its document; the chunk's
+-- own DELETE trigger has already enqueued that document for every profile.
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_embeddings_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_docs text[];
+  v_tenants text[];
+  v_profiles text[];
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.rag_vector_sync_targets t WHERE t.enabled) THEN
+    RETURN NULL;
+  END IF;
+  SELECT pg_catalog.array_agg(k.document_id::text), pg_catalog.array_agg(k.tenant_key), pg_catalog.array_agg(k.profile_id)
+    INTO v_docs, v_tenants, v_profiles
+    FROM (
+      SELECT DISTINCT c.document_id, n.tenant_key, n.profile_id
+        FROM new_rows n JOIN public.document_chunks c ON c.id = n.chunk_id
+    ) k;
+  PERFORM public.rag_vector_sync_enqueue('document', v_docs, v_tenants, v_profiles);
+  RETURN NULL;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_embeddings_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_docs text[];
+  v_tenants text[];
+  v_profiles text[];
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.rag_vector_sync_targets t WHERE t.enabled) THEN
+    RETURN NULL;
+  END IF;
+  WITH changed AS (
+    SELECT o.chunk_id AS old_chunk, o.tenant_key AS old_tenant, o.profile_id AS old_profile,
+           n.chunk_id AS new_chunk, n.tenant_key AS new_tenant, n.profile_id AS new_profile
+      FROM old_rows o
+      FULL JOIN new_rows n ON n.chunk_id = o.chunk_id AND n.profile_id = o.profile_id
+     WHERE o.chunk_id IS NULL OR n.chunk_id IS NULL
+        OR (o.tenant_key, o.embedding::text) IS DISTINCT FROM (n.tenant_key, n.embedding::text)
+  ), keys AS (
+    SELECT c.old_chunk AS chunk_id, c.old_tenant AS tenant_key, c.old_profile AS profile_id FROM changed c WHERE c.old_chunk IS NOT NULL
+    UNION
+    SELECT c.new_chunk, c.new_tenant, c.new_profile FROM changed c WHERE c.new_chunk IS NOT NULL
+  )
+  SELECT pg_catalog.array_agg(k.document_id::text), pg_catalog.array_agg(k.tenant_key), pg_catalog.array_agg(k.profile_id)
+    INTO v_docs, v_tenants, v_profiles
+    FROM (
+      SELECT DISTINCT c.document_id, keys.tenant_key, keys.profile_id
+        FROM keys JOIN public.document_chunks c ON c.id = keys.chunk_id
+    ) k;
+  PERFORM public.rag_vector_sync_enqueue('document', v_docs, v_tenants, v_profiles);
+  RETURN NULL;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_embeddings_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_docs text[];
+  v_tenants text[];
+  v_profiles text[];
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.rag_vector_sync_targets t WHERE t.enabled) THEN
+    RETURN NULL;
+  END IF;
+  SELECT pg_catalog.array_agg(k.document_id::text), pg_catalog.array_agg(k.tenant_key), pg_catalog.array_agg(k.profile_id)
+    INTO v_docs, v_tenants, v_profiles
+    FROM (
+      SELECT DISTINCT c.document_id, o.tenant_key, o.profile_id
+        FROM old_rows o JOIN public.document_chunks c ON c.id = o.chunk_id
+    ) k;
+  PERFORM public.rag_vector_sync_enqueue('document', v_docs, v_tenants, v_profiles);
+  RETURN NULL;
+END
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Profile flips: every embedding profile status change (activation, rollback, backfill start, retire) and every chunking
+-- pointer move to or from active.
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_embedding_profiles()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_ids text[];
+  v_profiles text[];
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.rag_vector_sync_targets t WHERE t.enabled) THEN
+    RETURN NULL;
+  END IF;
+  SELECT pg_catalog.array_agg('embedding:' || k.id), pg_catalog.array_agg(k.id)
+    INTO v_ids, v_profiles
+    FROM (
+      SELECT DISTINCT n.id
+        FROM old_rows o JOIN new_rows n ON n.id = o.id
+       WHERE o.status IS DISTINCT FROM n.status
+    ) k;
+  PERFORM public.rag_vector_sync_enqueue('profile', v_ids, pg_catalog.array_fill(NULL::text, ARRAY[coalesce(pg_catalog.array_length(v_ids, 1), 0)]), v_profiles);
+  RETURN NULL;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_chunking_profiles()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_ids text[];
+  v_count integer;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.rag_vector_sync_targets t WHERE t.enabled) THEN
+    RETURN NULL;
+  END IF;
+  SELECT pg_catalog.array_agg('chunking:' || k.doc_type)
+    INTO v_ids
+    FROM (
+      SELECT DISTINCT n.doc_type
+        FROM old_rows o JOIN new_rows n ON n.id = o.id AND n.doc_type = o.doc_type
+       WHERE o.status IS DISTINCT FROM n.status AND (o.status = 'active' OR n.status = 'active')
+    ) k;
+  v_count := coalesce(pg_catalog.array_length(v_ids, 1), 0);
+  PERFORM public.rag_vector_sync_enqueue('profile', v_ids, pg_catalog.array_fill(NULL::text, ARRAY[v_count]), pg_catalog.array_fill(NULL::text, ARRAY[v_count]));
+  RETURN NULL;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_vector_sync_chunks_insert() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_chunks_update() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_chunks_delete() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_documents_update() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_documents_delete() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_embeddings_insert() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_embeddings_update() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_embeddings_delete() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_embedding_profiles() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_chunking_profiles() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_chunks_insert() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_chunks_update() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_chunks_delete() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_documents_update() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_documents_delete() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_embeddings_insert() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_embeddings_update() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_embeddings_delete() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_embedding_profiles() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_chunking_profiles() TO service_role;
+
+-- ---------------------------------------------------------------------------
+-- Triggers
+-- ---------------------------------------------------------------------------
+
+DROP TRIGGER IF EXISTS rag_vector_sync_chunks_insert ON public.document_chunks;
+CREATE TRIGGER rag_vector_sync_chunks_insert
+  AFTER INSERT ON public.document_chunks
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_vector_sync_chunks_insert();
+
+DROP TRIGGER IF EXISTS rag_vector_sync_chunks_update ON public.document_chunks;
+CREATE TRIGGER rag_vector_sync_chunks_update
+  AFTER UPDATE ON public.document_chunks
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_vector_sync_chunks_update();
+
+DROP TRIGGER IF EXISTS rag_vector_sync_chunks_delete ON public.document_chunks;
+CREATE TRIGGER rag_vector_sync_chunks_delete
+  AFTER DELETE ON public.document_chunks
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_vector_sync_chunks_delete();
+
+DROP TRIGGER IF EXISTS rag_vector_sync_documents_update ON public.documents;
+CREATE TRIGGER rag_vector_sync_documents_update
+  AFTER UPDATE ON public.documents
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_vector_sync_documents_update();
+
+DROP TRIGGER IF EXISTS rag_vector_sync_documents_delete ON public.documents;
+CREATE TRIGGER rag_vector_sync_documents_delete
+  AFTER DELETE ON public.documents
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_vector_sync_documents_delete();
+
+DROP TRIGGER IF EXISTS rag_vector_sync_embeddings_insert ON public.chunk_embeddings;
+CREATE TRIGGER rag_vector_sync_embeddings_insert
+  AFTER INSERT ON public.chunk_embeddings
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_vector_sync_embeddings_insert();
+
+DROP TRIGGER IF EXISTS rag_vector_sync_embeddings_update ON public.chunk_embeddings;
+CREATE TRIGGER rag_vector_sync_embeddings_update
+  AFTER UPDATE ON public.chunk_embeddings
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_vector_sync_embeddings_update();
+
+DROP TRIGGER IF EXISTS rag_vector_sync_embeddings_delete ON public.chunk_embeddings;
+CREATE TRIGGER rag_vector_sync_embeddings_delete
+  AFTER DELETE ON public.chunk_embeddings
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_vector_sync_embeddings_delete();
+
+DROP TRIGGER IF EXISTS rag_vector_sync_embedding_profiles ON public.embedding_profiles;
+CREATE TRIGGER rag_vector_sync_embedding_profiles
+  AFTER UPDATE ON public.embedding_profiles
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_vector_sync_embedding_profiles();
+
+DROP TRIGGER IF EXISTS rag_vector_sync_chunking_profiles ON public.chunking_profiles;
+CREATE TRIGGER rag_vector_sync_chunking_profiles
+  AFTER UPDATE ON public.chunking_profiles
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_vector_sync_chunking_profiles();
+
+COMMIT;
+
+-- >>> supabase/migrations/0703_vector_sync_claim.sql
+-- 0703: Phase 7 vector sync claim and lifecycle RPCs (D-04, D-24, A-7, A-12).
+-- claim leases pending rows and expired leases oldest first, FOR UPDATE SKIP LOCKED, and never hands out an entity
+-- (target, entity, entity_id) that another row holds under a live lease, so overlapping drains cannot write a stale state last.
+-- Claims take a transaction advisory lock so two claimers cannot both pass the live-lease test for the same entity before either
+-- commits. Retry backoff reuses lease_until on a pending row; the eighth failed attempt is dead. checkpoint stores a paging cursor
+-- and gives back the attempt the claim counted. expand pages a tenant or profile row into document rows for its target.
+-- set_target is the operator switch: enabling a backend enqueues a full build per tenant and marks its index state building.
+-- SECURITY INVOKER, service role only; no function takes a tenant key from the caller.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_claim(p_limit integer, p_lease_seconds integer)
+RETURNS SETOF public.vector_sync_outbox
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+BEGIN
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 1000 THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_limit' USING ERRCODE = '22023';
+  END IF;
+  IF p_lease_seconds IS NULL OR p_lease_seconds < 1 OR p_lease_seconds > 3600 THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_lease' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('public.rag_vector_sync_claim'));
+
+  RETURN QUERY
+  WITH candidates AS (
+    SELECT c.id
+      FROM public.vector_sync_outbox c
+     WHERE ((c.status = 'pending' AND (c.lease_until IS NULL OR c.lease_until < pg_catalog.now()))
+            OR (c.status = 'leased' AND c.lease_until < pg_catalog.now()))
+       AND NOT EXISTS (
+         SELECT 1 FROM public.vector_sync_outbox l
+          WHERE l.target = c.target
+            AND l.entity = c.entity
+            AND l.entity_id = c.entity_id
+            AND l.id <> c.id
+            AND l.status = 'leased'
+            AND l.lease_until >= pg_catalog.now()
+       )
+     ORDER BY c.enqueued_at, c.id
+     LIMIT p_limit
+     FOR UPDATE OF c SKIP LOCKED
+  )
+  UPDATE public.vector_sync_outbox o
+     SET status = 'leased',
+         lease_until = pg_catalog.now() + pg_catalog.make_interval(secs => p_lease_seconds),
+         attempts = o.attempts + 1
+    FROM candidates
+   WHERE o.id = candidates.id
+  RETURNING o.*;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_complete(p_ids bigint[])
+RETURNS integer
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_count integer;
+BEGIN
+  UPDATE public.vector_sync_outbox o
+     SET status = 'done', lease_until = NULL, last_error = NULL
+   WHERE o.id = ANY (coalesce(p_ids, '{}'::bigint[]))
+     AND o.status = 'leased';
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_fail(p_id bigint, p_error text)
+RETURNS text
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_code text := pg_catalog.left(coalesce(p_error, 'unknown'), 200);
+  v_status text;
+BEGIN
+  -- Codes only (backend_error:503, timeout): anything else may carry content and is replaced.
+  IF v_code !~ '^[a-z0-9_.:-]+$' THEN
+    v_code := 'invalid_error_code';
+  END IF;
+  UPDATE public.vector_sync_outbox o
+     SET status = CASE WHEN o.attempts >= 8 THEN 'dead' ELSE 'pending' END,
+         lease_until = CASE
+           WHEN o.attempts >= 8 THEN NULL
+           ELSE pg_catalog.now() + pg_catalog.make_interval(secs => LEAST(pg_catalog.power(2, o.attempts), 3600))
+         END,
+         last_error = v_code
+   WHERE o.id = p_id AND o.status = 'leased'
+  RETURNING o.status INTO v_status;
+  RETURN v_status;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_checkpoint(p_id bigint, p_cursor text)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_found boolean;
+BEGIN
+  IF p_cursor IS NULL OR p_cursor = '' OR pg_catalog.length(p_cursor) > 200 THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_cursor' USING ERRCODE = '22023';
+  END IF;
+  UPDATE public.vector_sync_outbox o
+     SET status = 'pending', lease_until = NULL, cursor = p_cursor, attempts = GREATEST(o.attempts - 1, 0)
+   WHERE o.id = p_id AND o.status = 'leased';
+  v_found := FOUND;
+  RETURN v_found;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_expand(p_id bigint, p_limit integer)
+RETURNS TABLE (enqueued integer, next_cursor text, has_more boolean)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_row public.vector_sync_outbox%ROWTYPE;
+  v_after uuid;
+  v_doc_type text;
+  v_docs text[];
+  v_tenants text[];
+  v_profiles text[];
+  v_total integer;
+  v_count integer;
+  v_last text;
+BEGIN
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 10000 THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_limit' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_row FROM public.vector_sync_outbox o WHERE o.id = p_id FOR UPDATE;
+  IF NOT FOUND OR v_row.status <> 'leased' OR v_row.entity NOT IN ('tenant', 'profile') THEN
+    RAISE EXCEPTION 'vector_sync_refused: not_expandable' USING ERRCODE = '22023';
+  END IF;
+  IF v_row.cursor IS NOT NULL THEN
+    IF v_row.cursor !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      RAISE EXCEPTION 'vector_sync_refused: invalid_cursor' USING ERRCODE = '22023';
+    END IF;
+    v_after := v_row.cursor::uuid;
+  END IF;
+  IF v_row.entity = 'profile' THEN
+    IF v_row.entity_id LIKE 'chunking:%' THEN
+      v_doc_type := pg_catalog.substr(v_row.entity_id, pg_catalog.length('chunking:') + 1);
+    ELSIF v_row.entity_id NOT LIKE 'embedding:%' THEN
+      RAISE EXCEPTION 'vector_sync_refused: not_expandable' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+
+  -- Current documents of the row's tenant, or of every tenant for a profile row (one doc_type for a chunking pointer).
+  SELECT pg_catalog.array_agg(p.id::text ORDER BY p.id), pg_catalog.array_agg(p.tenant_key ORDER BY p.id), count(*)::integer
+    INTO v_docs, v_tenants, v_total
+    FROM (
+      SELECT d.id, d.tenant_key
+        FROM public.documents d
+       WHERE d.is_current
+         AND (v_row.entity = 'profile' OR d.tenant_key = v_row.tenant_key)
+         AND (v_doc_type IS NULL OR d.doc_type = v_doc_type)
+         AND (v_after IS NULL OR d.id > v_after)
+       ORDER BY d.id
+       LIMIT p_limit + 1
+    ) p;
+
+  has_more := coalesce(v_total, 0) > p_limit;
+  IF has_more THEN
+    v_docs := v_docs[1:p_limit];
+    v_tenants := v_tenants[1:p_limit];
+  END IF;
+  v_count := coalesce(pg_catalog.array_length(v_docs, 1), 0);
+  v_profiles := pg_catalog.array_fill(v_row.profile_id, ARRAY[v_count]);
+  enqueued := public.rag_vector_sync_enqueue('document', v_docs, v_tenants, v_profiles, v_row.target);
+  v_last := CASE WHEN v_count > 0 THEN v_docs[v_count] ELSE v_row.cursor END;
+  UPDATE public.vector_sync_outbox o SET cursor = v_last WHERE o.id = p_id;
+  next_cursor := v_last;
+  RETURN NEXT;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_requeue_dead(p_target text)
+RETURNS integer
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_count integer;
+BEGIN
+  IF p_target IS NULL OR p_target NOT IN ('weaviate', 'qdrant') THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_target' USING ERRCODE = '22023';
+  END IF;
+  UPDATE public.vector_sync_outbox o
+     SET status = 'pending', attempts = 0, lease_until = NULL
+   WHERE o.target = p_target AND o.status = 'dead';
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_vector_sync_set_target(p_target text, p_enabled boolean, p_actor text)
+RETURNS integer
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_was boolean;
+  v_tenants text[];
+  v_count integer;
+BEGIN
+  IF p_target IS NULL OR p_target NOT IN ('weaviate', 'qdrant') THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_target' USING ERRCODE = '22023';
+  END IF;
+  IF p_enabled IS NULL THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_enabled' USING ERRCODE = '22023';
+  END IF;
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'vector_sync_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT t.enabled INTO v_was FROM public.rag_vector_sync_targets t WHERE t.target = p_target FOR UPDATE;
+  INSERT INTO public.rag_vector_sync_targets AS t (target, enabled, updated_at, updated_by)
+  VALUES (p_target, p_enabled, pg_catalog.now(), pg_catalog.left(p_actor, 200))
+  ON CONFLICT (target) DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at, updated_by = EXCLUDED.updated_by;
+
+  IF NOT p_enabled OR coalesce(v_was, false) THEN
+    RETURN 0;
+  END IF;
+
+  SELECT pg_catalog.array_agg(k.tenant_key ORDER BY k.tenant_key)
+    INTO v_tenants
+    FROM (SELECT DISTINCT d.tenant_key FROM public.documents d WHERE d.is_current AND d.tenant_key IS NOT NULL) k;
+  v_count := coalesce(pg_catalog.array_length(v_tenants, 1), 0);
+
+  -- The synced profiles are the active one and any being backfilled (Phase 3 D-34).
+  INSERT INTO public.rag_backend_index_state AS s (target, profile_id, tenant_key, state, updated_at)
+  SELECT p_target, p.id, k.tenant_key, 'building', pg_catalog.now()
+    FROM public.embedding_profiles p
+    CROSS JOIN unnest(coalesce(v_tenants, '{}'::text[])) AS k(tenant_key)
+   WHERE p.status IN ('active', 'backfilling')
+  ON CONFLICT (target, profile_id, tenant_key) DO UPDATE SET state = 'building', last_error = NULL, updated_at = EXCLUDED.updated_at;
+
+  RETURN public.rag_vector_sync_enqueue('tenant', v_tenants, v_tenants, pg_catalog.array_fill(NULL::text, ARRAY[v_count]), p_target);
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_vector_sync_claim(integer, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_complete(bigint[]) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_fail(bigint, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_checkpoint(bigint, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_expand(bigint, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_requeue_dead(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_set_target(text, boolean, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_claim(integer, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_complete(bigint[]) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_fail(bigint, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_checkpoint(bigint, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_expand(bigint, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_requeue_dead(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_set_target(text, boolean, text) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0704_rag_validate_chunks.sql
+-- 0704: Phase 7 re-validation, isolation layer 2 (D-10, A-5, A-12).
+-- rag_servable_chunks is the one definition of a servable chunk: chunk and document current, document ready, chunk ready or variant,
+-- chunk and document in the same tenant, and the chunk passes the active chunking profile of its doc type with the legacy-row
+-- fallback of hybrid_search_chunks (0802): the active pointer only, never an eval override. The sync reads (0705) and
+-- rag_validate_chunks both select from it, so pgvector and the external stores cannot drift on what may be served.
+-- rag_validate_chunks returns the hit columns of hybrid_search_chunks (without scores) for exactly the ids that are servable, in the
+-- caller's tenant and hold a vector in the profile: document_chunks.embedding for a legacy_column profile, a chunk_embeddings row
+-- for a halfvec profile. The tenant comes only from p_tenant_key, checked by rag_assert_tenant_key; there is no parameter or
+-- setting that skips any predicate. SECURITY INVOKER, service role only (the view too).
+-- Idempotent: safe to run more than once.
+
+BEGIN;
+
+CREATE OR REPLACE VIEW public.rag_servable_chunks WITH (security_invoker = true) AS
+SELECT c.id AS chunk_id, c.document_id, c.tenant_key
+  FROM public.document_chunks c
+  JOIN public.documents d ON d.id = c.document_id
+  CROSS JOIN LATERAL (
+    SELECT COALESCE(
+      (SELECT cp.id FROM public.chunking_profiles cp WHERE cp.doc_type = c.doc_type AND cp.status = 'active' ORDER BY cp.id LIMIT 1),
+      'legacy'
+    ) AS profile_id
+  ) ep
+ WHERE c.tenant_key IS NOT NULL
+   AND d.tenant_key = c.tenant_key
+   AND c.is_current
+   AND c.status IN ('ready', 'variant')
+   AND d.is_current
+   AND d.status = 'ready'
+   AND c.doc_type IN ('financial_report', 'contract_legal', 'invoice_receipt', 'product_technical', 'scanned_image', 'general')
+   AND (
+     c.chunking_profile_id = ep.profile_id
+     OR (ep.profile_id <> 'legacy' AND c.chunking_profile_id = 'legacy' AND c.chunk_kind IN ('image', 'invoice_header'))
+     OR (ep.profile_id <> 'legacy' AND c.chunking_profile_id = 'legacy'
+         AND NOT EXISTS (
+           SELECT 1 FROM public.document_chunks c2
+            WHERE c2.document_id = c.document_id
+              AND c2.tenant_key = c.tenant_key
+              AND c2.is_current
+              AND c2.chunking_profile_id = ep.profile_id
+         ))
+   );
+
+REVOKE ALL ON TABLE public.rag_servable_chunks FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON TABLE public.rag_servable_chunks TO service_role;
+
+DROP FUNCTION IF EXISTS public.rag_validate_chunks(text, uuid[], text);
+
+CREATE FUNCTION public.rag_validate_chunks(p_tenant_key text, p_ids uuid[], p_profile_id text)
+RETURNS TABLE (
+  chunk_id uuid,
+  document_id uuid,
+  content text,
+  metadata jsonb,
+  chunk_index integer,
+  doc_type text,
+  language text,
+  parent_id uuid,
+  section_path text[],
+  chunk_kind text,
+  document_filename text,
+  document_created_at timestamptz,
+  document_metadata jsonb,
+  document_content_preview text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_storage text;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+
+  IF COALESCE(pg_catalog.cardinality(p_ids), 0) > 500 THEN
+    RAISE EXCEPTION 'rag_validate_chunks: too many ids' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT e.storage INTO v_storage FROM public.embedding_profiles e WHERE e.id = p_profile_id;
+  IF v_storage IS NULL OR v_storage NOT IN ('legacy_column', 'halfvec') THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: unknown profile' USING ERRCODE = '22023';
+  END IF;
+
+  IF COALESCE(pg_catalog.cardinality(p_ids), 0) = 0 THEN
+    RETURN;
+  END IF;
+
+  RETURN QUERY
+  SELECT c.id, c.document_id, c.content, c.metadata, c.chunk_index, c.doc_type, c.language, c.parent_id, c.section_path, c.chunk_kind,
+         d.filename, d.created_at, d.metadata, pg_catalog.left(d.content, 200)
+    FROM public.rag_servable_chunks s
+    JOIN public.document_chunks c ON c.id = s.chunk_id
+    JOIN public.documents d ON d.id = c.document_id
+   WHERE s.chunk_id = ANY(p_ids)
+     AND s.tenant_key = p_tenant_key
+     AND c.tenant_key = p_tenant_key
+     AND d.tenant_key = p_tenant_key
+     AND CASE
+           WHEN v_storage = 'legacy_column' THEN c.embedding IS NOT NULL
+           ELSE EXISTS (
+             SELECT 1 FROM public.chunk_embeddings e
+              WHERE e.chunk_id = c.id AND e.profile_id = p_profile_id AND e.tenant_key = p_tenant_key
+           )
+         END
+   ORDER BY c.id;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_validate_chunks(text, uuid[], text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_validate_chunks(text, uuid[], text) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0705_vector_sync_reads.sql
+-- 0705: Phase 7 vector sync reads for the drain worker (D-02, D-03, D-11).
+-- rag_vector_sync_document_rows pages the servable chunks of one document (rag_servable_chunks, 0704) that hold a vector in the
+-- profile, ordered by chunk id after p_after, with the profile vector as real[] and only the D-03 payload fields: lexical_text,
+-- lexical_version, content_hash and the filter fields. No chunk content and no document name leave through these functions.
+-- rag_vector_sync_chunk_row is the same read for one chunk. A chunk or document missing from the answer is not servable for that
+-- profile, and the worker deletes its point.
+-- rag_vector_sync_profiles lists the synced embedding profiles (active and backfilling) with dims and storage.
+-- rag_backend_readiness returns the index state row of (target, profile, tenant), or a row with a null state when there is none,
+-- plus the live outbox lag in seconds: the age of the oldest pending or leased outbox row of that target and tenant.
+-- Every function taking a tenant key checks it with rag_assert_tenant_key first. SECURITY INVOKER, service role only.
+-- Idempotent: safe to run more than once.
+
+BEGIN;
+
+DROP FUNCTION IF EXISTS public.rag_vector_sync_document_rows(text, uuid, text, uuid, integer);
+DROP FUNCTION IF EXISTS public.rag_vector_sync_chunk_row(text, uuid, text);
+DROP FUNCTION IF EXISTS public.rag_vector_sync_profiles();
+DROP FUNCTION IF EXISTS public.rag_backend_readiness(text, text, text);
+
+CREATE FUNCTION public.rag_vector_sync_document_rows(
+  p_tenant_key text,
+  p_document_id uuid,
+  p_profile_id text,
+  p_after uuid,
+  p_limit integer
+)
+RETURNS TABLE (
+  chunk_id uuid,
+  document_id uuid,
+  tenant_key text,
+  vector real[],
+  lexical_text text,
+  lexical_version integer,
+  content_hash text,
+  doc_type text,
+  doc_date date,
+  language text,
+  source text,
+  chunking_profile_id text,
+  parent_id uuid
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_storage text;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_document_id IS NULL THEN
+    RAISE EXCEPTION 'vector_sync_refused: document_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 1000 THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_limit' USING ERRCODE = '22023';
+  END IF;
+  SELECT e.storage INTO v_storage FROM public.embedding_profiles e WHERE e.id = p_profile_id;
+  IF v_storage IS NULL OR v_storage NOT IN ('legacy_column', 'halfvec') THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: unknown profile' USING ERRCODE = '22023';
+  END IF;
+
+  IF v_storage = 'legacy_column' THEN
+    RETURN QUERY
+    SELECT c.id, c.document_id, c.tenant_key, c.embedding::real[], c.lexical_text, c.lexical_version, c.content_hash, c.doc_type,
+           c.doc_date, c.language, c.source, c.chunking_profile_id, c.parent_id
+      FROM public.rag_servable_chunks s
+      JOIN public.document_chunks c ON c.id = s.chunk_id
+     WHERE s.document_id = p_document_id
+       AND s.tenant_key = p_tenant_key
+       AND c.tenant_key = p_tenant_key
+       AND (p_after IS NULL OR c.id > p_after)
+       AND c.embedding IS NOT NULL
+     ORDER BY c.id
+     LIMIT p_limit;
+  ELSE
+    RETURN QUERY
+    SELECT c.id, c.document_id, c.tenant_key, (e.embedding::public.vector)::real[], c.lexical_text, c.lexical_version, c.content_hash,
+           c.doc_type, c.doc_date, c.language, c.source, c.chunking_profile_id, c.parent_id
+      FROM public.rag_servable_chunks s
+      JOIN public.document_chunks c ON c.id = s.chunk_id
+      JOIN public.chunk_embeddings e ON e.chunk_id = c.id AND e.profile_id = p_profile_id AND e.tenant_key = p_tenant_key
+     WHERE s.document_id = p_document_id
+       AND s.tenant_key = p_tenant_key
+       AND c.tenant_key = p_tenant_key
+       AND (p_after IS NULL OR c.id > p_after)
+     ORDER BY c.id
+     LIMIT p_limit;
+  END IF;
+END
+$fn$;
+
+CREATE FUNCTION public.rag_vector_sync_chunk_row(p_tenant_key text, p_chunk_id uuid, p_profile_id text)
+RETURNS TABLE (
+  chunk_id uuid,
+  document_id uuid,
+  tenant_key text,
+  vector real[],
+  lexical_text text,
+  lexical_version integer,
+  content_hash text,
+  doc_type text,
+  doc_date date,
+  language text,
+  source text,
+  chunking_profile_id text,
+  parent_id uuid
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_storage text;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_chunk_id IS NULL THEN
+    RAISE EXCEPTION 'vector_sync_refused: chunk_required' USING ERRCODE = '22023';
+  END IF;
+  SELECT e.storage INTO v_storage FROM public.embedding_profiles e WHERE e.id = p_profile_id;
+  IF v_storage IS NULL OR v_storage NOT IN ('legacy_column', 'halfvec') THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: unknown profile' USING ERRCODE = '22023';
+  END IF;
+
+  IF v_storage = 'legacy_column' THEN
+    RETURN QUERY
+    SELECT c.id, c.document_id, c.tenant_key, c.embedding::real[], c.lexical_text, c.lexical_version, c.content_hash, c.doc_type,
+           c.doc_date, c.language, c.source, c.chunking_profile_id, c.parent_id
+      FROM public.rag_servable_chunks s
+      JOIN public.document_chunks c ON c.id = s.chunk_id
+     WHERE s.chunk_id = p_chunk_id
+       AND s.tenant_key = p_tenant_key
+       AND c.tenant_key = p_tenant_key
+       AND c.embedding IS NOT NULL;
+  ELSE
+    RETURN QUERY
+    SELECT c.id, c.document_id, c.tenant_key, (e.embedding::public.vector)::real[], c.lexical_text, c.lexical_version, c.content_hash,
+           c.doc_type, c.doc_date, c.language, c.source, c.chunking_profile_id, c.parent_id
+      FROM public.rag_servable_chunks s
+      JOIN public.document_chunks c ON c.id = s.chunk_id
+      JOIN public.chunk_embeddings e ON e.chunk_id = c.id AND e.profile_id = p_profile_id AND e.tenant_key = p_tenant_key
+     WHERE s.chunk_id = p_chunk_id
+       AND s.tenant_key = p_tenant_key
+       AND c.tenant_key = p_tenant_key;
+  END IF;
+END
+$fn$;
+
+CREATE FUNCTION public.rag_vector_sync_profiles()
+RETURNS TABLE (profile_id text, dims integer, storage text, status text)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+  SELECT p.id, p.dims, p.storage, p.status
+    FROM public.embedding_profiles p
+   WHERE p.status IN ('active', 'backfilling')
+   ORDER BY p.id;
+$fn$;
+
+CREATE FUNCTION public.rag_backend_readiness(p_target text, p_profile_id text, p_tenant_key text)
+RETURNS TABLE (
+  target text,
+  profile_id text,
+  tenant_key text,
+  state text,
+  last_reconciled_at timestamptz,
+  lag_seconds integer,
+  supabase_count bigint,
+  backend_count bigint,
+  outbox_lag_seconds integer
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_target IS NULL OR p_target NOT IN ('weaviate', 'qdrant') THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_target' USING ERRCODE = '22023';
+  END IF;
+  IF p_profile_id IS NULL OR NOT EXISTS (SELECT 1 FROM public.embedding_profiles e WHERE e.id = p_profile_id) THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: unknown profile' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN QUERY
+  SELECT p_target, p_profile_id, p_tenant_key, s.state, s.last_reconciled_at, s.lag_seconds, s.supabase_count, s.backend_count,
+         COALESCE((
+           SELECT pg_catalog.ceil(EXTRACT(EPOCH FROM (pg_catalog.now() - pg_catalog.min(o.enqueued_at))))::integer
+             FROM public.vector_sync_outbox o
+            WHERE o.target = p_target
+              AND o.tenant_key = p_tenant_key
+              AND o.status IN ('pending', 'leased')
+         ), 0)
+    FROM (SELECT 1) one
+    LEFT JOIN public.rag_backend_index_state s
+      ON s.target = p_target AND s.profile_id = p_profile_id AND s.tenant_key = p_tenant_key;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_vector_sync_document_rows(text, uuid, text, uuid, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_chunk_row(text, uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_profiles() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_backend_readiness(text, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_document_rows(text, uuid, text, uuid, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_chunk_row(text, uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_profiles() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_backend_readiness(text, text, text) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0706_activation_gate_external.sql
+-- 0706: Phase 7 activation gate for external backends (D-06, RET-05, RET-09).
+-- rag_activate_embedding_profile keeps the 0425 body (every Phase 3 refusal, in the same order) and adds one condition after them:
+-- for each enabled target in rag_vector_sync_targets (qdrant first, then weaviate), every tenant with current ready chunks must have a
+-- rag_backend_index_state row in state ready for that target and the target profile, otherwise activation raises
+-- `external_not_ready:<target>` (55000) and changes nothing. With no target enabled the gate is the 0425 gate.
+-- rag_rollback_embedding_profile is not changed: rolling back is never gated on an external index.
+-- Signature, SECURITY DEFINER, search_path, statement_timeout and grants are unchanged. Idempotent.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_activate_embedding_profile(p_target text, p_actor text)
+ RETURNS TABLE(activated_profile text, previous_profile text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+ SET statement_timeout TO '120s'
+AS $function$
+DECLARE
+  v_target public.embedding_profiles%ROWTYPE;
+  v_active text;
+  v_missing bigint;
+  v_bad bigint;
+  v_evidence jsonb;
+  v_recorded timestamptz;
+  v_last timestamptz;
+  v_slice_ok boolean;
+  v_ext_target text;
+  v_ext_missing bigint;
+BEGIN
+  IF p_actor IS NULL OR btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'activation_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_target FROM public.embedding_profiles WHERE id = p_target;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'activation_refused: unknown_profile' USING ERRCODE = '22023';
+  END IF;
+  IF v_target.status = 'active' THEN
+    RAISE EXCEPTION 'activation_refused: already_active' USING ERRCODE = '55000';
+  END IF;
+  SELECT p.id INTO v_active FROM public.embedding_profiles p WHERE p.status = 'active';
+
+  IF v_target.storage = 'legacy_column' THEN
+    SELECT count(*) INTO v_missing FROM public.document_chunks c
+    WHERE c.is_current AND c.status = 'ready' AND c.embedding IS NULL;
+  ELSE
+    SELECT count(*) INTO v_missing FROM public.document_chunks c
+    WHERE c.is_current AND c.status = 'ready'
+      AND NOT EXISTS (SELECT 1 FROM public.chunk_embeddings e WHERE e.chunk_id = c.id AND e.profile_id = p_target);
+  END IF;
+  IF v_missing > 0 THEN
+    RAISE EXCEPTION 'activation_refused: incomplete (% current ready chunks have no vector for profile %)', v_missing, p_target
+      USING ERRCODE = '55000';
+  END IF;
+
+  IF v_target.storage <> 'legacy_column' THEN
+    SELECT count(*) INTO v_bad FROM public.chunk_embeddings e
+    WHERE e.profile_id = p_target AND (e.embedding_model <> v_target.model OR e.dims <> v_target.dims);
+    IF v_bad > 0 THEN
+      RAISE EXCEPTION 'activation_refused: model_mismatch (% rows of profile % differ from model % at % dims)', v_bad, p_target, v_target.model, v_target.dims
+        USING ERRCODE = '55000';
+    END IF;
+  END IF;
+
+  v_evidence := v_target.eval_evidence;
+  IF v_evidence IS NULL OR jsonb_typeof(v_evidence) <> 'object' THEN
+    RAISE EXCEPTION 'activation_refused: eval_missing' USING ERRCODE = '55000';
+  END IF;
+  IF v_evidence->>'target_profile' IS DISTINCT FROM p_target THEN
+    RAISE EXCEPTION 'activation_refused: eval_target_mismatch' USING ERRCODE = '55000';
+  END IF;
+  IF v_evidence->>'baseline_profile' IS DISTINCT FROM v_active THEN
+    RAISE EXCEPTION 'activation_refused: eval_baseline_mismatch (evidence baseline %, active profile %)', v_evidence->>'baseline_profile', v_active
+      USING ERRCODE = '55000';
+  END IF;
+  IF v_evidence->'gate_passed' IS DISTINCT FROM 'true'::jsonb THEN
+    RAISE EXCEPTION 'activation_refused: eval_failed' USING ERRCODE = '55000';
+  END IF;
+  v_slice_ok := coalesce(v_evidence#>'{pre_migration,passed}' = 'true'::jsonb, false)
+    AND coalesce(CASE WHEN jsonb_typeof(v_evidence#>'{pre_migration,n}') = 'number' THEN (v_evidence#>>'{pre_migration,n}')::numeric >= 1 END, false);
+  IF NOT v_slice_ok THEN
+    RAISE EXCEPTION 'activation_refused: pre_migration_missing' USING ERRCODE = '55000';
+  END IF;
+
+  IF v_target.storage <> 'legacy_column' THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM public.embedding_backfill_runs r
+      WHERE r.id::text = v_evidence->>'backfill_run_id' AND r.profile_id = p_target AND r.status = 'completed'
+    ) THEN
+      RAISE EXCEPTION 'activation_refused: eval_run_mismatch' USING ERRCODE = '55000';
+    END IF;
+    SELECT max(e.embedded_at) INTO v_last FROM public.chunk_embeddings e WHERE e.profile_id = p_target;
+  ELSE
+    SELECT max(c.created_at) INTO v_last FROM public.document_chunks c
+    WHERE c.is_current AND c.status = 'ready' AND c.embedding IS NOT NULL;
+  END IF;
+
+  BEGIN
+    v_recorded := (v_evidence->>'recorded_at')::timestamptz;
+  EXCEPTION WHEN others THEN
+    v_recorded := NULL;
+  END;
+  IF v_recorded IS NULL OR (v_last IS NOT NULL AND v_recorded < v_last) THEN
+    RAISE EXCEPTION 'activation_refused: eval_stale (evidence recorded %, data embedded %)', v_recorded, v_last USING ERRCODE = '55000';
+  END IF;
+
+  FOR v_ext_target IN
+    SELECT t.target FROM public.rag_vector_sync_targets t
+    WHERE t.enabled
+    ORDER BY CASE t.target WHEN 'qdrant' THEN 0 WHEN 'weaviate' THEN 1 ELSE 2 END, t.target
+  LOOP
+    SELECT count(*) INTO v_ext_missing
+    FROM (
+      SELECT DISTINCT c.tenant_key FROM public.document_chunks c
+      WHERE c.is_current AND c.status = 'ready' AND c.tenant_key IS NOT NULL
+    ) k
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.rag_backend_index_state s
+      WHERE s.target = v_ext_target AND s.profile_id = p_target AND s.tenant_key = k.tenant_key AND s.state = 'ready'
+    );
+    IF v_ext_missing > 0 THEN
+      RAISE EXCEPTION 'external_not_ready:% (% tenants with current documents have no ready % index for profile %)', v_ext_target, v_ext_missing, v_ext_target, p_target
+        USING ERRCODE = '55000';
+    END IF;
+  END LOOP;
+
+  UPDATE public.embedding_profiles SET status = 'available' WHERE status = 'active';
+  UPDATE public.embedding_profiles
+  SET status = 'active', previous_active_id = v_active, activated_at = now(), activated_by = p_actor
+  WHERE id = p_target;
+
+  RETURN QUERY SELECT p_target, v_active;
+END
+$function$;
+
+REVOKE ALL ON FUNCTION public.rag_activate_embedding_profile(text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_activate_embedding_profile(text, text) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0707_vector_sync_reconcile.sql
+-- 0707: Phase 7 vector sync reconcile RPCs (D-05, D-11, A-12).
+-- Reconcile compares, per (target, profile, tenant), Supabase's servable rows that hold a vector in the profile (the same set
+-- rag_vector_sync_document_rows reads, 0705) with the external store, and repairs drift through the outbox.
+-- Hash definition, shared with src/lib/rag/sync/reconcile.ts: m = md5(chunk id as lowercase text);
+--   bucket = first byte of m mod 64; id hash = first 16 hex digits of m read as a signed 64-bit integer;
+--   content hash = the same over md5(id || ':' || coalesce(content_hash, '') || ':' || coalesce(lexical_version, '')).
+-- Per bucket the summary returns the row count and the XOR of both hashes, as decimal text (JSON numbers lose 64-bit precision).
+-- rag_vector_sync_bucket_rows pages the rows of one bucket so a mismatch narrows to ids.
+-- rag_vector_sync_tenants lists, for an enabled target, the tenants with servable rows or an index-state row, least recently
+-- reconciled first. rag_vector_sync_enqueue_repair adds one outbox row (the 0702 rag_vector_sync_enqueue name is taken by the
+-- array writer the triggers call). rag_set_backend_index_state records one compare; a mismatch leaves a building tenant building,
+-- so a newly enabled tenant becomes ready only on its first match. rag_vector_sync_prune deletes done rows only.
+-- SECURITY INVOKER, search_path '', service role only. Idempotent: safe to run more than once.
+
+BEGIN;
+
+DROP FUNCTION IF EXISTS public.rag_vector_sync_reconcile_summary(text, text);
+DROP FUNCTION IF EXISTS public.rag_vector_sync_bucket_rows(text, text, integer, uuid, integer);
+DROP FUNCTION IF EXISTS public.rag_vector_sync_tenants(text, text);
+DROP FUNCTION IF EXISTS public.rag_vector_sync_enqueue_repair(text, text, text, text, text);
+DROP FUNCTION IF EXISTS public.rag_set_backend_index_state(text, text, text, text, bigint, bigint, text);
+DROP FUNCTION IF EXISTS public.rag_vector_sync_prune(integer);
+
+CREATE FUNCTION public.rag_vector_sync_reconcile_summary(p_tenant_key text, p_profile_id text)
+RETURNS TABLE (bucket integer, row_count bigint, id_xor text, content_xor text)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_storage text;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  SELECT e.storage INTO v_storage FROM public.embedding_profiles e WHERE e.id = p_profile_id;
+  IF v_storage IS NULL OR v_storage NOT IN ('legacy_column', 'halfvec') THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: unknown profile' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN QUERY
+  WITH src AS (
+    SELECT c.id, c.content_hash, c.lexical_version
+      FROM public.rag_servable_chunks s
+      JOIN public.document_chunks c ON c.id = s.chunk_id
+     WHERE s.tenant_key = p_tenant_key
+       AND c.tenant_key = p_tenant_key
+       AND CASE
+             WHEN v_storage = 'legacy_column' THEN c.embedding IS NOT NULL
+             ELSE EXISTS (
+               SELECT 1 FROM public.chunk_embeddings e
+                WHERE e.chunk_id = c.id AND e.profile_id = p_profile_id AND e.tenant_key = p_tenant_key
+             )
+           END
+  ),
+  hashed AS (
+    SELECT pg_catalog.md5(r.id::text) AS m,
+           pg_catalog.md5(r.id::text || ':' || coalesce(r.content_hash, '') || ':' || coalesce(r.lexical_version::text, '')) AS cm
+      FROM src r
+  ),
+  per_bucket AS (
+    SELECT (pg_catalog.get_byte(pg_catalog.decode(pg_catalog.substr(h.m, 1, 2), 'hex'), 0) % 64) AS b,
+           count(*)::bigint AS n,
+           pg_catalog.bit_xor(('x' || pg_catalog.substr(h.m, 1, 16))::bit(64)::bigint) AS ix,
+           pg_catalog.bit_xor(('x' || pg_catalog.substr(h.cm, 1, 16))::bit(64)::bigint) AS cx
+      FROM hashed h
+     GROUP BY 1
+  )
+  SELECT g.b, coalesce(p.n, 0)::bigint, coalesce(p.ix, 0)::text, coalesce(p.cx, 0)::text
+    FROM pg_catalog.generate_series(0, 63) AS g(b)
+    LEFT JOIN per_bucket p ON p.b = g.b
+   ORDER BY g.b;
+END
+$fn$;
+
+CREATE FUNCTION public.rag_vector_sync_bucket_rows(
+  p_tenant_key text,
+  p_profile_id text,
+  p_bucket integer,
+  p_after uuid,
+  p_limit integer
+)
+RETURNS TABLE (chunk_id uuid, document_id uuid, content_hash text, lexical_version integer)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_storage text;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_bucket IS NULL OR p_bucket < 0 OR p_bucket > 63 THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_bucket' USING ERRCODE = '22023';
+  END IF;
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 1000 THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_limit' USING ERRCODE = '22023';
+  END IF;
+  SELECT e.storage INTO v_storage FROM public.embedding_profiles e WHERE e.id = p_profile_id;
+  IF v_storage IS NULL OR v_storage NOT IN ('legacy_column', 'halfvec') THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: unknown profile' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN QUERY
+  SELECT c.id, c.document_id, c.content_hash, c.lexical_version
+    FROM public.rag_servable_chunks s
+    JOIN public.document_chunks c ON c.id = s.chunk_id
+   WHERE s.tenant_key = p_tenant_key
+     AND c.tenant_key = p_tenant_key
+     AND (p_after IS NULL OR c.id > p_after)
+     AND (pg_catalog.get_byte(pg_catalog.decode(pg_catalog.substr(pg_catalog.md5(c.id::text), 1, 2), 'hex'), 0) % 64) = p_bucket
+     AND CASE
+           WHEN v_storage = 'legacy_column' THEN c.embedding IS NOT NULL
+           ELSE EXISTS (
+             SELECT 1 FROM public.chunk_embeddings e
+              WHERE e.chunk_id = c.id AND e.profile_id = p_profile_id AND e.tenant_key = p_tenant_key
+           )
+         END
+   ORDER BY c.id
+   LIMIT p_limit;
+END
+$fn$;
+
+CREATE FUNCTION public.rag_vector_sync_tenants(p_target text, p_profile_id text)
+RETURNS TABLE (tenant_key text, last_reconciled_at timestamptz)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  IF p_target IS NULL OR p_target NOT IN ('weaviate', 'qdrant') THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_target' USING ERRCODE = '22023';
+  END IF;
+  IF p_profile_id IS NULL OR NOT EXISTS (SELECT 1 FROM public.embedding_profiles e WHERE e.id = p_profile_id) THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: unknown profile' USING ERRCODE = '22023';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.rag_vector_sync_targets t WHERE t.target = p_target AND t.enabled) THEN
+    RETURN;
+  END IF;
+
+  RETURN QUERY
+  SELECT k.tenant_key, s.last_reconciled_at
+    FROM (
+      SELECT DISTINCT v.tenant_key FROM public.rag_servable_chunks v WHERE v.tenant_key IS NOT NULL
+      UNION
+      SELECT i.tenant_key FROM public.rag_backend_index_state i WHERE i.target = p_target AND i.profile_id = p_profile_id
+    ) k
+    LEFT JOIN public.rag_backend_index_state s
+      ON s.target = p_target AND s.profile_id = p_profile_id AND s.tenant_key = k.tenant_key
+   ORDER BY s.last_reconciled_at ASC NULLS FIRST, k.tenant_key;
+END
+$fn$;
+
+CREATE FUNCTION public.rag_vector_sync_enqueue_repair(
+  p_target text,
+  p_entity text,
+  p_entity_id text,
+  p_tenant_key text,
+  p_profile_id text
+)
+RETURNS integer
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_count integer;
+BEGIN
+  IF p_target IS NULL OR p_target NOT IN ('weaviate', 'qdrant') THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_target' USING ERRCODE = '22023';
+  END IF;
+  IF p_entity IS NULL OR p_entity NOT IN ('chunk', 'document', 'tenant') THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_entity' USING ERRCODE = '22023';
+  END IF;
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_entity = 'tenant' THEN
+    IF p_entity_id IS DISTINCT FROM p_tenant_key THEN
+      RAISE EXCEPTION 'vector_sync_refused: invalid_entity_id' USING ERRCODE = '22023';
+    END IF;
+  ELSIF p_entity_id IS NULL OR p_entity_id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_entity_id' USING ERRCODE = '22023';
+  END IF;
+  IF p_profile_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.embedding_profiles e WHERE e.id = p_profile_id) THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: unknown profile' USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO public.vector_sync_outbox (target, entity, entity_id, tenant_key, profile_id)
+  SELECT p_target, p_entity, p_entity_id, p_tenant_key, p_profile_id
+   WHERE EXISTS (SELECT 1 FROM public.rag_vector_sync_targets t WHERE t.target = p_target AND t.enabled)
+     AND NOT EXISTS (
+       SELECT 1 FROM public.vector_sync_outbox o
+        WHERE o.target = p_target
+          AND o.entity = p_entity
+          AND o.entity_id = p_entity_id
+          AND o.status = 'pending'
+          AND o.attempts = 0
+          AND o.cursor IS NULL
+          AND o.tenant_key IS NOT DISTINCT FROM p_tenant_key
+          AND o.profile_id IS NOT DISTINCT FROM p_profile_id
+     );
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END
+$fn$;
+
+CREATE FUNCTION public.rag_set_backend_index_state(
+  p_target text,
+  p_profile_id text,
+  p_tenant_key text,
+  p_state text,
+  p_supabase_count bigint,
+  p_backend_count bigint,
+  p_error text
+)
+RETURNS text
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_error text;
+  v_lag integer;
+  v_state text;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_target IS NULL OR p_target NOT IN ('weaviate', 'qdrant') THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_target' USING ERRCODE = '22023';
+  END IF;
+  IF p_profile_id IS NULL OR NOT EXISTS (SELECT 1 FROM public.embedding_profiles e WHERE e.id = p_profile_id) THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: unknown profile' USING ERRCODE = '22023';
+  END IF;
+  IF p_state IS NULL OR p_state NOT IN ('ready', 'stale', 'failed') THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_state' USING ERRCODE = '22023';
+  END IF;
+  IF (p_supabase_count IS NOT NULL AND p_supabase_count < 0) OR (p_backend_count IS NOT NULL AND p_backend_count < 0) THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_count' USING ERRCODE = '22023';
+  END IF;
+
+  -- Codes only: anything that is not a short code is replaced, so no content can reach last_error.
+  IF p_state = 'failed' THEN
+    v_error := CASE WHEN p_error ~ '^[a-z0-9_.:-]{1,200}$' THEN p_error ELSE 'store_error' END;
+  END IF;
+
+  SELECT coalesce(pg_catalog.ceil(EXTRACT(EPOCH FROM (pg_catalog.now() - pg_catalog.min(o.enqueued_at))))::integer, 0)
+    INTO v_lag
+    FROM public.vector_sync_outbox o
+   WHERE o.target = p_target
+     AND o.tenant_key = p_tenant_key
+     AND o.status IN ('pending', 'leased');
+
+  INSERT INTO public.rag_backend_index_state AS s (
+    target, profile_id, tenant_key, state, last_reconciled_at, lag_seconds, supabase_count, backend_count, last_error, updated_at
+  )
+  VALUES (
+    p_target, p_profile_id, p_tenant_key, CASE WHEN p_state = 'stale' THEN 'building' ELSE p_state END, pg_catalog.now(), v_lag,
+    p_supabase_count, p_backend_count, v_error, pg_catalog.now()
+  )
+  ON CONFLICT (target, profile_id, tenant_key) DO UPDATE
+    SET state = CASE WHEN EXCLUDED.state = 'building' AND s.state <> 'building' THEN 'stale' ELSE EXCLUDED.state END,
+        last_reconciled_at = EXCLUDED.last_reconciled_at,
+        lag_seconds = EXCLUDED.lag_seconds,
+        supabase_count = EXCLUDED.supabase_count,
+        backend_count = EXCLUDED.backend_count,
+        last_error = EXCLUDED.last_error,
+        updated_at = EXCLUDED.updated_at
+  RETURNING s.state INTO v_state;
+  RETURN v_state;
+END
+$fn$;
+
+CREATE FUNCTION public.rag_vector_sync_prune(p_days integer)
+RETURNS integer
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_count integer;
+BEGIN
+  IF p_days IS NULL OR p_days < 1 OR p_days > 3650 THEN
+    RAISE EXCEPTION 'vector_sync_refused: invalid_days' USING ERRCODE = '22023';
+  END IF;
+  DELETE FROM public.vector_sync_outbox o
+   WHERE o.status = 'done'
+     AND o.enqueued_at < pg_catalog.now() - pg_catalog.make_interval(days => p_days);
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_vector_sync_reconcile_summary(text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_bucket_rows(text, text, integer, uuid, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_tenants(text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_enqueue_repair(text, text, text, text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_set_backend_index_state(text, text, text, text, bigint, bigint, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_prune(integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_reconcile_summary(text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_bucket_rows(text, text, integer, uuid, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_tenants(text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_enqueue_repair(text, text, text, text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_set_backend_index_state(text, text, text, text, bigint, bigint, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_prune(integer) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;

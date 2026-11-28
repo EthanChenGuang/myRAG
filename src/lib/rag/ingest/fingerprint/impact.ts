@@ -6,6 +6,8 @@ import {
 } from '@/lib/rag-eval/contracts.generated';
 import { canonicalJson } from '@/lib/rag-eval/trace';
 import { rpcRows, type RpcClient } from '../../backend/supabase-rpc';
+import { parseLanguageList } from '../../../../../config/rag/validate-language-settings.cjs';
+import { getLanguagePack, registryOrder } from '../../lang/registry';
 import { getLanguageSettings } from '../../lang/settings';
 import { loadIngestConfig, type IngestEnvInput } from '../config';
 import { getIngestDeps } from '../deps';
@@ -129,6 +131,21 @@ function proposalsByMechanism(proposed: Record<string, string>): Map<RebuildMech
   return ordered;
 }
 
+/**
+ * LANG-11 (plan 07-52): removing a language is query-side. A proposed language set is compared with the languages the document was
+ * processed with kept in it, so a removed language never makes a stored document look out of date (its OCR codes are not recomputed
+ * without it); an added language still does.
+ */
+function keepStoredLanguages(values: Record<string, string>, parts: IngestFingerprintParts): Record<string, string> {
+  if (!Object.prototype.hasOwnProperty.call(values, 'RAG_SUPPORTED_LANGUAGES')) return values;
+  const proposed = parseLanguageList(values.RAG_SUPPORTED_LANGUAGES);
+  if (proposed.length === 0) return values;
+  const stored = Object.keys(parts.language_pack_versions).filter((code) => getLanguagePack(code) !== undefined);
+  const missing = stored.filter((code) => !proposed.includes(code));
+  if (missing.length === 0) return values;
+  return { ...values, RAG_SUPPORTED_LANGUAGES: registryOrder([...proposed, ...missing]).join(',') };
+}
+
 function toDocType(value: string): ImpactDocType {
   return (DOC_TYPES as readonly string[]).includes(value) ? (value as ImpactDocType) : 'general';
 }
@@ -171,12 +188,12 @@ export function countImpact(groups: readonly FingerprintGroup[], proposed: Recor
     const docType = toDocType(group.docType);
     let explained = false;
     for (const [mechanism, values] of proposals) {
-      if (effectiveView(expectedFingerprintFor(parsed.data, values).parts) === stored) continue;
+      if (effectiveView(expectedFingerprintFor(parsed.data, keepStoredLanguages(values, parsed.data)).parts) === stored) continue;
       const counts = affected.get(mechanism) as Map<ImpactDocType, number>;
       counts.set(docType, (counts.get(docType) ?? 0) + group.documents);
       explained = true;
     }
-    if (!explained && effectiveView(expectedFingerprintFor(parsed.data, all).parts) !== stored) {
+    if (!explained && effectiveView(expectedFingerprintFor(parsed.data, keepStoredLanguages(all, parsed.data)).parts) !== stored) {
       const counts = affected.get(mechanisms[0] as RebuildMechanism) as Map<ImpactDocType, number>;
       counts.set(docType, (counts.get(docType) ?? 0) + group.documents);
     }

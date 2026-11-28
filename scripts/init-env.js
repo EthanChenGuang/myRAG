@@ -316,6 +316,672 @@ RAG_INITIAL_MATCH_COUNT=60
 RAG_SIMILARITY_THRESHOLD=0.45
 
 # -----------------------------
+# RAG: Documents and ingestion
+# -----------------------------
+# Store normalized identifiers per passage (needs the identifier backfill)
+# Identifier index
+RAG_IDENTIFIER_INDEX=false
+# legacy keeps today's document writers; unified switches to the single ingest pipeline
+# Ingest pipeline
+RAG_INGEST_PIPELINE=legacy
+# Document parser: llamaparse | docling
+# Document parser
+RAG_PARSER=llamaparse
+# Time one request may wait for a sidecar parse job, in milliseconds (1000 to 55000)
+# Parse wait budget (ms)
+RAG_PARSE_POLL_BUDGET_MS=45000
+# Ask a model to detect the document type when rules are unsure: true | false
+# Model-assisted document type detection
+RAG_DOC_TYPE_LLM_DETECT=false
+# Ask a model to extract invoice fields when rules find none: true | false
+# Model-assisted invoice extraction
+RAG_INVOICE_LLM_EXTRACT=false
+# Source sync: full reconcile interval and age limit (days), and the share of a connection's documents above which a full listing pauses for confirmation (0.05 to 1)
+# Full reconcile interval (days)
+RAG_SOURCE_RECONCILE_INTERVAL_DAYS=7
+# Reconcile age limit (days)
+RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=7
+# Pause above this share of documents
+RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=0.3
+# Source sync: files one Purge-mode connection may purge per UTC day from its change feed; the rest wait for confirmation (0 = off)
+# Daily purge limit per connection
+RAG_SOURCE_PURGE_DAILY_CAP=0
+# Create image chunks from PDF pages: true | false
+# PDF image chunks
+RAG_PDF_IMAGE_CHUNKS=false
+# Embedding profile registry: off | on (off keeps the single configured embedding model)
+# Embedding profile registry
+RAG_EMBEDDING_PROFILES=off
+# Domain embedding leg for document types with an active binding: off | on (needs RAG_EMBEDDING_PROFILES=on)
+# Domain embeddings
+RAG_DOMAIN_EMBEDDINGS=off
+# Maximum domain embedding legs per query (0..5; 0 keeps bindings without extra legs)
+# Domain embedding legs per query
+RAG_DOMAIN_EMBEDDING_MAX_LEGS=2
+# Timeout for one domain embedding leg in milliseconds (100..5000)
+# Domain embedding leg timeout (ms)
+RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=800
+# Tenant or traffic-share rollouts of embedding profiles: true | false (false keeps the globally active profiles for every tenant)
+# Tenant or traffic-share rollouts
+RAG_ROLLOUTS=false
+# Fallback host when the Qwen embedding provider is unavailable: openrouter | none
+# Qwen embedding fallback host
+RAG_QWEN_EMBED_FALLBACK=openrouter
+# Primary host for the Qwen embedding provider: deepinfra | openrouter (openrouter needs only OPENROUTER_API_KEY; the fallback then goes to DeepInfra when a key is set)
+# Qwen embedding primary host
+RAG_QWEN_EMBED_PRIMARY=deepinfra
+# Fine-tuned embedding slots: off | on (any other value is off). Bind, consent and activation are CLI-only (npm run rag:embedding)
+# Fine-tuned embeddings
+RAG_FINETUNE=off
+# Shared key for the fine-tuned slot endpoints (may stay empty on a private network)
+# Slot endpoint API key
+RAG_FT_EMBED_API_KEY=
+# Slot A: OpenAI-compatible base URL (POST {base}/embeddings), model version id, query and document prompts
+# Slot A base URL
+RAG_FT_SLOT_A_BASE_URL=
+# Slot A model version
+RAG_FT_SLOT_A_MODEL=
+# Slot A query prompt
+RAG_FT_SLOT_A_QUERY_PROMPT=
+# Slot A document prompt
+RAG_FT_SLOT_A_DOCUMENT_PROMPT=
+# Slot B: same settings as slot A
+# Slot B base URL
+RAG_FT_SLOT_B_BASE_URL=
+# Slot B model version
+RAG_FT_SLOT_B_MODEL=
+# Slot B query prompt
+RAG_FT_SLOT_B_QUERY_PROMPT=
+# Slot B document prompt
+RAG_FT_SLOT_B_DOCUMENT_PROMPT=
+# Host for the OpenAI embedding model: openai | openrouter (openrouter sends embedding requests to OpenRouter with OPENROUTER_API_KEY, same model and vectors; the OpenAI Batch API is then unavailable and backfills embed in sync)
+# OpenAI embedding host
+RAG_OPENAI_EMBEDDINGS_VIA=openai
+# Parse routing: fixed | tiered (tiered needs unified pipeline and async ingest)
+# Parse routing
+RAG_PARSE_ROUTING=fixed
+# Allow cloud parsers (LlamaParse and premium): true | false
+# Allow cloud parsers
+RAG_PARSER_ALLOW_CLOUD=true
+# Premium page budget per month for tiered routing (0 = unlimited reporting only)
+# Premium page budget per month
+RAG_PARSE_PREMIUM_PAGE_BUDGET=0
+# Maximum premium pages per document under tiered routing
+# Premium pages per document
+RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC=200
+# Escalate failing page ranges one tier: on | off
+# Parse escalation
+RAG_PARSE_ESCALATION=on
+# Vision-model page detection under tiered routing: true | false
+# Vision-model page detection
+RAG_PARSE_VLM_DETECT=false
+# Vision model override (empty = image captioning model)
+# Vision model
+RAG_PARSE_VLM_MODEL=
+# Queue ingestion jobs instead of inline processing: off | on (on needs unified pipeline)
+# Queued ingestion
+RAG_INGEST_ASYNC=off
+# Publish chunks incrementally while parsing: true | false
+# Progressive publishing
+RAG_PARSE_PROGRESSIVE=false
+# Embedding batch mode for backfill: sync | batch_api
+# Embedding batch mode
+RAG_EMBED_BATCH_MODE=sync
+# Browser realtime job updates (Supabase broadcast): true | false
+# Realtime job updates
+NEXT_PUBLIC_RAG_INGEST_REALTIME=false
+# Ledger workers and the app must use the Supabase project HTTPS URL (PostgREST), never a direct Postgres DSN.
+
+# Supported languages, comma-separated registry codes (e.g. zh,en,it). Empty = not configured; set them in the Languages panel
+# Supported languages
+RAG_SUPPORTED_LANGUAGES=
+# Primary language: one of RAG_SUPPORTED_LANGUAGES (empty = not configured)
+# Primary language
+RAG_PRIMARY_LANGUAGE=
+# Language-aware chunking, sentence splitting and OCR: off | on
+# Language-aware ingestion
+RAG_LANGUAGE_AWARE_INGEST=off
+# Query language confidence: mapped | calibrated (mapped keeps the three values 1, 0.5 and empty)
+# Language confidence
+RAG_LANG_CONFIDENCE=mapped
+# Repeat table headers in split table chunks: profile | always
+# Table header repeat
+RAG_TABLE_HEADER_REPEAT=always
+# Add "column = value" lines per table row to the search text: true | false
+# Table row serialization
+RAG_TABLE_ROW_SERIALIZATION=false
+# Image caption language: en | document
+# Image caption language
+RAG_CAPTION_LANGUAGE=en
+# BGE-M3 serving (Phase 3.2.1): hosted | sidecar
+# BGE-M3 serving
+RAG_BGE_M3_SERVING=hosted
+# Host for hosted BGE-M3 calls: deepinfra | openrouter (openrouter uses OPENROUTER_API_KEY, pins the DeepInfra upstream and records host openrouter; verify with npm run rag:embedding -- verify-route bge-m3)
+# BGE-M3 hosted route
+RAG_BGE_M3_VIA=deepinfra
+# Search-only translations of document chunks: off | on
+# Document translation
+RAG_DOC_TRANSLATION=off
+# Translation model override (empty = RAG_QUERY_LLM_MODEL)
+# Translation model
+RAG_DOC_TRANSLATION_MODEL=
+# Suggest scope tags for new documents: true | false
+# Scope tag suggestions
+RAG_SCOPE_TAG_SUGGEST=false
+# Detect possible older versions of new documents: off | on
+# Supersession detection
+RAG_SUPERSESSION_DETECT=off
+# Read effective dates with a model when rules find none: true | false
+# Model-assisted effective dates
+RAG_EFFECTIVE_DATE_LLM_EXTRACT=false
+# Templated collections (Phase 3.3)
+# Split documents at the headings of the workspace's section rule set (needs the unified ingest pipeline): off | on
+# Section rules
+RAG_SECTION_RULES=off
+# Remove repeated page lines before chunking (needs the unified ingest pipeline): off | detect | rules | both
+# Page boilerplate removal
+RAG_PAGE_BOILERPLATE=off
+# Store schema-checked attributes with documents and chunks (needs the unified ingest pipeline): true | false
+# Document attributes
+RAG_DOC_ATTRIBUTES=false
+# Add the rendered attribute header line to embedding and keyword text (needs RAG_DOC_ATTRIBUTES=true): true | false
+# Attribute header in search text
+RAG_ATTRIBUTE_HEADER=false
+# Voyage embeddings
+# Voyage API key
+VOYAGE_API_KEY=
+# Voyage base URL
+VOYAGE_BASE_URL=https://api.voyageai.com/v1
+# DeepInfra embeddings (OpenAI-compatible)
+# DeepInfra API key
+DEEPINFRA_API_KEY=
+# DeepInfra base URL
+DEEPINFRA_BASE_URL=https://api.deepinfra.com/v1/openai
+# SharePoint Online and OneDrive for Business connectors (empty keys use the Nango ids sharepoint-online and one-drive)
+# Enable SharePoint and OneDrive
+NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED=false
+# SharePoint integration key
+NANGO_SHAREPOINT_INTEGRATION_KEY=
+# OneDrive integration key
+NANGO_ONEDRIVE_INTEGRATION_KEY=
+
+# -----------------------------
+# RAG: Query
+# -----------------------------
+# Terminology dictionary (v2 only): query expansion, dense variant, missed-query mining
+# Terminology query expansion
+RAG_TERMINOLOGY=false
+# Terminology dense variant
+RAG_TERMINOLOGY_DENSE=false
+# Terminology mining
+RAG_TERMINOLOGY_MINING=false
+# Query rewriting before retrieval; false keeps today's behaviour and every switch below is inert while it is false
+# Query layer
+RAG_QUERY_LAYER=false
+# Query-layer framework
+RAG_QUERY_FRAMEWORK=llamaindex
+# Query model
+RAG_QUERY_LLM_MODEL=openai/gpt-4.1-nano
+# Condense follow-up questions
+RAG_QUERY_CONDENSE=true
+# Expand with paraphrases
+RAG_QUERY_EXPAND=true
+# Decompose compound questions
+RAG_QUERY_DECOMPOSE=true
+# Translate for cross-language search
+RAG_QUERY_TRANSLATE=true
+# Normalize relative dates
+RAG_QUERY_DATE_NORMALIZE=true
+# Hypothetical answer (HyDE) variant
+RAG_QUERY_HYDE=false
+# Profiles without translation
+RAG_QUERY_TRANSLATE_DISABLED_PROFILES=
+# Voice transforms
+RAG_QUERY_VOICE_TRANSFORMS=condense_history,normalize_dates
+# Phase 6.2 query-layer additions; inert while RAG_QUERY_LAYER=false except RAG_WHATSAPP_HISTORY, which applies to the WhatsApp channel
+# History fallback variant
+RAG_QUERY_HISTORY_FALLBACK=true
+# Sub-question completeness check
+RAG_QUERY_DECOMPOSE_COMPLETENESS=true
+# Sub-question filters
+RAG_QUERY_SUBQ_FILTERS=false
+# Answer per sub-question
+RAG_DECOMPOSED_ANSWER=true
+# WhatsApp conversation history
+RAG_WHATSAPP_HISTORY=false
+# Translation glossary
+RAG_TRANSLATION_GLOSSARY=false
+# Sidecar language detector
+RAG_LANGID_SIDECAR=false
+# Speculative retrieval
+RAG_SPECULATIVE_RETRIEVAL=false
+# Auto model routing
+RAG_MODEL_ROUTING=off
+# Routing fast model
+RAG_ROUTING_FAST_MODEL=anthropic/claude-haiku-5.5
+# Routing quality model
+RAG_ROUTING_QUALITY_MODEL=anthropic/claude-sonnet-5.5
+# Scope gate
+RAG_SCOPE_GATE=false
+# Answer cache backend: off | pgvector | redisvl (REDIS_URL is read by the sidecar for redisvl only)
+# Semantic cache backend
+RAG_SEMANTIC_CACHE=off
+# Cached answer lifetime (seconds)
+RAG_SEMANTIC_CACHE_TTL=3600
+# Cached refusal lifetime (seconds)
+RAG_SEMANTIC_CACHE_REFUSAL_TTL=600
+# Cache hit max distance
+RAG_SEMANTIC_CACHE_MAX_DISTANCE=0.05
+# Store embed widget answers
+RAG_SEMANTIC_CACHE_EMBED_STORE=false
+
+# -----------------------------
+# RAG: Retrieval
+# -----------------------------
+# legacy keeps today's retrieval path; unified switches to the staged pipeline
+# Retrieval pipeline
+RAG_PIPELINE=legacy
+# Stages to skip, comma-separated (empty runs every stage)
+# Disabled stages
+RAG_DISABLED_STAGES=
+# Per-stage time budgets as stage=ms,stage=ms (empty uses the built-in budgets)
+# Stage timeouts
+RAG_STAGE_TIMEOUTS=
+# Lexical hybrid search leg
+# Lexical search leg
+RAG_LEXICAL_SEARCH=false
+# Parent chunks and pgvector scan
+# Parent-child expansion
+RAG_PARENT_CHILD=false
+# HNSW iterative scan
+RAG_HNSW_ITERATIVE_SCAN=off
+# Document access groups: off | on (off: every member sees every document)
+# Document access groups
+RAG_DOC_ACCESS_GROUPS=off
+# Exact-scan row cutoff
+RAG_EXACT_SCAN_CUTOFF=0
+# Query translation before lexical tokenization
+# Lexical query translation
+RAG_LEXICAL_TRANSLATION=false
+# Dictionary terms match as single lexical tokens (needs relex)
+# Dictionary terms as single search terms
+RAG_LEXICAL_DICTIONARY=false
+# Italian stemming in lexical text (needs relex)
+# Italian stemming
+RAG_LEXICAL_STEM_IT=false
+# Lexical leg scoring: ts_rank_cd or bm25 (bm25 needs RAG_PIPELINE=v2, RAG_LEXICAL_SEARCH=true and npm run rag:lexstats)
+# Lexical scoring
+RAG_LEXICAL_SCORING=ts_rank_cd
+# BM25 term-frequency saturation, 0.5 to 3
+# BM25 k1
+RAG_LEXICAL_BM25_K1=1.2
+# BM25 length normalisation, 0 to 1
+# BM25 b
+RAG_LEXICAL_BM25_B=0.75
+# BM25 document frequency: raw, or cluster to count a duplicate cluster once (needs bm25 and RAG_DUP_CLUSTERS=true)
+# BM25 document frequency
+RAG_LEXICAL_DF_MODE=raw
+# Requests may ask for earlier document versions (needs RAG_LEXICAL_SEARCH=true)
+# Version scope filter
+RAG_VERSION_SCOPE=false
+# Embedded chat may request earlier versions only while this and RAG_VERSION_SCOPE are on
+# Version scope in embedded chat
+RAG_EMBED_VERSION_SCOPE=false
+# Structured table row lookup (needs the table-rows backfill)
+# Table row lookup
+RAG_TABLE_LOOKUP=false
+# Limit retrieval to passages carrying a named identifier (needs RAG_IDENTIFIER_INDEX=true)
+# Identifier filter
+RAG_IDENTIFIER_FILTER=false
+# Emergency override for pool/cap/topk (operator only)
+# Retrieval params override (emergency)
+RAG_RETRIEVAL_PARAMS_OVERRIDE=
+# Tenant for embedded chat: s:default | o:<uuid> | u:<uuid> (empty means s:default in single-tenant, fails closed in multi-tenant)
+# Embedded chat tenant
+RAG_EMBED_TENANT=
+# Access-group key embedded chat and WhatsApp answer for (empty: documents visible to everyone only)
+# Embedded chat access group
+RAG_EMBED_ACCESS_GROUP=
+# Look up exact identifiers (invoice numbers, contract ids) before vector search: true | false
+# Exact identifier lookup
+RAG_EXACT_ID_LOOKUP=false
+# Recheck before rerank that each candidate's document still exists and is current: true | false
+# Source recheck before rerank
+RAG_SOURCE_RECHECK=false
+# Document scope tags at upload and in retrieval filters: true | false
+# Scope tags
+RAG_SCOPE_TAGS=false
+# Exclude documents outside their effective dates from answers: true | false
+# Effective dates
+RAG_EFFECTIVE_DATES=false
+# Limit or rank retrieval by matched attributes (needs RAG_DOC_ATTRIBUTES=true and RAG_PIPELINE=v2): off | hard | soft
+# Attribute filter
+RAG_ATTRIBUTE_FILTER=off
+# Numbers with unit symbols match as single lexical tokens (needs relex): true | false
+# Numbers with units as single search terms
+RAG_LEXICAL_QUANTITY=false
+
+# -----------------------------
+# RAG: Reranking and context
+# -----------------------------
+# Reranker: none | auto | cohere | voyage | local_bm25
+# auto uses Cohere when COHERE_API_KEY is set and a local fallback otherwise
+# Reranker
+RAG_RERANKER=none
+# Chat rerank tier
+RAG_RERANK_TIER_CHAT=quality
+# Voice rerank tier
+RAG_RERANK_TIER_VOICE=fast
+# Per-language Voyage rerank model, e.g. zh=rerank-2.5
+# Voyage rerank model by language
+RAG_RERANK_VOYAGE_MODEL_BY_LANG=
+# Cohere API key
+COHERE_API_KEY=
+# Cohere base URL
+COHERE_BASE_URL=
+# Refusal and context assembly
+# Threshold refusal
+RAG_REFUSAL_THRESHOLD=false
+# Fallback refusal floor when no calibrated rerank cell applies: similarity | legacy_rule
+# Refusal floor
+RAG_REFUSAL_FLOOR=similarity
+# Context edge order
+RAG_CONTEXT_EDGE_ORDER=false
+# Context compression
+RAG_CONTEXT_COMPRESSION=false
+# Context token budget
+RAG_CONTEXT_TOKEN_BUDGET=6000
+# Group near-duplicate passages across documents (needs the dup-cluster backfill)
+# Duplicate clusters
+RAG_DUP_CLUSTERS=false
+# Result diversity: off | collapse | mmr
+# Result diversity
+RAG_RESULT_DIVERSITY=off
+
+# -----------------------------
+# RAG: Answers and citations
+# -----------------------------
+# Chat answer style
+# classic: headed markdown answer with a closing paragraph of follow-up offers (default)
+# concise: one-line answer, short fact bullets, then --- and up to 3 "↳ " follow-up questions
+# Answer style
+RAG_ANSWER_STYLE=classic
+# Earlier assistant answers are not evidence: on knowledge-base turns, tell the model to take facts only
+# from this turn's context and tool results and to correct an earlier unsupported answer (default false)
+# Earlier answers are not evidence
+RAG_HISTORY_NOT_EVIDENCE=false
+# Inline citations on knowledge-base answers
+# Inline citations
+RAG_CITATIONS=false
+# Route Claude models to the Anthropic API with Claude Citations
+# Claude Citations
+RAG_CLAUDE_CITATIONS=false
+# Anthropic API key for Claude Citations (never logged)
+# Anthropic API key
+ANTHROPIC_API_KEY=
+# Anthropic API base URL; empty uses https://api.anthropic.com/v1 (set only for tests and recorded streams)
+# Anthropic base URL
+ANTHROPIC_BASE_URL=
+# Score answers for groundedness after the stream (sidecar)
+# Groundedness scoring
+RAG_GROUNDEDNESS=false
+# Allow the Vectara hosted groundedness scorer
+# Vectara hosted scorer
+RAG_GROUNDEDNESS_VECTARA_OPT_IN=false
+# Groundedness scoring timeout in milliseconds
+# Groundedness timeout (ms)
+RAG_GROUNDEDNESS_TIMEOUT_MS=20000
+# Premise sent to the scorer, in cl100k tokens
+# Groundedness premise cap (tokens)
+RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=3000
+# Multi-tenant only: set after the Vectara data-retention terms were recorded in live verification
+# Multi-tenant Vectara acknowledgement
+RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=false
+# Refusal, notice and badge texts from the language registry (needs supported languages)
+# Language registry texts
+RAG_REGISTRY_TEXTS=false
+# Answer the covered part and name what the documents do not cover
+# Partial answer rule
+RAG_PARTIAL_ANSWER_RULE=false
+# Do not answer from documents on a neighbouring subject
+# Context relevance rule
+RAG_CONTEXT_RELEVANCE_RULE=false
+# One citation per factual sentence and marks on uncited sentences (needs RAG_CITATIONS or RAG_CLAUDE_CITATIONS)
+# Citation per sentence
+RAG_CITATION_PER_SENTENCE=false
+# Check each sentence against the documents after the answer (needs RAG_GROUNDEDNESS)
+# Claim check
+RAG_CLAIM_CHECK=false
+# Judge model for languages the groundedness scorer does not cover (needs RAG_GROUNDEDNESS_JUDGE_MODEL)
+# Judge model for uncovered languages
+RAG_GROUNDEDNESS_LLM_JUDGE=false
+# Judge model id; answer sentences and their document passages go to this model's provider
+# Judge model
+RAG_GROUNDEDNESS_JUDGE_MODEL=
+# Output-length cap for knowledge-base answers: off | auto | a positive integer of at least 256
+# Answer length limit
+RAG_MAX_OUTPUT_TOKENS=off
+# Label each document's version and effective date, and answer from the latest
+# Version labels
+RAG_VERSION_LABELS=false
+# Calculator tool for arithmetic over document numbers
+# Calculation tool
+RAG_CALC_TOOL=false
+# Recompute arithmetic written in answers and mark results that do not match
+# Calculation check
+RAG_CALC_CHECK=false
+# Fit the prompt to the model's context window before sending it
+# Prompt budget
+RAG_PROMPT_BUDGET=false
+# When documents do not fit the window: truncate | refine (refine needs RAG_PROMPT_BUDGET)
+# Context overflow
+RAG_CONTEXT_OVERFLOW=truncate
+
+# -----------------------------
+# RAG: Evaluation
+# -----------------------------
+# Eval endpoint exposes document content; keep it off in production
+# Evaluation endpoint
+RAG_EVAL_ENDPOINT_ENABLED=false
+# Shared secret for the eval endpoint (at least 32 characters)
+# Evaluation endpoint secret
+RAG_EVAL_SECRET=
+# Multi-tenant scopes the eval endpoint may read, comma-separated org:<uuid> or user:<uuid> (empty denies all)
+# Evaluation allowed scopes
+RAG_EVAL_ALLOWED_SCOPES=
+# Expert review queue and weekly mining (off answers 404)
+# Expert review queue
+RAG_DOMAIN_EXPERT_REVIEW=false
+# Check RAG-affecting settings before a Config UI save: off | warn | enforce (off saves at once, as before)
+# Setting check before save
+RAG_CONFIG_GATE=off
+# Add a live chat-model layer to the setting check (uses model credit; no effect while RAG_CONFIG_GATE=off)
+# Live layer of the setting check
+RAG_CONFIG_GATE_LIVE=false
+# Weekly representative sample into the review queue (needs RAG_RETRIEVAL_LOG=masked_query and RAG_DOMAIN_EXPERT_REVIEW=true)
+# Representative sample
+RAG_REPRESENTATIVE_SAMPLE=false
+
+# -----------------------------
+# RAG: Vector backends
+# -----------------------------
+# Where chat retrieval runs: pgvector | weaviate | qdrant (external backends apply only with RAG_PIPELINE=v2)
+# Chat retrieval backend
+RAG_RETRIEVAL_BACKEND=pgvector
+# Where voice retrieval runs: pgvector | weaviate | qdrant (set separately from chat)
+# Voice retrieval backend
+RAG_RETRIEVAL_BACKEND_VOICE=pgvector
+# Shared secret for the vector sync drain and reconcile calls (at least 32 characters)
+# Vector sync secret
+RAG_VECTOR_SYNC_SECRET=
+# Largest sync lag in seconds before an external index counts as not ready
+# Max sync lag (seconds)
+RAG_VECTOR_SYNC_MAX_LAG_SECONDS=300
+# Weaviate endpoint URL
+# Weaviate URL
+WEAVIATE_URL=
+# Weaviate write API key (sync only, never logged)
+# Weaviate write API key
+WEAVIATE_API_KEY=
+# Weaviate read-only API key used by retrieval
+# Weaviate read API key
+WEAVIATE_READ_API_KEY=
+# Qdrant endpoint URL
+# Qdrant URL
+QDRANT_URL=
+# Qdrant write API key (sync only, never logged)
+# Qdrant write API key
+QDRANT_API_KEY=
+# Qdrant read-only API key used by retrieval
+# Qdrant read API key
+QDRANT_READ_API_KEY=
+
+# -----------------------------
+# RAG: Security
+# -----------------------------
+# Signing secret for voice retrieval tokens (at least 32 characters)
+# Voice token secret
+RAG_VOICE_TOKEN_SECRET=
+# Lifetime of a voice retrieval token in seconds
+# Voice token lifetime (seconds)
+RAG_VOICE_TOKEN_TTL_SECONDS=3600
+# Wrap retrieved chunks in tagged <doc> blocks with an untrusted-content notice
+# Context tagging
+RAG_CONTEXT_TAGGING=false
+# Retrieval-time injection check: off | flag | drop | downweight (drop is recommended; downweight is weaker than drop)
+# Retrieval-time injection check
+RAG_INJECTION_CHECK=off
+# Prompt Guard 2 detector in the sidecar (optional; en and it only)
+# Prompt Guard detector
+RAG_INJECTION_PROMPT_GUARD=false
+# Lakera Guard hosted detector (sends chunk text to Lakera, a third party)
+# Lakera Guard hosted detector
+RAG_INJECTION_LAKERA=false
+# Lakera Guard API key (never logged)
+# Lakera Guard API key
+LAKERA_GUARD_API_KEY=
+# Lakera Guard base URL; empty uses the default Lakera host (regional hosts such as the EU one are allowed)
+# Lakera Guard base URL
+LAKERA_GUARD_BASE_URL=
+# Multi-tenant only: set after the Lakera data-retention terms were recorded in live verification
+# Multi-tenant Lakera acknowledgement
+RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=false
+# Tool results (web search, MCP) in the model context: off | tag | tag_and_flag
+# Tool result guard
+RAG_TOOL_RESULT_GUARD=off
+# Render markdown images in answers only from allowed hosts (inlined at build time; needs a rebuild)
+# Answer image allowlist
+NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=false
+# Links and sign-in requests in answers: off | flag | enforce
+# Answer guard
+RAG_OUTPUT_GUARD=off
+# Record security events with the document's uploader (ids only)
+# Security events
+RAG_SECURITY_EVENTS=false
+# Open an alert above this many events from one uploader; 0 means no alerts
+# Uploader alert threshold
+RAG_UPLOADER_ALERT_THRESHOLD=0
+# Alert window in hours (1 to 720)
+# Uploader alert window (hours)
+RAG_UPLOADER_ALERT_WINDOW_HOURS=24
+# Hold uploads of an alerted uploader: off | manual | auto
+# Hold uploads of alerted uploaders
+RAG_UPLOADER_HOLD=off
+# Prompt injection scan on ingested text: off | quarantine
+# Prompt injection scan
+RAG_INJECTION_SCAN=off
+# Hidden text check at ingestion: off | flag | quarantine
+# Hidden text check
+RAG_HIDDEN_TEXT_CHECK=off
+# Link check at ingestion against the allowlist: off | flag | quarantine
+# Link check at ingestion
+RAG_INGEST_LINK_CHECK=off
+# Allowed link domains, comma-separated (subdomains included)
+# Allowed link domains
+RAG_OUTPUT_LINK_ALLOWLIST=
+# Uploads that need admin approval: off | members | all (needs the unified pipeline)
+# Upload approval
+RAG_UPLOAD_APPROVAL=off
+
+# -----------------------------
+# RAG: Tracing and monitoring
+# -----------------------------
+# Langfuse tracing
+LANGFUSE_ENABLED=false
+# Langfuse public key
+LANGFUSE_PUBLIC_KEY=
+# Secret key (at least 32 characters)
+# Langfuse secret key
+LANGFUSE_SECRET_KEY=
+# Langfuse base URL
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+# Share of requests traced, 0 to 1
+# Trace sample rate
+LANGFUSE_SAMPLE_RATE=0.1
+# Send prompt and answer text to Langfuse (off keeps only metadata)
+# Send prompt and answer text to Langfuse
+LANGFUSE_CAPTURE_CONTENT=false
+# Share of traces queued for human review, 0 to 1
+# Review sample rate
+LANGFUSE_REVIEW_SAMPLE_RATE=0
+# Thumbs up/down feedback on answers
+# Answer feedback
+RAG_ANSWER_FEEDBACK=false
+# Retrieval log: off | ids | masked_query (masked_query is needed for weekly mining)
+# Retrieval log
+RAG_RETRIEVAL_LOG=off
+# Days a retrieval log row is kept, 1 to 365 (other values are read as 30)
+# Log retention (days)
+RAG_RETRIEVAL_LOG_RETENTION_DAYS=30
+# Feedback control under refusals in web chat (needs the retrieval log)
+# Refusal feedback
+RAG_REFUSAL_FEEDBACK=false
+# Answer rating in the embed widget and window (needs the secret below and the retrieval log)
+# Embed answer rating
+RAG_EMBED_FEEDBACK=false
+# Signing secret for embed feedback tokens, at least 32 characters (never logged)
+# Embed feedback secret
+RAG_EMBED_FEEDBACK_SECRET=
+# Count opened sources and citations as a weak signal (needs the retrieval log)
+# Count opened sources
+RAG_SOURCE_OPEN_SIGNAL=false
+# Daily monitor of the retrieval log (needs RAG_RETRIEVAL_LOG at ids or masked_query; off runs nothing and stores nothing)
+# Daily monitor
+RAG_MONITOR=false
+# Optional admin webhook for monitor alerts, https:// only (treated as a secret, never shown or logged)
+# Monitor webhook URL
+RAG_MONITOR_WEBHOOK_URL=
+# Optional HMAC-SHA256 signing secret for webhook deliveries, at least 32 characters (never logged)
+# Monitor webhook signing secret
+RAG_MONITOR_WEBHOOK_SECRET=
+
+# -----------------------------
+# RAG: Sidecar
+# -----------------------------
+# Base URL of the Python sidecar service
+# Sidecar URL
+RAG_SIDECAR_URL=
+# Shared secret for the sidecar (at least 32 characters)
+# Sidecar secret
+RAG_SIDECAR_SECRET=
+# Concurrent voice rooms the app allows (409 voice_busy beyond it); must equal VOICE_AGENT_MAX_SESSIONS on the voice agent
+# Max concurrent voice rooms
+VOICE_MAX_ACTIVE_ROOMS=4
+# Redis URL
+REDIS_URL=
+# Concurrent worker jobs (sidecar)
+# Worker concurrency
+RAG_INGEST_WORKER_CONCURRENCY=2
+# Terminal ingestion jobs older than this many days are archived and purged (maintenance task)
+# Job retention (days)
+RAG_INGEST_JOB_RETENTION_DAYS=90
+# Sidecar maintenance loop interval (seconds); off via RAG_INGEST_MAINTENANCE=off
+# Maintenance interval (seconds)
+RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS=3600
+# Ingestion maintenance
+RAG_INGEST_MAINTENANCE=on
+
+# -----------------------------
 # RAG BEHAVIOR MODE
 # -----------------------------
 # Controls how strictly the AI follows your knowledge base
@@ -324,463 +990,6 @@ RAG_SIMILARITY_THRESHOLD=0.45
 # flexible: Use KB as one source among many, blend naturally
 # bypass: Ignore knowledge base entirely, pure ChatGPT-like behavior
 RAG_BEHAVIOR_MODE=strict
-
-# Chat answer style
-# classic: headed markdown answer with a closing paragraph of follow-up offers (default)
-# concise: one-line answer, short fact bullets, then --- and up to 3 "↳ " follow-up questions
-RAG_ANSWER_STYLE=classic
-
-# Earlier assistant answers are not evidence: on knowledge-base turns, tell the model to take facts only
-# from this turn's context and tool results and to correct an earlier unsupported answer (default false)
-RAG_HISTORY_NOT_EVIDENCE=false
-
-# -----------------------------
-# RAG EVALUATION & SIDECAR
-# -----------------------------
-# Eval endpoint exposes document content; keep it off in production
-RAG_EVAL_ENDPOINT_ENABLED=false
-# Shared secret for the eval endpoint (at least 32 characters)
-RAG_EVAL_SECRET=
-# Multi-tenant scopes the eval endpoint may read, comma-separated org:<uuid> or user:<uuid> (empty denies all)
-RAG_EVAL_ALLOWED_SCOPES=
-# Base URL of the Python sidecar service
-RAG_SIDECAR_URL=
-# Shared secret for the sidecar (at least 32 characters)
-RAG_SIDECAR_SECRET=
-
-# -----------------------------
-# RETRIEVAL PIPELINE
-# -----------------------------
-# legacy keeps today's retrieval path; unified switches to the staged pipeline
-RAG_PIPELINE=legacy
-# Stages to skip, comma-separated (empty runs every stage)
-RAG_DISABLED_STAGES=
-# Per-stage time budgets as stage=ms,stage=ms (empty uses the built-in budgets)
-RAG_STAGE_TIMEOUTS=
-
-# -----------------------------
-# RETRIEVAL V2 (Phase 4 switches — off by default)
-# -----------------------------
-# Lexical hybrid search leg
-RAG_LEXICAL_SEARCH=false
-# Reranker: none | auto | cohere | voyage | local_bm25
-# auto uses Cohere when COHERE_API_KEY is set and a local fallback otherwise
-# With auto and COHERE_API_KEY set, query and candidate text are sent to Cohere (chat, embed, eval; voice stays local)
-RAG_RERANKER=none
-RAG_RERANK_TIER_CHAT=quality
-RAG_RERANK_TIER_VOICE=fast
-# Per-language Voyage rerank model, e.g. zh=rerank-2.5
-RAG_RERANK_VOYAGE_MODEL_BY_LANG=
-COHERE_API_KEY=
-COHERE_BASE_URL=
-# Refusal and context assembly
-RAG_REFUSAL_THRESHOLD=false
-# Fallback refusal floor when no calibrated rerank cell applies: similarity | legacy_rule
-RAG_REFUSAL_FLOOR=similarity
-RAG_CONTEXT_EDGE_ORDER=false
-RAG_CONTEXT_COMPRESSION=false
-RAG_CONTEXT_TOKEN_BUDGET=6000
-# Parent chunks and pgvector scan
-RAG_PARENT_CHILD=false
-RAG_HNSW_ITERATIVE_SCAN=off
-# Document access groups: off | on (off: every member sees every document)
-RAG_DOC_ACCESS_GROUPS=off
-RAG_EXACT_SCAN_CUTOFF=0
-# Query translation before lexical tokenization
-RAG_LEXICAL_TRANSLATION=false
-# Dictionary terms match as single lexical tokens (needs relex)
-RAG_LEXICAL_DICTIONARY=false
-# Italian stemming in lexical text (needs relex)
-RAG_LEXICAL_STEM_IT=false
-# Lexical leg scoring: ts_rank_cd or bm25 (bm25 needs RAG_PIPELINE=v2, RAG_LEXICAL_SEARCH=true and npm run rag:lexstats)
-RAG_LEXICAL_SCORING=ts_rank_cd
-# BM25 term-frequency saturation, 0.5 to 3
-RAG_LEXICAL_BM25_K1=1.2
-# BM25 length normalisation, 0 to 1
-RAG_LEXICAL_BM25_B=0.75
-# BM25 document frequency: raw, or cluster to count a duplicate cluster once (needs bm25 and RAG_DUP_CLUSTERS=true)
-RAG_LEXICAL_DF_MODE=raw
-# Requests may ask for earlier document versions (needs RAG_LEXICAL_SEARCH=true)
-RAG_VERSION_SCOPE=false
-# Embedded chat may request earlier versions only while this and RAG_VERSION_SCOPE are on
-RAG_EMBED_VERSION_SCOPE=false
-# Structured table row lookup (needs the table-rows backfill)
-RAG_TABLE_LOOKUP=false
-# Group near-duplicate passages across documents (needs the dup-cluster backfill)
-RAG_DUP_CLUSTERS=false
-# Result diversity: off | collapse | mmr
-RAG_RESULT_DIVERSITY=off
-# Store normalized identifiers per passage (needs the identifier backfill)
-RAG_IDENTIFIER_INDEX=false
-# Limit retrieval to passages carrying a named identifier (needs RAG_IDENTIFIER_INDEX=true)
-RAG_IDENTIFIER_FILTER=false
-# Terminology dictionary (v2 only): query expansion, dense variant, missed-query mining
-RAG_TERMINOLOGY=false
-RAG_TERMINOLOGY_DENSE=false
-RAG_TERMINOLOGY_MINING=false
-# Emergency override for pool/cap/topk (operator only)
-RAG_RETRIEVAL_PARAMS_OVERRIDE=
-# Tenant for embedded chat: s:default | o:<uuid> | u:<uuid> (empty means s:default in single-tenant, fails closed in multi-tenant)
-RAG_EMBED_TENANT=
-# Access-group key embedded chat and WhatsApp answer for (empty: documents visible to everyone only)
-RAG_EMBED_ACCESS_GROUP=
-# Signing secret for voice retrieval tokens (at least 32 characters)
-RAG_VOICE_TOKEN_SECRET=
-# Lifetime of a voice retrieval token in seconds
-RAG_VOICE_TOKEN_TTL_SECONDS=3600
-# Concurrent voice rooms the app allows (409 voice_busy beyond it); must equal VOICE_AGENT_MAX_SESSIONS on the voice agent
-VOICE_MAX_ACTIVE_ROOMS=4
-
-# -----------------------------
-# VECTOR BACKENDS (Phase 7)
-# -----------------------------
-# Where chat retrieval runs: pgvector | weaviate | qdrant (external backends apply only with RAG_PIPELINE=v2)
-RAG_RETRIEVAL_BACKEND=pgvector
-# Where voice retrieval runs: pgvector | weaviate | qdrant (set separately from chat)
-RAG_RETRIEVAL_BACKEND_VOICE=pgvector
-# Shared secret for the vector sync drain and reconcile calls (at least 32 characters)
-RAG_VECTOR_SYNC_SECRET=
-# Largest sync lag in seconds before an external index counts as not ready
-RAG_VECTOR_SYNC_MAX_LAG_SECONDS=300
-# Weaviate endpoint URL
-WEAVIATE_URL=
-# Weaviate write API key (sync only, never logged)
-WEAVIATE_API_KEY=
-# Weaviate read-only API key used by retrieval
-WEAVIATE_READ_API_KEY=
-# Qdrant endpoint URL
-QDRANT_URL=
-# Qdrant write API key (sync only, never logged)
-QDRANT_API_KEY=
-# Qdrant read-only API key used by retrieval
-QDRANT_READ_API_KEY=
-
-# -----------------------------
-# LANGFUSE TRACING
-# -----------------------------
-LANGFUSE_ENABLED=false
-LANGFUSE_PUBLIC_KEY=
-# Secret key (at least 32 characters)
-LANGFUSE_SECRET_KEY=
-LANGFUSE_BASE_URL=https://cloud.langfuse.com
-# Share of requests traced, 0 to 1
-LANGFUSE_SAMPLE_RATE=0.1
-# Send prompt and answer text to Langfuse (off keeps only metadata)
-LANGFUSE_CAPTURE_CONTENT=false
-# Share of traces queued for human review, 0 to 1
-LANGFUSE_REVIEW_SAMPLE_RATE=0
-
-# -----------------------------
-# VERIFIED CITATIONS AND GROUNDEDNESS
-# -----------------------------
-# Inline citations on knowledge-base answers
-RAG_CITATIONS=false
-# Route Claude models to the Anthropic API with Claude Citations
-RAG_CLAUDE_CITATIONS=false
-# Anthropic API key for Claude Citations (never logged)
-ANTHROPIC_API_KEY=
-# Anthropic API base URL; empty uses https://api.anthropic.com/v1 (set only for tests and recorded streams)
-ANTHROPIC_BASE_URL=
-# Score answers for groundedness after the stream (sidecar)
-RAG_GROUNDEDNESS=false
-# Allow the Vectara hosted groundedness scorer
-RAG_GROUNDEDNESS_VECTARA_OPT_IN=false
-# Groundedness scoring timeout in milliseconds
-RAG_GROUNDEDNESS_TIMEOUT_MS=20000
-# Premise sent to the scorer, in cl100k tokens
-RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=3000
-# Thumbs up/down feedback on answers
-RAG_ANSWER_FEEDBACK=false
-# Multi-tenant only: set after the Vectara data-retention terms were recorded in live verification
-RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=false
-
-# -----------------------------
-# RETRIEVAL LOG AND FEEDBACK
-# -----------------------------
-# Retrieval log: off | ids | masked_query (masked_query is needed for weekly mining)
-RAG_RETRIEVAL_LOG=off
-# Days a retrieval log row is kept, 1 to 365 (other values are read as 30)
-RAG_RETRIEVAL_LOG_RETENTION_DAYS=30
-# Feedback control under refusals in web chat (needs the retrieval log)
-RAG_REFUSAL_FEEDBACK=false
-# Answer rating in the embed widget and window (needs the secret below and the retrieval log)
-RAG_EMBED_FEEDBACK=false
-# Signing secret for embed feedback tokens, at least 32 characters (never logged)
-RAG_EMBED_FEEDBACK_SECRET=
-# Count opened sources and citations as a weak signal (needs the retrieval log)
-RAG_SOURCE_OPEN_SIGNAL=false
-# Expert review queue and weekly mining (off answers 404)
-RAG_DOMAIN_EXPERT_REVIEW=false
-
-# -----------------------------
-# EVALUATION GATES AND MONITORING
-# -----------------------------
-# Check RAG-affecting settings before a Config UI save: off | warn | enforce (off saves at once, as before)
-RAG_CONFIG_GATE=off
-# Add a live chat-model layer to the setting check (uses model credit; no effect while RAG_CONFIG_GATE=off)
-RAG_CONFIG_GATE_LIVE=false
-# Daily monitor of the retrieval log (needs RAG_RETRIEVAL_LOG at ids or masked_query; off runs nothing and stores nothing)
-RAG_MONITOR=false
-# Optional admin webhook for monitor alerts, https:// only (treated as a secret, never shown or logged)
-RAG_MONITOR_WEBHOOK_URL=
-# Optional HMAC-SHA256 signing secret for webhook deliveries, at least 32 characters (never logged)
-RAG_MONITOR_WEBHOOK_SECRET=
-# Weekly representative sample into the review queue (needs RAG_RETRIEVAL_LOG=masked_query and RAG_DOMAIN_EXPERT_REVIEW=true)
-RAG_REPRESENTATIVE_SAMPLE=false
-
-# -----------------------------
-# PROMPT-INJECTION DEFENSE
-# -----------------------------
-# Wrap retrieved chunks in tagged <doc> blocks with an untrusted-content notice
-RAG_CONTEXT_TAGGING=false
-# Retrieval-time injection check: off | flag | drop | downweight (drop is recommended; downweight is weaker than drop)
-RAG_INJECTION_CHECK=off
-# Prompt Guard 2 detector in the sidecar (optional; en and it only)
-RAG_INJECTION_PROMPT_GUARD=false
-# Lakera Guard hosted detector (sends chunk text to Lakera, a third party)
-RAG_INJECTION_LAKERA=false
-# Lakera Guard API key (never logged)
-LAKERA_GUARD_API_KEY=
-# Lakera Guard base URL; empty uses the default Lakera host (regional hosts such as the EU one are allowed)
-LAKERA_GUARD_BASE_URL=
-# Multi-tenant only: set after the Lakera data-retention terms were recorded in live verification
-RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=false
-# Tool results (web search, MCP) in the model context: off | tag | tag_and_flag
-RAG_TOOL_RESULT_GUARD=off
-# Render markdown images in answers only from allowed hosts (inlined at build time; needs a rebuild)
-NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=false
-
-# -----------------------------
-# ANSWER RULES AND OUTPUT SAFETY
-# -----------------------------
-# Refusal, notice and badge texts from the language registry (needs supported languages)
-RAG_REGISTRY_TEXTS=false
-# Answer the covered part and name what the documents do not cover
-RAG_PARTIAL_ANSWER_RULE=false
-# Do not answer from documents on a neighbouring subject
-RAG_CONTEXT_RELEVANCE_RULE=false
-# One citation per factual sentence and marks on uncited sentences (needs RAG_CITATIONS or RAG_CLAUDE_CITATIONS)
-RAG_CITATION_PER_SENTENCE=false
-# Check each sentence against the documents after the answer (needs RAG_GROUNDEDNESS)
-RAG_CLAIM_CHECK=false
-# Judge model for languages the groundedness scorer does not cover (needs RAG_GROUNDEDNESS_JUDGE_MODEL)
-RAG_GROUNDEDNESS_LLM_JUDGE=false
-# Judge model id; answer sentences and their document passages go to this model's provider
-RAG_GROUNDEDNESS_JUDGE_MODEL=
-# Output-length cap for knowledge-base answers: off | auto | a positive integer of at least 256
-RAG_MAX_OUTPUT_TOKENS=off
-# Links and sign-in requests in answers: off | flag | enforce
-RAG_OUTPUT_GUARD=off
-# Label each document's version and effective date, and answer from the latest
-RAG_VERSION_LABELS=false
-# Record security events with the document's uploader (ids only)
-RAG_SECURITY_EVENTS=false
-# Open an alert above this many events from one uploader; 0 means no alerts
-RAG_UPLOADER_ALERT_THRESHOLD=0
-# Alert window in hours (1 to 720)
-RAG_UPLOADER_ALERT_WINDOW_HOURS=24
-# Hold uploads of an alerted uploader: off | manual | auto
-RAG_UPLOADER_HOLD=off
-# Calculator tool for arithmetic over document numbers
-RAG_CALC_TOOL=false
-# Recompute arithmetic written in answers and mark results that do not match
-RAG_CALC_CHECK=false
-# Fit the prompt to the model's context window before sending it
-RAG_PROMPT_BUDGET=false
-# When documents do not fit the window: truncate | refine (refine needs RAG_PROMPT_BUDGET)
-RAG_CONTEXT_OVERFLOW=truncate
-
-# -----------------------------
-# QUERY LAYER
-# -----------------------------
-# Query rewriting before retrieval; false keeps today's behaviour and every switch below is inert while it is false
-RAG_QUERY_LAYER=false
-RAG_QUERY_FRAMEWORK=llamaindex
-RAG_QUERY_LLM_MODEL=openai/gpt-4.1-nano
-RAG_QUERY_CONDENSE=true
-RAG_QUERY_EXPAND=true
-RAG_QUERY_DECOMPOSE=true
-RAG_QUERY_TRANSLATE=true
-RAG_QUERY_DATE_NORMALIZE=true
-RAG_QUERY_HYDE=false
-RAG_QUERY_TRANSLATE_DISABLED_PROFILES=
-RAG_QUERY_VOICE_TRANSFORMS=condense_history,normalize_dates
-# Phase 6.2 query-layer additions; inert while RAG_QUERY_LAYER=false except RAG_WHATSAPP_HISTORY, which applies to the WhatsApp channel
-RAG_QUERY_HISTORY_FALLBACK=true
-RAG_QUERY_DECOMPOSE_COMPLETENESS=true
-RAG_QUERY_SUBQ_FILTERS=false
-RAG_DECOMPOSED_ANSWER=true
-RAG_WHATSAPP_HISTORY=false
-RAG_TRANSLATION_GLOSSARY=false
-RAG_LANGID_SIDECAR=false
-RAG_SPECULATIVE_RETRIEVAL=false
-RAG_MODEL_ROUTING=off
-RAG_ROUTING_FAST_MODEL=anthropic/claude-haiku-5.5
-RAG_ROUTING_QUALITY_MODEL=anthropic/claude-sonnet-5.5
-RAG_SCOPE_GATE=false
-
-# -----------------------------
-# SEMANTIC CACHE
-# -----------------------------
-# Answer cache backend: off | pgvector | redisvl (REDIS_URL is read by the sidecar for redisvl only)
-RAG_SEMANTIC_CACHE=off
-RAG_SEMANTIC_CACHE_TTL=3600
-RAG_SEMANTIC_CACHE_REFUSAL_TTL=600
-RAG_SEMANTIC_CACHE_MAX_DISTANCE=0.05
-RAG_SEMANTIC_CACHE_EMBED_STORE=false
-REDIS_URL=
-
-# -----------------------------
-# INGESTION AND EMBEDDING PROFILES
-# -----------------------------
-# legacy keeps today's document writers; unified switches to the single ingest pipeline
-RAG_INGEST_PIPELINE=legacy
-# Document parser: llamaparse | docling
-RAG_PARSER=llamaparse
-# Time one request may wait for a sidecar parse job, in milliseconds (1000 to 55000)
-RAG_PARSE_POLL_BUDGET_MS=45000
-# Ask a model to detect the document type when rules are unsure: true | false
-RAG_DOC_TYPE_LLM_DETECT=false
-# Ask a model to extract invoice fields when rules find none: true | false
-RAG_INVOICE_LLM_EXTRACT=false
-# Look up exact identifiers (invoice numbers, contract ids) before vector search: true | false
-RAG_EXACT_ID_LOOKUP=false
-# Recheck before rerank that each candidate's document still exists and is current: true | false
-RAG_SOURCE_RECHECK=false
-# Source sync: full reconcile interval and age limit (days), and the share of a connection's documents above which a full listing pauses for confirmation (0.05 to 1)
-RAG_SOURCE_RECONCILE_INTERVAL_DAYS=7
-RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=7
-RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=0.3
-# Source sync: files one Purge-mode connection may purge per UTC day from its change feed; the rest wait for confirmation (0 = off)
-RAG_SOURCE_PURGE_DAILY_CAP=0
-# Create image chunks from PDF pages: true | false
-RAG_PDF_IMAGE_CHUNKS=false
-# Prompt injection scan on ingested text: off | quarantine
-RAG_INJECTION_SCAN=off
-# Embedding profile registry: off | on (off keeps the single configured embedding model)
-RAG_EMBEDDING_PROFILES=off
-# Domain embedding leg for document types with an active binding: off | on (needs RAG_EMBEDDING_PROFILES=on)
-RAG_DOMAIN_EMBEDDINGS=off
-# Maximum domain embedding legs per query (0..5; 0 keeps bindings without extra legs)
-RAG_DOMAIN_EMBEDDING_MAX_LEGS=2
-# Timeout for one domain embedding leg in milliseconds (100..5000)
-RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=800
-# Fallback host when the Qwen embedding provider is unavailable: openrouter | none
-RAG_QWEN_EMBED_FALLBACK=openrouter
-# Primary host for the Qwen embedding provider: deepinfra | openrouter (openrouter needs only OPENROUTER_API_KEY; the fallback then goes to DeepInfra when a key is set)
-RAG_QWEN_EMBED_PRIMARY=deepinfra
-# Fine-tuned embedding slots: off | on (any other value is off). Bind, consent and activation are CLI-only (npm run rag:embedding)
-RAG_FINETUNE=off
-# Shared key for the fine-tuned slot endpoints (may stay empty on a private network)
-RAG_FT_EMBED_API_KEY=
-# Slot A: OpenAI-compatible base URL (POST {base}/embeddings), model version id, query and document prompts
-RAG_FT_SLOT_A_BASE_URL=
-RAG_FT_SLOT_A_MODEL=
-RAG_FT_SLOT_A_QUERY_PROMPT=
-RAG_FT_SLOT_A_DOCUMENT_PROMPT=
-# Slot B: same settings as slot A
-RAG_FT_SLOT_B_BASE_URL=
-RAG_FT_SLOT_B_MODEL=
-RAG_FT_SLOT_B_QUERY_PROMPT=
-RAG_FT_SLOT_B_DOCUMENT_PROMPT=
-# Host for the OpenAI embedding model: openai | openrouter (openrouter sends embedding requests to OpenRouter with OPENROUTER_API_KEY, same model and vectors; the OpenAI Batch API is then unavailable and backfills embed in sync)
-RAG_OPENAI_EMBEDDINGS_VIA=openai
-
-# -----------------------------
-# INGESTION (Phase 3.1 queue)
-# -----------------------------
-# Parse routing: fixed | tiered (tiered needs unified pipeline and async ingest)
-RAG_PARSE_ROUTING=fixed
-# Allow cloud parsers (LlamaParse and premium): true | false
-RAG_PARSER_ALLOW_CLOUD=true
-# Premium page budget per month for tiered routing (0 = unlimited reporting only)
-RAG_PARSE_PREMIUM_PAGE_BUDGET=0
-# Maximum premium pages per document under tiered routing
-RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC=200
-# Escalate failing page ranges one tier: on | off
-RAG_PARSE_ESCALATION=on
-# Vision-model page detection under tiered routing: true | false
-RAG_PARSE_VLM_DETECT=false
-# Vision model override (empty = image captioning model)
-RAG_PARSE_VLM_MODEL=
-# Queue ingestion jobs instead of inline processing: off | on (on needs unified pipeline)
-RAG_INGEST_ASYNC=off
-# Concurrent worker jobs (sidecar)
-RAG_INGEST_WORKER_CONCURRENCY=2
-# Terminal ingestion jobs older than this many days are archived and purged (maintenance task)
-RAG_INGEST_JOB_RETENTION_DAYS=90
-# Sidecar maintenance loop interval (seconds); off via RAG_INGEST_MAINTENANCE=off
-RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS=3600
-RAG_INGEST_MAINTENANCE=on
-# Publish chunks incrementally while parsing: true | false
-RAG_PARSE_PROGRESSIVE=false
-# Embedding batch mode for backfill: sync | batch_api
-RAG_EMBED_BATCH_MODE=sync
-# Browser realtime job updates (Supabase broadcast): true | false
-NEXT_PUBLIC_RAG_INGEST_REALTIME=false
-# Ledger workers and the app must use the Supabase project HTTPS URL (PostgREST), never a direct Postgres DSN.
-
-# -----------------------------
-# LANGUAGES AND INGESTION HARDENING (Phase 3.2)
-# -----------------------------
-# Supported languages, comma-separated registry codes (e.g. zh,en,it). Empty = not configured; set them in the Languages panel
-RAG_SUPPORTED_LANGUAGES=
-# Primary language: one of RAG_SUPPORTED_LANGUAGES (empty = not configured)
-RAG_PRIMARY_LANGUAGE=
-# Language-aware chunking, sentence splitting and OCR: off | on
-RAG_LANGUAGE_AWARE_INGEST=off
-# Repeat table headers in split table chunks: profile | always
-RAG_TABLE_HEADER_REPEAT=always
-# Add "column = value" lines per table row to the search text: true | false
-RAG_TABLE_ROW_SERIALIZATION=false
-# Image caption language: en | document
-RAG_CAPTION_LANGUAGE=en
-# BGE-M3 serving (Phase 3.2.1): hosted | sidecar
-RAG_BGE_M3_SERVING=hosted
-# Host for hosted BGE-M3 calls: deepinfra | openrouter (openrouter uses OPENROUTER_API_KEY, pins the DeepInfra upstream and records host openrouter; verify with npm run rag:embedding -- verify-route bge-m3)
-RAG_BGE_M3_VIA=deepinfra
-# Search-only translations of document chunks: off | on
-RAG_DOC_TRANSLATION=off
-# Translation model override (empty = RAG_QUERY_LLM_MODEL)
-RAG_DOC_TRANSLATION_MODEL=
-# Hidden text check at ingestion: off | flag | quarantine
-RAG_HIDDEN_TEXT_CHECK=off
-# Link check at ingestion against the allowlist: off | flag | quarantine
-RAG_INGEST_LINK_CHECK=off
-# Allowed link domains, comma-separated (subdomains included)
-RAG_OUTPUT_LINK_ALLOWLIST=
-# Uploads that need admin approval: off | members | all (needs the unified pipeline)
-RAG_UPLOAD_APPROVAL=off
-# Document scope tags at upload and in retrieval filters: true | false
-RAG_SCOPE_TAGS=false
-# Suggest scope tags for new documents: true | false
-RAG_SCOPE_TAG_SUGGEST=false
-# Detect possible older versions of new documents: off | on
-RAG_SUPERSESSION_DETECT=off
-# Exclude documents outside their effective dates from answers: true | false
-RAG_EFFECTIVE_DATES=false
-# Read effective dates with a model when rules find none: true | false
-RAG_EFFECTIVE_DATE_LLM_EXTRACT=false
-# Templated collections (Phase 3.3)
-# Split documents at the headings of the workspace's section rule set (needs the unified ingest pipeline): off | on
-RAG_SECTION_RULES=off
-# Remove repeated page lines before chunking (needs the unified ingest pipeline): off | detect | rules | both
-RAG_PAGE_BOILERPLATE=off
-# Store schema-checked attributes with documents and chunks (needs the unified ingest pipeline): true | false
-RAG_DOC_ATTRIBUTES=false
-# Add the rendered attribute header line to embedding and keyword text (needs RAG_DOC_ATTRIBUTES=true): true | false
-RAG_ATTRIBUTE_HEADER=false
-# Limit or rank retrieval by matched attributes (needs RAG_DOC_ATTRIBUTES=true and RAG_PIPELINE=v2): off | hard | soft
-RAG_ATTRIBUTE_FILTER=off
-# Numbers with unit symbols match as single lexical tokens (needs relex): true | false
-RAG_LEXICAL_QUANTITY=false
-
-# Voyage embeddings
-VOYAGE_API_KEY=
-VOYAGE_BASE_URL=https://api.voyageai.com/v1
-# DeepInfra embeddings (OpenAI-compatible)
-DEEPINFRA_API_KEY=
-DEEPINFRA_BASE_URL=https://api.deepinfra.com/v1/openai
 
 # -----------------------------
 # RAG CONFIGURATION (Unified Optimized System)
@@ -908,11 +1117,6 @@ NANGO_HOST=https://api.nango.dev
 NANGO_SUPPORTED_FILE_TYPES=pdf,doc,docx,txt,md,html,pptx,xlsx
 NANGO_MAX_FILES_PER_SYNC=100
 NANGO_SYNC_INTERVAL_HOURS=1
-
-# SharePoint Online and OneDrive for Business connectors (empty keys use the Nango ids sharepoint-online and one-drive)
-NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED=false
-NANGO_SHAREPOINT_INTEGRATION_KEY=
-NANGO_ONEDRIVE_INTEGRATION_KEY=
 
 # -----------------------------
 # CONNECTORS MANAGEMENT

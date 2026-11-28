@@ -245,11 +245,11 @@ describe('breakdown and contract (D-25, D-26)', () => {
 describe('rule-kind registry (LANG-10 hook point)', () => {
   const withLanguageDrop: MonitorAlertsConfig = {
     ...config,
-    rules: [...config.rules, { id: 'language_drop', kind: 'language_drop', min_sample: 50, enabled: true }],
+    rules: [...config.rules.filter((rule) => rule.id !== 'language_drop'), { id: 'language_drop', kind: 'language_drop', min_sample: 50, enabled: true }],
   };
 
-  it('has no language_drop entry in this phase', () => {
-    expect(registryEntryFor('language_drop')).toBeUndefined();
+  it('registers language_drop as a context entry (Phase 7 plan 07-46)', () => {
+    expect(registryEntryFor('language_drop')?.input).toBe('context');
     expect(registryEntryFor('rate')?.input).toBe('daily_cells');
     expect(registryEntryFor('drift')?.input).toBe('report');
     expect(registryEntryFor('offline_online_gap')?.input).toBe('report');
@@ -259,7 +259,8 @@ describe('rule-kind registry (LANG-10 hook point)', () => {
   it('skips a configured kind without an entry with one [Monitor] warning and returns the other candidates', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const cells = seed({ days: 5, rates: { refused: (i) => (i >= 5 ? 0.38 : 0.12) } });
-    const result = run(cells, 5, withLanguageDrop);
+    const { language_drop: _registered, ...withoutLanguageDrop } = RULE_KIND_REGISTRY;
+    const result = evaluateRules({ cells, day: dayOf(FIRST, 5), config: withLanguageDrop, budgets, registry: withoutLanguageDrop });
     expect(result.rulesUnregistered).toEqual(['language_drop']);
     expect(result.candidates.map((c) => c.rule)).toEqual(['refusal_rate']);
     expect(warn).toHaveBeenCalledTimes(1);

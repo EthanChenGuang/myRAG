@@ -17,6 +17,7 @@ This document is the working guide for anyone, human or AI assistant (Claude, Co
 | Frontend | Next.js 16.0.10 App Router (React Compiler enabled), React 19.2.1, TypeScript, Tailwind CSS, Framer Motion, Zustand |
 | Backend | Next.js API routes, Supabase (PostgreSQL + pgvector HNSW, storage, auth, realtime) |
 | AI Stack | Vercel AI SDK 6.0.3 (OpenRouter, OpenAI, Anthropic, DeepSeek, Gemini, MCP integrations) |
+| Vector backends | pgvector (default and fallback); optional Weaviate and Qdrant fed from Supabase by the vector sync outbox (`RAG_RETRIEVAL_BACKEND`) |
 | Voice | LiveKit + AssemblyAI STT + Resemble.ai TTS + Silero VAD |
 | Integrations | WhatsApp (Baileys), Stripe & Polar payments, Nango (Google Drive/Notion/Dropbox), Meshy/Luma/Runway |
 
@@ -69,6 +70,20 @@ myrag/
 - Watch console logs for `[Document Search]` to analyse retrieval behaviour.
 - Latency budgets (p50/p95, text chat and voice) live in `eval/config/latency-budgets.json`; eval reports show per-stage latency against them; report-only until live measurements ratify them.
 - All knowledge-base retrieval goes through `@/lib/rag` (resolve a `TenantScope` with `resolveTenantScope` / `resolveEmbedScope` / `resolveVoiceScope`, then `runRetrieval`); `scripts/ci/check-rag-boundary.mjs` fails on embedding, retrieval-RPC or reranker use elsewhere. Tenant checks have no off switch. Retrieval searches on the service-role client, so `SUPABASE_SERVICE_ROLE_KEY` must be set. Multi-tenant embed needs `RAG_EMBED_TENANT`; voice needs `RAG_VOICE_TOKEN_SECRET` (32+ chars).
+- Retrieval backend: `RAG_RETRIEVAL_BACKEND=pgvector` (default; `weaviate | qdrant`) for chat and embed, `RAG_RETRIEVAL_BACKEND_VOICE=pgvector` for voice; external backends run only under `RAG_PIPELINE=v2`. A tenant whose external index is not ready (collection missing, sync lag above `RAG_VECTOR_SYNC_MAX_LAG_SECONDS`), or a backend that errors or is slow, is answered from pgvector and the trace is marked degraded. External vector stores always filter by tenant, and every hit is re-validated against Supabase before use.
+
+### RAG pipeline
+- The pipeline lives in `src/lib/rag/` (ingest, query layer, v2 stages, backends, sync, generation); the Python sidecar is `rag-sidecar/` and the eval harness `eval/`. The operator and developer guide is [README_RAG_PIPELINE.md](README_RAG_PIPELINE.md): sidecar, generated provider and switch tables, vector sync, backends, evaluation workflow and data flow.
+- pgvector stays the default backend; external vector stores always filter by tenant, and every hit they return is re-validated against Supabase. Weaviate and Qdrant are copies: a trigger-fed outbox and a drain worker sync them from Supabase (`npm run rag:vector-sync`, `npm run rag:reconcile`, scheduler recipe `supabase/optional/vector-sync-schedule.sql`); log lines carry the `[Vector Sync]` prefix with counts and ids only.
+- Release defaults change only through the pre-registered regression (`python -m rag_eval.regression plan|run|decide`, test-split ledger `eval/decisions/test-split-ledger.jsonl`) and a live record; the review queue, promotion and `rag_eval.failure_report` are in the Phase 5.1.1 lines below.
+- Purges: a lineage purge also deletes its points from Weaviate and Qdrant through the outbox (migration 0740); disabled targets are still purged while they hold the tenant's index; `rag_vector_sync_purge_status` reports each target's state, and `npm run rag:reconcile` re-opens a purge whose points reappear and serves the tenant from pgvector meanwhile. No switch.
+- Source-of-truth recheck: on Weaviate and Qdrant the Supabase re-validation always runs, whatever `RAG_SOURCE_RECHECK` says; dropped stale ids are counted as `stale_index_drop` and queued for a bounded repair (at most 200 ids per target and tenant per minute). pgvector is unchanged.
+- Access groups on external backends: every point carries `access_groups` (migration 0742; re-run it after 0702); while `RAG_DOC_ACCESS_GROUPS=on` (Phase 4.3's switch, default `off`) every query and prefetch filters by the caller's groups and hits are re-validated with `rag_validate_chunks_for_groups`.
+- Per-language monitoring: the trace `languages` block (codes only), `/api/rag/admin/language-quality` (404 while `RAG_MONITOR` is off, migration 0743) and the `language_drop` rule in `eval/config/monitor-alerts.json`. `RAG_LANG_CONFIDENCE=mapped` (default, today's confidence; `calibrated` uses the bins written by `npx tsx eval/harness/calibrate-language-confidence.mts`).
+- Rollouts: `RAG_ROLLOUTS=false` (default; off equals today: nothing is read, the route answers 404) serves a candidate embedding profile, chunking profile or rebuild run to some tenants: `npm run rag:rollout -- start|include|exclude|rollback|promote|list` (per-tenant rollback is `exclude`; `promote` passes only the gate in `config/rag/rollout-policy.json`, else exit 2), Config UI Rollouts panel, migration 0744.
+- Languages: `npm run rag:languages -- baseline|plan|add|remove|selection|rebuild` changes the supported languages; adding one needs its eval baseline (`language_baseline_missing`), removal is query-side only and deletes nothing (migration 0745).
+- Red team: `npm run rag:red-team -- run --tenant <key>` attacks a deployment with `eval/fixtures/red-team/attack-corpus.jsonl` and opens review items (needs `RAG_DOMAIN_EXPERT_REVIEW=true`, else it skips with exit 4); Config UI Red-team runs panel, migration 0741. The red-team corpus uses invented neutral nouns only and never domain example strings.
+- Decision records: `rag_eval.regression decide` (and `annotate --record <file> --plan <plan>`) writes the cost (`config/rag/price-table.json`; unknown prices read `not_provided`, unrecorded quantities `not_measured`), latency and per-language blocks; a language below its baseline keeps the incumbent (`language_below_baseline`). Guide: README_RAG_PIPELINE.md.
 
 ### Image RAG
 - Images uploaded via Config UI are captioned by GPT-4o Vision and embedded.
@@ -140,6 +155,7 @@ myrag/
 - Cluster-aware document frequency: `RAG_LEXICAL_DF_MODE=raw` (`cluster`, query-side) counts a term once per duplicate cluster instead of once per chunk. It needs an effective `bm25` and `RAG_DUP_CLUSTERS=true` (clusters built with `npm run rag:dup-clusters`), and a tenant whose cluster statistics are ready (`npm run rag:lexstats -- enable --cluster`, then `check --cluster`). Fallback ladder, never a refusal: a tenant not cluster-ready, or a cluster call refused with `lexical_cluster_stats_not_ready` (one retry), gets raw BM25 (`lexical_df_cluster_unavailable`; `lexical_df_cluster` when cluster DF served); a failed retry or raw statistics not ready fall to `ts_rank_cd` as above. `raw` sends no new argument and writes no cluster row. Not flipped (`eval/decisions/04.4-lexical-scoring.md`, section "Cluster-aware DF").
 - Statistics are per tenant (`rag_lexical_stats_state`, `rag_lexical_df`, `rag_lexical_corpus`, `rag_lexical_stats_pending`, `rag_lexical_cluster_dirty`, `rag_lexical_cluster_units`; RLS on, service role only): a tenant's document frequencies and lengths never mix with another tenant's. Under `bm25` publish and relex compact the tenant they wrote; `npm run rag:lexstats -- <enable|rebuild|compact|check|status|disable>` (`--tenant <key>` or `--all`) maintains them by hand (`--cluster` on enable, rebuild, check and disable for the cluster statistics) and prints tenant-key hashes and counts only. The optional `supabase/optional/lexical-stats-schedule.sql` (pg_cron, opt-in) compacts what those callers left. The purge hook is `rag_purge_hook_lexical_stats`.
 - Migrations 0900 to 0904 are not folded into the setup files. `rag_bm25_search_chunks` (0904) repeats every filter of `hybrid_search_chunks`: any migration that adds a filter parameter to `hybrid_search_chunks` must add it, with the same predicate, to `rag_bm25_search_chunks` from its newest body (`tests/rag-db/bm25-filter-parity.test.mts` fails otherwise); after re-running 0904, re-run every later file that redefines it. Migrations 0905 (cluster statistics) and 0938 (`p_df_mode` on `rag_bm25_search_chunks`; 0935 is an empty placeholder) are not folded: after re-running 0901, 0902 or 0903, re-run 0905; after re-running 0904, re-run 0932, 0936 and then 0938; after re-running 0932 or 0936, re-run what follows it in that order.
+- External backends (LEX-05): Weaviate and Qdrant score with `RAG_LEXICAL_BM25_K1` and `RAG_LEXICAL_BM25_B` while `bm25` is effective (the default pair otherwise), and each collection records its pair. Weaviate binds it into the index: a collection built with another pair is not served (pgvector answers, degraded) until `npm run rag:vector-sync -- rebuild-lexical --target <weaviate|qdrant> --confirm` rebuilds it; Qdrant sends the pair per query and only refreshes its record. Without `--confirm` the command only reports (exit 2).
 - Proof: `uv run --directory eval python -m rag_eval.phase44_gate --spec eval/config/phase44-comparison.json --out eval/reports/phase-04.4` (fixture, both modes), with cluster-aware DF `--spec eval/config/phase44-cluster-df-comparison.json --out eval/reports/phase-04.4-cluster-df`; real set: `python -m rag_eval.lexical_compare` (from `eval/`).
 
 ### Terminology dictionary (Phase 4.1.1)
@@ -389,7 +405,15 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 | `uv run --directory eval python -m rag_eval.golden_set` | Golden set lifecycle, version and manifest hash |
 | `uv run --directory eval python -m rag_eval.drift` | Weekly query drift against the test set |
 | `uv run --directory eval python -m rag_eval.representativeness` | Test-set coverage of the query clusters |
-| `scripts/init-env.js` | Default environment template |
+| `npm run rag:vector-sync` | Vector sync to Weaviate and Qdrant: `drain`, `backfill --target`, `targets enable\|disable`, `requeue-dead --target`, `status`, `rebuild-lexical --target [--confirm]` |
+| `npm run rag:reconcile` | Compare the external vector stores with Supabase and repair drift |
+| `uv run --directory eval python -m rag_eval.regression` | Release regression: `plan` (pre-registered first), `run`, `decide`; test-split uses go to the ledger |
+| `uv run --directory eval python -m rag_eval.failure_report` | Failure report from the review queue (counts, ids and hashes only) |
+| `npm run rag:rollout` | Staged rollouts per tenant: `start`, `include`, `exclude`, `rollback`, `promote`, `list` (needs `RAG_ROLLOUTS=true`) |
+| `npm run rag:languages` | Add or remove supported languages: `baseline`, `plan`, `add`, `remove`, `selection`, `rebuild` |
+| `npm run rag:red-team` | Red-team run against a deployment: `run --tenant <key>`; successful attacks open review items |
+| `npx tsx eval/harness/calibrate-language-confidence.mts` | Language-confidence calibration (`--check`); the only writer of `eval/config/language-confidence-calibration.json` |
+| `scripts/init-env.js` | Default environment template (managed RAG variables under `# RAG: <group>` banners) |
 
 ---
 
@@ -397,5 +421,6 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 - **[README_VOICE_INTEGRATION.md](README_VOICE_INTEGRATION.md)** – Voice architecture, mobile support, troubleshooting
 - **[README_NANGO_INTEGRATION.md](README_NANGO_INTEGRATION.md)** – Cloud connectors setup
 - **[README_DEPLOYMENT_MODES.md](README_DEPLOYMENT_MODES.md)** – Single vs Multi-tenant
+- **[README_RAG_PIPELINE.md](README_RAG_PIPELINE.md)** – RAG pipeline: sidecar, providers and switches, vector sync, backends, evaluation workflow, data flow ([docs/vendor-data-flow.md](docs/vendor-data-flow.md))
 
 Keep this guide current—when architecture or workflows change, update this file so every agent stays aligned.

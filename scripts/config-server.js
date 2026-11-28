@@ -2,11 +2,12 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
-const { exec, spawn } = require('child_process');
+const { exec, execFile, spawn } = require('child_process');
 const multer = require('multer');
 const security = require('./config-server-security');
 const ragGate = require('./config-server-rag-gate');
 const { formatEnvValue } = require('./config-env-quote');
+const redTeam = require('./config-server-red-team');
 const app = express();
 const PORT = 3333;
 // Loopback only. CONFIG_UI_HOST can override it, but any other value exposes an unauthenticated .env editor to the network.
@@ -826,6 +827,7 @@ ${fullValues.RAG_EMBEDDING_PROFILES !== undefined ? `RAG_EMBEDDING_PROFILES=${fu
 ${fullValues.RAG_DOMAIN_EMBEDDINGS !== undefined ? `RAG_DOMAIN_EMBEDDINGS=${fullValues.RAG_DOMAIN_EMBEDDINGS}` : 'RAG_DOMAIN_EMBEDDINGS=off'}
 ${fullValues.RAG_DOMAIN_EMBEDDING_MAX_LEGS !== undefined ? `RAG_DOMAIN_EMBEDDING_MAX_LEGS=${fullValues.RAG_DOMAIN_EMBEDDING_MAX_LEGS}` : 'RAG_DOMAIN_EMBEDDING_MAX_LEGS=2'}
 ${fullValues.RAG_DOMAIN_EMBEDDING_TIMEOUT_MS !== undefined ? `RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=${fullValues.RAG_DOMAIN_EMBEDDING_TIMEOUT_MS}` : 'RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=800'}
+${fullValues.RAG_ROLLOUTS !== undefined ? `RAG_ROLLOUTS=${fullValues.RAG_ROLLOUTS}` : 'RAG_ROLLOUTS=false'}
 ${fullValues.RAG_QWEN_EMBED_FALLBACK !== undefined ? `RAG_QWEN_EMBED_FALLBACK=${fullValues.RAG_QWEN_EMBED_FALLBACK}` : 'RAG_QWEN_EMBED_FALLBACK=openrouter'}
 ${fullValues.RAG_QWEN_EMBED_PRIMARY !== undefined ? `RAG_QWEN_EMBED_PRIMARY=${fullValues.RAG_QWEN_EMBED_PRIMARY}` : 'RAG_QWEN_EMBED_PRIMARY=deepinfra'}
 ${fullValues.RAG_FINETUNE !== undefined ? `RAG_FINETUNE=${fullValues.RAG_FINETUNE}` : 'RAG_FINETUNE=off'}
@@ -857,6 +859,7 @@ ${fullValues.NEXT_PUBLIC_RAG_INGEST_REALTIME !== undefined ? `NEXT_PUBLIC_RAG_IN
 ${fullValues.RAG_SUPPORTED_LANGUAGES !== undefined ? `RAG_SUPPORTED_LANGUAGES=${fullValues.RAG_SUPPORTED_LANGUAGES}` : 'RAG_SUPPORTED_LANGUAGES='}
 ${fullValues.RAG_PRIMARY_LANGUAGE !== undefined ? `RAG_PRIMARY_LANGUAGE=${fullValues.RAG_PRIMARY_LANGUAGE}` : 'RAG_PRIMARY_LANGUAGE='}
 ${fullValues.RAG_LANGUAGE_AWARE_INGEST !== undefined ? `RAG_LANGUAGE_AWARE_INGEST=${fullValues.RAG_LANGUAGE_AWARE_INGEST}` : 'RAG_LANGUAGE_AWARE_INGEST=off'}
+${fullValues.RAG_LANG_CONFIDENCE !== undefined ? `RAG_LANG_CONFIDENCE=${fullValues.RAG_LANG_CONFIDENCE}` : 'RAG_LANG_CONFIDENCE=mapped'}
 ${fullValues.RAG_TABLE_HEADER_REPEAT !== undefined ? `RAG_TABLE_HEADER_REPEAT=${fullValues.RAG_TABLE_HEADER_REPEAT}` : 'RAG_TABLE_HEADER_REPEAT=always'}
 ${fullValues.RAG_TABLE_ROW_SERIALIZATION !== undefined ? `RAG_TABLE_ROW_SERIALIZATION=${fullValues.RAG_TABLE_ROW_SERIALIZATION}` : 'RAG_TABLE_ROW_SERIALIZATION=false'}
 ${fullValues.RAG_CAPTION_LANGUAGE !== undefined ? `RAG_CAPTION_LANGUAGE=${fullValues.RAG_CAPTION_LANGUAGE}` : 'RAG_CAPTION_LANGUAGE=en'}
@@ -1435,6 +1438,16 @@ ragGate.registerRagGateRoutes(
   }),
 );
 
+// SEC-11: red-team runs started from the Config UI, behind the loopback and CSRF checks; the app confirms an admin first.
+redTeam.registerRedTeamRoutes(
+  app,
+  redTeam.createRedTeamRunner({
+    repoRoot: REPO_ROOT,
+    execFile,
+    appBaseUrl: () => getMainAppBaseUrl(),
+  }),
+);
+
 // API endpoint to create a new .env.local with template
 app.post('/api/config/create', async (req, res) => {
   try {
@@ -1875,6 +1888,7 @@ RAG_EMBEDDING_PROFILES=${getEnvValue('RAG_EMBEDDING_PROFILES') || 'off'}
 RAG_DOMAIN_EMBEDDINGS=${getEnvValue('RAG_DOMAIN_EMBEDDINGS') || 'off'}
 RAG_DOMAIN_EMBEDDING_MAX_LEGS=${getEnvValue('RAG_DOMAIN_EMBEDDING_MAX_LEGS') || '2'}
 RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=${getEnvValue('RAG_DOMAIN_EMBEDDING_TIMEOUT_MS') || '800'}
+RAG_ROLLOUTS=${getEnvValue('RAG_ROLLOUTS') || 'false'}
 RAG_QWEN_EMBED_FALLBACK=${getEnvValue('RAG_QWEN_EMBED_FALLBACK') || 'openrouter'}
 RAG_QWEN_EMBED_PRIMARY=${getEnvValue('RAG_QWEN_EMBED_PRIMARY') || 'deepinfra'}
 RAG_FINETUNE=${getEnvValue('RAG_FINETUNE') || 'off'}
@@ -1906,6 +1920,7 @@ NEXT_PUBLIC_RAG_INGEST_REALTIME=${getEnvValue('NEXT_PUBLIC_RAG_INGEST_REALTIME')
 RAG_SUPPORTED_LANGUAGES=${getEnvValue('RAG_SUPPORTED_LANGUAGES') || ''}
 RAG_PRIMARY_LANGUAGE=${getEnvValue('RAG_PRIMARY_LANGUAGE') || ''}
 RAG_LANGUAGE_AWARE_INGEST=${getEnvValue('RAG_LANGUAGE_AWARE_INGEST') || 'off'}
+RAG_LANG_CONFIDENCE=${getEnvValue('RAG_LANG_CONFIDENCE') || 'mapped'}
 RAG_TABLE_HEADER_REPEAT=${getEnvValue('RAG_TABLE_HEADER_REPEAT') || 'always'}
 RAG_TABLE_ROW_SERIALIZATION=${getEnvValue('RAG_TABLE_ROW_SERIALIZATION') || 'false'}
 RAG_CAPTION_LANGUAGE=${getEnvValue('RAG_CAPTION_LANGUAGE') || 'en'}
@@ -2428,6 +2443,7 @@ RAG_EMBEDDING_PROFILES=${getEnvValue('RAG_EMBEDDING_PROFILES') || 'off'}
 RAG_DOMAIN_EMBEDDINGS=${getEnvValue('RAG_DOMAIN_EMBEDDINGS') || 'off'}
 RAG_DOMAIN_EMBEDDING_MAX_LEGS=${getEnvValue('RAG_DOMAIN_EMBEDDING_MAX_LEGS') || '2'}
 RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=${getEnvValue('RAG_DOMAIN_EMBEDDING_TIMEOUT_MS') || '800'}
+RAG_ROLLOUTS=${getEnvValue('RAG_ROLLOUTS') || 'false'}
 RAG_QWEN_EMBED_FALLBACK=${getEnvValue('RAG_QWEN_EMBED_FALLBACK') || 'openrouter'}
 RAG_QWEN_EMBED_PRIMARY=${getEnvValue('RAG_QWEN_EMBED_PRIMARY') || 'deepinfra'}
 RAG_FINETUNE=${getEnvValue('RAG_FINETUNE') || 'off'}
@@ -2459,6 +2475,7 @@ NEXT_PUBLIC_RAG_INGEST_REALTIME=${getEnvValue('NEXT_PUBLIC_RAG_INGEST_REALTIME')
 RAG_SUPPORTED_LANGUAGES=${getEnvValue('RAG_SUPPORTED_LANGUAGES') || ''}
 RAG_PRIMARY_LANGUAGE=${getEnvValue('RAG_PRIMARY_LANGUAGE') || ''}
 RAG_LANGUAGE_AWARE_INGEST=${getEnvValue('RAG_LANGUAGE_AWARE_INGEST') || 'off'}
+RAG_LANG_CONFIDENCE=${getEnvValue('RAG_LANG_CONFIDENCE') || 'mapped'}
 RAG_TABLE_HEADER_REPEAT=${getEnvValue('RAG_TABLE_HEADER_REPEAT') || 'always'}
 RAG_TABLE_ROW_SERIALIZATION=${getEnvValue('RAG_TABLE_ROW_SERIALIZATION') || 'false'}
 RAG_CAPTION_LANGUAGE=${getEnvValue('RAG_CAPTION_LANGUAGE') || 'en'}
@@ -3722,8 +3739,66 @@ app.get('/api/config/query-layer/status', (req, res) => {
 });
 
 const languageSettings = require('./rag/language-settings-context');
+const languageChangePlan = require('../config/rag/language-change-plan.cjs');
 
 const MAX_LANGUAGE_ENTRIES = 64;
+const LANGUAGE_LIVE_BASELINE_DIR = path.join('eval', 'golden', 'private', 'baselines', 'languages');
+const LANGUAGE_SELECTION_TIMEOUT_MS = 60000;
+
+/** LANG-11: a baseline record (fixture or live) exists for the language and names it. */
+function languageBaselineRecorded(code, root = REPO_ROOT) {
+  const relative = languageChangePlan.baselineRelativePath(code);
+  if (!relative) return false;
+  for (const file of [path.join(root, relative), path.join(root, LANGUAGE_LIVE_BASELINE_DIR, `${code}.json`)]) {
+    try {
+      if (fs.existsSync(file) && JSON.parse(fs.readFileSync(file, 'utf8')).language === code) return true;
+    } catch {
+      // an unreadable record is not a baseline
+    }
+  }
+  return false;
+}
+
+/** LANG-11 change plan for a proposed set against the saved one; the same planner as `npm run rag:languages`. */
+function planLanguagesRequest(body, { root = REPO_ROOT, env, registry, rerankerOverrides } = {}) {
+  const values = env || languageSettings.readEnvFileValues(path.join(root, '.env.local'));
+  const context = languageSettings.buildValidationContext({ root, env: values, registry, rerankerOverrides });
+  const saved = languageSettings.normalizeLanguageSettings(values.RAG_SUPPORTED_LANGUAGES, values.RAG_PRIMARY_LANGUAGE, context.registry);
+  const input = body && typeof body === 'object' ? body : {};
+  const plan = languageChangePlan.planLanguageChange(
+    { current: saved.languages, proposed: input.languages, primary: input.primary },
+    { ...context, hasBaseline: (code) => languageBaselineRecorded(code, root) },
+  );
+  const notVerifiedReason = languageSettings.activeProfileCheck(context);
+  return { plan, verifiedAgainstActiveProfile: notVerifiedReason === null, notVerifiedReason };
+}
+
+/**
+ * The language_add group counts under the proposed set (`npm run rag:languages -- selection`, a dry run in the app's code). Codes
+ * reach the child only after the planner accepted them, as separate arguments. null when the database is not configured or the
+ * count fails: the panel then falls back to the impact dialog's own count.
+ */
+function countLanguageAddSelection(normalized) {
+  return new Promise((resolve) => {
+    const args = ['tsx', 'src/lib/rag/lang/cli.ts', 'selection', '--languages', normalized.languages.join(','), '--primary', normalized.primary];
+    execFile('npx', args, { cwd: REPO_ROOT, timeout: LANGUAGE_SELECTION_TIMEOUT_MS, env: process.env }, (error, stdout) => {
+      if (error) return resolve(null);
+      try {
+        const line = String(stdout).trim().split('\n').pop();
+        const parsed = JSON.parse(line);
+        const groups = parsed && parsed.groups;
+        const ok = groups && ['und', 'scanned', 'stale'].every((key) => Number.isInteger(groups[key]) && groups[key] >= 0) && Number.isInteger(parsed.total);
+        resolve(ok ? { groups: { und: groups.und, scanned: groups.scanned, stale: groups.stale }, total: parsed.total } : null);
+      } catch {
+        resolve(null);
+      }
+    });
+  });
+}
+
+function languageAddCounter() {
+  return typeof app.locals.languageAddCounts === 'function' ? app.locals.languageAddCounts : countLanguageAddSelection;
+}
 
 /** D-07 for the config-server entry point; the POST handler and the entry-point parity test call it. */
 function validateLanguagesRequest(body, { root = REPO_ROOT, env, registry, rerankerOverrides } = {}) {
@@ -3750,7 +3825,7 @@ function describeLanguageSettings(root = REPO_ROOT) {
   const notVerifiedReason = languageSettings.activeProfileCheck(context);
   const packs = languageSettings.completePacks(context.registry).map((pack) => {
     const reasons = languageSettings.packBlockingReasons(pack.code, context);
-    return {
+    const entry = {
       code: pack.code,
       nativeName: pack.native_name,
       englishName: pack.name,
@@ -3758,6 +3833,9 @@ function describeLanguageSettings(root = REPO_ROOT) {
       selectable: reasons.length === 0,
       reasons,
     };
+    // LANG-11: adding a language to a saved set needs its baseline first; the panel blocks the row before any dialog.
+    if (saved.configured && !saved.languages.includes(pack.code) && !languageBaselineRecorded(pack.code, root)) entry.baselineMissing = true;
+    return entry;
   });
   return {
     configured: saved.configured,
@@ -3799,10 +3877,21 @@ app.post('/api/config/languages', async (req, res) => {
       details: [{ path: 'languages', message: 'languages must be a list of language codes and primary a code' }],
     });
   }
+  if (body.preview !== undefined && typeof body.preview !== 'boolean') {
+    return res.status(400).json({ success: false, error: 'Invalid request body', details: [{ path: 'preview', message: 'preview must be a boolean' }] });
+  }
   try {
-    const result = validateLanguagesRequest({ languages: body.languages, primary: body.primary });
-    if (!result.ok) {
-      return res.status(400).json({ success: false, error: 'Invalid language settings', details: result.errors });
+    const { plan, verifiedAgainstActiveProfile, notVerifiedReason } = planLanguagesRequest({ languages: body.languages, primary: body.primary });
+    if (!plan.ok) {
+      return res.status(400).json({ success: false, error: 'Invalid language settings', details: plan.refusals });
+    }
+    const result = { normalized: plan.normalized, warnings: plan.warnings, verifiedAgainstActiveProfile, notVerifiedReason };
+    // Only a change to a saved set carries the LANG-11 fields; the first choice and an unchanged save answer as in Phase 3.2.
+    const changed = !plan.firstChoice && (plan.added.length > 0 || plan.removed.length > 0);
+    const change = changed ? { added: plan.added, removed: plan.removed, notes: plan.notes, rebuild: plan.rebuild } : {};
+    if (body.preview === true) {
+      const selection = plan.rebuild ? await languageAddCounter()(plan.normalized) : null;
+      return res.json({ success: true, preview: true, languages: plan.normalized.languages, primary: plan.normalized.primary, added: plan.added, removed: plan.removed, notes: plan.notes, rebuild: plan.rebuild, firstChoice: plan.firstChoice, selection, warnings: plan.warnings });
     }
     const languagesEnvPath = path.join(REPO_ROOT, '.env.local');
     const beforeValues = fs.existsSync(languagesEnvPath) ? dotenv.parse(fs.readFileSync(languagesEnvPath, 'utf8')) : {};
@@ -3810,11 +3899,14 @@ app.post('/api/config/languages', async (req, res) => {
     const gate = await ragGate.guardEnvWrite({ before: beforeValues, after: afterValues, ragGate: body.ragGate, repoRoot: REPO_ROOT, makeClient: app.locals.ragGateMakeClient, route: 'languages' });
     if (!gate.ok) return res.status(gate.status).json(gate.body);
     languageSettings.writeLanguageVariables(languagesEnvPath, result.normalized);
-    console.log('[RAG Languages] saved', { languages: result.normalized.languages, primary: result.normalized.primary });
+    console.log('[RAG Languages] saved', { languages: result.normalized.languages, primary: result.normalized.primary, added: plan.added.length, removed: plan.removed.length });
+    const selection = plan.rebuild ? await languageAddCounter()(plan.normalized) : null;
     return res.json({
       success: true,
       languages: result.normalized.languages,
       primary: result.normalized.primary,
+      ...change,
+      ...(plan.rebuild ? { selection } : {}),
       warnings: result.warnings,
       verifiedAgainstActiveProfile: result.verifiedAgainstActiveProfile,
       notVerifiedReason: result.notVerifiedReason,
@@ -5200,4 +5292,4 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings, answerRulesModelFamily, answerRulesTokenizerFamily, buildRagPipelineManifest };
+module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, planLanguagesRequest, describeLanguageSettings, answerRulesModelFamily, answerRulesTokenizerFamily, buildRagPipelineManifest };

@@ -37,6 +37,7 @@ function point(tenantKey: string, documentId: string, dims: number): VectorPoint
       lexical_text: 'neutral sample words',
       content_hash: 'h',
       lexical_version: 1,
+      access_groups: ['all'],
     },
   };
 }

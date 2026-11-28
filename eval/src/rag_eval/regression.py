@@ -66,12 +66,25 @@ from rag_eval.regression_rules import (
     primary_outcome,
     run_invalid_reason,
 )
+from rag_eval.release_costs import (
+    PRICE_TABLE_PATH,
+    PriceTable,
+    PriceTableError,
+    RunInputs,
+    annotate_blocks,
+    language_quality,
+    languages_below_baseline,
+    load_price_table,
+    read_ingest_outputs,
+    run_languages,
+)
 from rag_eval.report import RETRIEVAL_TOTAL
 from rag_eval.traces import load_traces
 
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_HARNESS = 3
+EXIT_DIFFERS = 1
 
 LEDGER_PATH = REPO_ROOT / "eval" / "decisions" / "test-split-ledger.jsonl"
 RECORD_PATH = REPO_ROOT / "eval" / "config" / "release-defaults.json"
@@ -81,6 +94,8 @@ NOISE_PATH = REPO_ROOT / "eval" / "config" / "noise.json"
 BUDGETS_PATH = REPO_ROOT / "eval" / "config" / "latency-budgets.json"
 FIXTURE_GOLDEN = REPO_ROOT / "eval" / "fixtures" / "golden.jsonl"
 FIXTURE_MARKDOWN = "defaults-fixtures.md"
+COST_SECTION = "## Cost, latency and per-language quality"
+LANGUAGE_BELOW_BASELINE = "language_below_baseline"
 RUN_INDEX = "regression-run.json"
 STAGE_A_SUFFIX = ".decision.json"
 
@@ -854,6 +869,8 @@ def run_stage_b_tail(ctx: RunContext, forced: set[str]) -> None:
         run_configs[entry.registered.name] = entry.run_config
         ctx.execute(entry.run_config, force=entry.registered.name in forced, registered=entry.registered.name not in forced)
     verdicts, _ = ablation_verdicts(resolved, run_configs, ctx.summaries, base.winner, ctx.settings)
+    executed = {INCUMBENT_CONFIG: _winner_config(ctx.plan, INCUMBENT_CONFIG), **run_configs}
+    verdicts = apply_language_rule(verdicts, executed, ctx.summaries, base.winner, ctx.settings)
     confirm = resolve_confirm(winner, verdicts)
     ctx.execute(confirm, force=CONFIRM_CONFIG in forced, registered=CONFIRM_CONFIG not in forced)
 
@@ -883,6 +900,100 @@ def _summaries_from_index(index: RunIndex) -> tuple[dict[str, RunSummary], dict[
     return summaries, configs
 
 
+def load_run_inputs(index: RunIndex) -> dict[str, RunInputs]:
+    runs: dict[str, RunInputs] = {}
+    for name, entry in index.entries.items():
+        if entry.status != "ran":
+            continue
+        out_dir = Path(entry.out_dir)
+        artifacts = load_artifacts(out_dir)
+        documents, usage = read_ingest_outputs(out_dir)
+        runs[name] = RunInputs(
+            name=name,
+            env=dict(entry.config.env),
+            backend=str(entry.config.overrides.get("backend", INCUMBENT_BACKEND)),
+            embedding_profile=str(entry.config.overrides.get("embedding_profile", LEGACY_PROFILE)),
+            report=artifacts.report,
+            traces=artifacts.traces,
+            summary=summarize(entry.config, artifacts),
+            ingest_documents=documents,
+            ingest_usage=usage,
+        )
+    return runs
+
+
+def _reranker_of(run: RunInputs, overrides_model: Any) -> str:
+    provider = run.env.get("RAG_RERANKER", "none")
+    return f"{provider}:{overrides_model}" if overrides_model else provider
+
+
+def adopted_config_name(record: DefaultsDecision, runs: Mapping[str, RunInputs], index: RunIndex | None = None) -> str:
+    """The run that measured the record's defaults: the confirmatory run when a switch was adopted, else the stage-B
+    config whose profile, reranker and backend the record names (the incumbent when it matches)."""
+    if any(verdict.decision == "adopt" for verdict in record.verdicts) and CONFIRM_CONFIG in runs:
+        return CONFIRM_CONFIG
+    models = {name: entry.config.overrides.get("rerank_model") for name, entry in (index.entries.items() if index else ())}
+    candidates = [
+        name
+        for name, run in sorted(runs.items())
+        if not name.startswith(ABLATE_PREFIX)
+        and name != CONFIRM_CONFIG
+        and run.embedding_profile == record.embedding_profile
+        and run.backend == record.backend
+        and (index is None or _reranker_of(run, models.get(name)) == record.reranker)
+    ]
+    if INCUMBENT_CONFIG in candidates or not candidates:
+        return INCUMBENT_CONFIG
+    return candidates[0]
+
+
+@dataclass(frozen=True)
+class AnnotationInputs:
+    prices: PriceTable
+    budgets: LatencyBudgets
+    budgets_sha256: str
+
+
+def _check_incumbent_run(executed: Mapping[str, RegressionRunConfig], incumbent: Incumbent) -> None:
+    run = executed.get(INCUMBENT_CONFIG)
+    if run is None:
+        return
+    differing = [name for name in DFLT_VARIABLES if run.env.get(name) != incumbent.env.get(name)]
+    if differing:
+        raise RegressionError(
+            f"the incumbent run {INCUMBENT_CONFIG} is not the Phase 4.1 decision for {', '.join(differing)} "
+            f"({incumbent.source.path})"
+        )
+
+
+def apply_language_rule(
+    verdicts: Sequence[SwitchVerdict],
+    executed: Mapping[str, RegressionRunConfig],
+    summaries: Mapping[str, RunSummary],
+    winner_name: str,
+    settings: RuleSettings,
+) -> list[SwitchVerdict]:
+    """ADM-02: an adopted switch whose run leaves an enabled language below the incumbent's value keeps the incumbent."""
+    incumbent = summaries[INCUMBENT_CONFIG]
+    languages = run_languages(incumbent, executed[INCUMBENT_CONFIG].env if INCUMBENT_CONFIG in executed else None)
+    result: list[SwitchVerdict] = []
+    for verdict in verdicts:
+        if verdict.decision != "adopt":
+            result.append(verdict)
+            continue
+        name = f"{ABLATE_PREFIX}{verdict.switch.lower()}"
+        config = executed.get(name)
+        holder = name if config is not None and config.env.get(verdict.switch) == verdict.value else winner_name
+        challenger = summaries.get(holder)
+        rows = language_quality(challenger, incumbent, languages, settings) if challenger is not None else []
+        if languages_below_baseline(rows):
+            verdict = SwitchVerdict.model_validate(
+                {**verdict.model_dump(), "decision": "keep_incumbent", "reason": LANGUAGE_BELOW_BASELINE}
+            )
+        result.append(verdict)
+    return result
+
+
 def decide_stage_a(plan: RegressionPlan, plan_sha: str, index: RunIndex, settings: RuleSettings, clock: Clock) -> StageADecision:
     summaries, _ = _summaries_from_index(index)
     ranking = rank_stage_a(plan, summaries, settings)
@@ -910,15 +1021,18 @@ def decide_stage_b(
     *,
     fixtures: bool,
     clock: Clock,
+    annotation: AnnotationInputs | None = None,
 ) -> StageBOutcome:
     summaries, executed = _summaries_from_index(index)
     if INCUMBENT_CONFIG not in summaries:
         raise RegressionError(f"the incumbent run {INCUMBENT_CONFIG} is missing; run the plan first")
+    _check_incumbent_run(executed, incumbent)
     base = resolve_stage_b_base(plan, summaries, settings, notes, fixtures=fixtures)
     winner = _winner_config(plan, base.winner)
     resolved = [resolve_ablation(config, winner, incumbent.env) for config in plan.configs if config.name.startswith(ABLATE_PREFIX)]
     run_configs = {base.winner: winner, **{name: config for name, config in executed.items() if name.startswith(ABLATE_PREFIX)}}
     verdicts, skipped = ablation_verdicts(resolved, run_configs, summaries, base.winner, settings)
+    verdicts = apply_language_rule(verdicts, executed, summaries, base.winner, settings)
     confirm_ok, confirm_reason = False, "confirmatory_run_missing"
     if CONFIRM_CONFIG in summaries:
         expected = resolve_confirm(winner, verdicts)
@@ -945,23 +1059,51 @@ def decide_stage_b(
     invalid_runs = sorted(
         (name, reason) for name, summary in summaries.items() if (reason := run_invalid_reason(summary)) is not None
     )
-    decision = DefaultsDecision(
-        provisional="fixtures" if fixtures else None,
-        decided_at=clock(),
-        plan_sha256=plan_sha,
-        primary_metric=plan.primary_metric,
-        incumbent_source=incumbent.source,
-        incumbent=dict(incumbent.env),
-        defaults=defaults,
-        embedding_profile=str(winner.overrides.get("embedding_profile", LEGACY_PROFILE)),
-        reranker=f"{provider}:{model}" if model else provider,
-        backend=base.backend.winner,
-        verdicts=verdicts,
-        backend_comparison=base.backend,
-        config_hashes={name: entry.sha256 for name, entry in sorted(index.entries.items()) if entry.status == "ran"},
-        test_split_uses=plan_uses,
-    )
+    fields: dict[str, Any] = {
+        "provisional": "fixtures" if fixtures else None,
+        "decided_at": clock(),
+        "plan_sha256": plan_sha,
+        "primary_metric": plan.primary_metric,
+        "incumbent_source": incumbent.source,
+        "incumbent": dict(incumbent.env),
+        "defaults": defaults,
+        "embedding_profile": str(winner.overrides.get("embedding_profile", LEGACY_PROFILE)),
+        "reranker": f"{provider}:{model}" if model else provider,
+        "backend": base.backend.winner,
+        "verdicts": verdicts,
+        "backend_comparison": base.backend,
+        "config_hashes": {name: entry.sha256 for name, entry in sorted(index.entries.items()) if entry.status == "ran"},
+        "test_split_uses": plan_uses,
+    }
+    if annotation is None:
+        decision = DefaultsDecision(**fields)
+    else:
+        decision = annotate_decision(DefaultsDecision.model_construct(**fields), index, settings, annotation)
     return StageBOutcome(decision, base, skipped, confirm_ok, confirm_reason, invalid_runs, executed)
+
+
+def annotate_decision(
+    record: DefaultsDecision, index: RunIndex, settings: RuleSettings, annotation: AnnotationInputs
+) -> DefaultsDecision:
+    """The record with the ADM-02 cost, latency and per-language blocks; refuses one that leaves a language below baseline."""
+    runs = load_run_inputs(index)
+    annotated = annotate_blocks(
+        record,
+        runs,
+        incumbent_name=INCUMBENT_CONFIG,
+        adopted_name=adopted_config_name(record, runs, index),
+        prices=annotation.prices,
+        budgets=annotation.budgets,
+        budgets_sha256=annotation.budgets_sha256,
+        settings=settings,
+    )
+    below = languages_below_baseline(annotated.per_language or [])
+    if below:
+        raise RegressionError(
+            f"{LANGUAGE_BELOW_BASELINE}: the adopted configuration leaves {', '.join(below)} below the incumbent; "
+            "no record is written"
+        )
+    return annotated
 
 
 def _fmt(value: float | None, digits: int = 4) -> str:
@@ -1037,6 +1179,79 @@ def render_markdown(outcome: StageBOutcome, plan: RegressionPlan, settings: Rule
     return "\n".join(lines) + "\n"
 
 
+def _usd(amount: Any) -> str:
+    return f"{amount.usd:.6f}" if amount.usd is not None else str(amount.reason)
+
+
+def render_cost_section(decision: DefaultsDecision) -> str:
+    """The ADM-02 numbers of the record, in the same order as the JSON blocks."""
+    lines = [COST_SECTION, ""]
+    cost, latency, languages = decision.cost, decision.latency, decision.per_language
+    if cost is None or latency is None or languages is None:
+        return "\n".join([*lines, "Not annotated.", ""])
+    basis = cost.basis
+    lines += [
+        (
+            f"Price table sha256 `{basis.price_table_sha256}`; basis {basis.kind}; document sample {basis.document_sample}; "
+            f"query sample {basis.query_sample}. An amount without a price reads not_provided, one the run did not record "
+            "not_measured (USD)."
+        ),
+        "",
+        "### Cost per 1,000 documents ingested",
+        "",
+        "| embedding profile | backend | parse | embedding | enrichment | external store |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for row in cost.per_1000_documents:
+        parts = row.documents
+        assert parts is not None
+        lines.append(
+            f"| {row.embedding_profile} | {row.backend} | {_usd(parts.parse)} | {_usd(parts.embedding)} | "
+            f"{_usd(parts.enrichment)} | {_usd(parts.external_store)} |"
+        )
+    lines += ["", "### Cost per 1,000 queries", "", "| config | query embedding | rerank | generation | external store |", "| --- | --- | --- | --- | --- |"]
+    for row in cost.per_1000_queries:
+        queries = row.queries
+        assert queries is not None
+        lines.append(
+            f"| {row.config_name} | {_usd(queries.query_embedding)} | {_usd(queries.rerank)} | "
+            f"{_usd(queries.generation)} | {_usd(queries.external_store)} |"
+        )
+    lines += [
+        "",
+        f"### Latency (budgets sha256 `{latency.budgets_sha256}`)",
+        "",
+        "| config | channel | stage | p50 ms | p95 ms | budget p50 | budget p95 | within budget | report only |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for entry in latency.entries:
+        for value in entry.values:
+            within = "n/a" if value.within_budget is None else ("yes" if value.within_budget else "no")
+            lines.append(
+                f"| {entry.config_name} | {entry.channel} | {value.stage} | {_fmt(value.p50_ms, 1)} | {_fmt(value.p95_ms, 1)} | "
+                f"{_fmt(value.budget_p50_ms, 1)} | {_fmt(value.budget_p95_ms, 1)} | {within} | {'yes' if value.report_only else 'no'} |"
+            )
+    lines += [
+        "",
+        "### Per-language quality against the incumbent",
+        "",
+        "| language | metric | n | value | baseline | difference | band | below baseline | reason |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for row in languages:
+        below = "n/a" if row.below_baseline is None else ("yes" if row.below_baseline else "no")
+        lines.append(
+            f"| {row.language} | {row.metric} | {row.n} | {_fmt(row.value)} | {_fmt(row.baseline)} | {_fmt(row.difference)} | "
+            f"{_fmt(row.band)} | {below} | {row.reason or '-'} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def with_cost_section(markdown: str, decision: DefaultsDecision) -> str:
+    head = markdown.split(f"\n{COST_SECTION}\n", 1)[0].rstrip("\n") + "\n"
+    return f"{head}\n{render_cost_section(decision)}"
+
+
 def markdown_path(decisions_dir: Path, decision: DefaultsDecision) -> Path:
     if decision.provisional == "fixtures":
         return decisions_dir / FIXTURE_MARKDOWN
@@ -1109,6 +1324,18 @@ def _settings_for(plan: RegressionPlan, noise_path: Path, budgets_path: Path) ->
     return RuleSettings.build(
         noise, budgets, gated_slice_prefixes=plan.gated_slice_prefixes, min_gate_n=plan.min_gate_n, alpha=plan.alpha
     )
+
+
+def _annotation_inputs(args: argparse.Namespace) -> AnnotationInputs:
+    try:
+        raw = resolve_cli_path(args.budgets).read_bytes()
+        return AnnotationInputs(
+            prices=load_price_table(resolve_cli_path(args.price_table)),
+            budgets=LatencyBudgets.model_validate_json(raw),
+            budgets_sha256=hashlib.sha256(raw).hexdigest(),
+        )
+    except (OSError, PriceTableError, ValidationError) as exc:
+        raise RegressionError(f"the price table or latency budgets are unreadable: {exc}") from exc
 
 
 def _load_plan(path: Path) -> tuple[RegressionPlan, str]:
@@ -1220,6 +1447,7 @@ def cmd_decide(args: argparse.Namespace, clock: Clock) -> int:
             _load_notes(args.backend_notes),
             fixtures=args.fixtures,
             clock=clock,
+            annotation=_annotation_inputs(args),
         )
     except ValidationError as exc:
         raise RegressionError(
@@ -1229,8 +1457,42 @@ def cmd_decide(args: argparse.Namespace, clock: Clock) -> int:
     markdown = markdown_path(resolve_cli_path(args.decisions_dir), outcome.decision)
     DefaultsDecision.model_validate_json(outcome.decision.model_dump_json())
     _write_text(record, outcome.decision.model_dump_json(indent=2) + "\n")
-    _write_text(markdown, render_markdown(outcome, plan, settings))
+    _write_text(markdown, with_cost_section(render_markdown(outcome, plan, settings), outcome.decision))
     print(f"regression: defaults decision -> {repo_relative(record)}, record -> {repo_relative(markdown)}")
+    return EXIT_OK
+
+
+def _canonical(decision: DefaultsDecision) -> str:
+    return json.dumps(decision.model_dump(mode="json"), sort_keys=True)
+
+
+def cmd_annotate(args: argparse.Namespace) -> int:
+    """Recompute the ADM-02 blocks of an existing stage-B record from its run outputs; --check compares and writes nothing."""
+    plan, plan_sha = _load_plan(args.plan)
+    if plan.stage != "b":
+        raise RegressionError("annotate reads a stage-B plan")
+    record_path = resolve_cli_path(args.record)
+    current = _validate(DefaultsDecision, record_path)
+    if current.plan_sha256 != plan_sha:
+        raise RegressionError(f"{repo_relative(record_path)} was decided under another plan ({current.plan_sha256[:12]})")
+    runs_dir = resolve_cli_path(args.runs_dir) if args.runs_dir else _default_runs_dir(args.plan)
+    index = read_index(runs_dir, plan_sha)
+    if not index.entries:
+        raise RegressionError(f"no run outputs for this plan in {repo_relative(runs_dir)}; annotate needs the stage-B runs")
+    settings = _settings_for(plan, args.noise, args.budgets)
+    annotated = annotate_decision(current, index, settings, _annotation_inputs(args))
+    markdown = markdown_path(resolve_cli_path(args.decisions_dir), annotated)
+    existing_md = markdown.read_text(encoding="utf-8") if markdown.is_file() else ""
+    new_md = with_cost_section(existing_md, annotated)
+    if args.check:
+        if _canonical(annotated) != _canonical(current) or new_md != existing_md:
+            print(f"regression: {repo_relative(record_path)} or {repo_relative(markdown)} differs from the recomputed blocks", file=sys.stderr)
+            return EXIT_DIFFERS
+        print("regression: the record's cost, latency and per-language blocks are current")
+        return EXIT_OK
+    _write_text(record_path, annotated.model_dump_json(indent=2) + "\n")
+    _write_text(markdown, new_md)
+    print(f"regression: annotated {repo_relative(record_path)} and {repo_relative(markdown)}")
     return EXIT_OK
 
 
@@ -1245,6 +1507,7 @@ def build_parser() -> argparse.ArgumentParser:
         cmd.add_argument("--budgets", type=Path, default=BUDGETS_PATH)
         cmd.add_argument("--ledger", type=Path, default=LEDGER_PATH)
         cmd.add_argument("--backend-notes", type=Path, help="JSON {backend: {cost_note, operational_note}}")
+        cmd.add_argument("--price-table", type=Path, default=PRICE_TABLE_PATH)
 
     plan = sub.add_parser("plan", help="write a pre-registered RegressionPlan")
     shared(plan)
@@ -1277,6 +1540,14 @@ def build_parser() -> argparse.ArgumentParser:
     decide.add_argument("--runs-dir", type=Path)
     decide.add_argument("--out", type=Path, help="stage A: decision JSON; stage B: the defaults record")
     decide.add_argument("--decisions-dir", type=Path, default=DECISIONS_DIR)
+
+    annotate = sub.add_parser("annotate", help="write the ADM-02 cost, latency and per-language blocks into a record")
+    shared(annotate)
+    annotate.add_argument("--record", type=Path, default=RECORD_PATH)
+    annotate.add_argument("--plan", type=Path, required=True)
+    annotate.add_argument("--runs-dir", type=Path)
+    annotate.add_argument("--decisions-dir", type=Path, default=DECISIONS_DIR)
+    annotate.add_argument("--check", action="store_true", help="exit 1 when the record on disk differs; write nothing")
     return parser
 
 
@@ -1287,6 +1558,8 @@ def main(argv: list[str] | None = None, *, clock: Clock = utc_now, runner: Harne
             return cmd_plan(args, clock)
         if args.command == "run":
             return cmd_run(args, clock, runner)
+        if args.command == "annotate":
+            return cmd_annotate(args)
         return cmd_decide(args, clock)
     except RegressionError as exc:
         print(f"error: {exc}", file=sys.stderr)

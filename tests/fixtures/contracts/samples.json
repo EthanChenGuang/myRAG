@@ -11408,6 +11408,27 @@
           "kind": "offline_online_gap",
           "metric": "judge_gap",
           "min_sample": 50
+        },
+        {
+          "baseline_min_sample": 200,
+          "enabled": true,
+          "id": "language_drop",
+          "kind": "language_drop",
+          "min_sample": 50,
+          "params": {
+            "language_band_judge_mean": 0.1,
+            "language_band_not_helpful_rate": 0.1,
+            "language_band_refusal_rate": 0.05,
+            "metrics": [
+              "refusal_rate",
+              "not_helpful_rate",
+              "judge_mean"
+            ],
+            "overall_band_judge_mean": 0.05,
+            "overall_band_not_helpful_rate": 0.05,
+            "overall_band_refusal_rate": 0.02,
+            "window_days": 1
+          }
         }
       ],
       "sampling": {

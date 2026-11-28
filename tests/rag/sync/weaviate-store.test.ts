@@ -33,6 +33,7 @@ function point(id: string, tenantKey: string, documentId: string, extra: Partial
       lexical_text: 'neutral sample words',
       content_hash: `hash-${id.slice(-4)}`,
       lexical_version: 1,
+      access_groups: ['all'],
       ...extra,
     },
   };
@@ -117,7 +118,7 @@ describe('weaviate store writes (D-02, D-03, D-07)', () => {
     expect(first.id).toBe(id(1));
     expect(first.vectors).toEqual([1, 0, 0]);
     expect(Object.keys(first.properties).sort()).toEqual(
-      ['content_hash', 'doc_date', 'doc_type', 'document_id', 'language', 'lexical_text', 'lexical_version', 'tenant_key'].sort(),
+      ['access_groups', 'content_hash', 'doc_date', 'doc_type', 'document_id', 'language', 'lexical_text', 'lexical_version', 'tenant_key'].sort(),
     );
     expect(first.properties.doc_date).toBe('2025-03-01T00:00:00Z');
     const [second] = inserts[1].args as Array<{ properties: Record<string, unknown> }>;
