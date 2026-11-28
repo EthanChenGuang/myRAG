@@ -8,7 +8,7 @@ import path from 'node:path';
 import type { PGlite } from '@electric-sql/pglite';
 import { buildIngestFixtureDatabase, partitionIngestModeItems } from '../../eval/harness/ingest-mode.mts';
 import { createFixtureDatabase, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
-import { isQ62Item } from '../../eval/harness/q62-fixtures.mts';
+import { isIsolatedQ62Item } from '../../eval/harness/q62-fixtures.mts';
 
 const ROOT = process.cwd();
 const CORPUS_DIR = path.join(ROOT, 'eval/fixtures/corpus');
@@ -74,9 +74,12 @@ function lines(file: string): string[] {
     .filter((line) => line.trim() !== '');
 }
 
-/** The golden lines that run against the main tenant; the committed q62 items (06.2-22) are left out of the comparison. */
+/**
+ * The golden lines that run against the main tenant; the committed q62 items (06.2-22) and the dominant-language items (06.2-41,
+ * their own isolated tenant) are left out of the comparison.
+ */
 function oldLines(file: string): string[] {
-  return lines(file).filter((line) => !isQ62Item(JSON.parse(line) as { category: string; tags?: string[] }));
+  return lines(file).filter((line) => !isIsolatedQ62Item(JSON.parse(line) as { category: string; tags?: string[] }));
 }
 
 function writeGolden(dir: string, name: string, content: string[]): string {
