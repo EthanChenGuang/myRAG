@@ -42,6 +42,7 @@ import { installFakeModelWindows } from './fake-small-window.mts';
 import { withGeneratorDelays } from './generator-delays.mts';
 import { startFakeGroundedness, type FakeGroundedness } from './fake-groundedness.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, RunConfigError, type RunConfig } from './run-config.mts';
+import { PGVECTOR_SNAPSHOT, prepareExternalBackends, type ExternalBackendId, type PrepareExternalBackendsOptions } from './external-backends.mts';
 import { CACHE_PAIRS_APP_ENV, CACHE_PAIRS_FILE, cachePairOptions, cachePairSpecs, cachePairsRun, runCachePairs } from './cache-pairs.mts';
 
 export type EvalTier = 'smoke' | 'nightly' | 'live';
@@ -162,6 +163,8 @@ export interface InProcessEval {
   fakeQueryLlm?: import('./fake-query-llm.mts').FakeQueryLlm;
   /** D-36: set when the run's effective lexical scoring is bm25 and the fixture tenants' statistics were rebuilt. */
   lexicalStats?: import('./pglite-supabase.mts').RunLexicalStatsReport;
+  /** D-06: the backend the session serves and its index settings (pgvector unless an external backend was prepared). */
+  backendSnapshot?: import('./external-backends.mts').RunBackendSnapshot;
   close: () => Promise<void>;
 }
 
@@ -193,6 +196,8 @@ export interface RunEvalOptions {
   ingestBuildEnv?: Record<string, string>;
   /** Reuse a prepared in-process eval session (the harness keeps the edge open). */
   retainInProcess?: InProcessEval;
+  /** Test seams for the external-backend seed (plan 07-25); never set by the CLI. */
+  externalBackendTestHooks?: Pick<PrepareExternalBackendsOptions, 'wrapStore' | 'indexStateForTests'>;
   /** Named configuration: an env overlay (in-process only) and eval overrides sent with every request. */
   runConfig?: RunConfig;
   /** Sets options.citations on every request; implies includeAnswer. */
@@ -419,6 +424,10 @@ export async function prepareInProcessEval(options: {
    * list seeds nothing. A caller-built ingestFixture is seeded only when it holds no layer of these rows yet.
    */
   terminologySeed?: readonly import('./pglite-supabase.mts').TerminologySeedRow[];
+  /** D-12, D-17: external backends the run's overrides select; seeded through the outbox and reconciled before the first request. */
+  externalBackends?: readonly ExternalBackendId[];
+  /** Test seams of prepareExternalBackends (writer recording, forced index state). */
+  externalBackendTestHooks?: Pick<PrepareExternalBackendsOptions, 'wrapStore' | 'indexStateForTests'>;
 }): Promise<InProcessEval> {
   const {
     corpusDir,
@@ -633,6 +642,34 @@ export async function prepareInProcessEval(options: {
     throw error;
   }
 
+  let externalBackends: Awaited<ReturnType<typeof prepareExternalBackends>> | null = null;
+  if (options.externalBackends?.length) {
+    try {
+      const { LEGACY_PROFILE } = await import('../../src/lib/rag/embeddings/active-profile.ts');
+      const q62Tenant = fixture.q62Tenant;
+      const dominantTenant = fixture.dominantLanguageTenant;
+      externalBackends = await prepareExternalBackends({
+        db: fixture.db,
+        edge: startedEdge,
+        backends: options.externalBackends,
+        profileId: embeddingProfileId ?? LEGACY_PROFILE.id,
+        extraDatabases: [
+          ...(q62Tenant ? [{ db: q62Tenant.db, serve: <T,>(fn: () => Promise<T>) => withQ62Tenant(startedEdge, fixture.db, q62Tenant, fn) }] : []),
+          ...(dominantTenant
+            ? [{ db: dominantTenant.db, serve: <T,>(fn: () => Promise<T>) => withIsolatedTenant(startedEdge, fixture.db, dominantTenant, fn) }]
+            : []),
+        ],
+        ...options.externalBackendTestHooks,
+      });
+    } catch (error) {
+      if (ownsEdge) await startedEdge.close().catch(() => undefined);
+      await closeQ62Tenant(fixture.q62Tenant);
+      await closeIsolatedTenant(fixture.dominantLanguageTenant);
+      if (ownsDb) await fixture.db.close().catch(() => undefined);
+      throw error;
+    }
+  }
+
   const route = await import('../../src/app/api/internal/rag/run/route.ts');
   const kbLanguages = fixture.q62Tenant || fixture.dominantLanguageTenant ? await import('../../src/lib/rag/query/kb-languages.ts') : null;
 
@@ -685,7 +722,9 @@ export async function prepareInProcessEval(options: {
     sqlSha256: fixture.sqlSha256,
     ...(fakeQueryLlm ? { fakeQueryLlm } : {}),
     ...(lexicalStats ? { lexicalStats } : {}),
+    backendSnapshot: externalBackends?.snapshot ?? PGVECTOR_SNAPSHOT,
     close: async () => {
+      await externalBackends?.close();
       restoreQueryLlm?.();
       translatorModule?.resetTranslatorForTests();
       floorModule.resetEvalScoreCalibration();
@@ -697,6 +736,33 @@ export async function prepareInProcessEval(options: {
         await fixture.db.close().catch(() => undefined);
       }
     },
+  };
+}
+
+/** D-17: the ingest-time switches of a run config; in ingest mode they apply to the fixture build, before the corpus loads. */
+const INGEST_TIME_SWITCHES = ['RAG_INGEST_PIPELINE', 'RAG_EMBEDDING_PROFILES'] as const;
+
+function ingestTimeEnv(env: Record<string, string> | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const name of INGEST_TIME_SWITCHES) if (env?.[name] !== undefined) out[name] = env[name];
+  return out;
+}
+
+function externalBackendOf(overrides: EvalRequestOptions['retrieval_overrides'] | undefined): ExternalBackendId | null {
+  const backend = overrides?.backend;
+  return backend === 'weaviate' || backend === 'qdrant' ? backend : null;
+}
+
+async function externalSnapshot(backend: ExternalBackendId, embeddingProfile: string | null) {
+  const { backendIndexParams } = await import('../../src/lib/rag/backend/index-params.ts');
+  const params = backendIndexParams(backend, embeddingProfile ?? 'openai-3-small-1536');
+  return {
+    backend,
+    backend_impl: 'real' as const,
+    collection: params?.collection ?? null,
+    hnsw_m: params?.hnsw_m ?? PGVECTOR_SNAPSHOT.hnsw_m,
+    hnsw_ef_construction: params?.hnsw_ef ?? PGVECTOR_SNAPSHOT.hnsw_ef_construction,
+    lexical_mode: params?.lexical_mode ?? PGVECTOR_SNAPSHOT.lexical_mode,
   };
 }
 
@@ -949,6 +1015,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     }
   }
 
+  const externalBackend = externalBackendOf(requestOptions.retrieval_overrides);
+
   const goldenFilter = goldenFilterFor(includeDrafts);
   const allItems = readGolden(goldenPath);
   // table_split items need the isolated tenants of the inline ingest fixture mode; every other run leaves them out.
@@ -1015,9 +1083,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         // Plan 03.3-23 (D-36): the Phase 3.3 switches the run sets to a non-default value are layered into the ingest build, which
         // then seeds the fixture tenant's rule data; a run that only restates the defaults layers nothing.
         const phase33Env = phase33BuildEnv({ ...(runConfig?.env ?? {}), ...(envOverlay ?? {}) });
+        const layeredEnv = { ...phase33Env, ...ingestTimeEnv(runConfig?.env) };
         const buildEnv =
-          fixtureMode === 'ingest' && (Object.keys(phase33Env).length > 0 || options.ingestBuildEnv)
-            ? { ...phase33Env, ...options.ingestBuildEnv }
+          fixtureMode === 'ingest' && (Object.keys(layeredEnv).length > 0 || options.ingestBuildEnv)
+            ? { ...layeredEnv, ...options.ingestBuildEnv }
             : options.ingestBuildEnv;
         if (fixtureMode !== 'ingest' && Object.keys(phase33Env).some((name) => !(PHASE33_PROCESS_SWITCHES as readonly string[]).includes(name))) {
           console.log('[Eval Harness] phase33_seed_skipped_prechunked: the prechunked build seeds no Phase 3.3 rule data');
@@ -1047,6 +1116,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
               ? { appEnv: options.appEnv }
               : {}),
           ...(requestOptions.query_layer === true ? { queryLayer: true } : {}),
+          ...(externalBackend ? { externalBackends: [externalBackend] } : {}),
+          ...(externalBackend && options.externalBackendTestHooks ? { externalBackendTestHooks: options.externalBackendTestHooks } : {}),
         });
         inProcess = prepared;
       }
@@ -1279,6 +1350,9 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         ...(runConfig.chunkingProfiles?.length ? { chunking_profiles: runConfig.chunkingProfiles } : {}),
       }
     : null;
+  // D-06: the in-process session records what it served; a --base-url run serves the deployment's real store.
+  const backendSnapshot =
+    inProcess?.backendSnapshot ?? (externalBackend ? { ...PGVECTOR_SNAPSHOT, ...(await externalSnapshot(externalBackend, embeddingProfile)) } : PGVECTOR_SNAPSHOT);
   const effectiveConfigHash = configHash(firstEffectiveConfig);
   const runConfigHash = crypto
     .createHash('sha256')
@@ -1294,6 +1368,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         deployment_mode: effectiveDeploymentMode,
         ...(runConfigRecord ? { run_config: runConfigRecord } : {}),
         ...(envOverlay ? { env_overlay: envOverlay } : {}),
+        // A pgvector run keeps its hash; an external run's hash names the implementation it measured.
+        ...(backendSnapshot.backend !== 'pgvector' ? { backend_snapshot: backendSnapshot } : {}),
       }),
       'utf8',
     )
@@ -1320,6 +1396,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     item_count: items.length,
     edge_errors: edgeErrors,
     ...(runConfigRecord ? { run_config: runConfigRecord } : {}),
+    backend_snapshot: backendSnapshot,
   });
   const runPath = path.join(outDir, 'run.json');
   fs.writeFileSync(runPath, `${JSON.stringify(manifest, null, 2)}\n`);

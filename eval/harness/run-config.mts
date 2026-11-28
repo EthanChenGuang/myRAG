@@ -147,6 +147,13 @@ const PHASE5_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
   RAG_CITATIONS: BOOLEAN_VALUES,
 };
 
+/** D-17 (07-25): the ablation switches no earlier phase allowed; the two ingest-time ones apply to the ingest build before the corpus loads. */
+const PHASE7_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
+  RAG_GROUNDEDNESS: BOOLEAN_VALUES,
+  RAG_INGEST_PIPELINE: ['legacy', 'unified'],
+  RAG_EMBEDDING_PROFILES: ['off', 'on'],
+};
+
 /**
  * Vendor settings a run config may set, each only to one of the listed values (Phase 4.1 D-22): a key is empty, the proxy
  * placeholder or the token `fixture` (keep the fake edge's placeholder key); a base URL is empty or the vendor's own host.
@@ -202,6 +209,7 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   ...Object.keys(PHASE5_SWITCH_VALUES),
   ...Object.keys(PHASE44_SWITCH_VALUES),
   ...Object.keys(PHASE43_SWITCH_VALUES),
+  ...Object.keys(PHASE7_SWITCH_VALUES),
 ];
 
 export const RUN_CONFIG_REJECT_MESSAGE =
@@ -272,6 +280,7 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
     ...PHASE5_SWITCH_VALUES,
     ...PHASE44_SWITCH_VALUES,
     ...PHASE43_SWITCH_VALUES,
+    ...PHASE7_SWITCH_VALUES,
   })) {
     if (!allowed) continue;
     // A malformed SEC, Phase 6, Phase 3.3, Phase 5.2 or Phase 5.2.1 value would silently fall back to off in the app; the run config fails instead (the value is never echoed).

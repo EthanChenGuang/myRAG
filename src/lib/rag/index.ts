@@ -914,6 +914,7 @@ export type { ImportCounts, PreparedQuestions, QuestionFileFormat } from './moni
 export { guardAppEnvWrite, RAG_GATE_INVALID_REASON_MESSAGE, RAG_GATE_REQUIRED_MESSAGE } from './config-gate/guard';
 export type { AppGuardRoute, GuardAppEnvWriteInput, GuardAppEnvWriteResult } from './config-gate/guard';
 export { DRAIN_DEFAULT_BUDGET_MS, drainSlice, drainUntilEmpty } from './sync/drain';
+export { toStageRetrievalOverrides } from './v2/overrides';
 export type { DrainSliceOptions, DrainUntilEmptyOptions } from './sync/drain';
 export { RECONCILE_DEFAULT_BUDGET_MS, reconcileSlice } from './sync/reconcile';
 export type { ReconcileSliceOptions, ReconcileSliceResult } from './sync/reconcile';

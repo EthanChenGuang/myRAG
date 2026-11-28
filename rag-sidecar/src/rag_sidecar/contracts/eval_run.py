@@ -474,6 +474,18 @@ class RunConfigRecord(_Contract):
     chunking_profiles: list[ChunkingProfile] = Field(default_factory=list)
 
 
+class RunBackendSnapshot(_Contract):
+    """D-06, Pitfall 20: the retrieval backend a run measured and its index settings; key names and parameters only, never a key."""
+
+    backend: Literal["pgvector", "weaviate", "qdrant"]
+    backend_impl: Literal["real", "fake"]
+    collection: str | None = None
+    hnsw_m: int = Field(ge=1)
+    hnsw_ef_construction: int = Field(ge=1)
+    lexical_mode: str = Field(min_length=1)
+    quantization: Literal["none"] = "none"
+
+
 class RunManifest(_Contract):
     schema_version: Literal[1] = 1
     run_id: str
@@ -494,6 +506,7 @@ class RunManifest(_Contract):
     item_count: int = Field(ge=0)
     edge_errors: int = Field(ge=0)
     run_config: RunConfigRecord | None = None
+    backend_snapshot: RunBackendSnapshot | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
     rag_mode: Literal["strict", "balanced", "flexible"] = Field(
         default="strict", exclude_if=lambda value: value == "strict", json_schema_extra=omit_default_schema
     )

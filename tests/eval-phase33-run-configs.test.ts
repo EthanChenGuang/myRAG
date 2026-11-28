@@ -57,7 +57,7 @@ describe('Phase 3.3 run configs (plan 03.3-22, D-03, D-30, D-36)', () => {
 
   test('a name outside the allowlist is rejected', () => {
     expect(() =>
-      parseRunConfig({ name: 'tpl-extra', env: { ...V2_OFF, RAG_INGEST_PIPELINE: 'unified' }, overrides: null }, 'inline'),
+      parseRunConfig({ name: 'tpl-extra', env: { ...V2_OFF, RAG_TEMPLATED_UNKNOWN: 'on' }, overrides: null }, 'inline'),
     ).toThrow(RunConfigError);
   });
 });
