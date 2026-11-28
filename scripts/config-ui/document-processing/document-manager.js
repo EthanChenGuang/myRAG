@@ -355,6 +355,9 @@ class DocumentManager {
             const row = this.createDocumentRow(doc);
             this.elements.tableBody.appendChild(row);
         });
+        if (window.AccessGroupsDocumentBadges) {
+            window.AccessGroupsDocumentBadges.apply(this.elements.tableBody, this.currentOrganizationId).catch(() => {});
+        }
 
         console.log('DocumentManager: Rendered', sortedDocs.length, 'document rows');
 
@@ -443,6 +446,7 @@ class DocumentManager {
                 </button>
             </td>
         `;
+        if (doc.id) row.setAttribute('data-access-groups-doc', String(doc.id));
         // Handlers get the raw values; nothing from the document reaches an inline handler.
         row.querySelector('[data-doc-action="type"]').addEventListener('click', () => this.promptChangeDocType(doc.id, String(docType)));
         row.querySelector('[data-doc-action="url"]').addEventListener('click', () => this.addUrl(doc.id, doc.metadata?.external_url || ''));

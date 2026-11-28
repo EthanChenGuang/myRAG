@@ -44,6 +44,7 @@ async function blocks(specs: Spec[], variants?: QueryVariant[]): Promise<Context
   const cfg = loadRagConfig({ RAG_PIPELINE: 'v2' });
   const input: RunRetrievalInput = { scope, query: 'first part and second part', profile: 'chat', signal: new AbortController().signal };
   const out = await runContextStages({
+    access: { mode: 'off' },
     input,
     config: cfg,
     profile: 'chat',

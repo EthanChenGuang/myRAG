@@ -11,6 +11,7 @@ import {
   type TenantScope,
 } from '@/lib/rag';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { ingestDocumentAccess } from './access';
 
 /** Test seam: a route never passes it, so the cookie session is the only way in. */
 export interface IngestRouteDeps {
@@ -126,6 +127,10 @@ export async function handleIngestStatus(request: Request, params: Promise<{ id:
   try {
     const access = await authorize(request, params, tag, deps, false);
     if (!access.ok) return access.response;
+    // D-15: the status of a document the caller may not see reads like an unknown id.
+    const visibility = await ingestDocumentAccess(access.scope, access.userId, access.documentId, request.signal);
+    if (visibility === 'hidden') return notFound();
+    if (visibility === 'unavailable') return fail(503, 'Status unavailable');
     const report = await getIngestStatusReport(access.scope, access.documentId, { signal: request.signal });
     if (!report) return notFound();
     const body: Record<string, unknown> = {

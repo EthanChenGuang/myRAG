@@ -851,6 +851,7 @@ ${fullValues.RAG_TABLE_HEADER_REPEAT !== undefined ? `RAG_TABLE_HEADER_REPEAT=${
 ${fullValues.RAG_TABLE_ROW_SERIALIZATION !== undefined ? `RAG_TABLE_ROW_SERIALIZATION=${fullValues.RAG_TABLE_ROW_SERIALIZATION}` : 'RAG_TABLE_ROW_SERIALIZATION=false'}
 ${fullValues.RAG_CAPTION_LANGUAGE !== undefined ? `RAG_CAPTION_LANGUAGE=${fullValues.RAG_CAPTION_LANGUAGE}` : 'RAG_CAPTION_LANGUAGE=en'}
 ${fullValues.RAG_BGE_M3_SERVING !== undefined ? `RAG_BGE_M3_SERVING=${fullValues.RAG_BGE_M3_SERVING}` : 'RAG_BGE_M3_SERVING=hosted'}
+${fullValues.RAG_BGE_M3_VIA !== undefined ? `RAG_BGE_M3_VIA=${fullValues.RAG_BGE_M3_VIA}` : 'RAG_BGE_M3_VIA=deepinfra'}
 ${fullValues.RAG_DOC_TRANSLATION !== undefined ? `RAG_DOC_TRANSLATION=${fullValues.RAG_DOC_TRANSLATION}` : 'RAG_DOC_TRANSLATION=off'}
 ${fullValues.RAG_DOC_TRANSLATION_MODEL !== undefined ? `RAG_DOC_TRANSLATION_MODEL=${fullValues.RAG_DOC_TRANSLATION_MODEL}` : 'RAG_DOC_TRANSLATION_MODEL='}
 ${fullValues.RAG_HIDDEN_TEXT_CHECK !== undefined ? `RAG_HIDDEN_TEXT_CHECK=${fullValues.RAG_HIDDEN_TEXT_CHECK}` : 'RAG_HIDDEN_TEXT_CHECK=off'}
@@ -1204,6 +1205,10 @@ app.post('/api/upload', documentUpload.array('files'), async (req, res) => {
     }
     if (req.body.image_context) {
       formData.append('image_context', req.body.image_context);
+    }
+    // D-16: the access choice is forwarded exactly as sent; the app validates it. Absent: nothing is added.
+    if (typeof req.body.access === 'string') {
+      formData.append('access', req.body.access);
     }
     formData.append('upload_source', 'config_upload');
 
@@ -1886,6 +1891,7 @@ RAG_TABLE_HEADER_REPEAT=${getEnvValue('RAG_TABLE_HEADER_REPEAT') || 'always'}
 RAG_TABLE_ROW_SERIALIZATION=${getEnvValue('RAG_TABLE_ROW_SERIALIZATION') || 'false'}
 RAG_CAPTION_LANGUAGE=${getEnvValue('RAG_CAPTION_LANGUAGE') || 'en'}
 RAG_BGE_M3_SERVING=${getEnvValue('RAG_BGE_M3_SERVING') || 'hosted'}
+RAG_BGE_M3_VIA=${getEnvValue('RAG_BGE_M3_VIA') || 'deepinfra'}
 RAG_DOC_TRANSLATION=${getEnvValue('RAG_DOC_TRANSLATION') || 'off'}
 RAG_DOC_TRANSLATION_MODEL=${getEnvValue('RAG_DOC_TRANSLATION_MODEL') || ''}
 RAG_HIDDEN_TEXT_CHECK=${getEnvValue('RAG_HIDDEN_TEXT_CHECK') || 'off'}
@@ -2429,6 +2435,7 @@ RAG_TABLE_HEADER_REPEAT=${getEnvValue('RAG_TABLE_HEADER_REPEAT') || 'always'}
 RAG_TABLE_ROW_SERIALIZATION=${getEnvValue('RAG_TABLE_ROW_SERIALIZATION') || 'false'}
 RAG_CAPTION_LANGUAGE=${getEnvValue('RAG_CAPTION_LANGUAGE') || 'en'}
 RAG_BGE_M3_SERVING=${getEnvValue('RAG_BGE_M3_SERVING') || 'hosted'}
+RAG_BGE_M3_VIA=${getEnvValue('RAG_BGE_M3_VIA') || 'deepinfra'}
 RAG_DOC_TRANSLATION=${getEnvValue('RAG_DOC_TRANSLATION') || 'off'}
 RAG_DOC_TRANSLATION_MODEL=${getEnvValue('RAG_DOC_TRANSLATION_MODEL') || ''}
 RAG_HIDDEN_TEXT_CHECK=${getEnvValue('RAG_HIDDEN_TEXT_CHECK') || 'off'}
@@ -4018,6 +4025,10 @@ app.post('/api/process-document', documentUpload.single('file'), async (req, res
     form.append('upload_source', 'config_upload');
     if (req.body.doc_type) {
       form.append('doc_type', req.body.doc_type);
+    }
+    // D-16: the access choice is forwarded exactly as sent; the app validates it. Absent: nothing is added.
+    if (typeof req.body.access === 'string') {
+      form.append('access', req.body.access);
     }
 
     const { client, options } = createMainAppRequest('/api/process-document', 'POST', {

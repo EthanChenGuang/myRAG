@@ -172,7 +172,7 @@ export async function setUploadAccess(
   scope: TenantScope,
   documentId: string,
   keys: readonly string[],
-  uploaderId: string,
+  uploaderId: string | null,
   deps: AccessServiceDeps,
 ): Promise<UploadAccessOutcome> {
   const tenantKey = tenantKeyOf(scope);
@@ -181,7 +181,8 @@ export async function setUploadAccess(
   const normalised = keys.map((key) => (typeof key === 'string' ? key.trim().toLowerCase() : ''));
   if (normalised.some((key) => !ACCESS_KEY_RE.test(key))) throw refused(SETTER, 'empty_access');
   const label = normalised.includes('all') ? ['all'] : [...new Set(normalised)].sort();
-  const actor = uuidOf(SETTER, uploaderId, 'actor_required');
+  // A backfill run has no uploader: the audit row records no actor (actor kind system, reason upload).
+  const actor = uploaderId === null ? null : uuidOf(SETTER, uploaderId, 'actor_required');
   const rows = await callAccessRows(deps, SETTER, {
     p_tenant_key: tenantKey,
     p_document_ids: [id],

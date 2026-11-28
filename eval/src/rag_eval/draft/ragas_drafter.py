@@ -162,6 +162,7 @@ def _live_generate(chunks: list[str], buckets: list[RagasBucket], personas: list
     from ragas.testset.persona import Persona
 
     from rag_eval.judge.config import load_judge_config
+    from rag_eval.judge.openai_route import resolve_embedding_route
 
     judge = load_judge_config()
     llm = LangchainLLMWrapper(
@@ -172,8 +173,11 @@ def _live_generate(chunks: list[str], buckets: list[RagasBucket], personas: list
             temperature=judge.temperature,
         )
     )
+    route = resolve_embedding_route(judge.embedding_model)
     embeddings = LangchainEmbeddingsWrapper(
-        OpenAIEmbeddings(model=judge.embedding_model, api_key=os.environ["OPENAI_API_KEY"])
+        OpenAIEmbeddings(model=route.model, api_key=route.api_key, base_url=route.base_url)
+        if route.base_url
+        else OpenAIEmbeddings(model=route.model, api_key=route.api_key)
     )
     generator = TestsetGenerator(
         llm=llm,

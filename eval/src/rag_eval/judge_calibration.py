@@ -44,6 +44,11 @@ from rag_eval.judge.config import (
     assert_judge_family_differs,
     load_judge_config,
 )
+from rag_eval.judge.openai_route import (
+    OpenAiRouteError,
+    judge_key_names,
+    resolve_embedding_route,
+)
 from rag_eval.judge.run import (
     EXIT_FAMILY,
     EXIT_INPUT,
@@ -624,7 +629,7 @@ def _write_text(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-def _live_factory(openrouter_key: str, openai_key: str) -> JudgeFactory:
+def _live_factory(openrouter_key: str) -> JudgeFactory:
     def build(role: str, config: JudgeConfig) -> JudgeScorer:
         from rag_eval.judge.deepeval_judge import OpenRouterDeepEvalLLM, score_deepeval
 
@@ -633,7 +638,7 @@ def _live_factory(openrouter_key: str, openai_key: str) -> JudgeFactory:
         if "ragas" in ROLE_LIBRARIES[role]:
             from rag_eval.judge.ragas_judge import build_ragas_live
 
-            ragas = build_ragas_live(config, openrouter_key, openai_key)
+            ragas = build_ragas_live(config, openrouter_key, resolve_embedding_route(config.embedding_model))
 
         def score(cases: list[JudgeCase]) -> Scores:
             out: dict[tuple[str, str, str], float | None] = {}
@@ -723,14 +728,15 @@ def _run(args: argparse.Namespace, judge_factory: JudgeFactory | None) -> int:
         return _fail(str(exc), EXIT_FAMILY)
     factory = judge_factory
     if factory is None:
-        openrouter_key = os.environ.get("OPENROUTER_API_KEY") or None
-        openai_key = os.environ.get("OPENAI_API_KEY") or None
-        for name, value in (("OPENROUTER_API_KEY", openrouter_key), ("OPENAI_API_KEY", openai_key)):
-            if value is None:
+        try:
+            key_names = judge_key_names()
+        except OpenAiRouteError as exc:
+            return _fail(str(exc), EXIT_INPUT)
+        for name in key_names:
+            if not os.environ.get(name):
                 print(f"{MISSING_KEY_NOTICE}: {name} is not set", file=sys.stderr)
                 return EXIT_KEY
-        assert openrouter_key is not None and openai_key is not None
-        factory = _live_factory(openrouter_key, openai_key)
+        factory = _live_factory(os.environ["OPENROUTER_API_KEY"])
     sources: JudgeLabelSource | dict[str, JudgeLabelSource] = "seed"
     cases = seed
     if tenant_path:

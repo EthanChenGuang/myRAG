@@ -1,8 +1,10 @@
+import { checkDecompositionCompleteness, type CompletenessRecord, type RequiredTerm } from './completeness';
 import { keepsProtectedTokens } from './protected';
 
 export type CheckedKind = 'condense' | 'expand' | 'translate' | 'decompose' | 'hyde';
 export type VariantKind = Exclude<CheckedKind, 'condense' | 'decompose'>;
-export type PostCheckSkipReason = 'protected_token_lost' | 'length' | 'empty' | 'cap';
+/** `error` only for a completeness check that threw (the D-15 result is then used unchanged). */
+export type PostCheckSkipReason = 'protected_token_lost' | 'length' | 'empty' | 'cap' | 'error';
 
 /** A skip record names the transform and the reason only; it never carries query text. */
 export type PostCheckSkip = {
@@ -75,17 +77,14 @@ export function checkCondensed(condensed: CondensedInput, limits: PostCheckLimit
   return { text: condensed.text, passThrough: false, skip: null };
 }
 
-/**
- * Each sub-question must keep at least one protected token and the kept list together must keep
- * all of them; a comparison splits its codes across sub-questions, so per-question "all tokens"
- * would reject every comparison.
- */
-export function checkSubQuestions(sub: SubQuestionsInput, limits: PostCheckLimits): SubQuestionsCheck {
+type PerQuestion = { early: SubQuestionsCheck } | { kept: string[]; skipped: PostCheckSkip[] };
+
+function perQuestionChecks(sub: SubQuestionsInput, limits: PostCheckLimits): PerQuestion {
   const { input, protectedTokens } = sub;
   const questions = sub.questions.filter((q) => q.trim().length > 0);
-  if (questions.length === 0) return { subQuestions: [], notCompound: true, skipped: [] };
+  if (questions.length === 0) return { early: { subQuestions: [], notCompound: true, skipped: [] } };
   if (questions.length === 1 && normalizeForCompare(questions[0]) === normalizeForCompare(input)) {
-    return { subQuestions: [], notCompound: true, skipped: [] };
+    return { early: { subQuestions: [], notCompound: true, skipped: [] } };
   }
 
   const skipped: PostCheckSkip[] = [];
@@ -102,7 +101,10 @@ export function checkSubQuestions(sub: SubQuestionsInput, limits: PostCheckLimit
     }
     kept.push(question);
   });
+  return { kept, skipped };
+}
 
+function capAndUnion(kept: string[], skipped: PostCheckSkip[], protectedTokens: readonly string[], limits: PostCheckLimits): SubQuestionsCheck {
   if (kept.length > limits.maxSubQuestions) {
     skipped.push({ kind: 'decompose', reason: 'cap', count: kept.length - limits.maxSubQuestions });
     kept.length = limits.maxSubQuestions;
@@ -113,4 +115,42 @@ export function checkSubQuestions(sub: SubQuestionsInput, limits: PostCheckLimit
   }
 
   return { subQuestions: kept, notCompound: false, skipped };
+}
+
+/**
+ * Each sub-question must keep at least one protected token and the kept list together must keep
+ * all of them; a comparison splits its codes across sub-questions, so per-question "all tokens"
+ * would reject every comparison.
+ */
+export function checkSubQuestions(sub: SubQuestionsInput, limits: PostCheckLimits): SubQuestionsCheck {
+  const checked = perQuestionChecks(sub, limits);
+  if ('early' in checked) return checked.early;
+  return capAndUnion(checked.kept, checked.skipped, sub.protectedTokens, limits);
+}
+
+export type CompletenessCheck = SubQuestionsCheck & { completeness?: CompletenessRecord };
+
+/**
+ * D-04 with RAG_QUERY_DECOMPOSE_COMPLETENESS on (research F-1): per-question checks, then the completeness repair, then the
+ * cap, then the union protected-token check, so a lost token is repaired before the union check could discard the list.
+ * No completeness record when nothing was decomposed (no sub-question survived the per-question checks).
+ */
+export function checkSubQuestionsWithCompleteness(
+  sub: SubQuestionsInput,
+  limits: PostCheckLimits,
+  required: readonly RequiredTerm[],
+): CompletenessCheck {
+  const checked = perQuestionChecks(sub, limits);
+  if ('early' in checked) return checked.early;
+  if (checked.kept.length === 0) return capAndUnion(checked.kept, checked.skipped, sub.protectedTokens, limits);
+  const repaired = checkDecompositionCompleteness({
+    original: sub.input,
+    subQuestions: checked.kept,
+    required,
+    maxSubQuestions: limits.maxSubQuestions,
+  });
+  if (repaired.completeness.action === 'discarded') {
+    return { subQuestions: [], notCompound: false, skipped: checked.skipped, completeness: repaired.completeness };
+  }
+  return { ...capAndUnion(repaired.subQuestions, checked.skipped, sub.protectedTokens, limits), completeness: repaired.completeness };
 }

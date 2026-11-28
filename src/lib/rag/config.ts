@@ -215,6 +215,8 @@ export interface LexicalScoringConfig {
 }
 export const LEXICAL_SCORING_DEFAULTS: Readonly<LexicalScoringConfig> = Object.freeze({ mode: 'ts_rank_cd', k1: 1.2, b: 0.75 });
 export type BgeM3Serving = 'hosted' | 'sidecar';
+/** Which OpenAI-compatible host answers hosted BGE-M3 calls; openrouter pins its upstream to DeepInfra. */
+export type BgeM3Via = 'deepinfra' | 'openrouter';
 
 export interface RetrievalParamsOverride {
   candidate_pool_size?: number;
@@ -409,6 +411,7 @@ export interface RagEnvInput {
   RAG_SCOPE_TAGS?: string;
   RAG_DOC_TRANSLATION?: string;
   RAG_BGE_M3_SERVING?: string;
+  RAG_BGE_M3_VIA?: string;
   RAG_OUTPUT_LINK_ALLOWLIST?: string;
   RAG_EMBEDDING_PROFILES?: string;
   RAG_DOMAIN_EMBEDDINGS?: string;
@@ -480,6 +483,7 @@ export interface RagConfig {
   docAttributes: boolean;
   docTranslation: 'off' | 'on';
   bgeM3Serving: BgeM3Serving;
+  bgeM3Via: BgeM3Via;
   /** Raw comma-separated domains; the output link filter parses it. */
   outputLinkAllowlist: string;
   queryLayer: QueryLayerConfig;
@@ -1307,6 +1311,7 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_SCOPE_TAGS ?? '',
     env.RAG_DOC_TRANSLATION ?? '',
     env.RAG_BGE_M3_SERVING ?? '',
+    env.RAG_BGE_M3_VIA ?? '',
     env.RAG_DOC_ACCESS_GROUPS ?? '',
     (env.RAG_EMBED_ACCESS_GROUP ?? '').trim(),
     env.RAG_OUTPUT_LINK_ALLOWLIST ?? '',
@@ -1452,6 +1457,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     docAttributes,
     docTranslation: parseNamedChoice('RAG_DOC_TRANSLATION', env.RAG_DOC_TRANSLATION, ['off', 'on'], 'off', warnings),
     bgeM3Serving: parseNamedChoice('RAG_BGE_M3_SERVING', env.RAG_BGE_M3_SERVING, ['hosted', 'sidecar'], 'hosted', warnings),
+    bgeM3Via: parseNamedChoice('RAG_BGE_M3_VIA', env.RAG_BGE_M3_VIA, ['deepinfra', 'openrouter'], 'deepinfra', warnings),
     outputLinkAllowlist: (env.RAG_OUTPUT_LINK_ALLOWLIST ?? '').trim(),
     queryLayer,
     queryAdditions,

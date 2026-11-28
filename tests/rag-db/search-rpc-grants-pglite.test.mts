@@ -19,9 +19,9 @@ const LOCKED = [
   'get_documents_by_type_slug_workspace',
 ] as const;
 
-/** Simulates a multi-tenant DB that ran 0306 CREATE OR REPLACE while anon still had EXECUTE from an older grant. */
+/** Simulates a multi-tenant DB that ran 0306 CREATE OR REPLACE while anon still had EXECUTE from an older grant (0930 signature of the workspace search). */
 const LIVE_HOLE_GRANTS = `
-GRANT EXECUTE ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid) TO PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid, text[], boolean) TO PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION match_document_chunks_by_org(uuid, vector, integer, double precision) TO PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION get_documents_by_type_slug(uuid, text, text) TO PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION get_documents_by_type_slug_workspace(uuid, uuid, text, text) TO PUBLIC, anon, authenticated;

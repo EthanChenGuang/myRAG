@@ -152,6 +152,8 @@ export interface NangoFileRecord {
   modified_at?: string;
   parent_id?: string;
   web_url?: string;
+  /** Dropbox: the shared folder that holds the file (files/list_folder sharing_info.parent_shared_folder_id). */
+  parent_shared_folder_id?: string;
 }
 
 /**
@@ -162,6 +164,8 @@ export interface SyncStats {
   failed: number;
   skipped: number;
   deleted: number;
+  /** Documents this sync left with the fallback audience (owner and admins) because their source sharing was unmappable or unreadable. */
+  failClosed: number;
 }
 
 /**

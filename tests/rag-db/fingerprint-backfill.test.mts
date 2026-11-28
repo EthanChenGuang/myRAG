@@ -10,12 +10,12 @@ const TENANT_A = `u:${TWO_TENANT_IDS.userA}`;
 const TENANT_B = `u:${TWO_TENANT_IDS.userB}`;
 const TENANT_O = `o:${TWO_TENANT_IDS.orgO}`;
 /**
- * 149 fixture corpus documents of the fixture user (19 before the 04.1.1-10 synthetic-terms documents, 22 before the 05.2-28
+ * 155 fixture corpus documents of the fixture user (149 before the six 05.2.1-12 calc-rules and long-reference documents, 19 before the 04.1.1-10 synthetic-terms documents, 22 before the 05.2-28
  * Phase 5.2 documents and the 04.2-37 Phase 4.2 documents, 140 before the six 05.3-15 documents, 146 before the three 05.2-29
  * sec-link-topics documents; the three superseded Phase 4.2 version notes are not current) plus the three canary documents, all
  * published before Phase 3.2.
  */
-const FIXTURE_USER_DOCUMENTS = 149;
+const FIXTURE_USER_DOCUMENTS = 155;
 const DOCUMENTS = FIXTURE_USER_DOCUMENTS + 3;
 const SENTINEL = 'c'.repeat(64);
 

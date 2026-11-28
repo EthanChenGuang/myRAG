@@ -1,7 +1,8 @@
-import { streamText, tool, type ToolSet, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, UIMessage, stepCountIs } from 'ai';
+import { asSchema, streamText, tool, type ToolSet, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, UIMessage, stepCountIs } from 'ai';
 import { buildCtaInstruction } from '@/lib/chat/cta-instruction';
 import { buildFormattingInstruction, resolveAnswerStyle } from '@/lib/chat/answer-style';
 import { appendHistoryNotEvidence, historyNotEvidenceEnabled } from '@/lib/chat/history-not-evidence';
+import { getMaxTokensForModel } from '@/lib/chat/model-output-limit';
 import { z } from 'zod/v3';
 // Use the dedicated OpenRouter provider
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
@@ -71,6 +72,12 @@ import {
   readGenerationConfig,
   repairOwnerMembership,
   resolveTenantScope,
+  accessGroupsEnabled,
+  createCitationRecheck,
+  accessSetsFor,
+  scheduleSecurityEvent,
+  bodyNamesAccessGroups,
+  resolveAccessScope,
   runRetrieval,
   scheduleAnswerFinish,
   scheduleCalcReviewEnqueue,
@@ -84,10 +91,23 @@ import {
   type TraceCollector,
   type CitationLabeler,
   type ClaudeTurnFacts,
+  assertQuestionLast,
+  currentContextTokenBudget,
+  finalizePromptBudget,
+  fixedText,
+  modelContextLength,
+  modelFamily,
+  planPromptBudget,
+  type BudgetMessage,
+  type FinalizeResult,
+  type PromptBudgetPlan,
+  type PromptBudgetTrace,
 } from '@/lib/rag';
+import type { AnswerChecks } from '@/lib/rag-eval/contracts.generated';
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
 import type { JSONValue } from '@ai-sdk/provider';
+import { createDocumentReferenceTool } from '@/lib/chat/document-reference-tool';
 import { REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE, readSecurityConfig, escapeToolOutput, scanToolOutput, type ToolResultGuardMode } from '@/lib/rag';
 // Keep custom tool definitions if needed
 
@@ -124,6 +144,116 @@ const ANSWER_EVIDENCE_TOOLS = new Set(['webSearch', 'useDocument', CALCULATE_TOO
 // Phase 5.2.1 D-65: RAG_CALC_TOOL, read from the one answer-config reader once plan 05.2.1-02 adds the field; false before
 function calcToolSwitchOn(config: object): boolean {
   return (config as { readonly calcTool?: unknown }).calcTool === true;
+}
+
+const EMAIL_TOOL_PREFERENCE = '\n\nIMPORTANT: When user says "send an email", use gmail_send_email tool, NOT gmail_create_draft.';
+const WEB_SEARCH_TOOL_DESCRIPTION =
+  'Search the web for up-to-date information. Use this when you need current information about events, news, or facts that may have occurred after your training data.';
+const webSearchInputSchema = z.object({
+  query: z.string().min(1).max(100).describe('The search query to find information on the web'),
+});
+const PROMPT_BUDGET_EXCEEDED = 'prompt_budget_exceeded';
+
+// Phase 5.2.1 D-80: the tool schemas as the model receives them (name, description, JSON schema), counted on their JSON
+async function toolSchemaParts(tools: Record<string, any> | undefined): Promise<unknown[]> {
+  return Promise.all(
+    Object.entries(tools ?? {}).map(async ([name, definition]) => {
+      let parameters: unknown = null;
+      try {
+        const schema = definition?.inputSchema ?? definition?.parameters;
+        parameters = schema ? await Promise.resolve(asSchema(schema).jsonSchema) : null;
+      } catch {
+        parameters = null;
+      }
+      return { name, description: typeof definition?.description === 'string' ? definition.description : '', parameters };
+    }),
+  );
+}
+
+// D-84: the in-band error with the registry text only; the code travels in a header, never prompt sizes or text
+function promptBudgetExceededResponse(language: string): Response {
+  return new Response(formatErrorSSE(fixedText('notices.prompt_too_long', language)), {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-RAG-Error': PROMPT_BUDGET_EXCEEDED,
+    },
+  });
+}
+
+const BUDGET_NOTE_ID = 'system-condensed-history';
+const CONTEXT_COMPRESSION_PLUGIN = 'context-compression';
+
+interface BudgetHistoryShape {
+  keptHistory: readonly unknown[];
+  standaloneNote: string | null;
+}
+
+// D-82: the conversation sent to the model; the kept turns are a suffix of the history, so they map by count. Off: all of it
+function budgetModelHistory<T>(converted: T[], budget: BudgetHistoryShape | null): T[] {
+  if (!budget) return converted;
+  return converted.slice(Math.max(0, converted.length - 1 - budget.keptHistory.length));
+}
+
+function budgetNoteMessages(budget: BudgetHistoryShape | null): ExtendedMessage[] {
+  return budget?.standaloneNote ? [{ id: BUDGET_NOTE_ID, role: 'system', content: budget.standaloneNote }] : [];
+}
+
+function uiMessageText(message: { parts?: ReadonlyArray<{ type?: string; text?: string }> }, textOnly = false): string {
+  return (message.parts ?? [])
+    .map((part) => (part.type === 'text' && typeof part.text === 'string' ? part.text : textOnly ? '' : JSON.stringify(part)))
+    .filter((text) => text.length > 0)
+    .join('\n');
+}
+
+// D-86: the part of the trace stored in rag_answer_records.checks.prompt_budget
+function promptBudgetSummary(trace: PromptBudgetTrace): NonNullable<AnswerChecks['prompt_budget']> {
+  return {
+    parts: trace.parts,
+    window: trace.window,
+    dropped_documents: trace.dropped_documents,
+    dropped_history_turns: trace.dropped_history_turns,
+    near_limit: trace.near_limit,
+    status: trace.status,
+  };
+}
+
+// D-86: the prompt_budget span; part sizes, window and decisions as counts and fixed words, never text
+function recordPromptBudgetSpan(collector: TraceCollector | null | undefined, trace: PromptBudgetTrace): void {
+  if (!collector) return;
+  const at = collector.now();
+  collector.record({
+    name: 'prompt_budget',
+    status: trace.status === 'ok' ? 'ok' : 'error',
+    startedAt: at,
+    endedAt: at,
+    counts: {
+      ...Object.fromEntries(Object.entries(trace.parts).map(([part, tokens]) => [`prompt_tokens_${part}`, tokens])),
+      window: trace.window,
+      estimated_raw_total: trace.estimated_raw_total,
+      dropped_documents: trace.dropped_documents,
+      dropped_history_turns: trace.dropped_history_turns,
+    },
+    attributes: {
+      window_source: trace.window_source,
+      context_length_unknown: trace.context_length_unknown,
+      estimator: trace.estimator.encoding,
+      estimator_family: trace.estimator.family ?? 'none',
+      factor: trace.estimator.factor,
+      factor_source: trace.estimator.factor_source,
+      near_limit: trace.near_limit,
+      overflow_mode: trace.overflow_mode,
+      standalone_kept: trace.standalone_kept,
+      status: trace.status,
+    },
+  });
+}
+
+function messageContentText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  return content === undefined || content === null ? '' : JSON.stringify(content);
 }
 
 interface StepToolResult {
@@ -178,37 +308,17 @@ function withToolResultNotice(prompt: string): string {
   return `${prompt}\n\n${TOOL_RESULT_NOTICE}`;
 }
 
-const documentReferenceTool = tool({
-  description: 'IMPORTANT: This is a FUNCTION TOOL to track document usage internally. Call this tool when you use information from documents. DO NOT write "useDocument" as text in your response. This tool tracks which documents you referenced to answer the query.',
-  inputSchema: z.object({
-    documentId: z.string().describe('The ID of the document that was used'),
-    documentName: z.string().describe('The name/filename of the document'),
-    relevance: z.number().min(0).max(100).describe('How relevant this document was to the query (0-100)'),
-    reason: z.string().describe('Why this document was used to answer the query')
-  }),
-  execute: async ({ documentId, documentName, relevance, reason }) => {
-    // Log the document reference for tracking
-    console.log('[Document Reference Tool] Document referenced:', {
-      documentId,
-      documentName,
-      relevance,
-      reason
-    });
-
-    // Format a nice source citation that can be included in the response
-    const sourceText = `📚 **Source:** ${documentName} (Relevance: ${relevance}%)`;
-
-    // Return a structured response with formatted source
-    return {
-      success: true,
-      message: sourceText,
-      // Allow this to be shown as a source citation
-      internal: false,
-      documentName,
-      relevance
+/** D-26: the citation access recheck of this request's scope; a scope the check cannot read fails closed, so every citation is dropped. */
+function citationRecheckFor(scope: TenantScope | null) {
+  if (!scope) return undefined;
+  try {
+    return createCitationRecheck(scope);
+  } catch {
+    return async (): Promise<ReadonlySet<string>> => {
+      throw new Error('[RAG Access] citation recheck unavailable');
     };
   }
-});
+}
 
 // Legacy document URL mapping - hardcoded URLs for specific documents
 // Database metadata (external_url) takes precedence over these mappings
@@ -1311,6 +1421,8 @@ export async function POST(req: Request) {
 
   try {
     const requestBody = await req.json();
+    // D-06: groups never come from the body; a claim is ignored and logged once per request
+    if (bodyNamesAccessGroups(requestBody)) console.warn('[RAG Access] body_group_claim_ignored', { route: 'chat' });
     const { messages: rawMessages, data, imageStorage }: {
       messages: APIMessage[],
       data?: {
@@ -1400,7 +1512,24 @@ export async function POST(req: Request) {
         tenant.status === 403 ? 'Forbidden' : tenant.status === 401 ? 'Unauthorized' : 'Workspace verification unavailable';
       return NextResponse.json({ error }, { status: tenant.status });
     }
-    const scope: TenantScope | null = tenant.scope;
+    let scope: TenantScope | null = tenant.scope;
+
+    // D-05, D-06: the access groups come from the verified session only (anonymous without one, e.g. WhatsApp webhook posts). A refusal
+    // keeps the scope unresolved, so runRetrieval fails closed with status error and the knowledge-base failure path below applies (D-10).
+    if (scope && accessGroupsEnabled()) {
+      let sessionUserId: string | null = null;
+      try {
+        sessionUserId = (await getSessionUser())?.id ?? null;
+      } catch {
+        sessionUserId = null;
+      }
+      const access = await resolveAccessScope({
+        scope,
+        identity: sessionUserId ? { kind: 'user', userId: sessionUserId } : { kind: 'anonymous' },
+        signal: req.signal,
+      });
+      if (access.ok) scope = access.scope;
+    }
 
     // D-39: a scopes filter narrows only the verified tenant, and only with values of that tenant's vocabulary
     if (retrievalFilters?.scopes) {
@@ -1999,6 +2128,108 @@ IMPORTANT:
       NEVER omit the 'instructions' field - it's essential for proper tool execution.`
     };
 
+    // System message for handling Gmail attachments
+    const gmailAttachmentSystemMessage: ExtendedMessage = {
+      id: 'system-gmail-attachment-instruction',
+      role: 'system',
+      content: `When the user asks to send an email with generated media as an attachment:
+      
+      STEP 1: Find the generated media in the conversation history
+      - Look for messages with content parts of type: 'generated_image', 'generated_video', or 'generated_3d_model'
+      - These will have URLs in fields like: generated_images array, video_url, or model_url
+      
+      STEP 2: Extract the actual URL
+      - The URL will be a Supabase storage URL like: https://...supabase.co/storage/v1/object/public/chat-images/...
+      - DO NOT use placeholder text like "[Generated Image]"
+      
+      STEP 3: Format your Gmail tool call with BOTH instructions and structured parameters:
+      {
+        "instructions": "Create a draft email to recipient@example.com with subject and body",
+        "to": "recipient@example.com",
+        "subject": "Email subject",
+        "body": "Email body text",
+        "attachment_url": "[THE ACTUAL SUPABASE URL]"
+      }
+      
+      IMPORTANT:
+      - Include BOTH the 'instructions' field AND the structured parameters
+      - The 'instructions' field should briefly describe what you're doing
+      - Send all parameters in a single object, NOT wrapped in an 'input' field
+      - The attachment_url MUST be the actual URL (starts with https://)
+      - The system will automatically convert attachment_url to the 'file' parameter
+      - DO NOT include the attachment URL in the body text
+      - Body text should be plain text (system will convert to HTML)
+      
+      If the user doesn't explicitly mention attaching the generated media but says something like "email this image" or "send this video", assume they want it as an attachment.`
+    };
+
+    // System message for handling media uploads to Google Drive
+    const mediaUploadSystemMessage: ExtendedMessage = {
+      id: 'system-media-upload-instruction',
+      role: 'system',
+      content: `🚨 CRITICAL: When the user asks to upload media (images, videos, or 3D models) to Google Drive:
+
+      ⚠️ YOU HAVE ACCESS TO THE google_drive_upload_file TOOL - USE IT IMMEDIATELY!
+      
+      DO NOT ask "Could you please provide the image you want to upload?" - The user has already provided it.
+      DO NOT respond with text only - Call the google_drive_upload_file tool.
+      
+      When the user says "Upload this image to Google Drive" or similar:
+      
+      STEP 1: Find the media in the conversation history - check BOTH generated and attached media
+      
+      FOR GENERATED MEDIA:
+      - Look for messages with content parts of type: 'generated_image', 'generated_video', or 'generated_3d_model'
+      - These will have URLs in fields like: generated_images array, video_url, or model_url
+      - For generated_image: Look for content.generated_images[0] (array of URLs)
+      - For generated_video: Look for content.video_url or content.generated_videos[0]
+      - For generated_3d_model: Look for content.model_url
+      
+      FOR ATTACHED MEDIA:
+      - Look for user messages with image attachments
+      - These appear as message content arrays with image_url parts
+      - The system will automatically provide the correct image URL during tool execution
+      - DO NOT generate placeholder URLs like "https://supabase.co/storage/v1/object/public/chat-images/abc123.png"
+      
+      STEP 2: Extract the actual URL
+      - The URL will be a Supabase storage URL like: https://...supabase.co/storage/v1/object/public/chat-images/...
+      - DO NOT use placeholder text like "[Generated Image]" or descriptions
+      - Extract the ACTUAL URL string from the content part
+      
+      STEP 3: Call google_drive_upload_file with EXACTLY these parameters:
+      {
+        "instructions": "Upload [type] to Google Drive",
+        "file": "[THE ACTUAL URL YOU EXTRACTED OR LEAVE EMPTY FOR ATTACHED IMAGES]",
+        "new_name": "descriptive-name.ext"
+      }
+      
+      CRITICAL REMINDERS FOR ATTACHED IMAGES:
+      - If the user attached an image (not generated), DO NOT provide a fake URL in the 'file' parameter
+      - For attached images, provide minimal parameters: {"instructions": "Upload image to Google Drive", "new_name": "image.png"}
+      - The system will automatically inject the correct image URL during tool execution
+      - NEVER generate placeholder URLs like "https://supabase.co/storage/v1/object/public/chat-images/abc123.png"
+      
+      CRITICAL REMINDERS FOR GENERATED MEDIA:
+      - file MUST be the actual URL (starts with https://)
+      - If you see multiple images, use the first one or ask which to upload
+      - Common URL patterns:
+        * Images: https://...supabase.co/storage/v1/object/public/chat-images/[id].png
+        * Videos: https://...supabase.co/storage/v1/object/public/chat-videos/[id].mp4
+        * 3D Models: https://...supabase.co/storage/v1/object/public/3d-models/[id].glb
+      
+      Example of CORRECT extraction from conversation:
+      User: "Generate an image of a sunset"
+      Assistant: [Shows generated image with URL https://...supabase.co/storage/v1/object/public/chat-images/abc123.png]
+      User: "Upload this image to Google Drive"
+      
+      Your tool call MUST include:
+      {
+        "instructions": "Upload the sunset image to Google Drive",
+        "file_url": "https://...supabase.co/storage/v1/object/public/chat-images/abc123.png",
+        "filename": "sunset-image.png"
+      }`
+    };
+
     // Combine messages including system messages
     const messages = [
       formattingSystemMessage,
@@ -2032,6 +2263,7 @@ IMPORTANT:
       reasoning: reasoningRequested,
       attachments: hasAttachedImage,
     };
+    const citationRecheck = citationRecheckFor(scope);
     const citationSession = createCitationSession({
       capabilities: citationCapabilities,
       ragMode,
@@ -2040,6 +2272,7 @@ IMPORTANT:
       ...(registryAnswerLanguage ? { textsSource: answerTurn.textsSource } : {}),
       config: generationConfig,
       facts: citationFacts,
+      ...(citationRecheck ? { recheck: citationRecheck } : {}),
     });
     // Phase 5.2.1 D-65, D-66: a turn that may get the calculation labels its blocks, so chunk operands can name an alias
     const calcQuestion = getLastUserText(rawMessages);
@@ -2217,6 +2450,65 @@ Context:
           }
         : undefined;
 
+    // Phase 5.2.1 D-79, D-80, D-83: with RAG_PROMPT_BUDGET on, the whole prompt is planned against the model window before
+    // retrieval; off, nothing is computed and the request is today's
+    const promptBudgetOn = answerTurn.config.promptBudget;
+    const budgetLanguage = answerTurn.answerLanguage ?? userLanguage;
+    let promptBudgetPlan: PromptBudgetPlan | null = null;
+    let promptBudgetInput: Parameters<typeof planPromptBudget>[0] | null = null;
+    if (promptBudgetOn) {
+      const budgetWebSearch = SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY);
+      const budgetTools: Record<string, unknown> =
+        SUPPORTS_TOOLS && !modelBlocksTools(model)
+          ? {
+              useDocument: createDocumentReferenceTool([]),
+              ...(budgetWebSearch ? { webSearch: { description: WEB_SEARCH_TOOL_DESCRIPTION, inputSchema: webSearchInputSchema } } : {}),
+              ...(calcMayBeOffered
+                ? { [CALCULATE_TOOL_NAME]: buildCalculateTool({ aliases: new Set<string>(), holder: createCalcTraceHolder() }) }
+                : {}),
+            }
+          : {};
+      const budgetSystem = [
+        `${createEnhancedRAGPrompt((await resolveRagSystemPrompt()).ragSystemPrompt, '', ragMode)}${EMAIL_TOOL_PREFERENCE}`,
+        ...[...messages.slice(0, messages.length - originalMessages.length), gmailAttachmentSystemMessage, mediaUploadSystemMessage].map(
+          (message) => messageContentText(message.content),
+        ),
+      ].join('\n\n');
+      const budgetRules = answerTurn.rulesBlock({
+        mode: ragMode,
+        webSearchOffered: budgetWebSearch,
+        ...(calcMayBeOffered ? { calculation: { mode: 'tool' as const } } : {}),
+      });
+      const budgetModelLimit = modelBlocksTools(model) ? 16384 : getMaxTokensForModel(model);
+      promptBudgetInput = {
+        window: modelContextLength(model),
+        family: modelFamily(model),
+        parts: {
+          system: budgetSystem,
+          rules: budgetRules,
+          tools: await toolSchemaParts(budgetTools as Record<string, any>),
+          question: messageContentText(originalMessages.at(-1)?.content),
+        },
+        history: originalMessages.slice(0, -1) as unknown as BudgetMessage[],
+        // D-29: the cap only lowers the model limit, so the limit is the reserve before the cap is decided
+        answerReserve: answerTurn.maxOutputTokens(budgetModelLimit),
+        documentTarget: effectiveDisableRAG ? 0 : currentContextTokenBudget(),
+        answerLanguage: budgetLanguage,
+        mcpToolReserve: useMcpForRequest,
+        overflowMode: answerTurn.config.contextOverflow,
+      };
+      promptBudgetPlan = planPromptBudget(promptBudgetInput);
+      if (promptBudgetPlan.status === 'exceeded') {
+        console.warn('[Prompt Budget] Request does not fit the model window; not sent', {
+          code: PROMPT_BUDGET_EXCEEDED,
+          window: promptBudgetPlan.trace.window,
+          windowSource: promptBudgetPlan.trace.window_source,
+        });
+        return promptBudgetExceededResponse(budgetLanguage);
+      }
+    }
+    const documentTokenBudgetOption = promptBudgetPlan ? { documentTokenBudget: promptBudgetPlan.documentBudget } : {};
+
     // Initialize variables for RAG
     let context = '';
     let retrievalResult: RetrievalResult | null = null;
@@ -2292,6 +2584,7 @@ Context:
             isGPTModel,
             ragMode,
             webSearchEnabled,
+            ...documentTokenBudgetOption,
           },
           signal: req.signal,
           trace: collector,
@@ -2324,7 +2617,7 @@ Context:
           query: queryText,
           profile: 'chat',
           documentRefs,
-          options: { generalOverview: true },
+          options: { generalOverview: true, ...documentTokenBudgetOption },
           signal: req.signal,
           trace: collector,
           ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
@@ -2675,6 +2968,8 @@ Context:
     // Replace the {{context}} placeholder with the actual context
     let systemPrompt;
     let claudeSystemText: string | null = null;
+    // D-80: the composed answer-rule block of this turn, counted as its own part by the post-build check
+    let budgetBuiltRules = '';
 
     // Use optimized system prompt with RAG context
     console.log('[RAG SYSTEM DEBUG] ========== System Prompt Selection ==========');
@@ -2722,6 +3017,7 @@ Context:
         ),
         historyNotEvidence,
       );
+      if (promptBudgetPlan) budgetBuiltRules = answerTurn.rulesBlock(answerRuleOptions);
       if (citationSession.strategy === 'claude-citations') {
         claudeSystemText = [
           appendHistoryNotEvidence(
@@ -2789,7 +3085,7 @@ Context:
 
     // Modify the system prompt to prefer gmail_send_email over gmail_create_draft
     // Add email tool guidance to system prompt
-    let enhancedSystemPrompt = `${systemPrompt}\n\nIMPORTANT: When user says "send an email", use gmail_send_email tool, NOT gmail_create_draft.`;
+    let enhancedSystemPrompt = `${systemPrompt}${EMAIL_TOOL_PREFERENCE}`;
 
     // Add multi-step instructions if handling multi-step query
     if (isHandlingMultiStep && multiStepMetadata) {
@@ -2864,107 +3160,6 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       throw new Error('Last message must be from the user');
     }
 
-    // System message for handling Gmail attachments
-    const gmailAttachmentSystemMessage: ExtendedMessage = {
-      id: 'system-gmail-attachment-instruction',
-      role: 'system',
-      content: `When the user asks to send an email with generated media as an attachment:
-      
-      STEP 1: Find the generated media in the conversation history
-      - Look for messages with content parts of type: 'generated_image', 'generated_video', or 'generated_3d_model'
-      - These will have URLs in fields like: generated_images array, video_url, or model_url
-      
-      STEP 2: Extract the actual URL
-      - The URL will be a Supabase storage URL like: https://...supabase.co/storage/v1/object/public/chat-images/...
-      - DO NOT use placeholder text like "[Generated Image]"
-      
-      STEP 3: Format your Gmail tool call with BOTH instructions and structured parameters:
-      {
-        "instructions": "Create a draft email to recipient@example.com with subject and body",
-        "to": "recipient@example.com",
-        "subject": "Email subject",
-        "body": "Email body text",
-        "attachment_url": "[THE ACTUAL SUPABASE URL]"
-      }
-      
-      IMPORTANT:
-      - Include BOTH the 'instructions' field AND the structured parameters
-      - The 'instructions' field should briefly describe what you're doing
-      - Send all parameters in a single object, NOT wrapped in an 'input' field
-      - The attachment_url MUST be the actual URL (starts with https://)
-      - The system will automatically convert attachment_url to the 'file' parameter
-      - DO NOT include the attachment URL in the body text
-      - Body text should be plain text (system will convert to HTML)
-      
-      If the user doesn't explicitly mention attaching the generated media but says something like "email this image" or "send this video", assume they want it as an attachment.`
-    };
-
-    // System message for handling media uploads to Google Drive
-    const mediaUploadSystemMessage: ExtendedMessage = {
-      id: 'system-media-upload-instruction',
-      role: 'system',
-      content: `🚨 CRITICAL: When the user asks to upload media (images, videos, or 3D models) to Google Drive:
-
-      ⚠️ YOU HAVE ACCESS TO THE google_drive_upload_file TOOL - USE IT IMMEDIATELY!
-      
-      DO NOT ask "Could you please provide the image you want to upload?" - The user has already provided it.
-      DO NOT respond with text only - Call the google_drive_upload_file tool.
-      
-      When the user says "Upload this image to Google Drive" or similar:
-      
-      STEP 1: Find the media in the conversation history - check BOTH generated and attached media
-      
-      FOR GENERATED MEDIA:
-      - Look for messages with content parts of type: 'generated_image', 'generated_video', or 'generated_3d_model'
-      - These will have URLs in fields like: generated_images array, video_url, or model_url
-      - For generated_image: Look for content.generated_images[0] (array of URLs)
-      - For generated_video: Look for content.video_url or content.generated_videos[0]
-      - For generated_3d_model: Look for content.model_url
-      
-      FOR ATTACHED MEDIA:
-      - Look for user messages with image attachments
-      - These appear as message content arrays with image_url parts
-      - The system will automatically provide the correct image URL during tool execution
-      - DO NOT generate placeholder URLs like "https://supabase.co/storage/v1/object/public/chat-images/abc123.png"
-      
-      STEP 2: Extract the actual URL
-      - The URL will be a Supabase storage URL like: https://...supabase.co/storage/v1/object/public/chat-images/...
-      - DO NOT use placeholder text like "[Generated Image]" or descriptions
-      - Extract the ACTUAL URL string from the content part
-      
-      STEP 3: Call google_drive_upload_file with EXACTLY these parameters:
-      {
-        "instructions": "Upload [type] to Google Drive",
-        "file": "[THE ACTUAL URL YOU EXTRACTED OR LEAVE EMPTY FOR ATTACHED IMAGES]",
-        "new_name": "descriptive-name.ext"
-      }
-      
-      CRITICAL REMINDERS FOR ATTACHED IMAGES:
-      - If the user attached an image (not generated), DO NOT provide a fake URL in the 'file' parameter
-      - For attached images, provide minimal parameters: {"instructions": "Upload image to Google Drive", "new_name": "image.png"}
-      - The system will automatically inject the correct image URL during tool execution
-      - NEVER generate placeholder URLs like "https://supabase.co/storage/v1/object/public/chat-images/abc123.png"
-      
-      CRITICAL REMINDERS FOR GENERATED MEDIA:
-      - file MUST be the actual URL (starts with https://)
-      - If you see multiple images, use the first one or ask which to upload
-      - Common URL patterns:
-        * Images: https://...supabase.co/storage/v1/object/public/chat-images/[id].png
-        * Videos: https://...supabase.co/storage/v1/object/public/chat-videos/[id].mp4
-        * 3D Models: https://...supabase.co/storage/v1/object/public/3d-models/[id].glb
-      
-      Example of CORRECT extraction from conversation:
-      User: "Generate an image of a sunset"
-      Assistant: [Shows generated image with URL https://...supabase.co/storage/v1/object/public/chat-images/abc123.png]
-      User: "Upload this image to Google Drive"
-      
-      Your tool call MUST include:
-      {
-        "instructions": "Upload the sunset image to Google Drive",
-        "file_url": "https://...supabase.co/storage/v1/object/public/chat-images/abc123.png",
-        "filename": "sunset-image.png"
-      }`
-    };
 
     // Convert messages to AI SDK compatible format
     const convertedMessages = originalMessages.map(msg => {
@@ -3019,6 +3214,19 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       return msg;
     });
 
+    // D-82: when turns were dropped and the query layer condensed the question, the note is planned with the documents as packed
+    const budgetStandalone = retrievalResult?.queryPlan?.standalone?.trim();
+    if (
+      promptBudgetPlan &&
+      promptBudgetInput &&
+      budgetStandalone &&
+      budgetStandalone !== retrievalResult?.queryPlan?.original?.trim() &&
+      promptBudgetPlan.trace.dropped_history_turns > 0
+    ) {
+      const replanned = planPromptBudget({ ...promptBudgetInput, standaloneQuery: budgetStandalone, documentTarget: promptBudgetPlan.documentBudget });
+      if (replanned.status === 'ok') promptBudgetPlan = replanned;
+    }
+
     // Prepend the system messages to the original message history
     // IMPORTANT: Identity prompt MUST come FIRST to establish the AI's persona
     const systemContextMessage: ExtendedMessage = {
@@ -3039,7 +3247,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       gmailGeneralSystemMessage,
       gmailAttachmentSystemMessage,
       mediaUploadSystemMessage,
-      ...citationSession.stripHistory(convertedMessages),
+      ...budgetNoteMessages(promptBudgetPlan),
+      ...citationSession.stripHistory(budgetModelHistory(convertedMessages, promptBudgetPlan)),
     ];
 
     const messagesForModel = messagesForModelExtended.map(toMessage);
@@ -3150,7 +3359,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       // Prepare base application tools for AI SDK
       // Note: Specialized content tools removed - using unified RAG pipeline with workspace isolation
       const baseTools: Record<string, any> = {
-        useDocument: documentReferenceTool
+        // D-15: built per request, so the tool accepts only this request's used (access-filtered) documents
+        useDocument: createDocumentReferenceTool(usedDocuments)
       };
 
       // Initialize MCP client if requested, only for tool discovery (NOT execution)
@@ -3649,10 +3859,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           const exa = new Exa(exaApiKey);
 
           allTools['webSearch'] = tool({
-            description: 'Search the web for up-to-date information. Use this when you need current information about events, news, or facts that may have occurred after your training data.',
-            inputSchema: z.object({
-              query: z.string().min(1).max(100).describe('The search query to find information on the web'),
-            }),
+            description: WEB_SEARCH_TOOL_DESCRIPTION,
+            inputSchema: webSearchInputSchema,
             execute: async ({ query }) => {
               console.log('API ROUTE: Web search tool called with Exa, query:', query);
 
@@ -3750,67 +3958,6 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         });
       });
 
-      // Helper function to determine appropriate token limits for different models
-      function getMaxTokensForModel(modelId: string): number {
-        // Check for environment variable override
-        if (env.MAX_COMPLETION_TOKENS) {
-          const envLimit = parseInt(env.MAX_COMPLETION_TOKENS);
-          if (!isNaN(envLimit) && envLimit > 0) {
-            console.log('API ROUTE: Using MAX_COMPLETION_TOKENS from env:', envLimit);
-            return envLimit;
-          }
-        }
-
-        // Specific limits for Claude 4 models (newer generation with higher capacity)
-        if (modelId.includes('claude-sonnet-4') || modelId.includes('claude-4-sonnet')) {
-          console.log('API ROUTE: Using Claude Sonnet 4 token limit: 16384');
-          return 16384; // Conservative but sufficient for most responses (actual max is 64K)
-        }
-        if (modelId.includes('claude-opus-4') || modelId.includes('claude-4-opus')) {
-          console.log('API ROUTE: Using Claude Opus 4 token limit: 16384');
-          return 16384; // Conservative limit for Opus 4 (actual max is 32K)
-        }
-
-        // Specific limits for Claude 3.7/3.8 models
-        if (modelId.includes('claude-3.7') || modelId.includes('claude-3.8')) {
-          console.log('API ROUTE: Using Claude 3.7/3.8 token limit: 8192');
-          return 8192; // Higher limit for newer Claude 3 models
-        }
-
-        // Default for other Claude/Anthropic models
-        if (modelId.includes('claude') || modelId.includes('anthropic')) {
-          console.log('API ROUTE: Using default Claude model token limit: 4096');
-          return 4096; // Safe limit for older Claude models
-        }
-
-        // GPT models
-        if (modelId.includes('gpt-5-mini')) {
-          console.log('API ROUTE: Using GPT-5-mini token limit: 8192');
-          return 8192; // Higher limit for cheaper model
-        }
-        if (modelId.includes('gpt-5')) {
-          console.log('API ROUTE: Using GPT-5 token limit: 4096');
-          return 4096; // Conservative default
-        }
-        if (modelId.includes('gpt-4.1-mini')) {
-          console.log('API ROUTE: Using GPT-4.1-mini token limit: 8192');
-          return 8192; // Higher limit for cheaper model
-        }
-        if (modelId.includes('gpt-4.1')) {
-          console.log('API ROUTE: Using GPT-4.1 token limit: 4096');
-          return 4096; // Standard limit
-        }
-
-        // Llama models
-        if (modelId.includes('llama')) {
-          console.log('API ROUTE: Using Llama model token limit: 4096');
-          return 4096; // Standard limit for Llama
-        }
-
-        // Default for unknown models
-        console.log('API ROUTE: Using default token limit: 4096');
-        return 4096;
-      }
 
       // Debug logging for WhatsApp issue
       // console.log('[WHATSAPP DEBUG] ===== FULL PROMPT ANALYSIS =====');
@@ -3906,8 +4053,52 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         }
       }
 
+      // D-84: the built request is checked against the window; tool schemas above the reserve cost more history, never documents
+      let promptBudgetFinal: FinalizeResult | null = null;
+      if (promptBudgetPlan) {
+        const budgetDocuments = context.length > 0 && !smallTalkTurn ? context : '';
+        let budgetSystemText = messagesForModel
+          .filter((message) => message.role === 'system' && message.id !== BUDGET_NOTE_ID)
+          .map((message) => uiMessageText(message))
+          .join('\n\n');
+        if (budgetDocuments) budgetSystemText = budgetSystemText.replace(budgetDocuments, '');
+        if (budgetBuiltRules) budgetSystemText = budgetSystemText.replace(budgetBuiltRules, '');
+        promptBudgetFinal = finalizePromptBudget(promptBudgetPlan, {
+          builtParts: {
+            system: budgetSystemText,
+            rules: budgetBuiltRules,
+            tools: await toolSchemaParts(SUPPORTS_TOOLS && !isClaudeSonnet4 ? allTools : undefined),
+            documents: budgetDocuments,
+          },
+          droppedDocuments: retrievalResult?.packing?.droppedDocuments ?? 0,
+        });
+        if (promptBudgetFinal.status === 'exceeded') {
+          console.warn('[Prompt Budget] Built request does not fit the model window; not sent', {
+            code: PROMPT_BUDGET_EXCEEDED,
+            window: promptBudgetFinal.trace.window,
+          });
+          recordPromptBudgetSpan(ragTrace?.collector, promptBudgetFinal.trace);
+          finishRagTrace();
+          return promptBudgetExceededResponse(budgetLanguage);
+        }
+        recordPromptBudgetSpan(ragTrace?.collector, promptBudgetFinal.trace);
+        if (promptBudgetFinal.action === 'dropped_history') {
+          const regionStart = messagesForModel.length - budgetNoteMessages(promptBudgetPlan).length - budgetModelHistory(convertedMessages, promptBudgetPlan).length;
+          const rebuilt = { keptHistory: promptBudgetFinal.keptHistory, standaloneNote: promptBudgetFinal.standaloneNote };
+          messagesForModel.splice(
+            regionStart,
+            messagesForModel.length - regionStart,
+            ...[...budgetNoteMessages(rebuilt), ...citationSession.stripHistory(budgetModelHistory(convertedMessages, rebuilt))].map(toMessage),
+          );
+        }
+      }
+
       // Convert UI messages to model messages required by streamText
       const modelMessages = await convertToModelMessages(messagesForModel);
+      if (promptBudgetPlan) {
+        const budgetQuestionText = uiMessageText(toMessage(convertedMessages[convertedMessages.length - 1]!), true);
+        if (budgetQuestionText.trim()) assertQuestionLast(modelMessages as unknown as BudgetMessage[], budgetQuestionText);
+      }
       let requestReasoningDetails: Record<string, unknown> | undefined;
       const captureReasoningDetails = (openrouterMetadata: Record<string, unknown> | undefined) => {
         const reasoningContent = openrouterMetadata?.reasoning_content;
@@ -4011,6 +4202,18 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             }
           };
         }
+      }
+
+      // D-84, Pitfall B3: OpenRouter must not compress a request the budget planned
+      if (promptBudgetPlan && AI_PROVIDER === 'openrouter') {
+        const openrouterOptions = streamParams.providerOptions?.openrouter || {};
+        const plugins = Array.isArray(openrouterOptions.plugins)
+          ? openrouterOptions.plugins.filter((plugin: { id?: unknown } | null) => plugin?.id !== CONTEXT_COMPRESSION_PLUGIN)
+          : [];
+        streamParams.providerOptions = {
+          ...(streamParams.providerOptions || {}),
+          openrouter: { ...openrouterOptions, plugins: [...plugins, { id: CONTEXT_COMPRESSION_PLUGIN, enabled: false }] },
+        };
       }
 
       const normalizeWebSearchItems = (payload: any): any[] => {
@@ -4475,6 +4678,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             : [];
         const knowledgeBaseContext =
           premiseBlocks.length > 0 && (retrievalResult?.status === 'ok' || retrievalResult?.status === 'degraded');
+        // D-25, A-06: the cited documents' label sets, only while access is on (the labels map is absent while off)
+        const citedAccessSets = accessSetsFor(retrievalResult?.accessLabels, (records?.citations ?? []).map((record) => record.documentId));
         return scheduleAnswerFinish({
           answerId,
           scope,
@@ -4501,6 +4706,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           requestLanguage: userLanguage,
           ...(answerTurn.config.anyNonDefault ? answerFinishFields(answerTurn, retrievalResult) : {}),
           ...(calcRun ? { calc: { primary: calcRun.primary, items: calcRun.checks, reviewReasons: calcRun.reviewReasons } } : {}),
+          ...(citedAccessSets && citedAccessSets.length > 0 ? { accessSets: citedAccessSets } : {}),
+          ...(promptBudgetFinal ? { promptBudget: promptBudgetSummary(promptBudgetFinal.trace) } : {}),
         });
       };
 
@@ -4634,14 +4841,22 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             const status = isAborted ? 'aborted' : generationFailed || finishReason === 'error' ? 'error' : 'ok';
             const fallbackReason = citationSession.fallbackReason;
             const answerTrace = answerTraceFields(answerTurn, citationSession.truncatedMarkers());
-            const rules = [...(fallbackReason ? [`citation_strategy_fallback:${fallbackReason}`] : []), ...answerTrace.rules];
+            const accessCheck = citationSession.accessCheck();
+            const rules = [
+              ...(fallbackReason ? [`citation_strategy_fallback:${fallbackReason}`] : []),
+              ...answerTrace.rules,
+              ...(accessCheck && accessCheck.violations > 0 ? ['access_violation'] : []),
+              ...(accessCheck?.failed ? ['access_recheck_failed'] : []),
+            ];
+            const counts = accessCheck ? { ...answerTrace.counts, access_violations: accessCheck.violations } : answerTrace.counts;
+            if (accessCheck) ragTrace.collector.addAccessViolations(accessCheck.violations);
             ragTrace.collector.record({
               name: 'generation',
               status,
               startedAt: aiStartTime,
               endedAt: ragTrace.collector.now(),
               ...(rules.length > 0 ? { rules } : {}),
-              ...(answerTrace.counts ? { counts: answerTrace.counts } : {}),
+              ...(counts ? { counts } : {}),
             });
             // D-75, D-61: the calculation check as its own span, status counts and duration only
             const calcRun = calcCheckSink?.result();
@@ -4660,6 +4875,16 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             }
           }
           finishRagTrace();
+          // D-26: a citation the caller may not see leaves an id-only security event, written after the response
+          const deniedCitations = citationSession.accessCheck();
+          if (scope && deniedCitations && !deniedCitations.failed && deniedCitations.violations > 0) {
+            scheduleSecurityEvent(scope, {
+              event: 'citation_access_violation',
+              chunkIds: deniedCitations.chunkIds,
+              documentIds: deniedCitations.documentIds,
+              requestId: ragTraceId ?? answerId ?? null,
+            });
+          }
           const responseText = responseMessage.parts
             .map((part) => (part.type === 'text' ? part.text : ''))
             .join('');

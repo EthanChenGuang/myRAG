@@ -106,7 +106,7 @@ describe('uploader on context blocks (D-44)', () => {
   it('switch off: the documents select is the base string and blocks carry no uploaderId key', async () => {
     vi.stubEnv('RAG_SECURITY_EVENTS', '');
     const { client, calls } = fakeAdmin(data());
-    const rows = await fetchAssemblyRows(CANDIDATES, { adminClient: client, signal: new AbortController().signal });
+    const rows = await fetchAssemblyRows(CANDIDATES, { access: { mode: 'off' }, adminClient: client, signal: new AbortController().signal });
     expect(calls.find((call) => call.table === 'documents')!.select).toBe(BASE_SELECT);
     const blocks = blocksOf(withoutUserId(rows.documents));
     expect(blocks.length).toBeGreaterThan(0);
@@ -117,7 +117,7 @@ describe('uploader on context blocks (D-44)', () => {
   it('switch on: the same single documents read also selects user_id, and each block carries its uploader', async () => {
     vi.stubEnv('RAG_SECURITY_EVENTS', 'true');
     const { client, calls } = fakeAdmin(data());
-    const rows = await fetchAssemblyRows(CANDIDATES, { adminClient: client, signal: new AbortController().signal });
+    const rows = await fetchAssemblyRows(CANDIDATES, { access: { mode: 'off' }, adminClient: client, signal: new AbortController().signal });
     const documentCalls = calls.filter((call) => call.table === 'documents');
     expect(documentCalls).toHaveLength(1);
     expect(documentCalls[0]!.select).toBe(`${BASE_SELECT}, user_id`);
@@ -131,7 +131,7 @@ describe('uploader on context blocks (D-44)', () => {
   it('the uploader does not change any other block field', async () => {
     vi.stubEnv('RAG_SECURITY_EVENTS', 'true');
     const { client } = fakeAdmin(data());
-    const rows = await fetchAssemblyRows(CANDIDATES, { adminClient: client, signal: new AbortController().signal });
+    const rows = await fetchAssemblyRows(CANDIDATES, { access: { mode: 'off' }, adminClient: client, signal: new AbortController().signal });
     const on = blocksOf(rows.documents).map((block) => omit(block, 'uploaderId'));
     expect(on).toEqual(blocksOf(withoutUserId(rows.documents)));
   });
@@ -347,11 +347,11 @@ describe('the overview documents read (D-44)', () => {
   it('keeps the base select with the switch off and adds user_id with it on', async () => {
     const off = overviewAdmin();
     vi.stubEnv('RAG_SECURITY_EVENTS', 'false');
-    await fetchOverviewDocuments(chunks, { admin: off.admin, signal: new AbortController().signal });
+    await fetchOverviewDocuments(chunks, { access: { mode: 'off' }, admin: off.admin, signal: new AbortController().signal });
     expect(off.selects).toEqual([BASE_SELECT]);
     const on = overviewAdmin();
     vi.stubEnv('RAG_SECURITY_EVENTS', 'true');
-    await fetchOverviewDocuments(chunks, { admin: on.admin, signal: new AbortController().signal });
+    await fetchOverviewDocuments(chunks, { access: { mode: 'off' }, admin: on.admin, signal: new AbortController().signal });
     expect(on.selects).toEqual([`${BASE_SELECT}, user_id`]);
   });
 });

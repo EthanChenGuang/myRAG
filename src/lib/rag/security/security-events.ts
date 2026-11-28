@@ -83,6 +83,8 @@ export interface OutputGuardEventContext {
   removedTargets: readonly string[];
   /** The matched credential-request phrases; searched in the blocks, never logged or stored. */
   matchedPhrases: readonly string[];
+  /** Phase 4.3 (D-25, A-06): the blocks' access-key arrays while access groups are on; passed to the review hand-off as given. */
+  accessSets?: readonly (readonly string[])[] | null;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -378,6 +380,7 @@ export function recordOutputGuardEvents(summary: OutputGuardSummary, context: Ou
         documentIds: [...documentIds].sort(),
         detector: OUTPUT_GUARD_DETECTOR,
         traceId: context.traceId,
+        ...(context.accessSets ? { accessSets: context.accessSets } : {}),
       });
     } catch (error) {
       resolved.log('[RAG Security] review hand-off failed', { tenant: context.tenantKey, traceId: context.traceId, code: errorCode(error) });

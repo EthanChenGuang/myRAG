@@ -1,4 +1,5 @@
 import type { TranslatedQuery } from './variants';
+import type { TenantGlossary } from './glossary';
 import type { TranslateSkip } from './llamaindex/translate';
 import type { PostCheckLimits, PostCheckSkipReason } from './post-checks';
 import type { Lang } from './rewrite-gate';
@@ -77,13 +78,17 @@ export interface QueryLayerTranslateContext extends TranslateContext {
   /** QueryParams.max_translations. */
   maxItems?: number;
   limits?: PostCheckLimits;
+  /** D-14: the tenant glossary while RAG_TRANSLATION_GLOSSARY is effective; absent changes nothing. */
+  glossary?: TenantGlossary | null;
   /** The framework's transformer (D-02); the native one when absent. */
   transformer?: Pick<QueryTransformer, 'translate'>;
   /** Receives every discarded or failed target (reason only, never text). */
   onSkip?: (skip: TranslateSkip) => void;
+  /** D-17: receives the source language the translate output reported, when it reported one. */
+  onSourceLanguage?: (language: Lang) => void;
 }
 
-const POST_CHECK_REASONS: ReadonlySet<string> = new Set<PostCheckSkipReason>(['protected_token_lost', 'length', 'empty', 'cap']);
+const POST_CHECK_REASONS: ReadonlySet<string> = new Set<PostCheckSkipReason | 'glossary_term_lost'>(['protected_token_lost', 'length', 'empty', 'cap', 'glossary_term_lost']);
 
 export class TranslateCallFailed extends Error {
   constructor() {
@@ -116,8 +121,10 @@ export const queryLayerTranslator: Translator = Object.freeze({
       signal: ctx.signal,
       ...(ctx.maxItems !== undefined ? { maxItems: ctx.maxItems } : {}),
       ...(ctx.limits ? { limits: ctx.limits } : {}),
+      ...(ctx.glossary ? { glossary: ctx.glossary } : {}),
     });
     for (const skip of result.skipped) ctx.onSkip?.(skip);
+    if (result.sourceLanguage) ctx.onSourceLanguage?.(result.sourceLanguage);
     if (result.variants.length === 0 && result.skipped.some((skip) => !POST_CHECK_REASONS.has(skip.reason))) {
       throw new TranslateCallFailed();
     }

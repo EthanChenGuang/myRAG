@@ -11,7 +11,8 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['tests/setup-env.ts'],
     include: ['tests/**/*.test.ts'],
-    testTimeout: 60000,
-    hookTimeout: 60000,
+    testTimeout: 120000,
+    // Route-fixture setup builds the full fixture corpus; with the 05.2.1-12 documents a multi-tenant build takes 43-59 s on CI.
+    hookTimeout: 180000,
   },
 });

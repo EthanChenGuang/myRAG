@@ -80,6 +80,7 @@ describe('voiceKeywordFallback', () => {
     quiet();
     const { admin, calls } = recordingAdmin(responderFor({}));
     await voiceKeywordFallback({
+      access: { mode: 'off' },
       query: 'show me the logo',
       scope: mintScope('single', null, null),
       admin,
@@ -109,6 +110,7 @@ describe('voiceKeywordFallback', () => {
     quiet();
     const { admin, calls } = recordingAdmin(responderFor({ documentIds: [DOC_1, DOC_2] }));
     await voiceKeywordFallback({
+      access: { mode: 'off' },
       query: 'show me the logo',
       scope: mintScope('personal', USER_A, null),
       admin,
@@ -132,6 +134,7 @@ describe('voiceKeywordFallback', () => {
     quiet();
     const { admin, calls } = recordingAdmin(responderFor({ documentIds: [DOC_1] }));
     await voiceKeywordFallback({
+      access: { mode: 'off' },
       query: 'who created this',
       scope: mintScope('org', USER_A, ORG_O),
       admin,
@@ -150,6 +153,7 @@ describe('voiceKeywordFallback', () => {
     const { admin, calls } = recordingAdmin(responderFor({ documentIds: [] }));
     const existing: VoiceChunk[] = [{ id: 'c1', document_id: DOC_1, content: 'x', similarity: 0.5, metadata: {} }];
     const merged = await voiceKeywordFallback({
+      access: { mode: 'off' },
       query: 'show me the logo',
       scope: mintScope('personal', USER_A, null),
       admin,
@@ -165,6 +169,7 @@ describe('voiceKeywordFallback', () => {
     quiet();
     const { admin, calls } = recordingAdmin(responderFor({}));
     await voiceKeywordFallback({
+      access: { mode: 'off' },
       query: 'logo),id.eq.x',
       scope: mintScope('single', null, null),
       admin,
@@ -188,6 +193,7 @@ describe('voiceKeywordFallback', () => {
     const person = chunkRow('img-person', DOC_1, { name: 'Creator portrait', image_context: 'founder', image_url: 'https://example.invalid/p.png' });
     const { admin } = recordingAdmin(responderFor({ chunks: [logo, person] }));
     const merged = await voiceKeywordFallback({
+      access: { mode: 'off' },
       query: 'show me the logo',
       scope: mintScope('single', null, null),
       admin,

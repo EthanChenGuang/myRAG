@@ -91,9 +91,13 @@ def pre_count():
     return PRE_ITEM_SETS["fixture-baseline"][0]
 
 
+# Later plans append their own categories (05.2.1-12: multi_step_calc, context_overflow); they are not this plan's items.
+LATER_PLAN_CATEGORIES = ("multi_step_calc", "context_overflow")
+
+
 @pytest.fixture(scope="module")
 def new_items(golden, pre_count):
-    return golden[pre_count:]
+    return [item for item in golden[pre_count:] if item.category not in LATER_PLAN_CATEGORIES]
 
 
 @pytest.fixture(scope="module")

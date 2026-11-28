@@ -69,7 +69,8 @@ export async function POST(request: NextRequest) {
             conn.connection_id,
             conn.provider
           );
-          results.push({ provider: conn.provider, ...stats });
+          // UI-SPEC 6.14: how many documents this sync left with the fallback audience (owner and admins).
+          results.push({ provider: conn.provider, ...stats, failClosed: stats.failClosed ?? 0 });
         } catch (e) {
           results.push({
             provider: conn.provider,
@@ -125,7 +126,8 @@ export async function POST(request: NextRequest) {
       .eq('user_id', user.id)
       .eq('connection_id', connectionId);
 
-    return NextResponse.json(stats);
+    // UI-SPEC 6.14: the count of documents this sync left with the fallback audience (owner and admins).
+    return NextResponse.json({ ...stats, failClosed: stats.failClosed ?? 0 });
 
   } catch (error) {
     console.error('[Nango] Sync error:', error);

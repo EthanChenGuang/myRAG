@@ -22,10 +22,12 @@ CORPUS = REPO_ROOT / "eval" / "fixtures" / "corpus"
 # same items, so the batch-count tests keep to the older corpus.
 PHASE42_STEMS = ("dup-passage", "dup-solo", "versioned-note", "grid-reference", "coded-list", "morphology-note")
 PHASE53_STEMS = ("access-rules", "instrument-catalog")
+# Plan 05.2.1-12 calc-rules and long-reference documents, also left out of the pre-Phase-4.2 drafting set.
+PHASE521_STEMS = ("calc-rules", "long-reference")
 
 
 def _pre_phase42_documents():
-    return [doc for doc in DirectoryWorkspaceSource(CORPUS).documents() if not doc.filename.startswith(PHASE42_STEMS + PHASE53_STEMS)]
+    return [doc for doc in DirectoryWorkspaceSource(CORPUS).documents() if not doc.filename.startswith(PHASE42_STEMS + PHASE53_STEMS + PHASE521_STEMS)]
 GOOD_QUOTE = "The annual plans refund window is 45 days from the purchase date"
 CATEGORIES = ("multi_turn", "compound", "exact_term", "table", "scanned", "no_answer", "general")
 

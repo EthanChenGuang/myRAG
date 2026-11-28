@@ -24,7 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      HAS_JUDGE_KEYS: ${{ secrets.OPENROUTER_API_KEY != '' && secrets.OPENAI_API_KEY != '' }}
+      HAS_JUDGE_KEYS: ${{ secrets.OPENROUTER_API_KEY != '' && (secrets.OPENAI_API_KEY != '' || vars.RAG_EVAL_OPENAI_VIA != 'openai') }}
+      RAG_EVAL_OPENAI_VIA: ${{ vars.RAG_EVAL_OPENAI_VIA || (secrets.OPENAI_API_KEY == '' && 'openrouter' || 'openai') }}
     steps:
       - name: Skip notice when judge keys are absent
         if: env.HAS_JUDGE_KEYS != 'true'
@@ -149,7 +150,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      HAS_JUDGE_KEYS: ${{ secrets.OPENROUTER_API_KEY != '' && secrets.OPENAI_API_KEY != '' }}
+      HAS_JUDGE_KEYS: ${{ secrets.OPENROUTER_API_KEY != '' && (secrets.OPENAI_API_KEY != '' || vars.RAG_EVAL_OPENAI_VIA != 'openai') }}
+      RAG_EVAL_OPENAI_VIA: ${{ vars.RAG_EVAL_OPENAI_VIA || (secrets.OPENAI_API_KEY == '' && 'openrouter' || 'openai') }}
     steps:
       - name: Skip notice when judge keys are absent
         if: env.HAS_JUDGE_KEYS != 'true'
@@ -241,6 +243,7 @@ jobs:
     timeout-minutes: 120
     env:
       HAS_ADMIN_BEARER: ${{ secrets.RAG_ADMIN_BEARER != '' }}
+      RAG_EVAL_OPENAI_VIA: ${{ vars.RAG_EVAL_OPENAI_VIA || (secrets.OPENAI_API_KEY == '' && 'openrouter' || 'openai') }}
     steps:
       - name: Detect private eval data and the admin token on this runner
         run: |
