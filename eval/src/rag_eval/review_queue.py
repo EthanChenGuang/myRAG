@@ -27,7 +27,7 @@ from rag_sidecar.contracts.review import ReviewQueueItem
 
 from rag_eval.draft import writer
 from rag_eval.draft.writer import PrivatePathError, assert_private_path
-from rag_eval.golden_io import load_golden, write_golden
+from rag_eval.golden_io import UnsafeWriteTarget, load_golden, write_golden, write_private_atomic
 from rag_eval.matching import normalize_text
 from rag_eval.near_dup import matches as near_duplicate_matches
 from rag_eval.paths import resolve_cli_path
@@ -255,10 +255,7 @@ def _queue_dir() -> Path:
 
 
 def _write_text(path: Path, payload: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_bytes(payload.encode("utf-8"))
-    os.replace(tmp, path)
+    write_private_atomic(path, payload.encode("utf-8"))
 
 
 def pull(
@@ -345,10 +342,14 @@ def pull(
         collected.extend(db_items)
 
     ordered = _merge(collected)
-    _write_text(
-        target,
-        "".join(json.dumps(item.model_dump(mode="json"), ensure_ascii=False, sort_keys=True) + "\n" for item in ordered),
-    )
+    try:
+        _write_text(
+            target,
+            "".join(json.dumps(item.model_dump(mode="json"), ensure_ascii=False, sort_keys=True) + "\n" for item in ordered),
+        )
+    except UnsafeWriteTarget as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_PRIVATE
     print(f"[Review Queue] pulled {total} observations and {db_count} flagged records, wrote {len(ordered)} items to {target}")
     return EXIT_OK
 

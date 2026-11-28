@@ -67,6 +67,9 @@ MiningReason = Literal[
     "zero_results",
     "low_score",
     "no_source_opened",
+    "claim_unsupported",
+    "calc_mismatch",
+    "calc_unverified",
 ]
 # Phase 5.2 D-55: reasons written by the answer checks and by rag_enqueue_review_item (0944); never produced by weekly mining alone.
 CheckReviewReason = Literal["claim_unsupported", "output_guard", "version_conflict"]
@@ -409,6 +412,10 @@ class MiningReasonCounts(_Contract):
     zero_results: Count = 0
     low_score: Count = 0
     no_source_opened: Count = 0
+    # Answer-check reasons the newest rag_mine_failed_queries (0984) also mines from rag_answer_records.review_reasons.
+    claim_unsupported: Count = 0
+    calc_mismatch: Count = 0
+    calc_unverified: Count = 0
 
 
 class MiningTenantResult(_Contract):

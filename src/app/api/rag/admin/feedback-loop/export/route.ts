@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod/v3';
-import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
 import { getDeploymentMode } from '@/lib/deployment-mode';
 import { buildExport, EXPORT_KINDS, readFeedbackLoopConfig, validateGrantTenantKey } from '@/lib/rag';
 import { getSupabaseAdmin } from '@/lib/supabase';
@@ -17,13 +17,13 @@ function badRequest(error: string): NextResponse {
 
 /**
  * D-17 and D-20: an operator admin pulls one tenant's labelled items of one triage kind as NDJSON (DictionaryCandidate, TrainingPair
- * or GoldenExportLine per line). requireAdminOrDeny runs before anything else; 404 unless RAG_DOMAIN_EXPERT_REVIEW is true; the
+ * or GoldenExportLine per line). checkAdmin runs before anything else, and its verified user id names the admin in the export audit lines (T-07-77); 404 unless RAG_DOMAIN_EXPERT_REVIEW is true; the
  * tenant key must be valid for the deployment mode. Reads use the service-role client filtered by that tenant_key. A golden line also
  * carries its item's source, read from rag_review_item_strata for the exported item ids and that tenant only (research X-9).
  */
 export async function GET(request: Request): Promise<Response> {
-  const denied = await requireAdminOrDeny(request);
-  if (denied) return denied;
+  const guard = await checkAdmin(request);
+  if (!guard.ok) return adminDenied(guard.status);
 
   if (!readFeedbackLoopConfig().domainExpertReview) {
     return NextResponse.json({ success: false, error: 'Not found' }, { status: 404, headers: NO_STORE });
@@ -38,7 +38,7 @@ export async function GET(request: Request): Promise<Response> {
   try {
     const admin = getSupabaseAdmin();
     if (!admin) return NextResponse.json({ success: false, error: 'Export is unavailable' }, { status: 503, headers: NO_STORE });
-    const lines = await buildExport(admin, parsed.data.kind, tenant.tenantKey);
+    const lines = await buildExport(admin, parsed.data.kind, tenant.tenantKey, guard.userId);
     const encoder = new TextEncoder();
     const body = new ReadableStream<Uint8Array>({
       start(controller) {

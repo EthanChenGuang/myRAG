@@ -3,6 +3,24 @@
     "MiningReasonCounts": {
       "additionalProperties": false,
       "properties": {
+        "calc_mismatch": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Calc Mismatch",
+          "type": "integer"
+        },
+        "calc_unverified": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Calc Unverified",
+          "type": "integer"
+        },
+        "claim_unsupported": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Claim Unsupported",
+          "type": "integer"
+        },
         "feedback_negative": {
           "default": 0,
           "minimum": 0,

@@ -21,7 +21,7 @@ from rag_sidecar.contracts.feedback_loop import DictionaryCandidate, TrainingPai
 
 from rag_eval.draft import writer
 from rag_eval.draft.writer import PrivatePathError, assert_private_path
-from rag_eval.golden_io import load_golden
+from rag_eval.golden_io import UnsafeWriteTarget, load_golden, write_private_atomic
 from rag_eval.paths import resolve_cli_path
 from rag_eval.review_queue import (
     DEFAULT_TOKEN_ENV,
@@ -114,13 +114,7 @@ def _leaks(records: list[BaseModel], test: tuple[set[str], set[str]]) -> int:
 
 def _write_atomic(path: Path, records: list[BaseModel]) -> None:
     payload = "".join(json.dumps(record.model_dump(mode="json"), ensure_ascii=False, sort_keys=True) + "\n" for record in records)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    try:
-        tmp.write_bytes(payload.encode("utf-8"))
-        os.replace(tmp, path)
-    finally:
-        tmp.unlink(missing_ok=True)
+    write_private_atomic(path, payload.encode("utf-8"))
 
 
 def export(kind: str, tenant: str, *, base_url: str, token_env: str = DEFAULT_TOKEN_ENV, out: Path | str | None = None) -> int:
@@ -157,7 +151,11 @@ def export(kind: str, tenant: str, *, base_url: str, token_env: str = DEFAULT_TO
                 file=sys.stderr,
             )
             return EXIT_INPUT
-    _write_atomic(target, records)
+    try:
+        _write_atomic(target, records)
+    except UnsafeWriteTarget as exc:
+        print(f"error: {exc}; nothing written", file=sys.stderr)
+        return EXIT_PRIVATE
     checked = "checked against the domain set" if test is not None else "no domain set to check against"
     suffix = f" ({checked})" if kind == "training" else ""
     print(f"[Feedback Loop] {kind} export {hashed}: wrote {len(records)} line(s) to {target}{suffix}")

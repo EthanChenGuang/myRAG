@@ -89,13 +89,13 @@ async function readItems(admin: Client, tenantKey: string, triage: Triage, statu
   return items;
 }
 
-function logExport(kind: ExportKind, tenantKey: string, count: number, skipped: number): void {
-  console.log('[Feedback Loop] export', { kind, tenant: hashForLog(tenantKey), count, skipped });
+function logExport(kind: ExportKind, tenantKey: string, adminId: string, count: number, skipped: number): void {
+  console.log('[Feedback Loop] export', { kind, admin: adminId, tenant: hashForLog(tenantKey), count, skipped });
 }
 
 // --- Dictionary (Phase 4.1.1 hand-off) ---
 
-export async function exportDictionary(admin: Client, tenantKey: string): Promise<DictionaryCandidate[]> {
+export async function exportDictionary(admin: Client, tenantKey: string, adminId: string): Promise<DictionaryCandidate[]> {
   const items = await readItems(admin, tenantKey, 'dictionary', ['labelled']);
   const groups = new Map<string, { candidate: DictionaryCandidate; ids: Set<string> }>();
   for (const item of items) {
@@ -139,7 +139,7 @@ export async function exportDictionary(admin: Client, tenantKey: string): Promis
     if (parsed.success) out.push(parsed.data);
     else skipped += 1;
   }
-  logExport('dictionary', tenantKey, out.length, skipped);
+  logExport('dictionary', tenantKey, adminId, out.length, skipped);
   return out;
 }
 
@@ -234,7 +234,7 @@ function documentGroupId(documentId: string): string {
   return createHash('sha256').update(documentId).digest('hex');
 }
 
-export async function exportTraining(admin: Client, tenantKey: string): Promise<TrainingPair[]> {
+export async function exportTraining(admin: Client, tenantKey: string, adminId: string): Promise<TrainingPair[]> {
   const items = await readItems(admin, tenantKey, 'training', ['labelled']);
   const golden = await goldenDocuments(admin, tenantKey);
   const out: TrainingPair[] = [];
@@ -263,7 +263,7 @@ export async function exportTraining(admin: Client, tenantKey: string): Promise<
     if (parsed.success) out.push(parsed.data);
     else skipped += 1;
   }
-  logExport('training', tenantKey, out.length, skipped);
+  logExport('training', tenantKey, adminId, out.length, skipped);
   return out;
 }
 
@@ -359,7 +359,7 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-export async function exportGolden(admin: Client, tenantKey: string): Promise<GoldenExportLine[]> {
+export async function exportGolden(admin: Client, tenantKey: string, adminId: string): Promise<GoldenExportLine[]> {
   const items = await readItems(admin, tenantKey, 'golden', ['labelled']);
   const out: GoldenExportLine[] = [];
   let skipped = 0;
@@ -412,16 +412,18 @@ export async function exportGolden(admin: Client, tenantKey: string): Promise<Go
       else skipped += 1;
     }
   }
-  logExport('golden', tenantKey, out.length, skipped);
-  console.log('[Review] chunks', { export: 'golden', tenant: hashForLog(tenantKey), count: chunkReads });
+  logExport('golden', tenantKey, adminId, out.length, skipped);
+  console.log('[Review] chunks', { export: 'golden', admin: adminId, tenant: hashForLog(tenantKey), count: chunkReads });
   return out;
 }
 
-export async function buildExport(admin: Client, kind: ExportKind, tenantKey: string): Promise<unknown[]> {
+/** adminId is the user id the route guard verified (checkAdmin); it is logged as an id only, for the audit trail of chunk reads. */
+export async function buildExport(admin: Client, kind: ExportKind, tenantKey: string, adminId: string): Promise<unknown[]> {
   if (!parseTenantKey(tenantKey)) throw new Error('feedback_export_invalid_tenant');
-  if (kind === 'dictionary') return exportDictionary(admin, tenantKey);
-  if (kind === 'training') return exportTraining(admin, tenantKey);
-  return exportGolden(admin, tenantKey);
+  if (!UUID_RE.test(adminId)) throw new Error('feedback_export_invalid_admin');
+  if (kind === 'dictionary') return exportDictionary(admin, tenantKey, adminId);
+  if (kind === 'training') return exportTraining(admin, tenantKey, adminId);
+  return exportGolden(admin, tenantKey, adminId);
 }
 
 // --- Mark exported (D-20, D-21) ---

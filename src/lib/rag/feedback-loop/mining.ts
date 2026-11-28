@@ -20,6 +20,9 @@ const MINING_REASONS = [
   'zero_results',
   'low_score',
   'no_source_opened',
+  'claim_unsupported',
+  'calc_mismatch',
+  'calc_unverified',
 ] as const;
 type MiningReason = (typeof MINING_REASONS)[number];
 type ReasonCounts = Record<MiningReason, number>;

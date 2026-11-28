@@ -7898,6 +7898,9 @@
       "tenants": [
         {
           "by_reason": {
+            "calc_mismatch": 0,
+            "calc_unverified": 0,
+            "claim_unsupported": 0,
             "feedback_negative": 2,
             "groundedness_flagged": 0,
             "low_score": 0,
