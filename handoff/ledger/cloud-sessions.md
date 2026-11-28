@@ -968,3 +968,5 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 00:27Z OWNER chose (a): min_gate_n for slice-drop checks -> quick-min-gate-n (pre-register commit first).
 - 00:27Z SKILL created: .claude/skills/gsd-orchestrator on claude/ecstatic-hamilton-86gtwv. OWNER STANDING RULE: keep it updated with every reusable lesson (skill §10).
 - 00:30Z skill updated: intake routing table (owner request -> GSD route), CI sharding and HNSW-vacuum lessons. Also: plan-check split 04.4-16 into 16-19 (exec 04.4-16 dispatched); 06.3-05 DONE 51730ae7 -> t41; ci-timeouts DONE adec1ab0 (already merged into t38); t40 ETA about 45 min. Accepted t40's characterize-chat fix fd0f73944.
+- 00:33Z quick-311 DONE exec/quick-311-binding-hardening 992aa27d -> t41 (EMB-10 live mode; I-1/2/3; leg_weights.domain dropped by eval route fixed; sweep: no candidate passes; start live at 0.25). Archived.
+- 00:33Z skill updated: §11 handoff/takeover.
