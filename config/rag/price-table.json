@@ -1,0 +1,176 @@
+{
+  "schema_version": 1,
+  "note": "Unit prices for the release defaults record (ADM-02). usd null means not provided: the amount is reported as not_provided, never guessed. Values are copied only from price sources already in the repository; an operator fills the missing ones before the live decide.",
+  "entries": [
+    {
+      "id": "embedding:openai-3-small-1536",
+      "kind": "embedding",
+      "provider": "openai",
+      "model": "text-embedding-3-small",
+      "unit": "usd_per_million_tokens",
+      "usd": 0.02,
+      "as_of": "2026-11-28",
+      "source": "src/lib/rag/embeddings/catalog.ts list price (read through prices.ts)"
+    },
+    {
+      "id": "embedding:voyage-4-large-1024",
+      "kind": "embedding",
+      "provider": "voyage",
+      "model": "voyage-4-large",
+      "unit": "usd_per_million_tokens",
+      "usd": 0.12,
+      "as_of": "2026-11-28",
+      "source": "src/lib/rag/embeddings/catalog.ts list price (read through prices.ts)"
+    },
+    {
+      "id": "embedding:qwen3-8b-1024",
+      "kind": "embedding",
+      "provider": "qwen3",
+      "model": "Qwen/Qwen3-Embedding-8B",
+      "unit": "usd_per_million_tokens",
+      "usd": 0.01,
+      "as_of": "2026-11-28",
+      "source": "src/lib/rag/embeddings/catalog.ts list price (read through prices.ts)"
+    },
+    {
+      "id": "embedding:bge-m3-1024",
+      "kind": "embedding",
+      "provider": "bge-m3",
+      "model": "BAAI/bge-m3",
+      "unit": "usd_per_million_tokens",
+      "usd": 0.01,
+      "as_of": "2026-11-28",
+      "source": "src/lib/rag/embeddings/catalog.ts list price (read through prices.ts)"
+    },
+    {
+      "id": "parse:native",
+      "kind": "parse",
+      "provider": "parse-tier",
+      "model": "native",
+      "unit": "usd_per_page",
+      "usd": 0.001,
+      "as_of": "2026-01-01",
+      "source": "config/rag/parse-routing.json costs.tier.native (assumed until measured)"
+    },
+    {
+      "id": "parse:fast",
+      "kind": "parse",
+      "provider": "parse-tier",
+      "model": "fast",
+      "unit": "usd_per_page",
+      "usd": 0.001,
+      "as_of": "2026-01-01",
+      "source": "config/rag/parse-routing.json costs.tier.fast (assumed until measured)"
+    },
+    {
+      "id": "parse:structured",
+      "kind": "parse",
+      "provider": "parse-tier",
+      "model": "structured",
+      "unit": "usd_per_page",
+      "usd": 0.001,
+      "as_of": "2026-01-01",
+      "source": "config/rag/parse-routing.json costs.tier.structured (assumed until measured)"
+    },
+    {
+      "id": "parse:premium",
+      "kind": "parse",
+      "provider": "parse-tier",
+      "model": "premium",
+      "unit": "usd_per_page",
+      "usd": 0.004,
+      "as_of": "2026-01-01",
+      "source": "config/rag/parse-routing.json costs.tier.premium"
+    },
+    {
+      "id": "enrichment:tokens",
+      "kind": "enrichment",
+      "provider": "query-llm",
+      "model": null,
+      "unit": "usd_per_million_tokens",
+      "usd": null,
+      "as_of": "2026-11-28",
+      "source": "no in-repo price"
+    },
+    {
+      "id": "rerank:cohere",
+      "kind": "rerank",
+      "provider": "cohere",
+      "model": null,
+      "unit": "usd_per_call",
+      "usd": null,
+      "as_of": "2026-11-28",
+      "source": "no in-repo price"
+    },
+    {
+      "id": "rerank:voyage",
+      "kind": "rerank",
+      "provider": "voyage",
+      "model": null,
+      "unit": "usd_per_call",
+      "usd": null,
+      "as_of": "2026-11-28",
+      "source": "no in-repo price"
+    },
+    {
+      "id": "generation:input",
+      "kind": "generation",
+      "provider": "chat-model",
+      "model": null,
+      "unit": "usd_per_million_tokens",
+      "usd": null,
+      "as_of": "2026-11-28",
+      "source": "no in-repo price"
+    },
+    {
+      "id": "generation:output",
+      "kind": "generation",
+      "provider": "chat-model",
+      "model": null,
+      "unit": "usd_per_million_tokens",
+      "usd": null,
+      "as_of": "2026-11-28",
+      "source": "no in-repo price"
+    },
+    {
+      "id": "store_point:weaviate",
+      "kind": "external_store",
+      "provider": "weaviate",
+      "model": null,
+      "unit": "usd_per_point",
+      "usd": null,
+      "as_of": "2026-11-28",
+      "source": "no in-repo price"
+    },
+    {
+      "id": "store_point:qdrant",
+      "kind": "external_store",
+      "provider": "qdrant",
+      "model": null,
+      "unit": "usd_per_point",
+      "usd": null,
+      "as_of": "2026-11-28",
+      "source": "no in-repo price"
+    },
+    {
+      "id": "store_request:weaviate",
+      "kind": "external_store",
+      "provider": "weaviate",
+      "model": null,
+      "unit": "usd_per_request",
+      "usd": null,
+      "as_of": "2026-11-28",
+      "source": "no in-repo price"
+    },
+    {
+      "id": "store_request:qdrant",
+      "kind": "external_store",
+      "provider": "qdrant",
+      "model": null,
+      "unit": "usd_per_request",
+      "usd": null,
+      "as_of": "2026-11-28",
+      "source": "no in-repo price"
+    }
+  ]
+}

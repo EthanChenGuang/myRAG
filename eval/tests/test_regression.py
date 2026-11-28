@@ -388,12 +388,25 @@ def test_a_failed_confirmatory_run_falls_back_to_the_incumbent_for_the_adopted_s
     assert "Confirmatory run: failed (latency_over_budget)" in (world["decisions"] / "defaults-fixtures.md").read_text()
 
 
-def test_a_live_decide_without_the_adm02_blocks_writes_nothing(world, capsys):
+def test_a_live_decide_writes_the_adm02_blocks_itself(world):
     harness = FakeHarness()
     plan_path = _plan_b(world, harness)
     assert _run_b(world, plan_path, harness) == 0
-    assert _decide_b(world, plan_path) == 2
-    assert "cost, latency and per-language" in capsys.readouterr().err
+    assert _decide_b(world, plan_path) == 0
+    decision = DefaultsDecision.model_validate_json(world["record"].read_text(encoding="utf-8"))
+    assert decision.provisional is None
+    assert decision.cost is not None and decision.latency is not None and decision.per_language
+    assert (world["decisions"] / f"defaults-{decision.decided_at[:10]}.md").is_file()
+
+
+def test_a_live_decide_with_an_unreadable_price_table_writes_nothing(world, capsys):
+    harness = FakeHarness()
+    plan_path = _plan_b(world, harness)
+    assert _run_b(world, plan_path, harness) == 0
+    bad = world["dir"] / "prices.json"
+    bad.write_text("{}", encoding="utf-8")
+    assert _decide_b(world, plan_path, "--price-table", bad) == 2
+    assert "price table" in capsys.readouterr().err
     assert not world["record"].exists() and not list(world["decisions"].glob("defaults-*.md"))
 
 
