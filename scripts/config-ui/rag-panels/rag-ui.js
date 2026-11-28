@@ -339,7 +339,8 @@ function ragUiMapError(result, locale, options) {
       return { key: 'error.hiddenNeedsSidecar', kind: 'invalid', message: ragUiLabel('error.hiddenNeedsSidecar', locale) };
     }
     const detail = Array.isArray(body.details) && body.details[0] && typeof body.details[0] === 'object' ? body.details[0] : null;
-    const text = detail && typeof detail.message === 'string' ? detail.message : err;
+    const text = detail && typeof detail.message === 'string' && detail.message.trim() ? detail.message : err;
+    if (!text) return { key: 'code.unknown', kind: 'invalid', message: ragUiLabel('code.unknown', locale, { code: String(status) }) };
     const mapped = { key: 'error.invalid', kind: 'invalid', message: ragUiLabel('error.invalid', locale, { detail: text }) };
     if (detail && typeof detail.path === 'string') mapped.field = detail.path;
     return mapped;

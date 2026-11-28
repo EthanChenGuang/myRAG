@@ -71,6 +71,12 @@ describe('ragUiMapError covers every row of UI-SPEC 8.2', () => {
   const map = (result: Record<string, unknown>, opts: Record<string, unknown> = {}) =>
     ragUiMapError(result, 'en', { unavailable: 'View is unavailable right now. Select Reload panel in a moment.', ...opts });
 
+  it('a 400 with no details[] and no error string is code.unknown with the status, in every locale', () => {
+    expect(map({ status: 400, body: { errors: [] } })).toMatchObject({ key: 'code.unknown', message: 'The server reported 400.' });
+    expect(ragUiMapError({ status: 400, body: {} }, 'zh', {})!.message).toBe('服务器返回了 400。');
+    expect(ragUiMapError({ status: 400, body: { details: [{ message: ' ' }] } }, 'it', {})!.message).toBe('Il server ha indicato 400.');
+  });
+
   it('thrown or timeout: the shared network sentence, or outcome unknown after an action that changes state', () => {
     expect(map({ thrown: true })).toMatchObject({ key: 'error.network', kind: 'network' });
     expect(map({ thrown: true })!.message).toContain('Config UI server');
