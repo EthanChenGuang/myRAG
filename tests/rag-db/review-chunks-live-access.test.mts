@@ -182,7 +182,7 @@ for (const mode of MODES) {
       await setSwitch(true, admin);
       assert.deepEqual(await servedText(OUTSIDER, itemId), [], 'the outsider gets no text for the NULL-set item');
       // 0990 (rih G8): while access is enforced a NULL-set item fails closed and only the tenant's administrators read it, so a
-      // group member without admin rights gets nothing either until the 0984/0986 backfill recomputes its sets.
+      // group member without admin rights gets nothing either until the 0984/0988 backfill recomputes its sets.
       assert.deepEqual(await servedText(MEMBER, itemId), [], 'a NULL-set item fails closed for a non-admin member while enforced');
     });
 

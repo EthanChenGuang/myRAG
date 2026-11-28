@@ -808,7 +808,9 @@ test('terminology-rpc: rag_term_* RPCs and table access fail under src outside s
   assert.deepEqual(rulesFor({ 'src/lib/rag/terminology/admin/write.ts': rpc + table }), []);
   assert.deepEqual(rulesFor({ 'tests/rag-db/x.test.mts': rpc + table }), []);
   assert.deepEqual(rulesFor({ 'eval/harness/x.mts': rpc + table }), []);
-  assert.deepEqual(rulesFor({ 'src/lib/c.ts': "// db.rpc('rag_term_effective')\nconst x = 'rag_term_entries';\n" }), []);
+  // A mention in a comment passes; quick-term-rpc-hardening also catches a rag_term_* name in a string constant.
+  assert.deepEqual(rulesFor({ 'src/lib/c.ts': "// db.rpc('rag_term_effective')\n" }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/c.ts': "const x = 'rag_term_entries';\n" }), ['src/lib/c.ts:terminology-rpc']);
 });
 
 test('table-lookup-rpc: the deterministic lookup RPCs fail outside src/lib/rag and pass inside', () => {

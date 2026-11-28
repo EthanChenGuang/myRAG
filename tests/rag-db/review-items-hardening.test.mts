@@ -221,7 +221,7 @@ for (const mode of MODES) {
       after(async () => {
         for (const file of [
           'supabase/migrations/0984_review_items_access_sets.sql',
-          'supabase/migrations/0986_review_items_writers_access_sets.sql',
+          'supabase/migrations/0988_review_items_writers_access_sets.sql',
           MIGRATION,
           GRANTS_MIGRATION,
         ]) {
