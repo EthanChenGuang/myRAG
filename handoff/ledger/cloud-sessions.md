@@ -998,3 +998,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - Told the NF-1 executor to merge main and finish; told the t39 builder to merge main and open its PR.
   - MORNING QUEUE: switch the connector to prod; owner desk applies train38-live.sql, then 0989 (NF-1) and 0991 (UF-1) once those PRs merge; then ask about the prod deploy.
 - 01:00Z NF-1 DONE (1d903706). I merged main in (39e682fc) and opened PR #138, subscribed. Archived. Prod SQL: .planning/quick/261127-nf1-shared-chats-rls/prod-apply.sql (morning queue).
+- 01:02Z quick-52-nyquist-ui DONE d19b0902 (nyquist true; UI 18->21/24) and quick-idn DONE 3dc5e49f (neutral names plus a domain-word CI check) -> t41, told the t41 builder. Archived both.
