@@ -1,20 +1,20 @@
 -- 0990: review-queue hardening after the Phase 5.1.1 verification (quick task review-items-hardening; G5, G6, G8, G9).
 -- G5 (privacy): rag_review_items_fill_owner(), a BEFORE INSERT trigger on rag_review_items, copies user_id and chat_id from the item's
--- retrieval log row of the same tenant when the writer left them NULL. The sampled writer rag_review_items_enqueue (0967, 0986) wrote
+-- retrieval log row of the same tenant when the writer left them NULL. The sampled writer rag_review_items_enqueue (0967, 0988) wrote
 -- retrieval_log_id only, and that key is ON DELETE SET NULL (0534), so a deleted user's or chat's sampled items kept their masked query
 -- until expires_at. With the owner columns set, the user cascade (0534) and rag_feedback_loop_on_chat_delete (0534) remove them; the
 -- log retention purge still leaves the item (its snapshot outlives the log). A trigger rather than a rebuilt writer body, so re-running
--- 0967 or 0986 cannot bring the gap back. Existing items are backfilled from their log rows. SECURITY INVOKER (writers run as
+-- 0967 or 0988 cannot bring the gap back. Existing items are backfilled from their log rows. SECURITY INVOKER (writers run as
 -- service_role or as a SECURITY DEFINER owner, both of which read the log), empty search_path, service_role only.
 -- G8: rag_review_access_sets (0984) is rebuilt with one change: while public.rag_access_enforced() is true, a write with no given sets
 -- and no source document returns '[]' (no restricted source: readable by every expert of the tenant) instead of NULL. The restrictive
 -- policy rag_review_items_access_sets (0934) is replaced so that NULL fails closed while access is enforced: a NULL row is then readable
 -- only by those who administer the tenant (rag_caller_reads_access_sets on a group key nobody holds). With access off a NULL row reads
 -- as before. So items written while access was off, or by a writer restored by an out-of-order re-run, never leak once access is on;
--- the 0984 and 0986 backfills, re-run while enforced, recompute their sets.
+-- the 0984 and 0988 backfills, re-run while enforced, recompute their sets.
 -- G6 and G9 are covered elsewhere: 0944 and 0950 drop their four-argument rag_enqueue_review_item again when the five-argument one
 -- (0984) exists, and tests/rag-db/review-items-hardening.test.mts checks that every rag_review_items writer sets access_sets.
--- One common file: nothing differs by deployment mode. Not folded into the setup files. Idempotent. Apply after 0934, 0984 and 0986;
+-- One common file: nothing differs by deployment mode. Not folded into the setup files. Idempotent. Apply after 0934, 0984 and 0988;
 -- re-running any of them later restores the older function or policy, so re-run this file and then 0410 after them.
 
 BEGIN;
