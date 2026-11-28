@@ -551,6 +551,10 @@ export interface RunLexicalStatsReport {
   b: number;
   /** The run's effective DF mode (D-44, D-45): `cluster` also enabled and rebuilt corpus chunks_cluster. */
   dfMode: 'raw' | 'cluster';
+  /** 04.4-21/22: the effective lexical scoring; ts_rank_cd here means the statistics were built for RAG_RERANK_LOCAL_STATS=tenant only. */
+  scoring: 'bm25' | 'ts_rank_cd';
+  /** 04.4-22 (D-58): present only while the effective RAG_RERANK_LOCAL_STATS is tenant. */
+  rerankLocalStats?: 'tenant';
   tenants: import('./lexical-stats.mts').TenantLexicalStats[];
 }
 
@@ -569,8 +573,11 @@ export async function seedRunLexicalStats(fixture: {
 }): Promise<RunLexicalStatsReport | null> {
   const { loadRagConfig } = await import('@/lib/rag/config');
   const { getRagDeps } = await import('@/lib/rag/deps');
-  const scoring = loadRagConfig(getRagDeps().ragEnv()).v2.lexicalScoring;
-  if (scoring.mode !== 'bm25') return null;
+  const v2 = loadRagConfig(getRagDeps().ragEnv()).v2;
+  const scoring = v2.lexicalScoring;
+  // 04.4-22 (D-58): the local reranker's tenant statistics are the same tables, so a tenant-mode run builds them as a bm25 run does.
+  const rerankTenant = v2.rerankLocalStats === 'tenant';
+  if (scoring.mode !== 'bm25' && !rerankTenant) return null;
   const { fixtureTenantKeys, seedFixtureLexicalStats } = await import('./lexical-stats.mts');
   const seedOptions = scoring.dfMode === 'cluster' ? { cluster: true } : {};
   const tenants = await seedFixtureLexicalStats(fixture.db, await fixtureTenantKeys(fixture.db), seedOptions);
@@ -579,9 +586,17 @@ export async function seedRunLexicalStats(fixture: {
   for (const tenant of [fixture.q62Tenant, fixture.dominantLanguageTenant]) {
     if (tenant) tenants.push(...(await seedFixtureLexicalStats(tenant.db, [tenant.tenantKey], seedOptions)));
   }
-  fixture.sqlSha256['lexical_stats:bm25'] = sha256Hex('bm25');
+  if (scoring.mode === 'bm25') fixture.sqlSha256['lexical_stats:bm25'] = sha256Hex('bm25');
   if (scoring.dfMode === 'cluster') fixture.sqlSha256['lexical_stats:cluster'] = sha256Hex('cluster');
-  return { k1: scoring.k1, b: scoring.b, dfMode: scoring.dfMode, tenants };
+  if (rerankTenant) fixture.sqlSha256['lexical_stats:rerank_tenant'] = sha256Hex('rerank_tenant');
+  return {
+    k1: scoring.k1,
+    b: scoring.b,
+    dfMode: scoring.dfMode,
+    scoring: scoring.mode === 'bm25' ? 'bm25' : 'ts_rank_cd',
+    ...(rerankTenant ? { rerankLocalStats: 'tenant' as const } : {}),
+    tenants,
+  };
 }
 
 export async function createFixtureDatabase(options: {

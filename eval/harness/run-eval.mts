@@ -1302,8 +1302,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           .join('; ');
         throw new Error(`[Eval Harness] fake edge recorded ${edgeErrors} unsupported or failed request(s): ${sample}`);
       }
-      if (inProcess.lexicalStats && !cachePairs) await writeLexicalOverlap(inProcess, deploymentMode, routed.main, outDir);
-      if (inProcess.lexicalStats && !cachePairs && tieCategories().length > 0) await writeLexicalTies(inProcess, deploymentMode, routed.main, outDir);
+      // The overlap and tie files measure the BM25 lexical leg; a ts_rank_cd run with tenant rerank statistics (04.4-22) has none.
+      const bm25Stats = inProcess.lexicalStats?.scoring === 'bm25';
+      if (bm25Stats && !cachePairs) await writeLexicalOverlap(inProcess, deploymentMode, routed.main, outDir);
+      if (bm25Stats && !cachePairs && tieCategories().length > 0) await writeLexicalTies(inProcess, deploymentMode, routed.main, outDir);
     }
   } finally {
     restoreConsole();
