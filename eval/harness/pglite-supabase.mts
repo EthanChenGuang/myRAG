@@ -47,6 +47,8 @@ export interface FixtureDatabase {
   tableSplitTenants?: import('./table-split.mts').TableSplitTenant[];
   /** With q62 items: the isolated tenant of the Phase 6.2 documents (q62-fixtures.mts); the caller closes its database. */
   q62Tenant?: import('./q62-fixtures.mts').Q62Tenant;
+  /** With dominant_language items: the isolated tenant dominated by one language (plan 06.2-41); the caller closes its database. */
+  dominantLanguageTenant?: import('./q62-fixtures.mts').IsolatedFixtureTenant;
   /**
    * Ingest mode only: the golden id of every corpus document (the prechunked derivation from its path) to the id of the document the
    * build wrote from the same file, so item filters name the documents ingest mode actually wrote.
@@ -568,6 +570,8 @@ export async function createFixtureDatabase(options: {
   terminologySeed?: readonly TerminologySeedRow[];
   /** Also load the Phase 6.2 documents into their isolated tenant (q62-fixtures.mts), in either fixture mode. */
   q62?: boolean;
+  /** Also load the dominant-language tenant (q62-fixtures.mts, plan 06.2-41), in either fixture mode. */
+  dominantLanguage?: boolean;
 }): Promise<FixtureDatabase> {
   const { deploymentMode, corpusDir } = options;
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
@@ -594,12 +598,14 @@ export async function createFixtureDatabase(options: {
       ...(options.ingestEnv ? { ingestEnv: options.ingestEnv } : {}),
       ...(options.templated ? { templated: true } : {}),
       ...(options.q62 ? { q62: true } : {}),
+      ...(options.dominantLanguage ? { dominantLanguage: true } : {}),
     });
     if (options.terminologySeed?.length) {
       try {
         await seedTerminology(built.db, options.terminologySeed);
       } catch (error) {
         await built.q62Tenant?.db.close().catch(() => undefined);
+        await built.dominantLanguageTenant?.db.close().catch(() => undefined);
         await built.db.close().catch(() => undefined);
         throw error;
       }
@@ -630,10 +636,12 @@ export async function createFixtureDatabase(options: {
     throw error;
   }
 
-  if (!options.q62) return { db, fixtureUserId: FIXTURE_USER_ID, corpusSha256: corpus.corpusSha256, sqlSha256 };
+  if (!options.q62 && !options.dominantLanguage) return { db, fixtureUserId: FIXTURE_USER_ID, corpusSha256: corpus.corpusSha256, sqlSha256 };
+  let q62Tenant: import('./q62-fixtures.mts').Q62Tenant | undefined;
+  let dominantLanguageTenant: import('./q62-fixtures.mts').IsolatedFixtureTenant | undefined;
   try {
-    const { loadQ62PrechunkedTenant, q62CorpusParts } = await import('./q62-fixtures.mts');
-    const q62Tenant = await loadQ62PrechunkedTenant({
+    const fixtures = await import('./q62-fixtures.mts');
+    const deps = {
       deploymentMode,
       createDatabase: () => createEmptyFixtureDatabase(options),
       prechunkedWriter,
@@ -641,11 +649,27 @@ export async function createFixtureDatabase(options: {
       supersedeFixtureLineages,
       runFixtureRelex,
       seedTerminology,
-    });
+    };
     const hash = crypto.createHash('sha256').update(corpus.corpusSha256);
-    for (const part of q62CorpusParts()) hash.update(Buffer.from([0])).update(part);
-    return { db, fixtureUserId: FIXTURE_USER_ID, corpusSha256: hash.digest('hex'), sqlSha256, q62Tenant };
+    if (options.q62) {
+      q62Tenant = await fixtures.loadQ62PrechunkedTenant(deps);
+      for (const part of fixtures.q62CorpusParts()) hash.update(Buffer.from([0])).update(part);
+    }
+    if (options.dominantLanguage) {
+      dominantLanguageTenant = await fixtures.loadIsolatedPrechunkedTenant(fixtures.DOMINANT_LANGUAGE_TENANT, deps);
+      for (const part of fixtures.dominantLanguageCorpusParts()) hash.update(Buffer.from([0])).update(part);
+    }
+    return {
+      db,
+      fixtureUserId: FIXTURE_USER_ID,
+      corpusSha256: hash.digest('hex'),
+      sqlSha256,
+      ...(q62Tenant ? { q62Tenant } : {}),
+      ...(dominantLanguageTenant ? { dominantLanguageTenant } : {}),
+    };
   } catch (error) {
+    await q62Tenant?.db.close().catch(() => undefined);
+    await dominantLanguageTenant?.db.close().catch(() => undefined);
     await db.close().catch(() => undefined);
     throw error;
   }

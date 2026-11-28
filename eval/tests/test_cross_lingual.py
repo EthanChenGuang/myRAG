@@ -239,13 +239,16 @@ def test_markdown_renders_the_language_pair_table_only_when_the_mapping_is_non_e
 
 
 def test_no_cross_lingual_gold_document_has_a_translated_twin_in_another_language_folder():
-    corpus_dir = REPO_ROOT / "eval/fixtures/corpus"
+    # 06.2-41: the dominant_language items quote the isolated dominant-language corpus, checked the same way.
+    corpus_dirs = (REPO_ROOT / "eval/fixtures/corpus", REPO_ROOT / "eval/fixtures/q62-dominant-corpus")
     stem_languages: dict[str, set[str]] = {}
-    for doc in load_corpus(corpus_dir):
-        stem_languages.setdefault(doc.relpath.split("/", 1)[1].split(".", 1)[0], set()).add(doc.language)
+    documents = {}
+    for corpus_dir in corpus_dirs:
+        for doc in load_corpus(corpus_dir):
+            stem_languages.setdefault(doc.relpath.split("/", 1)[1].split(".", 1)[0], set()).add(doc.language)
+            documents[doc.filename] = doc
     items = [item for item in load_golden(REPO_ROOT / "eval/fixtures/golden.jsonl") if item.category == "cross_lingual"]
     assert items
-    documents = {doc.filename: doc for doc in load_corpus(corpus_dir)}
     for item in items:
         for span in item.gold_evidence:
             stem = documents[span.document].relpath.split("/", 1)[1].split(".", 1)[0]

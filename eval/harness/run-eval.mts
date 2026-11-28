@@ -16,7 +16,18 @@ import { ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.
 import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTableSplitTenant, type TableSplitTenant } from './table-split.mts';
 import { isTemplatedItem } from './templated-fixtures.mts';
 import { phase33BuildEnv, PHASE33_PROCESS_SWITCHES } from './templated-seed.mts';
-import { closeQ62Tenant, isQ62Item, Q62_USER_ID, withQ62Tenant, type Q62Tenant } from './q62-fixtures.mts';
+import {
+  closeIsolatedTenant,
+  closeQ62Tenant,
+  DOMINANT_LANGUAGE_USER_ID,
+  isDominantLanguageItem,
+  isQ62Item,
+  Q62_USER_ID,
+  withIsolatedTenant,
+  withQ62Tenant,
+  type IsolatedFixtureTenant,
+  type Q62Tenant,
+} from './q62-fixtures.mts';
 import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedRunLexicalStats, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
@@ -131,6 +142,13 @@ export interface InProcessEval {
   tableSplitTenants?: TableSplitTenant[];
   /** Set when the session was prepared for q62 items (either fixture mode). */
   q62Tenant?: Q62Tenant;
+  /** Set when the session was prepared for dominant_language items (either fixture mode, plan 06.2-41). */
+  dominantLanguageTenant?: IsolatedFixtureTenant;
+  /**
+   * Drops the in-process per-tenant-key caches the isolated tenants would otherwise share with the main tenant (single-tenant mode keys
+   * every fixture database `s:default`): today the KB language shares that XLG-01 reads.
+   */
+  resetTenantCaches?: () => void;
   /** Ingest mode only: golden corpus document id to the id of the document the build wrote from the same file. */
   ingestDocumentIds?: ReadonlyMap<string, string>;
   fixtureUserId: string;
@@ -385,6 +403,8 @@ export async function prepareInProcessEval(options: {
   tableSplitDocType?: string;
   /** Also load the isolated q62 tenant of the Phase 6.2 documents (q62-fixtures.mts), in either fixture mode. */
   q62?: boolean;
+  /** Also load the dominant-language tenant (q62-fixtures.mts, plan 06.2-41), in either fixture mode. */
+  dominantLanguage?: boolean;
   /** Ingest mode: ingestion switches for the fixture build, also recorded in the retrieval env (RunEvalOptions.ingestBuildEnv). */
   ingestBuildEnv?: Record<string, string>;
   /** The run's requests set options.query_layer=true (D-38); with the env overlay it decides the fake query LLM install (D-39). */
@@ -418,6 +438,8 @@ export async function prepareInProcessEval(options: {
   }
   const q62 = options.q62 === true;
   if (q62 && ingestRouting) throw new Error('[Eval Harness] q62 items do not run under --routing');
+  const dominantLanguage = options.dominantLanguage === true;
+  if (dominantLanguage && ingestRouting) throw new Error('[Eval Harness] dominant_language items do not run under --routing');
   const existingSecret = process.env.RAG_EVAL_SECRET ?? '';
   const secret = existingSecret.length >= 32 ? existingSecret : crypto.randomBytes(24).toString('hex');
   const evalEnv = {
@@ -426,6 +448,7 @@ export async function prepareInProcessEval(options: {
       `user:${FIXTURE_USER_ID}`,
       ...(tableSplit && deploymentMode === 'multi-tenant' ? [`user:${TABLE_SPLIT_USER_ID}`] : []),
       ...(q62 && deploymentMode === 'multi-tenant' ? [`user:${Q62_USER_ID}`] : []),
+      ...(dominantLanguage && deploymentMode === 'multi-tenant' ? [`user:${DOMINANT_LANGUAGE_USER_ID}`] : []),
       ...allowedScopes,
     ].join(','),
     ...(embeddingProfileId ? { RAG_EMBEDDING_PROFILES: 'on' } : {}),
@@ -448,6 +471,7 @@ export async function prepareInProcessEval(options: {
       ...(options.ingestBuildEnv ? { ingestEnv: options.ingestBuildEnv } : {}),
       ...(terminologySeed.length ? { terminologySeed } : {}),
       ...(q62 ? { q62: true } : {}),
+      ...(dominantLanguage ? { dominantLanguage: true } : {}),
     }));
   if (tableSplit && !fixture.tableSplitTenants) {
     if (!ingestFixture) await fixture.db.close().catch(() => undefined);
@@ -459,6 +483,14 @@ export async function prepareInProcessEval(options: {
       await fixture.db.close().catch(() => undefined);
     }
     throw new Error('[Eval Harness] the fixture was built without the q62 tenant');
+  }
+  if (dominantLanguage && !fixture.dominantLanguageTenant) {
+    if (!ingestFixture) {
+      await closeTableSplitTenants(fixture.tableSplitTenants);
+      await closeQ62Tenant(fixture.q62Tenant);
+      await fixture.db.close().catch(() => undefined);
+    }
+    throw new Error('[Eval Harness] the fixture was built without the dominant-language tenant');
   }
   let edge: FakeEdge | undefined;
   try {
@@ -509,9 +541,19 @@ export async function prepareInProcessEval(options: {
           ),
         );
       }
+      const dominantTenant = fixture.dominantLanguageTenant;
+      if (dominantTenant) {
+        await withIsolatedTenant(startedEdge, fixture.db, dominantTenant, () =>
+          seedFixtureFeatures(
+            { db: dominantTenant.db, fixtureUserId: DOMINANT_LANGUAGE_USER_ID, sqlSha256: {} },
+            { deploymentMode, admin: fixtureAdminClient(startedEdge.url) },
+          ),
+        );
+      }
     } catch (error) {
       if (ownsEdge) await startedEdge.close().catch(() => undefined);
       await closeQ62Tenant(fixture.q62Tenant);
+      await closeIsolatedTenant(fixture.dominantLanguageTenant);
       await fixture.db.close().catch(() => undefined);
       throw error;
     }
@@ -528,6 +570,7 @@ export async function prepareInProcessEval(options: {
   }
 
   const route = await import('../../src/app/api/internal/rag/run/route.ts');
+  const kbLanguages = fixture.q62Tenant || fixture.dominantLanguageTenant ? await import('../../src/lib/rag/query/kb-languages.ts') : null;
 
   let translatorModule: typeof import('../../src/lib/rag/query/translate.ts') | null = null;
   if (shouldInstallFixtureTranslator(envOverrides)) {
@@ -569,6 +612,8 @@ export async function prepareInProcessEval(options: {
     fixtureDb: fixture.db,
     ...(fixture.tableSplitTenants ? { tableSplitTenants: fixture.tableSplitTenants } : {}),
     ...(fixture.q62Tenant ? { q62Tenant: fixture.q62Tenant } : {}),
+    ...(fixture.dominantLanguageTenant ? { dominantLanguageTenant: fixture.dominantLanguageTenant } : {}),
+    ...(kbLanguages ? { resetTenantCaches: () => kbLanguages.resetKbLanguageCacheForTests() } : {}),
     ...(fixtureMode === 'ingest' ? { ingestDocumentIds: new Map(Object.entries(fixture.ingestDocumentIds ?? {})) } : {}),
     fixtureUserId: fixture.fixtureUserId,
     corpusSha256: fixture.corpusSha256,
@@ -583,6 +628,7 @@ export async function prepareInProcessEval(options: {
       if (ownsDb) {
         await closeTableSplitTenants(fixture.tableSplitTenants);
         await closeQ62Tenant(fixture.q62Tenant);
+        await closeIsolatedTenant(fixture.dominantLanguageTenant);
         await fixture.db.close().catch(() => undefined);
       }
     },
@@ -846,7 +892,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const items = selectGolden(allItems, goldenFilter).filter(
     (item) =>
       (tableSplitRunnable || (!isTableSplitItem(item) && !isTemplatedItem(item))) &&
-      (q62Runnable || isTableSplitItem(item) || !isQ62Item(item)),
+      (q62Runnable || isTableSplitItem(item) || !isQ62Item(item)) &&
+      (q62Runnable || isTableSplitItem(item) || !isDominantLanguageItem(item)),
   );
   const routed = partitionIngestModeItems(items);
   if (items.length === 0) {
@@ -920,6 +967,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           ...(routed.tableSplit.length > 0 && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
           ...(routed.templated.length > 0 ? { templated: true } : {}),
           ...(routed.q62.length > 0 ? { q62: true } : {}),
+          ...(routed.dominantLanguage.length > 0 ? { dominantLanguage: true } : {}),
           ...(buildEnv ? { ingestBuildEnv: buildEnv } : {}),
           ...((runConfig && Object.keys(runConfig.env).length > 0) || envOverlay
             ? { envOverrides: { ...(runConfig?.env ?? {}), ...(envOverlay ?? {}) } }
@@ -1017,10 +1065,16 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     }
     const q62Tenant = routed.q62.length > 0 ? inProcess?.q62Tenant : undefined;
     if (routed.q62.length > 0 && !q62Tenant) throw new Error('[Eval Harness] q62 items need a session prepared with the q62 tenant');
+    const dominantTenant = routed.dominantLanguage.length > 0 ? inProcess?.dominantLanguageTenant : undefined;
+    if (routed.dominantLanguage.length > 0 && !dominantTenant) {
+      throw new Error('[Eval Harness] dominant_language items need a session prepared with the dominant-language tenant');
+    }
     // Routing by category: the other items first, exactly as before, then each table_split item against its tenant, then the q62 items
-    // (scoped_compound, glossary, version_compare, tagged off_domain) against the q62 tenant.
-    for (const item of cachePairs ? [] : [...routed.main, ...routed.tableSplit, ...routed.q62]) {
-      const routedQ62 = !isTableSplitItem(item) && isQ62Item(item);
+    // (scoped_compound, glossary, version_compare, tagged off_domain) against the q62 tenant, then the items tagged dominant_language
+    // against the dominant-language tenant (plan 06.2-41).
+    for (const item of cachePairs ? [] : [...routed.main, ...routed.tableSplit, ...routed.q62, ...routed.dominantLanguage]) {
+      const routedDominant = !isTableSplitItem(item) && isDominantLanguageItem(item);
+      const routedQ62 = !isTableSplitItem(item) && isQ62Item(item) && !routedDominant;
       // Ingest mode: filter ids name the documents the build wrote; the table_split tenants have no map, so their filters fail closed.
       const documentIds =
         fixtureMode === 'ingest'
@@ -1028,7 +1082,9 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
             ? NO_INGEST_DOCUMENT_IDS
             : routedQ62
               ? (q62Tenant?.documentIds ?? NO_INGEST_DOCUMENT_IDS)
-              : (inProcess?.ingestDocumentIds ?? NO_INGEST_DOCUMENT_IDS)
+              : routedDominant
+                ? (dominantTenant?.documentIds ?? NO_INGEST_DOCUMENT_IDS)
+                : (inProcess?.ingestDocumentIds ?? NO_INGEST_DOCUMENT_IDS)
           : undefined;
       const options = itemRequestOptions(requestOptions, item, documentIds);
       if (inProcess && deploymentMode === 'multi-tenant' && !options.user_id) {
@@ -1042,6 +1098,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       // The q62 documents also belong to their own fixture user in multi-tenant mode.
       if (inProcess && deploymentMode === 'multi-tenant' && routedQ62) {
         options.user_id = Q62_USER_ID;
+        options.organization_id = null;
+      }
+      if (inProcess && deploymentMode === 'multi-tenant' && routedDominant) {
+        options.user_id = DOMINANT_LANGUAGE_USER_ID;
         options.organization_id = null;
       }
       const stubAnswer = stubInjectionAnswers && answersItemForInjectionMetrics(tier, item);
@@ -1061,8 +1121,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         tableTenants && inProcess && isTableSplitItem(item)
           ? await withTableSplitTenant(inProcess.edge, inProcess.fixtureDb, tableTenants, item, () => send(payload))
           : q62Tenant && inProcess && routedQ62
-            ? await withQ62Tenant(inProcess.edge, inProcess.fixtureDb, q62Tenant, () => send(payload))
-            : await send(payload);
+            ? await withIsolatedTenant(inProcess.edge, inProcess.fixtureDb, q62Tenant, () => send(payload), inProcess.resetTenantCaches)
+            : dominantTenant && inProcess && routedDominant
+              ? await withIsolatedTenant(inProcess.edge, inProcess.fixtureDb, dominantTenant, () => send(payload), inProcess.resetTenantCaches)
+              : await send(payload);
       if (status !== 200) {
         const detail = body && typeof body === 'object' && 'error' in body ? String((body as { error: unknown }).error) : 'no error body';
         throw new Error(`[Eval Harness] item ${item.id}: route returned ${status} (${detail})`);

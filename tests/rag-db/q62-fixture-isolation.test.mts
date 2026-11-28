@@ -8,7 +8,7 @@ import path from 'node:path';
 import type { PGlite } from '@electric-sql/pglite';
 import { buildIngestFixtureDatabase, partitionIngestModeItems } from '../../eval/harness/ingest-mode.mts';
 import { createFixtureDatabase, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
-import { isQ62Item } from '../../eval/harness/q62-fixtures.mts';
+import { isIsolatedQ62Item } from '../../eval/harness/q62-fixtures.mts';
 
 const ROOT = process.cwd();
 const CORPUS_DIR = path.join(ROOT, 'eval/fixtures/corpus');
@@ -74,9 +74,12 @@ function lines(file: string): string[] {
     .filter((line) => line.trim() !== '');
 }
 
-/** The golden lines that run against the main tenant; the committed q62 items (06.2-22) are left out of the comparison. */
+/**
+ * The golden lines that run against the main tenant; the committed q62 items (06.2-22) and the dominant-language items (06.2-41,
+ * their own isolated tenant) are left out of the comparison.
+ */
 function oldLines(file: string): string[] {
-  return lines(file).filter((line) => !isQ62Item(JSON.parse(line) as { category: string; tags?: string[] }));
+  return lines(file).filter((line) => !isIsolatedQ62Item(JSON.parse(line) as { category: string; tags?: string[] }));
 }
 
 function writeGolden(dir: string, name: string, content: string[]): string {
@@ -222,7 +225,11 @@ describe('routing', () => {
     );
     const routed = partitionIngestModeItems(items) as { q62?: typeof items; main: typeof items; tableSplit: typeof items };
     assert.ok(routed.q62, 'the partition has a q62 group');
-    const tagged = items.filter((item) => (item.tags ?? []).includes('phase62')).map((item) => item.id).sort();
+    // The 06.2-41 items also carry phase62 but go to the dominant-language tenant (tag dominant_language).
+    const tagged = items
+      .filter((item) => (item.tags ?? []).includes('phase62') && !(item.tags ?? []).includes('dominant_language'))
+      .map((item) => item.id)
+      .sort();
     assert.equal(tagged.length, 33);
     assert.deepEqual(routed.q62.map((item) => item.id).sort(), tagged);
   });

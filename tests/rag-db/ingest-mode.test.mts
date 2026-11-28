@@ -8,7 +8,7 @@ import { loadCorpus, type LoadedCorpus } from '../../eval/harness/corpus.mts';
 import { createFixtureDatabase, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
 import { buildIngestFixtureDatabase, ingestModeGoldenPaths, isPrechunkedOnlyDocument, mergeGoldenFiles } from '../../eval/harness/ingest-mode.mts';
 import { fixtureEntry } from '../helpers/fake-sidecar.ts';
-import { isQ62Item } from '../../eval/harness/q62-fixtures.mts';
+import { isIsolatedQ62Item } from '../../eval/harness/q62-fixtures.mts';
 
 const CORPUS_DIR = path.join(process.cwd(), 'eval/fixtures/corpus');
 const MARKER = '<!-- chunk -->';
@@ -35,7 +35,7 @@ function goldSpans(): Array<{ id: string; span: GoldSpan }> {
     const item = JSON.parse(line) as { id: string; review_status: string; gold_evidence: GoldSpan[]; category: string; tags?: string[] };
     if (item.review_status !== 'approved') continue;
     // The 06.2-22 items quote the isolated q62 tenant's documents (q62-fixture-isolation.test.mts checks them there).
-    if (isQ62Item(item)) continue;
+    if (isIsolatedQ62Item(item)) continue;
     for (const span of item.gold_evidence) spans.push({ id: item.id, span });
   }
   return spans;

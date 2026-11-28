@@ -109,9 +109,14 @@ RELATIVE_DATE_LATIN = ("today", "yesterday", "last week", "this month", "oggi", 
 RELATIVE_DATE_CJK = ("今天", "昨天", "上周", "本月")
 
 
+# Plan 06.2-41 (tag dominant_language): items served from the isolated dominant-language tenant
+# (eval/fixtures/q62-dominant-corpus, not this corpus); test_golden_phase62.py checks them.
+DOMINANT_LANGUAGE_TAG = "dominant_language"
+
+
 @pytest.fixture(scope="module")
 def items():
-    return load_golden(GOLDEN_PATH)
+    return [item for item in load_golden(GOLDEN_PATH) if DOMINANT_LANGUAGE_TAG not in item.tags]
 
 
 def test_corpus_has_nineteen_documents_per_language():
@@ -227,7 +232,9 @@ def test_splits_equal_manifest_and_rule(items):
         for item in load_golden(REPO_ROOT / "eval/fixtures/ingest/golden-ingest.jsonl")
         if "parse_fixtures" in item.tags or item.category == "table_split" or item.id.startswith("ingest-tpl-")
     }
-    assert set(manifest) == {item.id for item in items} | ingest_ids
+    # The dominant-language items (06.2-41) are listed too; test_golden_phase62.py checks their split.
+    dominant_ids = {item.id for item in load_golden(GOLDEN_PATH) if DOMINANT_LANGUAGE_TAG in item.tags}
+    assert set(manifest) == {item.id for item in items} | ingest_ids | dominant_ids
     for item in items:
         assert manifest[item.id] == item.split == assign_split(item.id), item.id
 

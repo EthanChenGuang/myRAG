@@ -2,12 +2,12 @@
   "bins": [
     {
       "confident": true,
-      "correct": 98,
+      "correct": 100,
       "length_bucket": "short",
-      "n": 98,
+      "n": 100,
       "script_class": "single",
       "source": "calibrated",
-      "value": 0.99
+      "value": 0.9902
     },
     {
       "confident": true,
@@ -20,12 +20,12 @@
     },
     {
       "confident": true,
-      "correct": 235,
+      "correct": 237,
       "length_bucket": "medium",
-      "n": 237,
+      "n": 239,
       "script_class": "single",
       "source": "calibrated",
-      "value": 0.9874
+      "value": 0.9876
     },
     {
       "confident": true,
@@ -38,12 +38,12 @@
     },
     {
       "confident": true,
-      "correct": 225,
+      "correct": 229,
       "length_bucket": "long",
-      "n": 225,
+      "n": 229,
       "script_class": "single",
       "source": "calibrated",
-      "value": 0.9956
+      "value": 0.9957
     },
     {
       "confident": true,
@@ -110,11 +110,11 @@
     }
   ],
   "detector": "heuristic",
-  "generated_at": "2026-11-28T00:39:15Z",
+  "generated_at": "2026-11-28T00:44:14Z",
   "inputs": [
     {
       "path": "eval/fixtures/golden.jsonl",
-      "sha256": "2a7757f408eef267e4f07ed4dd1297658a37d104ad2d5217b722697a6451f312"
+      "sha256": "4266ed0765cf42cfaaf1c96319e07595a4ce50bd88752e2807cb962592064436"
     },
     {
       "path": "eval/fixtures/domain/golden.jsonl",
@@ -134,7 +134,7 @@
     },
     {
       "path": "config/rag/language-packs.json",
-      "sha256": "57a2d55903e6f0cc71cd4d68f4b168e73bbfd30750e4940e9ac64ef7f706ee72"
+      "sha256": "63dcc385901612163225bb09264cfa57848acee914cb929815d49f31d1f80852"
     }
   ],
   "length_buckets": {
