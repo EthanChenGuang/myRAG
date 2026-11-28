@@ -67,6 +67,9 @@ const ALL_COLUMNS = [
   'topk_redundancy',
   // 04.3-13 (0934): the cited documents' access-key arrays, keys only.
   'access_sets',
+  // 06.3 G2 (1013): the source recheck's checked and dropped counts, numbers only.
+  'source_rechecked',
+  'stale_index_drop',
   'created_at',
 ].sort();
 

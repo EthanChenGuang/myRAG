@@ -43,7 +43,12 @@
         "online_judge_mean",
         "test_set_not_representative",
         "offline_online_gap",
-        "language_drop"
+        "language_drop",
+        "source_reconcile_paused",
+        "source_reconcile_overdue",
+        "source_reconcile_failed",
+        "source_reconcile_incomplete",
+        "stale_index_drop_rate"
       ],
       "title": "Id",
       "type": "string"
@@ -56,7 +61,9 @@
         "judge_mean",
         "drift",
         "offline_online_gap",
-        "language_drop"
+        "language_drop",
+        "source_sync",
+        "stale_index_drop"
       ],
       "title": "Kind",
       "type": "string"

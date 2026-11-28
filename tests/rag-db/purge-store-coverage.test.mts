@@ -26,7 +26,8 @@ const CASCADES = ['chunk_embeddings', 'embedding_backfill_gaps', 'document_paren
 const EXEMPT = ['rag_purge_audit', 'rag_admin_audit', 'vector_sync_outbox', 'rag_upload_approval_exemptions', 'ingestion_batches', 'rag_identifier_patterns'];
 
 // Every public table that references a document, chunk or parent: by foreign key, or by a column named
-// document_id / chunk_id / lineage_id (singular or plural, any prefix such as source_ or older_, scalar or array).
+// document_id / chunk_id / lineage_id (singular or plural, any prefix such as source_ or older_, scalar or array), or keyed by a
+// document's source_key (rag_staged_attributes holds no document id; G1 of the 6.3 verification).
 const REFERENCING_TABLES_SQL = `
   SELECT c.relname AS relation
     FROM pg_catalog.pg_class c
@@ -44,7 +45,7 @@ const REFERENCING_TABLES_SQL = `
        OR EXISTS (
          SELECT 1 FROM pg_catalog.pg_attribute a
           WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
-            AND a.attname ~ '(^|_)(document|chunk|lineage)_ids?$'
+            AND (a.attname ~ '(^|_)(document|chunk|lineage)_ids?$' OR a.attname = 'source_key')
        )
      )
    ORDER BY 1`;
@@ -90,6 +91,15 @@ for (const mode of MODES) {
       }
     });
 
+    test('a new table keyed by source_key is reported as missing', async () => {
+      await db.exec('CREATE TABLE public.extra_source_store (tenant_key text, source text, source_key text, PRIMARY KEY (tenant_key, source, source_key))');
+      try {
+        assert.deepEqual(missingFromInventory(await referencingTables(db), await inventory(db)), ['extra_source_store']);
+      } finally {
+        await db.exec('DROP TABLE public.extra_source_store');
+      }
+    });
+
     test('a new table with only a foreign key to document_chunks is reported as missing', async () => {
       await db.exec('CREATE TABLE public.extra_fk_store (id uuid PRIMARY KEY, ref uuid REFERENCES public.document_chunks (id) ON DELETE CASCADE)');
       try {
@@ -112,10 +122,11 @@ for (const mode of MODES) {
         if (row.handling !== 'exempt') assert.ok(row.store_id.trim().length > 0, `${row.relation} names its store id`);
       }
       assert.match(byRelation.get('rag_purge_audit')?.reason ?? '', /ids and hashes/);
-      for (const relation of ['rag_retrieval_log', 'rag_review_items']) {
-        assert.equal(byRelation.get(relation)?.handling, 'exempt', relation);
-        assert.equal(byRelation.get(relation)?.reason, 'ids only, 30 and 90 day retention', relation);
-      }
+      assert.equal(byRelation.get('rag_retrieval_log')?.handling, 'exempt');
+      assert.equal(byRelation.get('rag_retrieval_log')?.reason, 'ids only, 30 and 90 day retention');
+      // Owner decision 12a (G6): review-item snapshots lose the purged documents' candidate ids.
+      assert.equal(byRelation.get('rag_review_items')?.handling, 'purge_step');
+      assert.equal(byRelation.get('rag_review_items')?.store_id, 'review_items');
     });
 
     test('every cascade relation that exists has an ON DELETE CASCADE foreign key to a purged store', async () => {

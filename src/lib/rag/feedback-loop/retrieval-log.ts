@@ -210,6 +210,8 @@ export function buildRetrievalLogRow(input: BuildRetrievalLogRowInput): Retrieva
     source_opened_count: 0,
     ...(redundancy !== null ? { topk_redundancy: redundancy } : {}),
     ...(accessSets !== null ? { access_sets: accessSets } : {}),
+    // RET-14 (1013): the source recheck's counts, only when it completed; a row without a recheck is unchanged.
+    ...(result.sourceRecheck ? { source_rechecked: result.sourceRecheck.checked, stale_index_drop: result.sourceRecheck.dropped } : {}),
   };
 }
 

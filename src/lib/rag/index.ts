@@ -865,7 +865,9 @@ export {
 } from './config-gate/gate-core';
 export type { BuildChangeRecordInput, ChangeRecordClient, ChangeRecordRow, DecideSaveOptions, RagGateInput, SaveDecision } from './config-gate/gate-core';
 export { monitorSettings } from './monitor/config';
-export type { MonitorSettings } from './monitor/config';
+export type { MonitorSettings, MonitorEnvInput } from './monitor/config';
+export { storeSourceMonitorAlert } from './monitor/source-alert';
+export type { SourceAlertKind } from './monitor/source-alert';
 export { runDaily } from './monitor/daily';
 export type { RunDailyOptions, RunDailyResult } from './monitor/daily';
 export { deliverAlerts, deliverStoredAlerts, signWebhookBody, WEBHOOK_SIGNATURE_HEADER, WEBHOOK_TIMESTAMP_HEADER } from './monitor/deliver';

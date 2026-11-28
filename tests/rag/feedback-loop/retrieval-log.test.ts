@@ -193,6 +193,22 @@ describe('buildRetrievalLogRow top-k redundancy (04.2-20, D-22)', () => {
   });
 });
 
+describe('buildRetrievalLogRow source recheck counts (RET-14, 1013)', () => {
+  it('writes source_rechecked and stale_index_drop when the recheck completed', () => {
+    const row = buildRetrievalLogRow(input({ result: result({ sourceRecheck: { checked: 12, dropped: 3 } }) }));
+    expect(row.source_rechecked).toBe(12);
+    expect(row.stale_index_drop).toBe(3);
+    expectValid(row);
+  });
+
+  it('leaves both fields out when the recheck did not run, so the row is unchanged', () => {
+    const row = buildRetrievalLogRow(input({ result: result() }));
+    expect(row).not.toHaveProperty('source_rechecked');
+    expect(row).not.toHaveProperty('stale_index_drop');
+    expectValid(row);
+  });
+});
+
 describe('buildRetrievalLogRow language fields (D-03a)', () => {
   it('takes the pipeline query language and confidence 1 when the detector agrees confidently', () => {
     const row = buildRetrievalLogRow(input({ query: '这是一个关于第二份报告的合成问题', result: result({ queryLanguage: 'zh' }) }));

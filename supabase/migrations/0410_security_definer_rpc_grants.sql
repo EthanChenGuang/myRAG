@@ -854,6 +854,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_purge_citation_leftovers(text, uuid[]) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_citation_leftovers(text, uuid[]) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_purge_chat_image_leftovers(text, uuid, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_chat_image_leftovers(text, uuid, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_chat_image_leftovers(text, uuid, text[]) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_purge_audit_finish(uuid, jsonb, text[], jsonb, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_purge_audit_finish(uuid, jsonb, text[], jsonb, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_audit_finish(uuid, jsonb, text[], jsonb, text) TO service_role;

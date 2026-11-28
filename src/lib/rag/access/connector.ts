@@ -14,7 +14,7 @@ import {
   type Row,
 } from './errors';
 
-export const CONNECTOR_PROVIDERS = ['google-drive', 'dropbox', 'notion'] as const;
+export const CONNECTOR_PROVIDERS = ['google-drive', 'dropbox', 'notion', 'sharepoint-online', 'one-drive'] as const;
 export type ConnectorProvider = (typeof CONNECTOR_PROVIDERS)[number];
 export type ConnectorMapKind = 'group' | 'team' | 'workspace';
 export type SharingRuleKind = 'domain' | 'anyone' | 'public';

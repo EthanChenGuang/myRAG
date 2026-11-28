@@ -170,6 +170,13 @@ class RetrievalLogEntry(_LanguageSnapshot):
     topk_redundancy: float | None = Field(
         default=None, ge=0, le=1, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
     )
+    # RET-14 (Phase 6.3): the source recheck's checked and dropped candidate counts, set only when the recheck completed.
+    source_rechecked: int | None = Field(
+        default=None, ge=0, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
+    )
+    stale_index_drop: int | None = Field(
+        default=None, ge=0, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
+    )
     created_at: Timestamp | None = None
 
     @field_validator("feedback_reasons")
