@@ -1,5 +1,5 @@
 import { getLanguagePack, getLanguageRegistry, packText, TEXT_KEYS, type TextKey } from './registry';
-import { getLanguageSettings } from './settings';
+import { getLanguageSettings, languageVariablesUnset } from './settings';
 
 export type { TextKey } from './registry';
 export type TextParams = Readonly<Record<string, string | number>>;
@@ -24,7 +24,8 @@ function lookup(key: TextKey, code: string | null): string | null {
 
 /** The languages a registry read tries, in order: the one asked for (null when not a string), RAG_PRIMARY_LANGUAGE, English. */
 export function fallbackLanguages(language: unknown): readonly [string | null, string, string] {
-  return [typeof language === 'string' ? language : null, getLanguageSettings().primary ?? UNCONFIGURED_FALLBACK, UNCONFIGURED_FALLBACK];
+  const primary = languageVariablesUnset() ? UNCONFIGURED_FALLBACK : (getLanguageSettings().primary ?? UNCONFIGURED_FALLBACK);
+  return [typeof language === 'string' ? language : null, primary, UNCONFIGURED_FALLBACK];
 }
 
 /**
