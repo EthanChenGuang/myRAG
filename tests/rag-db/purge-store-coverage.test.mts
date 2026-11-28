@@ -122,10 +122,11 @@ for (const mode of MODES) {
         if (row.handling !== 'exempt') assert.ok(row.store_id.trim().length > 0, `${row.relation} names its store id`);
       }
       assert.match(byRelation.get('rag_purge_audit')?.reason ?? '', /ids and hashes/);
-      for (const relation of ['rag_retrieval_log', 'rag_review_items']) {
-        assert.equal(byRelation.get(relation)?.handling, 'exempt', relation);
-        assert.equal(byRelation.get(relation)?.reason, 'ids only, 30 and 90 day retention', relation);
-      }
+      assert.equal(byRelation.get('rag_retrieval_log')?.handling, 'exempt');
+      assert.equal(byRelation.get('rag_retrieval_log')?.reason, 'ids only, 30 and 90 day retention');
+      // Owner decision 12a (G6): review-item snapshots lose the purged documents' candidate ids.
+      assert.equal(byRelation.get('rag_review_items')?.handling, 'purge_step');
+      assert.equal(byRelation.get('rag_review_items')?.store_id, 'review_items');
     });
 
     test('every cascade relation that exists has an ON DELETE CASCADE foreign key to a purged store', async () => {
