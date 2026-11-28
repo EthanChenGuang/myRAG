@@ -1134,3 +1134,8 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
     - D: OCR-tolerant normalization.
 - t42 interim: 3 branch-level test fixes made on the train (translation-seam, legacy-post-filter-sentinel, eval-route-query-layer). Sidecar 2955 pass.
 - 03:40Z 07-27 DONE (exec/07-27 eca55095: README_RAG_PIPELINE, env template grouping, AGENTS.md) and archived; queued for train 43. Dispatched 07-45 (session for base 07-27). t42 step 3: merged 06.2-28, 04.4-19, 06.3-23, 07-25.
+- 03:44Z 07-43 PARTIAL (exec/07-43 171cd056; release_costs plus regression annotate are built, 22+63 tests pass) and archived; queued for train 43.
+  - The fixture record was not annotated because the stage-B outputs are gitignored and gone; rebuilding them would spend about 25 more test-split uses.
+  - Orchestrator decision (b): leave the provisional fixture record without the annotation blocks; the live 07-33 decide writes them. No budget is spent. The owner can overrule.
+  - MORNING (owner): fill the null prices in config/rag/price-table.json before the 07-33 decide.
+  - Lesson: eval outputs a later plan needs must be committed, not left in a gitignored eval/out.
