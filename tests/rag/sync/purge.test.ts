@@ -30,6 +30,7 @@ function point(n: number, tenantKey: string, documentId: string): VectorPoint {
       lexical_text: null,
       content_hash: null,
       lexical_version: null,
+      access_groups: ['all'],
     },
   };
 }

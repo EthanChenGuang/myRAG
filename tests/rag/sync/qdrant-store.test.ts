@@ -36,6 +36,7 @@ function payload(tenantKey: string, documentId: string, extra: Partial<VectorPoi
     lexical_text: 'neutral sample words',
     content_hash: `hash-${documentId.slice(-2)}`,
     lexical_version: 1,
+    access_groups: ['all'],
     ...extra,
   };
 }

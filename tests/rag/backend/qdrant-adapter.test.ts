@@ -45,6 +45,7 @@ function payload(tenantKey: string, n: number): VectorPointPayload {
     lexical_text: CANARY_TEXT,
     content_hash: null,
     lexical_version: 1,
+    access_groups: ['all'],
   };
 }
 

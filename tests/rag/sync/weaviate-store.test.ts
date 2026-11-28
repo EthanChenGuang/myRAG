@@ -33,6 +33,7 @@ function point(id: string, tenantKey: string, documentId: string, extra: Partial
       lexical_text: 'neutral sample words',
       content_hash: `hash-${id.slice(-4)}`,
       lexical_version: 1,
+      access_groups: ['all'],
       ...extra,
     },
   };

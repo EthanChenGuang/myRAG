@@ -80,7 +80,7 @@ async function catalog(db: PGlite): Promise<string> {
   const fns = await db.query<{ def: string; acl: string | null }>(
     `SELECT pg_get_functiondef(p.oid) AS def, p.proacl::text AS acl FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'public' AND p.proname IN ('rag_vector_sync_document_rows', 'rag_vector_sync_chunk_row', 'rag_validate_chunks_for_groups',
-        'rag_vector_sync_documents_access_groups', 'rag_vector_sync_chunks_access_groups')
+        'rag_vector_sync_documents_update', 'rag_vector_sync_chunks_update')
       ORDER BY p.proname`,
   );
   const triggers = await db.query<{ t: string }>(
@@ -233,7 +233,7 @@ for (const mode of MODES) {
       }
     });
 
-    test('an update that changes no label enqueues nothing through the group triggers', async () => {
+    test('an update that changes no synced column enqueues nothing', async () => {
       const count = await outboxCount(db);
       await db.query("UPDATE public.documents SET filename = filename || '-renamed' WHERE id = $1", [docId]);
       await db.query("UPDATE public.document_chunks SET metadata = '{\"note\":1}'::jsonb WHERE document_id = $1", [docId]);

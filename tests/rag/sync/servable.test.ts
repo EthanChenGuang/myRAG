@@ -16,6 +16,7 @@ const TENANT_A = 'u:00000000-0000-4000-8000-0000000000a1';
 const TENANT_B = 'u:00000000-0000-4000-8000-0000000000b1';
 const DOC = '00000000-0000-4000-8000-00000000d001';
 const D03_KEYS = [
+  'access_groups',
   'chunking_profile_id',
   'content_hash',
   'doc_date',
@@ -48,6 +49,7 @@ function syncRow(n: number, extra: Partial<SyncRow> & Record<string, unknown> = 
     source: 'upload',
     chunking_profile_id: null,
     parent_id: null,
+    access_groups: ['all'],
     ...extra,
   } as SyncRow;
 }
@@ -86,6 +88,22 @@ describe('planDocumentSync', () => {
     expect(Object.keys(point.payload).sort()).toEqual(D03_KEYS);
     expect(point.vector).toEqual([0.1, 0.2, 0.3]);
     expect(JSON.stringify(point)).not.toContain('secret');
+  });
+
+  it('copies access_groups unchanged, from an array or a Postgres array literal', () => {
+    const group = 'g:0a000000-0000-4000-8000-00000000a701';
+    const user = 'u:0a000000-0000-4000-8000-00000000a702';
+    const fromArray = planDocumentSync(TENANT_A, [syncRow(1, { access_groups: [group, user] })], []);
+    expect(fromArray.upserts[0].payload.access_groups).toEqual([group, user]);
+    const fromLiteral = planDocumentSync(TENANT_A, [syncRow(1, { access_groups: `{${group},${user}}` })], []);
+    expect(fromLiteral.upserts[0].payload.access_groups).toEqual([group, user]);
+    expect(planChunkSync(TENANT_A, syncRow(2, { access_groups: ['all'] }), chunkId(2)).upserts[0].payload.access_groups).toEqual(['all']);
+  });
+
+  it('refuses a row without access_groups or with a malformed key instead of writing a guessed label', () => {
+    for (const access_groups of [undefined, null, [], '{}', ['g1'], ['all', 'G:not-a-uuid']]) {
+      expect(() => planDocumentSync(TENANT_A, [syncRow(1, { access_groups } as Partial<SyncRow>)], [])).toThrow(/access_groups/);
+    }
   });
 });
 

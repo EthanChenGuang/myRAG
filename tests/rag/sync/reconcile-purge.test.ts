@@ -45,6 +45,7 @@ function planted(n: number, tenantKey: string, documentId: string): VectorPoint 
       lexical_text: 'neutral words',
       content_hash: 'h',
       lexical_version: 1,
+      access_groups: ['all'],
     },
   };
 }

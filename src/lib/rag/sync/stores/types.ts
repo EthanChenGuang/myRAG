@@ -16,6 +16,11 @@ export interface VectorPointPayload {
   lexical_text: string | null;
   content_hash: string | null;
   lexical_version: number | null;
+  /**
+   * SEC-12: the chunk's Phase 4.3 access keys as stored (`all`, `g:<group uuid>`, `u:<user uuid>`), copied unchanged. A filter field,
+   * never content; every synced point carries it, and the query side filters on it only while RAG_DOC_ACCESS_GROUPS is on.
+   */
+  access_groups: string[];
 }
 
 export interface VectorPoint {
