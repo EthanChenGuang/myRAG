@@ -1224,3 +1224,4 @@ Signatures were NOT covered by this; they are asked for separately.
     - quick-deferred-batch: session_01X342sjagSEBp2diSEwUUfX
     - quick-63-hardening: session_01X342sikgAoxqyxifa2wXrb
   - The signatures session (session_01X342shUVJkfnBgHdbAAQhL) is BLOCKED and wants the owner to confirm in that session. Asked the owner.
+- 07:56Z p52-band DONE (exec/quick-41-p52-band 2f85de79). Not yet in t44: 4 pre-existing FixtureFloorMismatchError failures (tracer subset), and the same session is fixing them. OWNER DECISION 07:56Z (in person): accept the new floor and re-record the voice baseline (FR 0.004->0.038, zh R@5 0.960->0.918 from the eval-only floor refit); record it in 04.1 CONTEXT.
