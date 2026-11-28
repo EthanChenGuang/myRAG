@@ -28,6 +28,7 @@ interface RecordedSearch {
   tenantKey: string;
   profileId: string;
   chunkIds: string[];
+  chunking?: Record<string, string>;
 }
 
 describe('rollouts: a listed tenant searches the candidate profile (multi-tenant, D-37 fixture data only)', () => {
@@ -137,6 +138,7 @@ describe('rollouts: a listed tenant searches the candidate profile (multi-tenant
           tenantKey: scopeModule.scopeKey(req.scope),
           profileId: req.embeddingProfileId,
           chunkIds: [...legs.dense, ...legs.lexical].map((row) => row.chunkId),
+          ...(req.chunkingProfileOverride ? { chunking: { ...req.chunkingProfileOverride } } : {}),
         });
         return legs;
       },
@@ -280,6 +282,60 @@ describe('rollouts: a listed tenant searches the candidate profile (multi-tenant
     );
   });
 
+  test('a chunking_profile rollout passes the candidate profiles as the server-side override for the candidate arm only', async () => {
+    setRollouts(true);
+    await fixture.db.query(
+      "INSERT INTO chunking_profiles (id, doc_type, child_tokens, parent_mode, parent_tokens, status, preset) VALUES ('cp-rollout', 'general', 256, 'none', NULL, 'ready', '256/1024') ON CONFLICT DO NOTHING",
+    );
+    await assert.rejects(
+      rpc('rag_rollout_start', { p_kind: 'chunking_profile', p_candidate_ref: { chunking_profile_ids: ['cp-missing'] }, p_mode: 'tenants', p_tenants: [TENANT_A] }),
+      /rollout_refused: chunking_not_built/,
+    );
+    const id = (await rpc('rag_rollout_start', {
+      p_kind: 'chunking_profile',
+      p_candidate_ref: { chunking_profile_ids: ['general:cp-rollout'] },
+      p_mode: 'tenants',
+      p_tenants: [TENANT_A],
+      p_actor: ACTOR,
+    })) as string;
+    const resultA = await retrieve(TWO_TENANT_IDS.userA);
+    assert.notEqual(resultA.status, 'error', `retrieval failed: ${resultA.reason}`);
+    assert.ok(searches.length >= 1);
+    for (const search of searches) assert.deepEqual(search.chunking, { general: 'cp-rollout' });
+    assert.notEqual(resultA.retrievalConfigHash, baselineA.hash, "the candidate chunking profile is in A's hash");
+
+    searches.length = 0;
+    const resultB = await retrieve(TWO_TENANT_IDS.userB);
+    for (const search of searches) assert.equal(search.chunking, undefined, 'B sends no override');
+    assert.equal(resultB.retrievalConfigHash, baselineB.hash);
+    await rpc('rag_rollout_finish', { p_rollout_id: id, p_state: 'cancelled', p_actor: ACTOR });
+  });
+
+  test('npm run rag:rollout: start, list, include, exclude and rollback against the database; refusals exit non-zero with the code', async () => {
+    const { main } = await import('@/lib/rag/rollout/cli');
+    const lines: string[] = [];
+    const io = { out: (line: string) => lines.push(line), err: (line: string) => lines.push(line) };
+    const client = supabaseModule.getSupabaseAdmin() as never;
+    assert.equal(await main(['start', '--kind', 'embedding_profile', '--candidate', P2, '--tenants', TENANT_A, '--actor', ACTOR], io, { rpc: client }), 0, lines.join('\n'));
+    const id = /started ([0-9a-f-]{36})/.exec(lines.join('\n'))?.[1];
+    assert.ok(id, lines.join('\n'));
+    lines.length = 0;
+    assert.equal(await main(['start', '--kind', 'embedding_profile', '--candidate', P2, '--share', '10'], io, { rpc: client }), 1);
+    assert.match(lines.join('\n'), /refused: active_exists/);
+    lines.length = 0;
+    assert.equal(await main(['include', id!, '--tenant', TENANT_B], io, { rpc: client }), 0, lines.join('\n'));
+    assert.equal(await main(['exclude', id!, '--tenant', TENANT_A], io, { rpc: client }), 0, lines.join('\n'));
+    lines.length = 0;
+    assert.equal(await main(['list'], io, { rpc: client }), 0);
+    assert.match(lines.join('\n'), new RegExp(`${id} kind=embedding_profile candidate=${P2} incumbent=${P1} tenants included=1 excluded=1`));
+    assert.ok(!lines.join('\n').includes('salt'), 'the salt is never printed');
+    assert.equal(await main(['rollback', id!], io, { rpc: client }), 0);
+    lines.length = 0;
+    assert.equal(await main(['rollback', id!], io, { rpc: client }), 1);
+    assert.match(lines.join('\n'), /refused: not_active/);
+    assert.equal(await main(['start', '--kind', 'embedding_profile', '--candidate', P2], io, { rpc: client }), 2);
+  });
+
   test('the bucket in SQL equals the TypeScript bucket', async () => {
     const salt = 'paritysalt01';
     for (let i = 0; i < 200; i += 1) {
@@ -310,4 +366,96 @@ describe('rollouts: a listed tenant searches the candidate profile (multi-tenant
       }
     });
   }
+});
+
+describe('rollouts: a rebuild_run rollout publishes held versions per tenant and restores them on exclusion', () => {
+  let fixture: TwoTenantDatabase;
+  const HASH = 'c'.repeat(64);
+  const versions: Record<string, { v1: string; v2: string }> = {};
+  let runId: string;
+
+  const one = async <T,>(sql: string, params: unknown[] = []): Promise<T> => (await fixture.db.query<T>(sql, params)).rows[0]!;
+  const current = async (documentId: string): Promise<boolean> =>
+    (await one<{ is_current: boolean }>('SELECT is_current FROM documents WHERE id = $1', [documentId])).is_current;
+
+  async function version(tenantKey: string, userId: string, sourceKey: string, text: string): Promise<string> {
+    const begin = await one<{ document_id: string }>(
+      `SELECT document_id FROM rag_begin_document_version($1, $2::uuid, NULL, 'config_upload', $3, $4, $5, 'general', 'fallback', 'general-1', 1)`,
+      [tenantKey, userId, sourceKey, 'rollout-neutral.md', crypto.createHash('sha256').update(crypto.randomUUID()).digest('hex')],
+    );
+    const chunks = [{ chunk_index: 0, content: text, metadata: { chunk_index: 0 }, lexical_text: text }];
+    await fixture.db.query(
+      'SELECT * FROM rag_write_chunks($1, $2, $3::jsonb, $4::jsonb, true, 1)',
+      [begin.document_id, tenantKey, JSON.stringify(chunks), JSON.stringify({ [P1]: [Array.from({ length: 1536 }, (_, i) => ((i % 3) + 1) / 10)] })],
+    );
+    return begin.document_id;
+  }
+
+  before(async () => {
+    fixture = await createTwoTenantDatabase();
+    const run = await one<{ id: string }>(
+      `INSERT INTO rag_rebuild_runs (mechanism, settings_hash, activation, state, eval_evidence) VALUES ('reparse', $1, 'rebuild_batch', 'complete', NULL) RETURNING id`,
+      [HASH],
+    );
+    runId = run.id;
+    for (const [tenantKey, userId] of [[TENANT_A, TWO_TENANT_IDS.userA], [TENANT_B, TWO_TENANT_IDS.userB]] as const) {
+      const sourceKey = `rollout-${crypto.randomUUID()}.md`;
+      const v1 = await version(tenantKey, userId, sourceKey, 'A neutral synthetic sentence, first version.');
+      await fixture.db.query('SELECT * FROM rag_publish_document_version($1, $2)', [v1, tenantKey]);
+      const v2 = await version(tenantKey, userId, sourceKey, 'A neutral synthetic sentence, rebuilt version.');
+      const batchId = crypto.randomUUID();
+      await fixture.db.query("UPDATE documents SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('publish_hold', jsonb_build_object('batch_id', $2::text)) WHERE id = $1", [v2, batchId]);
+      await fixture.db.query(
+        "INSERT INTO rag_rebuild_items (run_id, document_id, tenant_key, new_document_id, batch_id, state) VALUES ($1, $2, $3, $4, $5, 'done')",
+        [runId, v1, tenantKey, v2, batchId],
+      );
+      versions[tenantKey] = { v1, v2 };
+    }
+  });
+
+  after(async () => {
+    await fixture?.db.close();
+  });
+
+  test('the eval refusal blocks a per-tenant publish exactly as it blocks activation', async () => {
+    const start = () =>
+      fixture.db.query(`SELECT rag_rollout_start('rebuild_run', $1::jsonb, 'tenants', NULL, $2::text[], NULL)`, [
+        JSON.stringify({ rebuild_run_id: runId }),
+        [TENANT_A],
+      ]);
+    await assert.rejects(start(), /rollout_refused: eval_missing/);
+    await fixture.db.query(`UPDATE rag_rebuild_runs SET eval_evidence = '{"passed":false}'::jsonb WHERE id = $1`, [runId]);
+    await assert.rejects(start(), /rollout_refused: eval_failed/);
+    for (const tenantKey of [TENANT_A, TENANT_B]) assert.equal(await current(versions[tenantKey]!.v1), true);
+  });
+
+  let rolloutId: string;
+
+  test('an included tenant is served its rebuilt versions; the other tenant stays on its previous versions', async () => {
+    await fixture.db.query(`UPDATE rag_rebuild_runs SET eval_evidence = '{"passed":true}'::jsonb WHERE id = $1`, [runId]);
+    rolloutId = (
+      await one<{ id: string }>(`SELECT rag_rollout_start('rebuild_run', $1::jsonb, 'tenants', NULL, $2::text[], NULL) AS id`, [
+        JSON.stringify({ rebuild_run_id: runId }),
+        [TENANT_A],
+      ])
+    ).id;
+    assert.equal(await current(versions[TENANT_A]!.v2), true);
+    assert.equal(await current(versions[TENANT_A]!.v1), false);
+    assert.equal(await current(versions[TENANT_B]!.v1), true, 'B keeps its previous version');
+    assert.equal(await current(versions[TENANT_B]!.v2), false);
+  });
+
+  test('excluding the tenant republishes its previous versions with their vectors; the rebuilt vectors are kept, not dropped', async () => {
+    await fixture.db.query("SELECT rag_rollout_set_tenant($1, $2, 'exclude', NULL)", [rolloutId, TENANT_A]);
+    const { v1, v2 } = versions[TENANT_A]!;
+    assert.equal(await current(v1), true);
+    assert.equal(await current(v2), false);
+    const restored = await one<{ n: number }>('SELECT count(*)::int AS n FROM document_chunks WHERE document_id = $1 AND is_current AND embedding IS NOT NULL', [v1]);
+    assert.equal(Number(restored.n), 1, 'the previous version has its vector again');
+    const kept = await one<{ n: number }>('SELECT count(*)::int AS n FROM rag_rebuild_saved_vectors WHERE document_id = $1 AND embedding IS NOT NULL', [v2]);
+    assert.equal(Number(kept.n), 1, "the rebuilt version's vector is kept in rag_rebuild_saved_vectors");
+    assert.equal(await current(versions[TENANT_B]!.v1), true, 'B is untouched');
+    const rows = await one<{ n: number }>('SELECT count(*)::int AS n FROM documents WHERE id = ANY($1::uuid[])', [[v1, v2, versions[TENANT_B]!.v1, versions[TENANT_B]!.v2]]);
+    assert.equal(Number(rows.n), 4, 'no version deleted');
+  });
 });
