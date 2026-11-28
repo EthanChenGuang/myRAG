@@ -48,3 +48,33 @@ Written by plan 04.2-32 on 2026-11-27, at the phase close. One list of every ups
 - W-5: owners assigned to (j), `04.2-06-eval-tuning-overrides.md`, `04.2-02-settings-classification.md` and `04.2-21-embed-sources.md`.
 - W-6: REQUIREMENTS.md LANG-07 notes the `loadEffectiveDictionary` and layer-version implementation.
 - Not done here: W-1 (the redundancy measure change needs the owner) and the live items G-1 to G-4.
+
+## Gate FAIL on `category:scanned` and the D-31 revision (2026-11-28)
+
+Source: `.planning/debug/phase42-scanned-slice-regression.md` (branch `exec/debug-42-scanned`).
+
+- **Correction of the quick-42-fixes note.** The W-3 entry of `exec/quick-42-fixes` (c50e5550) and its summary `.planning/quick/261127-q42-phase42-verify-fixes/261127-q42-SUMMARY.md` say the diversity and identifier gates fail "on the later `category:scanned` slice" and call the slice an addition made after Phase 4.2. That is wrong. The scanned items (`{en,it,zh}-scanned-00{1,2}`) came in with plan 01-15 and were in the gated population when the committed 4.2 report was made (152d29f61). What came after 4.2 is the fixture corpus of plan 05.2.1-12 (`calc-rules.*`, `long-reference.*`, 57 golden items). It changed the candidate pool of the reference run, one marginal item (`en-scanned-001`) moved in the reference, and that exposed two limits that were already there: the chunk-level identifier filter (b1) and MMR's sensitivity at the context cutoff (b2). When `exec/quick-42-fixes` is merged, read its W-3 sentence with this correction; its numbers are right, its cause is not.
+- **D-59 (D-31 revision).** The identifier filter moves from chunk level to document level; the near-miss guard stays per chunk. Decided by the orchestrator under the owner's standing authorization, not an owner sign-off; the owner can overturn it. Text and evidence: 04.2-CONTEXT.md, "D-31 revision (2026-11-28)".
+- **Gap plan 04.2-40** (wave 12; depends on 04.2-27, 04.2-29, 04.2-32, 04.3-11, 04.4-14, 05.2.1-12): the document-level predicate in `hybrid_search_chunks`, `rag_bm25_search_chunks`, `rag_exact_id_documents` and `rag_table_lookup`; failing-first and parity tests; `rag_eval.sweep diversity` re-run; the gate re-run with the unchanged spec, result recorded as measured.
+- **Migration number.** The redefinition must sort after 0930, 0932 and 0933, which hold the newest bodies. A free 08xx number (0866 and up) would be overwritten by them in file order. The plan claims the lowest free number above the newest definer at execution, expected **0935**, inside Phase 4.3's gap-closure range (0935 to 0939). The Phase 4.3 owner should be told when the number is claimed.
+- **Pending owner decisions, not applied by any plan:** (1) D-59 itself; (2) the gate rules of the debug report, section 4 item 3: a minimum slice size (`min_gate_n`) or paired item flips for small slices, a rule that plans adding shared fixture documents re-run the phase fixture gates, and whether `identifier_precise` accepts a cited chunk of a carrying document. Until (2) is decided the spec stays as it is; the diversity gate can stay FAIL on the 4-item slice after 04.2-40, and the plan records that as measured.
+- The committed `eval/reports/phase-04.2/` (PASS) belongs to the corpus before 05.2.1-12 until plan 04.2-40 Task 5 re-renders it.
+
+## Plan 04.2-40 migration claim (2026-11-28)
+
+| Number | Plan | Note |
+|---|---|---|
+| 0936 | 04.2-40 | `0936_identifier_document_filter.sql`. It sits in Phase 4.3's block (0935 to 0939) because it redefines `hybrid_search_chunks`, `rag_bm25_search_chunks`, `rag_exact_id_documents` and `rag_table_lookup`, whose newest bodies are in 0930, 0932 and 0933. 0935 is already held by exec/04.4-16 for plan 04.4-17. Tell the Phase 4.3 owner. |
+
+**Ordering requirement for 04.4-17 (required, not a suggestion).** 04.4-17 plans to redefine `rag_bm25_search_chunks` with `p_df_mode` in 0935. 0936 rebuilds that function from the 0932 body, and its precheck stops with 55000 when the function has an argument outside the 0932 signature. If 0935 ships with that body, a fresh apply in file order stops at 0936. 04.4-17 must give up 0935, take a number above 0936, rebuild from the 0936 body and keep the `identifier-document-filter` marker fragment. Details: `04.2-40-bm25-ordering.md`.
+
+## Plan 04.2-40 result (2026-11-28)
+
+- Gate on the current corpus, spec unchanged: off_identity, identifier, table, versions and dictionary PASS.
+- Diversity FAILs on `category:scanned`: one item (`en-scanned-001`) drops out of the top 10 under MMR in a 4-item slice. Hand-off: `04.2-40-gate-diversity.md`.
+- Identifier precision is 1.0 and leakage 0.0. `en-scanned-001` is retrieved at rank 2 under `v2-identifier-on`.
+- Diversity sweep: no eligible lambda; `mmr_lambda` stays 0.9 (`04.2-40-diversity-sweep.md`).
+- Ordering hand-off for 04.4-17: `04.2-40-bm25-ordering.md`.
+- Pending owner decisions:
+  1. D-59 itself.
+  2. The gate rules of debug report section 4 item 3: `min_gate_n` or paired flips, whether plans that add fixtures must re-run the gates, and `identifier_precise` for a carrying document.

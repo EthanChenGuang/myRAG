@@ -398,6 +398,8 @@ RAG_LEXICAL_SCORING=ts_rank_cd
 RAG_LEXICAL_BM25_K1=1.2
 # BM25 length normalisation, 0 to 1
 RAG_LEXICAL_BM25_B=0.75
+# BM25 document frequency: raw, or cluster to count a duplicate cluster once (needs bm25 and RAG_DUP_CLUSTERS=true)
+RAG_LEXICAL_DF_MODE=raw
 # Requests may ask for earlier document versions (needs RAG_LEXICAL_SEARCH=true)
 RAG_VERSION_SCOPE=false
 # Embedded chat may request earlier versions only while this and RAG_VERSION_SCOPE are on

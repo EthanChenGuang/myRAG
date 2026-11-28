@@ -24,6 +24,9 @@ const COLUMNS: Record<(typeof TABLES)[number], Record<string, { type: string; nu
     enabled_at: { type: 'timestamp with time zone', nullable: false },
     rebuilt_at: { type: 'timestamp with time zone', nullable: true },
     compacted_at: { type: 'timestamp with time zone', nullable: true },
+    // 0905 (04.4-16): cluster-aware statistics state, NULL while the tenant keeps none.
+    cluster_status: { type: 'text', nullable: true },
+    cluster_rebuilt_at: { type: 'timestamp with time zone', nullable: true },
   },
   rag_lexical_stats_pending: {
     id: { type: 'bigint', nullable: false },

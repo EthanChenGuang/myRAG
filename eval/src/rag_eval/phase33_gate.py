@@ -32,11 +32,13 @@ from rag_eval.phase_compare import (
     RETRIEVAL_METRICS,
     CheckResult,
     RunOutput,
+    SliceGateRule,
     SwitchComparisonSpec,
     gate_check,
     no_slice_drop_check,
     paired_all_zero_check,
     retrieval_unchanged_check,
+    with_min_gate_n,
 )
 from rag_eval.profile_compare import baseline_from_report
 from rag_eval.traces import load_manifest, load_traces
@@ -197,6 +199,7 @@ class Phase33GatesSpec(_Model):
     min_dev_items: int = Field(ge=1)
     gates: list[Gate] = Field(min_length=1)
     report_only: ReportOnlySpec
+    no_slice_drop_rule: SliceGateRule = Field(default_factory=SliceGateRule)
 
     @model_validator(mode="after")
     def _consistent(self) -> Phase33GatesSpec:
@@ -680,7 +683,9 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
         for problem in problems:
             print(f"error: {problem}", file=sys.stderr)
         return EXIT_INVALID
-    noise = NoiseConfig.model_validate_json(resolve_cli_path(spec.noise).read_text(encoding="utf-8"))
+    noise = with_min_gate_n(
+        NoiseConfig.model_validate_json(resolve_cli_path(spec.noise).read_text(encoding="utf-8")), spec.no_slice_drop_rule.min_gate_n
+    )
     baselines = {
         mode: Baseline.model_validate_json(resolve_cli_path(path).read_text(encoding="utf-8"))
         for mode, path in comparison.baselines.items()

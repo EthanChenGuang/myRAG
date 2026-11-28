@@ -113,6 +113,15 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
     });
     io.out(`${PREFIX} ${report.tenantKey}: hashed ${report.hashed}, clustered ${report.clustered} in ${report.batches} batches`);
     io.out(`${PREFIX} recompute: ${report.recomputed} clusters refreshed, ${report.dissolved} dissolved`);
+    // D-48, D-49: under bm25 with RAG_LEXICAL_DF_MODE=cluster the cluster markers this run staged are reconciled (best effort).
+    try {
+      const { afterDupClusterWrite } = await import('../lexical/stats-hooks');
+      if (await afterDupClusterWrite({ db: () => db }, report.tenantKey)) {
+        io.out(`${PREFIX} lexical statistics compacted (best effort); npm run rag:lexstats -- status shows any marker backlog`);
+      }
+    } catch (error) {
+      io.err(`${PREFIX} lexical statistics follow-up failed (${error instanceof Error ? error.name : 'unknown'}); the clusters are kept`);
+    }
     return 0;
   } catch (error) {
     if (signal?.aborted) {

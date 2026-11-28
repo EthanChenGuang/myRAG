@@ -451,6 +451,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_LEXICAL_DF_MODE",
+      "side": "query"
+    },
+    {
       "name": "RAG_LEXICAL_DICTIONARY",
       "side": "ingestion",
       "mechanism": "relex"

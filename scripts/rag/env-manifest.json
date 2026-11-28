@@ -1747,6 +1747,25 @@
       "help": "Length normalisation, from 0 (none) to 1 (full). Used only with bm25."
     },
     {
+      "name": "RAG_LEXICAL_DF_MODE",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "BM25 document frequency",
+      "type": "enum",
+      "options": [
+        "raw",
+        "cluster"
+      ],
+      "requires": [
+        "RAG_LEXICAL_SCORING=bm25",
+        "RAG_DUP_CLUSTERS=true"
+      ],
+      "default": "raw",
+      "help": "Counts a duplicate cluster once in BM25 document frequency. Needs BM25 scoring and duplicate clusters."
+    },
+    {
       "name": "RAG_MAX_OUTPUT_TOKENS",
       "status": "managed",
       "knownGaps": [],

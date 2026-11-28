@@ -33,8 +33,13 @@ from rag_eval.phase_compare import (
     _write_text,
     default_runner,
     materialise_run_config,
+    SliceGateRule,
+    below_min_n_notes,
+    is_below_min_n,
+    note_slice,
     paired_all_zero_check,
     slice_drops,
+    with_min_gate_n,
 )
 from rag_eval.phase_compare import RunSpec as CompareRunSpec
 from rag_eval.profile_compare import baseline_from_report
@@ -245,6 +250,7 @@ class Phase42GateSpec(_Model):
     gates: GateSpecs
     rules: RuleSpecs
     report_only: list[ReportOnlyEntry] = Field(default_factory=list)
+    no_slice_drop_rule: SliceGateRule = Field(default_factory=SliceGateRule)
 
     @model_validator(mode="after")
     def _references(self) -> Phase42GateSpec:
@@ -318,6 +324,7 @@ class GateOutcome(_Model):
     runs: list[str]
     numbers: dict[str, Number] = Field(default_factory=dict)
     offenders: list[str] = Field(default_factory=list)
+    below_min_n: list[str] = Field(default_factory=list)
 
 
 class RuleOutcome(_Model):
@@ -326,6 +333,7 @@ class RuleOutcome(_Model):
     outcome: str
     numbers: dict[str, Number] = Field(default_factory=dict)
     reasons: list[str] = Field(default_factory=list)
+    below_min_n: list[str] = Field(default_factory=list)
 
 
 class RunSummary(_Model):
@@ -399,11 +407,14 @@ def drop_offenders(on: RunOutput, reference: RunOutput, noise: NoiseConfig, *, r
         for o in gate.offenders
         if o.slice not in skip
     ]
+    found += [f"{line}, against {reference_name}" for line in below_min_n_notes(gate) if note_slice(line) not in skip]
     return found
 
 
 def _outcome(name: str, decision: str, runs: list[str], numbers: dict[str, Number], offenders: list[str]) -> GateOutcome:
-    return GateOutcome(name=name, decision=decision, passed=not offenders, runs=runs, numbers=numbers, offenders=offenders)
+    gated = [line for line in offenders if not is_below_min_n(line)]
+    below = [line for line in offenders if is_below_min_n(line)]
+    return GateOutcome(name=name, decision=decision, passed=not gated, runs=runs, numbers=numbers, offenders=gated, below_min_n=below)
 
 
 # ---------- gates
@@ -623,14 +634,16 @@ def stem_rule(rule: StemRule, outputs: Mapping[str, RunOutput], noise: NoiseConf
     recorded = getattr(ref_metrics, rule.metric).value if ref_metrics is not None else None
     gain = None if observed is None or recorded is None else observed - recorded
     band = _band(baseline, rule.slice, rule.metric, noise)
-    reasons = drop_offenders(on, reference, noise, reference_name=rule.reference)
+    drops = drop_offenders(on, reference, noise, reference_name=rule.reference)
+    reasons = [line for line in drops if not is_below_min_n(line)]
+    below = [line for line in drops if is_below_min_n(line)]
     if gain is None:
         reasons.append(f"{rule.slice} {rule.metric} not measured in one of the runs")
     elif gain <= band:
         reasons.append(f"{rule.slice} {rule.metric} gain {gain:.4f} does not exceed the noise band {band:.4f}")
     outcome = STEM_OUTCOMES[0] if not reasons else STEM_OUTCOMES[1]
     numbers: dict[str, Number] = {"on": observed, "reference": recorded, "gain": gain, "band": band, "dropped_slices": len([r for r in reasons if "dropped" in r])}
-    return RuleOutcome(name="stem_it", decision=rule.decision, outcome=outcome, numbers=numbers, reasons=reasons)
+    return RuleOutcome(name="stem_it", decision=rule.decision, outcome=outcome, numbers=numbers, reasons=reasons, below_min_n=below)
 
 
 def _base_key(record: CellRecord) -> str:
@@ -713,7 +726,7 @@ def run_phase42_gates(
     if not isinstance(spec, Phase42GateSpec):
         spec = _read_model(Phase42GateSpec, str(spec), "gate spec")
     selected = _selection(only)
-    noise = _read_model(NoiseConfig, spec.noise, "noise config")
+    noise = with_min_gate_n(_read_model(NoiseConfig, spec.noise, "noise config"), spec.no_slice_drop_rule.min_gate_n)
     by_name = {run.name: run for run in spec.runs}
     needed = {name for gate in selected for name in runs_for(spec, gate)}
     baselines: dict[str, Baseline] = {}
@@ -812,6 +825,8 @@ def render_markdown(result: Phase42Gates) -> str:
             lines += ["", "| Number | Value |", "| --- | --- |", *(f"| {key} | {_num(value)} |" for key, value in sorted(g.numbers.items()))]
         if g.offenders:
             lines += ["", "Offenders:", *(f"- {offender}" for offender in g.offenders)]
+        if g.below_min_n:
+            lines += ["", "Below min_gate_n (reported, not gated):", *(f"- {line}" for line in g.below_min_n)]
     if result.decisions:
         lines += ["", "## Decisions", ""]
         for d in result.decisions:
@@ -819,6 +834,7 @@ def render_markdown(result: Phase42Gates) -> str:
             if d.numbers:
                 lines += ["| Number | Value |", "| --- | --- |", *(f"| {key} | {_num(value)} |" for key, value in sorted(d.numbers.items())), ""]
             lines += [f"- {reason}" for reason in d.reasons] or ["- every condition of the rule holds"]
+            lines += [f"- below min_gate_n (reported, not gated): {line}" for line in d.below_min_n]
             lines.append("")
     if result.report_only:
         lines += ["", "## Report-only", "", *(f"- {entry.metric}: {entry.note}" for entry in result.report_only)]

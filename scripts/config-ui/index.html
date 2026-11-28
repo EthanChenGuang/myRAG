@@ -6539,6 +6539,15 @@
                                                 </div>
                                             </div>
                                             <div class="form-control">
+                                                <label class="label" for="RAG_LEXICAL_DF_MODE"><span class="label-text"><span data-rag-i18n="RAG_LEXICAL_DF_MODE.label">BM25 document frequency</span> (<span translate="no">RAG_LEXICAL_DF_MODE</span>)</span></label>
+                                                <select id="RAG_LEXICAL_DF_MODE" name="RAG_LEXICAL_DF_MODE" autocomplete="off" translate="no" aria-describedby="rag-lexical-df-mode-help" class="select select-bordered w-full max-w-xs">
+                                                    <option value="raw" selected>raw</option>
+                                                    <option value="cluster">cluster</option>
+                                                </select>
+                                                <p class="label-text-alt text-base-content/70 max-w-prose mt-1" id="rag-lexical-df-mode-help" data-rag-i18n="RAG_LEXICAL_DF_MODE.help">Counts a duplicate cluster once in BM25 document frequency. Needs <code class="font-mono text-xs" translate="no">bm25</code> scoring and duplicate clusters (<code class="font-mono text-xs" translate="no">RAG_DUP_CLUSTERS</code>).</p>
+                                                <p class="label-text-alt text-base-content max-w-prose mt-1" id="rag-lexical-df-mode-needs-dup-clusters" role="status" data-rag-i18n="RAG_LEXICAL_DF_MODE.needsDupClusters" hidden>Duplicate clusters are off, so <code class="font-mono text-xs" translate="no">cluster</code> has no effect and BM25 counts every chunk. Turn on <code class="font-mono text-xs" translate="no">RAG_DUP_CLUSTERS</code> to use it.</p>
+                                            </div>
+                                            <div class="form-control">
                                                 <label class="label" for="RAG_RERANKER"><span class="label-text">Reranker</span></label>
                                                 <select id="RAG_RERANKER" name="RAG_RERANKER" translate="no" aria-describedby="rag-reranker-help" class="select select-bordered w-full">
                                                     <option value="none" selected>none</option>
@@ -11018,12 +11027,19 @@
                 if (!scoring) return;
                 const lexical = document.getElementById('RAG_LEXICAL_SEARCH');
                 const bm25 = scoring.value === 'bm25';
-                for (const id of ['RAG_LEXICAL_BM25_K1', 'RAG_LEXICAL_BM25_B']) {
+                for (const id of ['RAG_LEXICAL_BM25_K1', 'RAG_LEXICAL_BM25_B', 'RAG_LEXICAL_DF_MODE']) {
                     const field = document.getElementById(id);
                     if (!field) continue;
                     field.disabled = !bm25;
                     if (bm25) field.removeAttribute('aria-disabled');
                     else field.setAttribute('aria-disabled', 'true');
+                }
+                const dfMode = document.getElementById('RAG_LEXICAL_DF_MODE');
+                const dfNote = document.getElementById('rag-lexical-df-mode-needs-dup-clusters');
+                if (dfMode && dfNote) {
+                    const dupClusters = document.getElementById('RAG_DUP_CLUSTERS');
+                    dfNote.hidden = !(bm25 && dfMode.value === 'cluster' && dupClusters && !dupClusters.checked);
+                    dfMode.setAttribute('aria-describedby', dfNote.hidden ? 'rag-lexical-df-mode-help' : 'rag-lexical-df-mode-help rag-lexical-df-mode-needs-dup-clusters');
                 }
                 const note = document.getElementById('rag-lexical-scoring-needs-lexical');
                 if (!note) return;
@@ -11569,6 +11585,10 @@
                 setTimeout(initSaveButtons, 500);
 
                 for (const id of ['RAG_LEXICAL_SCORING', 'RAG_LEXICAL_SEARCH']) {
+                    const field = document.getElementById(id);
+                    if (field) field.addEventListener('change', () => this.updateLexicalScoringControls());
+                }
+                for (const id of ['RAG_LEXICAL_DF_MODE', 'RAG_DUP_CLUSTERS']) {
                     const field = document.getElementById(id);
                     if (field) field.addEventListener('change', () => this.updateLexicalScoringControls());
                 }

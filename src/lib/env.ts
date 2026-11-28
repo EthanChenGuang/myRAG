@@ -198,6 +198,7 @@ class EnvironmentConfig {
       RAG_LEXICAL_SCORING: process.env.RAG_LEXICAL_SCORING || 'ts_rank_cd',
       RAG_LEXICAL_BM25_K1: process.env.RAG_LEXICAL_BM25_K1 || '1.2',
       RAG_LEXICAL_BM25_B: process.env.RAG_LEXICAL_BM25_B || '0.75',
+      RAG_LEXICAL_DF_MODE: process.env.RAG_LEXICAL_DF_MODE || 'raw',
       RAG_VERSION_SCOPE: process.env.RAG_VERSION_SCOPE || 'false',
       RAG_EMBED_VERSION_SCOPE: process.env.RAG_EMBED_VERSION_SCOPE || 'false',
       RAG_TABLE_LOOKUP: process.env.RAG_TABLE_LOOKUP || 'false',

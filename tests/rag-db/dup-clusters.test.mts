@@ -791,3 +791,104 @@ describe('backfill command rag:dup-clusters (D-20)', () => {
     assert.deepEqual(await rows('SELECT id, member_count, source_document_ids, updated_at FROM rag_dup_clusters WHERE tenant_key = $1', [KEY_O]), before);
   });
 });
+
+describe('cluster-aware lexical statistics after publish and rag:dup-clusters (04.4-17, D-48, D-49)', () => {
+  let ingestModule: typeof import('@/lib/rag/ingest');
+  let ingestConfig: typeof import('@/lib/rag/ingest/config');
+  let objectStoreModule: typeof import('@/lib/rag/ingest/object-store');
+  let fakeStoreModule: typeof import('../helpers/fake-object-store');
+  let ragDeps: typeof import('@/lib/rag/deps');
+  let scopeModule: typeof import('@/lib/rag/tenant/scope');
+  let cli: typeof import('@/lib/rag/dedupe/cli');
+  const db = lifecycleFixture.db;
+  const KEY_B = `u:${TWO_TENANT_IDS.userB}`;
+  const LEXICAL = { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', RAG_LEXICAL_SCORING: 'bm25' };
+  let env: Record<string, string> = {};
+  const rows = async (sql: string, params: unknown[] = []): Promise<Row[]> => (await db.query<Row>(sql, params)).rows;
+  const service = async (sql: string, params: unknown[] = []): Promise<Row[]> =>
+    db.transaction(async (tx) => {
+      await tx.exec('SET LOCAL ROLE service_role');
+      return (await tx.query<Row>(sql, params)).rows;
+    });
+  const markers = async (): Promise<number> => Number((await rows('SELECT count(*)::int AS n FROM rag_lexical_cluster_dirty WHERE tenant_key = $1', [KEY_B]))[0]?.n);
+  const check = async (): Promise<Row> => (await service('SELECT public.rag_lexstats_check($1) AS c', [KEY_B]))[0]?.c as Row;
+  const upload = async (sourceKey: string, copy: number) =>
+    ingestModule.ingest({
+      scope: scopeModule.mintScope('personal', TWO_TENANT_IDS.userB, null),
+      source: 'config_upload',
+      sourceKey,
+      text: `# Leaflet ${copy}\n\n## Routine\n\n${sharedPassage(copy)}\n\n## Note\n\n${uniqueParagraph(7, copy)}\n`,
+      filename: `${sourceKey.replace(/\//g, '-')}.md`,
+      mimeType: 'text/markdown',
+      signal: new AbortController().signal,
+    });
+  const run = async (argv: string[]) => {
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await cli.main(argv, { out: (line) => out.push(line), err: (line) => err.push(line) });
+    return { code, out, err };
+  };
+
+  before(async () => {
+    ingestModule = await import('@/lib/rag/ingest');
+    ingestConfig = await import('@/lib/rag/ingest/config');
+    objectStoreModule = await import('@/lib/rag/ingest/object-store');
+    fakeStoreModule = await import('../helpers/fake-object-store');
+    ragDeps = await import('@/lib/rag/deps');
+    scopeModule = await import('@/lib/rag/tenant/scope');
+    cli = await import('@/lib/rag/dedupe/cli');
+    objectStoreModule.setObjectStoreForTests(fakeStoreModule.createFakeObjectStore());
+    ingestConfig.resetIngestConfigForTests();
+    ragDeps.setRagDepsForTests({ ragEnv: () => env });
+    await service('SELECT public.rag_lexstats_enable($1)', [KEY_B]);
+    await service('SELECT public.rag_lexstats_cluster_enable($1)', [KEY_B]);
+    await service('SELECT public.rag_lexstats_rebuild($1)', [KEY_B]);
+  });
+
+  after(async () => {
+    await service('SELECT public.rag_lexstats_disable($1)', [KEY_B]);
+    objectStoreModule?.resetObjectStoreForTests();
+    ingestConfig?.resetIngestConfigForTests();
+    ragDeps?.resetRagDepsForTests();
+  });
+
+  test('a publish that clusters copies under bm25 and DF mode cluster leaves no marker and a clean check', async () => {
+    env = { ...LEXICAL, RAG_DUP_CLUSTERS: 'true', RAG_LEXICAL_DF_MODE: 'cluster' };
+    const before = Number((await rows('SELECT count(*)::int AS n FROM document_chunks WHERE tenant_key = $1 AND dup_cluster_id IS NOT NULL', [KEY_B]))[0]?.n);
+    for (let copy = 0; copy < 3; copy += 1) assert.equal((await upload(`dflex/pub/${copy}`, copy)).status, 'ready');
+    const clustered = Number((await rows('SELECT count(*)::int AS n FROM document_chunks WHERE tenant_key = $1 AND dup_cluster_id IS NOT NULL', [KEY_B]))[0]?.n);
+    assert.ok(clustered >= before + 3, `the copies joined a cluster (${before} -> ${clustered})`);
+    assert.equal(await markers(), 0, 'no marker backlog after the publish hook');
+    assert.equal((await check()).clean, true);
+  });
+
+  test('rag:dup-clusters: under raw the markers stay for compaction; under DF mode cluster the command reconciles them', async () => {
+    env = { ...LEXICAL, RAG_DUP_CLUSTERS: 'false' };
+    for (let copy = 10; copy < 13; copy += 1) assert.equal((await upload(`dflex/cli/${copy}`, copy)).status, 'ready');
+    assert.equal(await markers(), 0, 'unclustered copies stage no marker');
+    const raw = await run(['--tenant', KEY_B]);
+    assert.equal(raw.code, 0, raw.err.join('\n'));
+    assert.ok(!raw.out.some((line) => line.includes('lexical statistics compacted')), 'raw: no follow-up');
+    assert.ok((await markers()) > 0, 'raw: the backfill staged markers');
+
+    env = { ...LEXICAL, RAG_DUP_CLUSTERS: 'false' };
+    for (let copy = 20; copy < 23; copy += 1) assert.equal((await upload(`dflex/cli/${copy}`, copy)).status, 'ready');
+    env = { ...LEXICAL, RAG_DUP_CLUSTERS: 'true', RAG_LEXICAL_DF_MODE: 'cluster' };
+    const clustered = await run(['--tenant', KEY_B]);
+    assert.equal(clustered.code, 0, clustered.err.join('\n'));
+    assert.ok(clustered.out.some((line) => line.includes('lexical statistics compacted')), clustered.out.join('\n'));
+    assert.equal(await markers(), 0, 'cluster: no marker backlog after the command');
+    assert.equal((await check()).clean, true);
+  });
+
+  test('a failing statistics follow-up never fails the command', async () => {
+    env = { ...LEXICAL, RAG_DUP_CLUSTERS: 'true', RAG_LEXICAL_DF_MODE: 'cluster' };
+    await db.exec('ALTER FUNCTION public.rag_lexstats_compact(text, integer) RENAME TO rag_lexstats_compact_hidden');
+    try {
+      const result = await run(['--tenant', KEY_B]);
+      assert.equal(result.code, 0, result.err.join('\n'));
+    } finally {
+      await db.exec('ALTER FUNCTION public.rag_lexstats_compact_hidden(text, integer) RENAME TO rag_lexstats_compact');
+    }
+  });
+});
