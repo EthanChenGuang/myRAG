@@ -106,6 +106,8 @@ export interface BuildV2ResultInput {
   glossary?: GlossaryHashStage;
   /** D-46: the source_recheck marker from the search stages; absent when the stage did not run or did not complete. */
   sourceRecheck?: { checked: number; dropped: number };
+  /** LANG-11: the candidate chunking profiles of the tenant's rollout arm, for the hash. */
+  rolloutChunkingOverride?: Record<string, string>;
 }
 
 export interface RequestConfigHashInput {
@@ -130,6 +132,8 @@ export interface RequestConfigHashInput {
   attributeFilter?: AttributeFilterHashStage;
   /** D-14: the glossary state; absent reads as switch off, so the hash keeps its value. */
   glossary?: GlossaryHashStage;
+  /** LANG-11: the candidate chunking profiles of the tenant's rollout arm; absent keeps the hash unchanged. */
+  rolloutChunkingOverride?: Record<string, string>;
 }
 
 /** The request's retrieval-config hash; the result and the semantic-cache key both use it, so they never disagree. */
@@ -155,7 +159,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
     params: effectiveRetrievalParams(profile, config, evalRetrievalOverrides(profile, input.stageOverrides?.retrievalOverrides)),
     reranker: describeReranker(config, profile, queryLanguage ?? '', input.stageOverrides?.retrievalOverrides),
     thresholdsConfigHash,
-    activeChunkingProfiles: hashedChunkingProfiles(profile, chunking, input.stageOverrides?.retrievalOverrides),
+    activeChunkingProfiles: hashedChunkingProfiles(profile, chunking, input.stageOverrides?.retrievalOverrides, ctx.rolloutChunkingOverride),
     switches: {
       lexicalSearch: config.v2.lexicalSearch,
       refusalThreshold: config.v2.refusalThreshold,
@@ -385,6 +389,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(ctx.lexicalStamp ? { lexicalStamp: ctx.lexicalStamp } : {}),
     ...(ctx.attributeFilter ? { attributeFilter: ctx.attributeFilter } : {}),
     ...(ctx.glossary ? { glossary: ctx.glossary } : {}),
+    ...(ctx.rolloutChunkingOverride ? { rolloutChunkingOverride: ctx.rolloutChunkingOverride } : {}),
   });
 
   const base = {

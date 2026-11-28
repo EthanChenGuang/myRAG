@@ -53,6 +53,7 @@ import { variantDenseTexts } from '../query/variants';
 import type { VariantFilterRetry } from './port';
 import { identifierSuggestionMessage } from '../generation/messages';
 import { logScopeGateProblem, runScopeGateStage, scopeGateFailOpen } from '../scope/stage';
+import { resolveRolloutArm, resolveRolloutQueryProfile, rolloutChunkingOverride, rolloutDetail } from '../rollout/resolve';
 
 export const V2_PROFILES = ['chat', 'embed', 'eval', 'voice'] as const;
 
@@ -179,6 +180,13 @@ async function runV2PipelineBody(
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
+  // LANG-11 (07-47): the tenant's rollout arm, from the verified scope and the rollout tables only; nothing is read while
+  // RAG_ROLLOUTS is off, and eval's explicit overrides win over a rollout.
+  const rolloutArms = config.rollouts.enabled && profile !== 'eval' ? await resolveRolloutQueryProfile(await resolveRolloutArm(scope, config)) : null;
+  const rolloutProfile = rolloutArms?.profile;
+  const rolloutChunking = rolloutChunkingOverride(rolloutArms?.resolutions);
+  const rolloutSpanDetail = rolloutDetail(rolloutArms?.resolutions);
+
   // LANG-07 (D-08, D-09): the tenant's query-side lexical options, resolved once per request from the verified scope only while a
   // switch is on; the search stage and both config hashes (result and semantic-cache key) read the same resolution.
   const lexicalSwitchOn = lexicalOptionsOn(config);
@@ -233,7 +241,7 @@ async function runV2PipelineBody(
   };
   let translationPlan: TranslationLegsPlan | null = null;
   const cacheSeam: SemanticCacheSeam = {
-    embed: async (text, embedSignal) => (await embedForRetrieval(input, [text], embedSignal))[0]!,
+    embed: async (text, embedSignal) => (await embedForRetrieval(input, [text], embedSignal, rolloutProfile))[0]!,
     retrievalConfigHash: async (embedded) =>
       requestRetrievalConfigHash({
         input,
@@ -250,6 +258,7 @@ async function runV2PipelineBody(
         ...(await lexicalStampFor()),
         attributeFilter: attributeStage,
         glossary: glossaryStage,
+        ...(rolloutChunking ? { rolloutChunkingOverride: rolloutChunking } : {}),
       }),
   };
 
@@ -257,7 +266,7 @@ async function runV2PipelineBody(
   const speculativeSeam: SpeculativeSeam | undefined = speculativeSearchApplies(config, input)
     ? {
         deps: {
-          embed: async (text, embedSignal) => (await embedForRetrieval(input, [text], embedSignal))[0]!,
+          embed: async (text, embedSignal) => (await embedForRetrieval(input, [text], embedSignal, rolloutProfile))[0]!,
           search: async (args) => {
             // T-06.2-67: the speculation searches under the request's own scope only.
             if (args.scope !== scope) throw new Error('speculative scope mismatch');
@@ -272,6 +281,7 @@ async function runV2PipelineBody(
               embedding: args.embedding,
               filters: args.filters,
               signal: args.signal,
+              ...(rolloutChunking ? { rolloutChunkingOverride: rolloutChunking } : {}),
             });
           },
           now: () => collector.now(),
@@ -370,6 +380,7 @@ async function runV2PipelineBody(
             speculation.handle
               ? await embedPrecomputed(query.queryLayer?.precomputed, speculation.handle)
               : precomputedVectors(query.queryLayer?.precomputed),
+            rolloutProfile,
           ),
         collector,
         { detail: (value) => value[0]?.profile?.id },
@@ -446,6 +457,8 @@ async function runV2PipelineBody(
       ...(queryLexical ? { lexical: queryLexical } : {}),
       ...(query.attributes ? { attributes: query.attributes } : {}),
       access,
+      ...(rolloutChunking ? { rolloutChunkingOverride: rolloutChunking } : {}),
+      ...(rolloutSpanDetail ? { rolloutDetail: rolloutSpanDetail } : {}),
       // Phase 6.2 D-08, P-10: the layer's cap on searches; filter retries stay within it.
       ...(query.queryLayer
         ? {
@@ -671,6 +684,7 @@ async function runV2PipelineBody(
     attributeFilter: attributeStage,
     glossary: glossaryStage,
     ...(sourceRecheck ? { sourceRecheck } : {}),
+    ...(rolloutChunking ? { rolloutChunkingOverride: rolloutChunking } : {}),
   });
   return scopeGate ? { ...result, scopeGate } : result;
 }
