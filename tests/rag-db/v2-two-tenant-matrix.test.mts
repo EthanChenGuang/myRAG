@@ -865,6 +865,35 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     }
   });
 
+  test('two-tenant matrix under the D-01 values: multi-tenant, an identifier only tenant B holds gives tenant A no exact_id pool member', async () => {
+    const env = { ...D01_ENV, COHERE_API_KEY: '', RAG_EXACT_ID_LOOKUP: 'true' };
+    const question = `Which entry is ${tenant('b').markers.identifier}?`;
+    try {
+      depsModule.setRagDepsForTests({ ragEnv: () => env });
+      configModule.resetRagConfigForTests();
+      for (const profile of ['chat', 'embed', 'eval'] as Profile[]) {
+        const asker = await retrieve(await scopeFor(profile, 'a'), profile, question);
+        const where = `D-01 exact_id ${profile}/a`;
+        await assertOwnRows('a', asker.result, where);
+        assertNoForeignText('a', { result: asker.result, stages: asker.result.stages }, where);
+        const askerRefusal = stage(asker.result, 'refusal');
+        assert.equal(askerRefusal?.counts?.refused, 1, `${where}: refused (${askerRefusal?.detail})`);
+        assert.doesNotMatch(askerRefusal?.detail ?? '', /exact=/u, `${where}: no exact_id pool member`);
+
+        const owner = await retrieve(await scopeFor(profile, 'b'), profile, question);
+        const ownerWhere = `D-01 exact_id ${profile}/b`;
+        await assertOwnRows('b', owner.result, ownerWhere);
+        const ownerRefusal = stage(owner.result, 'refusal');
+        assert.equal(ownerRefusal?.counts?.answered, 1, `${ownerWhere}: answered (${ownerRefusal?.detail})`);
+        assert.match(ownerRefusal?.detail ?? '', /floor=legacy_rule pool=\d+ exact=\d+$/u, `${ownerWhere}: answered through its own exact_id row`);
+        assert.ok(chunkIdsOf(owner.result).includes(tenant('b').lookup.identifierChunkId), `${ownerWhere}: its identifier chunk comes back`);
+      }
+    } finally {
+      depsModule.setRagDepsForTests({ ragEnv: () => allOnEnv });
+      configModule.resetRagConfigForTests();
+    }
+  });
+
   test('two-tenant matrix under the implicit defaults: multi-tenant, nothing set, with and without the CI languages, every profile serves legacy inside the caller tenant', async () => {
     const hybrid = () => rpcCalls().filter((call) => call.path.endsWith('/rpc/hybrid_search_chunks')).length;
     let ownCandidates = 0;

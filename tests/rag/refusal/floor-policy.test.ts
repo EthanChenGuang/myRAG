@@ -16,6 +16,7 @@ import * as thresholds from '@/lib/rag/refusal/thresholds';
 import { rerankerSupportedLanguages } from '@/lib/rag/rerank/languages';
 import { resetRerankerFactoryForTests, setRerankerFactoryForTests } from '@/lib/rag/rerank/select';
 import { RERANK_TEXT_VERSION, type Reranker } from '@/lib/rag/rerank/types';
+import { EXACT_ID_LIMIT } from '@/lib/rag/retrieval/exact-id';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { createTraceCollector } from '@/lib/rag/trace/collector';
 import type { Profile, RetrievalOptions, StageOverrides } from '@/lib/rag/types';
@@ -297,6 +298,14 @@ describe('v2 refusal stage floor policy', () => {
     expect(a.out.decision).toMatchObject({ decision: 'refuse', basis: 'rerank_threshold', threshold: 0.6 });
     expect(a.out.survivors).toEqual([]);
     expect(a.refusalStage?.detail).toBe('rerank_threshold');
+
+    const exactOnly: FusedHit = { hit: hit('x0', { rank: 1, documentId: 'dx', similarity: 1, content: 'sample passage' }), score: 1 / 61, ranks: { exact_id: 1 } };
+    const b = await rank(env, [exactOnly], {
+      profile: 'eval',
+      stageOverrides: { retrievalOverrides: { rerankModel: 'fake-quality-v1' } },
+    });
+    expect(b.out.decision).toMatchObject({ decision: 'refuse', basis: 'rerank_threshold', threshold: 0.6 });
+    expect(b.refusalStage?.detail).toBe('rerank_threshold');
   });
 });
 
@@ -364,11 +373,74 @@ describe('legacy rule pool', () => {
     expect((await rank(LEGACY_RULE, [scored])).out.decision).toMatchObject({ decision: 'refuse' });
   });
 
-  it('synthetic similarity is not a pool member', async () => {
-    const exactOnly = only({ exact_id: 1 }, { similarity: 1, content: 'widget sample' });
-    expect((await rank(LEGACY_RULE, [exactOnly])).out.decision).toMatchObject({ decision: 'refuse' });
-    const exactAndDense = only({ 'dense:0': 1, exact_id: 1 }, { similarity: 0.7 });
-    expect((await rank(LEGACY_RULE, [exactAndDense])).out.decision).toMatchObject({ decision: 'answer' });
+  it('exact_id rows are pool members judged with the legacy keep rule', async () => {
+    const exactOnly = only({ exact_id: 1 }, { similarity: 1, content: 'sample passage' });
+    const a = await rank(LEGACY_RULE, [exactOnly]);
+    expect(a.out.decision).toMatchObject({ decision: 'answer', reason: 'above_similarity_floor', topScore: 1 });
+    expect(a.refusalStage?.detail).toBe('above_similarity_floor floor=legacy_rule pool=1 exact=1');
+
+    const exactAndLowDense = only({ 'dense:0': 1, exact_id: 1 }, { similarity: 0.24, content: 'sample passage' });
+    const b = await rank(LEGACY_RULE, [exactAndLowDense]);
+    expect(b.out.decision).toMatchObject({ decision: 'answer', reason: 'above_similarity_floor', topScore: 1 });
+    expect(b.refusalStage?.detail).toBe('above_similarity_floor floor=legacy_rule pool=1 exact=1');
+
+    const syntheticNotExact = only({ 'lexical:0': 1 }, { similarity: 1, lexicalScore: 3, content: 'sample passage' });
+    const c = await rank(LEGACY_RULE, [syntheticNotExact]);
+    expect(c.out.decision).toMatchObject({ decision: 'refuse' });
+    expect(c.refusalStage?.detail).toBe('similarity_floor floor=legacy_rule pool=0');
+
+    const lexicalOnly = only({ 'lexical:0': 1 }, { similarity: null, lexicalScore: 3, content: 'widget sample' });
+    expect((await rank(LEGACY_RULE, [lexicalOnly])).out.decision).toMatchObject({ decision: 'refuse' });
+  });
+
+  it('exact_id rows merge as legacy merges them', async () => {
+    const rows = (count: number, ranks: (index: number) => Record<string, number>, similarity: number | null): FusedHit[] =>
+      Array.from({ length: count }, (_, index) => ({
+        hit: hit(`e${index}`, { rank: index + 1, documentId: `de${index}`, similarity, content: `sample passage e${index}` }),
+        score: 1 / (60 + index + 1),
+        ranks: ranks(index),
+      }));
+    const dense = pool([{ similarity: 0.6 }, { similarity: 0.55 }, { similarity: 0.5 }]);
+    const oneExact = rows(1, () => ({ exact_id: 1 }), 1);
+    const capped = await rank(LEGACY_RULE, [...dense, ...oneExact], { inputOptions: { maxResults: 2 } });
+    expect(capped.out.decision).toMatchObject({ decision: 'answer' });
+    expect(capped.refusalStage?.detail).toBe('above_similarity_floor floor=legacy_rule pool=2 exact=1');
+
+    const threeExact = rows(3, (index) => ({ exact_id: index + 1 }), 1);
+    const beyond = await rank(LEGACY_RULE, [...dense, ...threeExact], { inputOptions: { maxResults: 2 } });
+    expect(beyond.refusalStage?.detail).toBe('above_similarity_floor floor=legacy_rule pool=3 exact=3');
+
+    const many = rows(EXACT_ID_LIMIT + 2, (index) => ({ exact_id: index + 1 }), 1);
+    const limited = await rank(LEGACY_RULE, many);
+    expect(limited.refusalStage?.detail).toBe(`above_similarity_floor floor=legacy_rule pool=${EXACT_ID_LIMIT} exact=${EXACT_ID_LIMIT}`);
+  });
+
+  it('no exact_id list: pool, decision and detail unchanged', async () => {
+    const beyondCount = pool([{ similarity: 0.6 }, { similarity: 0.55 }, { similarity: 0.5 }]);
+    const capped = await rank(LEGACY_RULE, beyondCount, { inputOptions: { maxResults: 2 } });
+    expect(capped.out.decision).toEqual({
+      decision: 'refuse',
+      basis: 'similarity_floor',
+      reason: 'below_similarity_floor',
+      topScore: 0.6,
+      threshold: 0.65,
+      cellKey: null,
+    });
+    expect(capped.refusalStage?.detail).toBe('similarity_floor floor=legacy_rule pool=2');
+  });
+
+  it('voice admits no exact_id row: the legacy voice search has no exact lookup', async () => {
+    const exactOnly = only({ exact_id: 1 }, { similarity: 1, content: 'sample passage' });
+    const voice = await rank(LEGACY_RULE, [exactOnly], { profile: 'voice' });
+    expect(voice.out.decision).toMatchObject({ decision: 'refuse' });
+    expect(voice.refusalStage?.detail).toBe('similarity_floor floor=legacy_rule pool=0');
+  });
+
+  it('similarity floor and an applied threshold gate are unchanged by exact_id rows', async () => {
+    const exactAndLowDense = only({ 'dense:0': 1, exact_id: 1 }, { similarity: 0.24, content: 'sample passage' });
+    const a = await rank(V2, [exactAndLowDense]);
+    expect(a.out.decision).toMatchObject({ decision: 'refuse', topScore: 0.24 });
+    expect(a.refusalStage?.detail).toBe('similarity_floor');
   });
 
   it('outside the legacy pool', async () => {
