@@ -37,6 +37,8 @@ export interface GraphChangePage extends ChangePage {
     changes: GraphSourceChange[];
     /** True when a 410 dropped the stored link and this read restarted without a token. */
     resynced: boolean;
+    /** Ids of drive root items seen in this read (they end a parent walk; see scope.ts). */
+    rootIds?: string[];
 }
 
 export interface GraphDeltaReadInput extends SourceChangeFeedReadInput {

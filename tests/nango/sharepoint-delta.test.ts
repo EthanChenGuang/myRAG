@@ -80,6 +80,7 @@ describe('GraphDeltaFeed enumeration (D-21, D-25)', () => {
         expect(deleted.map((change) => change.fileId)).toEqual(['item-gone-1']);
         expect(page.changes.filter((change) => change.fileId === 'item-file-a')).toHaveLength(1);
         expect(page.changes.some((change) => change.fileId === 'item-root')).toBe(false);
+        expect(page.rootIds).toEqual(['item-root']);
     });
 
     it('takes etag from eTag and modifiedAt from lastModifiedDateTime; deleted items carry only id and the flag', async () => {
