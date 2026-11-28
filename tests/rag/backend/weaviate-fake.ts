@@ -87,6 +87,7 @@ export function evaluateFilter(filter: WeaviateFilterValue | undefined, object: 
     case 'Equal':
       return value === filter.value;
     case 'ContainsAny':
+      if (Array.isArray(value)) return value.some((item) => (filter.value as unknown[]).includes(item));
       return value !== undefined && value !== null && (filter.value as unknown[]).includes(value);
     case 'GreaterThanEqual':
       return typeof value === 'string' && value >= String(filter.value);
