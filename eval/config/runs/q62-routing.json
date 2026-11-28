@@ -1,0 +1,11 @@
+{
+  "name": "q62-routing",
+  "env": {
+    "RAG_MODEL_ROUTING": "auto",
+    "RAG_PIPELINE": "v2",
+    "RAG_QUERY_DECOMPOSE": "false",
+    "RAG_QUERY_LAYER": "true"
+  },
+  "overrides": null,
+  "selected_model": "auto"
+}

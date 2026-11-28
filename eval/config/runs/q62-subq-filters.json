@@ -1,0 +1,11 @@
+{
+  "name": "q62-subq-filters",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_QUERY_DECOMPOSE": "true",
+    "RAG_QUERY_DECOMPOSE_COMPLETENESS": "true",
+    "RAG_QUERY_LAYER": "true",
+    "RAG_QUERY_SUBQ_FILTERS": "true"
+  },
+  "overrides": null
+}
