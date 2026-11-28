@@ -134,3 +134,15 @@
 - Notes for PROD:
   - NF-1 file header says "owner desk / SQL editor"; on prod the owner chooses whether to paste it or have me apply the block.
   - Train 41 DEPLOY CAUTION: set NANGO_WEBHOOK_SECRET before deploying the train-41 app.
+
+## 2026-11-28 08:07 UTC: PROD (ppvywaxrycaxrtrrditl) read-only rollback snapshot before trains 38-41
+- Free plan: no Supabase backups or PITR. The owner chose a read-only definition snapshot instead.
+- Prod state: last migration train37_0410_r20_delta; rag_access_enforced()=false.
+- Snapshot contents:
+  - 23 existing functions that trains 38-41 / 0989 / 0991 redefine (definition + ACL).
+  - 17 policies on chats, documents, document_chunks, rag_review_items, rag_retrieval_log.
+  - 42 triggers on the affected tables.
+  - 3 constraints.
+  - The 0720 columns are absent.
+- Files: snapshots/prod-pre-train38-2026-11-28.json and snapshots/prod-pre-train38-2026-11-28-functions.sql.
+- Nothing was written to prod.
