@@ -431,7 +431,7 @@ The release-defaults record carries cost, latency and per-language blocks next t
 Quality is watched per language, not only overall. Every value is a language code (`und` when unknown), never the text it was derived from.
 
 - **Trace**: the `languages` block of the RAG trace holds the query language, its confidence, the kept chunks' languages and the answer language (null on production traces while `RAG_RETRIEVAL_LOG` is off). The online judge summary adds a `by_language` breakdown.
-- **Cells**: `GET /api/rag/admin/language-quality` (admin, 404 while `RAG_MONITOR` is off, at most 90 days) returns refusal, not-helpful and judge cells per tenant and language from `rag_language_quality_cells` (migration 0743).
+- **Cells**: `GET /api/rag/admin/language-quality` (admin, 404 while `RAG_MONITOR` is off, at most 90 days) returns refusal, not-helpful and judge cells per tenant and language from `rag_language_quality_cells` (migration 0743). The route is offered as an API only: no Config UI panel or app page calls it.
 - **Alert**: the `language_drop` rule of the daily monitor job (`eval/config/monitor-alerts.json`) compares each language's refusal rate, not-helpful rate and judge mean over one day with its 30-day baseline (at least 50 and 200 samples) (bands per measure for the language and overall) and alerts when a language falls beyond them. `und` is never alerted.
 - **Confidence**: `RAG_LANG_CONFIDENCE=mapped` (default) keeps today's detector confidence; `calibrated` stores calibrated values in the retrieval log. The bins come from `npx tsx eval/harness/calibrate-language-confidence.mts` (`--check` verifies), the only writer of `eval/config/language-confidence-calibration.json`.
 
