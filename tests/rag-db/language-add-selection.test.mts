@@ -139,8 +139,9 @@ for (const mode of ['multi-tenant', 'single-tenant'] as const) {
       assert.ok(answer.by_mechanism.every((row) => row.affected === 0), 'a removal-only change affects no document, LlamaParse ones included');
       const coverage = impact.coverageFromGroups(await impact.loadFingerprintGroups({ db: rpc }), { ...REMOVE }, true);
       assert.ok(coverage.pending.every((row) => row.affected === 0), 'after the save no document is left on previous settings');
-      const dry = await run.startRebuild({ mechanism: 'reparse', selection: 'language_add', dryRun: true, startedBy: 'test' }, { db: rpc, saved: { ...REMOVE }, ingestAsync: () => true });
-      assert.equal(dry.affected, 0);
+      const dry = await run.startRebuild({ mechanism: 'reparse', dryRun: true, startedBy: 'test' }, { db: rpc, saved: { ...REMOVE }, ingestAsync: () => true });
+      assert.equal(dry.affected, 0, 'the Phase 3.2 reparse under the removed set selects nothing');
+      assert.equal(dry.plan.kind, 'nothing');
       assert.deepEqual(await storeCounts(db), before);
     });
 

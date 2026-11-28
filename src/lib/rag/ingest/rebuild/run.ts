@@ -25,6 +25,8 @@ import {
   type RebuildCandidate,
   type RebuildPlan,
   type RebuildableMechanism,
+  type LanguageAddCandidate,
+  selectLanguageAdd,
 } from './plan';
 
 type Row = Record<string, unknown>;
@@ -470,17 +472,20 @@ function startedRun(row: Row | undefined): { run: RebuildRunRow; resumed: boolea
 export async function startRebuild(input: StartRebuildInput, deps: RebuildDeps = {}): Promise<StartRebuildResult> {
   if (!isRebuildableMechanism(input.mechanism)) throw new RebuildInputError('invalid_mechanism');
   const mechanism = input.mechanism;
+  const languageAdd = input.selection === 'language_add';
+  if (input.selection !== undefined && (!languageAdd || mechanism !== 'reparse')) throw new RebuildInputError('invalid_selection');
   const signal = deps.signal ?? new AbortController().signal;
   const db = dbOf(deps);
   const proposal = coverageProposal(deps.saved ?? savedFingerprintValues());
-  const candidates = await loadCandidates(db, signal);
+  const candidates = languageAdd ? await loadLanguageAddCandidates(db, signal) : await loadCandidates(db, signal);
   const staleHeader = mechanism === 'rechunk' && attributeHeaderEnabled() ? await staleHeaderSelection(db, candidates, deps, signal) : null;
-  const settingsHash = rebuildSettingsHash(mechanism, proposal, staleHeader?.digest);
-  const selection = selectAffected(candidates, mechanism, proposal, staleHeader?.ids);
+  const settingsHash = rebuildSettingsHash(mechanism, proposal, staleHeader?.digest, languageAdd ? 'language_add' : undefined);
+  const added = languageAdd ? selectLanguageAdd(candidates as LanguageAddCandidate[], proposal) : null;
+  const selection = added ?? selectAffected(candidates, mechanism, proposal, staleHeader?.ids);
   const ingestAsync = deps.ingestAsync ? deps.ingestAsync() : queueConfigFromProcessEnv().ingestAsync;
   const legacy = mechanism === 'rechunk' && selection.documents.length > 0 ? await legacyChildTokens(db, signal) : undefined;
   const plan = planRebuild(mechanism, selection, { ingestAsync, settingsHash, ...(legacy ? { legacyChildTokens: legacy } : {}) });
-  const base = { mechanism, affected: selection.documents.length, withoutFingerprint: selection.withoutFingerprint, plan };
+  const base = { mechanism, affected: selection.documents.length, withoutFingerprint: selection.withoutFingerprint, plan, ...(added ? { groups: added.groups } : {}) };
   if (input.dryRun) return { status: 'dry_run', ...base };
   if (plan.kind === 'nothing') return { status: 'nothing', ...base };
   if (plan.kind !== 'held_batch' && plan.kind !== 'chunking_profile') return { status: 'command', ...base };
@@ -496,7 +501,9 @@ export async function startRebuild(input: StartRebuildInput, deps: RebuildDeps =
       p_plan:
         plan.kind === 'chunking_profile'
           ? { kind: plan.kind, affected: plan.affected, profiles: plan.profiles.map((profile) => ({ id: profile.profileId, doc_type: profile.docType })) }
-          : { kind: plan.kind, affected: plan.affected },
+          : added
+            ? { kind: plan.kind, affected: plan.affected, selection: 'language_add', groups: added.groups }
+            : { kind: plan.kind, affected: plan.affected },
       p_items: plan.kind === 'held_batch' ? plan.documents.map((document) => ({ tenant_key: document.tenantKey, document_id: document.documentId })) : null,
       p_total: plan.affected,
       p_started_by: input.startedBy,
@@ -569,6 +576,28 @@ export async function rollbackRebuild(runId: string, actor: string | null, deps:
   return { restored, superseded };
 }
 
-export async function loadLanguageAddCandidates(_db: RpcClient, _signal: AbortSignal, _tenantKey: string | null = null): Promise<import('./plan').LanguageAddCandidate[]> {
-  return [];
+/** LANG-11: 0745 rag_language_add_candidates in keyset pages; tenantKey null lists every tenant, each row with its own tenant key. */
+export async function loadLanguageAddCandidates(db: RpcClient, signal: AbortSignal, tenantKey: string | null = null): Promise<LanguageAddCandidate[]> {
+  const candidates: LanguageAddCandidate[] = [];
+  let after: string | null = null;
+  for (;;) {
+    const rows = await call(db, 'rag_language_add_candidates', { p_tenant_key: tenantKey, p_after: after, p_limit: CANDIDATE_PAGE }, signal);
+    for (const row of rows) {
+      const documentId = text(row, 'id');
+      const rowTenant = text(row, 'tenant_key');
+      if (documentId === null || rowTenant === null || (tenantKey !== null && rowTenant !== tenantKey)) continue;
+      candidates.push({
+        documentId,
+        tenantKey: rowTenant,
+        docType: text(row, 'doc_type') ?? 'general',
+        fingerprint: text(row, 'ingest_fingerprint'),
+        parts: row.parts ?? null,
+        hasUnd: row.has_und === true,
+        scanned: row.scanned === true,
+      });
+    }
+    if (rows.length < CANDIDATE_PAGE) return candidates;
+    after = text(rows[rows.length - 1] as Row, 'id');
+    if (after === null) return candidates;
+  }
 }

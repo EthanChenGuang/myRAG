@@ -75,8 +75,9 @@ export function selectAffected(
  * One hash per mechanism and saved values: a second start under the same settings finds the run of the first. A stale-header digest (the
  * header state a rechunk rebuild covers, D-27) is hashed only when given, so without it the value equals today's.
  */
-export function rebuildSettingsHash(mechanism: RebuildMechanism, proposal: Record<string, string>, staleHeaderDigest?: string): string {
-  const hashed = staleHeaderDigest === undefined ? { mechanism, values: proposal } : { mechanism, values: proposal, stale_header: staleHeaderDigest };
+export function rebuildSettingsHash(mechanism: RebuildMechanism, proposal: Record<string, string>, staleHeaderDigest?: string, selection?: 'language_add'): string {
+  const base: Record<string, unknown> = staleHeaderDigest === undefined ? { mechanism, values: proposal } : { mechanism, values: proposal, stale_header: staleHeaderDigest };
+  const hashed = selection === undefined ? base : { ...base, selection };
   return createHash('sha256').update(canonicalJson(hashed)).digest('hex');
 }
 
@@ -174,14 +175,50 @@ export function planRebuild(mechanism: RebuildableMechanism, selection: RebuildS
   }
 }
 
-export type LanguageAddGroup = 'und' | 'scanned' | 'stale';
+/** LANG-11 (plan 07-52): the groups a language addition reprocesses, in the order a document is counted under. */
+export const LANGUAGE_ADD_GROUPS = ['und', 'scanned', 'stale'] as const;
+export type LanguageAddGroup = (typeof LANGUAGE_ADD_GROUPS)[number];
+
+/** A candidate of 0745 rag_language_add_candidates: the two flags come from SQL, inside the document's tenant. */
 export interface LanguageAddCandidate extends RebuildCandidate {
   hasUnd: boolean;
   scanned: boolean;
 }
+
 export interface LanguageAddSelection extends RebuildSelection {
+  /** Selected documents per group; a document in several groups counts once, under the first of und, scanned, stale. */
   groups: Record<LanguageAddGroup, number>;
 }
-export function selectLanguageAdd(_candidates: readonly LanguageAddCandidate[], _proposal: Record<string, string>): LanguageAddSelection {
-  return { documents: [], withoutFingerprint: 0, groups: { und: 0, scanned: 0, stale: 0 } };
+
+function staleUnder(candidate: RebuildCandidate, proposal: Record<string, string>): boolean | null {
+  const counts = countImpact([{ docType: candidate.docType, fingerprint: candidate.fingerprint, parts: candidate.parts, documents: 1 }], proposal);
+  if (counts.withoutFingerprint > 0) return null;
+  for (const byType of counts.affected.values()) for (const value of byType.values()) if (value > 0) return true;
+  return false;
+}
+
+/**
+ * LANG-11: the documents a language addition reprocesses: those stored as `und`, scanned documents, and those whose stored fingerprint
+ * differs under the proposed settings (the coverage comparison, which keeps a document's own languages, so a removed language never counts).
+ * A document in none of the three groups is never selected; one without a fingerprint is selected only through und or scanned.
+ */
+export function selectLanguageAdd(candidates: readonly LanguageAddCandidate[], proposal: Record<string, string>): LanguageAddSelection {
+  const documents: RebuildTarget[] = [];
+  const seen = new Set<string>();
+  const groups: Record<LanguageAddGroup, number> = { und: 0, scanned: 0, stale: 0 };
+  let withoutFingerprint = 0;
+  for (const candidate of candidates) {
+    if (seen.has(candidate.documentId)) continue;
+    seen.add(candidate.documentId);
+    let group: LanguageAddGroup | null = candidate.hasUnd ? 'und' : candidate.scanned ? 'scanned' : null;
+    if (group === null) {
+      const stale = staleUnder(candidate, proposal);
+      if (stale === null) withoutFingerprint += 1;
+      if (stale === true) group = 'stale';
+    }
+    if (group === null) continue;
+    groups[group] += 1;
+    documents.push({ documentId: candidate.documentId, tenantKey: candidate.tenantKey, docType: candidate.docType });
+  }
+  return { documents, withoutFingerprint, groups };
 }
