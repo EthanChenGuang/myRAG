@@ -6,11 +6,15 @@ import { installChatPipeline } from '../helpers/chat-route-fakes';
 const FAST = 'anthropic/claude-haiku-5.5';
 const QUALITY = 'anthropic/claude-sonnet-5.5';
 const QUERY = 'Tell me about the alpha module';
+const LONG_QUERY = 'What is the recorded alpha value of the synthetic sample listed in the third section of the neutral test document?';
+const KEPT = [{ chunk_id: 'chunk-1', document_id: 'doc-1', document_name: 'alpha.md', content: 'The alpha module stores neutral sample values.', similarity: 0.8, rank: 1, kept_by: 'similarity' as const }];
 const ENV_NAMES = [
   'NEXT_PUBLIC_EMBED_ENABLED',
   'NEXT_PUBLIC_EMBED_ALLOWED_DOMAINS',
   'NEXT_PUBLIC_EMBED_MODEL',
   'NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE',
+  'NEXT_PUBLIC_MCP_SYSTEM_ENABLED',
+  'NEXT_PUBLIC_OPENROUTER_MODELS',
   'EMBED_RATE_LIMIT',
   'RAG_PIPELINE',
   'RAG_QUERY_LAYER',
@@ -49,7 +53,11 @@ vi.mock('@/lib/query-classifier', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/query-classifier')>();
   return {
     ...actual,
-    classifyQuery: () => ({ needsMcp: false, confidence: 0.9, category: h.next.category, reasoningText: 'stub' }),
+    // 'real': the unstubbed classifier (06.2-43: a default deployment answers conversational for every query)
+    classifyQuery: (...args: Parameters<typeof actual.classifyQuery>) =>
+      h.next.category === 'real'
+        ? actual.classifyQuery(...args)
+        : { needsMcp: false, confidence: 0.9, category: h.next.category, reasoningText: 'stub' },
   };
 });
 vi.mock('ai', async (importOriginal) => ({
@@ -82,7 +90,7 @@ function plan(reasons: string[] = []) {
   };
 }
 
-function result(queryPlan: unknown = plan()) {
+function result(queryPlan: unknown = plan(), overrides: Record<string, unknown> = {}) {
   return {
     status: 'ok' as const,
     reason: 'ok',
@@ -108,6 +116,7 @@ function result(queryPlan: unknown = plan()) {
       searchStrategy: 'semantic_only' as const,
     },
     queryPlan,
+    ...overrides,
   };
 }
 
@@ -127,10 +136,10 @@ async function loadRoute() {
   return import('@/app/api/embed/chat/route');
 }
 
-async function embed(model: string | undefined, next: unknown = result()) {
+async function embed(model: string | undefined, next: unknown = result(), query: string = QUERY) {
   h.next.result = next;
   const { POST } = await loadRoute();
-  const body: Record<string, unknown> = { messages: [{ role: 'user', content: QUERY }] };
+  const body: Record<string, unknown> = { messages: [{ role: 'user', content: query }] };
   if (model !== undefined) body.model = model;
   const response = await POST(
     new NextRequest('http://localhost/api/embed/chat', {
@@ -172,6 +181,7 @@ describe('embed route Auto model routing (06.2-35, D-19, D-20)', () => {
     h.runSpy.mockReset();
     h.providerIds.length = 0;
     h.next.category = 'document_search';
+    delete env.NEXT_PUBLIC_MCP_SYSTEM_ENABLED;
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -233,5 +243,91 @@ describe('embed route Auto model routing (06.2-35, D-19, D-20)', () => {
       expect(h.providerIds.length).toBeGreaterThan(0);
       expect(h.providerIds).not.toContain('auto');
     }
+  });
+});
+
+describe('embed route Auto routing on a default deployment (06.2-43, D-20 revision 1)', () => {
+  let saved: Record<string, string | undefined>;
+
+  beforeEach(() => {
+    saved = Object.fromEntries(ENV_NAMES.map((name) => [name, env[name]]));
+    env.NEXT_PUBLIC_EMBED_ENABLED = 'true';
+    env.NEXT_PUBLIC_EMBED_ALLOWED_DOMAINS = '*';
+    env.NEXT_PUBLIC_EMBED_MODEL = DEFAULT_EMBED;
+    env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'single-tenant';
+    env.EMBED_RATE_LIMIT = '100000';
+    env.RAG_PIPELINE = 'v2';
+    env.RAG_QUERY_LAYER = 'true';
+    env.RAG_MODEL_ROUTING = 'auto';
+    env.RAG_SEMANTIC_CACHE = 'pgvector';
+    env.RAG_SUPPORTED_LANGUAGES = 'en,zh,it';
+    env.RAG_PRIMARY_LANGUAGE = 'en';
+    delete env.RAG_ROUTING_FAST_MODEL;
+    delete env.RAG_ROUTING_QUALITY_MODEL;
+    delete env.NEXT_PUBLIC_MCP_SYSTEM_ENABLED;
+    h.capture.reset();
+    h.runSpy.mockReset();
+    h.providerIds.length = 0;
+    h.next.category = 'real';
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    for (const name of ENV_NAMES) {
+      if (saved[name] === undefined) delete env[name];
+      else env[name] = saved[name];
+    }
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('a short question with retrieved documents streams with the fast model (conversational_lookup)', async () => {
+    const run = await embed('auto', result(plan(), { kept: KEPT }));
+    expect(run.streamedModels).toEqual([FAST]);
+    expect(run.route).toEqual({ tier: 'fast', rule: 'conversational_lookup', selection: 'auto' });
+    expect(run.input?.cacheContext?.generatorModel).toBe(`auto|${FAST}|${QUALITY}`);
+  });
+
+  it('a long question keeps the quality model (long_query)', async () => {
+    const run = await embed('auto', result({ ...plan(), original: LONG_QUERY, standalone: LONG_QUERY }, { kept: KEPT }), LONG_QUERY);
+    expect(run.streamedModels).toEqual([QUALITY]);
+    expect(run.route).toEqual({ tier: 'quality', rule: 'long_query', selection: 'auto' });
+  });
+
+  it('no retrieved document keeps the quality model (conversational_no_hit)', async () => {
+    const run = await embed('auto', result(plan(), { kept: [] }));
+    expect(run.streamedModels).toEqual([QUALITY]);
+    expect(run.route).toEqual({ tier: 'quality', rule: 'conversational_no_hit', selection: 'auto' });
+  });
+
+  it('a small-talk turn that skipped retrieval keeps the quality model (conversational_no_hit)', async () => {
+    const smallTalkPlan = { ...plan(), gate: { ...plan().gate, reasons: ['R12_SMALL_TALK'], skip_retrieval: true } };
+    const run = await embed('auto', result(smallTalkPlan, { reason: 'small_talk', kept: KEPT }));
+    expect(run.streamedModels).toEqual([QUALITY]);
+    expect(run.route).toEqual({ tier: 'quality', rule: 'conversational_no_hit', selection: 'auto' });
+  });
+
+  it('a routed id outside the allowlist keeps the quality model (invalid_routing_id)', async () => {
+    env.NEXT_PUBLIC_OPENROUTER_MODELS = JSON.stringify([{ id: QUALITY, displayName: 'Synthetic quality' }]);
+    const run = await embed('auto', result(plan(), { kept: KEPT }));
+    expect(run.streamedModels).toEqual([QUALITY]);
+    expect(run.route).toEqual({ tier: 'quality', rule: 'invalid_routing_id', selection: 'auto' });
+  });
+
+  it('with routing off or an explicit model nothing changes, hit or not', async () => {
+    env.RAG_MODEL_ROUTING = 'off';
+    const off = await embed('auto', result(plan(), { kept: KEPT }));
+    expect(off.streamedModels).toEqual([QUALITY]);
+    expect(off.input?.cacheContext?.generatorModel).toBe(QUALITY);
+    expect(off.route).toEqual({ tier: 'quality', rule: 'routing_off', selection: 'auto' });
+    env.RAG_MODEL_ROUTING = 'auto';
+    h.capture.reset();
+    h.runSpy.mockReset();
+    const explicit = await embed(QUALITY, result(plan(), { kept: KEPT }));
+    expect(explicit.streamedModels).toEqual([QUALITY]);
+    expect(explicit.input?.cacheContext?.generatorModel).toBe(QUALITY);
+    expect(explicit.route).toBeUndefined();
   });
 });
