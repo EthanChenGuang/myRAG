@@ -2361,6 +2361,7 @@ if (typeof window !== 'undefined') {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    monitorRuleLabel,
     MONITOR_LABELS,
     monitorLabel,
     monitorMessage,
