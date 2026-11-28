@@ -1105,3 +1105,4 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
   - superset branches: 06.3-29, 06.3-28, 04.4-17, 06.2-38, 06.2-35;
   - 07-44, quick-06-cache-gaps, quick-61-gaps.
   - Excluded: 05.2.1-23, 04.1-18-r2, 06.2-30.
+- 02:29Z 06.2-28 DONE (exec/06.2-28 24e3d5dc: scope-gate Config UI panel; design gate PASS) and archived; added to train 42.
