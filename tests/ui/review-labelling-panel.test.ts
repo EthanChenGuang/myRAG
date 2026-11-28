@@ -478,8 +478,7 @@ describe('review-labelling.js: case view (D-16, D-19)', () => {
 });
 
 function expectNoHtmlSinks(source: string) {
-  expect(source).not.toContain('innerHTML');
-  expect(source).not.toContain('insertAdjacentHTML');
+  expect(source).not.toMatch(/innerHTML|insertAdjacentHTML|outerHTML/);
 }
 
 describe('review-labelling.js static guards', () => {
