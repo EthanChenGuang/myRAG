@@ -1,0 +1,122 @@
+{
+  "$defs": {
+    "CacheSplitMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "near_miss_pairs": {
+          "minimum": 0,
+          "title": "Near Miss Pairs",
+          "type": "integer"
+        },
+        "near_miss_wrong_hit_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Near Miss Wrong Hit Rate",
+          "type": "number"
+        },
+        "paraphrase_hit_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Paraphrase Hit Rate",
+          "type": "number"
+        },
+        "paraphrase_pairs": {
+          "minimum": 0,
+          "title": "Paraphrase Pairs",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "paraphrase_pairs",
+        "near_miss_pairs",
+        "paraphrase_hit_rate",
+        "near_miss_wrong_hit_rate"
+      ],
+      "title": "CacheSplitMetrics",
+      "type": "object"
+    },
+    "SemanticCacheProfileCalibration": {
+      "additionalProperties": false,
+      "properties": {
+        "dev": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheSplitMetrics"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "embedding_profile_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Embedding Profile Id",
+          "type": "string"
+        },
+        "fitted_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fitted At"
+        },
+        "max_distance": {
+          "maximum": 0.2,
+          "minimum": 0,
+          "title": "Max Distance",
+          "type": "number"
+        },
+        "source": {
+          "enum": [
+            "default",
+            "calibrated"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "test": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheSplitMetrics"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "embedding_profile_id",
+        "max_distance",
+        "source"
+      ],
+      "title": "SemanticCacheProfileCalibration",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "profiles": {
+      "items": {
+        "$ref": "#/$defs/SemanticCacheProfileCalibration"
+      },
+      "title": "Profiles",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "title": "SemanticCacheCalibration",
+  "type": "object"
+}

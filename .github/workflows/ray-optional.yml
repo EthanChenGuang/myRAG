@@ -1,0 +1,45 @@
+name: ray-optional
+
+# The optional Ray runner (D-37, SC5) is proven here, outside the default pipeline: the PR workflow and the default sidecar
+# image never install the ray extra. No repository secret is used.
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ray-optional
+  cancel-in-progress: true
+
+jobs:
+  ray-equality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - run: npm ci --ignore-scripts
+      - name: Sync the sidecar with the ray extra
+        run: uv sync --directory rag-sidecar --locked --extra ray --extra chunking --extra preflight
+      - name: Ray is importable (the tests below would otherwise skip)
+        run: uv run --no-sync --directory rag-sidecar python -c "import ray"
+      - name: Ray runner tests on a local Ray instance
+        run: uv run --no-sync --directory rag-sidecar pytest -q -m ray tests/test_ingest_ray_runner.py
+      - name: Runner equality, budget and resume (--runner ray against --runner worker)
+        env:
+          RAG_TEST_RAY: '1'
+          UV_NO_SYNC: '1'
+          UV_FROZEN: '1'
+        run: node --import tsx --test tests/rag-e2e/backfill-ray-equality.test.mts

@@ -1,0 +1,236 @@
+{
+  "$defs": {
+    "HiddenTextQuarantineReason": {
+      "additionalProperties": false,
+      "properties": {
+        "checker_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Checker Version",
+          "type": "string"
+        },
+        "detail": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "kind": {
+          "const": "hidden_text",
+          "title": "Kind",
+          "type": "string"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/QuarantineSpan"
+          },
+          "maxItems": 200,
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        },
+        "unlocated": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unlocated",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "detail",
+        "spans",
+        "checker_version"
+      ],
+      "title": "HiddenTextQuarantineReason",
+      "type": "object"
+    },
+    "InjectionRuleQuarantineReason": {
+      "additionalProperties": false,
+      "properties": {
+        "checker_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Checker Version",
+          "type": "string"
+        },
+        "detail": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "kind": {
+          "const": "injection_rule",
+          "title": "Kind",
+          "type": "string"
+        },
+        "unlocated": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unlocated",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "detail",
+        "checker_version"
+      ],
+      "title": "InjectionRuleQuarantineReason",
+      "type": "object"
+    },
+    "InvoiceExtractionQuarantineReason": {
+      "additionalProperties": false,
+      "properties": {
+        "checker_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Checker Version",
+          "type": "string"
+        },
+        "detail": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "kind": {
+          "const": "invoice_extraction",
+          "title": "Kind",
+          "type": "string"
+        },
+        "unlocated": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unlocated",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "detail",
+        "checker_version"
+      ],
+      "title": "InvoiceExtractionQuarantineReason",
+      "type": "object"
+    },
+    "QuarantineSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "reason": {
+          "enum": [
+            "color_near_background",
+            "font_too_small",
+            "outside_page",
+            "invisible_render_mode",
+            "covered_by_object",
+            "vanished_run",
+            "comment",
+            "tracked_deletion",
+            "zero_width"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "reason"
+      ],
+      "title": "QuarantineSpan",
+      "type": "object"
+    },
+    "UntrustedLinkQuarantineReason": {
+      "additionalProperties": false,
+      "properties": {
+        "checker_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Checker Version",
+          "type": "string"
+        },
+        "detail": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "kind": {
+          "const": "untrusted_link",
+          "title": "Kind",
+          "type": "string"
+        },
+        "targets": {
+          "items": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 200,
+          "minItems": 1,
+          "title": "Targets",
+          "type": "array"
+        },
+        "unlocated": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unlocated",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "detail",
+        "targets",
+        "checker_version"
+      ],
+      "title": "UntrustedLinkQuarantineReason",
+      "type": "object"
+    }
+  },
+  "description": "One entry of `documents.metadata.quarantine.reasons[]` (D-32); `rule_ids` and `snippets` stay beside it.",
+  "discriminator": {
+    "mapping": {
+      "hidden_text": "#/$defs/HiddenTextQuarantineReason",
+      "injection_rule": "#/$defs/InjectionRuleQuarantineReason",
+      "invoice_extraction": "#/$defs/InvoiceExtractionQuarantineReason",
+      "untrusted_link": "#/$defs/UntrustedLinkQuarantineReason"
+    },
+    "propertyName": "kind"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/InjectionRuleQuarantineReason"
+    },
+    {
+      "$ref": "#/$defs/HiddenTextQuarantineReason"
+    },
+    {
+      "$ref": "#/$defs/UntrustedLinkQuarantineReason"
+    },
+    {
+      "$ref": "#/$defs/InvoiceExtractionQuarantineReason"
+    }
+  ],
+  "title": "QuarantineReason"
+}

@@ -225,14 +225,14 @@ class DocumentStatusMonitor {
     }
 
     queueList.innerHTML = queue.map(item => `
-      <div class="queue-item ${item.status}" data-id="${item.id}">
+      <div class="queue-item ${this.escapeText(item.status)}" data-id="${this.escapeText(item.id)}">
         <div class="queue-file-info">
-          <span class="queue-file-name">${item.file.name}</span>
-          <span class="queue-file-size">${this.formatFileSize(item.file.size)}</span>
+          <span class="queue-file-name">${this.escapeText(item.file.name)}</span>
+          <span class="queue-file-size">${this.escapeText(this.formatFileSize(item.file.size))}</span>
         </div>
         <div class="queue-status">
-          <span class="status-badge ${item.status}">${this.getStatusIcon(item.status)} ${item.status}</span>
-          ${item.error ? `<span class="error-msg">${item.error}</span>` : ''}
+          <span class="status-badge ${this.escapeText(item.status)}">${this.getStatusIcon(item.status)} ${this.escapeText(item.status)}</span>
+          ${item.error ? `<span class="error-msg">${this.escapeText(item.error)}</span>` : ''}
         </div>
       </div>
     `).join('');
@@ -245,7 +245,7 @@ class DocumentStatusMonitor {
       queueItem.className = `queue-item ${fileItem.status}`;
       const statusBadge = queueItem.querySelector('.status-badge');
       if (statusBadge) {
-        statusBadge.innerHTML = `${this.getStatusIcon(fileItem.status)} ${fileItem.status}`;
+        statusBadge.textContent = `${this.getStatusIcon(fileItem.status)} ${fileItem.status}`;
         statusBadge.className = `status-badge ${fileItem.status}`;
       }
       
@@ -255,7 +255,10 @@ class DocumentStatusMonitor {
           errorMsg.textContent = fileItem.error;
         } else {
           const statusDiv = queueItem.querySelector('.queue-status');
-          statusDiv.innerHTML += `<span class="error-msg">${fileItem.error}</span>`;
+          const error = document.createElement('span');
+          error.className = 'error-msg';
+          error.textContent = String(fileItem.error);
+          statusDiv.appendChild(error);
         }
       }
     }
@@ -269,15 +272,15 @@ class DocumentStatusMonitor {
     configDisplay.innerHTML = `
       <div class="rag-config-item">
         <span class="config-label">Chunk Strategy:</span>
-        <span class="config-value">${config.chunkStrategy}</span>
+        <span class="config-value">${this.escapeText(config.chunkStrategy)}</span>
       </div>
       <div class="rag-config-item">
         <span class="config-label">Chunk Size:</span>
-        <span class="config-value">${config.chunkSize}</span>
+        <span class="config-value">${this.escapeText(config.chunkSize)}</span>
       </div>
       <div class="rag-config-item">
         <span class="config-label">Chunk Overlap:</span>
-        <span class="config-value">${config.chunkOverlap}</span>
+        <span class="config-value">${this.escapeText(config.chunkOverlap)}</span>
       </div>
       <div class="rag-config-item">
         <span class="config-label">Multimodal:</span>
@@ -285,7 +288,7 @@ class DocumentStatusMonitor {
       </div>
       <div class="rag-config-item">
         <span class="config-label">Embedding Model:</span>
-        <span class="config-value">${config.embeddingModel}</span>
+        <span class="config-value">${this.escapeText(config.embeddingModel)}</span>
       </div>
     `;
   }
@@ -297,8 +300,8 @@ class DocumentStatusMonitor {
     notification.innerHTML = `
       <div class="notification-content">
         <h4>✅ Batch Processing Completed</h4>
-        <p>Processed: ${data.processed} files</p>
-        ${data.failed > 0 ? `<p>Failed: ${data.failed} files</p>` : ''}
+        <p>Processed: ${this.escapeText(data.processed)} files</p>
+        ${data.failed > 0 ? `<p>Failed: ${this.escapeText(data.failed)} files</p>` : ''}
       </div>
     `;
     
@@ -310,6 +313,12 @@ class DocumentStatusMonitor {
   }
 
   // Utility methods
+  escapeText(value) {
+    return String(value === null || value === undefined ? '' : value).replace(/[&<>"'`]/g, (ch) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;',
+    })[ch]);
+  }
+
   getStatusIcon(status) {
     switch (status) {
       case 'queued': return '⏳';
@@ -357,6 +366,7 @@ const INGEST_STATUS_LABELS = {
     'status.quarantined': 'Quarantined',
     'status.needs_review': 'Needs review',
     'status.skipped_duplicate': 'Skipped, unchanged',
+    'status.pending_review': 'Awaiting approval',
     'status.dryRunReady': 'Dry run complete',
     'status.deleteReady': 'Removed',
     'status.provisional': 'Searchable, still improving',
@@ -405,6 +415,7 @@ const INGEST_STATUS_LABELS = {
     'status.quarantined': '已隔离',
     'status.needs_review': '待审核',
     'status.skipped_duplicate': '已跳过（未变化）',
+    'status.pending_review': '等待批准',
     'status.dryRunReady': '试运行完成',
     'status.deleteReady': '已移除',
     'status.provisional': '可检索，仍在优化',
@@ -453,6 +464,7 @@ const INGEST_STATUS_LABELS = {
     'status.quarantined': 'In quarantena',
     'status.needs_review': 'Da rivedere',
     'status.skipped_duplicate': 'Saltato, invariato',
+    'status.pending_review': 'In attesa di approvazione',
     'status.dryRunReady': 'Prova completata',
     'status.deleteReady': 'Rimosso',
     'status.provisional': 'Ricercabile, in miglioramento',
@@ -491,7 +503,7 @@ const INGEST_STATUS_LABELS = {
   },
 };
 
-const INGEST_TERMINAL_STATUSES = new Set(['ready', 'failed', 'needs_review', 'quarantined', 'skipped_duplicate']);
+const INGEST_TERMINAL_STATUSES = new Set(['ready', 'failed', 'needs_review', 'quarantined', 'skipped_duplicate', 'pending_review']);
 const INGEST_NON_TERMINAL = new Set(['queued', 'preflight', 'parsing', 'checking', 'chunking', 'embedding']);
 
 function fillIngestTemplate(text, vars) {
@@ -584,6 +596,9 @@ function ingestJobStatusView(job, locale) {
       terminal: true,
       showRetry: false,
     };
+  } else if (status === 'pending_review') {
+    icon = 'bi-hourglass';
+    colorClass = 'text-info';
   } else if (INGEST_NON_TERMINAL.has(status)) {
     icon = 'bi-arrow-repeat';
     colorClass = 'text-info';

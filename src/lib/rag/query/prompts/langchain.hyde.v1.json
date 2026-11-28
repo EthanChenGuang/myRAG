@@ -1,0 +1,11 @@
+{
+  "id": "langchain.hyde",
+  "version": 1,
+  "source": "@langchain/classic 1.0.61 dist/retrievers/hyde.js getPromptTemplateFromKey(\"websearch\")",
+  "license": "MIT",
+  "attribution": "Copyright (c) LangChain, Inc. Prompt text reused under the MIT License; placeholder {question} renamed to the {{question}} syntax, text otherwise verbatim. Used as a native HyDE port; HydeRetriever is not used.",
+  "template": "Please write a passage to answer the question\nQuestion: {{question}}\nPassage:",
+  "placeholders": [
+    "question"
+  ]
+}

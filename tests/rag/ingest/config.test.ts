@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi, type MockInstance } from 'vitest';
 import { loadIngestConfig, resetIngestConfigForTests, type IngestConfig } from '@/lib/rag/ingest/config';
+import { emptyIngestState, type ChunkPrepSnapshot, type IngestInput, type IngestState } from '@/lib/rag/ingest/types';
 
 let warn: MockInstance<(...args: unknown[]) => void>;
 
@@ -21,6 +22,7 @@ function ingestWarnings(): string[] {
 
 const DEFAULTS: IngestConfig = {
   pipeline: 'legacy',
+  pipelineBlocked: null,
   parser: 'llamaparse',
   parsePollBudgetMs: 45000,
   docTypeLlmDetect: false,
@@ -30,6 +32,27 @@ const DEFAULTS: IngestConfig = {
   injectionScan: 'off',
   embeddingProfiles: 'off',
   qwenFallback: 'openrouter',
+  qwenPrimary: 'deepinfra',
+  languageAwareIngest: 'off',
+  tableHeaderRepeat: 'always',
+  tableRowSerialization: false,
+  captionLanguage: 'en',
+  docTranslation: 'off',
+  docTranslationModel: '',
+  hiddenTextCheck: 'off',
+  ingestLinkCheck: 'off',
+  outputLinkAllowlist: '',
+  siteUrl: '',
+  uploadApproval: 'off',
+  scopeTags: false,
+  scopeTagSuggest: false,
+  supersessionDetect: 'off',
+  effectiveDateLlmExtract: false,
+  domainEmbeddings: 'off',
+  sectionRules: 'off',
+  pageBoilerplate: 'off',
+  docAttributes: false,
+  attributeHeader: false,
   warnings: [],
 };
 
@@ -51,6 +74,11 @@ describe('defaults', () => {
       RAG_INJECTION_SCAN: 'off',
       RAG_EMBEDDING_PROFILES: 'off',
       RAG_QWEN_EMBED_FALLBACK: 'openrouter',
+      RAG_QWEN_EMBED_PRIMARY: 'deepinfra',
+      RAG_SECTION_RULES: 'off',
+      RAG_PAGE_BOILERPLATE: 'off',
+      RAG_DOC_ATTRIBUTES: 'false',
+      RAG_ATTRIBUTE_HEADER: 'false',
     });
     expect(config).toEqual(DEFAULTS);
     expect(ingestWarnings()).toEqual([]);
@@ -169,5 +197,53 @@ describe('Qwen embedding fallback', () => {
   test('anything else falls back to openrouter with a warning', () => {
     expect(loadIngestConfig({ RAG_QWEN_EMBED_FALLBACK: 'deepinfra' }).qwenFallback).toBe('openrouter');
     expect(ingestWarnings()).toHaveLength(1);
+  });
+});
+
+describe('Qwen embedding primary host', () => {
+  test('defaults to deepinfra', () => {
+    expect(loadIngestConfig({}).qwenPrimary).toBe('deepinfra');
+    expect(ingestWarnings()).toEqual([]);
+  });
+
+  test('deepinfra and openrouter are accepted', () => {
+    expect(loadIngestConfig({ RAG_QWEN_EMBED_PRIMARY: 'deepinfra' }).qwenPrimary).toBe('deepinfra');
+    expect(loadIngestConfig({ RAG_QWEN_EMBED_PRIMARY: 'openrouter' }).qwenPrimary).toBe('openrouter');
+    expect(loadIngestConfig({ RAG_QWEN_EMBED_PRIMARY: ' OpenRouter ' }).qwenPrimary).toBe('openrouter');
+    expect(ingestWarnings()).toEqual([]);
+  });
+
+  test('anything else falls back to deepinfra with one warning', () => {
+    const config = loadIngestConfig({ RAG_QWEN_EMBED_PRIMARY: 'voyage' });
+    expect(config.qwenPrimary).toBe('deepinfra');
+    expect(config.warnings).toHaveLength(1);
+    expect(config.warnings[0]).toContain('RAG_QWEN_EMBED_PRIMARY');
+    expect(ingestWarnings()).toHaveLength(1);
+    loadIngestConfig({ RAG_QWEN_EMBED_PRIMARY: 'voyage', RAG_PARSER: 'llamaparse' });
+    expect(ingestWarnings()).toHaveLength(1);
+  });
+});
+
+describe('typed ingest seams (D-09, D-23)', () => {
+  test('IngestInput takes attributes; emptyIngestState has no chunkPrep; a chunkPrep snapshot survives JSON', () => {
+    const input: Pick<IngestInput, 'attributes' | 'scopes'> = { scopes: [], attributes: { alpha_code: 'x1', beta_tags: ['one', 'two'] } };
+    expect(input.attributes?.beta_tags).toEqual(['one', 'two']);
+    const empty = emptyIngestState();
+    expect('chunkPrep' in empty).toBe(false);
+    const chunkPrep: ChunkPrepSnapshot = {
+      fingerprint: 'fp-1',
+      boilerplate: { mode: 'both', cleanerVersion: 1, rulesVersion: 1, ruleIds: [{ id: 'r1', version: 2 }], removedLineKeys: ['k1'] },
+      sectionRules: {
+        ruleSetId: 's1',
+        ruleSetVersion: 3,
+        toc: { skip: true, minRunLines: 4 },
+        headingHits: { 'Part one': { name: 'part', level: 1, restart: false } },
+        satisfied: true,
+      },
+      warnings: ['code_a'],
+      truncated: false,
+    };
+    const state: IngestState = { ...empty, chunkPrep };
+    expect(JSON.parse(JSON.stringify(state))).toEqual(state);
   });
 });

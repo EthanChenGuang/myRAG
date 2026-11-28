@@ -1,0 +1,85 @@
+{
+  "$defs": {
+    "LanguageFilterCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "dropped": {
+          "minimum": 0,
+          "title": "Dropped",
+          "type": "integer"
+        },
+        "kept": {
+          "minimum": 0,
+          "title": "Kept",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kept",
+        "dropped"
+      ],
+      "title": "LanguageFilterCounts",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "by_language": {
+      "additionalProperties": {
+        "$ref": "#/$defs/LanguageFilterCounts"
+      },
+      "propertyNames": {
+        "enum": [
+          "zh",
+          "en",
+          "it"
+        ]
+      },
+      "title": "By Language",
+      "type": "object"
+    },
+    "dropped": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "enum": [
+          "shape",
+          "language",
+          "verbatim_copy",
+          "near_duplicate",
+          "not_answerable",
+          "low_confidence",
+          "golden_overlap",
+          "unknown_chunk_ref"
+        ]
+      },
+      "title": "Dropped",
+      "type": "object"
+    },
+    "judge_skipped": {
+      "title": "Judge Skipped",
+      "type": "boolean"
+    },
+    "kept": {
+      "minimum": 0,
+      "title": "Kept",
+      "type": "integer"
+    },
+    "round_trip": {
+      "const": "not_applied",
+      "title": "Round Trip",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kept",
+    "dropped",
+    "by_language",
+    "round_trip",
+    "judge_skipped"
+  ],
+  "title": "FilterReport",
+  "type": "object"
+}

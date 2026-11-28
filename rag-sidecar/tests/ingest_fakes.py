@@ -17,6 +17,8 @@ from rag_sidecar.contracts.queue import (
     OriginalRef,
     ParseExternalRequest,
     ParseExternalResponse,
+    TranslateCallbackRequest,
+    TranslateCallbackResponse,
 )
 from rag_sidecar.contracts.routing import ParseAttempt
 from rag_sidecar.ingest.ledger_client import LeaseLost, ParseCacheEntry, Refused
@@ -60,7 +62,7 @@ class FakeLedger:
   def __init__(self, clock: FakeClock | None = None) -> None:
       self.clock = clock or FakeClock()
       self.jobs: dict[str, IngestionJob] = {}
-      self.cache: dict[tuple[str, str, str, str], ParseCacheEntry] = {}
+      self.cache: dict[tuple[str, str, str, str, str], ParseCacheEntry] = {}
       self.call_counts: dict[str, int] = {}
 
   def _bump(self, name: str) -> None:
@@ -188,7 +190,8 @@ class FakeLedger:
       number = len(attempts) + 1
       payload = {**attempt, "attempt_no": number}
       attempts.append(ParseAttempt.model_validate(payload))
-      job = job.model_copy(update={"attempts": attempts})
+      escalations = job.escalations + (1 if attempt.get("reason") == "escalation" else 0)
+      job = job.model_copy(update={"attempts": attempts, "escalations": escalations})
       self.jobs[job_id] = job
       return number
 
@@ -246,7 +249,7 @@ class FakeLedger:
       job = self.jobs.get(job_id)
       if job is None or job.file_sha256 is None:
           return []
-      row = self.cache.get((job.tenant_key, job.file_sha256, parser, options_hash))
+      row = self.cache.get((job.tenant_key, job.file_sha256, parser, parser_version, options_hash))
       return [row] if row else []
 
   async def cache_put(
@@ -278,7 +281,7 @@ class FakeLedger:
           result=result or {},
           byte_size=byte_size,
       )
-      self.cache[(job.tenant_key, job.file_sha256, parser, options_hash)] = row
+      self.cache[(job.tenant_key, job.file_sha256, parser, parser_version, options_hash)] = row
       return row
 
 
@@ -350,6 +353,13 @@ class FakeApp:
         if script.status >= 400:
             raise RuntimeError(f"advance status {script.status}")
         return AdvanceResponse.model_validate(script.response)
+
+    async def translate(self, job_id: str, request: TranslateCallbackRequest) -> TranslateCallbackResponse:
+        self.calls.append(("translate", job_id, request.model_dump(mode="json")))
+        script = await self._next_script("translate")
+        if script.status >= 400:
+            raise RuntimeError(f"translate status {script.status}")
+        return TranslateCallbackResponse.model_validate(script.response)
 
     async def acquire_token(self) -> None:
         self.token_acquires += 1

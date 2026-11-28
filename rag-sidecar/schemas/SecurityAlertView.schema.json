@@ -1,0 +1,101 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "event_count": {
+      "minimum": 1,
+      "title": "Event Count",
+      "type": "integer"
+    },
+    "held": {
+      "default": false,
+      "title": "Held",
+      "type": "boolean"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "opened_at": {
+      "minLength": 1,
+      "title": "Opened At",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "open",
+        "acknowledged"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "tenant_key": {
+      "minLength": 1,
+      "title": "Tenant Key",
+      "type": "string"
+    },
+    "threshold": {
+      "minimum": 1,
+      "title": "Threshold",
+      "type": "integer"
+    },
+    "uploader_email": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Uploader Email"
+    },
+    "uploader_id": {
+      "format": "uuid",
+      "title": "Uploader Id",
+      "type": "string"
+    },
+    "uploader_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Uploader Name"
+    },
+    "window_hours": {
+      "minimum": 1,
+      "title": "Window Hours",
+      "type": "integer"
+    },
+    "workspace_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Name"
+    }
+  },
+  "required": [
+    "id",
+    "tenant_key",
+    "uploader_id",
+    "event_count",
+    "window_hours",
+    "threshold",
+    "opened_at",
+    "status"
+  ],
+  "title": "SecurityAlertView",
+  "type": "object"
+}

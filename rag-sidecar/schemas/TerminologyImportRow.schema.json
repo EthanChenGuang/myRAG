@@ -1,0 +1,114 @@
+{
+  "additionalProperties": false,
+  "description": "One CSV row of D-23 (variants already split on `|`); also one line of the fixture dictionary (D-27).",
+  "properties": {
+    "canonical": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Canonical",
+      "type": "string"
+    },
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "kind": {
+      "enum": [
+        "synonym",
+        "abbreviation",
+        "alias",
+        "identifier",
+        "translation",
+        "misspelling"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "language": {
+      "enum": [
+        "zh",
+        "en",
+        "it",
+        "any"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "mode": {
+      "default": "one_way",
+      "enum": [
+        "one_way",
+        "equivalent"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    },
+    "source_language": {
+      "anyOf": [
+        {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Language"
+    },
+    "target_language": {
+      "anyOf": [
+        {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target Language"
+    },
+    "variants": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Variants",
+      "type": "array"
+    }
+  },
+  "required": [
+    "language",
+    "kind",
+    "canonical",
+    "variants"
+  ],
+  "title": "TerminologyImportRow",
+  "type": "object"
+}

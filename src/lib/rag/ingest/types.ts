@@ -1,7 +1,8 @@
-import type { DocTypeDetection, ParseResult } from '@/lib/rag-eval/contracts.generated';
+import type { DocTypeDetection, HiddenTextReport, ParseResult, UploadApproval } from '@/lib/rag-eval/contracts.generated';
 import type { TenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
 import type { IngestConfig } from './config';
+import type { IngestLexical } from './lexical-options';
 import type { IngestDeps } from './deps';
 import type { DocType, ProcessingProfile } from './profiles/load';
 import type { StateStore } from './state-store';
@@ -59,6 +60,8 @@ export interface TypeChangeState {
   reuseParseOfVersion: number | null;
   /** parser_used and parser_version of that version, kept on the new row when its parse output is reused. */
   reusedParser: { parser: 'docling' | 'llamaparse' | 'text'; version: string } | null;
+  /** The version replaced had its hidden spans removed (metadata.hidden_text_sanitized): only its sanitized parse.md and chunks.json may be reused, never docling.json or the original. */
+  sanitizedParse?: boolean;
 }
 
 interface IngestInputBase {
@@ -69,6 +72,22 @@ interface IngestInputBase {
   mimeType: string;
   /** The type picked for the file, or 'auto' to detect it. Absent: the admin defaults decide. */
   docType?: DocType | 'auto';
+  /**
+   * Scope tags the uploader chose (dimension:value, D-40), already checked by validateUploadScopes in the route. Stored on the document
+   * once its row exists and before any chunk is written. Absent: no tag is written, as today.
+   */
+  scopes?: string[];
+  /**
+   * Attribute values for the document (D-23), already checked by the caller against the tenant's attribute schema. They never enter logs,
+   * traces, stage details or the job settings snapshot; only counts and code words may. Absent: no attribute is written.
+   */
+  attributes?: IngestAttributeValues;
+  /**
+   * The document this upload replaces ("Replaces…", D-41), already checked by validateUploadReplaces in the route: a current document of
+   * the same tenant outside the upload's lineage. Recorded on the version at publish; after publish it is raised as a supersession
+   * candidate (confirmed at once for an admin of the tenant). Absent, or with RAG_SUPERSESSION_DETECT=off: nothing is recorded.
+   */
+  replacesDocumentId?: string;
   options?: IngestOptions;
   signal: AbortSignal;
   trace?: TraceCollector;
@@ -76,6 +95,11 @@ interface IngestInputBase {
   deadlineMs?: number;
   /** Admin type change only; see TypeChangeState. */
   typeChange?: TypeChangeState;
+  /**
+   * The server-verified uploader (the session user, or the owner of a connector's connection), for the upload-approval decision
+   * (D-37). Never taken from a request body. A personal or organization scope that carries its user takes precedence over it.
+   */
+  uploaderId?: string | null;
 }
 
 export type IngestInput = IngestInputBase &
@@ -83,7 +107,7 @@ export type IngestInput = IngestInputBase &
 
 export const DEFAULT_INGEST_DEADLINE_MS = 50000;
 
-export type IngestStatus = 'ready' | 'skipped_duplicate' | 'quarantined' | 'processing' | 'failed';
+export type IngestStatus = 'ready' | 'skipped_duplicate' | 'quarantined' | 'pending_review' | 'processing' | 'failed';
 
 export interface IngestResult {
   status: IngestStatus;
@@ -121,6 +145,95 @@ export interface IngestState {
   embeddingGaps: Array<{ profileId: string; chunkIndex: number }>;
   /** Present on an admin type change only; absent on every other run. */
   typeChange?: TypeChangeState;
+  /** The upload-approval decision of identify (D-36, D-56); absent while RAG_UPLOAD_APPROVAL is off. A queued job takes it from its snapshot. */
+  approval?: UploadApproval;
+  /** A job of a batch with hold_publish (D-12): publish records the hold on the document instead of making it current. */
+  publishHold?: { batchId: string };
+  /** The parser version of this version's parse, kept so a resumed run can still name it in the ingestion fingerprint (D-10). */
+  parserVersion?: string;
+  /** The hidden-text check of this version (D-33, D-34), kept so a retried scan reuses the report and removes each span once. */
+  hiddenText?: HiddenTextState;
+  /** The resolved chunk-preparation rule data (D-09), snapshotted on first use so a resumed run re-chunks from it. Plain JSON only. */
+  chunkPrep?: ChunkPrepSnapshot;
+  /** Single-tenant runs only: the server-set uploader, so that uploader can resume the version without being an administrator. */
+  uploaderId?: string;
+  /** An embed stage that yielded between batches: where a resumed run continues, valid only for the same targets and chunk total. */
+  embedProgress?: EmbedProgress;
+  /** D-51: the Phase 3.2 span facts (codes, counts and one hash, never text); absent while every switch that produces one is off. */
+  traceFacts?: IngestTraceFacts;
+}
+
+/**
+ * D-51: what the trace shows of the Phase 3.2 stages. enrich sets the language shares and the und count, scan_injection the outcome and
+ * count of each check, publish the fingerprint hash and the approval state. Kept in the state so a queued job's trace reads them too.
+ */
+export interface IngestTraceFacts {
+  /** Registry code to its token share of the document's detected chunks, rounded to 2 decimals. */
+  language_shares?: Record<string, number>;
+  und_count?: number;
+  /** `<outcome>:<count>` per check, or `off`. */
+  scan?: { injection: string; hidden_text: string; links: string };
+  ingest_fingerprint?: string;
+  /** `required`: approval applies but a scan quarantined the version, so it is not held for review. */
+  approval_state?: 'not_required' | 'pending_review' | 'required';
+}
+
+export interface EmbedProgress {
+  batchesDone: number;
+  written: number;
+  total: number;
+  targets: string[];
+  gaps: Array<{ profileId: string; chunkIndex: number }>;
+}
+
+/** Attribute key to one text value or a list of text values. */
+export type IngestAttributeValues = Record<string, string | string[]>;
+
+export interface ChunkPrepBoilerplateSnapshot {
+  mode: 'detect' | 'rules' | 'both';
+  cleanerVersion: number;
+  rulesVersion: number;
+  ruleIds: Array<{ id: string; version: number }>;
+  removedLineKeys: string[];
+}
+
+export interface ChunkPrepHeadingHit {
+  name: string;
+  level: number;
+  restart: boolean;
+}
+
+export interface ChunkPrepSectionRulesSnapshot {
+  ruleSetId: string;
+  ruleSetVersion: number;
+  /** Table-of-contents handling: a run of at least minRunLines heading lines with no body line between them is skipped. */
+  toc: { skip: boolean; minRunLines: number };
+  /** Keyed by the trimmed line text. */
+  headingHits: Record<string, ChunkPrepHeadingHit>;
+  satisfied: boolean;
+}
+
+export interface ChunkPrepSnapshot {
+  fingerprint: string;
+  boilerplate?: ChunkPrepBoilerplateSnapshot;
+  sectionRules?: ChunkPrepSectionRulesSnapshot;
+  /** Code names only. */
+  warnings: string[];
+  /** The size cap dropped part of the snapshot. */
+  truncated: boolean;
+}
+
+export interface HiddenTextState {
+  /** The original the report belongs to. */
+  fileSha256: string;
+  /** The sidecar's report; null when the format has no checker or the check could not run under flag. */
+  report: HiddenTextReport | null;
+  /** Spans of the report removed from the parse output under quarantine; the write-time assertion checks them. */
+  removedSpans: string[];
+  /** Spans the remover could not locate, counted on the first removal (a retry reads sanitized text). */
+  unlocated: number;
+  /** parse.md and chunks.json were overwritten with the sanitized text. */
+  sanitized: boolean;
 }
 
 export function emptyIngestState(): IngestState {
@@ -152,6 +265,17 @@ export interface ChunkDraft {
   /** Set by the enrich stage. */
   content_hash?: string;
   lexical_text?: string;
+  /**
+   * The chunk's own language (or `und`). Text chunks: set by the enrich stage only with RAG_LANGUAGE_AWARE_INGEST=on.
+   * Image chunks with RAG_CAPTION_LANGUAGE=document: the language detected on the caption as written (D-23).
+   */
+  language?: string;
+  language_confidence?: number;
+  /**
+   * Set by the enrich stage for a table chunk while RAG_TABLE_ROW_SERIALIZATION is on: the list separator of the block's language (D-21).
+   * In memory only; the embed stage appends the row lines with it, and it is never written as a column.
+   */
+  table_row_separator?: string;
 }
 
 /** What a chunker returns: the drafts plus stable warning codes for the stage to report. */
@@ -199,6 +323,12 @@ export interface IngestWork {
   templateRow?: Record<string, string | null> | null;
   chunks: ChunkDraft[];
   chunksWritten: number;
+  /** The document's dominant language as the enrich stage wrote it; absent on a run resumed after enrich. */
+  documentLanguage?: string | null;
+  /** RAG_CAPTION_LANGUAGE=document: the caption target language, resolved once per run (null: no target, English prompt). */
+  captionTarget?: { language: string | null };
+  /** The document's lexical options and version, resolved once by enrich (plan 04.2-19); absent on a run resumed after enrich. */
+  lexical?: IngestLexical;
 }
 
 export interface StageContext {
@@ -217,6 +347,11 @@ export interface StageContext {
   document: IngestDocumentRef | null;
   parserUsed: string | null;
   work: IngestWork;
+  /**
+   * A queued job's hidden-text report made by the sidecar worker at preflight (D-33); scan_injection uses it instead of calling the
+   * sidecar. `report` null: the worker sent a report that failed validation, treated as a checker that could not answer.
+   */
+  workerHiddenText?: { fileSha256: string; report: HiddenTextReport | null };
 }
 
 /** What a stage that continues tells the trace: it ran switched off, took a fallback, or reached a named outcome. */

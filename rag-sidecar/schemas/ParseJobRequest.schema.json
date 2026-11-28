@@ -41,7 +41,13 @@
     }
   },
   "additionalProperties": false,
+  "description": "Body of `POST /v1/parse/jobs`.\n\nThe Phase 3.2 fields default to today's behaviour and the app sends them only when they differ from it. The\nmodel keeps extra=\"forbid\", so an older sidecar rejects a request carrying them: deploy the sidecar first.",
   "properties": {
+    "carry_table_header": {
+      "default": false,
+      "title": "Carry Table Header",
+      "type": "boolean"
+    },
     "docling": {
       "$ref": "#/$defs/DoclingOptions"
     },
@@ -63,6 +69,23 @@
       ],
       "default": null,
       "title": "Input Format"
+    },
+    "language_aware": {
+      "default": false,
+      "title": "Language Aware",
+      "type": "boolean"
+    },
+    "languages": {
+      "items": {
+        "enum": [
+          "zh",
+          "en",
+          "it"
+        ],
+        "type": "string"
+      },
+      "title": "Languages",
+      "type": "array"
     },
     "max_tokens": {
       "maximum": 4096,
@@ -95,6 +118,23 @@
       ],
       "default": null,
       "title": "Page Cap"
+    },
+    "primary_language": {
+      "anyOf": [
+        {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Primary Language"
     },
     "profile_id": {
       "pattern": "^[a-z][a-z_]*@[1-9][0-9]*$",

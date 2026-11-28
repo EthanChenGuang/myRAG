@@ -137,14 +137,10 @@ export function MobileToolbarFixed({ className }: MobileToolbarProps) {
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
           <button
-            className={cn(
-              "flex items-center justify-center w-10 h-10 rounded-lg transition-colors group relative",
-              "bg-[#FFE0D0]/30 hover:bg-[#FFE0D0] dark:bg-[#2F2F2F]/30 dark:hover:bg-[#424242]",
-              "text-gray-700 dark:text-gray-200 backdrop-blur-md",
-              className
-            )}
+            data-chat-settings-trigger=""
+            className={cn("chat-pill-icon h-10 w-10 group relative", className)}
           >
-            <Settings2 className="h-5 w-5" />
+            <Settings2 className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
             <span className="sr-only">Open toolbar</span>
           </button>
         </DropdownMenuTrigger>

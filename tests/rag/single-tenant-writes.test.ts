@@ -89,6 +89,15 @@ async function loadProcessDocument() {
   }));
   vi.doMock('@supabase/supabase-js', () => ({ createClient: () => adminClient() }));
   vi.doMock('@/lib/rag', () => ({
+    // Upload approval off (D-56): the legacy writers are not refused.
+    assertLegacyWriteAllowed: () => undefined,
+    legacyWriteRefused: () => false,
+    legacyApprovalRefusal: () => new Response(null, { status: 503 }),
+    UploadApprovalRequiresUnifiedError: class UploadApprovalRequiresUnifiedError extends Error {},
+    // Languages unset and RAG_LANGUAGE_AWARE_INGEST off (D-16): today's LlamaParse request and the legacy writer.
+    legacyLlamaparseLanguages: () => [],
+    currentLegacyUploadRoute: () => 'legacy',
+    assertLegacySplitterAllowed: () => undefined,
     assertCloudAllowed: () => ({ ok: true }),
     CloudRefused: class CloudRefused extends Error {},
     embedText: async () => {
@@ -128,6 +137,15 @@ async function loadScraper(kind: 'scrape' | 'crawl') {
   baseMocks();
   vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => adminClient() }));
   vi.doMock('@/lib/rag', () => ({
+    // Upload approval off (D-56): the legacy writers are not refused.
+    assertLegacyWriteAllowed: () => undefined,
+    legacyWriteRefused: () => false,
+    legacyApprovalRefusal: () => new Response(null, { status: 503 }),
+    UploadApprovalRequiresUnifiedError: class UploadApprovalRequiresUnifiedError extends Error {},
+    // Languages unset and RAG_LANGUAGE_AWARE_INGEST off (D-16): today's LlamaParse request and the legacy writer.
+    legacyLlamaparseLanguages: () => [],
+    currentLegacyUploadRoute: () => 'legacy',
+    assertLegacySplitterAllowed: () => undefined,
     isAdminUser: async (admin: ReturnType<typeof adminClient>, userId: string) => {
       const { data } = await admin.from('admin_users').eq('id', userId).abortSignal().maybeSingle();
       return Boolean(data);

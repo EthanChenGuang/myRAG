@@ -1,4 +1,6 @@
 import { streamText, tool, type ToolSet, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, UIMessage, stepCountIs } from 'ai';
+import { buildCtaInstruction } from '@/lib/chat/cta-instruction';
+import { buildFormattingInstruction, resolveAnswerStyle } from '@/lib/chat/answer-style';
 import { z } from 'zod/v3';
 // Use the dedicated OpenRouter provider
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
@@ -10,16 +12,49 @@ import { formatErrorSSE } from '@/lib/error-stream';
 import { ContentPart, APIMessage, ExtendedMessage, fromAPIMessages, toMessage } from '@/types/chat';
 import { ReasoningConfig, REASONING_MODELS } from '@/lib/types';
 import {
+  CLAUDE_FIRST_TOKEN_TIMEOUT_MS,
+  buildHistoryWindow,
+  createCitationSession,
   createEnhancedRAGPrompt,
+  answerLanguageOptions,
+  appendAnswerLanguage,
+  errorStatusOf,
+  firstTokenGate,
   createTraceCollector,
+  awaitPreGenerationDelay,
+  traceCacheState,
+  withFirstTextDelta,
+  detectLanguage,
   finishTrace,
+  isSmallTalkResult,
   isV2Pipeline,
+  knowledgeBaseUnavailableLanguage,
   knowledgeBaseUnavailableMessage,
+  noKnowledgeBaseResponse,
+  noKnowledgeBaseResponseLanguage,
+  identifierSuggestionMessage,
+  IDENTIFIER_NOT_FOUND,
+  mintAnswerId,
+  cacheSourcesFromResult,
+  sourceDocumentFields,
+  hashSystemPromptTemplate,
+  isCacheHitResult,
+  isSemanticCacheActive,
+  scheduleCacheStore,
+  streamCachedAnswer,
   parseRetrievalFilters,
+  resolveScopesFilter,
+  ScopeFilterError,
+  readFeedbackLoopConfig,
+  readGenerationConfig,
   repairOwnerMembership,
   resolveTenantScope,
   runRetrieval,
+  scheduleAnswerFinish,
   scopeKey,
+  shouldPersistAnswer,
+  type LogContext,
+  type LogOutcomeValue,
   type RetrievalFilterInput,
   type RetrievalResult,
   type TenantScope,
@@ -27,6 +62,8 @@ import {
 } from '@/lib/rag';
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
+import type { JSONValue } from '@ai-sdk/provider';
+import { REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE, readSecurityConfig, escapeToolOutput, scanToolOutput, type ToolResultGuardMode } from '@/lib/rag';
 // Keep custom tool definitions if needed
 
 import { ReadableStream } from 'stream/web';
@@ -56,6 +93,9 @@ interface StepToolCall {
   input?: unknown;
 }
 
+// Tool results that are evidence the answer may rely on; anything else (MCP) skips groundedness
+const ANSWER_EVIDENCE_TOOLS = new Set(['webSearch', 'useDocument']);
+
 interface StepToolResult {
   type: string;
   toolCallId?: string;
@@ -70,6 +110,38 @@ const describeArgs = (input: unknown): { keys: string[]; bytes: number } => ({
 });
 
 // Define document reference tool for function calling using the 'tool' helper
+/** D-10/A-7: only the model's copy of a tool result is escaped; execute and its raw output stay unchanged. */
+function withToolResultGuard(
+  definition: Record<string, any>,
+  toolName: string,
+  guard: ToolResultGuardMode,
+  onFlag: (toolName: string, ruleIds: string[]) => void,
+): Record<string, any> {
+  if (guard === 'off') return definition;
+  return {
+    ...definition,
+    toModelOutput: ({ output }: { output: unknown }) => {
+      if (guard === 'tag_and_flag') {
+        let ruleIds: string[] = [];
+        try {
+          ruleIds = scanToolOutput(output);
+        } catch {
+          console.warn('[RAG Security] Tool result rules failed; the result is passed on escaped', { tool: toolName });
+        }
+        if (ruleIds.length > 0) onFlag(toolName, ruleIds);
+      }
+      return { type: 'json' as const, value: (escapeToolOutput(output) ?? null) as JSONValue };
+    },
+  };
+}
+
+/** D-10: tool results are data; the sentence joins the reference notice when the context is tagged. */
+function withToolResultNotice(prompt: string): string {
+  const tagged = `${REFERENCE_NOTICE}\n<documents>`;
+  if (prompt.includes(tagged)) return prompt.replace(tagged, () => `${REFERENCE_NOTICE}\n${TOOL_RESULT_SENTENCE}\n<documents>`);
+  return `${prompt}\n\n${TOOL_RESULT_NOTICE}`;
+}
+
 const documentReferenceTool = tool({
   description: 'IMPORTANT: This is a FUNCTION TOOL to track document usage internally. Call this tool when you use information from documents. DO NOT write "useDocument" as text in your response. This tool tracks which documents you referenced to answer the query.',
   inputSchema: z.object({
@@ -119,6 +191,9 @@ console.log('API ROUTE: Environment check -', {
 });
 
 // Initialize AI providers based on configuration
+// Client capabilities are advisory: an invalid value counts as absent, never a 400
+const ChatCapabilitiesSchema = z.object({ citations: z.boolean().optional() }).passthrough();
+
 const AI_PROVIDER = env.NEXT_PUBLIC_AI_PROVIDER as 'openai' | 'openrouter' | 'groq';
 
 // Identify if the current provider supports tool calling
@@ -535,6 +610,20 @@ const normalize = (input: unknown): string => {
   return '';
 };
 
+const TOOL_CALL_PART_TYPES = new Set(['tool_call', 'tool-call', 'tool_calls']);
+
+/** True when the latest assistant turn carries a tool call, which may still await approval. */
+const lastAssistantHasToolCall = (messages: APIMessage[]): boolean => {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message.role !== 'assistant') continue;
+    return Array.isArray(message.content) && message.content.some(part => TOOL_CALL_PART_TYPES.has(part.type));
+  }
+  return false;
+};
+
+const CLAUDE_STREAM_ERROR_TEXT = 'The answer was interrupted by an error. Please try again.';
+
 const getLastUserText = (messages: APIMessage[]): string => {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
@@ -569,26 +658,6 @@ function createErrorResponse(message: string) {
       Connection: 'keep-alive'
     }
   });
-}
-
-function buildNoKnowledgeBaseResponse(language: Language): string {
-  if (language === 'es') {
-    return `# Información no disponible
-
-## Estado de la base de conocimiento
-- No encontré esta información en tu base de conocimiento.
-- La búsqueda web está desactivada, así que no puedo consultarla en línea.
-
-¿Quieres que active la búsqueda web para verificarlo? ¿Prefieres subir un documento con esa información? ¿Hay algún detalle específico que deba buscar?`;
-  }
-
-  return `# Information Not Available
-
-## Knowledge Base Status
-- I couldn’t find this information in your knowledge base.
-- Web search is turned off, so I can’t look it up online.
-
-Would you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?`;
 }
 
 // Add the missing extractSignificantPhrases function above the main route handler
@@ -1159,14 +1228,49 @@ function cleanMalformedDocumentCalls(text: string): string {
 }
 
 export async function POST(req: Request) {
+  const requestReceivedAt = Date.now();
   console.log('API ROUTE: Starting POST request handler');
 
   let ragTrace: { collector: TraceCollector; result: RetrievalResult } | null = null;
+  // Set only while RAG_RETRIEVAL_LOG is on; off leaves finishTrace's arguments as they were
+  let ragLogContext: LogContext | null = null;
+  let ragLogQuery: string | undefined;
+  let finishedLogOutcome: RetrievalResult['logOutcome'];
   const finishRagTrace = () => {
     if (!ragTrace) return;
     const pending = ragTrace;
     ragTrace = null;
-    finishTrace(pending.collector, pending.result);
+    finishedLogOutcome = pending.result.logOutcome;
+    if (ragLogContext) {
+      finishTrace(pending.collector, pending.result, { logContext: ragLogContext, ...(ragLogQuery !== undefined ? { logQuery: ragLogQuery } : {}) });
+    } else {
+      finishTrace(pending.collector, pending.result);
+    }
+  };
+  // D-25: timing lives on the collector of the turn that ran retrieval; a turn without one records nothing
+  let timingCollector: TraceCollector | null = null;
+  const startRequestTiming = (collector: TraceCollector, result: RetrievalResult) => {
+    timingCollector = collector;
+    collector.markRequestStart(requestReceivedAt);
+    collector.setCacheState(traceCacheState(result));
+  };
+  const markGenerationStart = () => timingCollector?.markGenerationStart();
+  const timeFirstText = <T extends { type: string }>(stream: globalThis.ReadableStream<T>): globalThis.ReadableStream<T> => {
+    const collector = timingCollector;
+    return collector ? withFirstTextDelta(stream, () => collector.markFirstTextDelta()) : stream;
+  };
+  // D-07, D-03a: the holder is read after the response, so set it before finishRagTrace runs for that path
+  const setRagLogOutcome = (value: LogOutcomeValue | null, answerLanguage?: string | null) => {
+    const logOutcome = ragLogContext ? (ragTrace?.result.logOutcome ?? finishedLogOutcome) : undefined;
+    if (!logOutcome) return;
+    if (value !== null) logOutcome.value = value;
+    if (answerLanguage !== undefined) logOutcome.answerLanguage = answerLanguage;
+  };
+  // D-08: only when a log row will exist to vote on; read before finishRagTrace clears ragTrace
+  const refusalStartMetadata = (): { ragTraceId: string; refusal: true } | null => {
+    if (!ragTrace || !ragLogContext || ragLogContext.skip) return null;
+    if (!readFeedbackLoopConfig().refusalFeedback) return null;
+    return { ragTraceId: ragTrace.collector.traceId, refusal: true };
   };
 
   try {
@@ -1195,6 +1299,7 @@ export async function POST(req: Request) {
         systemPromptOverride?: string, // WhatsApp and other overrides
         disableRAG?: boolean, // WhatsApp and other overrides
         ragMode?: 'strict' | 'balanced' | 'flexible' | 'bypass' // RAG behavior mode
+        capabilities?: unknown
       },
       imageStorage?: Record<string, string> // Add imageStorage for attached images
     } = requestBody;
@@ -1211,6 +1316,10 @@ export async function POST(req: Request) {
       }
       retrievalFilters = filtersParsed.filters;
     }
+
+    // D-11: the client's IANA zone, read only by the query layer; an unknown zone resolves to UTC there
+    const clientTimeZone =
+      typeof requestBody?.timeZone === 'string' && requestBody.timeZone.length <= 64 ? requestBody.timeZone : undefined;
 
     // Initialize Supabase client
     const supabase = getSupabaseAdmin();
@@ -1254,6 +1363,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error }, { status: tenant.status });
     }
     const scope: TenantScope | null = tenant.scope;
+
+    // D-39: a scopes filter narrows only the verified tenant, and only with values of that tenant's vocabulary
+    if (retrievalFilters?.scopes) {
+      try {
+        retrievalFilters = await resolveScopesFilter(retrievalFilters, { scope, signal: req.signal });
+      } catch (error) {
+        if (!(error instanceof ScopeFilterError)) throw error;
+        return NextResponse.json({ success: false, error: error.code, details: error.details }, { status: error.status });
+      }
+    }
 
     // Extract WhatsApp-specific overrides
     const systemPromptOverride = data?.systemPromptOverride;
@@ -1326,6 +1445,17 @@ export async function POST(req: Request) {
     // Extract chatId and sessionId from data
     const chatId = data?.chatId;
     const sessionId = (data as any)?.data?.sessionId || data?.sessionId || crypto.randomUUID();
+
+    if (readFeedbackLoopConfig().retrievalLog !== 'off') {
+      ragLogContext = {
+        channel: 'chat',
+        userId: scope?.userId ?? (await resolveToolOwnerId()),
+        organizationId: scope?.organizationId ?? null,
+        chatId: typeof chatId === 'string' ? chatId : null,
+        ragMode,
+        skip: effectiveDisableRAG || (typeof chatId === 'string' && chatId.startsWith('ghost-')),
+      };
+    }
 
     console.log('API ROUTE: Using chatId:', chatId);
     console.log('API ROUTE: Using sessionId:', sessionId);
@@ -1709,33 +1839,11 @@ export async function POST(req: Request) {
     }
 
     // Add system messages with unique IDs
+    const answerStyle = resolveAnswerStyle(env.RAG_ANSWER_STYLE);
     const formattingSystemMessage: ExtendedMessage = {
       id: 'system-format-instruction',
       role: 'system',
-      content: `Always format your responses using this exact markdown structure:
-
-1. Start with a single clear H1 heading using # (not ##)
-2. Use ## for section headings (H2)
-3. Use hyphen (-) not bullet character (•) for all bullet points
-4. Never use asterisks (**) in headings or section titles
-5. Keep whitespace between sections for readability
-6. Always end your response with a short paragraph (2-3 sentences) that encourages the user to continue the conversation with you. This should include 2-3 specific follow-up questions the user might want to ask related to the topic.
-
-Example format:
-# Main Title
-
-## First Section
-- First bullet point
-- Second bullet point
-- Third bullet point
-
-## Second Section
-- First bullet point
-- Second bullet point
-
-Would you like to know more about specific aspects of this topic? I can explain how to implement this solution in practice, discuss common challenges you might face, or share some examples of successful applications.
-
-Follow this format consistently for all responses.`
+      content: buildFormattingInstruction(answerStyle),
     };
 
     // 🚨 CRITICAL: Tool usage priority system message
@@ -1773,19 +1881,7 @@ Follow this format consistently for all responses.`
     const ctaSystemMessage: ExtendedMessage = {
       id: 'system-cta-instruction',
       role: 'system',
-      content: `It is absolutely critical that you end EVERY response with a conversational call-to-action that encourages continued dialogue.
-      
-Your closing paragraph should:
-1. Be friendly and inviting, using a warm tone
-2. Include 2-3 specific follow-up questions related to the topic just discussed
-3. Suggest deeper explorations of aspects you haven't covered yet
-4. Be phrased in a way that makes it easy for the user to continue the conversation
-5. NOT use bullet points or a "Next Steps" heading - just a natural paragraph
-
-For example:
-"Would you like me to elaborate on any of these points? I can provide more details about implementing this approach, explain how it compares to alternatives, or share some real-world examples of how others have used it successfully."
-
-This conversational prompt is essential for keeping the dialogue flowing naturally and encouraging users to continue exploring the topic with you.`
+      content: buildCtaInstruction(ragMode, answerStyle),
     };
     const documentReferenceSystemMessage: ExtendedMessage = {
       id: 'system-docref-instruction',
@@ -1867,6 +1963,42 @@ IMPORTANT:
     // Detect if we're using a GPT model for model-specific instructions
     const isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');
 
+    const parsedCapabilities = ChatCapabilitiesSchema.safeParse(data?.capabilities);
+    const citationCapabilities = parsedCapabilities.success ? { citations: parsedCapabilities.data.citations === true } : null;
+    const generationConfig = readGenerationConfig();
+    const reasoningRequested =
+      env.NEXT_PUBLIC_REASONING_ENABLED === 'true' &&
+      reasoningSettings?.enabled !== false &&
+      Boolean(reasoningSettings?.enabled || reasoningSettings?.effort || reasoningSettings?.maxOutputTokens);
+    const citationSession = createCitationSession({
+      capabilities: citationCapabilities,
+      ragMode,
+      modelId: model,
+      language: userLanguage,
+      config: generationConfig,
+      facts: {
+        mcp: useMcpForRequest || lastAssistantHasToolCall(rawMessages),
+        multiStep: isHandlingMultiStep,
+        webSearch: webSearchEnabled,
+        reasoning: reasoningRequested,
+        attachments: hasAttachedImage,
+      },
+    });
+
+    // Only web-chat answers of a signed-in user outside ghost chats get an answerId and a record
+    let answerUserId: string | null = null;
+    if (scope && citationCapabilities?.citations === true) {
+      try {
+        answerUserId = (await getSessionUser())?.id ?? null;
+      } catch {
+        answerUserId = null;
+      }
+    }
+    const answerId =
+      scope && shouldPersistAnswer({ capabilities: citationCapabilities, userId: answerUserId, chatId: data?.chatId, config: generationConfig })
+        ? mintAnswerId()
+        : null;
+
     // Log model selection for debugging
     console.log('[WEBAPP] Model from request:', data?.settings?.model);
     console.log('[WEBAPP] Using model:', model);
@@ -1915,9 +2047,115 @@ IMPORTANT:
     }
     console.log('[RAG SYSTEM] ================================================');
 
+    // Prepare system prompt with context
+    // Built once per request; the semantic cache hashes the template before {{context}} substitution (06-36)
+    let ragSystemPromptBuild: Promise<{ ragSystemPrompt: string; workspacePromptUsed: boolean }> | null = null;
+    const buildRagSystemPrompt = async (): Promise<{ ragSystemPrompt: string; workspacePromptUsed: boolean }> => {
+      // Check if there's a custom system prompt in environment variables (with fallback)
+      const defaultSystemPrompt = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
+
+1. If the context contains relevant information, use it to provide accurate and specific answers
+2. If information is not available in the context, say so clearly and suggest alternative approaches
+3. Always cite your sources when referencing specific documents
+4. Provide balanced, objective information rather than opinions
+5. For technical topics, include practical steps or examples when appropriate
+
+Context:
+{{context}}`;
+
+      // Get system prompt using the new SystemPromptManager with language support
+      let ragSystemPrompt = defaultSystemPrompt;
+
+      // Extract language and template settings from request
+      const templateKey = data?.settings?.systemPromptTemplate || 'helpful';
+
+      // NEW: Check for workspace-level system prompt override (highest priority after WhatsApp override)
+      let workspacePromptUsed = false;
+      // The organization comes from the verified scope, never from the request body
+      const workspaceOrgId = scope?.organizationId ?? null;
+
+      if (isMultiTenant() && workspaceOrgId) {
+        console.log('[System Prompt] Checking workspace-level prompt override...');
+
+        const { data: org } = await supabase
+          .from('organizations')
+          .select('settings')
+          .eq('id', workspaceOrgId)
+          .single();
+
+        if (org?.settings?.systemPrompt?.enabled) {
+          const wsPrompt = org.settings.systemPrompt;
+
+          if (wsPrompt.useFullPrompt && wsPrompt.fullPrompt) {
+            // Use full workspace prompt
+            ragSystemPrompt = wsPrompt.fullPrompt.replace(/\\n/g, '\n');
+            workspacePromptUsed = true;
+            console.log('[System Prompt] Using workspace full prompt');
+          } else if (wsPrompt.preContext || wsPrompt.postContext) {
+            // Assemble from pre + post
+            const pre = (wsPrompt.preContext || '').replace(/\\n/g, '\n');
+            const post = (wsPrompt.postContext || '').replace(/\\n/g, '\n');
+            ragSystemPrompt = `${pre}\n\n{{context}}\n\n${post}`;
+            workspacePromptUsed = true;
+            console.log('[System Prompt] Using workspace pre/post context');
+          }
+        }
+      }
+
+      // Use system prompt override if provided (for WhatsApp)
+      if (systemPromptOverride) {
+        // console.log('[WHATSAPP DEBUG] Using system prompt override from request');
+        ragSystemPrompt = systemPromptOverride;
+      } else if (workspacePromptUsed) {
+        // Already set workspace prompt above, skip other sources
+        console.log('[System Prompt] Workspace prompt applied, skipping global defaults');
+      } else if (data?.settings?.systemPromptTemplate) {
+        // Use localized system prompt template if specified
+        console.log(`[System Prompt] Using localized template: ${templateKey} in language: ${userLanguage}`);
+        ragSystemPrompt = SystemPromptManager.getAssembledPrompt(templateKey, userLanguage);
+      } else if (env.RAG_PRE_CONTEXT || env.RAG_POST_CONTEXT || env.RAG_SYSTEM_PROMPT) {
+        // Check if using split context (pre/post) or single prompt
+        if (env.RAG_PRE_CONTEXT || env.RAG_POST_CONTEXT) {
+          // Assemble prompt from pre and post context
+          const preContext = (env.RAG_PRE_CONTEXT || '').replace(/\\n/g, '\n');
+          const postContext = (env.RAG_POST_CONTEXT || '').replace(/\\n/g, '\n');
+          ragSystemPrompt = preContext + '\n\nContext:\n{{context}}\n\n' + postContext;
+          console.log('[System Prompt] Using RAG_PRE_CONTEXT/RAG_POST_CONTEXT from env object');
+        } else if (env.RAG_SYSTEM_PROMPT) {
+          // Use single RAG_SYSTEM_PROMPT with proper newline unescaping
+          ragSystemPrompt = env.RAG_SYSTEM_PROMPT.replace(/\\n/g, '\n');
+          console.log('[System Prompt] Using RAG_SYSTEM_PROMPT from env object');
+        }
+      } else {
+        console.log('[System Prompt] Using DEFAULT system prompt (no env vars found)');
+      }
+
+      // Always validate and ensure {{context}} placeholder exists
+      ragSystemPrompt = SystemPromptManager.ensureContextPlaceholder(ragSystemPrompt);
+      return { ragSystemPrompt, workspacePromptUsed };
+    };
+    const resolveRagSystemPrompt = () => (ragSystemPromptBuild ??= buildRagSystemPrompt());
+
+    // CACHE-01: passed only while the semantic cache can run, so with it off the runRetrieval input is today's. A turn with an
+    // attached image never reads or writes the cache: the image is not part of the key.
+    const cacheContext =
+      !effectiveDisableRAG && !hasAttachedImage && isSemanticCacheActive()
+        ? {
+            generatorModel: model || 'openai/gpt-4o-mini',
+            // The template before {{context}} substitution; the citation strategy changes the answer format, so it is hashed with it
+            systemPromptHash: hashSystemPromptTemplate(
+              `${(await resolveRagSystemPrompt()).ragSystemPrompt}\u0000citations:${citationSession.strategy ?? 'none'}`,
+            ),
+            webSearch: webSearchEnabled,
+            mcpTools: useMcpForRequest || isHandlingMultiStep || lastAssistantHasToolCall(rawMessages),
+            chatId: typeof data?.chatId === 'string' ? data.chatId : null,
+          }
+        : undefined;
+
     // Initialize variables for RAG
     let context = '';
     let retrievalResult: RetrievalResult | null = null;
+    let smallTalkTurn = false;
     let ragStartTime = 0;
     let ragDuration = 0;
 
@@ -1964,6 +2202,12 @@ IMPORTANT:
       }
 
       const documentRefs = { mentions: mentionNames, documentParts };
+      // D-09/D-16: the one classification of this request and a bounded history from the body; unused with the layer off
+      const queryLayerInputs = {
+        history: buildHistoryWindow(originalMessages),
+        classification: queryClassification,
+        ...(clientTimeZone ? { timeZone: clientTimeZone } : {}),
+      };
 
       // Then perform semantic search for the query text
       if (queryText) {
@@ -1985,8 +2229,13 @@ IMPORTANT:
           signal: req.signal,
           trace: collector,
           ...(retrievalFilters ? { retrievalFilters } : {}),
+          ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
+          ...queryLayerInputs,
+          ...(cacheContext ? { cacheContext } : {}),
         });
         ragTrace = { collector, result };
+        startRequestTiming(collector, result);
+        if (ragLogContext) ragLogQuery = queryText;
         collector.setReviewContent({ query: queryText });
         retrievalResult = result;
 
@@ -2011,8 +2260,12 @@ IMPORTANT:
           options: { generalOverview: true },
           signal: req.signal,
           trace: collector,
+          ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
+          ...queryLayerInputs,
+          ...(cacheContext ? { cacheContext } : {}),
         });
         ragTrace = { collector, result };
+        startRequestTiming(collector, result);
         retrievalResult = result;
 
         console.log('[Document Search] Overview retrieval finished:', {
@@ -2026,8 +2279,11 @@ IMPORTANT:
         usedDocuments = result.usedDocuments;
       }
 
+      // D-10: small talk under the query layer skipped retrieval and is answered without knowledge-base context
+      smallTalkTurn = isSmallTalkResult(retrievalResult);
+
       // Use a fallback if we have no context
-      if (!context.trim()) {
+      if (!context.trim() && !smallTalkTurn) {
         context = 'No relevant context found.';
       }
 
@@ -2145,6 +2401,63 @@ IMPORTANT:
 
     } // End of RAG processing (skipped when disableRAG is true)
 
+    // D-32: a semantic-cache hit streams the cached answer through the normal UI stream, with no generation call
+    const cacheHit = retrievalResult && isCacheHitResult(retrievalResult) ? retrievalResult.cacheHit : undefined;
+    if (cacheHit) {
+      const cached = cacheHit.answer;
+      ragTrace?.collector.setReviewContent({ answer: cached.answer_text });
+      setRagLogOutcome(cached.is_refusal ? 'refused_no_context' : 'answered', cached.answer_language);
+      finishRagTrace();
+      // W6: a hit writes its own Phase 5 answer record when a fresh answer would; refusals never carry one
+      const hitAnswerId = cached.is_refusal ? null : answerId;
+      const answerFields = hitAnswerId ? { answerId: hitAnswerId } : {};
+      const stream = createUIMessageStream({
+        execute: async ({ writer }) => {
+          streamCachedAnswer(cacheHit, {
+            writer,
+            startMetadata: { ...answerFields, ...(cached.is_refusal ? { refusal: true } : {}) },
+            finishMetadata: answerFields,
+          });
+        },
+        onFinish: ({ isAborted }) => {
+          if (!hitAnswerId || !scope || !answerUserId) return;
+          const citations = cached.citations ?? [];
+          void scheduleAnswerFinish({
+            answerId: hitAnswerId,
+            scope,
+            userId: answerUserId,
+            chatId: typeof data?.chatId === 'string' ? data.chatId : null,
+            traceId: cached.trace_id,
+            modelId: model || 'openai/gpt-4o-mini',
+            ragMode,
+            queryText: getLastUserText(rawMessages),
+            citations,
+            citationStrategy: citations[0]?.strategy ?? null,
+            invalidCitations: 0,
+            answerText: cached.answer_text,
+            aborted: isAborted || req.signal.aborted,
+            groundednessEligible: false,
+            toolOutputUsed: false,
+            premise: { blocks: [], webSearchTexts: [] },
+            requestLanguage: userLanguage,
+            groundedness: cached.groundedness,
+          });
+        },
+      });
+      return createUIMessageStreamResponse({ stream: timeFirstText(stream) });
+    }
+
+    // A-8/A-14: one per-turn YOLO decision after retrieval; flagged content kept in the context (flag or downweight) suspends it
+    const injectionSummary = retrievalResult?.injection;
+    const injectionFlagged = injectionSummary ? injectionSummary.flagged && injectionSummary.mode !== 'drop' : undefined;
+    const injectionFlaggedField = injectionFlagged === undefined ? {} : { injectionFlagged };
+    const mcpYoloForTurn = mcpYoloAllowed && injectionFlagged !== true;
+    if (mcpYoloAllowed && injectionFlagged === true) {
+      console.warn('[RAG Security] YOLO suspended for a turn with flagged context; MCP tools need approval', {
+        traceId: ragTrace?.collector.traceId ?? null,
+      });
+    }
+
     const retrievalFailed =
       !effectiveDisableRAG &&
       retrievalResult !== null &&
@@ -2161,20 +2474,24 @@ IMPORTANT:
       });
 
       if (strictWithoutWebSearch) {
+        setRagLogOutcome('kb_unavailable', knowledgeBaseUnavailableLanguage(fallbackLanguage));
+        const refusalMetadata = refusalStartMetadata();
         finishRagTrace();
         const errorText = knowledgeBaseUnavailableMessage(fallbackLanguage);
         const stream = createUIMessageStream({
           execute: async ({ writer }) => {
+            if (refusalMetadata) writer.write({ type: 'start', messageMetadata: refusalMetadata });
             writer.write({ type: 'error', errorText });
           }
         });
 
-        return createUIMessageStreamResponse({ stream });
+        return createUIMessageStreamResponse({ stream: timeFirstText(stream) });
       }
 
       if (ragTrace) {
         ragTrace.result = { ...ragTrace.result, status: 'degraded' };
       }
+      setRagLogOutcome('degraded_answer');
       context = 'No relevant context found.';
       usedDocuments = [];
       precomputedSourceImages = [];
@@ -2182,6 +2499,7 @@ IMPORTANT:
 
     const shouldBlockNoContextResponse =
       !effectiveDisableRAG &&
+      !smallTalkTurn &&
       ragMode === 'strict' &&
       !webSearchEnabled &&
       (retrievalResult === null || retrievalResult.status === 'empty') &&
@@ -2189,11 +2507,37 @@ IMPORTANT:
       context.trim().toLowerCase().startsWith('no relevant context found');
 
     if (shouldBlockNoContextResponse) {
-      const responseText = buildNoKnowledgeBaseResponse(fallbackLanguage);
+      // D-31, D-51: identifier_not_found adds the same-tenant suggestion sentence to the fixed text; no model call
+      const suggestionText =
+        retrievalResult?.reason === IDENTIFIER_NOT_FOUND
+          ? identifierSuggestionMessage(fallbackLanguage, retrievalResult.identifierSuggestions)
+          : '';
+      const responseText = suggestionText
+        ? `${noKnowledgeBaseResponse(fallbackLanguage)}\n\n${suggestionText}`
+        : noKnowledgeBaseResponse(fallbackLanguage);
       ragTrace?.collector.setReviewContent({ answer: responseText, context });
+      setRagLogOutcome('refused_no_context', noKnowledgeBaseResponseLanguage(fallbackLanguage));
+      const refusalMetadata = refusalStartMetadata();
+      const refusalTraceId = ragTrace?.collector.traceId;
       finishRagTrace();
+      if (retrievalResult?.cacheTicket && refusalTraceId) {
+        // Spec rule 5: refusals are cached with the short refusal TTL, after the response
+        scheduleCacheStore({
+          scope,
+          ticket: retrievalResult.cacheTicket,
+          traceId: refusalTraceId,
+          facts: {
+            chatId: typeof data?.chatId === 'string' ? data.chatId : null,
+            sourceImages: false,
+            retrievalStatus: retrievalResult.status,
+            answerText: responseText,
+            isRefusal: true,
+          },
+        });
+      }
       const stream = createUIMessageStream({
         execute: async ({ writer }) => {
+          if (refusalMetadata) writer.write({ type: 'start', messageMetadata: refusalMetadata });
           const textId = `text-${Date.now()}`;
           writer.write({ type: 'text-start', id: textId });
           writer.write({ type: 'text-delta', id: textId, delta: responseText });
@@ -2201,91 +2545,14 @@ IMPORTANT:
         }
       });
 
-      return createUIMessageStreamResponse({ stream });
+      return createUIMessageStreamResponse({ stream: timeFirstText(stream) });
     }
 
-    // Prepare system prompt with context
-    // Check if there's a custom system prompt in environment variables (with fallback)
-    const defaultSystemPrompt = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
+    citationSession.attach(retrievalFailed || effectiveDisableRAG || smallTalkTurn ? null : retrievalResult);
 
-1. If the context contains relevant information, use it to provide accurate and specific answers
-2. If information is not available in the context, say so clearly and suggest alternative approaches
-3. Always cite your sources when referencing specific documents
-4. Provide balanced, objective information rather than opinions
-5. For technical topics, include practical steps or examples when appropriate
-
-Context:
-{{context}}`;
-
-    // Get system prompt using the new SystemPromptManager with language support
-    let ragSystemPrompt = defaultSystemPrompt;
-
-    // Extract language and template settings from request
-    const templateKey = data?.settings?.systemPromptTemplate || 'helpful';
-
-    // NEW: Check for workspace-level system prompt override (highest priority after WhatsApp override)
-    let workspacePromptUsed = false;
-    // The organization comes from the verified scope, never from the request body
-    const workspaceOrgId = scope?.organizationId ?? null;
-
-    if (isMultiTenant() && workspaceOrgId) {
-      console.log('[System Prompt] Checking workspace-level prompt override...');
-
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('settings')
-        .eq('id', workspaceOrgId)
-        .single();
-
-      if (org?.settings?.systemPrompt?.enabled) {
-        const wsPrompt = org.settings.systemPrompt;
-
-        if (wsPrompt.useFullPrompt && wsPrompt.fullPrompt) {
-          // Use full workspace prompt
-          ragSystemPrompt = wsPrompt.fullPrompt.replace(/\\n/g, '\n');
-          workspacePromptUsed = true;
-          console.log('[System Prompt] Using workspace full prompt');
-        } else if (wsPrompt.preContext || wsPrompt.postContext) {
-          // Assemble from pre + post
-          const pre = (wsPrompt.preContext || '').replace(/\\n/g, '\n');
-          const post = (wsPrompt.postContext || '').replace(/\\n/g, '\n');
-          ragSystemPrompt = `${pre}\n\n{{context}}\n\n${post}`;
-          workspacePromptUsed = true;
-          console.log('[System Prompt] Using workspace pre/post context');
-        }
-      }
-    }
-
-    // Use system prompt override if provided (for WhatsApp)
-    if (systemPromptOverride) {
-      // console.log('[WHATSAPP DEBUG] Using system prompt override from request');
-      ragSystemPrompt = systemPromptOverride;
-    } else if (workspacePromptUsed) {
-      // Already set workspace prompt above, skip other sources
-      console.log('[System Prompt] Workspace prompt applied, skipping global defaults');
-    } else if (data?.settings?.systemPromptTemplate) {
-      // Use localized system prompt template if specified
-      console.log(`[System Prompt] Using localized template: ${templateKey} in language: ${userLanguage}`);
-      ragSystemPrompt = SystemPromptManager.getAssembledPrompt(templateKey, userLanguage);
-    } else if (env.RAG_PRE_CONTEXT || env.RAG_POST_CONTEXT || env.RAG_SYSTEM_PROMPT) {
-      // Check if using split context (pre/post) or single prompt
-      if (env.RAG_PRE_CONTEXT || env.RAG_POST_CONTEXT) {
-        // Assemble prompt from pre and post context
-        const preContext = (env.RAG_PRE_CONTEXT || '').replace(/\\n/g, '\n');
-        const postContext = (env.RAG_POST_CONTEXT || '').replace(/\\n/g, '\n');
-        ragSystemPrompt = preContext + '\n\nContext:\n{{context}}\n\n' + postContext;
-        console.log('[System Prompt] Using RAG_PRE_CONTEXT/RAG_POST_CONTEXT from env object');
-      } else if (env.RAG_SYSTEM_PROMPT) {
-        // Use single RAG_SYSTEM_PROMPT with proper newline unescaping
-        ragSystemPrompt = env.RAG_SYSTEM_PROMPT.replace(/\\n/g, '\n');
-        console.log('[System Prompt] Using RAG_SYSTEM_PROMPT from env object');
-      }
-    } else {
-      console.log('[System Prompt] Using DEFAULT system prompt (no env vars found)');
-    }
-
-    // Always validate and ensure {{context}} placeholder exists
-    ragSystemPrompt = SystemPromptManager.ensureContextPlaceholder(ragSystemPrompt);
+    const resolvedSystemPrompt = await resolveRagSystemPrompt();
+    let ragSystemPrompt = resolvedSystemPrompt.ragSystemPrompt;
+    const workspacePromptUsed = resolvedSystemPrompt.workspacePromptUsed;
 
     // Log prompt source and preview for debugging
     console.log('[System Prompt] Prompt source:',
@@ -2300,17 +2567,28 @@ Context:
 
     // Replace the {{context}} placeholder with the actual context
     let systemPrompt;
+    let claudeSystemText: string | null = null;
 
     // Use optimized system prompt with RAG context
     console.log('[RAG SYSTEM DEBUG] ========== System Prompt Selection ==========');
     console.log('[RAG SYSTEM DEBUG] context.length:', context.length);
     console.log('[RAG SYSTEM DEBUG] Context preview (first 200 chars):', context.substring(0, 200));
 
-    if (context.length > 0) {
+    if (smallTalkTurn) {
+      systemPrompt = createEnhancedRAGPrompt(ragSystemPrompt, '', 'bypass');
+    } else if (context.length > 0) {
       console.log('[RAG SYSTEM] ✅ Using optimized system prompt with context');
       console.log('[RAG SYSTEM] Creating enhanced prompt with context length:', context.length);
       console.log('[RAG SYSTEM] Using RAG mode:', ragMode);
-      systemPrompt = createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode);
+      const answerLanguage = answerLanguageOptions(retrievalResult);
+      systemPrompt = citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage));
+      if (citationSession.strategy === 'claude-citations') {
+        claudeSystemText = [
+          appendAnswerLanguage(citationSession.claudeSystemPrompt(ragSystemPrompt), answerLanguage),
+          String(formattingSystemMessage.content),
+          String(ctaSystemMessage.content),
+        ].join('\n\n');
+      }
     } else {
       console.log('[RAG SYSTEM] ❌ Using standard system prompt without context');
       console.log('[RAG SYSTEM] Reason: No context/documents found');
@@ -2615,7 +2893,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       gmailGeneralSystemMessage,
       gmailAttachmentSystemMessage,
       mediaUploadSystemMessage,
-      ...convertedMessages,
+      ...citationSession.stripHistory(convertedMessages),
     ];
 
     const messagesForModel = messagesForModelExtended.map(toMessage);
@@ -2767,7 +3045,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 }
 
                 // Check if YOLO mode is enabled
-                const yoloModeEnabled = mcpYoloAllowed;
+                const yoloModeEnabled = mcpYoloForTurn;
                 console.log(`[CACHED TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                 if (yoloModeEnabled) {
@@ -2812,7 +3090,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   Object.assign(approvalError, {
                     toolCallId: toolCallId,
                     toolName: toolName,
-                    toolArgs: params
+                    toolArgs: params,
+                    ...injectionFlaggedField
                   });
                   throw approvalError;
                 }
@@ -2864,7 +3143,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                     }
 
                     // Check if YOLO mode is enabled
-                    const yoloModeEnabled = mcpYoloAllowed;
+                    const yoloModeEnabled = mcpYoloForTurn;
                     console.log(`[MCP TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                     if (yoloModeEnabled) {
@@ -2908,7 +3187,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                       Object.assign(approvalError, {
                         toolCallId: toolCallId,
                         toolName: mcpTool.name,
-                        toolArgs: params
+                        toolArgs: params,
+                        ...injectionFlaggedField
                       });
                       throw approvalError;
                     }
@@ -3094,7 +3374,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                       params: transformedParams, // Use transformed parameters
                       meta: enhancedMeta
                     },
-                    result: null
+                    result: null,
+                    ...injectionFlaggedField
                   };
 
                   // 🎯 CRITICAL DEBUG: Log parameter storage
@@ -3103,7 +3384,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   console.log(`[PARAM DEBUG] Stored approval state:`, (globalThis as any).toolApprovalState[toolCallId]);
 
                   // Check if YOLO mode is enabled
-                  const yoloModeEnabled = mcpYoloAllowed;
+                  const yoloModeEnabled = mcpYoloForTurn;
                   console.log(`[ENHANCED TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                   if (yoloModeEnabled) {
@@ -3151,7 +3432,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                     Object.assign(approvalError, {
                       toolCallId: toolCallId,
                       toolName: toolName,
-                      toolArgs: transformedParams // Use transformed parameters in error too
+                      toolArgs: transformedParams, // Use transformed parameters in error too
+                      ...injectionFlaggedField
                     });
                     throw approvalError;
                   }
@@ -3250,6 +3532,22 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           });
 
           console.log('API ROUTE: Web search tool added successfully with Exa');
+        }
+      }
+
+      const toolResultGuard = readSecurityConfig().toolResultGuard;
+      if (toolResultGuard !== 'off') {
+        const recordToolResultFlag = (toolName: string, ruleIds: string[]) => {
+          const collector = ragTrace?.collector;
+          if (collector) {
+            const at = collector.now();
+            collector.record({ name: 'tool_result_check', status: 'ok', startedAt: at, endedAt: at, rules: ruleIds, detail: toolName });
+          }
+          console.warn('[RAG Security] Tool result flagged; passed on escaped', { tool: toolName, ruleIds, traceId: collector?.traceId ?? null });
+        };
+        for (const toolName of Object.keys(allTools)) {
+          if (toolName === 'useDocument') continue;
+          allTools[toolName] = withToolResultGuard(allTools[toolName], toolName, toolResultGuard, recordToolResultFlag);
         }
       }
 
@@ -3442,6 +3740,14 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         safeModelId.includes('claude-4-sonnet') ||
         safeModelId.includes('anthropic/claude-sonnet-4');
 
+      const resultToolsReachModel = SUPPORTS_TOOLS && !isClaudeSonnet4 && Object.keys(allTools).some((toolName) => toolName !== 'useDocument');
+      if (toolResultGuard !== 'off' && resultToolsReachModel) {
+        const contextIndex = messagesForModel.findIndex((message) => message.id === systemContextMessage.id);
+        if (contextIndex >= 0) {
+          messagesForModel[contextIndex] = toMessage({ ...systemContextMessage, content: withToolResultNotice(enhancedSystemPrompt) });
+        }
+      }
+
       // Convert UI messages to model messages required by streamText
       const modelMessages = await convertToModelMessages(messagesForModel);
       let requestReasoningDetails: Record<string, unknown> | undefined;
@@ -3558,10 +3864,20 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       };
 
       // First streamText call with merged tools and reasoning
-      const result = await streamText({
+      let answerToolOutputUsed = false;
+      const citationTransformParams = () => {
+        const citationTransforms = citationSession.transforms();
+        return citationTransforms.length > 0 ? { experimental_transform: citationTransforms } : {};
+      };
+
+      const startOpenRouterStream = () => streamText({
         ...streamParams,
+        ...citationTransformParams(),
         onStepFinish: async (params: { text?: string; toolCalls?: StepToolCall[]; toolResults?: StepToolResult[] }) => {
           let { text, toolCalls = [] as StepToolCall[], toolResults = [] as StepToolResult[] } = params;
+          if (Array.isArray(toolResults) && toolResults.some((item) => typeof item?.toolName === 'string' && !ANSWER_EVIDENCE_TOOLS.has(item.toolName))) {
+            answerToolOutputUsed = true;
+          }
 
           // Clean any malformed useDocument calls from the text
           if (text && isGPTModel) {
@@ -3712,7 +4028,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   provider: 'Document Database',
                   title: doc.name || doc.filename || 'Document Source',
                   image_url: doc.image_url,
-                  url: doc.external_url || DOCUMENT_URL_MAP[doc.name || doc.filename] || undefined
+                  url: doc.external_url || DOCUMENT_URL_MAP[doc.name || doc.filename] || undefined,
+                  ...sourceDocumentFields(doc)
                 })),
                 // [FIX] Add images directly to the tool result
                 images: sourceImages
@@ -3732,7 +4049,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 similarity: doc.similarity,
                 uploadedAt: doc.created_at,
                 explicitly_referenced: doc.explicitly_referenced || false,
-                image_url: doc.image_url
+                image_url: doc.image_url,
+                ...sourceDocumentFields(doc)
               }))
             });
 
@@ -3796,7 +4114,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   params: call.input,
                   meta: { toolCallId: call.toolCallId }
                 },
-                result: null
+                result: null,
+                ...injectionFlaggedField
               };
 
               // 🎯 CRITICAL DEBUG: Log tool call parameter storage
@@ -3811,6 +4130,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         onFinish: async (event) => {
           console.log('API ROUTE: streamText finished, keeping MCP client open for user approval');
           ragTrace?.collector.setReviewContent({ answer: event.text ?? '', context, model: safeModelId });
+          if (ragLogContext) setRagLogOutcome(null, detectLanguage(event.text ?? ''));
 
           // 🕐 END TIMING: AI generation and total request
           const aiEndTime = Date.now();
@@ -3905,8 +4225,74 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         }
       });
 
+      // D-10: an eligible turn runs the direct Claude call; OpenRouter starts only on its one fallback
+      let claudeError: unknown = null;
+      const claudeAbort = new AbortController();
+      let claudeStream: ReturnType<typeof citationSession.startClaude> | null = null;
+      await awaitPreGenerationDelay();
+      markGenerationStart();
+      if (citationSession.strategy === 'claude-citations' && claudeSystemText !== null) {
+        try {
+          const history = modelMessages.filter((message) => message.role !== 'system');
+          if (history.at(-1)?.role === 'user') history.pop();
+          claudeStream = citationSession.startClaude({
+            system: claudeSystemText,
+            history,
+            question: getLastUserText(rawMessages),
+            reasoning: reasoningRequested,
+            abortSignal: AbortSignal.any([req.signal, claudeAbort.signal]),
+            onError: (error) => {
+              claudeError = error;
+            },
+          });
+        } catch {
+          citationSession.fallback('error');
+        }
+      } else if (citationSession.strategy === 'claude-citations') {
+        citationSession.fallback('error');
+      }
+      let result = claudeStream ? null : await startOpenRouterStream();
+      if (ragTrace?.result.logOutcome?.value === 'unknown') setRagLogOutcome('answered');
+
       const ragTraceId = ragTrace?.collector.traceId;
       let generationFailed = false;
+
+      let answerRecordPending = answerId !== null;
+      const finishAnswerRecord = (responseText: string, aborted: boolean, failed: boolean) => {
+        if (!answerRecordPending || !answerId || !scope || !answerUserId) return null;
+        answerRecordPending = false;
+        const records = citationSession.fullRecords();
+        const premiseBlocks =
+          !retrievalFailed && !effectiveDisableRAG && retrievalResult?.blocks
+            ? retrievalResult.blocks.filter((block) => !block.isImage).map((block) => ({ alias: block.alias ?? '', text: block.text }))
+            : [];
+        const knowledgeBaseContext =
+          premiseBlocks.length > 0 && (retrievalResult?.status === 'ok' || retrievalResult?.status === 'degraded');
+        return scheduleAnswerFinish({
+          answerId,
+          scope,
+          userId: answerUserId,
+          chatId: typeof data?.chatId === 'string' ? data.chatId : null,
+          traceId: ragTraceId ?? answerId,
+          modelId: safeModelId,
+          ragMode,
+          queryText: getLastUserText(rawMessages),
+          citations: records?.citations ?? [],
+          citationStrategy: records ? citationSession.strategy : null,
+          invalidCitations: records?.invalidCitations ?? 0,
+          answerText: responseText,
+          aborted,
+          groundednessEligible: !failed && (ragMode === 'strict' || ragMode === 'balanced') && knowledgeBaseContext,
+          toolOutputUsed: answerToolOutputUsed,
+          premise: {
+            blocks: premiseBlocks,
+            webSearchTexts: webSearchResults
+              .map((item) => (typeof item?.text === 'string' ? item.text : typeof item?.content === 'string' ? item.content : ''))
+              .filter((text) => text.length > 0),
+          },
+          requestLanguage: userLanguage,
+        });
+      };
 
       const buildFinishMetadata = () => {
         const metadata: Record<string, unknown> = {};
@@ -3965,32 +4351,99 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 created_at: doc.created_at,
                 similarity: doc.similarity,
                 image_url: doc.image_url,
-                url: doc.external_url || DOCUMENT_URL_MAP[doc.name || doc.filename] || undefined
+                url: doc.external_url || DOCUMENT_URL_MAP[doc.name || doc.filename] || undefined,
+                ...sourceDocumentFields(doc)
               }))
             });
           }
+          const messageMetadata = ({ part }: { part: { type: string; providerMetadata?: Record<string, any> } }) => {
+            if (part.type === 'start') {
+              if (!ragTraceId && !answerId && injectionFlagged === undefined) return undefined;
+              return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...injectionFlaggedField };
+            }
+            if (part.type === 'finish-step') {
+              captureReasoningDetails(part.providerMetadata?.openrouter);
+              return undefined;
+            }
+            if (part.type !== 'finish') return undefined;
+            const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata() };
+            if (!ragTraceId && !answerId && injectionFlagged === undefined && Object.keys(finishMetadata).length === 0) return undefined;
+            return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...injectionFlaggedField, ...finishMetadata };
+          };
+          if (claudeStream) {
+            const gate = await firstTokenGate(
+              claudeStream.result.toUIMessageStream({
+                sendStart: precomputedSourceImages.length === 0,
+                messageMetadata,
+                onError: () => CLAUDE_STREAM_ERROR_TEXT,
+              }),
+              {
+                timeoutMs: CLAUDE_FIRST_TOKEN_TIMEOUT_MS,
+                errorStatus: () => errorStatusOf(claudeError),
+                abort: () => claudeAbort.abort(),
+              },
+            );
+            if (gate.kind === 'ok') {
+              writer.merge(gate.stream);
+              return;
+            }
+            citationSession.fallback(gate.reason);
+            claudeStream = null;
+            console.warn('[Citations] Claude Citations call failed before the first token; retrying on OpenRouter:', { reason: gate.reason });
+            result = await startOpenRouterStream();
+          }
+          if (!result) return;
           // Merge AI stream
           writer.merge(result.toUIMessageStream({
             sendStart: precomputedSourceImages.length === 0,
-            messageMetadata: ({ part }) => {
-              if (part.type === 'start') return ragTraceId ? { ragTraceId } : undefined;
-              if (part.type === 'finish-step') {
-                captureReasoningDetails(part.providerMetadata?.openrouter);
-                return undefined;
-              }
-              if (part.type !== 'finish') return undefined;
-              const finishMetadata = buildFinishMetadata();
-              if (!ragTraceId && Object.keys(finishMetadata).length === 0) return undefined;
-              return { ...(ragTraceId ? { ragTraceId } : {}), ...finishMetadata };
-            },
+            messageMetadata,
           }));
         },
-        onFinish: ({ isAborted, finishReason }) => {
+        onFinish: ({ isAborted, finishReason, responseMessage }) => {
+          if (claudeStream) {
+            const directText = responseMessage.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
+            ragTrace?.collector.setReviewContent({ answer: directText, context, model: safeModelId });
+            if (ragLogContext) setRagLogOutcome(null, detectLanguage(directText));
+          }
+          if (ragLogContext && (isAborted || generationFailed || finishReason === 'error')) setRagLogOutcome(null, null);
           if (ragTrace) {
             const status = isAborted ? 'aborted' : generationFailed || finishReason === 'error' ? 'error' : 'ok';
-            ragTrace.collector.record({ name: 'generation', status, startedAt: aiStartTime, endedAt: ragTrace.collector.now() });
+            const fallbackReason = citationSession.fallbackReason;
+            ragTrace.collector.record({
+              name: 'generation',
+              status,
+              startedAt: aiStartTime,
+              endedAt: ragTrace.collector.now(),
+              ...(fallbackReason ? { rules: [`citation_strategy_fallback:${fallbackReason}`] } : {}),
+            });
           }
           finishRagTrace();
+          const responseText = responseMessage.parts
+            .map((part) => (part.type === 'text' ? part.text : ''))
+            .join('');
+          const turnAborted = isAborted || req.signal.aborted;
+          const turnFailed = generationFailed || finishReason === 'error';
+          const groundednessHandle = answerRecordPending ? finishAnswerRecord(responseText, turnAborted, turnFailed) : null;
+          const cacheTicket = retrievalResult?.cacheTicket;
+          if (cacheTicket && ragTraceId && !turnAborted && !turnFailed) {
+            // D-32/D-33: stored after the response, chained to this request's Phase 5 groundedness label
+            scheduleCacheStore({
+              scope,
+              ticket: cacheTicket,
+              traceId: ragTraceId,
+              facts: {
+                chatId: typeof data?.chatId === 'string' ? data.chatId : null,
+                sourceImages: precomputedSourceImages.length > 0,
+                retrievalStatus: retrievalFailed ? 'degraded' : (retrievalResult?.status ?? 'error'),
+                answerText: responseText,
+                isRefusal: false,
+                toolsUsed: answerToolOutputUsed || webSearchResults.length > 0,
+              },
+              citations: citationSession.fullRecords()?.citations ?? [],
+              sources: retrievalResult ? cacheSourcesFromResult(retrievalResult) : [],
+              groundedness: groundednessHandle,
+            });
+          }
         },
         // Handle tool-related errors in the stream
         onError: error => {
@@ -4088,7 +4541,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       });
 
       // Return the stream response
-      return createUIMessageStreamResponse({ stream });
+      return createUIMessageStreamResponse({ stream: timeFirstText(stream) });
     } catch (streamError) {
       finishRagTrace();
       console.error('API ROUTE: Error in streamText:', streamError);

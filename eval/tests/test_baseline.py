@@ -195,6 +195,18 @@ def test_cli_without_a_fixture_mode_leaves_the_harness_default(tmp_path, monkeyp
     assert all("--fixture-mode" not in command for command in commands)
 
 
+def test_run_config_reaches_every_run(tmp_path, monkeypatch):
+    commands = _record_commands(tmp_path, monkeypatch, ["--run-config", "eval/config/runs/legacy.json"])
+    assert len(commands) == 3
+    for command in commands:
+        assert command[command.index("--run-config") + 1] == "eval/config/runs/legacy.json"
+
+
+def test_cli_without_a_run_config_passes_none(tmp_path, monkeypatch):
+    commands = _record_commands(tmp_path, monkeypatch, [])
+    assert all("--run-config" not in command for command in commands)
+
+
 def test_cli_rejects_an_unknown_fixture_mode(tmp_path):
     with pytest.raises(SystemExit) as excinfo:
         main(["record", "--runs", "3", "--fixture-mode", "nope", "--out", str(tmp_path / "b.json")])
@@ -259,3 +271,39 @@ def test_runs_with_different_gate_populations_are_non_deterministic():
 
 def test_reports_without_items_record_no_item_rows():
     assert record_baseline([_report("a"), _report("b"), _report("c")]).items is None
+
+
+def _write_reports(tmp_path, reports: list[EvalReport]) -> list[str]:
+    paths = []
+    for index, report in enumerate(reports, start=1):
+        path = tmp_path / f"run-{index}" / "report.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(report.model_dump_json(), encoding="utf-8")
+        paths.append(str(path))
+    return paths
+
+
+def test_record_reports_writes_a_baseline_from_three_finished_reports(tmp_path):
+    paths = _write_reports(tmp_path, [_report("run-a"), _report("run-b"), _report("run-c")])
+    out = tmp_path / "domain-baseline.json"
+    argv = ["record-reports", "--out", str(out)]
+    for path in paths:
+        argv += ["--report", path]
+    assert main(argv) == 0
+    recorded = Baseline.model_validate_json(out.read_text(encoding="utf-8"))
+    assert recorded.golden_sha256 == "g" * 64
+    assert len(recorded.runs) == 3
+    assert [run.run_id for run in recorded.runs] == ["run-a", "run-b", "run-c"]
+    assert all(stat.spread == 0 for stats in recorded.slices.values() for stat in stats.values())
+
+
+def test_record_reports_refuses_fewer_than_three_or_differing_runs(tmp_path, capsys):
+    two = _write_reports(tmp_path / "two", [_report("run-a"), _report("run-b")])
+    assert main(["record-reports", "--out", str(tmp_path / "a.json"), "--report", two[0], "--report", two[1]]) == 2
+    differing = _write_reports(tmp_path / "diff", [_report("run-a"), _report("run-b"), _report("run-c", recall_at_10=0.9)])
+    argv = ["record-reports", "--out", str(tmp_path / "b.json")]
+    for path in differing:
+        argv += ["--report", path]
+    assert main(argv) == 1
+    assert not (tmp_path / "b.json").exists()
+    assert "non-deterministic" in capsys.readouterr().err

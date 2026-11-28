@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "per_tenant_limit": 50,
+  "window_days": 7,
+  "open_item_ttl_days": 90,
+  "low_score_ceiling": {
+    "similarity": 0.35,
+    "rerank": 0.2
+  },
+  "refused_high_score_floor": {
+    "similarity": 0.55,
+    "rerank": 0.5
+  },
+  "notes": "Starting thresholds, uncalibrated and report-only: weekly mining uses them to pick review candidates and reports them; nothing tunes them automatically."
+}

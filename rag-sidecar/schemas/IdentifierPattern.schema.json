@@ -1,0 +1,38 @@
+{
+  "additionalProperties": false,
+  "description": "D-29: an admin-defined identifier pattern; the regex safety checks run in the app (D-52).",
+  "properties": {
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "flags": {
+      "default": "u",
+      "enum": [
+        "u",
+        "iu"
+      ],
+      "title": "Flags",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "pattern": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Pattern",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "pattern"
+  ],
+  "title": "IdentifierPattern",
+  "type": "object"
+}

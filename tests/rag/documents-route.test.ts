@@ -26,6 +26,9 @@ const state = {
   admins: [] as string[],
   readOnly: false,
   settingsFail: false,
+  dupClusters: 'false' as 'true' | 'false',
+  rpcFails: false,
+  rpcCalls: [] as Array<{ fn: string; args: Row }>,
 };
 
 // The columns the Phase 3 migrations add: lineage_id defaults to the row id, tenant_key is generated from the owner columns.
@@ -49,6 +52,14 @@ function matches(row: Row, filters: Array<[string, string, unknown]>): boolean {
 
 function dataAdmin() {
   return {
+    rpc(fn: string, args: Row) {
+      state.rpcCalls.push({ fn, args });
+      const response = state.rpcFails
+        ? { data: null, error: { code: '42501', message: 'permission denied' } }
+        : { data: [{ recomputed: 1, dissolved: 0 }], error: null };
+      const request = { abortSignal: () => request, then: (resolve: (value: unknown) => unknown) => Promise.resolve(response).then(resolve) };
+      return request;
+    },
     from(table: string) {
       const rows: Row[] =
         table === 'documents'
@@ -69,6 +80,8 @@ function dataAdmin() {
         } else if (op === 'update') {
           state.updates.push({ table, payload, filters: [...filters] });
           rows.filter((row) => matches(row, filters)).forEach((row) => Object.assign(row, payload));
+        } else {
+          return { data: rows.filter((row) => matches(row, filters)), error: null };
         }
         return { data: null, error: null };
       };
@@ -153,7 +166,7 @@ async function loadRoute() {
   vi.doMock('@/lib/auth/organization-handler', () => ({ verifyUserOrganizationAccess: async () => ({ hasAccess: false }) }));
   vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => dataAdmin(), supabaseAdmin: dataAdmin() }));
   const { setRagDepsForTests } = await import('@/lib/rag/deps');
-  setRagDepsForTests({ adminClient: () => membershipAdmin() as never });
+  setRagDepsForTests({ adminClient: () => membershipAdmin() as never, ragEnv: () => ({ RAG_DUP_CLUSTERS: state.dupClusters }) });
   return import('@/app/api/documents/[id]/route');
 }
 
@@ -195,6 +208,9 @@ describe('documents/[id] route', () => {
     state.admins = [];
     state.readOnly = false;
     state.settingsFail = false;
+    state.dupClusters = 'false';
+    state.rpcFails = false;
+    state.rpcCalls = [];
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -290,6 +306,44 @@ describe('documents/[id] route', () => {
     expect(ids(state.chunks)).not.toContain('chunk-a');
     expect(ids(state.documents)).toEqual([DOC_B_PERSONAL, DOC_ORG_X, DOC_ORG_Y]);
     expect(ids(state.chunks)).toEqual(['chunk-b', 'chunk-x', 'chunk-y']);
+  });
+
+  it('switch off: a delete makes no duplicate cluster call', async () => {
+    state.session = { id: USER_A };
+    const { DELETE } = await loadRoute();
+    const response = await DELETE(...call('DELETE', DOC_A_PERSONAL));
+    expect(response.status).toBe(200);
+    expect(state.rpcCalls).toEqual([]);
+  });
+
+  it('RAG_DUP_CLUSTERS=true: a delete recomputes the dirty clusters of the caller tenant only', async () => {
+    state.session = { id: USER_A };
+    state.dupClusters = 'true';
+    const { DELETE } = await loadRoute();
+    const response = await DELETE(...call('DELETE', DOC_A_PERSONAL));
+    expect(response.status).toBe(200);
+    expect(state.rpcCalls).toEqual([{ fn: 'rag_dup_clusters_recompute', args: { p_tenant_key: `u:${USER_A}`, p_cluster_ids: null } }]);
+  });
+
+  it('a failing cluster recompute never fails the delete', async () => {
+    state.session = { id: USER_A };
+    state.dupClusters = 'true';
+    state.rpcFails = true;
+    const { DELETE } = await loadRoute();
+    const response = await DELETE(...call('DELETE', DOC_A_PERSONAL));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true });
+    expect(ids(state.documents)).not.toContain(DOC_A_PERSONAL);
+    expect(state.rpcCalls.map((entry) => entry.fn)).toEqual(['rag_dup_clusters_recompute']);
+  });
+
+  it('a refused delete makes no duplicate cluster call', async () => {
+    state.session = { id: USER_A };
+    state.dupClusters = 'true';
+    const { DELETE } = await loadRoute();
+    const response = await DELETE(...call('DELETE', DOC_B_PERSONAL));
+    expect(response.status).toBe(404);
+    expect(state.rpcCalls).toEqual([]);
   });
 
   it('lets the owner PATCH the external url and keeps existing metadata', async () => {
@@ -456,5 +510,107 @@ describe('documents/[id] route', () => {
     const { DELETE } = await loadRoute();
     await DELETE(...call('DELETE', DOC_A_PERSONAL));
     expect(JSON.stringify([...logs.mock.calls, ...errors.mock.calls])).not.toContain('keep');
+  });
+});
+
+describe('documents/[id] DELETE removes the stored originals (W2)', () => {
+  const LINEAGE = '00000000-0000-4000-8000-00000000e001';
+  const V1 = '00000000-0000-4000-8000-00000000e011';
+  const V2 = '00000000-0000-4000-8000-00000000e012';
+  const FOREIGN_LINEAGE = '00000000-0000-4000-8000-00000000e002';
+  const TENANT_A = `u:${USER_A}`;
+  const TENANT_B = `u:${USER_B}`;
+  const keyOf = (tenant: string, lineage: string, version: number, name: string) => `${tenant}/${lineage}/${version}/${name}`;
+
+  beforeEach(() => {
+    state.mode = 'multi-tenant';
+    state.session = { id: USER_A };
+    state.authThrows = false;
+    state.members = [];
+    state.documents = [
+      {
+        id: V1,
+        lineage_id: LINEAGE,
+        version: 1,
+        user_id: USER_A,
+        organization_id: null,
+        original_path: keyOf(TENANT_A, LINEAGE, 1, 'original.pdf'),
+        processing_state: { artifacts: { 'parse.md': keyOf(TENANT_A, LINEAGE, 1, 'parse.md'), 'docling.json': keyOf(TENANT_A, LINEAGE, 1, 'docling.json') } },
+      },
+      {
+        id: V2,
+        lineage_id: LINEAGE,
+        version: 2,
+        user_id: USER_A,
+        organization_id: null,
+        original_path: keyOf(TENANT_B, FOREIGN_LINEAGE, 1, 'original.pdf'),
+        processing_state: { artifacts: { 'parse.md': keyOf(TENANT_A, LINEAGE, 2, 'parse.md') } },
+      },
+      { id: DOC_B_PERSONAL, lineage_id: FOREIGN_LINEAGE, version: 1, user_id: USER_B, organization_id: null, original_path: keyOf(TENANT_B, FOREIGN_LINEAGE, 1, 'original.pdf') },
+    ];
+    state.chunks = [];
+    state.deletes = [];
+    state.updates = [];
+    state.admins = [];
+    state.readOnly = false;
+    state.settingsFail = false;
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+    vi.doUnmock('@/lib/supabase');
+    vi.doUnmock('@/lib/supabase/server');
+    vi.doUnmock('@/lib/deployment-mode');
+    vi.doUnmock('@/lib/auth/organization-handler');
+  });
+
+  async function seededStore() {
+    const route = await loadRoute();
+    const { installFakeObjectStore } = await import('../helpers/fake-object-store');
+    const store = installFakeObjectStore();
+    const bytes = new Uint8Array([1]);
+    for (const key of [
+      keyOf(TENANT_A, LINEAGE, 1, 'original.pdf'),
+      keyOf(TENANT_A, LINEAGE, 1, 'parse.md'),
+      keyOf(TENANT_A, LINEAGE, 1, 'docling.json'),
+      keyOf(TENANT_A, LINEAGE, 2, 'parse.md'),
+      keyOf(TENANT_B, FOREIGN_LINEAGE, 1, 'original.pdf'),
+    ]) {
+      await store.put(key, bytes, { contentType: 'application/octet-stream' });
+    }
+    store.calls.length = 0;
+    return { route, store };
+  }
+
+  it('removes the original and parse files of every version, and never a path of another tenant', async () => {
+    const { route, store } = await seededStore();
+    const response = await route.DELETE(...call('DELETE', V1));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true });
+    expect(ids(state.documents)).toEqual([DOC_B_PERSONAL]);
+    expect(store.keys()).toEqual([keyOf(TENANT_B, FOREIGN_LINEAGE, 1, 'original.pdf')]);
+    expect(store.calls.every((entry) => entry.op === 'remove' && entry.key.startsWith(`${TENANT_A}/${LINEAGE}/`))).toBe(true);
+  });
+
+  it('still deletes the rows and reports artifacts_failed when the storage removal fails', async () => {
+    const { route, store } = await seededStore();
+    store.failOn('remove');
+    const response = await route.DELETE(...call('DELETE', V1));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true, artifacts_failed: 4 });
+    expect(ids(state.documents)).toEqual([DOC_B_PERSONAL]);
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain(TENANT_A);
+  });
+
+  it('touches no stored object when the document belongs to another tenant', async () => {
+    const { route, store } = await seededStore();
+    const response = await route.DELETE(...call('DELETE', DOC_B_PERSONAL));
+    expect(response.status).toBe(404);
+    expect(store.calls).toEqual([]);
+    expect(store.keys()).toHaveLength(5);
   });
 });

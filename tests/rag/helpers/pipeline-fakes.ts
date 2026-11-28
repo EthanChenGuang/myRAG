@@ -97,6 +97,7 @@ export function fakeReranker(options: FakeRerankerOptions = {}): { reranker: Rer
     id: provider,
     model,
     scoreSemantics: 'calibrated',
+    supportedLanguages: [],
     rerank(query, docs, opts) {
       if (opts.signal.aborted) {
         return Promise.reject(opts.signal.reason ?? new DOMException('Aborted', 'AbortError'));

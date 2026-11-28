@@ -2,7 +2,8 @@ import asyncio
 import contextlib
 import json
 import random
-from collections.abc import AsyncIterator
+import tempfile
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
 
 from rag_sidecar.auth import SharedSecretMiddleware
+from rag_sidecar.cache.router import build_cache_router
+from rag_sidecar.cache.service import CacheService
 from rag_sidecar.contracts import (
     InvoiceExtractRequest,
     InvoiceFields,
@@ -23,13 +26,20 @@ from rag_sidecar.contracts import (
     SidecarReady,
 )
 from rag_sidecar.extract.invoice import extract_invoice
+from rag_sidecar.groundedness.claims import build_claims_router
+from rag_sidecar.groundedness.router import build_groundedness_router
+from rag_sidecar.groundedness.scorer import Scorer, available_scorer_names, build_scorers, close_scorers
+from rag_sidecar.injection.router import build_injection_router
+from rag_sidecar.injection.scorer import InjectionScorer, load_prompt_guard_config, resolve_scorer
 from rag_sidecar.ingest.app_client import AppClient
 from rag_sidecar.ingest.ledger_client import LedgerClient
-from rag_sidecar.ingest.pool import PriorityPool
+from rag_sidecar.ingest.pool import UPLOAD_PRIORITY, PriorityPool
+from rag_sidecar.ingest.storage_client import StorageClient
 from rag_sidecar.ingest.worker import IngestWorker, RealClock
 from rag_sidecar.parse.converter import Converter, default_converter
 from rag_sidecar.parse.jobs import JobRunner, QueueFull
 from rag_sidecar.parse.upload import BODY_ALLOWANCE_BYTES, MalformedUpload, UploadTooLarge, read_upload
+from rag_sidecar.security.router import build_hidden_text_router
 from rag_sidecar.settings import SidecarSettings, load_settings
 
 CONTRACTS_SCHEMA_VERSION = 2
@@ -51,21 +61,64 @@ def _error(status: int, message: str, headers: dict[str, str] | None = None) -> 
     )
 
 
-def create_app(settings: SidecarSettings | None = None, converter: Converter | None = None) -> FastAPI:
+def _looks_like_pdf(path: Path) -> bool:
+    try:
+        head = path.read_bytes()[:8]
+    except OSError:
+        return False
+    return head.startswith(b"%PDF-")
+
+
+def _run_preflight_job(
+    path: Path,
+    settings: SidecarSettings,
+    routing_cfg,
+    file_sha: str,
+) -> dict:
+    from rag_sidecar.preflight.l1 import EncryptedPdf
+    from rag_sidecar.preflight.run import run_preflight
+
+    try:
+        converter = settings.build_range_converter()
+        output = run_preflight(path, None, routing_cfg, converter, file_sha=file_sha)
+        return output.result.model_dump(mode="json")
+    except EncryptedPdf:
+        return {"__preflight_error__": "encrypted_pdf"}
+
+
+def create_app(
+    settings: SidecarSettings | None = None,
+    converter: Converter | None = None,
+    scorers: Mapping[str, Scorer] | None = None,
+    injection_scorer: InjectionScorer | None = None,
+    cache_service: CacheService | None = None,
+) -> FastAPI:
     resolved = settings if settings is not None else load_settings()
     active_converter = converter if converter is not None else default_converter()
     docling_in_use = converter is None and active_converter is not None
     runner = JobRunner(resolved, active_converter) if active_converter is not None else None
+    active_scorers: Mapping[str, Scorer] = scorers if scorers is not None else build_scorers(resolved)
+    prompt_guard_config = load_prompt_guard_config()
+    active_injection_scorer = (
+        injection_scorer if injection_scorer is not None else resolve_scorer(resolved, prompt_guard_config)
+    )
 
     ingest_worker: IngestWorker | None = None
     ingest_pool: PriorityPool | None = None
+    preflight_pool: PriorityPool | None = None
     ingest_task: asyncio.Task[None] | None = None
     ledger_client: LedgerClient | None = None
     app_client: AppClient | None = None
+    storage_client: StorageClient | None = None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        nonlocal ingest_worker, ingest_pool, ingest_task, ledger_client, app_client
+        nonlocal ingest_worker, ingest_pool, preflight_pool, ingest_task, ledger_client, app_client, storage_client
+        from rag_sidecar.ingest.maintenance import start_maintenance_from_env
+
+        preflight_pool = PriorityPool(workers=resolved.parse_workers)
+        preflight_pool.start()
+        app.state.preflight_pool = preflight_pool
         if resolved.ingest_worker and resolved.worker_env_ready():
             assert resolved.supabase_url is not None
             assert resolved.service_role_key is not None
@@ -76,12 +129,16 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
                 service_key=resolved.service_role_key.get_secret_value(),
             )
             app_client = AppClient(app_base_url=resolved.app_internal_url, secret=resolved.secret)
+            storage_client = StorageClient(
+                base_url=resolved.supabase_url,
+                service_key=resolved.service_role_key.get_secret_value(),
+            )
             ingest_pool = PriorityPool(workers=resolved.parse_workers)
             ingest_pool.start()
             ingest_worker = IngestWorker(
                 resolved,
                 ledger_client,
-                None,
+                storage_client,
                 app_client,
                 ingest_pool,
                 RealClock(),
@@ -89,20 +146,28 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
             )
             ingest_task = asyncio.create_task(ingest_worker.run())
             app.state.ingest_worker = ingest_worker
+        maintenance = start_maintenance_from_env()
         try:
             yield
         finally:
+            if maintenance is not None:
+                await maintenance.stop()
             if ingest_worker is not None:
                 await ingest_worker.stop()
             if ingest_pool is not None:
                 await ingest_pool.stop()
+            if preflight_pool is not None:
+                await preflight_pool.stop()
             if ledger_client is not None:
                 await ledger_client.aclose()
             if app_client is not None:
                 await app_client.aclose()
+            if storage_client is not None:
+                await storage_client.aclose()
             if ingest_task is not None:
                 with contextlib.suppress(asyncio.CancelledError):
                     await ingest_task
+            await close_scorers(active_scorers)
             if runner is not None:
                 runner.close()
 
@@ -131,8 +196,8 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
             if not ok:
                 not_ready = SidecarReady(status="not_ready", reason=reason or "worker_not_ready")
                 return JSONResponse(status_code=503, content=not_ready.model_dump(mode="json"))
-            return SidecarReady(status="ready", reason="worker_running")
-        return SidecarReady(status="ready")
+            return SidecarReady(status="ready", reason="worker_running", scorers=available_scorer_names(active_scorers))
+        return SidecarReady(status="ready", scorers=available_scorer_names(active_scorers))
 
     v1 = APIRouter(prefix="/v1")
 
@@ -208,6 +273,51 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
         media_type = _ARTIFACT_MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
         return FileResponse(path, media_type=media_type, headers={"x-content-type-options": "nosniff"})
 
+    @v1.post("/preflight")
+    async def preflight_probe(request: Request) -> Response:
+        pool: PriorityPool | None = getattr(request.app.state, "preflight_pool", None)
+        if pool is None:
+            return _error(503, "preflight_unavailable")
+        from rag_sidecar.preflight.config import load_routing_config
+        from rag_sidecar.preflight.l2 import sha256_file
+
+        routing_cfg = load_routing_config()
+        declared = request.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > resolved.max_upload_bytes + BODY_ALLOWANCE_BYTES:
+            return _error(413, "upload_too_large")
+        with tempfile.TemporaryDirectory(prefix="rag-preflight-") as scratch:
+            upload_path = Path(scratch) / "upload.bin"
+            try:
+                upload = await read_upload(
+                    request.stream(),
+                    request.headers.get("content-type", ""),
+                    upload_path,
+                    resolved.max_upload_bytes,
+                )
+            except UploadTooLarge:
+                return _error(413, "upload_too_large")
+            except MalformedUpload:
+                return _error(415, "invalid_preflight_request")
+            if upload.file_bytes == 0:
+                return _error(415, "invalid_preflight_request")
+            if not _looks_like_pdf(upload_path):
+                return _error(415, "invalid_preflight_request")
+            digest = sha256_file(upload_path)
+            deadline_s = routing_cfg.timeouts.preflight_ms / 1000.0
+            future = pool.submit(
+                _run_preflight_job,
+                (upload_path, resolved, routing_cfg, digest),
+                priority=UPLOAD_PRIORITY,
+                deadline_s=deadline_s,
+            )
+            try:
+                payload = await future
+            except Exception:
+                return _error(500, "preflight_failed")
+            if isinstance(payload, dict) and payload.get("__preflight_error__") == "encrypted_pdf":
+                return _error(422, "encrypted_pdf")
+            return JSONResponse(content=payload)
+
     @v1.post("/ingest/wake", status_code=202)
     def ingest_wake(request: Request) -> JSONResponse:
         worker = getattr(request.app.state, "ingest_worker", None)
@@ -242,6 +352,11 @@ def create_app(settings: SidecarSettings | None = None, converter: Converter | N
         )
         return JSONResponse(content=fields.model_dump(mode="json"))
 
+    v1.include_router(build_groundedness_router(resolved, active_scorers))
+    v1.include_router(build_claims_router(resolved, active_scorers))
+    v1.include_router(build_injection_router(active_injection_scorer, prompt_guard_config))
+    v1.include_router(build_hidden_text_router(resolved))
+    v1.include_router(build_cache_router(resolved, cache_service))
     app.include_router(v1)
     return app
 

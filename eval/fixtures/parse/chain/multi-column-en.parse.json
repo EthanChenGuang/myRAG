@@ -1,0 +1,41 @@
+{
+  "artifacts": [
+    "docling.json"
+  ],
+  "chunks": [
+    {
+      "contextualized_text": "Two-column service bulletin\nPage one is single-column context for the layout fixture.",
+      "headings": [
+        "Two-column service bulletin"
+      ],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "Page one is single-column context for the layout fixture."
+    },
+    {
+      "contextualized_text": "Two-column service bulletin\nBulletin body\nLeft column copy explains maintenance intervals and torque limits for example valves.\nRight column copy lists example SKUs and replacement kits used only in routing tests.",
+      "headings": [
+        "Two-column service bulletin",
+        "Bulletin body"
+      ],
+      "is_table": false,
+      "pages": [
+        2
+      ],
+      "table_header": null,
+      "text": "Left column copy explains maintenance intervals and torque limits for example valves.\nRight column copy lists example SKUs and replacement kits used only in routing tests."
+    }
+  ],
+  "language": "en",
+  "markdown": "## Two-column service bulletin\n\nPage one is single-column context for the layout fixture.\n\n### Bulletin body\n\nLeft column copy explains maintenance intervals and torque limits for example valves.\n\nRight column copy lists example SKUs and replacement kits used only in routing tests.",
+  "page_count": 2,
+  "parser": "docling",
+  "parser_version": "docling-2.107.1",
+  "partial": false,
+  "pictures": [],
+  "text_layer_page_share": 1.0,
+  "warnings": []
+}

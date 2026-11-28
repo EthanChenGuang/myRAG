@@ -1,0 +1,223 @@
+{
+  "$defs": {
+    "LakeraConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "concurrency": {
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "detector_types": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Detector Types",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "max_chars": {
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Max Chars",
+          "type": "integer"
+        },
+        "min_level": {
+          "anyOf": [
+            {
+              "enum": [
+                "l1_confident",
+                "l2_very_likely",
+                "l3_likely",
+                "l4_less_likely",
+                "l5_unlikely"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Level"
+        },
+        "profiles": {
+          "items": {
+            "enum": [
+              "chat",
+              "embed",
+              "eval"
+            ],
+            "type": "string"
+          },
+          "title": "Profiles",
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "detector_types",
+        "concurrency",
+        "max_chars",
+        "profiles"
+      ],
+      "title": "LakeraConfig",
+      "type": "object"
+    },
+    "PromptGuardConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "inline_profiles": {
+          "items": {
+            "enum": [
+              "chat",
+              "embed",
+              "eval"
+            ],
+            "type": "string"
+          },
+          "title": "Inline Profiles",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "languages": {
+          "items": {
+            "enum": [
+              "en",
+              "fr",
+              "de",
+              "hi",
+              "it",
+              "pt",
+              "es",
+              "th"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Languages",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "max_items": {
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Max Items",
+          "type": "integer"
+        },
+        "model_id": {
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "title": "Model Id",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^[0-9a-f]{40}$",
+          "title": "Revision",
+          "type": "string"
+        },
+        "stride_tokens": {
+          "exclusiveMaximum": 512,
+          "minimum": 0,
+          "title": "Stride Tokens",
+          "type": "integer"
+        },
+        "threshold": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Threshold",
+          "type": "number"
+        },
+        "warm_profiles": {
+          "items": {
+            "enum": [
+              "chat",
+              "embed",
+              "eval"
+            ],
+            "type": "string"
+          },
+          "title": "Warm Profiles",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "window_tokens": {
+          "maximum": 512,
+          "minimum": 16,
+          "title": "Window Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "model_id",
+        "revision",
+        "threshold",
+        "languages",
+        "window_tokens",
+        "stride_tokens",
+        "max_items",
+        "inline_profiles",
+        "warm_profiles"
+      ],
+      "title": "PromptGuardConfig",
+      "type": "object"
+    },
+    "VerdictCacheConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "max_entries": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "title": "Max Entries",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_entries"
+      ],
+      "title": "VerdictCacheConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "cache": {
+      "$ref": "#/$defs/VerdictCacheConfig"
+    },
+    "inner_reserve_ms": {
+      "maximum": 1000,
+      "minimum": 0,
+      "title": "Inner Reserve Ms",
+      "type": "integer"
+    },
+    "lakera": {
+      "$ref": "#/$defs/LakeraConfig"
+    },
+    "prompt_guard": {
+      "$ref": "#/$defs/PromptGuardConfig"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "version": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}\\.[1-9][0-9]*$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "prompt_guard",
+    "lakera",
+    "cache",
+    "inner_reserve_ms"
+  ],
+  "title": "InjectionDetectorConfig",
+  "type": "object"
+}

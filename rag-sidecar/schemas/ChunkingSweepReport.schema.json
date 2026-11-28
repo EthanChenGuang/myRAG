@@ -37,6 +37,20 @@
           "title": "N",
           "type": "integer"
         },
+        "upper_95": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Upper 95"
+        },
         "value": {
           "anyOf": [
             {
@@ -227,6 +241,13 @@
       ],
       "default": null,
       "title": "Config Hash"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Notes",
+      "type": "array"
     },
     "profiles": {
       "items": {

@@ -52,9 +52,11 @@ export interface ChatUploadFormDataInput {
   organizationId?: string | null;
   pickerEnabled: boolean;
   docType?: string | null;
+  scopes?: readonly string[];
+  replacesDocumentId?: string | null;
 }
 
-/** Builds the process-document FormData; legacy mode stays byte-identical (no doc_type). */
+/** Builds the process-document FormData; without a doc type, tags or a replaced document it stays byte-identical to legacy mode. */
 export function buildChatUploadFormData(input: ChatUploadFormDataInput): FormData {
   const formData = new FormData();
   formData.append('file', input.file);
@@ -64,6 +66,12 @@ export function buildChatUploadFormData(input: ChatUploadFormDataInput): FormDat
   if (input.pickerEnabled && input.docType) {
     formData.append('doc_type', input.docType);
   }
+  for (const tag of input.scopes ?? []) {
+    formData.append('scopes', tag);
+  }
+  if (input.replacesDocumentId) {
+    formData.append('replaces_document_id', input.replacesDocumentId);
+  }
   return formData;
 }
 
@@ -71,7 +79,7 @@ export const INGEST_POLL_INITIAL_MS = 1000;
 export const INGEST_POLL_MAX_MS = 8000;
 export const INGEST_POLL_TIMEOUT_MS = 10 * 60 * 1000;
 
-const TERMINAL_STATUSES = new Set(['ready', 'quarantined', 'failed']);
+const TERMINAL_STATUSES = new Set(['ready', 'quarantined', 'pending_review', 'failed']);
 
 export function ingestPollDelayMs(attempt: number): number {
   const delay = INGEST_POLL_INITIAL_MS * 2 ** attempt;
@@ -89,7 +97,7 @@ export interface PollIngestOptions {
   startedAt?: number;
 }
 
-/** Polls GET /api/rag/ingest/{id} with 1s-doubling backoff (cap 8s) until ready, quarantined, failed or timeout. */
+/** Polls GET /api/rag/ingest/{id} with 1s-doubling backoff (cap 8s) until ready, quarantined, pending_review, failed or timeout. */
 export async function pollIngestUntilTerminal(
   documentId: string,
   options: PollIngestOptions,

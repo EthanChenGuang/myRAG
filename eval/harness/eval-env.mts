@@ -22,7 +22,11 @@ export function derivePinnedEvalEnv(initEnvText: string): Record<string, string>
     pinned[name] = value;
   }
   pinned.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'single-tenant';
+  pinned.NEXT_PUBLIC_MCP_SYSTEM_ENABLED = 'true';
   pinned.OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
+  // D-02: CI, the eval pin and all fixtures run with zh, en and it, primary en.
+  pinned.RAG_SUPPORTED_LANGUAGES = 'zh,en,it';
+  pinned.RAG_PRIMARY_LANGUAGE = 'en';
   return sortKeys(pinned);
 }
 

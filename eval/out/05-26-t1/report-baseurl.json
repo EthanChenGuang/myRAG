@@ -1,0 +1,49 @@
+{
+  "baseurl": {
+    "withV1": {
+      "path": "anthropic",
+      "ttftMs": 1339,
+      "totalMs": 1647,
+      "text": "The Velmora lighthouse was painted green in 1931.[S1]\n\nThe Tarn footbridge is 84 metres long.[S3]\n\n**Source:** Harbor notes, Bridge log",
+      "strategy": "claude-citations",
+      "fallbackReason": null,
+      "traceRules": [],
+      "citations": [
+        {
+          "alias": "S1",
+          "documentName": "Harbor notes.txt",
+          "quote": "The Velmora lighthouse was painted green in 1931. "
+        },
+        {
+          "alias": "S3",
+          "documentName": "Bridge log.txt",
+          "quote": "The Tarn footbridge is 84 metres long. "
+        }
+      ],
+      "invalidCitations": 0
+    },
+    "withoutV1": {
+      "path": "anthropic",
+      "ttftMs": 804,
+      "totalMs": 1155,
+      "text": "The Velmora lighthouse was painted green. The Velmora lighthouse was painted green in 1931.[S1]\n\nThe Tarn footbridge is 84 metres long. The Tarn footbridge is 84 metres long.[S3]\n\n**Source:** Harbor notes; Bridge log",
+      "strategy": "claude-citations",
+      "fallbackReason": null,
+      "traceRules": [],
+      "citations": [
+        {
+          "alias": "S1",
+          "documentName": "Harbor notes.txt",
+          "quote": "The Velmora lighthouse was painted green in 1931. "
+        },
+        {
+          "alias": "S3",
+          "documentName": "Bridge log.txt",
+          "quote": "The Tarn footbridge is 84 metres long. "
+        }
+      ],
+      "invalidCitations": 0
+    }
+  },
+  "requests": 2
+}

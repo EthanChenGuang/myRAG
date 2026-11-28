@@ -1,0 +1,57 @@
+{
+  "$defs": {
+    "ScopeTagSuggestionItem": {
+      "additionalProperties": false,
+      "properties": {
+        "dimension": {
+          "enum": [
+            "region",
+            "legal_entity",
+            "department"
+          ],
+          "title": "Dimension",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "rule",
+            "model"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dimension",
+        "value",
+        "source"
+      ],
+      "title": "ScopeTagSuggestionItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Suggested tags (D-40): structured model output and rule matches; consumers keep only vocabulary values.",
+  "properties": {
+    "suggestions": {
+      "items": {
+        "$ref": "#/$defs/ScopeTagSuggestionItem"
+      },
+      "maxItems": 30,
+      "title": "Suggestions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "suggestions"
+  ],
+  "title": "ScopeTagSuggestion",
+  "type": "object"
+}

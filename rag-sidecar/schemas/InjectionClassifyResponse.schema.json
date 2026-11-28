@@ -1,0 +1,72 @@
+{
+  "$defs": {
+    "InjectionClassifyResult": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "enum": [
+            "BENIGN",
+            "MALICIOUS"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "score": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Score",
+          "type": "number"
+        },
+        "windows": {
+          "minimum": 1,
+          "title": "Windows",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "score",
+        "label",
+        "windows"
+      ],
+      "title": "InjectionClassifyResult",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "model_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Model Id",
+      "type": "string"
+    },
+    "results": {
+      "items": {
+        "$ref": "#/$defs/InjectionClassifyResult"
+      },
+      "maxItems": 32,
+      "title": "Results",
+      "type": "array"
+    },
+    "revision": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Revision",
+      "type": "string"
+    }
+  },
+  "required": [
+    "model_id",
+    "revision",
+    "results"
+  ],
+  "title": "InjectionClassifyResponse",
+  "type": "object"
+}

@@ -30,6 +30,11 @@
           "title": "Dense",
           "type": "number"
         },
+        "domain": {
+          "exclusiveMinimum": 0,
+          "title": "Domain",
+          "type": "number"
+        },
         "exact_id": {
           "default": 1.0,
           "exclusiveMinimum": 0,
@@ -40,6 +45,11 @@
           "default": 1.0,
           "exclusiveMinimum": 0,
           "title": "Lexical",
+          "type": "number"
+        },
+        "translation": {
+          "exclusiveMinimum": 0,
+          "title": "Translation",
           "type": "number"
         }
       },
@@ -79,13 +89,19 @@
     "leg_weights": {
       "$ref": "#/$defs/RetrievalLegWeights"
     },
+    "mmr_lambda": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Mmr Lambda",
+      "type": "number"
+    },
     "provenance": {
       "$ref": "#/$defs/ConfigProvenance"
     },
     "rerank_input_cap": {
       "default": 75,
       "maximum": 100,
-      "minimum": 50,
+      "minimum": 25,
       "title": "Rerank Input Cap",
       "type": "integer"
     },
@@ -100,6 +116,11 @@
       "default": 1,
       "title": "Schema Version",
       "type": "integer"
+    },
+    "sub_question_coverage": {
+      "default": true,
+      "title": "Sub Question Coverage",
+      "type": "boolean"
     }
   },
   "title": "RetrievalParams",

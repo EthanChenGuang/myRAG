@@ -1,0 +1,62 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "dims": {
+      "minimum": 1,
+      "title": "Dims",
+      "type": "integer"
+    },
+    "model": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$",
+      "title": "Model",
+      "type": "string"
+    },
+    "pair_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pair Id"
+    },
+    "profile_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "title": "Profile Id",
+      "type": "string"
+    },
+    "query_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Query Id"
+    },
+    "vector": {
+      "items": {
+        "type": "number"
+      },
+      "minItems": 1,
+      "title": "Vector",
+      "type": "array"
+    }
+  },
+  "required": [
+    "profile_id",
+    "model",
+    "dims",
+    "vector"
+  ],
+  "title": "QueryVectorRow",
+  "type": "object"
+}

@@ -1,4 +1,5 @@
 import { assertTenantScope, scopeKey } from '../../tenant/scope';
+import { resolveUploadApproval } from '../approval/resolve';
 import { fileSha256 } from '../hash';
 import { normalizeFilename } from '../identity';
 import { profileFor } from '../profiles/load';
@@ -48,6 +49,13 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
     profile: profileFor(input.source, resolved.docType),
     bytes,
   };
+
+  // D-56: the approval decision is made here, once, for ingest() and enqueueIngest() alike, and enforced at publish. An admin's
+  // type change re-processes a stored file and is not an upload.
+  if (ctx.config.uploadApproval !== 'off' && !ctx.state.typeChange) {
+    ctx.state.approval = await resolveUploadApproval(ctx);
+    if (ctx.state.approval.required) return { kind: 'next', outcome: 'approval_required' };
+  }
   return { kind: 'next' };
 }
 

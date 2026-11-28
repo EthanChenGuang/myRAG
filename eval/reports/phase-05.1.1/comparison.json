@@ -1,0 +1,770 @@
+{
+  "noise_floor": 0.02,
+  "noise_k": 3.0,
+  "notes": [
+    "Fixture corpus only: the harness runs the eval profile, which never writes a retrieval log row (D-05), and no route, stream or UI control is exercised; the switched-on runs prove that the Phase 5.1.1 switches leave retrieval and stage latency unchanged. Live log writes, refusal and embed feedback, source-open signals and expert routes are covered by the vitest and node:test suites and by the operator's live verification.",
+    "Every switch compared here defaults to off in src/lib/env.ts; the on runs set them for the app under test only.",
+    "Phase 5.1.1 (D-28 step 10): off sets every Phase 5.1.1 switch to its default and must equal the fixture baselines the Phase 5.1 closing comparison (eval/reports/phase-05.1/comparison.json, all-off) was gated on, paired differences all zero; the characterization command holds the off-state chat, embed, voice, strict, webSearch, source_images and feedback-loop stream tests.",
+    "on sets RAG_RETRIEVAL_LOG=masked_query and RAG_REFUSAL_FEEDBACK, RAG_EMBED_FEEDBACK, RAG_SOURCE_OPEN_SIGNAL and RAG_DOMAIN_EXPERT_REVIEW to true. RAG_EMBED_FEEDBACK_SECRET is not set: a schema-2 spec refuses any credential-like name, and the embed token is never minted on the harness path.",
+    "latency_budget: every stage p95 with a chat budget in eval/config/latency-budgets.json and the retrieval total p95 stay within budget; on runs also stay within the latency noise band of their off run (p95 at most off p95 x 1.5 + 5 ms per stage)."
+  ],
+  "passed": true,
+  "phase": "05.1.1",
+  "runs": [
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "paired_all_zero",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "characterization",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "analyze.p95_ms": 1.0,
+            "assemble.p95_ms": 0.0,
+            "embed.p95_ms": 3.0,
+            "generation.p95_ms": 4.0,
+            "legacy_rank.p95_ms": 0.0,
+            "post_filter.p95_ms": 3.0,
+            "retrieval_total.p95_ms": 12.0,
+            "search.p95_ms": 7.0
+          },
+          "name": "latency_budget",
+          "passed": true
+        }
+      ],
+      "citation_coverage": null,
+      "fixture_mode": "prechunked",
+      "harness_flags": [],
+      "injection": {
+        "attack_success_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 18,
+            "value": 1.0
+          }
+        },
+        "config_label": "all_off",
+        "exposure_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 18,
+            "value": 1.0
+          }
+        },
+        "false_positive_rate": {},
+        "gate": "report_only",
+        "items": 18,
+        "rules_false_positive_count": 0
+      },
+      "invalid_citation_rate": null,
+      "name": "off-prechunked",
+      "overall": {
+        "correct_refusal_rate": {
+          "n": 25,
+          "value": 0.68
+        },
+        "false_refusal_rate": {
+          "n": 143,
+          "value": 0.3356643356643357
+        },
+        "false_refusal_upper_95": 0.4062709843361731,
+        "k_zero": {
+          "n": 143,
+          "value": 48.0
+        },
+        "mrr": {
+          "n": 143,
+          "value": 0.5396270396270396
+        },
+        "ndcg_at_context_k": {
+          "n": 143,
+          "value": 0.5456619263480117
+        },
+        "recall_at_10": {
+          "n": 143,
+          "value": 0.5664335664335665
+        },
+        "recall_at_5": {
+          "n": 143,
+          "value": 0.5664335664335665
+        },
+        "topk_redundancy": {
+          "n": 103,
+          "value": 0.6605177993527508
+        }
+      },
+      "passed": true,
+      "run_config_hash": "76b45811dadbeaa2cac59e5a575a979f901a3ef9e349a411796654dd341cc645",
+      "switches": {
+        "RAG_DOMAIN_EXPERT_REVIEW": "false",
+        "RAG_EMBED_FEEDBACK": "false",
+        "RAG_REFUSAL_FEEDBACK": "false",
+        "RAG_RETRIEVAL_LOG": "off",
+        "RAG_RETRIEVAL_LOG_RETENTION_DAYS": "30",
+        "RAG_SOURCE_OPEN_SIGNAL": "false"
+      }
+    },
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "paired_all_zero",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "characterization",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "analyze.p95_ms": 1.0,
+            "assemble.p95_ms": 0.0,
+            "embed.p95_ms": 3.0,
+            "exact_id_lookup.p95_ms": 5.0,
+            "generation.p95_ms": 5.0,
+            "legacy_rank.p95_ms": 0.0,
+            "post_filter.p95_ms": 3.0,
+            "retrieval_total.p95_ms": 15.0,
+            "search.p95_ms": 7.0
+          },
+          "name": "latency_budget",
+          "passed": true
+        }
+      ],
+      "citation_coverage": null,
+      "fixture_mode": "ingest",
+      "harness_flags": [],
+      "injection": {
+        "attack_success_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 18,
+            "value": 1.0
+          }
+        },
+        "config_label": "all_off",
+        "exposure_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 18,
+            "value": 1.0
+          }
+        },
+        "false_positive_rate": {},
+        "gate": "report_only",
+        "items": 18,
+        "rules_false_positive_count": 0
+      },
+      "invalid_citation_rate": null,
+      "name": "off-ingest",
+      "overall": {
+        "correct_refusal_rate": {
+          "n": 30,
+          "value": 0.5333333333333333
+        },
+        "false_refusal_rate": {
+          "n": 177,
+          "value": 0.192090395480226
+        },
+        "false_refusal_upper_95": 0.2473781500979356,
+        "k_zero": {
+          "n": 177,
+          "value": 34.0
+        },
+        "mrr": {
+          "n": 177,
+          "value": 0.6177024482109228
+        },
+        "ndcg_at_context_k": {
+          "n": 177,
+          "value": 0.6355617601245251
+        },
+        "recall_at_10": {
+          "n": 177,
+          "value": 0.7231638418079096
+        },
+        "recall_at_5": {
+          "n": 177,
+          "value": 0.711864406779661
+        },
+        "topk_redundancy": {
+          "n": 157,
+          "value": 0.5593418259023354
+        }
+      },
+      "passed": true,
+      "run_config_hash": "edcfcf6c8a8a63195edcf423da27f7ed50194cde853713b3111daf4d2e70357a",
+      "switches": {
+        "RAG_DOMAIN_EXPERT_REVIEW": "false",
+        "RAG_EMBED_FEEDBACK": "false",
+        "RAG_REFUSAL_FEEDBACK": "false",
+        "RAG_RETRIEVAL_LOG": "off",
+        "RAG_RETRIEVAL_LOG_RETENTION_DAYS": "30",
+        "RAG_SOURCE_OPEN_SIGNAL": "false"
+      }
+    },
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "retrieval_unchanged",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "no_slice_drop",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "analyze.p95_ms": 1.0,
+            "assemble.p95_ms": 0.0,
+            "embed.p95_ms": 3.0,
+            "generation.p95_ms": 4.0,
+            "legacy_rank.p95_ms": 0.0,
+            "post_filter.p95_ms": 3.0,
+            "retrieval_total.p95_ms": 11.0,
+            "search.p95_ms": 7.0
+          },
+          "name": "latency_budget",
+          "passed": true
+        }
+      ],
+      "citation_coverage": null,
+      "fixture_mode": "prechunked",
+      "harness_flags": [],
+      "injection": {
+        "attack_success_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 18,
+            "value": 1.0
+          }
+        },
+        "config_label": "all_off",
+        "exposure_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 18,
+            "value": 1.0
+          }
+        },
+        "false_positive_rate": {},
+        "gate": "report_only",
+        "items": 18,
+        "rules_false_positive_count": 0
+      },
+      "invalid_citation_rate": null,
+      "name": "on-prechunked",
+      "overall": {
+        "correct_refusal_rate": {
+          "n": 25,
+          "value": 0.68
+        },
+        "false_refusal_rate": {
+          "n": 143,
+          "value": 0.3356643356643357
+        },
+        "false_refusal_upper_95": 0.4062709843361731,
+        "k_zero": {
+          "n": 143,
+          "value": 48.0
+        },
+        "mrr": {
+          "n": 143,
+          "value": 0.5396270396270396
+        },
+        "ndcg_at_context_k": {
+          "n": 143,
+          "value": 0.5456619263480117
+        },
+        "recall_at_10": {
+          "n": 143,
+          "value": 0.5664335664335665
+        },
+        "recall_at_5": {
+          "n": 143,
+          "value": 0.5664335664335665
+        },
+        "topk_redundancy": {
+          "n": 103,
+          "value": 0.6605177993527508
+        }
+      },
+      "passed": true,
+      "run_config_hash": "b239f1f189a298a6fa97d0ef128ab97a7527533030cd1c8f6b32d9b5f336fbf1",
+      "switches": {
+        "RAG_DOMAIN_EXPERT_REVIEW": "true",
+        "RAG_EMBED_FEEDBACK": "true",
+        "RAG_REFUSAL_FEEDBACK": "true",
+        "RAG_RETRIEVAL_LOG": "masked_query",
+        "RAG_RETRIEVAL_LOG_RETENTION_DAYS": "30",
+        "RAG_SOURCE_OPEN_SIGNAL": "true"
+      }
+    },
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "retrieval_unchanged",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "no_slice_drop",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "analyze.p95_ms": 1.0,
+            "assemble.p95_ms": 0.0,
+            "embed.p95_ms": 3.0,
+            "exact_id_lookup.p95_ms": 5.0,
+            "generation.p95_ms": 5.0,
+            "legacy_rank.p95_ms": 0.0,
+            "post_filter.p95_ms": 3.0,
+            "retrieval_total.p95_ms": 15.0,
+            "search.p95_ms": 6.0
+          },
+          "name": "latency_budget",
+          "passed": true
+        }
+      ],
+      "citation_coverage": null,
+      "fixture_mode": "ingest",
+      "harness_flags": [],
+      "injection": {
+        "attack_success_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 18,
+            "value": 1.0
+          }
+        },
+        "config_label": "all_off",
+        "exposure_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 2,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 18,
+            "value": 1.0
+          }
+        },
+        "false_positive_rate": {},
+        "gate": "report_only",
+        "items": 18,
+        "rules_false_positive_count": 0
+      },
+      "invalid_citation_rate": null,
+      "name": "on-ingest",
+      "overall": {
+        "correct_refusal_rate": {
+          "n": 30,
+          "value": 0.5333333333333333
+        },
+        "false_refusal_rate": {
+          "n": 177,
+          "value": 0.192090395480226
+        },
+        "false_refusal_upper_95": 0.2473781500979356,
+        "k_zero": {
+          "n": 177,
+          "value": 34.0
+        },
+        "mrr": {
+          "n": 177,
+          "value": 0.6177024482109228
+        },
+        "ndcg_at_context_k": {
+          "n": 177,
+          "value": 0.6355617601245251
+        },
+        "recall_at_10": {
+          "n": 177,
+          "value": 0.7231638418079096
+        },
+        "recall_at_5": {
+          "n": 177,
+          "value": 0.711864406779661
+        },
+        "topk_redundancy": {
+          "n": 157,
+          "value": 0.5593418259023354
+        }
+      },
+      "passed": true,
+      "run_config_hash": "77c8a93cbdab3657ba7d21fc6e4aace6f98f977f1efc671e3670f993a3abd863",
+      "switches": {
+        "RAG_DOMAIN_EXPERT_REVIEW": "true",
+        "RAG_EMBED_FEEDBACK": "true",
+        "RAG_REFUSAL_FEEDBACK": "true",
+        "RAG_RETRIEVAL_LOG": "masked_query",
+        "RAG_RETRIEVAL_LOG_RETENTION_DAYS": "30",
+        "RAG_SOURCE_OPEN_SIGNAL": "true"
+      }
+    }
+  ],
+  "schema_version": 2
+}

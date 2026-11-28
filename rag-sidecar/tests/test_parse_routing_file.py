@@ -39,8 +39,21 @@ def test_file_validates_against_parse_routing_config():
                 "pptx": "structured",
                 "xlsx": "structured",
             },
+            "thresholds_ref": "eval/reports/phase-03.1/threshold-sweep.json",
         },
     )
+
+
+def test_the_thresholds_reference_names_a_committed_report():
+    reference = load_routing_config().thresholds_ref
+    assert reference is not None
+    report = json.loads((REPO_ROOT / reference).read_text(encoding="utf-8"))
+    l1 = load_routing_config().l1
+    assert report["chosen"] == {
+        "garbled_ratio": l1.garbled_ratio,
+        "min_ruling_paths": l1.min_ruling_paths,
+        "scanned_max_chars": l1.scanned_max_chars,
+    }
 
 
 def test_presets_match_d48_starting_values():

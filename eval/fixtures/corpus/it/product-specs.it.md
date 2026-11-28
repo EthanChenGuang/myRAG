@@ -1,3 +1,4 @@
+<!-- fixture-meta {"doc_type":"product_technical"} -->
 ## Termometro a sonda VS-210
 
 Il termometro a sonda VS-210 (codice articolo VV-21-0310) è pensato per i controlli di laboratorio e di cucina professionale. L'intervallo di misura va da -50 a 200 gradi Celsius, con una precisione di più o meno 0,3 gradi. Il tempo di risposta è di 3 secondi. Il cavo della sonda è lungo 1,5 metri. Funziona con una batteria al litio CR2032 e la custodia ha grado di protezione IP67. Il firmware installato in fabbrica è VFW-3.6.2.

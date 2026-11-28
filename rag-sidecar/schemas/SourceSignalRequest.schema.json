@@ -1,0 +1,15 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "const": "source_opened",
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind"
+  ],
+  "title": "SourceSignalRequest",
+  "type": "object"
+}

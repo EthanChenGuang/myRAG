@@ -1,0 +1,202 @@
+{
+  "$defs": {
+    "TerminologyMatch": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Canonical",
+          "type": "string"
+        },
+        "end": {
+          "minimum": 1,
+          "title": "End",
+          "type": "integer"
+        },
+        "entry_id": {
+          "format": "uuid",
+          "title": "Entry Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "synonym",
+            "abbreviation",
+            "alias",
+            "identifier",
+            "translation",
+            "misspelling"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it",
+            "any"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "layer": {
+          "enum": [
+            "shared",
+            "workspace"
+          ],
+          "title": "Layer",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        },
+        "surface": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Surface",
+          "type": "string"
+        }
+      },
+      "required": [
+        "surface",
+        "canonical",
+        "entry_id",
+        "kind",
+        "language",
+        "layer",
+        "start",
+        "end"
+      ],
+      "title": "TerminologyMatch",
+      "type": "object"
+    },
+    "TerminologyValidationIssue": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "conflict",
+            "chain",
+            "cycle",
+            "invalid_variant",
+            "invalid_language",
+            "invalid_translation",
+            "limit",
+            "duplicate",
+            "override"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "entry_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Entry Ids",
+          "type": "array"
+        },
+        "message": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "row": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row"
+        },
+        "severity": {
+          "enum": [
+            "error",
+            "warning"
+          ],
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "message"
+      ],
+      "title": "TerminologyValidationIssue",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "capped": {
+      "title": "Capped",
+      "type": "boolean"
+    },
+    "expansion_tokens": {
+      "items": {
+        "maxLength": 256,
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Expansion Tokens",
+      "type": "array"
+    },
+    "issues": {
+      "items": {
+        "$ref": "#/$defs/TerminologyValidationIssue"
+      },
+      "title": "Issues",
+      "type": "array"
+    },
+    "matches": {
+      "items": {
+        "$ref": "#/$defs/TerminologyMatch"
+      },
+      "title": "Matches",
+      "type": "array"
+    },
+    "original_tokens": {
+      "items": {
+        "maxLength": 256,
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Original Tokens",
+      "type": "array"
+    },
+    "overrides": {
+      "items": {
+        "$ref": "#/$defs/TerminologyValidationIssue"
+      },
+      "title": "Overrides",
+      "type": "array"
+    },
+    "version": {
+      "pattern": "^s\\d+(\\.w\\d+)?$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "matches",
+    "original_tokens",
+    "expansion_tokens",
+    "capped",
+    "overrides",
+    "issues",
+    "version"
+  ],
+  "title": "TerminologyPreviewResponse",
+  "type": "object"
+}

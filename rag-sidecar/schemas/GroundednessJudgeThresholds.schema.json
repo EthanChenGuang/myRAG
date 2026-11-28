@@ -1,0 +1,108 @@
+{
+  "$defs": {
+    "GroundednessJudgeThresholdCell": {
+      "additionalProperties": false,
+      "description": "D-27: an answer is verified while its unsupported share stays at or below the cell's maximum.",
+      "properties": {
+        "config_hash": {
+          "minLength": 1,
+          "title": "Config Hash",
+          "type": "string"
+        },
+        "fitted_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fitted At"
+        },
+        "judge_model": {
+          "minLength": 1,
+          "title": "Judge Model",
+          "type": "string"
+        },
+        "judge_version": {
+          "minLength": 1,
+          "title": "Judge Version",
+          "type": "string"
+        },
+        "language": {
+          "minLength": 1,
+          "title": "Language",
+          "type": "string"
+        },
+        "max_unsupported_share": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Unsupported Share",
+          "type": "number"
+        },
+        "precision": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Precision",
+          "type": "number"
+        },
+        "recall": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Recall",
+          "type": "number"
+        },
+        "run_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Run Ids",
+          "type": "array"
+        },
+        "source": {
+          "enum": [
+            "calibrated",
+            "fixture"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "judge_model",
+        "judge_version",
+        "language",
+        "max_unsupported_share",
+        "recall",
+        "precision",
+        "source",
+        "run_ids",
+        "config_hash"
+      ],
+      "title": "GroundednessJudgeThresholdCell",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "cells": {
+      "items": {
+        "$ref": "#/$defs/GroundednessJudgeThresholdCell"
+      },
+      "title": "Cells",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "title": "GroundednessJudgeThresholds",
+  "type": "object"
+}

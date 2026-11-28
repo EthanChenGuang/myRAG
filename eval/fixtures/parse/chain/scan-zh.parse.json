@@ -1,0 +1,41 @@
+{
+  "artifacts": [
+    "docling.json"
+  ],
+  "chunks": [
+    {
+      "contextualized_text": "设备验收通知\n兹通知，示例公司于2025年3月15日完成了第二批检测设备的现场验收，全部设备运行正常。",
+      "headings": [
+        "设备验收通知"
+      ],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "兹通知，示例公司于2025年3月15日完成了第二批检测设备的现场验收，全部设备运行正常。"
+    },
+    {
+      "contextualized_text": "设备验收通知\n验收结论\n验收编号 AC-2025-0231，验收人员已在记录表上签字确认，设备可以投入使用。",
+      "headings": [
+        "设备验收通知",
+        "验收结论"
+      ],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "验收编号 AC-2025-0231，验收人员已在记录表上签字确认，设备可以投入使用。"
+    }
+  ],
+  "language": "zh",
+  "markdown": "## 设备验收通知\n\n兹通知，示例公司于2025年3月15日完成了第二批检测设备的现场验收，全部设备运行正常。\n\n### 验收结论\n\n验收编号 AC-2025-0231，验收人员已在记录表上签字确认，设备可以投入使用。",
+  "page_count": 1,
+  "parser": "docling",
+  "parser_version": "docling-2.107.1",
+  "partial": false,
+  "pictures": [],
+  "text_layer_page_share": 0.0,
+  "warnings": []
+}

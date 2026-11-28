@@ -1,4 +1,5 @@
 import { ProcessingProfileSetSchema } from '@/lib/rag-eval/contracts.generated';
+import type { Language } from '@/lib/rag';
 
 /** The six document type identifiers (D-12), aligned with the generated profile schema. */
 export const DOC_TYPE_IDS = ProcessingProfileSetSchema.shape.profiles.element.shape.doc_type.options;
@@ -7,9 +8,9 @@ export const DOC_TYPE_CHOICES = [...DOC_TYPE_IDS, 'auto'] as const;
 
 export type DocTypeLabelId = (typeof DOC_TYPE_CHOICES)[number];
 
-export type DocTypeLabelLocale = 'zh' | 'en' | 'it';
+export type DocTypeLabelLocale = Language;
 
-const LABELS: Record<DocTypeLabelLocale, Record<DocTypeLabelId, string>> = {
+const LABELS: { en: Record<DocTypeLabelId, string> } & Partial<Record<DocTypeLabelLocale, Record<DocTypeLabelId, string>>> = {
   en: {
     general: 'General',
     financial_report: 'Financial report',
@@ -39,13 +40,12 @@ const LABELS: Record<DocTypeLabelLocale, Record<DocTypeLabelId, string>> = {
   },
 };
 
-function normalizeLocale(language: string): DocTypeLabelLocale {
-  if (language === 'zh' || language === 'it') return language;
-  return 'en';
+function localeLabels(language: string): Record<DocTypeLabelId, string> {
+  const own = Object.prototype.hasOwnProperty.call(LABELS, language) ? LABELS[language as DocTypeLabelLocale] : undefined;
+  return own ?? LABELS.en;
 }
 
 /** Localized label for a document type or auto-detect; unknown UI languages fall back to en. */
 export function docTypeLabel(id: DocTypeLabelId, language: string): string {
-  const locale = normalizeLocale(language);
-  return LABELS[locale][id] ?? LABELS.en[id];
+  return localeLabels(language)[id] ?? LABELS.en[id];
 }

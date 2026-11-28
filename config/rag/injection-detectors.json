@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "version": "2026-11-24.1",
+  "prompt_guard": {
+    "model_id": "meta-llama/Llama-Prompt-Guard-2-86M",
+    "revision": "a8ded8e697ce7c355e395a0df51f94adb4a2fd27",
+    "threshold": 0.5,
+    "languages": ["en", "it"],
+    "window_tokens": 512,
+    "stride_tokens": 64,
+    "max_items": 16,
+    "inline_profiles": ["eval"],
+    "warm_profiles": ["chat", "embed"]
+  },
+  "lakera": {
+    "detector_types": ["prompt_attack"],
+    "min_level": null,
+    "concurrency": 4,
+    "max_chars": 20000,
+    "profiles": ["chat", "embed", "eval"]
+  },
+  "cache": {
+    "max_entries": 5000
+  },
+  "inner_reserve_ms": 25
+}

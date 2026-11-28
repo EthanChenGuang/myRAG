@@ -1,0 +1,18 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "queries": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 4,
+      "title": "Queries",
+      "type": "array"
+    }
+  },
+  "required": [
+    "queries"
+  ],
+  "title": "QueryVariants",
+  "type": "object"
+}

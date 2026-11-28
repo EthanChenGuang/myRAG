@@ -51,6 +51,8 @@ export async function handleParseExternal(
   try {
     const job = await getJobInternal(jobId, { signal });
     if (!job) return refuse(404, 'job_not_found');
+    // D-29: a translate job runs only through the translate callback; a worker that does not know the kind is refused here.
+    if (job.kind === 'translate') return refuse(409, 'kind_mismatch');
     if (isTerminal(job) || !leaseHolds(job, body.worker_id, deps.now())) return refuse(409, 'lease_lost');
     if (body.mode === 'chain' || body.mode === 'native') {
       if (body.subpdf_ref !== null) return refuse(400, 'subpdf_not_allowed');

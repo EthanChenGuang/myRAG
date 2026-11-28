@@ -14,13 +14,20 @@ export interface EffectiveConfig {
   generator_model: string | null;
   rag_env: Record<string, string>;
   rag_prompt_sha256: Record<string, string>;
+  /** Present only while RAG_INJECTION_CHECK is not off (D-18). */
+  security?: { rules_version: string; detectors_version: string };
 }
 
 function sha256Hex(value: string): string {
   return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-export function buildEffectiveConfig(): EffectiveConfig {
+export interface EffectiveConfigOptions {
+  /** injectionTraceVersions() from @/lib/rag: rules_version and detectors_version while the check is on, else null. */
+  security?: { rules_version: string; detectors_version: string } | null;
+}
+
+export function buildEffectiveConfig(options: EffectiveConfigOptions = {}): EffectiveConfig {
   const ragEnv: Record<string, string> = {};
   for (const name of Object.keys(process.env).sort()) {
     if (!name.startsWith('RAG_') && !name.startsWith('NEXT_PUBLIC_RAG_')) continue;
@@ -38,7 +45,10 @@ export function buildEffectiveConfig(): EffectiveConfig {
     promptDigests[name] = sha256Hex(process.env[name] ?? '');
   }
 
+  const security = options.security ? { security: { rules_version: options.security.rules_version, detectors_version: options.security.detectors_version } } : {};
+
   return {
+    ...security,
     deployment_mode: process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE || 'single-tenant',
     embedding_model: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
     endpoint_version: ENDPOINT_VERSION,

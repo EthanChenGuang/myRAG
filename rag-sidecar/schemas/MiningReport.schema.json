@@ -1,0 +1,242 @@
+{
+  "$defs": {
+    "FnAudit": {
+      "additionalProperties": false,
+      "properties": {
+        "answerable": {
+          "minimum": 0,
+          "title": "Answerable",
+          "type": "integer"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "sampled": {
+          "minimum": 0,
+          "title": "Sampled",
+          "type": "integer"
+        },
+        "skipped": {
+          "title": "Skipped",
+          "type": "boolean"
+        },
+        "upper_95": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Upper 95"
+        }
+      },
+      "required": [
+        "sampled",
+        "answerable",
+        "passed",
+        "skipped"
+      ],
+      "title": "FnAudit",
+      "type": "object"
+    },
+    "MiningParams": {
+      "additionalProperties": false,
+      "properties": {
+        "absolute_margin": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Absolute Margin"
+        },
+        "fn_audit_max_upper": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Fn Audit Max Upper",
+          "type": "number"
+        },
+        "fn_audit_sample": {
+          "minimum": 0,
+          "title": "Fn Audit Sample",
+          "type": "integer"
+        },
+        "max_score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": -1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Score"
+        },
+        "min_score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": -1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Score"
+        },
+        "neighbour_window": {
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Neighbour Window",
+          "type": "integer"
+        },
+        "num_negatives": {
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Num Negatives",
+          "type": "integer"
+        },
+        "range_max": {
+          "minimum": 1,
+          "title": "Range Max",
+          "type": "integer"
+        },
+        "range_min": {
+          "minimum": 0,
+          "title": "Range Min",
+          "type": "integer"
+        },
+        "relative_margin": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relative Margin"
+        },
+        "round_trip_k": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Round Trip K"
+        },
+        "sampling_strategy": {
+          "enum": [
+            "top",
+            "random"
+          ],
+          "title": "Sampling Strategy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "range_min",
+        "range_max",
+        "num_negatives",
+        "sampling_strategy",
+        "neighbour_window",
+        "fn_audit_sample",
+        "fn_audit_max_upper"
+      ],
+      "title": "MiningParams",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "fn_audit": {
+      "$ref": "#/$defs/FnAudit"
+    },
+    "mean_negatives": {
+      "minimum": 0,
+      "title": "Mean Negatives",
+      "type": "number"
+    },
+    "miner": {
+      "enum": [
+        "vectors",
+        "st"
+      ],
+      "title": "Miner",
+      "type": "string"
+    },
+    "pairs": {
+      "minimum": 0,
+      "title": "Pairs",
+      "type": "integer"
+    },
+    "pairs_only": {
+      "minimum": 0,
+      "title": "Pairs Only",
+      "type": "integer"
+    },
+    "params": {
+      "$ref": "#/$defs/MiningParams"
+    },
+    "round_trip_k": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Round Trip K"
+    },
+    "round_trip_miss": {
+      "minimum": 0,
+      "title": "Round Trip Miss",
+      "type": "integer"
+    },
+    "with_full_negatives": {
+      "minimum": 0,
+      "title": "With Full Negatives",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "miner",
+    "pairs",
+    "with_full_negatives",
+    "pairs_only",
+    "mean_negatives",
+    "round_trip_miss",
+    "fn_audit",
+    "params"
+  ],
+  "title": "MiningReport",
+  "type": "object"
+}

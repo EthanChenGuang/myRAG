@@ -176,6 +176,105 @@ def test_ledger_maps_postgrest_errors(code, status, exc):
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("payload", [None, {}, {key: None for key in _job_payload()}])
+def test_ledger_claim_one_reads_an_unclaimable_job_as_none(payload):
+    """rag_claim_ingestion_job returns a NULL composite; PostgREST sends it as an object whose columns are all null."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    async def run():
+        client = LedgerClient(
+            base_url=_SUPABASE_URL,
+            service_key=_SB_KEY,
+            client=_recorded_transport({"/rpc/rag_claim_ingestion_job": handler}, []),
+        )
+        try:
+            return await client.claim_one(_JOB_ID, worker="ray:a", runner="ray")
+        finally:
+            await client.aclose()
+
+    assert asyncio.run(run()) is None
+
+
+def test_ledger_claim_one_posts_the_runner():
+    recorded: list[dict] = []
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_job_payload(status="preflight", locked_by="ray:a", runner="ray"))
+
+    async def run():
+        client = LedgerClient(
+            base_url=_SUPABASE_URL,
+            service_key=_SB_KEY,
+            client=_recorded_transport({"/rpc/rag_claim_ingestion_job": handler}, recorded),
+        )
+        try:
+            return await client.claim_one(_JOB_ID, worker="ray:a", runner="ray")
+        finally:
+            await client.aclose()
+
+    job = asyncio.run(run())
+    assert job is not None and job.runner == "ray"
+    assert recorded[0]["body"] == {"p_job_id": _JOB_ID, "p_worker": "ray:a", "p_runner": "ray"}
+
+
+def test_ledger_list_batch_jobs_pages_by_the_last_id():
+    batch = "00000000-0000-4000-8000-0000000000b7"
+    ids = [f"00000000-0000-4000-8000-{index:012d}" for index in range(1, 6)]
+    recorded: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        after = body["p_after_id"]
+        start = 0 if after is None else ids.index(after) + 1
+        page = ids[start : start + body["p_limit"]]
+        return httpx.Response(200, json=[_job_payload(id=job_id, batch_id=batch) for job_id in page])
+
+    async def run():
+        client = LedgerClient(
+            base_url=_SUPABASE_URL,
+            service_key=_SB_KEY,
+            client=_recorded_transport({"/rpc/rag_list_batch_jobs": handler}, recorded),
+        )
+        try:
+            return await client.list_batch_jobs(batch, page_size=2)
+        finally:
+            await client.aclose()
+
+    jobs = asyncio.run(run())
+    assert [job.id for job in jobs] == ids
+    assert all(job.kind == "ingest" and job.status == "queued" for job in jobs)
+    assert [row["body"] for row in recorded] == [
+        {"p_batch_id": batch, "p_status": None, "p_after_id": None, "p_limit": 2},
+        {"p_batch_id": batch, "p_status": None, "p_after_id": ids[1], "p_limit": 2},
+        {"p_batch_id": batch, "p_status": None, "p_after_id": ids[3], "p_limit": 2},
+    ]
+
+
+def test_ledger_list_batch_jobs_reads_inventory_rows_the_job_contract_does_not_cover():
+    """The inventory records duplicates as terminal rows with empty settings and no source; listing must not reject them."""
+    batch = "00000000-0000-4000-8000-0000000000b7"
+    inventory_row = _job_payload(id="00000000-0000-4000-8000-000000000009", batch_id=batch, status="skipped_duplicate", settings={}, source=None)
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[_job_payload(batch_id=batch), inventory_row])
+
+    async def run():
+        client = LedgerClient(
+            base_url=_SUPABASE_URL,
+            service_key=_SB_KEY,
+            client=_recorded_transport({"/rpc/rag_list_batch_jobs": handler}, []),
+        )
+        try:
+            return await client.list_batch_jobs(batch)
+        finally:
+            await client.aclose()
+
+    jobs = asyncio.run(run())
+    assert [(job.id, job.status) for job in jobs] == [(_JOB_ID, "queued"), (inventory_row["id"], "skipped_duplicate")]
+
+
 def test_ledger_repr_never_contains_key():
     client = LedgerClient(base_url=_SUPABASE_URL, service_key=_JWT_KEY)
     text = repr(client)
@@ -352,3 +451,44 @@ def test_fake_app_records_calls_and_pending():
         assert len(app.calls) == 1
 
     asyncio.run(run())
+
+def _slice_ms(ts_path: str, name: str) -> int:
+    source = (Path(__file__).resolve().parents[2] / ts_path).read_text(encoding="utf-8")
+    marker = f"export const {name} = "
+    start = source.index(marker) + len(marker)
+    return int(source[start : source.index(";", start)].replace("_", ""))
+
+
+def test_slice_callbacks_wait_longer_than_the_app_slice_and_below_the_route_limit():
+    """The advance and parse-external routes run a 40 s slice and then finish the step in flight; a read timeout equal to the slice
+    aborted the request while the app was still answering (and the app then marked the version failed)."""
+    from rag_sidecar.ingest import app_client
+    from rag_sidecar.ingest.process_job import ADVANCE_DEADLINE_MS
+
+    reads: dict[str, float] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        reads[request.url.path.rsplit("/", 1)[-1]] = request.extensions["timeout"]["read"]
+        if request.url.path.endswith("/advance"):
+            return httpx.Response(200, json={"worker_id": "worker-1", "stage": "chunk", "done": True, "wait_ms": 0})
+        return httpx.Response(200, json={"status": "pending", "retry_after_ms": 1000})
+
+    async def run() -> None:
+        http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url=_APP_URL)
+        app = AppClient(app_base_url=_APP_URL, secret=SecretStr("x" * 32), client=http_client, rate_per_second=100)
+        await app.advance(_JOB_ID, AdvanceRequest(worker_id="worker-1", attempt_no=1, phase="begin", deadline_ms=ADVANCE_DEADLINE_MS))
+        try:
+            await app.parse_external(_JOB_ID, ParseExternalRequest(worker_id="worker-1", attempt_no=1, mode="chain"))
+        except Exception:  # noqa: BLE001 - only the timeout the request was sent with matters here
+            pass
+        await app.aclose()
+
+    asyncio.run(run())
+    advance_slice_s = _slice_ms("src/lib/rag/ingest/callbacks/advance.ts", "ADVANCE_SLICE_MS") / 1000
+    parse_slice_s = _slice_ms("src/lib/rag/ingest/callbacks/parse-external.ts", "PARSE_SLICE_MS") / 1000
+    route_limit_s = 60
+    assert set(reads) == {"advance", "parse-external"}
+    assert advance_slice_s + 10 <= reads["advance"] < route_limit_s
+    assert ADVANCE_DEADLINE_MS / 1000 + 10 <= reads["advance"]
+    assert parse_slice_s + 10 <= reads["parse-external"] < route_limit_s
+    assert reads["advance"] == app_client._SLICE_READ_TIMEOUT

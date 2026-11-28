@@ -1,3 +1,4 @@
+<!-- fixture-meta {"doc_type":"product_technical"} -->
 ## XR-4410 thermal probe
 
 The XR-4410 thermal probe (SKU LV-77-0192) is a handheld probe for lab benches. Measurement range is -40 to 250 degrees Celsius. Accuracy is plus or minus 0.5 degrees Celsius. Response time is 2 seconds. The probe cable is 3 metres long. Power comes from two AA batteries. The housing is rated IP54. The firmware build shipped with this model is FW-2.8.14.

@@ -216,7 +216,7 @@ class TestRoutingContracts:
 
 class TestQueueContracts:
     def test_job_status_literal_count(self):
-        assert len(get_args(JobStatus)) == 11
+        assert len(get_args(JobStatus)) == 12
 
     def test_ingestion_job_round_trips(self):
         job = _ingestion_job()

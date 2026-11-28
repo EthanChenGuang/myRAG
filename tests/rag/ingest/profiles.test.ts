@@ -129,6 +129,23 @@ describe('processing profile loader', () => {
   });
 });
 
+describe('rule_sections in a repository profile', () => {
+  it('rejects a profile whose chunker kind is rule_sections, naming the profile id', () => {
+    const set = clone(rawProfiles);
+    set.profiles[1].chunker.kind = 'rule_sections';
+    const id = set.profiles[1].id;
+    expect(() => parseProcessingProfileSet(set)).toThrow(/^\[Ingest Config\] /);
+    expect(() => parseProcessingProfileSet(set)).toThrow(id);
+    expect(() => parseProcessingProfileSet(set)).toThrow(/rule_sections/);
+  });
+
+  it('keeps loading the bundled set with no profile naming rule_sections', () => {
+    const set = parseProcessingProfileSet(clone(rawProfiles));
+    expect(set).toEqual(ProcessingProfileSetSchema.parse(clone(rawProfiles)));
+    expect(set.profiles.some((profile) => profile.chunker.kind === 'rule_sections')).toBe(false);
+  });
+});
+
 describe('parseProcessingProfileSet mirrors the Pydantic rules the Zod schema cannot express', () => {
   it('accepts the bundled data', () => {
     expect(parseProcessingProfileSet(clone(rawProfiles)).profiles).toHaveLength(6);

@@ -1,0 +1,125 @@
+{
+  "schema_version": 2,
+  "phase": "05.1.1",
+  "noise": "eval/config/noise.json",
+  "baselines": {
+    "prechunked": "eval/baselines/fixture-baseline.json",
+    "ingest": "eval/baselines/fixture-ingest-baseline.json"
+  },
+  "runs": [
+    {
+      "name": "off-prechunked",
+      "fixture_mode": "prechunked",
+      "switches": {
+        "RAG_RETRIEVAL_LOG": "off",
+        "RAG_RETRIEVAL_LOG_RETENTION_DAYS": "30",
+        "RAG_REFUSAL_FEEDBACK": "false",
+        "RAG_EMBED_FEEDBACK": "false",
+        "RAG_SOURCE_OPEN_SIGNAL": "false",
+        "RAG_DOMAIN_EXPERT_REVIEW": "false"
+      },
+      "harness_flags": [],
+      "checks": [
+        "paired_all_zero",
+        "characterization",
+        {
+          "kind": "latency_budget",
+          "profile": "chat"
+        }
+      ]
+    },
+    {
+      "name": "off-ingest",
+      "fixture_mode": "ingest",
+      "switches": {
+        "RAG_RETRIEVAL_LOG": "off",
+        "RAG_RETRIEVAL_LOG_RETENTION_DAYS": "30",
+        "RAG_REFUSAL_FEEDBACK": "false",
+        "RAG_EMBED_FEEDBACK": "false",
+        "RAG_SOURCE_OPEN_SIGNAL": "false",
+        "RAG_DOMAIN_EXPERT_REVIEW": "false"
+      },
+      "harness_flags": [],
+      "checks": [
+        "paired_all_zero",
+        "characterization",
+        {
+          "kind": "latency_budget",
+          "profile": "chat"
+        }
+      ]
+    },
+    {
+      "name": "on-prechunked",
+      "fixture_mode": "prechunked",
+      "switches": {
+        "RAG_RETRIEVAL_LOG": "masked_query",
+        "RAG_RETRIEVAL_LOG_RETENTION_DAYS": "30",
+        "RAG_REFUSAL_FEEDBACK": "true",
+        "RAG_EMBED_FEEDBACK": "true",
+        "RAG_SOURCE_OPEN_SIGNAL": "true",
+        "RAG_DOMAIN_EXPERT_REVIEW": "true"
+      },
+      "harness_flags": [],
+      "checks": [
+        "retrieval_unchanged",
+        "no_slice_drop",
+        {
+          "kind": "latency_budget",
+          "profile": "chat",
+          "against": "off-prechunked",
+          "tolerance_ms": 5,
+          "tolerance_ratio": 0.5
+        }
+      ]
+    },
+    {
+      "name": "on-ingest",
+      "fixture_mode": "ingest",
+      "switches": {
+        "RAG_RETRIEVAL_LOG": "masked_query",
+        "RAG_RETRIEVAL_LOG_RETENTION_DAYS": "30",
+        "RAG_REFUSAL_FEEDBACK": "true",
+        "RAG_EMBED_FEEDBACK": "true",
+        "RAG_SOURCE_OPEN_SIGNAL": "true",
+        "RAG_DOMAIN_EXPERT_REVIEW": "true"
+      },
+      "harness_flags": [],
+      "checks": [
+        "retrieval_unchanged",
+        "no_slice_drop",
+        {
+          "kind": "latency_budget",
+          "profile": "chat",
+          "against": "off-ingest",
+          "tolerance_ms": 5,
+          "tolerance_ratio": 0.5
+        }
+      ]
+    }
+  ],
+  "commands": {
+    "characterization": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/rag/characterize-chat.test.ts",
+      "tests/rag/characterize-chat-overview.test.ts",
+      "tests/rag/characterize-embed.test.ts",
+      "tests/rag/characterize-voice.test.ts",
+      "tests/chat-strict.test.ts",
+      "tests/chat-websearch.test.ts",
+      "tests/chat-source-images.test.ts",
+      "tests/rag/feedback-loop/refusal-metadata.test.ts",
+      "tests/rag/feedback-loop/embed-stream-token.test.ts",
+      "tests/rag/feedback-loop/finish-log.test.ts",
+      "tests/rag/feedback-loop/routes-log.test.ts"
+    ]
+  },
+  "fixture_note": "Fixture corpus only: the harness runs the eval profile, which never writes a retrieval log row (D-05), and no route, stream or UI control is exercised; the switched-on runs prove that the Phase 5.1.1 switches leave retrieval and stage latency unchanged. Live log writes, refusal and embed feedback, source-open signals and expert routes are covered by the vitest and node:test suites and by the operator's live verification.",
+  "notes": [
+    "Phase 5.1.1 (D-28 step 10): off sets every Phase 5.1.1 switch to its default and must equal the fixture baselines the Phase 5.1 closing comparison (eval/reports/phase-05.1/comparison.json, all-off) was gated on, paired differences all zero; the characterization command holds the off-state chat, embed, voice, strict, webSearch, source_images and feedback-loop stream tests.",
+    "on sets RAG_RETRIEVAL_LOG=masked_query and RAG_REFUSAL_FEEDBACK, RAG_EMBED_FEEDBACK, RAG_SOURCE_OPEN_SIGNAL and RAG_DOMAIN_EXPERT_REVIEW to true. RAG_EMBED_FEEDBACK_SECRET is not set: a schema-2 spec refuses any credential-like name, and the embed token is never minted on the harness path.",
+    "latency_budget: every stage p95 with a chat budget in eval/config/latency-budgets.json and the retrieval total p95 stay within budget; on runs also stay within the latency noise band of their off run (p95 at most off p95 x 1.5 + 5 ms per stage)."
+  ]
+}

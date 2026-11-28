@@ -1,4 +1,4 @@
-<!-- fixture-meta {"filename": "warehouse-floorplan.png", "image_url": "https://example.com/fixtures/warehouse-floorplan.png"} -->
+<!-- fixture-meta {"filename":"warehouse-floorplan.png","image_url":"https://example.com/fixtures/warehouse-floorplan.png","doc_type":"scanned_image"} -->
 ## Overall layout
 
 The image shows a floor plan of the Lumen Valley Instruments warehouse, drawn from above. The building is a long rectangle with the loading docks along the south wall and the main office in the north-east corner. Three aisles run from the south wall to the north wall, labelled Aisle A, Aisle B and Aisle C from west to east.

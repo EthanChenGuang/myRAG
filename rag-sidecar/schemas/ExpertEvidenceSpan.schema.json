@@ -1,0 +1,42 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "chunk_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Chunk Id",
+      "type": "string"
+    },
+    "document_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Document Id",
+      "type": "string"
+    },
+    "document_name": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Document Name",
+      "type": "string"
+    },
+    "quote": {
+      "maxLength": 2000,
+      "minLength": 2,
+      "title": "Quote",
+      "type": "string"
+    },
+    "section": {
+      "maxLength": 512,
+      "title": "Section",
+      "type": "string"
+    }
+  },
+  "required": [
+    "chunk_id",
+    "document_id",
+    "document_name",
+    "section",
+    "quote"
+  ],
+  "title": "ExpertEvidenceSpan",
+  "type": "object"
+}

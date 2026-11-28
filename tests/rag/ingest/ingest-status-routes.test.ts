@@ -42,6 +42,7 @@ const state = {
   authThrows: false,
   members: [] as Array<{ organization_id: string; user_id: string }>,
   admins: [] as string[],
+  readOnly: false,
   docs: [] as DocRow[],
   calls: [] as Call[],
   rpcFails: false,
@@ -113,7 +114,10 @@ function memberAndAdminDb() {
           return query;
         },
         abortSignal: () => query,
+        order: () => query,
+        limit: () => query,
         maybeSingle() {
+          if (table === 'admin_settings') return Promise.resolve({ data: { read_only_doc_dashboard: state.readOnly }, error: null });
           if (table === 'admin_users') {
             return Promise.resolve({ data: state.admins.includes(filters.id as string) ? { id: filters.id } : null, error: null });
           }
@@ -179,6 +183,7 @@ describe('GET /api/rag/ingest/[id]', () => {
     state.authThrows = false;
     state.members = [];
     state.admins = [];
+    state.readOnly = false;
     state.calls = [];
     state.rpcFails = false;
     state.now = NOW;
@@ -371,6 +376,7 @@ describe('POST /api/rag/ingest/[id]/resume', () => {
     state.authThrows = false;
     state.members = [];
     state.admins = [];
+    state.readOnly = false;
     state.calls = [];
     state.rpcFails = false;
     state.now = NOW;
@@ -467,20 +473,43 @@ describe('POST /api/rag/ingest/[id]/resume', () => {
     expect(state.calls).toEqual([]);
   });
 
-  it('in single-tenant mode lets only an administrator resume', async () => {
+  it('in single-tenant mode lets an administrator resume any version, and anyone else only the version they uploaded', async () => {
     state.mode = 'single-tenant';
     state.session = { id: USER_A };
+    const { POST } = await loadRoutes();
+    // No uploader recorded: a non-administrator gets the unknown-id answer and nothing is written.
+    const unrecorded = await POST(post(DOC_SINGLE), ctx(DOC_SINGLE));
+    expect(unrecorded.status).toBe(404);
+    expect(writesMade()).toEqual([]);
+
+    state.docs[3]!.processing_state = { lastCompleted: 'store_original', uploaderId: USER_B };
+    const foreign = await POST(post(DOC_SINGLE), ctx(DOC_SINGLE));
+    expect(foreign.status).toBe(404);
+    expect(await foreign.json()).toEqual(await (await POST(post(DOC_UNKNOWN), ctx(DOC_UNKNOWN))).json());
+    expect(writesMade()).toEqual([]);
+
+    state.docs[3]!.processing_state = { lastCompleted: 'store_original', uploaderId: USER_A };
+    const own = await POST(post(DOC_SINGLE), ctx(DOC_SINGLE));
+    expect(own.status).toBe(200);
+    expect(await own.json()).toMatchObject({ status: 'processing', documentId: DOC_SINGLE });
+    expect(callsOf('rag_get_ingest_document').every((call) => call.args.p_tenant_key === 's:default')).toBe(true);
+
+    state.docs[3]!.processing_state = { lastCompleted: 'store_original', uploaderId: USER_B };
+    state.admins = [USER_A];
+    const asAdmin = await POST(post(DOC_SINGLE), ctx(DOC_SINGLE));
+    expect(asAdmin.status).toBe(200);
+  });
+
+  it('in single-tenant mode refuses a non-administrator while the knowledge base is read-only, before any lookup', async () => {
+    state.mode = 'single-tenant';
+    state.session = { id: USER_A };
+    state.readOnly = true;
+    state.docs[3]!.processing_state = { lastCompleted: 'store_original', uploaderId: USER_A };
     const { POST } = await loadRoutes();
     const refused = await POST(post(DOC_SINGLE), ctx(DOC_SINGLE));
     expect(refused.status).toBe(403);
     expect(resumeSpy).not.toHaveBeenCalled();
     expect(state.calls).toEqual([]);
-
-    state.admins = [USER_A];
-    const allowed = await POST(post(DOC_SINGLE), ctx(DOC_SINGLE));
-    expect(allowed.status).toBe(200);
-    expect(resumeSpy).toHaveBeenCalledTimes(1);
-    expect(callsOf('rag_get_ingest_document')[0]?.args.p_tenant_key).toBe('s:default');
   });
 
   it('maps a settled failure of the resume call itself to 503 without echoing database text', async () => {

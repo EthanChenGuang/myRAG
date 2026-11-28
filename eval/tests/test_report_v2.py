@@ -180,6 +180,23 @@ def test_lexical_leg_hit_rate_counts_gold_inside_lexical_top_ten():
     assert [item.lexical_hit_at_10 for item in report.items] == [True, False, False, True]
 
 
+def test_lexical_leg_hit_rate_reads_the_per_variant_lexical_lists():
+    gold = ("doc.en.md", f"intro {QUOTE} outro")
+    other = ("doc.en.md", "unrelated text")
+    report = _lexical_report(
+        [
+            [(*other, {"dense:0": 1, "lexical:0": 1}), (*gold, {"dense:0": 2, "lexical:0": 4})],
+            [(*gold, {"dense:0": 1, "lexical:0": 12, "lexical:1": 2})],
+            [(*gold, {"dense:0": 1, "lexical:0": 11})],
+            [(*gold, {"dense:0": 1, "exact_id": 1})],
+        ]
+    )
+    rate = report.lexical_leg_hit_rate_at_10
+    assert rate is not None
+    assert (rate.value, rate.n) == (0.5, 4)
+    assert [item.lexical_hit_at_10 for item in report.items] == [True, True, False, False]
+
+
 def test_lexical_leg_hit_rate_is_null_when_the_lexical_leg_never_ran():
     gold = ("doc.en.md", f"intro {QUOTE} outro")
     report = _lexical_report([[(*gold, {"dense": 1})], []])
@@ -270,7 +287,7 @@ def test_corpus_loader_reads_doc_type_from_fixture_meta(tmp_path: Path):
     (tmp_path / "en" / "b.md").write_text("# B\n\ntext\n", encoding="utf-8")
     docs = {doc.relpath: doc for doc in load_corpus(tmp_path)}
     assert docs["en/a.md"].doc_type == "financial_report"
-    assert docs["en/b.md"].doc_type is None
+    assert docs["en/b.md"].doc_type == "general"
 
 
 def test_runner_corpus_flag_feeds_doc_types_into_the_report(tmp_path: Path):
@@ -295,3 +312,68 @@ def test_runner_corpus_flag_feeds_doc_types_into_the_report(tmp_path: Path):
     assert code == 0
     report = EvalReport.model_validate_json((out / "report.json").read_text(encoding="utf-8"))
     assert set(report.by_doc_type) == {"invoice_receipt"}
+
+
+# --- Phase 4.2 plan 12: nDCG column, k = 0 count, duplicate flood block ---
+
+
+def _render(report: EvalReport, tmp_path: Path) -> str:
+    _, md_path = write_report(report, tmp_path)
+    return md_path.read_text(encoding="utf-8")
+
+
+def test_slice_tables_gain_ndcg_and_k_zero_columns(tmp_path: Path):
+    golden = [_item("en-general-001", "en", answerable=True), _item("en-general-002", "en", answerable=True)]
+    traces = [_hit_trace("en-general-001"), _trace("en-general-002", [], refused=True)]
+    report = _build(golden, traces)
+    assert report.overall.ndcg_at_context_k is not None and report.overall.ndcg_at_context_k.value == 0.5
+    assert report.overall.k_zero is not None and report.overall.k_zero.value == 1.0
+    md = _render(report, tmp_path)
+    header = next(line for line in md.splitlines() if line.startswith("| Slice |"))
+    assert header.endswith("| nDCG@k | k = 0 |")
+    overall_row = next(line for line in md.splitlines() if line.startswith("| overall |"))
+    assert overall_row.endswith("| 0.500 (n=2) | 1 |")
+    assert "## Duplicate flood" not in md
+
+
+def test_report_loaded_without_new_fields_keeps_its_slice_table_text(tmp_path: Path):
+    golden = [_item("en-general-001", "en", answerable=True)]
+    report = _build(golden, [_hit_trace("en-general-001")])
+    data = report.model_dump(mode="json")
+    for block in [data["overall"], *data["by_language"].values(), *data["by_split"].values()]:
+        block.pop("ndcg_at_context_k", None)
+        block.pop("k_zero", None)
+        block.pop("topk_redundancy", None)
+    old = EvalReport.model_validate(data)
+    md = _render(old, tmp_path)
+    header = next(line for line in md.splitlines() if line.startswith("| Slice |"))
+    assert "nDCG@k" not in header
+    assert header.endswith("| False refusal upper 95 |")
+
+
+def test_duplicate_flood_block_renders_only_with_flood_items(tmp_path: Path):
+    flood = _item("en-flood-001", "en", answerable=True, category="duplicate_flood")
+    data = flood.model_dump(mode="json")
+    data["gold_evidence"].append({"document": "other.en.md", "section": "s", "quote": "second intent"})
+    flood = GoldenItem.model_validate({**data, "evidence_groups": [[0], [1]]})
+    golden = [flood, _item("en-general-001", "en", answerable=True)]
+    traces = [_hit_trace("en-flood-001"), _hit_trace("en-general-001")]
+    report = _build(golden, traces)
+    md = _render(report, tmp_path)
+    assert "## Duplicate flood (report-only)" in md
+    block = md.split("## Duplicate flood (report-only)", 1)[1].split("\n## ", 1)[0]
+    assert "| en | 1.000 (n=1) | 0.000 (n=1) |" in block
+    assert "| overall | 1.000 (n=1) | 0.000 (n=1) |" in block
+
+
+def test_identifier_block_renders_only_with_identifier_items(tmp_path: Path):
+    item = _item("en-id-001", "en", answerable=True, category="identifier_near_miss")
+    item = item.model_copy(update={"tags": ["asked_identifier:QX-4471"]})
+    trace = _hit_trace("en-id-001")
+    trace = trace.model_copy(update={"kept": [trace.kept[0].model_copy(update={"identifiers_norm": ["qx4471"]})]})
+    report = _build([item], [trace])
+    block = _render(report, tmp_path).split("## Identifier near-miss (report-only)", 1)
+    assert len(block) == 2
+    assert "| overall | 1.000 (n=1) | 0.000 (n=1) |" in block[1].split("\n## ", 1)[0]
+    plain = _build([_item("en-general-001", "en", answerable=True)], [_hit_trace("en-general-001")])
+    assert "Identifier near-miss" not in _render(plain, tmp_path / "plain")

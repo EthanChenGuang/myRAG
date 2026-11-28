@@ -1,7 +1,8 @@
+import { LEGACY_KEEP_FLOORS, legacyKeepReason, type LegacyKeepCandidate } from '../context/relevance';
 import type { RefusalRecord } from './types';
 
-export const LEGACY_TEXT_FLOOR = 0.65;
-export const LEGACY_IMAGE_FLOOR = 0.25;
+export const LEGACY_TEXT_FLOOR = LEGACY_KEEP_FLOORS.text;
+export const LEGACY_IMAGE_FLOOR = LEGACY_KEEP_FLOORS.image;
 
 export interface SimilarityFloors {
   text: number;
@@ -61,6 +62,74 @@ export function similarityFloor(input: { candidates: FloorCandidate[]; floors: S
       decision: 'answer',
       basis: 'none',
       reason: 'above_similarity_floor',
+      topScore: bestText,
+      threshold: floors.text,
+      cellKey: null,
+    };
+  }
+
+  return {
+    decision: 'refuse',
+    basis: 'similarity_floor',
+    reason: 'below_similarity_floor',
+    topScore: bestText,
+    threshold: floors.text,
+    cellKey: null,
+  };
+}
+let evalScoreCalibration: Record<string, number> | null = null;
+
+/** Eval harness only: a fixture-fitted score_calibration for the eval profile; every other profile ignores it. */
+export function setEvalScoreCalibration(calibration: Record<string, number> | null): void {
+  evalScoreCalibration = calibration ? Object.freeze({ ...calibration }) : null;
+}
+
+export function resetEvalScoreCalibration(): void {
+  evalScoreCalibration = null;
+}
+
+export function evalFloorCalibration(profile: string): Record<string, number> | null {
+  return profile === 'eval' ? evalScoreCalibration : null;
+}
+
+/** Refusal when the legacy pool holds no candidate at all: what legacy answers for an empty search. */
+export function emptyLegacyPool(topScore: number | null): RefusalRecord {
+  return {
+    decision: 'refuse',
+    basis: 'similarity_floor',
+    reason: 'below_similarity_floor',
+    topScore,
+    threshold: LEGACY_KEEP_FLOORS.text,
+    cellKey: null,
+  };
+}
+
+/** Legacy refusal semantics: answer when any candidate passes the legacy keep rule (similarity, query term, image). */
+export function legacyRuleFloor(input: {
+  candidates: LegacyKeepCandidate[];
+  terms: readonly string[];
+  floors: SimilarityFloors;
+}): RefusalRecord {
+  const { candidates, terms, floors } = input;
+  if (candidates.length === 0) return notApplied('no_candidates');
+
+  let bestText: number | null = null;
+  let keptByScore = false;
+  let keptByTerm = false;
+  for (const candidate of candidates) {
+    const sim = candidate.similarity;
+    const dense = sim !== null && Number.isFinite(sim);
+    if (dense && (bestText === null || sim > bestText)) bestText = sim;
+    const reason = legacyKeepReason({ ...candidate, similarity: dense ? sim : null }, terms, floors);
+    if (reason === 'name') keptByTerm = true;
+    else if (reason !== null) keptByScore = true;
+  }
+
+  if (keptByScore || keptByTerm) {
+    return {
+      decision: 'answer',
+      basis: 'none',
+      reason: keptByScore ? 'above_similarity_floor' : 'query_term_match',
       topScore: bestText,
       threshold: floors.text,
       cellKey: null,

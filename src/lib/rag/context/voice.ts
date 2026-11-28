@@ -1,5 +1,6 @@
 import type { ChunkWithScore } from '../rerank/local-hybrid';
 import type { VoiceChunk } from '../voice/keyword-fallback';
+import { wrapDocuments, type WrapDoc } from './wrap';
 
 export interface VoiceResult extends ChunkWithScore {
   image_url: string | null;
@@ -14,6 +15,8 @@ export interface VoiceSourceImage {
 export interface VoiceResults {
   results: VoiceResult[];
   source_images: VoiceSourceImage[];
+  /** The tagged context over the final results; present only with RAG_CONTEXT_TAGGING=true and at least one result. */
+  context?: string;
 }
 
 const PERSON_TERMS = ['carlos', 'marcial', 'creator', 'founder', 'maker', 'author'];
@@ -66,4 +69,24 @@ export function assembleVoiceResults(input: { query: string; chunks: ChunkWithSc
   }));
 
   return { results, source_images };
+}
+
+function voiceSource(result: VoiceResult): string | undefined {
+  const metadata = result.metadata ?? {};
+  for (const value of [metadata.filename, metadata.document_title, metadata.name]) {
+    if (typeof value === 'string' && value.trim() !== '') return value;
+  }
+  return undefined;
+}
+
+/** The wrapped voice context: one <doc id="c<n>"> per final result in order, the document filename as source. */
+export function voiceContext(results: readonly VoiceResult[], flaggedChunkIds?: ReadonlySet<string>): string | null {
+  const docs: WrapDoc[] = results.map((result, index) => {
+    const doc: WrapDoc = { id: `c${index + 1}`, text: result.content };
+    const source = voiceSource(result);
+    if (source) doc.source = source;
+    if (flaggedChunkIds?.has(result.chunk_id)) doc.flagged = true;
+    return doc;
+  });
+  return wrapDocuments(docs);
 }

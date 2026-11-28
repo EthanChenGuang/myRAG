@@ -16,7 +16,8 @@
             "legal_clauses",
             "table_aware",
             "invoice",
-            "image_caption"
+            "image_caption",
+            "rule_sections"
           ],
           "title": "Kind",
           "type": "string"
@@ -47,6 +48,9 @@
         "repeat_table_header": {
           "title": "Repeat Table Header",
           "type": "boolean"
+        },
+        "section_rules": {
+          "$ref": "#/$defs/ResolvedSectionRules"
         }
       },
       "required": [
@@ -298,6 +302,82 @@
         "scan_injection"
       ],
       "title": "ProcessingProfile",
+      "type": "object"
+    },
+    "ResolvedSectionRules": {
+      "additionalProperties": false,
+      "description": "Plain heading-hit data the `rule_sections` chunker reads (Phase 3.3 D-17, D-19); no pattern reaches a chunker.",
+      "properties": {
+        "hits": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SectionHeadingHit"
+          },
+          "maxProperties": 5000,
+          "propertyNames": {
+            "maxLength": 1000,
+            "minLength": 1
+          },
+          "title": "Hits",
+          "type": "object"
+        },
+        "rule_set_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "title": "Rule Set Id",
+          "type": "string"
+        },
+        "skip_toc": {
+          "default": true,
+          "title": "Skip Toc",
+          "type": "boolean"
+        },
+        "toc_min_run": {
+          "default": 3,
+          "maximum": 20,
+          "minimum": 2,
+          "title": "Toc Min Run",
+          "type": "integer"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "rule_set_id",
+        "version",
+        "hits"
+      ],
+      "title": "ResolvedSectionRules",
+      "type": "object"
+    },
+    "SectionHeadingHit": {
+      "additionalProperties": false,
+      "description": "Canonical heading a matched line opens (Phase 3.3 D-17).",
+      "properties": {
+        "level": {
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Level",
+          "type": "integer"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "restart": {
+          "default": false,
+          "title": "Restart",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "level"
+      ],
+      "title": "SectionHeadingHit",
       "type": "object"
     }
   },

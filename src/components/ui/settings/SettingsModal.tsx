@@ -120,7 +120,7 @@ export const SettingsModal = memo(function SettingsModal({ isOpen, onOpenChange 
     'overflow-hidden',
     // Mobile: auto height that fits content, desktop: fixed height
     // Increased mobile max-height to 92vh to accommodate longer i18n translations
-    'h-auto lg:h-[650px] max-h-[92vh] lg:max-h-[80vh]',
+    'h-auto lg:h-[650px] max-h-[92vh] max-h-[92dvh] lg:max-h-[80vh]',
     'border shadow-lg rounded-lg',
     styles.settingsDialog,
     styles.accelerated
@@ -161,7 +161,7 @@ export const SettingsModal = memo(function SettingsModal({ isOpen, onOpenChange 
 
         <DialogTitle className="sr-only">{t('settings')}</DialogTitle>
 
-        <div className="flex flex-col lg:flex-row h-full lg:h-[650px]">
+        <div className="flex flex-col lg:flex-row h-full max-h-[92vh] max-h-[92dvh] lg:max-h-none lg:h-[650px] min-h-0">
           {/* Sidebar - reduced bottom padding on mobile for more content space */}
           <div className={cn('w-full lg:w-64 border-b lg:border-b-0 lg:border-r border-[#FFE0D0] dark:border-[#2A2A2A] px-3 pt-10 pb-2 lg:p-4 flex-shrink-0', styles.sidebar)}>
             {/* Settings title - smaller margin on mobile */}
@@ -207,7 +207,7 @@ export const SettingsModal = memo(function SettingsModal({ isOpen, onOpenChange 
           </div>
 
           {/* Optimized content area - reduced top padding on mobile */}
-          <div className={cn('flex-1 pt-2 px-4 pb-4 lg:p-6 overflow-y-auto', styles.contentArea, styles.tabContent)}>
+          <div className={cn('flex-1 min-h-0 pt-2 px-4 pb-4 lg:p-6 overflow-y-auto', styles.contentArea, styles.tabContent)}>
             <Suspense fallback={<TabSkeleton />}>
               <TabComponent />
             </Suspense>

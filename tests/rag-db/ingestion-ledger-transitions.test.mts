@@ -10,27 +10,13 @@ import { createTwoTenantDatabase, TWO_TENANT_IDS } from '../../eval/harness/two-
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
-const M0352 = 'supabase/migrations/0352_ingestion_claim.sql';
-const M0353 = 'supabase/migrations/0353_ingestion_transitions.sql';
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 
 const ADMIN = '00000000-0000-4000-8000-0000000000c1';
 const TENANT_SINGLE = 's:default';
 
-function modeMigrationSuffix(mode: DeploymentMode): string {
-  return mode === 'single-tenant'
-    ? 'supabase/migrations/0353_ingestion_transitions.single-tenant.sql'
-    : 'supabase/migrations/0353_ingestion_transitions.multi-tenant.sql';
-}
-
 function tenantFor(mode: DeploymentMode): string {
   return mode === 'single-tenant' ? TENANT_SINGLE : `u:${TWO_TENANT_IDS.userA}`;
-}
-
-async function applyMigrations(db: PGlite, mode: DeploymentMode): Promise<void> {
-  await db.exec(fs.readFileSync(path.join(REPO_ROOT, M0352), 'utf8'));
-  await db.exec(fs.readFileSync(path.join(REPO_ROOT, modeMigrationSuffix(mode)), 'utf8'));
-  await db.exec(fs.readFileSync(path.join(REPO_ROOT, M0353), 'utf8'));
 }
 
 async function tryQuery(db: PGlite, sql: string, params: unknown[] = []): Promise<{ code: string | null; message: string } | null> {
@@ -81,7 +67,6 @@ for (const mode of MODES) {
       fixture = mode === 'multi-tenant'
         ? await createTwoTenantDatabase()
         : await createFixtureDatabase({ deploymentMode: mode, corpusDir: CORPUS, supabaseGrants: true, migrations: true });
-      await applyMigrations(fixture.db);
       if (mode === 'multi-tenant') {
         await fixture.db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2)', [ADMIN, 'admin@example.invalid']);
         await fixture.db.query('INSERT INTO admin_users (id) VALUES ($1)', [ADMIN]);
@@ -239,6 +224,28 @@ for (const mode of MODES) {
       assert.equal(row?.escalations, 1);
       assert.ok(Number(row?.est_cost_usd) >= 0.29);
       assert.equal(row?.attempts?.length, 2);
+    });
+
+    test('the attempt cost the sidecar sends as est_cost_usd is added to the job total', async () => {
+      const { db } = fixture;
+      const tenant = tenantFor(mode);
+      const jobId = await enqueue(db, tenant, `attempt-usd/${crypto.randomUUID()}`);
+      await claim(db, jobId, 'pu');
+      for (const attempt of [
+        { tier: 'fast', preset: 'fast', reason: 'initial', est_cost_usd: 0.125 },
+        { tier: 'premium', preset: 'premium', reason: 'escalation', est_cost_usd: 0.25 },
+      ]) {
+        await db.query(`SELECT rag_record_parse_attempt($1, 'pu', $2::jsonb)`, [jobId, JSON.stringify(attempt)]);
+      }
+      const row = (
+        await db.query<{ est_cost_usd: string; costs: number[] }>(
+          `SELECT est_cost_usd::text, ARRAY(SELECT (a ->> 'est_cost_usd')::float8 FROM jsonb_array_elements(attempts) a) AS costs
+             FROM ingestion_jobs WHERE id = $1`,
+          [jobId],
+        )
+      ).rows[0];
+      assert.deepEqual(row?.costs, [0.125, 0.25]);
+      assert.equal(Number(row?.est_cost_usd), 0.375);
     });
 
     test('retryable fail backoff and fourth failure; permanent fails at once; releases reservations', async () => {

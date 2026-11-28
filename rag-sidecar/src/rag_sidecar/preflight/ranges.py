@@ -67,14 +67,10 @@ def _lift_short_runs(pages: list[TieredPage], min_run: int) -> None:
     runs = _run_length_encode(pages)
     for i, (s, e, preset) in enumerate(runs):
         length = e - s + 1
-        if length >= min_run:
+        if length >= min_run or i == 0 or i + 1 >= len(runs):
             continue
-        higher: Preset | None = None
-        if i > 0:
-            higher = _stronger(higher or runs[i - 1][2], runs[i - 1][2])
-        if i + 1 < len(runs):
-            higher = _stronger(higher or runs[i + 1][2], runs[i + 1][2])
-        if higher is None or _PRESET_RANK[preset] >= _PRESET_RANK[higher]:
+        higher = _stronger(runs[i - 1][2], runs[i + 1][2])
+        if _PRESET_RANK[preset] >= _PRESET_RANK[higher]:
             continue
         if preset == "premium":
             continue
@@ -86,14 +82,10 @@ def _lift_short_runs(pages: list[TieredPage], min_run: int) -> None:
     runs_after = _run_length_encode(pages)
     for i, (s, e, preset) in enumerate(runs_after):
         length = e - s + 1
-        if length >= min_run or preset == "premium":
+        if length >= min_run or preset == "premium" or i == 0 or i + 1 >= len(runs_after):
             continue
-        higher = None
-        if i > 0:
-            higher = _stronger(higher or runs_after[i - 1][2], runs_after[i - 1][2])
-        if i + 1 < len(runs_after):
-            higher = _stronger(higher or runs_after[i + 1][2], runs_after[i + 1][2])
-        if higher is None or _PRESET_RANK[preset] >= _PRESET_RANK[higher]:
+        higher = _stronger(runs_after[i - 1][2], runs_after[i + 1][2])
+        if _PRESET_RANK[preset] >= _PRESET_RANK[higher]:
             continue
         for page_num in range(s, e + 1):
             idx = page_num - pages[0].page

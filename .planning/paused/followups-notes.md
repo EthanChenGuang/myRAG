@@ -93,3 +93,17 @@ After all: code review gate -> regression gate -> verifier -> update roadmap.
 - Phase 3 verification (03-VERIFICATION.md): W1–W5 being fixed in exec/03-gaps; live: apply 0409/0410/0411 to the live DB (anon can still call match_document_chunks_by_org there).
 - `legacy-cloud-guard.test.ts` LOW-5 temp-dir check is not isolated: concurrent processes writing to os.tmpdir make it fail.
 - Timing tests (`lexical-tokenize` "under one second", `injection-scan`, `voice-budget`) fail under heavy local load.
+
+## Added 2026-11-25 (orchestrator, batch 3)
+- 03.1-49: rag_write_chunks (0408) fails with "cannot get array length of a scalar" when a profile's vector list has a null entry; `jsonb_typeof(...)='array' AND jsonb_array_length(...)` is not guaranteed to short-circuit (PGlite reproduces; real PG may too). Needs a CASE guard + failing test.
+- 03.1-49: under RAG_PIPELINE=v2, chunking-profile children are embedded synchronously even in batch_api backfill.
+- 04-46: ingest-mode lexical hit flips between identical runs (ordering instability); single-item category slices count a 1-rank move as a drop.
+- 04-UI-SPEC: Ingestion panel passes literal `{appUrl}` to the shared sign-in label.
+- Phase 4 verify: check-frontend-design-summary needs "## Design skills" in older 04 SUMMARYs (04-29..32, 04-44, 04-45 ...).
+- 03.1-50: run .github/workflows/ray-optional.yml once by hand (workflow_dispatch) after it reaches trunk; real Ray path unverified.
+- 04-36: Ingestion panel binds tab-link listeners in <head> before links exist, so clicking RAG administration doesn't init it; Document types / Embedding profiles bind only the first RAG admin link (mobile drawer link doesn't init). Needs failing UI test + fix.
+- 04-36: manual live check of chunking/refusal panels with an admin session (operator).
+- 03.1-51 deferred #10: classify_input should let a text MIME type win over an image extension (ledger doc_class + cost projection).
+- 04-42: eval/tests/test_parse_fixtures.py::test_generation_is_deterministic rewrites committed parse PDFs/manifest in place; it should write to tmp_path.
+- 04-42: rag-sidecar `chunking` extra lacks pypdfium2 (21 tests fail with only --extra chunking); CI syncs preflight too.
+- Local env: eval venv lacks PyYAML/deepeval/ragas after uv sync --frozen in some worktrees (CI fine).

@@ -1,12 +1,25 @@
+import {
+  CJK_SENTENCE_END,
+  SENTENCE_END,
+  hardSplit,
+  legacyBlockSplitter,
+  legacySplitter,
+  packPieces,
+  type BlockSplitter,
+} from '@/lib/rag/lang/sentences';
 import { buildEmbeddingText } from '../text/embedding-text';
-import { countTokens, truncateToTokens } from '../text/tokens';
+import { countTokens } from '../text/tokens';
 import type { ChunkDraft } from '../types';
+
+export { CJK_SENTENCE_END, SENTENCE_END, hardSplit };
 
 export interface MarkdownChunkOptions {
   maxTokens: number;
   overlapTokens: number;
   minChunkTokens: number;
   repeatTableHeader: boolean;
+  /** The sentence splitter of each over-long block (D-15); the legacy shared set when absent. */
+  sentences?: BlockSplitter;
 }
 
 type UnitKind = 'paragraph' | 'list' | 'fence' | 'row';
@@ -34,8 +47,6 @@ export const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/;
 export const FENCE = /^ {0,3}(```|~~~)/;
 const LIST_ITEM = /^ {0,6}(?:[-*+]|\d{1,9}[.)])[ \t]+\S/;
 const TABLE_SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$/;
-export const SENTENCE_END = /(?<=[.!?;。！？；])\s+|(?<=[。！？；])/u;
-export const CJK_SENTENCE_END = /[。！？；]$/u;
 const MAX_ATOMIC_TOKENS = 4000;
 
 const isTableRow = (line: string): boolean => line.trim().startsWith('|');
@@ -140,21 +151,6 @@ function toUnits(lines: string[]): Unit[] {
   return units;
 }
 
-export function hardSplit(text: string, budget: number): string[] {
-  const pieces: string[] = [];
-  let rest = text;
-  while (rest !== '') {
-    const piece = truncateToTokens(rest, Math.max(1, budget));
-    if (piece === '') {
-      pieces.push(rest);
-      break;
-    }
-    pieces.push(piece);
-    rest = rest.slice(piece.length);
-  }
-  return pieces;
-}
-
 export function chunkMarkdownSections(markdown: string, options: MarkdownChunkOptions): ChunkDraft[] {
   const drafts: ChunkDraft[] = [];
   for (const section of splitSections(markdown)) drafts.push(...chunkSection(section.path, section.lines, options));
@@ -168,6 +164,7 @@ export function chunkSection(path: string[], lines: string[], options: MarkdownC
   if (units.length === 0) return drafts;
   const prefixTokens = countTokens(buildEmbeddingText({ section_path: path, content: '' }));
   const contentBudget = Math.max(1, options.maxTokens - prefixTokens);
+  const sentencesOf = options.sentences ?? legacyBlockSplitter;
 
   const render = (list: Unit[]): string => {
     let out = '';
@@ -187,32 +184,16 @@ export function chunkSection(path: string[], lines: string[], options: MarkdownC
     if (fits([unit])) return [unit];
     const tokens = countTokens(unit.text);
     if ((unit.kind === 'list' || unit.kind === 'row') && tokens <= MAX_ATOMIC_TOKENS) return [unit];
+    const splitter = unit.kind === 'paragraph' ? sentencesOf(unit.text) : null;
     const parts =
-      unit.kind === 'fence'
-        ? unit.text.split('\n')
-        : unit.kind === 'paragraph'
-          ? unit.text.split(SENTENCE_END).filter((part) => part !== '')
-          : [unit.text];
-    const joinerAfter = (previous: string): string =>
-      unit.kind === 'fence' ? '\n' : CJK_SENTENCE_END.test(previous) ? '' : ' ';
-    const pieces: Unit[] = [];
-    let current = '';
-    const flush = (): void => {
-      if (current !== '') pieces.push({ text: current, kind: unit.kind, sep: pieces.length === 0 ? unit.sep : joinerAfter(pieces[pieces.length - 1]?.text ?? '') });
-      current = '';
-    };
-    for (const part of parts) {
-      const candidate = current === '' ? part : `${current}${joinerAfter(current)}${part}`;
-      if (countTokens(candidate) <= contentBudget) {
-        current = candidate;
-        continue;
-      }
-      flush();
-      if (countTokens(part) <= contentBudget) current = part;
-      else for (const piece of hardSplit(part, contentBudget)) pieces.push({ text: piece, kind: unit.kind, sep: pieces.length === 0 ? unit.sep : '' });
-    }
-    flush();
-    return pieces;
+      unit.kind === 'fence' ? unit.text.split('\n') : splitter !== null ? splitter.split(unit.text) : [unit.text];
+    const join = unit.kind === 'fence' ? (): string => '\n' : (splitter ?? legacySplitter).join;
+    const cut = splitter?.hardSplit ?? hardSplit;
+    return packPieces(parts, join, cut, contentBudget).map((piece, index) => ({
+      text: piece.text,
+      kind: unit.kind,
+      sep: index === 0 ? unit.sep : piece.sep,
+    }));
   };
 
   const packed: PackedChunk[] = [];

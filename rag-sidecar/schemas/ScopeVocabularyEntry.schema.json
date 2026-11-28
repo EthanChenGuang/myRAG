@@ -1,0 +1,50 @@
+{
+  "additionalProperties": false,
+  "description": "One tenant vocabulary value (D-38); stored as `dimension:value` on documents and chunks.",
+  "properties": {
+    "active": {
+      "default": true,
+      "title": "Active",
+      "type": "boolean"
+    },
+    "aliases": {
+      "items": {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 50,
+      "title": "Aliases",
+      "type": "array"
+    },
+    "dimension": {
+      "enum": [
+        "region",
+        "legal_entity",
+        "department"
+      ],
+      "title": "Dimension",
+      "type": "string"
+    },
+    "label": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string"
+    },
+    "value": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "title": "Value",
+      "type": "string"
+    }
+  },
+  "required": [
+    "dimension",
+    "value",
+    "label"
+  ],
+  "title": "ScopeVocabularyEntry",
+  "type": "object"
+}

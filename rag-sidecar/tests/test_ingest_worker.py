@@ -160,6 +160,82 @@ def test_incremental_job_claimed_into_reserved_slot_after_batch():
     asyncio.run(run())
 
 
+def _batch_hangs_uploads_finish() -> Any:
+    async def process(job: IngestionJob) -> JobOutcome:
+        if job.batch_id is not None:
+            await asyncio.Event().wait()
+        await asyncio.sleep(0)
+        return JobOutcome(status="ready")
+
+    return process
+
+
+def _locked(ledger: FakeLedger, *, batch: bool) -> list[IngestionJob]:
+    return [j for j in ledger.jobs.values() if (j.batch_id is not None) == batch and j.locked_by == _WORKER]
+
+
+def test_starvation_a_batch_job_starts_while_uploads_keep_waking_the_worker():
+    """03.1-45: each wake claims with an upload queued; the second slot must still take the batch job."""
+
+    async def run() -> None:
+        ledger = FakeLedger()
+        ledger.seed(_job(job_id="00000000-0000-4000-8000-0000000000f1", batch_id=_BATCH))
+        worker = IngestWorker(
+            _SLOT_SETTINGS, ledger, None, FakeApp(), None, FakeClock(), random.Random(0),
+            process_fn=_batch_hangs_uploads_finish(), sleep=_instant_sleep,
+        )
+        for index in range(5):
+            ledger.seed(_job(job_id=f"00000000-0000-4000-8000-0000000001{index:02d}", priority=100))
+            await worker._poll_once()  # what a wake does: one claim round with an upload waiting
+            for _ in range(5):
+                await asyncio.sleep(0)
+        assert len(_locked(ledger, batch=True)) == 1
+        uploads = [j for j in ledger.jobs.values() if j.batch_id is None]
+        assert all(j.status != "queued" for j in uploads), "uploads are never delayed"
+        await worker.stop()
+
+    asyncio.run(run())
+
+
+def test_starvation_batch_jobs_hold_at_most_concurrency_minus_one_slots():
+    async def run() -> None:
+        ledger = FakeLedger()
+        for index in range(5):
+            ledger.seed(_job(job_id=f"00000000-0000-4000-8000-0000000002{index:02d}", batch_id=_BATCH))
+        worker = IngestWorker(
+            _SettingsStub(concurrency=3), ledger, None, FakeApp(), None, FakeClock(), random.Random(0),
+            process_fn=_batch_hangs_uploads_finish(), sleep=_instant_sleep,
+        )
+        await worker._poll_once()
+        await worker._poll_once()
+        assert len(_locked(ledger, batch=True)) == 2, "one slot stays free for interactive jobs"
+        ledger.seed(_job(job_id="00000000-0000-4000-8000-0000000002ff", priority=100))
+        await worker._poll_once()
+        assert len(_locked(ledger, batch=False)) == 1
+        assert len(_locked(ledger, batch=True)) == 2
+        await worker.stop()
+
+    asyncio.run(run())
+
+
+def test_starvation_concurrency_one_runs_a_batch_job_only_when_idle():
+    async def run() -> None:
+        ledger = FakeLedger()
+        ledger.seed(_job(job_id="00000000-0000-4000-8000-0000000003a1", batch_id=_BATCH))
+        ledger.seed(_job(job_id="00000000-0000-4000-8000-0000000003a2", batch_id=_BATCH))
+        worker = IngestWorker(
+            _SettingsStub(concurrency=1), ledger, None, FakeApp(), None, FakeClock(), random.Random(0),
+            process_fn=_batch_hangs_uploads_finish(), sleep=_instant_sleep,
+        )
+        await worker._poll_once()
+        assert len(_locked(ledger, batch=True)) == 1, "an idle single-slot worker takes a batch job"
+        await worker._poll_once()
+        assert len(_locked(ledger, batch=True)) == 1
+        await worker.stop()
+
+    asyncio.run(run())
+
+
 def test_wake_during_poll_sleep_triggers_claim_within_50_ms():
     async def run() -> None:
         clock = FakeClock()

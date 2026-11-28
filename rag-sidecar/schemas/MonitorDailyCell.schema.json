@@ -1,0 +1,205 @@
+{
+  "$defs": {
+    "LatencyHistogram": {
+      "additionalProperties": false,
+      "description": "Counts per bin of LATENCY_BIN_EDGES_MS; the last bin is everything above the last edge.",
+      "properties": {
+        "bins": {
+          "items": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 18,
+          "minItems": 18,
+          "title": "Bins",
+          "type": "array"
+        }
+      },
+      "required": [
+        "bins"
+      ],
+      "title": "LatencyHistogram",
+      "type": "object"
+    },
+    "ScoreHistogram": {
+      "additionalProperties": false,
+      "description": "Twenty equal bins over 0 to 1 plus underflow and overflow (research Pitfall 15).",
+      "properties": {
+        "bins": {
+          "items": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 20,
+          "minItems": 20,
+          "title": "Bins",
+          "type": "array"
+        },
+        "overflow": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Overflow",
+          "type": "integer"
+        },
+        "underflow": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Underflow",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bins"
+      ],
+      "title": "ScoreHistogram",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One rag_monitor_daily row: counts and two fixed-bin histograms only (D-22).",
+  "properties": {
+    "below_threshold": {
+      "minimum": 0,
+      "title": "Below Threshold",
+      "type": "integer"
+    },
+    "channel": {
+      "enum": [
+        "chat",
+        "embed",
+        "voice"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
+    "day": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "title": "Day",
+      "type": "string"
+    },
+    "degraded": {
+      "minimum": 0,
+      "title": "Degraded",
+      "type": "integer"
+    },
+    "doc_type": {
+      "pattern": "^[a-z0-9_]+$",
+      "title": "Doc Type",
+      "type": "string"
+    },
+    "error": {
+      "minimum": 0,
+      "title": "Error",
+      "type": "integer"
+    },
+    "groundedness_flagged": {
+      "minimum": 0,
+      "title": "Groundedness Flagged",
+      "type": "integer"
+    },
+    "helpful": {
+      "minimum": 0,
+      "title": "Helpful",
+      "type": "integer"
+    },
+    "judge_score_sums": {
+      "patternProperties": {
+        "^[a-z0-9_]+$": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "title": "Judge Score Sums",
+      "type": "object"
+    },
+    "judged": {
+      "minimum": 0,
+      "title": "Judged",
+      "type": "integer"
+    },
+    "kb_unavailable": {
+      "minimum": 0,
+      "title": "Kb Unavailable",
+      "type": "integer"
+    },
+    "language": {
+      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+      "title": "Language",
+      "type": "string"
+    },
+    "latency_hist": {
+      "$ref": "#/$defs/LatencyHistogram"
+    },
+    "not_helpful": {
+      "minimum": 0,
+      "title": "Not Helpful",
+      "type": "integer"
+    },
+    "rag_mode": {
+      "enum": [
+        "strict",
+        "balanced",
+        "flexible",
+        "bypass",
+        "unknown"
+      ],
+      "title": "Rag Mode",
+      "type": "string"
+    },
+    "refused": {
+      "minimum": 0,
+      "title": "Refused",
+      "type": "integer"
+    },
+    "retrievals": {
+      "minimum": 0,
+      "title": "Retrievals",
+      "type": "integer"
+    },
+    "tenant_key": {
+      "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+      "title": "Tenant Key",
+      "type": "string"
+    },
+    "top_score_hist": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ScoreHistogram"
+      },
+      "propertyNames": {
+        "enum": [
+          "rerank",
+          "similarity"
+        ]
+      },
+      "title": "Top Score Hist",
+      "type": "object"
+    },
+    "zero_result": {
+      "minimum": 0,
+      "title": "Zero Result",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "tenant_key",
+    "day",
+    "language",
+    "rag_mode",
+    "channel",
+    "doc_type",
+    "retrievals",
+    "refused",
+    "kb_unavailable",
+    "degraded",
+    "error",
+    "zero_result",
+    "below_threshold",
+    "helpful",
+    "not_helpful",
+    "judged",
+    "groundedness_flagged",
+    "latency_hist"
+  ],
+  "title": "MonitorDailyCell",
+  "type": "object"
+}

@@ -44,6 +44,29 @@
       "title": "Query Masked",
       "type": "string"
     },
+    "reasons": {
+      "items": {
+        "enum": [
+          "sampled",
+          "feedback_negative",
+          "groundedness_flagged",
+          "refusal_disputed",
+          "refused_high_score",
+          "zero_results",
+          "low_score",
+          "no_source_opened",
+          "claim_unsupported",
+          "output_guard",
+          "version_conflict",
+          "representative",
+          "re_review"
+        ],
+        "type": "string"
+      },
+      "title": "Reasons",
+      "type": "array",
+      "uniqueItems": true
+    },
     "tags": {
       "items": {
         "type": "string"

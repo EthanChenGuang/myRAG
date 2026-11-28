@@ -35,7 +35,8 @@
             "failed",
             "quarantined",
             "needs_review",
-            "skipped_duplicate"
+            "skipped_duplicate",
+            "pending_review"
           ],
           "type": "string"
         },

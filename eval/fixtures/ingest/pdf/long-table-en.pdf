@@ -1,0 +1,527 @@
+%PDF-1.4
+%“Œ‹ž ReportLab Generated PDF document (opensource)
+1 0 obj
+<<
+/F1 2 0 R /F2 3 0 R
+>>
+endobj
+2 0 obj
+<<
+/BaseFont /Helvetica /Encoding /WinAnsiEncoding /Name /F1 /Subtype /Type1 /Type /Font
+>>
+endobj
+3 0 obj
+<<
+/BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding /Name /F2 /Subtype /Type1 /Type /Font
+>>
+endobj
+4 0 obj
+<<
+/Contents 9 0 R /MediaBox [ 0 0 595.28 841.89 ] /Parent 8 0 R /Resources <<
+/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>> /Rotate 0 /Trans <<
+
+>> 
+  /Type /Page
+>>
+endobj
+5 0 obj
+<<
+/Contents 10 0 R /MediaBox [ 0 0 595.28 841.89 ] /Parent 8 0 R /Resources <<
+/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>> /Rotate 0 /Trans <<
+
+>> 
+  /Type /Page
+>>
+endobj
+6 0 obj
+<<
+/PageMode /UseNone /Pages 8 0 R /Type /Catalog
+>>
+endobj
+7 0 obj
+<<
+/Author (myRAG synthetic fixtures) /CreationDate (D:20000101000000+00'00') /Creator (anonymous) /Keywords () /ModDate (D:20000101000000+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+  /Subject (Synthetic ingestion fixture) /Title (long-table-en) /Trapped /False
+>>
+endobj
+8 0 obj
+<<
+/Count 2 /Kids [ 4 0 R 5 0 R ] /Type /Pages
+>>
+endobj
+9 0 obj
+<<
+/Length 13021
+>>
+stream
+1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
+q
+1 0 0 1 56.7 745.89 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 6 Tm /F2 20 Tf 26 TL (Synthetic Basin Level Readings) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 710.89 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 20.5 Tm /F1 10.5 Tf 15.5 TL (This table lists invented morning and evening water levels of six storage basins over ten survey weeks.) Tj T* (All readings are synthetic and serve parsing and retrieval tests only.) Tj T* ET
+Q
+Q
+q
+1 0 0 1 56.7 88.89 cm
+q
+.901961 .901961 .901961 rg
+n 0 612 481.88 -13.6 re f*
+0 0 0 rg
+BT /F2 8 Tf 9.6 TL ET
+BT 1 0 0 1 6 602 Tm (Basin) Tj T* ET
+BT 1 0 0 1 80.95911 602 Tm (Survey week) Tj T* ET
+BT 1 0 0 1 171.9809 602 Tm (Morning level \(cm\)) Tj T* ET
+BT 1 0 0 1 284.4196 602 Tm (Evening level \(cm\)) Tj T* ET
+BT 1 0 0 1 396.8582 602 Tm (Trend) Tj T* ET
+BT /F1 8 Tf 9.6 TL ET
+BT 1 0 0 1 6 588.4 Tm (North Basin) Tj T* ET
+BT 1 0 0 1 80.95911 588.4 Tm (Survey week 01) Tj T* ET
+BT 1 0 0 1 171.9809 588.4 Tm (302.2) Tj T* ET
+BT 1 0 0 1 284.4196 588.4 Tm (350.3) Tj T* ET
+BT 1 0 0 1 396.8582 588.4 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 574.8 Tm (North Basin) Tj T* ET
+BT 1 0 0 1 80.95911 574.8 Tm (Survey week 02) Tj T* ET
+BT 1 0 0 1 171.9809 574.8 Tm (309.6) Tj T* ET
+BT 1 0 0 1 284.4196 574.8 Tm (360.9) Tj T* ET
+BT 1 0 0 1 396.8582 574.8 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 561.2 Tm (North Basin) Tj T* ET
+BT 1 0 0 1 80.95911 561.2 Tm (Survey week 03) Tj T* ET
+BT 1 0 0 1 171.9809 561.2 Tm (317.0) Tj T* ET
+BT 1 0 0 1 284.4196 561.2 Tm (371.5) Tj T* ET
+BT 1 0 0 1 396.8582 561.2 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 547.6 Tm (North Basin) Tj T* ET
+BT 1 0 0 1 80.95911 547.6 Tm (Survey week 04) Tj T* ET
+BT 1 0 0 1 171.9809 547.6 Tm (324.4) Tj T* ET
+BT 1 0 0 1 284.4196 547.6 Tm (382.1) Tj T* ET
+BT 1 0 0 1 396.8582 547.6 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 534 Tm (North Basin) Tj T* ET
+BT 1 0 0 1 80.95911 534 Tm (Survey week 05) Tj T* ET
+BT 1 0 0 1 171.9809 534 Tm (331.8) Tj T* ET
+BT 1 0 0 1 284.4196 534 Tm (392.7) Tj T* ET
+BT 1 0 0 1 396.8582 534 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 520.4 Tm (North Basin) Tj T* ET
+BT 1 0 0 1 80.95911 520.4 Tm (Survey week 06) Tj T* ET
+BT 1 0 0 1 171.9809 520.4 Tm (339.2) Tj T* ET
+BT 1 0 0 1 284.4196 520.4 Tm (403.3) Tj T* ET
+BT 1 0 0 1 396.8582 520.4 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 506.8 Tm (North Basin) Tj T* ET
+BT 1 0 0 1 80.95911 506.8 Tm (Survey week 07) Tj T* ET
+BT 1 0 0 1 171.9809 506.8 Tm (346.6) Tj T* ET
+BT 1 0 0 1 284.4196 506.8 Tm (413.9) Tj T* ET
+BT 1 0 0 1 396.8582 506.8 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 493.2 Tm (North Basin) Tj T* ET
+BT 1 0 0 1 80.95911 493.2 Tm (Survey week 08) Tj T* ET
+BT 1 0 0 1 171.9809 493.2 Tm (354.0) Tj T* ET
+BT 1 0 0 1 284.4196 493.2 Tm (304.5) Tj T* ET
+BT 1 0 0 1 396.8582 493.2 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 479.6 Tm (North Basin) Tj T* ET
+BT 1 0 0 1 80.95911 479.6 Tm (Survey week 09) Tj T* ET
+BT 1 0 0 1 171.9809 479.6 Tm (361.4) Tj T* ET
+BT 1 0 0 1 284.4196 479.6 Tm (315.1) Tj T* ET
+BT 1 0 0 1 396.8582 479.6 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 466 Tm (North Basin) Tj T* ET
+BT 1 0 0 1 80.95911 466 Tm (Survey week 10) Tj T* ET
+BT 1 0 0 1 171.9809 466 Tm (368.8) Tj T* ET
+BT 1 0 0 1 284.4196 466 Tm (325.7) Tj T* ET
+BT 1 0 0 1 396.8582 466 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 452.4 Tm (East Basin) Tj T* ET
+BT 1 0 0 1 80.95911 452.4 Tm (Survey week 01) Tj T* ET
+BT 1 0 0 1 171.9809 452.4 Tm (376.2) Tj T* ET
+BT 1 0 0 1 284.4196 452.4 Tm (336.3) Tj T* ET
+BT 1 0 0 1 396.8582 452.4 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 438.8 Tm (East Basin) Tj T* ET
+BT 1 0 0 1 80.95911 438.8 Tm (Survey week 02) Tj T* ET
+BT 1 0 0 1 171.9809 438.8 Tm (383.6) Tj T* ET
+BT 1 0 0 1 284.4196 438.8 Tm (346.9) Tj T* ET
+BT 1 0 0 1 396.8582 438.8 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 425.2 Tm (East Basin) Tj T* ET
+BT 1 0 0 1 80.95911 425.2 Tm (Survey week 03) Tj T* ET
+BT 1 0 0 1 171.9809 425.2 Tm (391.0) Tj T* ET
+BT 1 0 0 1 284.4196 425.2 Tm (357.5) Tj T* ET
+BT 1 0 0 1 396.8582 425.2 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 411.6 Tm (East Basin) Tj T* ET
+BT 1 0 0 1 80.95911 411.6 Tm (Survey week 04) Tj T* ET
+BT 1 0 0 1 171.9809 411.6 Tm (398.4) Tj T* ET
+BT 1 0 0 1 284.4196 411.6 Tm (368.1) Tj T* ET
+BT 1 0 0 1 396.8582 411.6 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 398 Tm (East Basin) Tj T* ET
+BT 1 0 0 1 80.95911 398 Tm (Survey week 05) Tj T* ET
+BT 1 0 0 1 171.9809 398 Tm (405.8) Tj T* ET
+BT 1 0 0 1 284.4196 398 Tm (378.7) Tj T* ET
+BT 1 0 0 1 396.8582 398 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 384.4 Tm (East Basin) Tj T* ET
+BT 1 0 0 1 80.95911 384.4 Tm (Survey week 06) Tj T* ET
+BT 1 0 0 1 171.9809 384.4 Tm (413.2) Tj T* ET
+BT 1 0 0 1 284.4196 384.4 Tm (389.3) Tj T* ET
+BT 1 0 0 1 396.8582 384.4 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 370.8 Tm (East Basin) Tj T* ET
+BT 1 0 0 1 80.95911 370.8 Tm (Survey week 07) Tj T* ET
+BT 1 0 0 1 171.9809 370.8 Tm (300.6) Tj T* ET
+BT 1 0 0 1 284.4196 370.8 Tm (399.9) Tj T* ET
+BT 1 0 0 1 396.8582 370.8 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 357.2 Tm (East Basin) Tj T* ET
+BT 1 0 0 1 80.95911 357.2 Tm (Survey week 08) Tj T* ET
+BT 1 0 0 1 171.9809 357.2 Tm (308.0) Tj T* ET
+BT 1 0 0 1 284.4196 357.2 Tm (410.5) Tj T* ET
+BT 1 0 0 1 396.8582 357.2 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 343.6 Tm (East Basin) Tj T* ET
+BT 1 0 0 1 80.95911 343.6 Tm (Survey week 09) Tj T* ET
+BT 1 0 0 1 171.9809 343.6 Tm (315.4) Tj T* ET
+BT 1 0 0 1 284.4196 343.6 Tm (301.1) Tj T* ET
+BT 1 0 0 1 396.8582 343.6 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 330 Tm (East Basin) Tj T* ET
+BT 1 0 0 1 80.95911 330 Tm (Survey week 10) Tj T* ET
+BT 1 0 0 1 171.9809 330 Tm (322.8) Tj T* ET
+BT 1 0 0 1 284.4196 330 Tm (311.7) Tj T* ET
+BT 1 0 0 1 396.8582 330 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 316.4 Tm (South Basin) Tj T* ET
+BT 1 0 0 1 80.95911 316.4 Tm (Survey week 01) Tj T* ET
+BT 1 0 0 1 171.9809 316.4 Tm (330.2) Tj T* ET
+BT 1 0 0 1 284.4196 316.4 Tm (322.3) Tj T* ET
+BT 1 0 0 1 396.8582 316.4 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 302.8 Tm (South Basin) Tj T* ET
+BT 1 0 0 1 80.95911 302.8 Tm (Survey week 02) Tj T* ET
+BT 1 0 0 1 171.9809 302.8 Tm (337.6) Tj T* ET
+BT 1 0 0 1 284.4196 302.8 Tm (332.9) Tj T* ET
+BT 1 0 0 1 396.8582 302.8 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 289.2 Tm (South Basin) Tj T* ET
+BT 1 0 0 1 80.95911 289.2 Tm (Survey week 03) Tj T* ET
+BT 1 0 0 1 171.9809 289.2 Tm (345.0) Tj T* ET
+BT 1 0 0 1 284.4196 289.2 Tm (343.5) Tj T* ET
+BT 1 0 0 1 396.8582 289.2 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 275.6 Tm (South Basin) Tj T* ET
+BT 1 0 0 1 80.95911 275.6 Tm (Survey week 04) Tj T* ET
+BT 1 0 0 1 171.9809 275.6 Tm (352.4) Tj T* ET
+BT 1 0 0 1 284.4196 275.6 Tm (354.1) Tj T* ET
+BT 1 0 0 1 396.8582 275.6 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 262 Tm (South Basin) Tj T* ET
+BT 1 0 0 1 80.95911 262 Tm (Survey week 05) Tj T* ET
+BT 1 0 0 1 171.9809 262 Tm (359.8) Tj T* ET
+BT 1 0 0 1 284.4196 262 Tm (364.7) Tj T* ET
+BT 1 0 0 1 396.8582 262 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 248.4 Tm (South Basin) Tj T* ET
+BT 1 0 0 1 80.95911 248.4 Tm (Survey week 06) Tj T* ET
+BT 1 0 0 1 171.9809 248.4 Tm (367.2) Tj T* ET
+BT 1 0 0 1 284.4196 248.4 Tm (375.3) Tj T* ET
+BT 1 0 0 1 396.8582 248.4 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 234.8 Tm (South Basin) Tj T* ET
+BT 1 0 0 1 80.95911 234.8 Tm (Survey week 07) Tj T* ET
+BT 1 0 0 1 171.9809 234.8 Tm (374.6) Tj T* ET
+BT 1 0 0 1 284.4196 234.8 Tm (385.9) Tj T* ET
+BT 1 0 0 1 396.8582 234.8 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 221.2 Tm (South Basin) Tj T* ET
+BT 1 0 0 1 80.95911 221.2 Tm (Survey week 08) Tj T* ET
+BT 1 0 0 1 171.9809 221.2 Tm (382.0) Tj T* ET
+BT 1 0 0 1 284.4196 221.2 Tm (396.5) Tj T* ET
+BT 1 0 0 1 396.8582 221.2 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 207.6 Tm (South Basin) Tj T* ET
+BT 1 0 0 1 80.95911 207.6 Tm (Survey week 09) Tj T* ET
+BT 1 0 0 1 171.9809 207.6 Tm (389.4) Tj T* ET
+BT 1 0 0 1 284.4196 207.6 Tm (407.1) Tj T* ET
+BT 1 0 0 1 396.8582 207.6 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 194 Tm (South Basin) Tj T* ET
+BT 1 0 0 1 80.95911 194 Tm (Survey week 10) Tj T* ET
+BT 1 0 0 1 171.9809 194 Tm (396.8) Tj T* ET
+BT 1 0 0 1 284.4196 194 Tm (417.7) Tj T* ET
+BT 1 0 0 1 396.8582 194 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 180.4 Tm (West Basin) Tj T* ET
+BT 1 0 0 1 80.95911 180.4 Tm (Survey week 01) Tj T* ET
+BT 1 0 0 1 171.9809 180.4 Tm (404.2) Tj T* ET
+BT 1 0 0 1 284.4196 180.4 Tm (308.3) Tj T* ET
+BT 1 0 0 1 396.8582 180.4 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 166.8 Tm (West Basin) Tj T* ET
+BT 1 0 0 1 80.95911 166.8 Tm (Survey week 02) Tj T* ET
+BT 1 0 0 1 171.9809 166.8 Tm (411.6) Tj T* ET
+BT 1 0 0 1 284.4196 166.8 Tm (318.9) Tj T* ET
+BT 1 0 0 1 396.8582 166.8 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 153.2 Tm (West Basin) Tj T* ET
+BT 1 0 0 1 80.95911 153.2 Tm (Survey week 03) Tj T* ET
+BT 1 0 0 1 171.9809 153.2 Tm (419.0) Tj T* ET
+BT 1 0 0 1 284.4196 153.2 Tm (329.5) Tj T* ET
+BT 1 0 0 1 396.8582 153.2 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 139.6 Tm (West Basin) Tj T* ET
+BT 1 0 0 1 80.95911 139.6 Tm (Survey week 04) Tj T* ET
+BT 1 0 0 1 171.9809 139.6 Tm (306.4) Tj T* ET
+BT 1 0 0 1 284.4196 139.6 Tm (340.1) Tj T* ET
+BT 1 0 0 1 396.8582 139.6 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 126 Tm (West Basin) Tj T* ET
+BT 1 0 0 1 80.95911 126 Tm (Survey week 05) Tj T* ET
+BT 1 0 0 1 171.9809 126 Tm (313.8) Tj T* ET
+BT 1 0 0 1 284.4196 126 Tm (350.7) Tj T* ET
+BT 1 0 0 1 396.8582 126 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 112.4 Tm (West Basin) Tj T* ET
+BT 1 0 0 1 80.95911 112.4 Tm (Survey week 06) Tj T* ET
+BT 1 0 0 1 171.9809 112.4 Tm (321.2) Tj T* ET
+BT 1 0 0 1 284.4196 112.4 Tm (361.3) Tj T* ET
+BT 1 0 0 1 396.8582 112.4 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 98.8 Tm (West Basin) Tj T* ET
+BT 1 0 0 1 80.95911 98.8 Tm (Survey week 07) Tj T* ET
+BT 1 0 0 1 171.9809 98.8 Tm (328.6) Tj T* ET
+BT 1 0 0 1 284.4196 98.8 Tm (371.9) Tj T* ET
+BT 1 0 0 1 396.8582 98.8 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 85.2 Tm (West Basin) Tj T* ET
+BT 1 0 0 1 80.95911 85.2 Tm (Survey week 08) Tj T* ET
+BT 1 0 0 1 171.9809 85.2 Tm (336.0) Tj T* ET
+BT 1 0 0 1 284.4196 85.2 Tm (382.5) Tj T* ET
+BT 1 0 0 1 396.8582 85.2 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 71.6 Tm (West Basin) Tj T* ET
+BT 1 0 0 1 80.95911 71.6 Tm (Survey week 09) Tj T* ET
+BT 1 0 0 1 171.9809 71.6 Tm (343.4) Tj T* ET
+BT 1 0 0 1 284.4196 71.6 Tm (393.1) Tj T* ET
+BT 1 0 0 1 396.8582 71.6 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 58 Tm (West Basin) Tj T* ET
+BT 1 0 0 1 80.95911 58 Tm (Survey week 10) Tj T* ET
+BT 1 0 0 1 171.9809 58 Tm (350.8) Tj T* ET
+BT 1 0 0 1 284.4196 58 Tm (403.7) Tj T* ET
+BT 1 0 0 1 396.8582 58 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 44.4 Tm (Upper Basin) Tj T* ET
+BT 1 0 0 1 80.95911 44.4 Tm (Survey week 01) Tj T* ET
+BT 1 0 0 1 171.9809 44.4 Tm (358.2) Tj T* ET
+BT 1 0 0 1 284.4196 44.4 Tm (414.3) Tj T* ET
+BT 1 0 0 1 396.8582 44.4 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 30.8 Tm (Upper Basin) Tj T* ET
+BT 1 0 0 1 80.95911 30.8 Tm (Survey week 02) Tj T* ET
+BT 1 0 0 1 171.9809 30.8 Tm (365.6) Tj T* ET
+BT 1 0 0 1 284.4196 30.8 Tm (304.9) Tj T* ET
+BT 1 0 0 1 396.8582 30.8 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 17.2 Tm (Upper Basin) Tj T* ET
+BT 1 0 0 1 80.95911 17.2 Tm (Survey week 03) Tj T* ET
+BT 1 0 0 1 171.9809 17.2 Tm (373.0) Tj T* ET
+BT 1 0 0 1 284.4196 17.2 Tm (315.5) Tj T* ET
+BT 1 0 0 1 396.8582 17.2 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 3.6 Tm (Upper Basin) Tj T* ET
+BT 1 0 0 1 80.95911 3.6 Tm (Survey week 04) Tj T* ET
+BT 1 0 0 1 171.9809 3.6 Tm (380.4) Tj T* ET
+BT 1 0 0 1 284.4196 3.6 Tm (326.1) Tj T* ET
+BT 1 0 0 1 396.8582 3.6 Tm (holding steady) Tj T* ET
+q
+1 J
+1 j
+.501961 .501961 .501961 RG
+.5 w
+n 0 612 m 481.88 612 l S
+n 0 0 m 481.88 0 l S
+n 0 0 m 0 612 l S
+n 481.88 0 m 481.88 612 l S
+n 0 598.4 m 481.88 598.4 l S
+n 0 584.8 m 481.88 584.8 l S
+n 0 571.2 m 481.88 571.2 l S
+n 0 557.6 m 481.88 557.6 l S
+n 0 544 m 481.88 544 l S
+n 0 530.4 m 481.88 530.4 l S
+n 0 516.8 m 481.88 516.8 l S
+n 0 503.2 m 481.88 503.2 l S
+n 0 489.6 m 481.88 489.6 l S
+n 0 476 m 481.88 476 l S
+n 0 462.4 m 481.88 462.4 l S
+n 0 448.8 m 481.88 448.8 l S
+n 0 435.2 m 481.88 435.2 l S
+n 0 421.6 m 481.88 421.6 l S
+n 0 408 m 481.88 408 l S
+n 0 394.4 m 481.88 394.4 l S
+n 0 380.8 m 481.88 380.8 l S
+n 0 367.2 m 481.88 367.2 l S
+n 0 353.6 m 481.88 353.6 l S
+n 0 340 m 481.88 340 l S
+n 0 326.4 m 481.88 326.4 l S
+n 0 312.8 m 481.88 312.8 l S
+n 0 299.2 m 481.88 299.2 l S
+n 0 285.6 m 481.88 285.6 l S
+n 0 272 m 481.88 272 l S
+n 0 258.4 m 481.88 258.4 l S
+n 0 244.8 m 481.88 244.8 l S
+n 0 231.2 m 481.88 231.2 l S
+n 0 217.6 m 481.88 217.6 l S
+n 0 204 m 481.88 204 l S
+n 0 190.4 m 481.88 190.4 l S
+n 0 176.8 m 481.88 176.8 l S
+n 0 163.2 m 481.88 163.2 l S
+n 0 149.6 m 481.88 149.6 l S
+n 0 136 m 481.88 136 l S
+n 0 122.4 m 481.88 122.4 l S
+n 0 108.8 m 481.88 108.8 l S
+n 0 95.2 m 481.88 95.2 l S
+n 0 81.6 m 481.88 81.6 l S
+n 0 68 m 481.88 68 l S
+n 0 54.4 m 481.88 54.4 l S
+n 0 40.8 m 481.88 40.8 l S
+n 0 27.2 m 481.88 27.2 l S
+n 0 13.6 m 481.88 13.6 l S
+n 74.95911 0 m 74.95911 612 l S
+n 165.9809 0 m 165.9809 612 l S
+n 278.4196 0 m 278.4196 612 l S
+n 390.8582 0 m 390.8582 612 l S
+Q
+Q
+Q
+ 
+endstream
+endobj
+10 0 obj
+<<
+/Length 4815
+>>
+stream
+1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
+q
+1 0 0 1 56.7 564.29 cm
+q
+0 0 0 rg
+BT /F1 8 Tf 9.6 TL ET
+BT 1 0 0 1 6 207.6 Tm (Upper Basin) Tj T* ET
+BT 1 0 0 1 80.95911 207.6 Tm (Survey week 05) Tj T* ET
+BT 1 0 0 1 171.9809 207.6 Tm (387.8) Tj T* ET
+BT 1 0 0 1 284.4196 207.6 Tm (336.7) Tj T* ET
+BT 1 0 0 1 396.8582 207.6 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 194 Tm (Upper Basin) Tj T* ET
+BT 1 0 0 1 80.95911 194 Tm (Survey week 06) Tj T* ET
+BT 1 0 0 1 171.9809 194 Tm (395.2) Tj T* ET
+BT 1 0 0 1 284.4196 194 Tm (347.3) Tj T* ET
+BT 1 0 0 1 396.8582 194 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 180.4 Tm (Upper Basin) Tj T* ET
+BT 1 0 0 1 80.95911 180.4 Tm (Survey week 07) Tj T* ET
+BT 1 0 0 1 171.9809 180.4 Tm (402.6) Tj T* ET
+BT 1 0 0 1 284.4196 180.4 Tm (357.9) Tj T* ET
+BT 1 0 0 1 396.8582 180.4 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 166.8 Tm (Upper Basin) Tj T* ET
+BT 1 0 0 1 80.95911 166.8 Tm (Survey week 08) Tj T* ET
+BT 1 0 0 1 171.9809 166.8 Tm (410.0) Tj T* ET
+BT 1 0 0 1 284.4196 166.8 Tm (368.5) Tj T* ET
+BT 1 0 0 1 396.8582 166.8 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 153.2 Tm (Upper Basin) Tj T* ET
+BT 1 0 0 1 80.95911 153.2 Tm (Survey week 09) Tj T* ET
+BT 1 0 0 1 171.9809 153.2 Tm (417.4) Tj T* ET
+BT 1 0 0 1 284.4196 153.2 Tm (379.1) Tj T* ET
+BT 1 0 0 1 396.8582 153.2 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 139.6 Tm (Upper Basin) Tj T* ET
+BT 1 0 0 1 80.95911 139.6 Tm (Survey week 10) Tj T* ET
+BT 1 0 0 1 171.9809 139.6 Tm (304.8) Tj T* ET
+BT 1 0 0 1 284.4196 139.6 Tm (389.7) Tj T* ET
+BT 1 0 0 1 396.8582 139.6 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 126 Tm (Lower Basin) Tj T* ET
+BT 1 0 0 1 80.95911 126 Tm (Survey week 01) Tj T* ET
+BT 1 0 0 1 171.9809 126 Tm (312.2) Tj T* ET
+BT 1 0 0 1 284.4196 126 Tm (400.3) Tj T* ET
+BT 1 0 0 1 396.8582 126 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 112.4 Tm (Lower Basin) Tj T* ET
+BT 1 0 0 1 80.95911 112.4 Tm (Survey week 02) Tj T* ET
+BT 1 0 0 1 171.9809 112.4 Tm (319.6) Tj T* ET
+BT 1 0 0 1 284.4196 112.4 Tm (410.9) Tj T* ET
+BT 1 0 0 1 396.8582 112.4 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 98.8 Tm (Lower Basin) Tj T* ET
+BT 1 0 0 1 80.95911 98.8 Tm (Survey week 03) Tj T* ET
+BT 1 0 0 1 171.9809 98.8 Tm (327.0) Tj T* ET
+BT 1 0 0 1 284.4196 98.8 Tm (301.5) Tj T* ET
+BT 1 0 0 1 396.8582 98.8 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 85.2 Tm (Lower Basin) Tj T* ET
+BT 1 0 0 1 80.95911 85.2 Tm (Survey week 04) Tj T* ET
+BT 1 0 0 1 171.9809 85.2 Tm (334.4) Tj T* ET
+BT 1 0 0 1 284.4196 85.2 Tm (312.1) Tj T* ET
+BT 1 0 0 1 396.8582 85.2 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 71.6 Tm (Lower Basin) Tj T* ET
+BT 1 0 0 1 80.95911 71.6 Tm (Survey week 05) Tj T* ET
+BT 1 0 0 1 171.9809 71.6 Tm (341.8) Tj T* ET
+BT 1 0 0 1 284.4196 71.6 Tm (322.7) Tj T* ET
+BT 1 0 0 1 396.8582 71.6 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 58 Tm (Lower Basin) Tj T* ET
+BT 1 0 0 1 80.95911 58 Tm (Survey week 06) Tj T* ET
+BT 1 0 0 1 171.9809 58 Tm (349.2) Tj T* ET
+BT 1 0 0 1 284.4196 58 Tm (333.3) Tj T* ET
+BT 1 0 0 1 396.8582 58 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 44.4 Tm (Lower Basin) Tj T* ET
+BT 1 0 0 1 80.95911 44.4 Tm (Survey week 07) Tj T* ET
+BT 1 0 0 1 171.9809 44.4 Tm (356.6) Tj T* ET
+BT 1 0 0 1 284.4196 44.4 Tm (343.9) Tj T* ET
+BT 1 0 0 1 396.8582 44.4 Tm (falling slowly) Tj T* ET
+BT 1 0 0 1 6 30.8 Tm (Lower Basin) Tj T* ET
+BT 1 0 0 1 80.95911 30.8 Tm (Survey week 08) Tj T* ET
+BT 1 0 0 1 171.9809 30.8 Tm (364.0) Tj T* ET
+BT 1 0 0 1 284.4196 30.8 Tm (354.5) Tj T* ET
+BT 1 0 0 1 396.8582 30.8 Tm (rising slowly) Tj T* ET
+BT 1 0 0 1 6 17.2 Tm (Lower Basin) Tj T* ET
+BT 1 0 0 1 80.95911 17.2 Tm (Survey week 09) Tj T* ET
+BT 1 0 0 1 171.9809 17.2 Tm (371.4) Tj T* ET
+BT 1 0 0 1 284.4196 17.2 Tm (365.1) Tj T* ET
+BT 1 0 0 1 396.8582 17.2 Tm (holding steady) Tj T* ET
+BT 1 0 0 1 6 3.6 Tm (Lower Basin) Tj T* ET
+BT 1 0 0 1 80.95911 3.6 Tm (Survey week 10) Tj T* ET
+BT 1 0 0 1 171.9809 3.6 Tm (378.8) Tj T* ET
+BT 1 0 0 1 284.4196 3.6 Tm (375.7) Tj T* ET
+BT 1 0 0 1 396.8582 3.6 Tm (falling slowly) Tj T* ET
+q
+1 J
+1 j
+.501961 .501961 .501961 RG
+.5 w
+n 0 217.6 m 481.88 217.6 l S
+n 0 0 m 481.88 0 l S
+n 0 0 m 0 217.6 l S
+n 481.88 0 m 481.88 217.6 l S
+n 0 204 m 481.88 204 l S
+n 0 190.4 m 481.88 190.4 l S
+n 0 176.8 m 481.88 176.8 l S
+n 0 163.2 m 481.88 163.2 l S
+n 0 149.6 m 481.88 149.6 l S
+n 0 136 m 481.88 136 l S
+n 0 122.4 m 481.88 122.4 l S
+n 0 108.8 m 481.88 108.8 l S
+n 0 95.2 m 481.88 95.2 l S
+n 0 81.6 m 481.88 81.6 l S
+n 0 68 m 481.88 68 l S
+n 0 54.4 m 481.88 54.4 l S
+n 0 40.8 m 481.88 40.8 l S
+n 0 27.2 m 481.88 27.2 l S
+n 0 13.6 m 481.88 13.6 l S
+n 74.95911 0 m 74.95911 217.6 l S
+n 165.9809 0 m 165.9809 217.6 l S
+n 278.4196 0 m 278.4196 217.6 l S
+n 390.8582 0 m 390.8582 217.6 l S
+Q
+Q
+Q
+q
+1 0 0 1 56.7 538.79 cm
+q
+0 0 0 rg
+BT 1 0 0 1 0 5 Tm /F1 10.5 Tf 15.5 TL (The basin names and readings above are invented for testing.) Tj T* ET
+Q
+Q
+ 
+endstream
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000061 00000 n 
+0000000102 00000 n 
+0000000209 00000 n 
+0000000321 00000 n 
+0000000520 00000 n 
+0000000720 00000 n 
+0000000788 00000 n 
+0000001085 00000 n 
+0000001150 00000 n 
+0000014223 00000 n 
+trailer
+<<
+/ID 
+[<743dfc0b98eb6858304189496fb3aa9e><743dfc0b98eb6858304189496fb3aa9e>]
+% ReportLab generated PDF document -- digest (opensource)
+
+/Info 7 0 R
+/Root 6 0 R
+/Size 11
+>>
+startxref
+19090
+%%EOF

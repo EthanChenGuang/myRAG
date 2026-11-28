@@ -1,5 +1,6 @@
 import { z } from 'zod/v3';
 import { completeScores, RerankError } from './scores';
+import { rerankerSupportedLanguages } from './languages';
 import type { Reranker, RerankOptions } from './types';
 
 const DEFAULT_BASE = 'https://api.voyageai.com/v1';
@@ -52,6 +53,7 @@ export function createVoyageReranker(deps: VoyageRerankerDeps): Reranker {
     id: 'voyage',
     model: deps.model,
     scoreSemantics: 'calibrated',
+    supportedLanguages: rerankerSupportedLanguages('voyage'),
     async rerank(query, docs, opts) {
       if (opts.signal.aborted) {
         throw opts.signal.reason ?? new DOMException('Aborted', 'AbortError');

@@ -1,0 +1,141 @@
+{
+  "$defs": {
+    "TerminologyLexiconTerm": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "synonym",
+            "abbreviation",
+            "alias",
+            "identifier",
+            "translation",
+            "misspelling"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it",
+            "any"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "normalized": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Normalized",
+          "type": "string"
+        }
+      },
+      "required": [
+        "normalized",
+        "language",
+        "kind"
+      ],
+      "title": "TerminologyLexiconTerm",
+      "type": "object"
+    },
+    "TerminologyTranslationPair": {
+      "additionalProperties": false,
+      "properties": {
+        "entry_id": {
+          "format": "uuid",
+          "title": "Entry Id",
+          "type": "string"
+        },
+        "source_language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Source Language",
+          "type": "string"
+        },
+        "sources": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Sources",
+          "type": "array"
+        },
+        "target": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        },
+        "target_language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Target Language",
+          "type": "string"
+        },
+        "target_normalized": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Target Normalized",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entry_id",
+        "source_language",
+        "target_language",
+        "sources",
+        "target",
+        "target_normalized"
+      ],
+      "title": "TerminologyTranslationPair",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "D-33: the return contract of getTerminologyLexicon (Phase 4.2 LANG-07, Phase 6.2 XLG-05).",
+  "properties": {
+    "entries_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Entries Sha256",
+      "type": "string"
+    },
+    "terms": {
+      "items": {
+        "$ref": "#/$defs/TerminologyLexiconTerm"
+      },
+      "title": "Terms",
+      "type": "array"
+    },
+    "translations": {
+      "items": {
+        "$ref": "#/$defs/TerminologyTranslationPair"
+      },
+      "title": "Translations",
+      "type": "array"
+    },
+    "version": {
+      "pattern": "^s\\d+\\.w\\d+$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "entries_sha256",
+    "terms",
+    "translations"
+  ],
+  "title": "TerminologyLexicon",
+  "type": "object"
+}

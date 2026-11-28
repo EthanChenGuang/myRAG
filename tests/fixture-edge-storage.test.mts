@@ -33,7 +33,7 @@ async function storagePut(
   edge: FakeEdge,
   bucket: string,
   objectKey: string,
-  body: Uint8Array,
+  body: Uint8Array<ArrayBuffer>,
   key: string,
   method: 'POST' | 'PUT' = 'POST',
 ): Promise<Response> {
@@ -204,7 +204,7 @@ describe('sidecar module launcher', () => {
     proc.kill();
   });
 
-  test('child env is explicit keys plus PATH, HOME and RAG_SIDECAR_ENV=test', async () => {
+  test('child env is explicit keys plus PATH, HOME, NODE_ENV=test and RAG_SIDECAR_ENV=test', async () => {
     const proc = spawnSidecarModule(
       'json.tool',
       ['--help'],
@@ -214,6 +214,7 @@ describe('sidecar module launcher', () => {
     const result = await proc.done;
     assert.equal(result.env.ONLY_PASSED, '1');
     assert.equal(result.env.RAG_SIDECAR_ENV, 'test');
+    assert.equal(result.env.NODE_ENV, 'test');
     assert.ok(result.env.PATH);
     assert.ok(result.env.HOME ?? result.env.HOMEPATH);
   });

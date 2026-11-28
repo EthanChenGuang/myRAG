@@ -1,3 +1,4 @@
+<!-- fixture-meta {"doc_type":"contract_legal"} -->
 ## 设备维护服务合 同
 
 合同编号：GV-MS-2O24-0057

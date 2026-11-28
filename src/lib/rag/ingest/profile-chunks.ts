@@ -1,8 +1,11 @@
+import { blockSplitterForIngest } from '@/lib/rag/lang/sentences';
 import { enrichChunkWithURLs } from '@/lib/url-extractor';
-import { LEXICAL_VERSION, chunkLexicalText } from '../lexical/chunk-text';
-import type { ChunkerConfig } from './chunkers';
+import { chunkLexicalText } from '../lexical/chunk-text';
+import { lexicalStampMetadata, type IngestLexical } from './lexical-options';
+import { withEffectiveHeader, type ChunkerConfig } from './chunkers';
 import { chunkParentChild } from './chunkers/parent-child';
 import { contentHash } from './hash';
+import { effectiveTableHeader } from './routing/effective-settings';
 import { buildEmbeddingText, EMBEDDING_TEXT_VERSION } from './text/embedding-text';
 import type {
   ChunkingProfileRow,
@@ -21,6 +24,12 @@ export interface ProfileDocument {
   /** The chunker of the document's processing profile; its kind and clause data decide how parents are cut. */
   chunker: ChunkerConfig;
   templateHeader?: string;
+  /** RAG_LANGUAGE_AWARE_INGEST: `on` splits each block at its own language's sentence ends (D-15); off or absent is today's splitter. */
+  languageAwareIngest?: 'off' | 'on';
+  /** RAG_TABLE_HEADER_REPEAT (D-19, D-20); `profile` or absent reads the processing profile's repeat_table_header. */
+  tableHeaderRepeat?: 'profile' | 'always';
+  /** The document's lexical options and stamps (plan 04.2-19); absent: default options and LEXICAL_VERSION. */
+  lexical?: IngestLexical;
 }
 
 export interface BuiltProfileChunks {
@@ -53,7 +62,9 @@ export function buildProfileChunks(document: ProfileDocument, parseMarkdown: str
   const cut = chunkParentChild(
     parseMarkdown,
     { childTokens: profile.childTokens, parentMode: profile.parentMode, parentTokens: profile.parentTokens },
-    document.chunker,
+    withEffectiveHeader(document.chunker, document.tableHeaderRepeat),
+    blockSplitterForIngest(document.languageAwareIngest),
+    { carryTableHeader: effectiveTableHeader(document.tableHeaderRepeat, document.chunker).carryTableHeader },
   );
   const parents: ProfileParentWrite[] = cut.parents.map((parent) => ({
     parent_index: parent.parent_index,
@@ -62,6 +73,7 @@ export function buildProfileChunks(document: ProfileDocument, parseMarkdown: str
     token_count: parent.token_count,
   }));
   const embeddingTexts: string[] = [];
+  const stamps = lexicalStampMetadata(document.lexical);
   const children = cut.children.map((child, index): ProfileChildWrite => {
     embeddingTexts.push(buildEmbeddingText({ section_path: child.section_path, content: child.content, template_header: document.templateHeader }));
     return {
@@ -80,14 +92,14 @@ export function buildProfileChunks(document: ProfileDocument, parseMarkdown: str
         chunkKind: child.chunk_kind,
         metadata: child.metadata,
         documentFilename: document.filename,
-      }),
+      }, document.lexical?.resolved.options),
       metadata: {
         ...(enrichChunkWithURLs(child.content, child.metadata) as Record<string, unknown>),
         document_title: document.filename,
         chunk_index: index,
         chunk_position: index + 1,
         total_chunks: cut.children.length,
-        lexical_version: LEXICAL_VERSION,
+        ...stamps,
       },
     };
   });

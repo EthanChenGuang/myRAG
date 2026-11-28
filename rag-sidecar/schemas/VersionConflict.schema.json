@@ -1,0 +1,41 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "document_ids": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 2,
+      "title": "Document Ids",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "group_rule": {
+      "enum": [
+        "supersession_link",
+        "supersession_candidate",
+        "title_match"
+      ],
+      "title": "Group Rule",
+      "type": "string"
+    },
+    "latest_document_id": {
+      "minLength": 1,
+      "title": "Latest Document Id",
+      "type": "string"
+    },
+    "mixed_versions": {
+      "default": false,
+      "title": "Mixed Versions",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "document_ids",
+    "latest_document_id",
+    "group_rule"
+  ],
+  "title": "VersionConflict",
+  "type": "object"
+}

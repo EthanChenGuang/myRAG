@@ -255,3 +255,46 @@ describe('LlamaParse v2 adapter', () => {
     expect(fake.calls).toHaveLength(0);
   });
 });
+
+describe('LlamaParse v2 page-text artifact (D-14)', () => {
+  async function withMode(mode: string | undefined) {
+    const { setIngestDepsForTests } = await import('@/lib/rag/ingest/deps');
+    setIngestDepsForTests({
+      ingestEnv: () => (mode === undefined ? {} : { RAG_INGEST_PIPELINE: 'unified', RAG_PAGE_BOILERPLATE: mode }),
+    });
+  }
+
+  afterEach(async () => {
+    const { resetIngestDepsForTests } = await import('@/lib/rag/ingest/deps');
+    resetIngestDepsForTests();
+  });
+
+  test.each(['detect', 'both'])('mode %s adds page-texts.json with every page, failed pages empty; result and request unchanged', async (mode) => {
+    await withMode(undefined);
+    fake.enqueue({ pages: [THREE_PAGES[0]!, { page_number: 2, success: false, error: 'ocr failed' }, THREE_PAGES[2]!] });
+    const baseline = await done(parser().parse(request()));
+    const baselineUpload = fake.uploads[0];
+
+    await withMode(mode);
+    fake.enqueue({ pages: [THREE_PAGES[0]!, { page_number: 2, success: false, error: 'ocr failed' }, THREE_PAGES[2]!] });
+    const attempt = await done(parser().parse(request()));
+    expect(attempt.result).toEqual(baseline.result);
+    expect(attempt.result.artifacts).toBeUndefined();
+    expect(fake.uploads[1]).toEqual(baselineUpload);
+    const names = attempt.artifacts.map((artifact) => artifact.name);
+    expect(names).toEqual(['page-texts.json']);
+    const stored = attempt.artifacts[0]!;
+    expect(stored.contentType).toBe('application/json');
+    const body = JSON.parse(new TextDecoder().decode(stored.bytes)) as { pages: Array<{ page: number; text: string }> };
+    expect(body.pages.map((entry) => entry.page)).toEqual([1, 2, 3]);
+    expect(body.pages[1]!.text).toBe('');
+    expect(body.pages[0]!.text).toContain('First page');
+  });
+
+  test.each([undefined, 'off', 'rules'])('mode %s keeps the attempt as today', async (mode) => {
+    await withMode(mode);
+    fake.enqueue({ pages: THREE_PAGES });
+    const attempt = await done(parser().parse(request()));
+    expect(attempt.artifacts).toEqual([]);
+  });
+});

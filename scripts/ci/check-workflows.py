@@ -1,4 +1,4 @@
-"""Structural check of the Phase 1 GitHub Actions workflows.
+"""Structural check of the GitHub Actions workflows (pr-smoke, nightly, ray-optional).
 
 Run locally with: python3 -I scripts/ci/check-workflows.py
 Requires PyYAML. Exits 1 and lists every failed assertion.
@@ -15,13 +15,43 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 PR = ROOT / ".github" / "workflows" / "pr-smoke.yml"
 NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
+RAY_OPTIONAL = ROOT / ".github" / "workflows" / "ray-optional.yml"
 DOCKERFILE = ROOT / "rag-sidecar" / "Dockerfile"
+SIDECAR_CONFIG_DIR = ROOT / "rag-sidecar" / "config" / "rag"
+SIDECAR_TEST_EXTRAS = ("chunking", "preflight", "hidden-text")
 
 TESTS_DIR = ROOT / "tests"
 TSX_GLOB = "tests/*.test.mts"
 TSX_COMMAND_RE = re.compile(r"node\s+--import\s+tsx\s+--test\b(?P<args>[^\n]*)")
 
-PR_JOBS = ["ts", "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build"]
+TS_JOB_NEEDLES = {
+    "ts-vitest": ("npx vitest run",),
+    "ts-db": ("node --import tsx --test", "tests/rag-db/*.test.mts"),
+    "ts-tsx": ("node --import tsx --test", TSX_GLOB, "tests/rag-e2e/*.test.mts", "nullglob"),
+    "ts-checks": (
+        "node scripts/check-config.mjs",
+        "scripts/check-config.test.mjs",
+        "scripts/tests/gen-zod.node-test.mjs",
+        "npm run typecheck:new",
+        "next typegen",
+        "npx tsc --noEmit -p tsconfig.json",
+        "scripts/tests/tsc-ratchet.node-test.mjs",
+        "scripts/tests/check-node-runtime.node-test.mjs",
+        "scripts/ci/check-workflows.py",
+        "scripts/ci/check-rag-boundary.mjs",
+        "scripts/tests/check-rag-boundary.node-test.mjs",
+        "scripts/ci/check-language-literals.mjs",
+        "scripts/tests/check-language-literals.node-test.mjs",
+        "scripts/ci/check-settings-classification.mjs",
+        "scripts/tests/check-settings-classification.node-test.mjs",
+        "scripts/ci/check-zod-isolation.mjs",
+        "scripts/tests/check-zod-isolation.node-test.mjs",
+    ),
+}
+# job -> the shard flag its test command must take from matrix.shard
+TS_SHARDED = {"ts-vitest": "--shard=", "ts-db": "--test-shard="}
+TS_TIMEOUT_MAX = 25
+PR_JOBS = [*TS_JOB_NEEDLES, "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build", "next-build"]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
 VERSION_COMMENT_RE = re.compile(r"^\s+#\s*v\d+(\.\d+){0,2}\s*$")
@@ -29,7 +59,20 @@ UV_IMAGE_RE = re.compile(r"ghcr\.io/astral-sh/uv:(?P<version>\d+\.\d+\.\d+)")
 SKIP_NOTICE = "::notice::judge key not configured, skipping"
 ONLINE_SKIP_NOTICE = "::notice::langfuse keys not configured, skipping online judge"
 DOCLING_SKIP_NOTICE = "::notice::docling extra not installable, skipping"
+SEC_SKIP_NOTICE = "::notice::generator key not configured, skipping injection runs"
+WEEKLY_JOB = "weekly-report"
+WEEKLY_CRON = "23 4 * * 1"
+PRIVATE_FLAG = "HAS_PRIVATE_EVAL"
+WEEKLY_SKIP_NOTICE = "::notice::no private eval data on this runner, skipping weekly report"
+SEC_SMOKE_STEP = "npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec"
+SEC_NIGHTLY_STEP = "run-nightly.mts --sec-matrix --generator live"
+FRAMEWORKS_STEP = "uv run --directory eval python -m rag_eval.compare frameworks --fixtures"
+CACHE_PAIRS_STEP = "npm run test-rag -- --run-config eval/config/runs/query-layer-llamaindex.json --cache-pairs"
+CACHE_CHECK_STEP = "python -m rag_eval.calibrate cache --check"
+LAKERA_SECRET = "LAKERA_GUARD_API_KEY"
 DOCLING_READY = "steps.docling.outputs.ready == 'true'"
+RAY_SYNC = "uv sync --directory rag-sidecar --locked --extra ray --extra chunking --extra preflight"
+RAY_EQUALITY_TEST = "tests/rag-e2e/backfill-ray-equality.test.mts"
 TELEMETRY = {
     "DEEPEVAL_TELEMETRY_OPT_OUT": "1",
     "DEEPEVAL_UPDATE_WARNING_OPT_IN": "0",
@@ -208,32 +251,7 @@ def check_pr(errors: list[str]) -> None:
         needs_eval = "eval" in body and ("pytest" in body or "test-rag" in body or "vitest" in body)
         if needs_eval and "uv sync --directory eval --locked --all-extras" not in body:
             errors.append(f"pr-smoke: job '{jname}' uses eval but does not sync it with --locked --all-extras")
-    ts = jobs.get("ts")
-    if ts is not None:
-        body = step_text(ts)
-        for needle in (
-            "npx vitest run",
-            "node --import tsx --test",
-            "tests/rag-db/",
-            "tests/rag-e2e/*.test.mts",
-            "nullglob",
-            "node scripts/check-config.mjs",
-            "scripts/check-config.test.mjs",
-            "scripts/tests/gen-zod.node-test.mjs",
-            "npm run typecheck:new",
-            "next typegen",
-            "npx tsc --noEmit -p tsconfig.json",
-            "scripts/tests/tsc-ratchet.node-test.mjs",
-            "scripts/ci/check-node-runtime.mjs",
-            "scripts/tests/check-node-runtime.node-test.mjs",
-            "scripts/ci/check-workflows.py",
-            "scripts/ci/check-rag-boundary.mjs",
-            "scripts/tests/check-rag-boundary.node-test.mjs",
-        ):
-            if needle not in body:
-                errors.append(f"pr-smoke: job ts is missing '{needle}'")
-        if "scripts/ci/tsc-baseline.json" in body or re.search(r"tsc-ratchet\.mjs(?![^\n]*--cwd)", body):
-            errors.append("pr-smoke: job ts must run plain tsc, not the root tsc ratchet or its baseline")
+    check_ts_jobs(jobs, errors)
     for jname, job in jobs.items():
         if re.search(r"tsc-ratchet\.mjs[^\n]*--write", step_text(job)):
             errors.append(f"pr-smoke: job {jname} must not run the tsc ratchet with --write")
@@ -263,35 +281,129 @@ def check_pr(errors: list[str]) -> None:
             for step in all_steps(voice)
         ):
             errors.append("pr-smoke: job voice-agent must run npm test in the voice-agent working directory")
-    py_job = jobs.get("python")
-    if py_job is not None:
-        body = step_text(py_job)
-        for needle in (
-            "uv sync --directory rag-sidecar --locked --extra chunking",
-            "uv sync --directory rag-sidecar --locked --extra preflight",
-            "uv run --directory rag-sidecar --extra chunking pytest -q",
-        ):
-            if needle not in body:
-                errors.append(f"pr-smoke: job python is missing '{needle}'")
-        if "--extra docling" in body:
-            errors.append("pr-smoke: job python must not install the heavy docling extra")
-        if "--extra ray" in body:
-            errors.append("pr-smoke: job python must not install the ray extra")
+    check_python_job(jobs.get("python"), errors)
     sp = jobs.get("schema-parity")
     if sp is not None:
         body = step_text(sp)
         if "npm run gen:schemas" not in body or "git diff --exit-code" not in body:
             errors.append("pr-smoke: schema-parity must regenerate then git diff --exit-code")
-    for jname in ("ts", "schema-parity", "eval-smoke", "gate-negative-control"):
+    for jname in (*TS_JOB_NEEDLES, "schema-parity", "eval-smoke", "gate-negative-control"):
         job = jobs.get(jname)
         if job is not None and "npm ci" not in step_text(job):
             errors.append(f"pr-smoke: job {jname} must install with npm ci")
-    docker = jobs.get("docker-build")
-    if docker is not None:
-        body = step_text(docker)
-        for needle in ("docker build -t rag-sidecar:ci rag-sidecar", "/health", "/ready", "/v1/info", "RAG_SIDECAR_SECRET"):
+    check_next_build(jobs.get("next-build"), errors)
+    check_docker_build(jobs.get("docker-build"), errors)
+
+
+def check_python_job(job: dict | None, errors: list[str]) -> None:
+    """
+    The sidecar tests need the chunking, preflight and hidden-text extras at once. Each `uv sync` and `uv run --extra` installs exactly
+    the extras it names and removes the rest, so one sync and the pytest run must both name all three.
+    """
+    if job is None:
+        return
+    body = step_text(job)
+    syncs = [line for line in body.splitlines() if "uv sync --directory rag-sidecar" in line]
+    runs = [line for line in body.splitlines() if "uv run --directory rag-sidecar" in line and "pytest" in line]
+    for kind, lines in (("sync", syncs), ("pytest run", runs)):
+        if not lines:
+            errors.append(f"pr-smoke: job python has no rag-sidecar {kind}")
+            continue
+        for line in lines:
+            if "--locked" not in line:
+                errors.append(f"pr-smoke: job python rag-sidecar {kind} must use --locked: {line.strip()}")
+            missing = [extra for extra in SIDECAR_TEST_EXTRAS if f"--extra {extra}" not in line]
+            if missing:
+                errors.append(f"pr-smoke: job python rag-sidecar {kind} must name every test extra (missing {', '.join(missing)}): {line.strip()}")
+    if "--extra docling" in body:
+        errors.append("pr-smoke: job python must not install the heavy docling extra")
+    if "--extra ray" in body:
+        errors.append("pr-smoke: job python must not install the ray extra")
+
+
+def check_docker_build(job: dict | None, errors: list[str]) -> None:
+    """The sidecar image must ship every config copy under rag-sidecar/config/rag/, byte-equal to config/rag/."""
+    if job is None:
+        return
+    body = step_text(job)
+    for needle in (
+        "docker build -t rag-sidecar:ci rag-sidecar",
+        "/app/config/rag/",
+        "load_routing_config()",
+        "load_processing_profiles()",
+        "/health",
+        "/ready",
+        "/v1/info",
+        "RAG_SIDECAR_SECRET",
+    ):
+        if needle not in body:
+            errors.append(f"pr-smoke: job docker-build is missing '{needle}'")
+    for name in sidecar_config_copies():
+        if name not in body:
+            errors.append(f"pr-smoke: job docker-build does not compare the image copy of config/rag/{name}")
+
+
+def sidecar_config_copies() -> list[str]:
+    return sorted(p.name for p in SIDECAR_CONFIG_DIR.glob("*.json"))
+
+
+def check_shards(jname: str, job: dict, flag: str, errors: list[str]) -> None:
+    """A sharded job must run every shard k/N for k = 1..N, and its test command must take the shard from the matrix."""
+    shards = ((job.get("strategy") or {}).get("matrix") or {}).get("shard")
+    if not isinstance(shards, list) or not shards:
+        errors.append(f"pr-smoke: job {jname} must list its shards in strategy.matrix.shard")
+        return
+    values = [str(v) for v in shards]
+    total = values[0].split("/")[-1]
+    expected = [f"{k}/{total}" for k in range(1, int(total) + 1)] if total.isdigit() and int(total) > 0 else None
+    if expected is None or values != expected:
+        errors.append(f"pr-smoke: job {jname} matrix.shard must be exactly 1/N..N/N, got {values!r}")
+    if f"{flag}${{{{ matrix.shard }}}}" not in step_text(job):
+        errors.append(f"pr-smoke: job {jname} must pass {flag}${{{{ matrix.shard }}}} to its test command")
+
+
+def check_ts_jobs(jobs: dict, errors: list[str]) -> None:
+    """The TypeScript checks run as parallel jobs; each one keeps its own required commands."""
+    for jname, needles in TS_JOB_NEEDLES.items():
+        job = jobs.get(jname)
+        if job is None:
+            continue
+        body = step_text(job)
+        for needle in (*needles, "scripts/ci/check-node-runtime.mjs"):
             if needle not in body:
-                errors.append(f"pr-smoke: job docker-build is missing '{needle}'")
+                errors.append(f"pr-smoke: job {jname} is missing '{needle}'")
+        if "scripts/ci/tsc-baseline.json" in body or re.search(r"tsc-ratchet\.mjs(?![^\n]*--cwd)", body):
+            errors.append(f"pr-smoke: job {jname} must run plain tsc, not the root tsc ratchet or its baseline")
+        if "continue-on-error" in str(job):
+            errors.append(f"pr-smoke: job {jname} must not use continue-on-error")
+        timeout = job.get("timeout-minutes")
+        if not isinstance(timeout, int) or timeout > TS_TIMEOUT_MAX:
+            errors.append(f"pr-smoke: job {jname} must set timeout-minutes <= {TS_TIMEOUT_MAX}, got {timeout!r}")
+        if jname in TS_SHARDED:
+            check_shards(jname, job, TS_SHARDED[jname], errors)
+        elif (job.get("strategy") or {}).get("matrix"):
+            errors.append(f"pr-smoke: job {jname} is not a sharded job and must not use a matrix")
+
+
+def check_next_build(job: dict | None, errors: list[str]) -> None:
+    """The production build Vercel runs: next build must succeed with placeholder env and no secrets."""
+    if job is None:
+        return
+    body = step_text(job)
+    if "npm ci" not in body:
+        errors.append("pr-smoke: job next-build must install with npm ci")
+    if not re.search(r"(?:npx next|npm run) build\b", body):
+        errors.append("pr-smoke: job next-build must run 'npx next build'")
+    env = {str(k): str(v) for k, v in (job.get("env") or {}).items()}
+    for step in all_steps(job):
+        env.update({str(k): str(v) for k, v in (step.get("env") or {}).items()})
+    for key in ("NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"):
+        if key not in env:
+            errors.append(f"pr-smoke: job next-build must set {key} to a placeholder")
+        elif "placeholder" not in env[key]:
+            errors.append(f"pr-smoke: job next-build must use a placeholder value for {key}")
+    if "secrets." in str(job):
+        errors.append("pr-smoke: job next-build must not reference secrets.")
 
 
 def check_eval_smoke(job: dict | None, errors: list[str]) -> None:
@@ -314,6 +426,65 @@ def check_eval_smoke(job: dict | None, errors: list[str]) -> None:
     uploads = [step for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact@")]
     if not any("eval/out/smoke-ingest" in str((step.get("with") or {}).get("path", "")) for step in uploads):
         errors.append("pr-smoke: job eval-smoke must upload eval/out/smoke-ingest")
+    # D-14, T-05.1-59: the recommended SEC configuration is gated at absolute zero on every pull request.
+    sec = next((i for i, run in enumerate(runs) if "sec-recommended.json" in run), None)
+    if sec is None:
+        errors.append(f"pr-smoke: job eval-smoke must run '{SEC_SMOKE_STEP}'")
+    else:
+        sec_body = runs[sec]
+        if SEC_SMOKE_STEP not in sec_body:
+            errors.append(f"pr-smoke: the injection gate step must run '{SEC_SMOKE_STEP}'")
+        if "--no-gate" in sec_body or "--baseline" in sec_body or "|| true" in sec_body or "continue-on-error" in str(steps[sec]):
+            errors.append("pr-smoke: the injection gate step must gate against the committed baseline and fail the job")
+        if plain is None or sec < plain:
+            errors.append("pr-smoke: the injection gate step must run after the all-off smoke step, which stays as it is")
+    if not any("eval/out/smoke-sec" in str((step.get("with") or {}).get("path", "")) for step in uploads):
+        errors.append("pr-smoke: job eval-smoke must upload eval/out/smoke-sec")
+    check_query_layer_gates(steps, runs, errors)
+
+
+def check_query_layer_gates(steps: list[dict], runs: list[str], errors: list[str]) -> None:
+    """D-40, D-42 e, T-06-92: the fixture framework comparison and the cache near-miss gate run on every PR and fail it."""
+    installs = [i for i, run in enumerate(runs) if "npm ci" in run or "uv sync --directory eval" in run]
+    last_install = max(installs) if installs else None
+
+    def soft(index: int) -> bool:
+        return "|| true" in runs[index] or bool(steps[index].get("continue-on-error"))
+
+    def after_installs(index: int, what: str) -> None:
+        if last_install is None or index < last_install:
+            errors.append(f"pr-smoke: the {what} step must run after npm ci and uv sync")
+
+    frameworks = next((i for i, run in enumerate(runs) if "rag_eval.compare frameworks" in run), None)
+    if frameworks is None:
+        errors.append(f"pr-smoke: job eval-smoke must run '{FRAMEWORKS_STEP}'")
+    else:
+        if FRAMEWORKS_STEP not in runs[frameworks]:
+            errors.append(f"pr-smoke: the framework comparison step must run '{FRAMEWORKS_STEP}'")
+        if soft(frameworks):
+            errors.append("pr-smoke: the framework comparison step must fail the job")
+        after_installs(frameworks, "framework comparison")
+
+    check = next((i for i, run in enumerate(runs) if CACHE_CHECK_STEP in run), None)
+    if check is None:
+        errors.append(f"pr-smoke: job eval-smoke must run '{CACHE_CHECK_STEP}' on a fresh pair run")
+        return
+    if soft(check):
+        errors.append("pr-smoke: the cache near-miss gate step must fail the job")
+    after_installs(check, "cache near-miss gate")
+    lines = runs[check].splitlines()
+    check_line = next(n for n, line in enumerate(lines) if CACHE_CHECK_STEP in line)
+    pair_line = next((n for n, line in enumerate(lines) if "--cache-pairs" in line), None)
+    if pair_line is None:
+        errors.append(f"pr-smoke: the cache near-miss gate step must run '{CACHE_PAIRS_STEP}' (--cache-pairs) before the check")
+        return
+    if pair_line > check_line:
+        errors.append(f"pr-smoke: '{CACHE_CHECK_STEP}' must check a fresh pair run, so the --cache-pairs run comes first")
+    if CACHE_PAIRS_STEP not in lines[pair_line]:
+        errors.append(f"pr-smoke: the cache pair run must be '{CACHE_PAIRS_STEP}'")
+    out = re.search(r"--out\s+(\S+)", lines[pair_line])
+    if out is None or f"--pairs {out.group(1)}/cache-pairs.json" not in lines[check_line]:
+        errors.append("pr-smoke: the cache check must read the cache-pairs.json of the fresh pair run in the same step")
 
 
 def check_online_judge(data: dict, errors: list[str]) -> None:
@@ -358,6 +529,54 @@ def check_online_judge(data: dict, errors: list[str]) -> None:
             errors.append("nightly: an online-judge step appears to echo a key")
 
 
+def check_injection_sec(data: dict, errors: list[str]) -> None:
+    """D-14, A-13: the live SEC matrix runs nightly behind the generator key; vendor keys only through step env."""
+    job = (data.get("jobs") or {}).get("injection-sec")
+    if job is None:
+        errors.append("nightly: job 'injection-sec' missing")
+        return
+    flag = "HAS_GENERATOR_KEY"
+    flag_expr = str((job.get("env") or {}).get(flag, ""))
+    if "secrets.OPENROUTER_API_KEY != ''" not in flag_expr:
+        errors.append(f"nightly: injection-sec job env {flag} must require secrets.OPENROUTER_API_KEY")
+    steps = all_steps(job)
+    ungated = [s for s in steps if f"{flag} == 'true'" not in str(s.get("if", ""))]
+    if (
+        len(ungated) != 1
+        or SEC_SKIP_NOTICE not in str(ungated[0].get("run", ""))
+        or f"{flag} != 'true'" not in str(ungated[0].get("if", ""))
+    ):
+        errors.append(f"nightly: only the skip-notice step of injection-sec may run without the {flag} == 'true' condition")
+    runner = [s for s in steps if SEC_NIGHTLY_STEP in str(s.get("run", ""))]
+    if len(runner) != 1:
+        errors.append(f"nightly: injection-sec must run '{SEC_NIGHTLY_STEP}' once")
+    else:
+        step_env = runner[0].get("env") or {}
+        for secret in ("OPENROUTER_API_KEY", LAKERA_SECRET):
+            if str(step_env.get(secret)) != f"${{{{ secrets.{secret} }}}}":
+                errors.append(f"nightly: injection-sec must pass {secret} from repository secrets by name through step env")
+    if "uv sync --directory eval --locked --all-extras" not in step_text(job):
+        errors.append("nightly: injection-sec must sync eval with --locked --all-extras")
+    for step in steps:
+        run = str(step.get("run", ""))
+        if "secrets." in run:
+            errors.append("nightly: injection-sec secrets must be passed through step env, not interpolated into run")
+        if re.search(r"\becho\b.*\bKEY\b", run):
+            errors.append("nightly: an injection-sec step appears to echo a key")
+
+
+def check_lakera_secret_scope(errors: list[str]) -> None:
+    """T-05.1-60: the Lakera key is referenced in nightly.yml only, never in a pull-request or other workflow."""
+    workflows_dir = ROOT / ".github" / "workflows"
+    for path in sorted(workflows_dir.glob("*.y*ml")):
+        if path == NIGHTLY:
+            continue
+        if LAKERA_SECRET in path.read_text(encoding="utf-8"):
+            errors.append(f"{path.name}: {LAKERA_SECRET} may be referenced only in nightly.yml")
+    if NIGHTLY.exists() and LAKERA_SECRET not in NIGHTLY.read_text(encoding="utf-8"):
+        errors.append(f"nightly: {LAKERA_SECRET} must be passed to the injection-sec job by name")
+
+
 def check_real_docling(data: dict, errors: list[str]) -> None:
     job = (data.get("jobs") or {}).get("real-docling")
     if job is None:
@@ -372,6 +591,7 @@ def check_real_docling(data: dict, errors: list[str]) -> None:
         DOCLING_SKIP_NOTICE,
         "uv sync --directory eval --locked --extra fixtures",
         "--target docling",
+        'load_profile("general@1")',
         "/opt/docling-models",
         "generate_pdfs.py",
         "--cjk-font",
@@ -396,6 +616,55 @@ def check_real_docling(data: dict, errors: list[str]) -> None:
             errors.append(f"nightly: real-docling step '{step.get('name', step.get('uses', '?'))}' must be conditioned on {DOCLING_READY}")
 
 
+def check_weekly_report(data: dict, errors: list[str]) -> None:
+    """D-25, T-0511-74/75: the weekly report runs only where private eval data exists, never uploads it, never inlines a secret."""
+    name = "nightly: weekly-report"
+    crons = [str(entry.get("cron", "")) for entry in (triggers(data).get("schedule") or []) if isinstance(entry, dict)]
+    job = (data.get("jobs") or {}).get(WEEKLY_JOB)
+    if job is None:
+        errors.append(f"nightly: job '{WEEKLY_JOB}' missing")
+        return
+    condition = str(job.get("if", ""))
+    if (
+        WEEKLY_CRON not in crons
+        or f"github.event.schedule == '{WEEKLY_CRON}'" not in condition
+        or "github.event_name == 'workflow_dispatch'" not in condition
+    ):
+        errors.append(f"{name} must run only on the weekly schedule '{WEEKLY_CRON}' (listed under schedule) or workflow_dispatch")
+    steps = all_steps(job)
+    first = steps[0] if steps else {}
+    first_run = str(first.get("run", ""))
+    if (
+        "if" in first
+        or "eval/golden/private" not in first_run
+        or f"{PRIVATE_FLAG}=true" not in first_run
+        or "$GITHUB_ENV" not in first_run
+        or WEEKLY_SKIP_NOTICE not in first_run
+    ):
+        errors.append(
+            f"{name}: the first step must run unconditionally, set {PRIVATE_FLAG} in $GITHUB_ENV from the presence of "
+            f"eval/golden/private and print '{WEEKLY_SKIP_NOTICE}' when it is absent"
+        )
+    for step in steps[1:]:
+        if f"env.{PRIVATE_FLAG} == 'true'" not in str(step.get("if", "")):
+            errors.append(f"{name}: step '{step.get('name', step.get('uses', '?'))}' must be conditioned on env.{PRIVATE_FLAG} == 'true'")
+    body = step_text(job)
+    for needle in ("rag_eval.failure_report", "rag_eval.weekly_report", "uv sync --directory eval --locked --all-extras"):
+        if needle not in body:
+            errors.append(f"{name} is missing '{needle}'")
+    for step in steps:
+        uses = str(step.get("uses", ""))
+        if uses.startswith("actions/upload-artifact@"):
+            errors.append(f"{name} must not upload an artifact (private reports stay on the runner)")
+        if uses.startswith("actions/checkout@") and (step.get("with") or {}).get("clean") is not False:
+            errors.append(f"{name}: checkout must set clean: false so the gitignored private data stays on the runner")
+        run = str(step.get("run", ""))
+        if "secrets." in run:
+            errors.append(f"{name}: secrets must be passed through step env, not interpolated into run")
+        if re.search(r"\becho\b.*\b(KEY|TOKEN|BEARER)\b", run):
+            errors.append(f"{name}: a step appears to echo a credential")
+
+
 def check_nightly(errors: list[str]) -> None:
     data, text = load(NIGHTLY)
     check_common("nightly", data, text, errors)
@@ -416,6 +685,8 @@ def check_nightly(errors: list[str]) -> None:
         errors.append("nightly: CONFIDENT_API_KEY must never be set")
     check_online_judge(data, errors)
     check_real_docling(data, errors)
+    check_injection_sec(data, errors)
+    check_weekly_report(data, errors)
     job = (data.get("jobs") or {}).get("judge")
     if job is None:
         errors.append("nightly: job 'judge' missing")
@@ -447,6 +718,42 @@ def check_nightly(errors: list[str]) -> None:
             errors.append("nightly: a step appears to echo a key")
 
 
+def check_ray_optional(data: dict, text: str, errors: list[str]) -> None:
+    """The optional Ray job (D-37): scheduled or manual only, no secrets, the ray extra synced from the lock, both Ray tests run."""
+    name = "ray-optional"
+    check_common(name, data, text, errors)
+    trig = triggers(data)
+    for t in ("schedule", "workflow_dispatch"):
+        if t not in trig:
+            errors.append(f"{name}: trigger '{t}' missing")
+    for forbidden in ("pull_request", "push"):
+        if forbidden in trig:
+            errors.append(f"{name}: trigger '{forbidden}' must not be used (the PR pipeline never installs the ray extra)")
+    if "secrets." in text:
+        errors.append(f"{name}: must not reference secrets.")
+    jobs = data.get("jobs") or {}
+    if not jobs:
+        errors.append(f"{name}: no job")
+        return
+    body = "\n".join(step_text(job) for job in jobs.values())
+    for needle in (RAY_SYNC, "npm ci", "-m ray", "tests/test_ingest_ray_runner.py", RAY_EQUALITY_TEST):
+        if needle not in body:
+            errors.append(f"{name}: missing '{needle}'")
+    if "--extra docling" in body:
+        errors.append(f"{name}: must not install the heavy docling extra")
+    for job in jobs.values():
+        for step in all_steps(job):
+            if RAY_EQUALITY_TEST in str(step.get("run", "")):
+                step_env = {**(job.get("env") or {}), **(step.get("env") or {})}
+                if str(step_env.get("RAG_TEST_RAY")) != "1":
+                    errors.append(f"{name}: the equality step must set RAG_TEST_RAY to '1', or the test skips")
+
+
+def check_no_ray_extra(name: str, text: str, errors: list[str]) -> None:
+    if "--extra ray" in text:
+        errors.append(f"{name}: must not install the ray extra (it runs only in ray-optional.yml)")
+
+
 def main() -> int:
     errors: list[str] = []
     if not PR.exists():
@@ -455,8 +762,16 @@ def main() -> int:
         check_pr(errors)
     if NIGHTLY.exists():
         check_nightly(errors)
+        check_no_ray_extra("nightly", NIGHTLY.read_text(encoding="utf-8"), errors)
     else:
         print("check-workflows: nightly.yml does not exist yet, skipping nightly assertions")
+    if PR.exists():
+        check_no_ray_extra("pr-smoke", PR.read_text(encoding="utf-8"), errors)
+    if RAY_OPTIONAL.exists():
+        check_ray_optional(*load(RAY_OPTIONAL), errors)
+    else:
+        errors.append(f"missing {RAY_OPTIONAL.relative_to(ROOT)}")
+    check_lakera_secret_scope(errors)
     workflows = [load(path)[0] for path in (PR, NIGHTLY) if path.exists()]
     check_tsx_tests_covered(workflows, TESTS_DIR, errors)
     if errors:

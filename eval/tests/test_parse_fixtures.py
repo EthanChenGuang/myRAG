@@ -2,8 +2,10 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 import pytest
@@ -89,27 +91,55 @@ def test_pdfs_match_manifest_hashes():
         assert _sha256(data) == row["sha256"]
 
 
-@requires_reportlab
-def test_generation_is_deterministic(tmp_path: Path):
-    font = _font()
-    if font is None:
-        pytest.skip("no CJK font available for scanned parse fixtures")
+def _snapshot(root: Path) -> dict[str, tuple[str, int]]:
+    return {
+        str(path.relative_to(root)): (_sha256(path.read_bytes()), path.stat().st_mtime_ns)
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def _generate_parse(out: Path, font: Path) -> subprocess.CompletedProcess[str]:
     cmd = [
         sys.executable,
         str(REPO_ROOT / "eval/fixtures/ingest/generate_pdfs.py"),
         "--target",
         "parse",
+        "--out",
+        str(out),
         "--cjk-font",
         str(font),
     ]
-    env = os.environ.copy()
-    first = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, env=env, check=True)
-    digest_first = {path.name: _sha256(path.read_bytes()) for path in sorted(PDF_DIR.glob("*.pdf"))}
-    second = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, env=env, check=True)
-    assert second.returncode == 0
-    digest_second = {path.name: _sha256(path.read_bytes()) for path in sorted(PDF_DIR.glob("*.pdf"))}
-    assert digest_first == digest_second
+    return subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, env=os.environ.copy(), check=True)
+
+
+def _generated_digests(out: Path) -> dict[str, str]:
+    return {str(path.relative_to(out)): _sha256(path.read_bytes()) for path in sorted(out.rglob("*")) if path.is_file()}
+
+
+@requires_reportlab
+def test_generation_is_deterministic(tmp_path: Path):
+    font = _font()
+    if font is None:
+        pytest.skip("no CJK font available for scanned parse fixtures")
+    first = _generate_parse(tmp_path / "first", font)
+    second = _generate_parse(tmp_path / "second", font)
+    digest_first = _generated_digests(tmp_path / "first")
+    assert "manifest.json" in digest_first
+    assert len([name for name in digest_first if name.startswith("pdf/")]) == len(_manifest_rows())
+    assert digest_first == _generated_digests(tmp_path / "second")
     assert first.stderr == second.stderr
+
+
+@requires_reportlab
+def test_generation_leaves_committed_fixtures_untouched(tmp_path: Path):
+    font = _font()
+    if font is None:
+        pytest.skip("no CJK font available for scanned parse fixtures")
+    before = _snapshot(PARSE)
+    _generate_parse(tmp_path / "out", font)
+    assert _snapshot(PARSE) == before
+    assert (tmp_path / "out" / "manifest.json").is_file()
 
 
 def test_expected_files_validate():
@@ -161,3 +191,118 @@ def test_recorded_premium_markdown_for_invoice_and_scanned():
         path = PARSE / "recorded" / digest / "premium" / "page-1.md"
         assert path.is_file(), spec.id
         assert path.read_text(encoding="utf-8").strip()
+
+# scan_zh_it (03.2-25, D-18): a character-exact zh/it scan. The recordings are built from the spec through the adapters
+# (build_recorded.py, record_chain_results.py), so they prove request shape and text transport, not OCR quality; real OCR
+# on the page runs under the sidecar's real_docling marker (nightly) and in live verification.
+SCAN_ZH_IT = "scan-zh-it"
+SCAN_ZH_IT_CLASS = "scan_zh_it"
+INGEST_BUILD_INFO = REPO_ROOT / "eval/fixtures/ingest/pdf/build-info.json"
+GRAVE_VOWELS = "àèìòù"
+FULL_WIDTH_PUNCTUATION = "。，；："
+HALF_WIDTH_AFTER_CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff][.,;:]")
+COMBINING_MARK = re.compile(r"[A-Za-z][\u0300-\u036f]")
+
+
+def _scan_row() -> dict:
+    rows = [row for row in _manifest_rows() if row["id"] == SCAN_ZH_IT]
+    assert len(rows) == 1, f"{SCAN_ZH_IT} is not in the parse manifest"
+    return rows[0]
+
+
+def _read(path: Path) -> str:
+    assert path.is_file(), f"missing {path.relative_to(REPO_ROOT)}"
+    return path.read_text(encoding="utf-8")
+
+
+def _scan_expected_text() -> str:
+    return _read(EXPECTED_DIR / f"{SCAN_ZH_IT}.txt")
+
+
+def _lines(text: str) -> str:
+    """Text blocks, one per line, with Markdown heading markers and blank lines removed."""
+    blocks = [re.sub(r"^#+\s+", "", line.strip()) for line in text.splitlines()]
+    return "\n".join(block for block in blocks if block) + "\n"
+
+
+def _scan_recorded_texts() -> dict[str, str]:
+    row = _scan_row()
+    base = PARSE / "recorded" / row["sha256"]
+    docling = json.loads(_read(base / "structured_ocr" / "page-1.json"))
+    chain = json.loads(_read(PARSE / "chain" / f"{SCAN_ZH_IT}.parse.json"))
+    return {
+        "docling": "\n".join(item["text"] for item in docling["texts"]) + "\n",
+        "llamaparse": _lines(_read(base / "premium" / "page-1.md")),
+        "chain": _lines(chain["markdown"]),
+    }
+
+
+def _recorded_requests() -> dict[str, dict]:
+    base = PARSE / "recorded" / _scan_row()["sha256"] / "requests"
+    return {name: json.loads(_read(base / f"{name}.json")) for name in ("docling", "llamaparse", "docling-engine")}
+
+
+def test_scan_zh_it_class_is_in_the_specs_and_the_manifest():
+    specs = _load("parse_specs", PARSE / "parse_specs.py")
+    found = [item for item in specs.fixture_specs_only() if item.id == SCAN_ZH_IT]
+    assert len(found) == 1, f"{SCAN_ZH_IT} is not in the parse specs"
+    spec = found[0]
+    assert spec.facts["parse_class"] == SCAN_ZH_IT_CLASS
+    assert spec.layer == "scanned" and spec.facts["page_kinds"] == {1: "scanned"}
+    assert _scan_row()["class"] == SCAN_ZH_IT_CLASS
+
+
+def test_scan_zh_it_pdf_is_image_only():
+    path = PDF_DIR / f"{SCAN_ZH_IT}.pdf"
+    assert path.is_file(), f"missing {path.name}"
+    data = path.read_bytes()
+    assert b"/Subtype /Image" in data
+    contents = re.search(rb"/Contents (\d+) 0 R", data)
+    assert contents is not None
+    stream = re.search(rb"\n" + contents.group(1) + rb" 0 obj\n.*?stream\r?\n(.*?)endstream", data, re.S)
+    assert stream is not None and b"Do" in stream.group(1), "the page content does not draw the scan image"
+    assert not re.search(rb"(Tj|TJ|'|\")\s", stream.group(1)), "the page has a text layer; OCR must be the only source"
+
+
+@requires_reportlab
+def test_scan_zh_it_regenerates_byte_for_byte_with_the_recorded_font(tmp_path: Path):
+    font = _font()
+    info = json.loads(INGEST_BUILD_INFO.read_text(encoding="utf-8"))["scan_font"]
+    if font is None or _sha256(font.read_bytes()) != info["sha256"]:
+        pytest.skip(f"the recorded scan font ({info['family']}, sha256 {info['sha256'][:12]}) is not installed")
+    _generate_parse(tmp_path / "out", font)
+    regenerated = tmp_path / "out" / "pdf" / f"{SCAN_ZH_IT}.pdf"
+    assert regenerated.is_file(), "the generator does not build the scan_zh_it page"
+    assert regenerated.read_bytes() == (PDF_DIR / f"{SCAN_ZH_IT}.pdf").read_bytes()
+    assert _read(tmp_path / "out" / "expected" / f"{SCAN_ZH_IT}.txt") == _scan_expected_text()
+
+
+def test_scan_zh_it_expected_text_is_precomposed_with_grave_accents_and_chinese_sentences():
+    text = _scan_expected_text()
+    assert unicodedata.is_normalized("NFC", text)
+    assert not COMBINING_MARK.search(text)
+    words = re.findall(r"[^\W\d_]+", text)
+    accented = [word for word in words if any(vowel in word for vowel in GRAVE_VOWELS) and not re.search(r"[\u4e00-\u9fff]", word)]
+    assert len(accented) >= 3, accented
+    assert re.search(r"[\u4e00-\u9fff][^\n]*[\u4e00-\u9fff]。", text), "no Chinese sentence ending in 。"
+    for mark in FULL_WIDTH_PUNCTUATION:
+        assert mark in text, mark
+    assert not HALF_WIDTH_AFTER_CJK.search(text)
+
+
+@pytest.mark.parametrize("source", ["docling", "llamaparse", "chain"])
+def test_scan_zh_it_recordings_equal_the_expected_text_after_nfc(source: str):
+    expected = _scan_expected_text()
+    recorded = _scan_recorded_texts()[source]
+    assert unicodedata.normalize("NFC", recorded) == expected
+    assert not COMBINING_MARK.search(recorded), "a base letter is followed by a combining accent"
+    for mark in FULL_WIDTH_PUNCTUATION:
+        assert recorded.count(mark) == expected.count(mark), mark
+    assert not HALF_WIDTH_AFTER_CJK.search(recorded)
+
+
+def test_scan_zh_it_recorded_requests_carry_the_registry_ocr_codes():
+    requests = _recorded_requests()
+    assert requests["docling"]["ocr_languages"] == ["zh", "it"]
+    assert requests["llamaparse"]["processing_options"]["ocr_parameters"]["languages"] == ["ch_sim", "it"]
+

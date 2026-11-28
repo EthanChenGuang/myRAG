@@ -1,5 +1,6 @@
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { describeStageCause } from './stage-error-cause';
 import { RetrievalBackendError, searchByEmbedding, type RawChunk, type RpcClient } from './backend/supabase-rpc';
 import {
   CORE_STAGES,
@@ -7,6 +8,7 @@ import {
   loadRagConfig,
   resolveFinalResultCount,
   validResultCount,
+  warnInjectionCheckDisabled,
   type RagConfig,
   type StageName,
 } from './config';
@@ -27,23 +29,57 @@ import {
   fetchOverviewDocuments,
   type OverviewContext,
 } from './context/overview';
-import { assembleVoiceResults, enrichVoiceCandidates, type VoiceResults } from './context/voice';
+import type { AssemblyDocumentRow } from './context/assemble';
+import { assembleVoiceResults, enrichVoiceCandidates, voiceContext, type VoiceResults } from './context/voice';
 import { getRagDeps, type RagDeps } from './deps';
 import { getEmbeddingProfileById } from './embeddings/active-profile';
 import { classifyProfileFailure, embedQuery, embedQueryForEvalProfile, withStaleProfileRetry } from './embeddings/query-embedding';
-import { legacyAnalyze, legacyRank, legacySearch, scaleThreshold, searchThresholdsFor } from './legacy/enhanced-retrieval';
+import {
+  LEGACY_VOICE_DEFAULT_MATCH_COUNT,
+  legacyAnalyze,
+  legacyRank,
+  legacySearch,
+  legacyVoicePoolRule,
+  scaleThreshold,
+  searchThresholdsFor,
+} from './legacy/enhanced-retrieval';
 import { defaultQueryContext } from './query/temporal-query-detector';
-import { resolveDocumentRefs } from './refs/resolve';
+import { renderReferencedSection, resolveDocumentRefs } from './refs/resolve';
+import type { SecurityConfig } from './security/config';
+import {
+  INJECTION_STAGE_GUARD_MS,
+  afterRules,
+  applyInjectionAction,
+  injectionDetectorsFor,
+  injectionItems,
+  injectionVersions,
+  releasedRulesFromRows,
+  logInjectionSummary,
+  runInjectionCheck,
+  runInjectionDetectors,
+  type ActiveInjectionMode,
+  type InjectionDetectorsRun,
+  type InjectionVerdicts,
+  type InjectionApplied,
+  type InjectionCheckItem,
+  type InjectionMarks,
+  type ItemCandidate,
+  type ReleasedRules,
+} from './security/injection-check';
 import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
 import { hybridRerank } from './rerank/local-hybrid';
-import { assertTenantScope, scopeKey } from './tenant/scope';
+import { assertTenantScope, scopeKey, type TenantScope } from './tenant/scope';
 import { createTraceCollector, sanitizeStageCounts, type TraceCollector } from './trace/collector';
-import { finishTrace } from './trace/finish';
+import { finishTrace, type FinishTraceOptions } from './trace/finish';
+import { resolveEffectivePipeline, V2_UNAVAILABLE, type PipelineFallback } from './v2/readiness';
 import { voiceKeywordFallback, type VoiceChunk } from './voice/keyword-fallback';
 import type {
   Candidate,
+  InjectionSummary,
+  LogOutcome,
   Profile,
   ReferencedState,
+  RetrievalOptions,
   RetrievalResult,
   RunRetrievalInput,
   StageFailureReason,
@@ -66,7 +102,13 @@ export interface StageRunOptions<T> {
   candidatesIn?: number | null;
   candidatesOut?: (value: T) => number | null;
   counts?: (value: T) => Record<string, number>;
+  rules?: (value: T) => string[];
+  versions?: (value: T) => string[];
   detail?: (value: T) => string | undefined;
+  /** Defaults to ok; injection_check reports degraded when a needed ML detector was unavailable. */
+  status?: (value: T) => Extract<StageRecord['status'], 'ok' | 'degraded'>;
+  /** Detail recorded when the stage fails (reason failed), e.g. search_delegate_error. */
+  failureDetail?: (error: unknown) => string | undefined;
 }
 
 export class StageError extends Error {
@@ -138,12 +180,14 @@ export async function runStage<T>(
     const counts = options.counts ? sanitizeStageCounts(options.counts(value)) : undefined;
     collector.record({
       name: spec.name,
-      status: 'ok',
+      status: options.status ? options.status(value) : 'ok',
       startedAt,
       endedAt: collector.now(),
       candidatesIn,
       candidatesOut: options.candidatesOut ? options.candidatesOut(value) : null,
       ...(counts !== undefined ? { counts } : {}),
+      ...(options.rules ? { rules: options.rules(value) } : {}),
+      ...(options.versions ? { versions: options.versions(value) } : {}),
       detail: options.detail ? options.detail(value) : undefined,
     });
     return { skipped: false, value };
@@ -156,6 +200,8 @@ export async function runStage<T>(
       throw new StageError(spec.name, reason, error);
     }
 
+    const failureDetail = reason === 'failed' && options.failureDetail ? options.failureDetail(error) : undefined;
+
     if (spec.onFail === 'throw') {
       collector.record({
         name: spec.name,
@@ -164,22 +210,39 @@ export async function runStage<T>(
         startedAt,
         endedAt,
         candidatesIn,
+        ...(failureDetail !== undefined ? { detail: failureDetail } : {}),
       });
       throw new StageError(spec.name, reason, error);
     }
 
-    collector.record({ name: spec.name, status: 'skipped', reason, startedAt, endedAt, candidatesIn });
+    collector.record({
+      name: spec.name,
+      status: 'skipped',
+      reason,
+      startedAt,
+      endedAt,
+      candidatesIn,
+      ...(failureDetail !== undefined ? { detail: failureDetail } : {}),
+    });
     logger.warn('RAG Pipeline', 'Optional stage skipped', { stage: spec.name, reason });
     return { skipped: true, reason };
   }
+}
+
+export const INJECTION_DETECTOR_UNAVAILABLE = 'detector_unavailable';
+
+function detectorUnavailable(record: StageRecord): boolean {
+  return record.name === 'injection_check' && record.status === 'degraded' && record.detail === INJECTION_DETECTOR_UNAVAILABLE;
 }
 
 export function deriveStatus(records: StageRecord[], survivingCount: number): RetrievalResult['status'] {
   if (records.some((record) => record.status === 'error' || record.status === 'timeout' || record.status === 'aborted')) {
     return 'error';
   }
-  if (records.some((record) => record.status === 'skipped' || record.status === 'degraded')) return 'degraded';
-  return survivingCount === 0 ? 'empty' : 'ok';
+  // A detector outage degrades only a result that would otherwise be ok: with nothing surviving it stays empty.
+  if (records.some((record) => record.status === 'skipped' || (record.status === 'degraded' && !detectorUnavailable(record)))) return 'degraded';
+  if (survivingCount === 0) return 'empty';
+  return records.some(detectorUnavailable) ? 'degraded' : 'ok';
 }
 
 export function stageSpec(
@@ -209,6 +272,127 @@ export function stageSpec(
 export function requireValue<T>(outcome: StageOutcome<T>, stage: string): T {
   if (outcome.skipped) throw new StageError(stage, 'failed');
   return outcome.value;
+}
+
+export interface InjectionStageInput<C extends ItemCandidate> {
+  spec: StageSpec;
+  signal: AbortSignal;
+  collector: TraceCollector;
+  profile: Profile;
+  security: SecurityConfig;
+  mode: ActiveInjectionMode;
+  items: readonly InjectionCheckItem[];
+  candidates: readonly C[];
+  referenced: ReferencedState | null;
+  /** The request's tenant: it keys the ML verdict cache (A-9). Without one no ML detector runs. */
+  scope: TenantScope | null;
+  /** Released rule ids from document rows already loaded under the caller's scope. */
+  released?: ReleasedRules;
+  /** Document filenames from the same rows, recorded on the summary's item records. */
+  documentNames?: ReadonlyMap<string, string>;
+}
+
+export interface InjectionStageRun<C extends ItemCandidate> {
+  applied: InjectionApplied<C> | null;
+  stalled: boolean;
+}
+
+function withDetectors<C extends ItemCandidate>(applied: InjectionApplied<C>, run: InjectionDetectorsRun): InjectionApplied<C> {
+  if (run.reported.length === 0) return applied;
+  const disabled = Object.keys(run.disabled).length > 0 ? { detectorsDisabled: { ...run.disabled } as Record<string, string> } : {};
+  const failures = Object.keys(run.failures).length > 0 ? { detectorFailures: { ...run.failures } as Record<string, string> } : {};
+  return {
+    ...applied,
+    counts: { ...applied.counts, ...run.counts },
+    summary: { ...applied.summary, detectorsUnavailable: [...run.unavailable], ...disabled, ...failures },
+  };
+}
+
+/**
+ * The injection_check stage shared by every legacy graph and the v2 graph. The rules run synchronously before any await and their
+ * result is held outside the stage race, so a stage timeout can never lose it (A-3). The ML detectors then run on the items the rules
+ * did not flag, under an inner deadline below the race; a needed detector that failed marks the stage degraded, never skipped.
+ */
+export async function runInjectionStage<C extends ItemCandidate>(input: InjectionStageInput<C>): Promise<InjectionStageRun<C>> {
+  const { spec, items, mode } = input;
+  const deps = getRagDeps();
+  const versions = injectionVersions(injectionDetectorsFor(input.profile, input.security));
+  let held: InjectionApplied<C> | null = null;
+  const apply = (verdicts: InjectionVerdicts) =>
+    applyInjectionAction({
+      candidates: input.candidates,
+      referenced: input.referenced,
+      items,
+      verdicts,
+      mode,
+      renderSection: renderReferencedSection,
+      ...(input.documentNames ? { documentNames: input.documentNames } : {}),
+    });
+  const checked = await runStage(
+    { ...spec, timeoutMs: spec.timeoutMs + INJECTION_STAGE_GUARD_MS },
+    input.signal,
+    async (stageSignal) => {
+      const verdicts = runInjectionCheck({ items, mode, ...(input.released ? { released: input.released } : {}) });
+      const rulesApplied = apply(verdicts);
+      held = rulesApplied;
+      const detectors = await runInjectionDetectors({
+        items,
+        verdicts,
+        profile: input.profile,
+        security: input.security,
+        scope: input.scope,
+        traceId: input.collector.traceId,
+        signal: stageSignal,
+        budgetMs: spec.timeoutMs,
+        lakeraDetector: deps.lakeraDetector,
+        promptGuardClassifier: deps.promptGuardClassifier,
+      });
+      const applied = withDetectors(detectors.verdicts === verdicts ? rulesApplied : apply(detectors.verdicts), detectors);
+      held = applied;
+      return afterRules(applied);
+    },
+    input.collector,
+    {
+      candidatesIn: items.length,
+      candidatesOut: (value) => value.counts.checked - value.counts.dropped,
+      counts: (value) => value.counts,
+      rules: (value) => value.summary.ruleIds,
+      versions: () => versions,
+      status: (value) => (value.summary.detectorsUnavailable.length > 0 ? 'degraded' : 'ok'),
+      detail: (value) => (value.summary.detectorsUnavailable.length > 0 ? INJECTION_DETECTOR_UNAVAILABLE : undefined),
+    },
+  );
+  const applied: InjectionApplied<C> | null = checked.skipped ? held : checked.value;
+  const stalled = checked.skipped && applied !== null;
+  if (applied) logInjectionSummary(applied.summary, applied.counts, { traceId: input.collector.traceId, stalled });
+  return { applied, stalled };
+}
+
+/** Document id to filename from rows read under the caller's scope; ids without a filename are left out. */
+export function documentNamesFromRows(rows: ReadonlyMap<string, { filename?: string | null }> | null | undefined): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const [id, row] of rows ?? []) if (row.filename) names.set(id, row.filename);
+  return names;
+}
+
+export function injectionDropped(summary: InjectionSummary): boolean {
+  return summary.droppedChunkIds.length > 0 || summary.droppedReferenceIds.length > 0;
+}
+
+/** Everything that would have reached the model was dropped by the check: `empty` wins over `degraded` (A-3). */
+export function injectionFilteredAll(injection: InjectionSummary | undefined, survivors: number, status: RetrievalResult['status']): boolean {
+  if (!injection || status === 'error') return false;
+  return injectionDropped(injection) && survivors === 0;
+}
+
+export function injectionReason(records: StageRecord[], stalled: boolean): string {
+  const reason = degradedReason(records);
+  return stalled && reason === 'injection_check_timeout' ? 'injection_check_stalled' : reason;
+}
+
+/** Downweight for graphs without a renderer that marks: flagged items move after the unflagged ones, order kept. */
+export function downweightOrder<C extends { chunk_id: string }>(candidates: readonly C[], flagged: ReadonlySet<string>): C[] {
+  return [...candidates.filter((c) => !flagged.has(c.chunk_id)), ...candidates.filter((c) => flagged.has(c.chunk_id))];
 }
 
 const ASSEMBLY_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval'];
@@ -252,7 +436,17 @@ export function failure(
     stages: collector.stages(),
     traceId: collector.traceId,
     queryContext,
+    logOutcome: newLogOutcome(),
   };
+}
+
+function newLogOutcome(): LogOutcome {
+  return { value: 'unknown', answerLanguage: null };
+}
+
+/** D-07: every result leaves runRetrieval with its own holder, tagged with the pipeline that produced it. */
+function withLogOutcome(result: RetrievalResult, pipeline: NonNullable<LogOutcome['pipeline']>): RetrievalResult {
+  return { ...result, logOutcome: { ...newLogOutcome(), pipeline } };
 }
 
 export function assembleDisabledStatus(
@@ -268,6 +462,7 @@ export function assembleDisabledStatus(
 export function degradedReason(records: StageRecord[]): string {
   const skipped = records.find((record) => record.status === 'skipped');
   if (skipped) return `${skipped.name}_${skipped.reason ?? 'skipped'}`;
+  if (records.some(detectorUnavailable)) return `injection_check_${INJECTION_DETECTOR_UNAVAILABLE}`;
   return records.some((record) => record.name === 'assemble' && record.status === 'disabled') ? 'assemble_disabled' : 'degraded';
 }
 
@@ -280,9 +475,12 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
   const config = loadRagConfig(deps.ragEnv());
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, input.stageOverrides);
   const mediaKind = input.options?.mediaKind ?? 'image';
+  const security = deps.securityConfig();
 
   let candidates: Candidate[] = [];
   let context = '';
+  let injection: InjectionSummary | undefined;
+  let injectionStalled = false;
 
   try {
     const embedding = requireValue(
@@ -292,7 +490,7 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
       'embed',
     );
 
-    const rawChunks = requireValue(
+    let rawChunks = requireValue(
       await runStage(
         spec('search', 'throw'),
         signal,
@@ -311,6 +509,28 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
       ),
       'search',
     );
+
+    if (security.injectionCheck !== 'off') {
+      warnInjectionCheckDisabled(config, security.injectionCheck);
+      // Text feeding image and video prompt rewriting is always dropped when flagged, rules only (A-11).
+      const run = await runInjectionStage({
+        spec: spec('injection_check', 'skip'),
+        signal,
+        collector,
+        scope,
+        profile,
+        security,
+        mode: 'drop',
+        items: injectionItems(rawChunks, null, null),
+        candidates: rawChunks,
+        referenced: null,
+      });
+      injectionStalled = run.stalled;
+      if (run.applied) {
+        injection = run.applied.summary;
+        rawChunks = run.applied.candidates;
+      }
+    }
 
     candidates = rawChunks.map((chunk) => ({
       chunk_id: chunk.chunk_id,
@@ -341,7 +561,7 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', null);
       }
-      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason });
+      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason, ...describeStageCause(error.original) });
       return failure(collector, 'error', `${error.stage}_${error.reason}`, null);
     }
     if (signal.aborted) return failure(collector, 'error', 'aborted', null);
@@ -349,9 +569,17 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
   }
 
   const records = collector.stages();
-  const status = deriveStatus(records, candidates.length);
-  const reason = status === 'ok' ? 'ok' : status === 'empty' ? 'no_candidates' : degradedReason(records);
-  return { ...failure(collector, status, reason, null), candidates, context };
+  const derived = deriveStatus(records, candidates.length);
+  const filteredAll = injectionFilteredAll(injection, candidates.length, derived);
+  const status = filteredAll ? 'empty' : derived;
+  const reason = filteredAll
+    ? 'injection_filtered'
+    : status === 'ok'
+      ? 'ok'
+      : status === 'empty'
+        ? 'no_candidates'
+        : injectionReason(records, injectionStalled);
+  return { ...failure(collector, status, reason, null), candidates, context, ...(injection ? { injection } : {}) };
 }
 
 export async function runRefsStage(
@@ -380,7 +608,25 @@ export async function runRefsStage(
     collector,
     { candidatesOut: (value) => value.usedDocuments.length },
   );
-  return resolved.skipped ? null : { usedDocuments: resolved.value.usedDocuments, context: resolved.value.context };
+  if (resolved.skipped) return null;
+  const { usedDocuments, context, sections } = resolved.value;
+  return { usedDocuments, context, sections };
+}
+
+/**
+ * The overview document rows, loaded once before the check so the released rule ids come from rows returned under the
+ * caller's scope (the ids are the scoped search results); assemble reuses them. A failed read leaves no exemption and
+ * assemble reads again, so the check never fails open.
+ */
+async function loadOverviewDocumentsForCheck(rawChunks: RawChunk[], signal: AbortSignal): Promise<Map<string, AssemblyDocumentRow> | null> {
+  const admin = getRagDeps().adminClient();
+  if (!admin || rawChunks.length === 0) return null;
+  try {
+    return await fetchOverviewDocuments(rawChunks, { admin, signal });
+  } catch {
+    signal.throwIfAborted();
+    return null;
+  }
 }
 
 async function runOverviewPipeline(
@@ -393,11 +639,14 @@ async function runOverviewPipeline(
   const config = loadRagConfig(deps.ragEnv());
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, input.stageOverrides);
 
+  const security = deps.securityConfig();
   let rawChunks: RawChunk[] = [];
   let overview: OverviewContext = { context: '', usedDocuments: [] };
+  let injection: InjectionSummary | undefined;
+  let injectionStalled = false;
 
   try {
-    const referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
+    let referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
 
     const embedding = requireValue(
       await runStage(spec('embed', 'throw'), signal, (stageSignal) => embedQuery(OVERVIEW_QUERY, stageSignal), collector, {
@@ -426,14 +675,48 @@ async function runOverviewPipeline(
       'search',
     );
 
+    let flaggedForRender: ReadonlySet<string> | undefined;
+    let documentRows: Map<string, AssemblyDocumentRow> | null = null;
+    if (security.injectionCheck !== 'off') {
+      const mode = security.injectionCheck;
+      warnInjectionCheckDisabled(config, mode);
+      documentRows = await loadOverviewDocumentsForCheck(rawChunks, signal);
+      const run = await runInjectionStage({
+        spec: spec('injection_check', 'skip'),
+        signal,
+        collector,
+        scope,
+        profile,
+        security,
+        mode,
+        items: injectionItems(rawChunks, null, referenced),
+        candidates: rawChunks,
+        referenced,
+        released: releasedRulesFromRows(documentRows),
+        documentNames: documentNamesFromRows(documentRows),
+      });
+      injectionStalled = run.stalled;
+      if (run.applied) {
+        injection = run.applied.summary;
+        if (injectionDropped(run.applied.summary)) {
+          rawChunks = run.applied.candidates;
+          referenced = run.applied.referenced;
+        }
+        if (run.applied.marks) flaggedForRender = run.applied.marks.chunkIds;
+      }
+    }
+
     const assembled = await runStage(
       spec('assemble', 'skip'),
       signal,
       async (stageSignal) => {
         const adminClient = deps.adminClient();
         if (!adminClient) throw new Error('[RAG Overview] admin client unavailable');
-        const documents = await fetchOverviewDocuments(rawChunks, { admin: adminClient, signal: stageSignal });
-        return assembleOverviewContext(rawChunks, documents, referenced?.usedDocuments ?? []);
+        const documents = documentRows ?? (await fetchOverviewDocuments(rawChunks, { admin: adminClient, signal: stageSignal }));
+        return assembleOverviewContext(rawChunks, documents, referenced?.usedDocuments ?? [], {
+          ...(security.contextTagging ? { contextTagging: true } : {}),
+          ...(flaggedForRender ? { flaggedChunkIds: flaggedForRender } : {}),
+        });
       },
       collector,
       { candidatesIn: rawChunks.length, candidatesOut: (value) => value.usedDocuments.length },
@@ -448,7 +731,7 @@ async function runOverviewPipeline(
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', null);
       }
-      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason });
+      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason, ...describeStageCause(error.original) });
       return failure(collector, 'error', `${error.stage}_${error.reason}`, null);
     }
     if (signal.aborted) return failure(collector, 'error', 'aborted', null);
@@ -468,9 +751,23 @@ async function runOverviewPipeline(
   }));
   const records = collector.stages();
   const survivors = rawChunks.length + overview.usedDocuments.length;
-  const status = assembleDisabledStatus(records, deriveStatus(records, survivors), survivors);
-  const reason = status === 'ok' ? 'ok' : status === 'empty' ? 'no_candidates' : degradedReason(records);
-  return { ...failure(collector, status, reason, null), candidates, context: overview.context, usedDocuments: overview.usedDocuments };
+  const derived = assembleDisabledStatus(records, deriveStatus(records, survivors), survivors);
+  const filteredAll = injectionFilteredAll(injection, survivors, derived);
+  const status = filteredAll ? 'empty' : derived;
+  const reason = filteredAll
+    ? 'injection_filtered'
+    : status === 'ok'
+      ? 'ok'
+      : status === 'empty'
+        ? 'no_candidates'
+        : injectionReason(records, injectionStalled);
+  return {
+    ...failure(collector, status, reason, null),
+    candidates,
+    context: overview.context,
+    usedDocuments: overview.usedDocuments,
+    ...(injection ? { injection } : {}),
+  };
 }
 
 function evalEmbeddingProfileId(input: RunRetrievalInput): string | undefined {
@@ -493,20 +790,112 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
 
   const deps = getRagDeps();
   const config = loadRagConfig(deps.ragEnv());
-  const useV2 =
-    config.pipeline === 'v2' &&
-    !input.options?.generalOverview &&
-    input.profile !== 'media' &&
-    (['chat', 'embed', 'eval', 'voice'] as const).includes(input.profile as 'chat' | 'embed' | 'eval' | 'voice');
-
-  const result =
-    input.profile === 'voice' && !useV2
-      ? await runVoicePipeline(input, collector)
-      : useV2
-      ? await (await import('./v2/pipeline')).runV2Pipeline(input, collector)
-      : await runPipeline(input, collector);
-  if (ownsTrace) finishTrace(collector, result, { query: input.query });
+  if (config.pipelineBlocked) {
+    // D-02: an explicit RAG_PIPELINE=v2 without chosen languages is a knowledge-base outage, never a refusal.
+    const blocked = withLogOutcome(failure(collector, 'error', config.pipelineBlocked, null), 'v2');
+    if (ownsTrace) finishTrace(collector, blocked, traceOptions(input));
+    return blocked;
+  }
+  const result = await dispatchRetrieval(input, collector);
+  if (ownsTrace) finishTrace(collector, result, traceOptions(input));
   return result;
+}
+
+function traceOptions(input: RunRetrievalInput): FinishTraceOptions {
+  return { query: input.query, ...(input.logContext !== undefined ? { logContext: input.logContext } : {}) };
+}
+
+const V2_PROFILES: readonly Profile[] = ['chat', 'embed', 'eval', 'voice'];
+
+function runLegacyPipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
+  return input.profile === 'voice' ? runVoicePipeline(input, collector) : runPipeline(input, collector);
+}
+
+/** D-07: the fallback is a trace record with its reason only, never query text, tenant id or an error body. */
+function recordPipelineFallback(collector: TraceCollector, reason: Exclude<PipelineFallback, 'none'>): void {
+  const at = collector.now();
+  collector.record({ name: 'pipeline_fallback', status: 'ok', startedAt: at, endedAt: at, detail: reason });
+}
+
+/** A collector that buffers its records so a defaulted v2 attempt that falls back leaves no trace of its stages. */
+function bufferedCollector(parent: TraceCollector): TraceCollector & { commit(): void } {
+  const buffer = createTraceCollector({ profile: parent.profile, tenantKey: parent.tenantKey });
+  return {
+    traceId: parent.traceId,
+    profile: parent.profile,
+    tenantKey: parent.tenantKey,
+    startedAt: parent.startedAt,
+    now: () => parent.now(),
+    record: (entry) => buffer.record(entry),
+    stages: () => buffer.stages(),
+    toStageLatency: () => buffer.toStageLatency(),
+    toStageStatus: () => buffer.toStageStatus(),
+    setReviewContent: (content) => parent.setReviewContent(content),
+    reviewContent: () => parent.reviewContent(),
+    markRequestStart: (at) => parent.markRequestStart(at),
+    markGenerationStart: () => parent.markGenerationStart(),
+    markFirstTextDelta: () => parent.markFirstTextDelta(),
+    setCacheState: (state) => parent.setCacheState(state),
+    timing: () => parent.timing(),
+    commit() {
+      for (const record of buffer.stages()) {
+        parent.record({
+          name: record.name,
+          status: record.status,
+          ...(record.reason !== undefined ? { reason: record.reason } : {}),
+          startedAt: record.startedAt,
+          endedAt: record.endedAt,
+          candidatesIn: record.candidates_in,
+          candidatesOut: record.candidates_out,
+          ...(record.counts !== undefined ? { counts: record.counts } : {}),
+          rules: record.rules,
+          ...(record.versions !== undefined ? { versions: record.versions } : {}),
+          ...(record.detail !== undefined ? { detail: record.detail } : {}),
+        });
+      }
+    },
+  };
+}
+
+/** 03.1.1-10: an eval binding override is refused where no binding leg can run, so an eval arm never silently measures the global profile. */
+const DOMAIN_EMBEDDINGS_DISABLED = 'domain_embeddings_disabled';
+
+function hasEvalBindingOverride(options: RetrievalOptions | undefined): boolean {
+  const bindings = options?.embeddingBindings;
+  return (bindings !== undefined && Object.keys(bindings).length > 0) || options?.domainControlLeg !== undefined;
+}
+
+async function dispatchRetrieval(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
+  const evalBindingOverride = input.profile === 'eval' && hasEvalBindingOverride(input.options);
+  const eligible = !input.options?.generalOverview && V2_PROFILES.includes(input.profile);
+  if (evalBindingOverride && (!eligible || !loadRagConfig(getRagDeps().ragEnv()).v2.domainEmbeddings.enabled)) {
+    return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
+  }
+  if (!eligible) return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
+
+  const effective = resolveEffectivePipeline();
+  if (evalBindingOverride && effective.pipeline === 'legacy') return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
+  if (effective.pipeline === 'legacy') {
+    if (effective.fallback !== 'none') recordPipelineFallback(collector, effective.fallback);
+    return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
+  }
+
+  const { runV2Pipeline } = await import('./v2/pipeline');
+  if (effective.source === 'explicit') return withLogOutcome(await runV2Pipeline(input, collector), 'v2');
+
+  // A defaulted v2 may find the Phase 4 functions missing: that attempt is discarded and the same input re-runs on legacy.
+  const attempt = bufferedCollector(collector);
+  const result = await runV2Pipeline(input, attempt);
+  if (result.status === 'error' && result.reason === V2_UNAVAILABLE) {
+    if (evalBindingOverride) {
+      attempt.commit();
+      return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
+    }
+    recordPipelineFallback(collector, V2_UNAVAILABLE);
+    return withLogOutcome(await runLegacyPipeline(input, collector), 'legacy');
+  }
+  attempt.commit();
+  return withLogOutcome({ ...result, stages: collector.stages() }, 'v2');
 }
 
 async function runPipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
@@ -531,6 +920,10 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   let candidates: Candidate[] = [];
   let assembly: AssembleOutput<Candidate> | null = null;
   let referenced: ReferencedState | null = null;
+  let injection: InjectionSummary | undefined;
+  let injectionStalled = false;
+  let injectionMarks: InjectionMarks | null = null;
+  const security = deps.securityConfig();
 
   try {
     referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
@@ -610,6 +1003,9 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         ragMode: input.options?.ragMode ?? 'strict',
         webSearchEnabled: input.options?.webSearchEnabled ?? false,
         applyRelevanceFilter,
+        citationLabeler: input.citationLabeler,
+        ...(security.contextTagging ? { contextTagging: true } : {}),
+        ...(injectionMarks ? { injectionMarks } : {}),
       });
 
       let rows: AssemblyRows | null = null;
@@ -629,6 +1025,37 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         { candidatesIn: candidates.length, candidatesOut: (value) => value.relevantChunks.length },
       );
 
+      if (security.injectionCheck !== 'off') {
+        const mode = security.injectionCheck;
+        warnInjectionCheckDisabled(config, mode);
+        const loadedRows = rows as AssemblyRows | null;
+        const current = filtered as FilteredCandidates<Candidate> | null;
+        const run = await runInjectionStage({
+          spec: spec('injection_check', 'skip'),
+          signal,
+          collector,
+          scope,
+          profile,
+          security,
+          mode,
+          items: injectionItems(current ? current.relevantChunks : candidates, loadedRows?.chunkMetadata ?? null, referenced),
+          candidates,
+          referenced,
+          released: releasedRulesFromRows(loadedRows?.documents),
+          documentNames: documentNamesFromRows(loadedRows?.documents),
+        });
+        injectionStalled = run.stalled;
+        if (run.applied) {
+          injection = run.applied.summary;
+          injectionMarks = run.applied.marks;
+          if (injectionDropped(run.applied.summary)) {
+            candidates = run.applied.candidates;
+            referenced = run.applied.referenced;
+            if (loadedRows && current) filtered = filterCandidates(assemblyInput(loadedRows, true));
+          }
+        }
+      }
+
       const assembled = await runStage(
         spec('assemble', 'skip'),
         signal,
@@ -640,7 +1067,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         },
         collector,
         {
-          candidatesIn: postFilter.skipped ? candidates.length : postFilter.value.relevantChunks.length,
+          candidatesIn: (filtered as FilteredCandidates<Candidate> | null)?.relevantChunks.length ?? candidates.length,
           candidatesOut: (value) => value.usedDocuments.length,
         },
       );
@@ -655,7 +1082,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', queryContext);
       }
-      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason });
+      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason, ...describeStageCause(error.original) });
       return failure(collector, 'error', `${error.stage}_${error.reason}`, queryContext);
     }
     if (signal.aborted) return failure(collector, 'error', 'aborted', queryContext);
@@ -663,21 +1090,24 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   }
 
   const records = collector.stages();
-  const status = assembleDisabledStatus(
+  const derived = assembleDisabledStatus(
     records,
     deriveStatus(records, assembly ? survivorCount(assembly) : candidates.length),
     assembly ? 0 : candidates.length,
   );
-  const reason =
-    status === 'ok'
+  const injectionFiltered = assembly !== null && injectionFilteredAll(injection, survivorCount(assembly), derived);
+  const status = injectionFiltered ? 'empty' : derived;
+  const reason = injectionFiltered
+    ? 'injection_filtered'
+    : status === 'ok'
       ? 'ok'
       : status === 'empty'
         ? candidates.length === 0
           ? 'no_candidates'
           : 'no_relevant_context'
-        : degradedReason(records);
+        : injectionReason(records, injectionStalled);
 
-  const base = failure(collector, status, reason, queryContext);
+  const base = { ...failure(collector, status, reason, queryContext), ...(injection ? { injection } : {}) };
   if (!assembly) return { ...base, candidates };
 
   return {
@@ -691,12 +1121,10 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
     kept: assembly.kept,
     queryTerms: assembly.queryTerms,
     refusalCandidate: assembly.refusalCandidate,
+    blocks: assembly.blocks,
   };
 }
 
-const VOICE_SEARCH_MULTIPLIER = 5;
-const VOICE_SEARCH_THRESHOLD = 0.15;
-const VOICE_DEFAULT_MATCH_COUNT = 5;
 
 function toVoiceChunk(row: RawChunk, scope: NonNullable<RunRetrievalInput['scope']>): VoiceChunk {
   // Workspace rows have always carried an id; single-tenant rows have not, and the keyword stage dedupes on id.
@@ -711,15 +1139,18 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
   const { signal, profile, query } = input;
   const config = loadRagConfig(deps.ragEnv());
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, input.stageOverrides);
-  const matchCount = validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT;
+  const matchCount = validResultCount(input.options?.maxResults) ?? LEGACY_VOICE_DEFAULT_MATCH_COUNT;
   const requireAdmin = () => {
     const admin = deps.adminClient();
     if (!admin) throw new Error('[RAG Voice] admin client unavailable');
     return admin;
   };
 
+  const security = deps.securityConfig();
   let voice: VoiceResults = { results: [], source_images: [] };
   let voiceInput = 0;
+  let injection: InjectionSummary | undefined;
+  let injectionStalled = false;
 
   try {
     const embedding = requireValue(
@@ -734,15 +1165,13 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
         spec('search', 'throw'),
         signal,
         async (stageSignal) => {
-          const rows = await withStaleProfileRetry(query, embedding, stageSignal, (current) =>
-            searchByEmbedding(
-              scope,
-              current,
-              matchCount * VOICE_SEARCH_MULTIPLIER,
-              scaleThreshold(searchThresholdsFor(current.profile), VOICE_SEARCH_THRESHOLD),
-              { client: requireAdmin() as unknown as RpcClient, signal: stageSignal },
-            ),
-          );
+          const rows = await withStaleProfileRetry(query, embedding, stageSignal, (current) => {
+            const { primary } = legacyVoicePoolRule(searchThresholdsFor(current.profile), matchCount);
+            return searchByEmbedding(scope, current, primary.matchCount, primary.threshold, {
+              client: requireAdmin() as unknown as RpcClient,
+              signal: stageSignal,
+            });
+          });
           return rows.map((row) => toVoiceChunk(row, scope));
         },
         collector,
@@ -767,7 +1196,35 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
       collector,
       { candidatesIn: merged.length, candidatesOut: (value) => value.length },
     );
-    const ranked = reranked.skipped ? enrichVoiceCandidates(merged) : reranked.value;
+    let ranked = reranked.skipped ? enrichVoiceCandidates(merged) : reranked.value;
+    let flaggedForRender: ReadonlySet<string> | undefined;
+
+    if (security.injectionCheck !== 'off') {
+      const mode = security.injectionCheck;
+      warnInjectionCheckDisabled(config, mode);
+      // The ranked content carries the [Metadata: ...] suffix the voice assembler sends, so the suffix is checked too.
+      const run = await runInjectionStage({
+        spec: spec('injection_check', 'skip'),
+        signal,
+        collector,
+        scope,
+        profile,
+        security,
+        mode,
+        items: injectionItems(ranked, null, null),
+        candidates: ranked,
+        referenced: null,
+      });
+      injectionStalled = run.stalled;
+      if (run.applied) {
+        injection = run.applied.summary;
+        if (injectionDropped(run.applied.summary)) ranked = run.applied.candidates;
+        if (run.applied.marks) {
+          flaggedForRender = run.applied.marks.chunkIds;
+          ranked = downweightOrder(ranked, flaggedForRender);
+        }
+      }
+    }
 
     const assembled = await runStage(
       spec('assemble', 'skip'),
@@ -778,6 +1235,10 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
     );
     voiceInput = ranked.length;
     voice = assembled.skipped ? { results: [], source_images: [] } : assembled.value;
+    if (security.contextTagging && !assembled.skipped) {
+      const context = voiceContext(voice.results, flaggedForRender);
+      if (context !== null) voice = { ...voice, context };
+    }
   } catch (error) {
     if (error instanceof StageError) {
       if (error.reason === 'aborted') return failure(collector, 'error', 'aborted', null);
@@ -787,7 +1248,7 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', null);
       }
-      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason });
+      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason, ...describeStageCause(error.original) });
       return failure(collector, 'error', `${error.stage}_${error.reason}`, null);
     }
     if (signal.aborted) return failure(collector, 'error', 'aborted', null);
@@ -796,7 +1257,15 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
   }
 
   const records = collector.stages();
-  const status = assembleDisabledStatus(records, deriveStatus(records, voice.results.length), voiceInput);
-  const reason = status === 'ok' ? 'ok' : status === 'empty' ? 'no_candidates' : degradedReason(records);
-  return { ...failure(collector, status, reason, null), voice };
+  const derived = assembleDisabledStatus(records, deriveStatus(records, voice.results.length), voiceInput);
+  const filteredAll = injectionFilteredAll(injection, voice.results.length, derived);
+  const status = filteredAll ? 'empty' : derived;
+  const reason = filteredAll
+    ? 'injection_filtered'
+    : status === 'ok'
+      ? 'ok'
+      : status === 'empty'
+        ? 'no_candidates'
+        : injectionReason(records, injectionStalled);
+  return { ...failure(collector, status, reason, null), voice, ...(injection ? { injection } : {}) };
 }

@@ -1,0 +1,71 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "budget_ms": {
+      "minimum": 0,
+      "title": "Budget Ms",
+      "type": "integer"
+    },
+    "claimed": {
+      "minimum": 0,
+      "title": "Claimed",
+      "type": "integer"
+    },
+    "dead": {
+      "minimum": 0,
+      "title": "Dead",
+      "type": "integer"
+    },
+    "deleted": {
+      "minimum": 0,
+      "title": "Deleted",
+      "type": "integer"
+    },
+    "elapsed_ms": {
+      "minimum": 0,
+      "title": "Elapsed Ms",
+      "type": "integer"
+    },
+    "failed": {
+      "minimum": 0,
+      "title": "Failed",
+      "type": "integer"
+    },
+    "lag_seconds": {
+      "minimum": 0,
+      "title": "Lag Seconds",
+      "type": "number"
+    },
+    "mode": {
+      "enum": [
+        "drain",
+        "reconcile"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "more_pending": {
+      "title": "More Pending",
+      "type": "boolean"
+    },
+    "upserted": {
+      "minimum": 0,
+      "title": "Upserted",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "mode",
+    "claimed",
+    "upserted",
+    "deleted",
+    "failed",
+    "dead",
+    "lag_seconds",
+    "elapsed_ms",
+    "budget_ms",
+    "more_pending"
+  ],
+  "title": "VectorSyncSliceReport",
+  "type": "object"
+}

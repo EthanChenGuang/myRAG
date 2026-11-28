@@ -1,0 +1,91 @@
+{
+  "$defs": {
+    "ConfigProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "defaults",
+            "sweep",
+            "calibration",
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ConfigProvenance",
+      "type": "object"
+    },
+    "DupClusterProfileEntry": {
+      "additionalProperties": false,
+      "description": "D-49: a duplicate threshold for one embedding profile; a fixture-fitted value applies in eval only.",
+      "properties": {
+        "source": {
+          "enum": [
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "threshold": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "threshold",
+        "source"
+      ],
+      "title": "DupClusterProfileEntry",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "D-49: eval/config/dup-cluster-params.json, written only by `rag_eval.calibrate dup-clusters`.",
+  "properties": {
+    "by_profile": {
+      "additionalProperties": {
+        "$ref": "#/$defs/DupClusterProfileEntry"
+      },
+      "propertyNames": {
+        "maxLength": 128,
+        "minLength": 1
+      },
+      "title": "By Profile",
+      "type": "object"
+    },
+    "config_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Hash"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ConfigProvenance"
+    },
+    "threshold": {
+      "default": 0.95,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Threshold",
+      "type": "number"
+    }
+  },
+  "title": "DupClusterParamsFile",
+  "type": "object"
+}

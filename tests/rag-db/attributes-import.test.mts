@@ -1,0 +1,696 @@
+import { after, before, describe, test } from 'node:test';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import type { PGlite } from '@electric-sql/pglite';
+import { createEmptyFixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
+import type { AttributesImportOutcome } from '@/lib/rag/ingest/attributes/import';
+import type { TenantScope } from '@/lib/rag/tenant/scope';
+
+process.env.OPENAI_API_KEY ||= 'placeholder-openai-key';
+process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'placeholder-service-role-key';
+process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'http://127.0.0.1:9';
+process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= 'placeholder-anon-key';
+
+const { runAttributesImport } = await import('@/lib/rag/ingest/attributes/import');
+const { main } = await import('@/lib/rag/ingest/attributes/cli');
+const { resetAttributeSchemaCacheForTests } = await import('@/lib/rag/ingest/attributes/schema');
+const { resetIngestDepsForTests, setIngestDepsForTests } = await import('@/lib/rag/ingest/deps');
+const { resetIngestConfigForTests } = await import('@/lib/rag/ingest/config');
+const { indexDocumentForLookup } = await import('@/lib/rag/ingest/write-indexers');
+const { createIngestWriter } = await import('@/lib/rag/ingest/writer');
+const { backfillIdentifiers } = await import('@/lib/rag/identifiers/backfill');
+const { resetAttributeIdentifierFeedForTests } = await import('@/lib/rag/ingest/attributes/identifier-feed');
+const { backfillScope } = await import('@/lib/rag/tenant/backfill-scope');
+const { mintScope } = await import('@/lib/rag/tenant/scope');
+
+/**
+ * TPL-04 (D-23, D-24, pitfall 9): the rag:attributes run against the 1005 import function in both deployment modes. Documents are written
+ * with the Phase 3 writer functions; import files live in a temporary directory. Keys and values are synthetic.
+ */
+
+const ORG_A = '00000000-0000-4000-8000-000000130301';
+const ORG_B = '00000000-0000-4000-8000-000000130302';
+const OWNER_A = '00000000-0000-4000-8000-000000130311';
+const OWNER_B = '00000000-0000-4000-8000-000000130312';
+const SOURCE = 'config_upload';
+const LEGACY_EMBED_PROFILE = 'openai-3-small-1536';
+const MARKER = 'marker-value-m3x';
+
+type Row = Record<string, unknown>;
+
+interface Tenant {
+  key: string;
+  userId: string | null;
+  orgId: string | null;
+  scope: TenantScope;
+}
+
+let sequence = 0;
+const next = (label: string): string => `${label}-${++sequence}`;
+
+async function rows(db: PGlite, sql: string, params: unknown[] = []): Promise<Row[]> {
+  return (await db.query<Row>(sql, params)).rows;
+}
+
+const asParam = (value: unknown): unknown =>
+  value !== null && typeof value === 'object' && !(Array.isArray(value) && value.every((item) => typeof item !== 'object' || item === null))
+    ? JSON.stringify(value)
+    : value;
+
+/** Service-role RPC over PGlite, with an optional hook that runs before a call. */
+function pgliteRpc(db: PGlite, before?: (fn: string, args: Record<string, unknown>) => Promise<void>): RpcClient & { calls: Array<{ fn: string; args: Row }> } {
+  const calls: Array<{ fn: string; args: Row }> = [];
+  return {
+    calls,
+    rpc(fn, args) {
+      calls.push({ fn, args });
+      const keys = Object.keys(args);
+      const sql = `SELECT * FROM ${fn}(${keys.map((key, index) => `${key} => $${index + 1}`).join(', ')})`;
+      const run = (before ? before(fn, args) : Promise.resolve())
+        .then(() => db.query<Row>(sql, keys.map((key) => asParam(args[key]))))
+        .then((result): RpcResponse => ({ data: result.rows, error: null }))
+        .catch((error: unknown): RpcResponse => {
+          const code = (error as { code?: unknown } | null)?.code;
+          return { data: null, error: { code: typeof code === 'string' ? code : 'P0001', message: error instanceof Error ? error.message : String(error) } };
+        });
+      const request: RpcRequest = { abortSignal: () => request, then: (onFulfilled, onRejected) => run.then(onFulfilled, onRejected) };
+      return request;
+    },
+  };
+}
+
+async function defineKeys(db: PGlite, tenantKey: string): Promise<void> {
+  await rows(
+    db,
+    `INSERT INTO public.rag_attribute_definitions (tenant_key, key, type) VALUES ($1, 'alpha_code', 'code'), ($1, 'beta_list', 'text_list'),
+       ($1, 'gamma_text', 'text') ON CONFLICT (tenant_key, key) DO NOTHING`,
+    [tenantKey],
+  );
+}
+
+async function beginVersion(db: PGlite, tenant: Tenant, sourceKey: string): Promise<string> {
+  const begun = (
+    await rows(
+      db,
+      `SELECT outcome, document_id FROM rag_begin_document_version($1, $2::uuid, $3::uuid, $4, $5, $6, $7, 'general', 'fallback', 'general-1', 1)`,
+      [tenant.key, tenant.userId, tenant.orgId, SOURCE, sourceKey, `${sourceKey}.md`, crypto.createHash('sha256').update(next('sha')).digest('hex')],
+    )
+  )[0];
+  assert.equal(begun?.outcome, 'created');
+  return String(begun?.document_id);
+}
+
+async function writeChunks(db: PGlite, tenant: Tenant, id: string): Promise<void> {
+  const contents = [`${next('tok')} neutral probe sentence one`, `${next('tok')} neutral probe sentence two`];
+  const chunks = contents.map((content, index) => ({ chunk_index: index, content, lexical_text: content, metadata: {} }));
+  const vector = (seed: number) => Array.from({ length: 1536 }, (_, index) => (index === seed % 1536 ? 1 : 0));
+  await rows(
+    db,
+    'SELECT * FROM rag_write_chunks(p_document_id => $1, p_tenant_key => $2, p_chunks => $3::jsonb, p_embeddings => $4::jsonb, p_final => true, p_total => 2)',
+    [id, tenant.key, JSON.stringify(chunks), JSON.stringify({ [LEGACY_EMBED_PROFILE]: [vector(1), vector(2)] })],
+  );
+}
+
+async function publishedDocument(db: PGlite, tenant: Tenant, sourceKey: string): Promise<string> {
+  const id = await beginVersion(db, tenant, sourceKey);
+  await writeChunks(db, tenant, id);
+  await rows(db, 'SELECT * FROM rag_publish_document_version(p_document_id => $1, p_tenant_key => $2)', [id, tenant.key]);
+  return id;
+}
+
+async function attributesOf(db: PGlite, id: string): Promise<{ document: unknown; chunks: unknown[] }> {
+  const document = (await rows(db, 'SELECT attributes FROM documents WHERE id = $1', [id]))[0]?.attributes ?? null;
+  const chunks = (await rows(db, 'SELECT attributes FROM document_chunks WHERE document_id = $1 ORDER BY chunk_index', [id])).map((row) => row.attributes);
+  return { document, chunks };
+}
+
+/** Row hashes of a tenant's documents, chunks and staged rows. */
+async function tenantSnapshot(db: PGlite, tenantKey: string): Promise<string[]> {
+  const hashes = async (sql: string) => (await rows(db, sql, [tenantKey])).map((row) => String(row.h));
+  return [
+    ...(await hashes("SELECT md5(row_to_json(d)::text) AS h FROM documents d WHERE tenant_key = $1 ORDER BY id")),
+    ...(await hashes("SELECT md5(row_to_json(c)::text) AS h FROM document_chunks c WHERE tenant_key = $1 ORDER BY id")),
+    ...(await hashes("SELECT md5(row_to_json(s)::text) AS h FROM rag_staged_attributes s WHERE tenant_key = $1 ORDER BY source, source_key")),
+  ];
+}
+
+/** Everything about a tenant's chunks except their attribute values. */
+async function chunkBodies(db: PGlite, tenantKey: string): Promise<string[]> {
+  return (
+    await rows(
+      db,
+      `SELECT md5(concat_ws('|', id::text, document_id::text, content, lexical_text, embedding::text)) AS h FROM document_chunks
+        WHERE tenant_key = $1 ORDER BY id`,
+      [tenantKey],
+    )
+  ).map((row) => String(row.h));
+}
+
+async function seedCacheFor(db: PGlite, tenantKey: string, documentId: string): Promise<void> {
+  await rows(
+    db,
+    `INSERT INTO public.rag_semantic_cache (tenant_key, key_hash, embedding_profile_id, embedding, query_text_masked, answer, source_versions, is_refusal, expires_at)
+     VALUES ($1, $2, 'p1', '[1,0,0,0]'::halfvec, 'masked placeholder', '{}'::jsonb, $3::jsonb, false, now() + interval '1 hour')`,
+    [tenantKey, crypto.createHash('sha256').update(next('cache')).digest('hex'), JSON.stringify([{ document_id: documentId, version: 1 }])],
+  );
+}
+
+async function cacheCount(db: PGlite, tenantKey: string): Promise<number> {
+  return Number((await rows(db, 'SELECT count(*)::int AS n FROM public.rag_semantic_cache WHERE tenant_key = $1', [tenantKey]))[0]?.n);
+}
+
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'attributes-import-'));
+after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+function importFile(lines: Array<Record<string, unknown>>): string {
+  const target = path.join(tmp, `${next('import')}.jsonl`);
+  fs.writeFileSync(target, lines.map((line) => JSON.stringify(line)).join('\n'));
+  return target;
+}
+
+interface Run {
+  outcome: AttributesImportOutcome;
+  out: string[];
+  err: string[];
+}
+
+async function runImport(rpc: RpcClient, tenant: Tenant, file: string, apply: boolean): Promise<Run> {
+  const out: string[] = [];
+  const err: string[] = [];
+  resetAttributeSchemaCacheForTests();
+  setIngestDepsForTests({ db: () => rpc });
+  try {
+    const outcome = await runAttributesImport(
+      { scope: tenant.scope, file, apply },
+      { rpc, signal: new AbortController().signal, io: { out: (line) => out.push(line), err: (line) => err.push(line) } },
+    );
+    return { outcome, out, err };
+  } finally {
+    resetIngestDepsForTests();
+  }
+}
+
+async function database(mode: 'multi-tenant' | 'single-tenant'): Promise<{ db: PGlite; a: Tenant; b: Tenant | null }> {
+  const db = (await createEmptyFixtureDatabase({ deploymentMode: mode })).db;
+  if (mode === 'single-tenant') {
+    await defineKeys(db, 's:default');
+    return { db, a: { key: 's:default', userId: null, orgId: null, scope: mintScope('single', null, null) }, b: null };
+  }
+  await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2), ($3, $4) ON CONFLICT DO NOTHING', [
+    OWNER_A,
+    'import-a@example.invalid',
+    OWNER_B,
+    'import-b@example.invalid',
+  ]);
+  await db.query(
+    'INSERT INTO organizations (id, name, slug, owner_id, is_personal) VALUES ($1, $2, $3, $4, false), ($5, $6, $7, $8, false) ON CONFLICT DO NOTHING',
+    [ORG_A, 'Tenant A', 'tenant-a-1313', OWNER_A, ORG_B, 'Tenant B', 'tenant-b-1313', OWNER_B],
+  );
+  await db.query(
+    "INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'owner'), ($3, $4, 'owner') ON CONFLICT DO NOTHING",
+    [ORG_A, OWNER_A, ORG_B, OWNER_B],
+  );
+  await defineKeys(db, `o:${ORG_A}`);
+  await defineKeys(db, `o:${ORG_B}`);
+  return {
+    db,
+    a: { key: `o:${ORG_A}`, userId: OWNER_A, orgId: ORG_A, scope: mintScope('org', null, ORG_A) },
+    b: { key: `o:${ORG_B}`, userId: OWNER_B, orgId: ORG_B, scope: mintScope('org', null, ORG_B) },
+  };
+}
+
+const totalsLine = (run: Run, label: string): string | undefined => run.out.find((line) => line.includes(label));
+
+for (const mode of ['multi-tenant', 'single-tenant'] as const) {
+  describe(`rag:attributes import (${mode})`, () => {
+    let db: PGlite;
+    let a: Tenant;
+    let b: Tenant | null;
+
+    before(async () => {
+      ({ db, a, b } = await database(mode));
+    });
+
+    after(async () => {
+      await db?.close();
+    });
+
+    test('apply writes documents and every chunk, stages unknown keys, prints the totals and the outbox line; a repeat changes nothing', async () => {
+      const keyOne = `set-a/${next('item')}`;
+      const keyTwo = `set-a/${next('item')}`;
+      const later = `set-a/${next('item')}`;
+      const one = await publishedDocument(db, a, keyOne);
+      const two = await publishedDocument(db, a, keyTwo);
+      await seedCacheFor(db, a.key, one);
+      const cacheBefore = await cacheCount(db, a.key);
+      const bodies = await chunkBodies(db, a.key);
+      const file = importFile([
+        { source_key: keyOne, attributes: { alpha_code: ' A-1 ', beta_list: ['x', 'y'] } },
+        { source_key: keyTwo, source: SOURCE, attributes: { gamma_text: 'neutral words' } },
+        { source_key: later, attributes: { alpha_code: 'L-1' } },
+      ]);
+      const rpc = pgliteRpc(db);
+
+      const first = await runImport(rpc, a, file, true);
+      assert.equal(first.outcome.exitCode, 0, first.err.join('\n'));
+      assert.deepEqual((await attributesOf(db, one)), {
+        document: { alpha_code: 'A-1', beta_list: ['x', 'y'] },
+        chunks: [{ alpha_code: 'A-1', beta_list: ['x', 'y'] }, { alpha_code: 'A-1', beta_list: ['x', 'y'] }],
+      });
+      assert.deepEqual((await attributesOf(db, two)).chunks, [{ gamma_text: 'neutral words' }, { gamma_text: 'neutral words' }]);
+      assert.deepEqual(new Set(first.outcome.changedDocumentIds), new Set([one, two]));
+      assert.equal(first.outcome.applied?.chunksUpdated, 4);
+      assert.equal(first.outcome.applied?.staged, 1);
+      assert.match(totalsLine(first, 'chunk rows updated:') ?? '', /chunk rows updated: 4 in 1 batches/);
+      assert.match(totalsLine(first, 'vector sync outbox rows added:') ?? '', /vector sync outbox rows added: 0$/);
+      assert.equal(await cacheCount(db, a.key), cacheBefore - 1);
+      assert.deepEqual(await chunkBodies(db, a.key), bodies, 'chunk ids, content, lexical text and vectors stay equal');
+      assert.ok(!rpc.calls.some((call) => !/^rag_(attribute_definitions_for|import_document_attributes)$/.test(call.fn)), 'no other RPC');
+
+      await seedCacheFor(db, a.key, one);
+      const cacheSecond = await cacheCount(db, a.key);
+      const snapshot = await tenantSnapshot(db, a.key);
+      const second = await runImport(rpc, a, file, true);
+      assert.equal(second.outcome.exitCode, 0);
+      assert.deepEqual(
+        [second.outcome.applied?.documentsChanged, second.outcome.applied?.chunksUpdated, second.outcome.applied?.staged, second.outcome.applied?.outboxRows],
+        [0, 0, 0, 0],
+      );
+      assert.equal(second.outcome.applied?.documentsUnchanged, 2);
+      assert.equal(second.outcome.applied?.stagedUnchanged, 1);
+      assert.deepEqual(second.outcome.changedDocumentIds, []);
+      assert.equal(await cacheCount(db, a.key), cacheSecond, 'the cached answer naming an imported document is still there');
+      assert.deepEqual(await tenantSnapshot(db, a.key), snapshot);
+
+      const begun = await beginVersion(db, a, later);
+      const applied = (await rows(db, 'SELECT * FROM rag_apply_document_attributes(p_tenant_key => $1, p_document_id => $2, p_explicit => NULL)', [a.key, begun]))[0];
+      assert.equal(applied?.origin, 'staged');
+      await writeChunks(db, a, begun);
+      assert.deepEqual((await attributesOf(db, begun)).chunks, [{ alpha_code: 'L-1' }, { alpha_code: 'L-1' }]);
+    });
+
+    test('a dry run leaves every row of documents, document_chunks and rag_staged_attributes unchanged', async () => {
+      const key = `set-a/${next('item')}`;
+      await publishedDocument(db, a, key);
+      const file = importFile([{ source_key: key, attributes: { alpha_code: 'D-1' } }, { source_key: `set-a/${next('item')}`, attributes: { alpha_code: 'D-2' } }]);
+      const before = await tenantSnapshot(db, a.key);
+      const run = await runImport(pgliteRpc(db), a, file, false);
+      assert.equal(run.outcome.exitCode, 2);
+      assert.equal(run.outcome.dryRun?.documentsChanged, 1);
+      assert.equal(run.outcome.dryRun?.staged, 1);
+      assert.deepEqual(await tenantSnapshot(db, a.key), before);
+    });
+
+    test('an invalid file writes nothing: exit 3, no import call, and the value is never printed', async () => {
+      const key = `set-a/${next('item')}`;
+      await publishedDocument(db, a, key);
+      const file = importFile([{ source_key: key, attributes: { alpha_code: 'V-1' } }, { source_key: `set-a/${next('item')}`, attributes: { delta_text: MARKER } }]);
+      const before = await tenantSnapshot(db, a.key);
+      const rpc = pgliteRpc(db);
+      const run = await runImport(rpc, a, file, true);
+      assert.equal(run.outcome.exitCode, 3);
+      assert.deepEqual(rpc.calls.map((call) => call.fn), ['rag_attribute_definitions_for']);
+      assert.ok(![...run.out, ...run.err].join('\n').includes(MARKER));
+      assert.deepEqual(await tenantSnapshot(db, a.key), before);
+    });
+
+    test('401 rows run as three batches; a refusal at the second batch exits 1, keeps the first, and a rerun completes with it unchanged', async () => {
+      const keys = Array.from({ length: 401 }, (_, index) => `set-b/${next(`item-${index}`)}`);
+      const published = await publishedDocument(db, a, keys[0] as string);
+      const lines = keys.map((key, index) => ({ source_key: key, attributes: index < 200 ? { alpha_code: `B-${index}` } : { gamma_text: `neutral ${index}` } }));
+      const file = importFile(lines);
+      let applyCalls = 0;
+      const rpc = pgliteRpc(db, async (fn, args) => {
+        if (fn !== 'rag_import_document_attributes' || args.p_dry_run !== false) return;
+        applyCalls += 1;
+        if (applyCalls === 2) await rows(db, "DELETE FROM public.rag_attribute_definitions WHERE tenant_key = $1 AND key = 'gamma_text'", [a.key]);
+      });
+      const failed = await runImport(rpc, a, file, true);
+      assert.equal(failed.outcome.exitCode, 1);
+      assert.equal(failed.outcome.batches, 3);
+      assert.equal(failed.outcome.batchesApplied, 1);
+      assert.ok(failed.err.some((line) => /1 of 3 batches applied/.test(line)), failed.err.join('\n'));
+      assert.deepEqual((await attributesOf(db, published)).document, { alpha_code: 'B-0' });
+      const stagedAfterFailure = Number(
+        (await rows(db, "SELECT count(*)::int AS n FROM rag_staged_attributes WHERE tenant_key = $1 AND source_key LIKE 'set-b/%'", [a.key]))[0]?.n,
+      );
+      assert.equal(stagedAfterFailure, 199);
+
+      await defineKeys(db, a.key);
+      const rerun = await runImport(pgliteRpc(db), a, file, true);
+      assert.equal(rerun.outcome.exitCode, 0, rerun.err.join('\n'));
+      assert.equal(rerun.outcome.batches, 3);
+      assert.equal(rerun.outcome.applied?.documentsUnchanged, 1);
+      assert.equal(rerun.outcome.applied?.stagedUnchanged, 199);
+      assert.equal(rerun.outcome.applied?.staged, 201);
+      assert.equal(rerun.outcome.applied?.chunksUpdated, 0);
+      assert.equal(rerun.out.filter((line) => /batch \d of 3:/.test(line)).length, 3);
+    });
+
+    if (mode === 'multi-tenant') {
+      test("an import for tenant A never touches tenant B's document, chunks or staged rows with the same source key", async () => {
+        assert.ok(b);
+        const shared = `set-c/${next('item')}`;
+        const pendingKey = `set-c/${next('item')}`;
+        const docA = await publishedDocument(db, a, shared);
+        await publishedDocument(db, b, shared);
+        await rows(db, 'SELECT * FROM rag_stage_document_attributes(p_tenant_key => $1, p_rows => $2::jsonb)', [
+          b.key,
+          JSON.stringify([{ source: SOURCE, source_key: pendingKey, attributes: { alpha_code: 'B-keep' } }]),
+        ]);
+        const beforeB = await tenantSnapshot(db, b.key);
+        const file = importFile([{ source_key: shared, attributes: { alpha_code: 'A-only' } }, { source_key: pendingKey, attributes: { alpha_code: 'A-stage' } }]);
+        const run = await runImport(pgliteRpc(db), a, file, true);
+        assert.equal(run.outcome.exitCode, 0);
+        assert.deepEqual((await attributesOf(db, docA)).document, { alpha_code: 'A-only' });
+        assert.deepEqual(await tenantSnapshot(db, b.key), beforeB, "tenant B's rows are byte-equal");
+      });
+    } else {
+      test('single-tenant mode refuses a u: or o: key at the tenant check (exit 64, no RPC)', async () => {
+        const file = importFile([{ source_key: 'set-d/item-001', attributes: { alpha_code: 'S-1' } }]);
+        for (const key of [`o:${ORG_A}`, `u:${OWNER_A}`]) {
+          const rpc = pgliteRpc(db);
+          const err: string[] = [];
+          const code = await main(['--tenant', key, '--import', file, '--apply'], { out: () => undefined, err: (line) => err.push(line) }, new AbortController().signal, {
+            rpc,
+            enabled: () => true,
+            resolveScope: (tenantKey) => backfillScope(tenantKey, { deploymentMode: 'single-tenant' }),
+          });
+          assert.equal(code, 64);
+          assert.deepEqual(rpc.calls, []);
+          assert.ok(err.some((line) => /tenant refused: invalid_tenant/.test(line)));
+        }
+      });
+    }
+  });
+}
+
+// --- TPL-04 identifier feed (plan 03.3-16; D-25, F-13) ---------------------------------------------------------------------------------
+
+const FEED_ON = { RAG_INGEST_PIPELINE: 'unified', RAG_DOC_ATTRIBUTES: 'true' };
+const FEED_OFF = { RAG_INGEST_PIPELINE: 'unified' };
+const NO_PATTERNS = async () => ({ expressions: [], patternIds: [], loadFailed: false });
+
+async function withIngest<T>(rpc: RpcClient, env: Record<string, string>, run: () => Promise<T>): Promise<T> {
+  resetAttributeSchemaCacheForTests();
+  resetIngestConfigForTests();
+  setIngestDepsForTests({ db: () => rpc, ingestEnv: () => env });
+  try {
+    return await run();
+  } finally {
+    resetIngestDepsForTests();
+    resetIngestConfigForTests();
+    resetAttributeSchemaCacheForTests();
+  }
+}
+
+async function flag(db: PGlite, tenantKey: string, key: string, on: boolean): Promise<void> {
+  await rows(db, 'UPDATE public.rag_attribute_definitions SET in_identifier_index = $3 WHERE tenant_key = $1 AND key = $2', [tenantKey, key, on]);
+}
+
+async function setAttributes(db: PGlite, tenantKey: string, id: string, values: Record<string, unknown>): Promise<void> {
+  await rows(db, 'SELECT * FROM rag_set_document_attributes(p_tenant_key => $1, p_document_id => $2, p_attributes => $3::jsonb)', [tenantKey, id, JSON.stringify(values)]);
+}
+
+async function indexOne(rpc: RpcClient, tenant: Tenant, id: string, env: Record<string, string>) {
+  return withIngest(rpc, env, () => {
+    const signal = new AbortController().signal;
+    return indexDocumentForLookup({
+      writer: createIngestWriter({ db: rpc, scope: tenant.scope, signal }),
+      scope: tenant.scope,
+      documentId: id,
+      tables: false,
+      identifiers: true,
+      signal,
+      loadPatterns: NO_PATTERNS,
+    });
+  });
+}
+
+async function identifiersOf(db: PGlite, id: string): Promise<{ document: Row; chunks: Row[] }> {
+  return {
+    document: (await rows(db, 'SELECT identifiers_raw, identifiers_norm FROM documents WHERE id = $1', [id]))[0] ?? {},
+    chunks: await rows(db, 'SELECT identifiers_raw, identifiers_norm FROM document_chunks WHERE document_id = $1 ORDER BY chunk_index', [id]),
+  };
+}
+
+async function capturedLogs<T>(run: () => Promise<T>): Promise<{ value: T; text: string }> {
+  const lines: string[] = [];
+  const saved = { log: console.log, info: console.info, warn: console.warn, error: console.error, debug: console.debug };
+  for (const level of ['log', 'info', 'warn', 'error', 'debug'] as const) {
+    console[level] = (...args: unknown[]) => void lines.push(args.map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg))).join(' '));
+  }
+  try {
+    return { value: await run(), text: lines.join('\n') };
+  } finally {
+    Object.assign(console, saved);
+  }
+}
+
+const FEED_MARKER = 'QX-7731-MK';
+
+for (const mode of ['multi-tenant', 'single-tenant'] as const) {
+  describe(`attribute identifier feed (${mode})`, () => {
+    let db: PGlite;
+    let a: Tenant;
+    let b: Tenant | null;
+
+    before(async () => {
+      ({ db, a, b } = await database(mode));
+      await flag(db, a.key, 'alpha_code', true);
+    });
+
+    after(async () => {
+      await db?.close();
+    });
+
+    test('both switches on: every chunk and the document union carry the flagged value, normalised and as spelled', async () => {
+      const id = await publishedDocument(db, a, `set-f/${next('item')}`);
+      await setAttributes(db, a.key, id, { alpha_code: FEED_MARKER, gamma_text: 'neutral words' });
+      const { value: report, text } = await capturedLogs(() => indexOne(pgliteRpc(db), a, id, FEED_ON));
+      assert.deepEqual(report.warnings, []);
+      assert.equal(report.identifiers?.attributeEntries, 1);
+      const stored = await identifiersOf(db, id);
+      assert.equal(stored.chunks.length, 2);
+      for (const chunk of stored.chunks) {
+        const norm = chunk.identifiers_norm as string[];
+        const raw = chunk.identifiers_raw as string[];
+        assert.ok(norm.includes('qx7731mk'));
+        assert.equal(raw[norm.indexOf('qx7731mk')], FEED_MARKER);
+      }
+      assert.ok((stored.document.identifiers_norm as string[]).includes('qx7731mk'));
+      assert.ok((stored.document.identifiers_raw as string[]).includes(FEED_MARKER));
+      assert.ok(!text.includes(FEED_MARKER) && !text.includes('qx7731mk'), 'no identifier in a log line');
+    });
+
+    test('two spellings that differ only by separators or case give one normalised value', async () => {
+      await rows(db, "INSERT INTO public.rag_attribute_definitions (tenant_key, key, type, in_identifier_index) VALUES ($1, 'beta_code', 'code', true) ON CONFLICT (tenant_key, key) DO UPDATE SET in_identifier_index = true", [a.key]);
+      const id = await publishedDocument(db, a, `set-f/${next('item')}`);
+      await setAttributes(db, a.key, id, { alpha_code: 'zk-40.2', beta_code: 'ZK 40/2' });
+      await indexOne(pgliteRpc(db), a, id, FEED_ON);
+      for (const chunk of (await identifiersOf(db, id)).chunks) assert.equal((chunk.identifiers_norm as string[]).filter((value) => value === 'zk402').length, 1);
+    });
+
+    test('RAG_DOC_ATTRIBUTES off: the rows equal the indexer without the feed and no attribute function is called', async () => {
+      const id = await publishedDocument(db, a, `set-f/${next('item')}`);
+      const plain = await publishedDocument(db, a, `set-f/${next('item')}`);
+      await setAttributes(db, a.key, id, { alpha_code: 'OF-1' });
+      const rpc = pgliteRpc(db);
+      await indexOne(rpc, a, id, FEED_OFF);
+      await indexOne(pgliteRpc(db), a, plain, FEED_ON);
+      assert.ok(!rpc.calls.some((call) => /attribute/.test(call.fn)), rpc.calls.map((call) => call.fn).join(','));
+      const off = await identifiersOf(db, id);
+      for (const chunk of off.chunks) assert.ok(!(chunk.identifiers_norm as string[]).includes('of1'));
+      assert.deepEqual(
+        off.chunks.map((chunk) => (chunk.identifiers_norm as string[]).length),
+        (await identifiersOf(db, plain)).chunks.map((chunk) => (chunk.identifiers_norm as string[]).length),
+      );
+    });
+
+    test('rag:identifiers keeps the attribute entries; a second run has nothing to do and changes nothing', async () => {
+      const id = await publishedDocument(db, a, `set-f/${next('item')}`);
+      await setAttributes(db, a.key, id, { alpha_code: 'BF-77' });
+      const rpc = pgliteRpc(db);
+      const first = await withIngest(rpc, FEED_ON, () => backfillIdentifiers({ db: rpc, scope: a.scope, loadPatterns: NO_PATTERNS }));
+      assert.ok(first.documents >= 1);
+      assert.equal(first.failed, 0);
+      const stored = await identifiersOf(db, id);
+      for (const chunk of stored.chunks) assert.ok((chunk.identifiers_norm as string[]).includes('bf77'));
+      const second = await withIngest(rpc, FEED_ON, () => backfillIdentifiers({ db: rpc, scope: a.scope, loadPatterns: NO_PATTERNS }));
+      assert.equal(second.documents, 0);
+      assert.deepEqual(await identifiersOf(db, id), stored);
+    });
+
+    if (mode === 'multi-tenant') {
+      test("tenant A's chunks never receive an entry from tenant B's attributes or definitions", async () => {
+        assert.ok(b);
+        await flag(db, b.key, 'gamma_text', false);
+        await rows(db, "UPDATE public.rag_attribute_definitions SET in_identifier_index = true WHERE tenant_key = $1 AND key = 'alpha_code'", [b.key]);
+        await flag(db, a.key, 'alpha_code', false);
+        const shared = `set-g/${next('item')}`;
+        const docA = await publishedDocument(db, a, shared);
+        const docB = await publishedDocument(db, b, shared);
+        await setAttributes(db, a.key, docA, { alpha_code: 'TA-1' });
+        await setAttributes(db, b.key, docB, { alpha_code: 'TB-2' });
+        await indexOne(pgliteRpc(db), a, docA, FEED_ON);
+        for (const chunk of (await identifiersOf(db, docA)).chunks) {
+          assert.ok(!(chunk.identifiers_norm as string[]).includes('tb2'));
+          assert.ok(!(chunk.identifiers_norm as string[]).includes('ta1'), "tenant B's flag does not apply to tenant A");
+        }
+        await indexOne(pgliteRpc(db), b, docB, FEED_ON);
+        for (const chunk of (await identifiersOf(db, docB)).chunks) {
+          assert.ok((chunk.identifiers_norm as string[]).includes('tb2'));
+          assert.ok(!(chunk.identifiers_norm as string[]).includes('ta1'));
+        }
+        await flag(db, a.key, 'alpha_code', true);
+      });
+    }
+  });
+}
+
+// --- TPL-04 re-index after an import and on request (plan 03.3-16; D-24, D-25) -----------------------------------------------------------
+
+async function cli(rpc: RpcClient, argv: string[], identifierIndex = true): Promise<{ code: number; out: string[]; err: string[]; logs: string }> {
+  const out: string[] = [];
+  const err: string[] = [];
+  const { value: code, text } = await capturedLogs(() =>
+    withIngest(rpc, FEED_ON, () =>
+      main(argv, { out: (line) => out.push(line), err: (line) => err.push(line) }, new AbortController().signal, {
+        rpc,
+        enabled: () => true,
+        resolveScope: async (key) => {
+          const scope = key.startsWith('o:') ? mintScope('org', null, key.slice(2)) : mintScope('single', null, null);
+          return { ok: true, scope };
+        },
+        identifierIndex: () => identifierIndex,
+        loadPatterns: NO_PATTERNS,
+      }),
+    ),
+  );
+  return { code, out, err, logs: text };
+}
+
+const norms = async (db: PGlite, id: string): Promise<{ chunks: string[][]; document: string[] }> => {
+  const stored = await identifiersOf(db, id);
+  return { chunks: stored.chunks.map((chunk) => (chunk.identifiers_norm as string[] | null) ?? []), document: (stored.document.identifiers_norm as string[] | null) ?? [] };
+};
+
+for (const mode of ['multi-tenant', 'single-tenant'] as const) {
+  describe(`attribute identifier re-index (${mode})`, () => {
+    let db: PGlite;
+    let a: Tenant;
+    let b: Tenant | null;
+
+    before(async () => {
+      ({ db, a, b } = await database(mode));
+      await flag(db, a.key, 'alpha_code', true);
+    });
+
+    after(async () => {
+      await db?.close();
+    });
+
+    test('rag_attribute_identifier_documents: the tenant ready documents with attributes, in id order after the cursor; limits checked', async () => {
+      const withValues = await publishedDocument(db, a, `set-h/${next('item')}`);
+      const without = await publishedDocument(db, a, `set-h/${next('item')}`);
+      const empty = await publishedDocument(db, a, `set-h/${next('item')}`);
+      await setAttributes(db, a.key, withValues, { alpha_code: 'LS-1' });
+      await setAttributes(db, a.key, empty, {});
+      const listed = (await rows(db, 'SELECT document_id FROM rag_attribute_identifier_documents($1, NULL, 1000)', [a.key])).map((row) => String(row.document_id));
+      assert.ok(listed.includes(withValues));
+      assert.ok(!listed.includes(without));
+      assert.ok(!listed.includes(empty));
+      assert.deepEqual(listed, [...listed].sort());
+      const afterCursor = (await rows(db, 'SELECT document_id FROM rag_attribute_identifier_documents($1, $2, 1000)', [a.key, withValues])).map((row) => String(row.document_id));
+      assert.ok(afterCursor.every((id) => id > withValues));
+      for (const limit of [0, 1001]) {
+        await assert.rejects(rows(db, 'SELECT * FROM rag_attribute_identifier_documents($1, NULL, $2)', [a.key, limit]), (error: { code?: string }) => error.code === '22023');
+      }
+      const otherMode = mode === 'multi-tenant' ? 's:default' : `o:${ORG_A}`;
+      await assert.rejects(rows(db, 'SELECT * FROM rag_attribute_identifier_documents($1, NULL, 10)', [otherMode]));
+      const grants = (
+        await rows(
+          db,
+          `SELECT has_function_privilege('anon', 'public.rag_attribute_identifier_documents(text, uuid, integer)', 'EXECUTE') AS anon,
+                  has_function_privilege('authenticated', 'public.rag_attribute_identifier_documents(text, uuid, integer)', 'EXECUTE') AS authenticated,
+                  has_function_privilege('service_role', 'public.rag_attribute_identifier_documents(text, uuid, integer)', 'EXECUTE') AS service`,
+        )
+      )[0];
+      assert.deepEqual(grants, { anon: false, authenticated: false, service: true });
+      if (b) {
+        const foreign = await publishedDocument(db, b, `set-h/${next('item')}`);
+        await setAttributes(db, b.key, foreign, { alpha_code: 'LS-2' });
+        const listedA = (await rows(db, 'SELECT document_id FROM rag_attribute_identifier_documents($1, NULL, 1000)', [a.key])).map((row) => String(row.document_id));
+        assert.ok(!listedA.includes(foreign));
+      }
+    });
+
+    test('an --apply import re-indexes the changed documents in the same run; a second identical run re-indexes none', async () => {
+      const key = `set-i/${next('item')}`;
+      const id = await publishedDocument(db, a, key);
+      const file = importFile([{ source_key: key, attributes: { alpha_code: 'IM-42' } }]);
+      const first = await cli(pgliteRpc(db), ['--tenant', a.key, '--import', file, '--apply']);
+      assert.equal(first.code, 0, first.err.join('\n'));
+      assert.ok(first.out.some((line) => /identifier index: 1 documents re-indexed/.test(line)), first.out.join('\n'));
+      const stored = await norms(db, id);
+      for (const chunk of stored.chunks) assert.ok(chunk.includes('im42'));
+      assert.ok(stored.document.includes('im42'));
+      const second = await cli(pgliteRpc(db), ['--tenant', a.key, '--import', file, '--apply']);
+      assert.equal(second.code, 0);
+      assert.ok(second.out.some((line) => /identifier index: 0 documents re-indexed/.test(line)), second.out.join('\n'));
+      assert.deepEqual(await norms(db, id), stored);
+      assert.ok(![...first.out, ...first.err, first.logs].join('\n').includes('IM-42'));
+    });
+
+    test('identifier index off: the import exits 0, no identifier column changes, one attribute_identifier_feed_off warning', async () => {
+      const key = `set-j/${next('item')}`;
+      const id = await publishedDocument(db, a, key);
+      const before = await identifiersOf(db, id);
+      const file = importFile([{ source_key: key, attributes: { alpha_code: 'OFF-9' } }]);
+      resetAttributeIdentifierFeedForTests();
+      const run = await cli(pgliteRpc(db), ['--tenant', a.key, '--import', file, '--apply'], false);
+      const again = await cli(pgliteRpc(db), ['--tenant', a.key, '--reindex-identifiers', '--apply'], false);
+      assert.equal(run.code, 0, run.err.join('\n'));
+      assert.equal(again.code, 0, again.err.join('\n'));
+      assert.deepEqual(await identifiersOf(db, id), before);
+      const warnings = [run.logs, again.logs].join('\n').split('\n').filter((line) => line.includes('attribute_identifier_feed_off'));
+      assert.equal(warnings.length, 1, 'one warning per process');
+      assert.ok(warnings[0]?.includes('[RAG Config]'));
+    });
+
+    test('--reindex-identifiers: report first, exit 2 without --apply; a flag turned off removes the entries, turned on restores them', async () => {
+      const id = await publishedDocument(db, a, `set-k/${next('item')}`);
+      await setAttributes(db, a.key, id, { alpha_code: 'RX-5' });
+      await indexOne(pgliteRpc(db), a, id, FEED_ON);
+      assert.ok((await norms(db, id)).document.includes('rx5'));
+      const otherBefore = b ? await tenantSnapshot(db, b.key) : null;
+
+      await flag(db, a.key, 'alpha_code', false);
+      const report = await cli(pgliteRpc(db), ['--tenant', a.key, '--reindex-identifiers']);
+      assert.equal(report.code, 2);
+      assert.ok(report.out.some((line) => /documents to re-index: \d+/.test(line)));
+      assert.ok((await norms(db, id)).document.includes('rx5'), 'a report-only run writes nothing');
+
+      const rpc = pgliteRpc(db);
+      const off = await cli(rpc, ['--tenant', a.key, '--reindex-identifiers', '--apply']);
+      assert.equal(off.code, 0, off.err.join('\n'));
+      const removed = await norms(db, id);
+      for (const chunk of removed.chunks) assert.ok(!chunk.includes('rx5'));
+      assert.ok(!removed.document.includes('rx5'));
+      assert.ok(rpc.calls.every((call) => !('p_tenant_key' in call.args) || call.args.p_tenant_key === a.key), 'every call names tenant A');
+
+      await flag(db, a.key, 'alpha_code', true);
+      const on = await cli(pgliteRpc(db), ['--tenant', a.key, '--reindex-identifiers', '--apply']);
+      assert.equal(on.code, 0);
+      const restored = await norms(db, id);
+      for (const chunk of restored.chunks) assert.ok(chunk.includes('rx5'));
+      assert.ok(restored.document.includes('rx5'));
+      assert.ok(on.out.some((line) => /semantic cache: unaffected/.test(line)));
+      if (b && otherBefore) assert.deepEqual(await tenantSnapshot(db, b.key), otherBefore, "tenant B's rows are byte-equal");
+    });
+  });
+}

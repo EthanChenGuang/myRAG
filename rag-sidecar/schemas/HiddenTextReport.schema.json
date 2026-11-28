@@ -1,0 +1,114 @@
+{
+  "$defs": {
+    "HiddenTextSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bbox"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "reason": {
+          "enum": [
+            "color_near_background",
+            "font_too_small",
+            "outside_page",
+            "invisible_render_mode",
+            "covered_by_object",
+            "vanished_run",
+            "comment",
+            "tracked_deletion",
+            "zero_width"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "reason"
+      ],
+      "title": "HiddenTextSpan",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "checker_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Checker Version",
+      "type": "string"
+    },
+    "dropped": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Dropped",
+      "type": "integer"
+    },
+    "link_targets": {
+      "items": {
+        "maxLength": 2048,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 200,
+      "title": "Link Targets",
+      "type": "array"
+    },
+    "spans": {
+      "items": {
+        "$ref": "#/$defs/HiddenTextSpan"
+      },
+      "maxItems": 200,
+      "title": "Spans",
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "clean",
+        "hidden_found",
+        "not_checked"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "status",
+    "checker_version"
+  ],
+  "title": "HiddenTextReport",
+  "type": "object"
+}

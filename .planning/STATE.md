@@ -1,25 +1,33 @@
 ---
 gsd_state_version: "1.0"
 milestone: v5.0
-current_phase: 03.1
-current_phase_name: Tiered Parsing, Incremental Queue & Bulk Backfill
-status: paused
-stopped_at: PAUSE merge-train handback to Claude Code; trunk 56b0349d; merged PRs #10 #9 #4 #5; tmux merge-train stopped
-last_updated: "2026-11-24T19:10:00.000Z"
-state_head: 56b0349d6307b757e4df1eab897878f11e4b8d81
+current_phase: "05"
+current_phase_name: Verified Citations & Groundedness (Phases 5, 5.1, 6, 7 in parallel)
+status: executing
+stopped_at: "Merge trains 1-11 merged; main synced via PR; 05-22 and 05.1-06 executing; 03.1-53/54 deferred to pre-production; 04-43 partly live"
+last_updated: "2026-11-25T07:35:00.000Z"
+state_head: 01b43787
 package_legitimacy_03_1_04:
   approved_at: "2026-11-24"
   lock_commit: 3e83978e482f67da5ce6d463f39251f3e21e8bf4
   pdfplumber: "0.11.11"
   pdfminer_six: "20260107"
   ray_data: "2.60.1"
-last_activity: 2026-11-24
-last_activity_desc: Trunk merge train paused at 56b0349d; PRs #10 #9 #4 #5 merged; queue #6+
+last_activity: 2026-11-25
+last_activity_desc: Merge trains 1-6 merged to trunk; Phase 3.1 and Phase 4 code complete except live checkpoints
 progress:
-  total_phases: 9
-  completed_phases: 0
-  total_plans: 58
-  completed_plans: 44
+  total_phases: 14
+  completed_phases: 1
+  total_plans: 342
+  completed_plans: 172
+package_legitimacy_03_1_04:
+  approved_at: 2026-11-24
+  lock_commit: 3e83978e482f67da5ce6d463f39251f3e21e8bf4
+  pdfplumber: 0.11.11
+  pdfminer_six: 20260107
+  ray_data: 2.60.1
+last_activity: 2026-11-24
+last_activity_desc: Trunk merge train paused at 56b0349d; PRs
 ---
 
 # Project State
@@ -33,12 +41,15 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 
 ## Current Position
 
-Phase: 03.1 — merge train paused for Claude Code takeover  
-Trunk: `claude/ecstatic-hamilton-86gtwv` @ `56b0349d` (merged GitHub PRs #10, #9, #4, #5)  
-Resume: `.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/.continue-here.md`  
-Local gates only (GitHub Actions billing blocked); runner killed mid-#15 gate.
+Trunk: `claude/ecstatic-hamilton-86gtwv` @ `01b43787` (2026-11-25). Merge trains 1–6 merged via PRs #23–#28, each with all 8 pr-smoke checks green.
 
-Progress: merge train ~4/18 PRs to trunk
+- **Phase 3.1:** code complete through 03.1-52 plus gap fixes (verification gaps 1-5 closed; 0426 and 0427 live). Live checkpoints 03.1-53 and 03.1-54 DEFERRED to pre-production by the owner (2026-11-25): no free always-on host with ~4 GB for the sidecar exists (Oracle free tier not approved; Hugging Face Docker Spaces need PRO). Until then the app uses the synchronous ingest path (RAG_INGEST_ASYNC=off). Draft HF Space files kept on branch exec/sidecar-hf-deploy. Before go-live: pick the host (owner machine + Cloudflare Tunnel, or a paid host after asking), take a backup, then run 03.1-53/54.
+- **Phase 4:** code complete through 04-47 (gap closures 04-46 refusal criterion, 04-47 search_path hardening, migration 0425). 04-VERIFICATION gaps closed; 04-43 live calibration open (human).
+- **Phases 5, 5.1, 6, 7:** executing in parallel cloud sessions. On trunk: 05-01..09, 05-12..14, 05-19, 05.1-01..03, 05.1-05, 05.1-24, 06-01, 06-03..09, 06-11, 06-12, 07-02, 07-03. Finished, awaiting train 7: 05-15, 05-18, 05-20, 06-17. Running: 05-10 (option-a decided), 05-21.
+- **Blocked on humans:** 04-43 (Cohere and Voyage keys saved; latency and DB checks running; calibration needs a real golden set and a v2 test deployment). 03.1-53/54 deferred to pre-production. 05-05 done (precondition waived: 03.1-54 and 04-43 modify no files). 05.1-18 and 05.1-25 skipped (Prompt Guard 2 declined).
+- **Phase 3.2 owner approvals (2026-11-25, given in advance):** 03.2-36 approved: python-docx 1.2.0, lxml 6.1.3 and defusedxml 0.7.1 as direct dependencies of the `hidden-text` extra, at the versions already in rag-sidecar/uv.lock. Any other version or package stops and asks again. 03.2-65 approved: the orchestrator applies migrations 0801–0810 to the live project itself through the Supabase tools when the plan is reached. 03.2-53: approved to proceed, but its items need real-world inputs (a LlamaCloud key, real scanned zh/it pages, a real terminal, and native-speaker reviewers). No script or model may mark golden items reviewed, so those items are recorded as not done until the owner supplies them.
+- **Owner rules (2026-11-25):** free options first, ask before paying; give a direct link whenever a key or dashboard setting is needed; merge trains go to main through PRs and merge automatically when the 8 checks pass; phases 3.1.1, 3.2, 4.1, 4.1.1, 4.2, 4.3, 5.1.1, 5.2, 5.3, 6.1 and 6.2 are held until the planning session releases them.
+- **Live DB order for operators:** migrations through 0425 (pgvector must be in `public`; run 0425's header dry-run query first), then 0501–0502, 0601–0603 (re-run 0410 after 0603), 0701–0703.
 
 ## Performance Metrics
 
@@ -185,6 +196,14 @@ None yet.
 - [Phase 5]: Deepest uncertainty: whether AI SDK v6 Anthropic Citations survive streaming with tools/MCP/webSearch (spike first); Vectara host, limits and retention.
 - [Phase 6]: `@langchain/core` zod 4 isolation from the app's zod 3; LangChain HyDE has no stock retriever and is a port.
 - [Phase 7]: Weaviate hybrid inside a tenant and Chinese tokenizer availability on Cloud; Qdrant per-prefetch filters; drain worker under the 60 s cap.
+
+### Roadmap Evolution
+
+- Phase 3.1.1 inserted after Phase 3.1: Domain embedding model candidates (voyage-law-2/finance-2 etc.) compared on our test set; per-doc-type model selection
+- Phase 4.1 inserted after Phase 4: Hybrid retrieval + rerank default on, only after calibrated refusal and a no-regression eval (Guang 2026-11-24)
+- Phase 4.1.1 inserted after Phase 4.1: Domain terminology dictionary in DB, expert-maintained; query expansion, index-time synonyms, zero-result log mining
+- Phase 5.1.1 inserted after Phase 5.1: Feedback loop + real domain test set (pulls EVAL-16/EVAL-17 forward): thumbs, failed-query mining into dictionary, training data and golden set
+- Phase 6.1 inserted after Phase 6: Embedding fine-tuning: synthetic queries, filtering, hard negatives, MNRL, document-level split, re-embed + profile switch
 
 ## Deferred Items
 

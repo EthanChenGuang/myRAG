@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "ConfigProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "defaults",
+            "sweep",
+            "calibration",
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ConfigProvenance",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "config_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Hash"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ConfigProvenance"
+    },
+    "required_parts": {
+      "items": {
+        "enum": [
+          "nightly_absolute",
+          "judge_floors",
+          "ship_check",
+          "pr_smoke"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Required Parts",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "status_context": {
+      "const": "rag-release-gate",
+      "title": "Status Context",
+      "type": "string"
+    }
+  },
+  "required": [
+    "status_context",
+    "required_parts",
+    "provenance"
+  ],
+  "title": "ReleaseGateConfig",
+  "type": "object"
+}

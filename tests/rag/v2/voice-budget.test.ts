@@ -14,6 +14,7 @@ import {
   fakeReranker,
   fakeRpcClient,
   installDeps,
+  rows,
   uninstallDeps,
 } from '../helpers/pipeline-fakes';
 
@@ -155,5 +156,89 @@ describe('v2 voice latency budget (D-25)', () => {
     expect(chat.stages.find((stage) => stage.name === 'rerank')?.status).toBe('ok');
     expect(chatElapsed).toBeGreaterThanOrEqual(350);
     expect(resolveReranker(loadRagConfig(env), 'chat', 'en', undefined, env, globalThis.fetch).tier).toBe('quality');
+  });
+});
+
+describe('voice budget under the implicit defaults (shipped default legacy, not flipped)', () => {
+  const LANGUAGES = { RAG_SUPPORTED_LANGUAGES: 'zh,en,it', RAG_PRIMARY_LANGUAGE: 'en' } as const;
+  const saved = Object.fromEntries(Object.keys(LANGUAGES).map((name) => [name, process.env[name]]));
+
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    Object.assign(process.env, LANGUAGES);
+    resetV2StartupForTests();
+  });
+
+  afterEach(() => {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    uninstallDeps();
+    resetRetrievalBackendForTests();
+    resetRerankerFactoryForTests();
+    resetRagConfigForTests();
+    vi.restoreAllMocks();
+  });
+
+  function setupImplicit(env: Record<string, string>, rerankDelayMs: number) {
+    uninstallDeps();
+    resetRerankerFactoryForTests();
+    let rerankCalls = 0;
+    let searchCalls = 0;
+    const { embedder } = fakeEmbedder({ delayMs: 50 });
+    const rpc = fakeRpcClient({ rows: rows(3) });
+    installDeps({ embedder, ragEnv: () => env, adminClient: adminWithRpc(rpc.client, fakeAssemblyAdmin()) });
+    const backend = delayedBackend(200);
+    setRetrievalBackendForTests({
+      ...backend,
+      search: (...args: Parameters<RetrievalBackend['search']>) => {
+        searchCalls += 1;
+        return backend.search(...args);
+      },
+    });
+    const base = fakeReranker({ model: 'fake-fast-v1', delayMs: rerankDelayMs });
+    setRerankerFactoryForTests(() => ({
+      ...base.reranker,
+      rerank(...args: Parameters<typeof base.reranker.rerank>) {
+        rerankCalls += 1;
+        return base.reranker.rerank(...args);
+      },
+    }));
+    return { rpcCalls: rpc.calls, rerankCalls: () => rerankCalls, searchCalls: () => searchCalls };
+  }
+
+  async function measure(env: Record<string, string>, rerankDelayMs: number) {
+    const probe = setupImplicit(env, rerankDelayMs);
+    await verifyV2Startup();
+    expect(loadRagConfig(env).pipeline).toBe('legacy');
+    const durations: number[] = [];
+    for (let index = 0; index < 20; index += 1) {
+      const { result, elapsed } = await runVoice();
+      durations.push(elapsed);
+      expect(elapsed, `run ${index + 1}`).toBeLessThan(800);
+      expect(result.voice?.results.length, `run ${index + 1}`).toBeGreaterThan(0);
+      expect(result.stages.find((stage) => stage.name === 'rerank')).toBeUndefined();
+    }
+    const sorted = [...durations].sort((a, b) => a - b);
+    expect(sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)]!).toBeLessThan(800);
+    expect(probe.rerankCalls()).toBe(0);
+    expect(probe.searchCalls()).toBe(0);
+    expect(probe.rpcCalls.some((call) => call.fn === 'hybrid_search_chunks')).toBe(false);
+    expect(probe.rpcCalls.length).toBeGreaterThan(0);
+  }
+
+  it('voice budget under the implicit defaults (hosted): legacy serves, p95 under 800 ms over 20 runs, no rerank call', async () => {
+    await measure({ COHERE_API_KEY: COHERE_KEY }, 150);
+  });
+
+  it('voice budget under the implicit defaults (no key): legacy serves, p95 under 800 ms over 20 runs, no rerank call', async () => {
+    await measure({}, 150);
+  });
+
+  it('voice budget under the implicit defaults: a 400 ms reranker is never reached', async () => {
+    await measure({ COHERE_API_KEY: COHERE_KEY }, 400);
   });
 });

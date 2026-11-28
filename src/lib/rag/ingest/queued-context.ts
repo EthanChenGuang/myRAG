@@ -2,7 +2,7 @@ import { z } from 'zod/v3';
 import type { IngestionJob } from '@/lib/rag-eval/contracts.generated';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { loadArtifact, versionPrefix, type ArtifactContext } from './artifacts';
-import { loadIngestConfig } from './config';
+import { loadIngestConfig, type IngestCheckMode, type IngestConfig } from './config';
 import { getIngestDeps } from './deps';
 import { ORIGINALS_BUCKET, getObjectStore } from './object-store';
 import { getProcessingProfile, profileFor, type DocType } from './profiles/load';
@@ -11,6 +11,7 @@ import { ingestStateFromRecord } from './status';
 import {
   INGEST_SOURCES,
   type DocTypeOrigin,
+  type IngestAttributeValues,
   type IngestInput,
   type IngestOptions,
   type IngestSource,
@@ -19,9 +20,16 @@ import {
   type TypeChangeState,
 } from './types';
 import { createIngestWriter } from './writer';
+import { ATTRIBUTE_KEY_PATTERN, ATTRIBUTE_LIMITS } from './attributes/validate';
 
 /** Written by enqueue next to the original: what the callbacks need of the upload and of the identify outcome, with no bytes. */
 export const QUEUED_INPUT_ARTIFACT = 'queued-input.json';
+
+const codePoints = (value: string): number => Array.from(value).length;
+const QueuedAttributeValueSchema = z.string().refine((value) => codePoints(value) <= ATTRIBUTE_LIMITS.maxValueLength);
+const QueuedAttributesSchema = z
+  .record(z.union([QueuedAttributeValueSchema, z.array(QueuedAttributeValueSchema).max(ATTRIBUTE_LIMITS.maxListValues)]))
+  .refine((values) => Object.keys(values).length <= ATTRIBUTE_LIMITS.maxDefinitions && Object.keys(values).every((key) => ATTRIBUTE_KEY_PATTERN.test(key)));
 
 const RecordSchema = z.object({
   v: z.literal(1),
@@ -31,6 +39,9 @@ const RecordSchema = z.object({
   mimeType: z.string(),
   kind: z.enum(['file', 'text']),
   docType: z.string().optional(),
+  scopes: z.array(z.string().max(80)).max(20).optional(),
+  attributes: QueuedAttributesSchema.optional(),
+  replacesDocumentId: z.string().uuid().optional(),
   options: z.record(z.unknown()).optional(),
   typeChange: z.record(z.unknown()).optional(),
   state: z.record(z.unknown()),
@@ -44,6 +55,12 @@ export interface QueuedInputRecord {
   mimeType: string;
   kind: 'file' | 'text';
   docType?: string;
+  /** The upload's scope tags (D-40), for a version the progressive final begin starts. */
+  scopes?: string[];
+  /** The upload's explicit attribute values (D-23), for a version the progressive final begin starts; never in the job snapshot. */
+  attributes?: IngestAttributeValues;
+  /** The document the upload replaces (D-41), for the publish of a queued run. */
+  replacesDocumentId?: string;
   options?: IngestOptions;
   typeChange?: TypeChangeState;
   /** The state slices identify and the earlier stages produced; the ledger's stage_state is laid over it. */
@@ -95,6 +112,18 @@ function profileOf(source: IngestSource, docType: string, warnings: string[]): {
   }
 }
 
+const CHECK_RANK: Readonly<Record<IngestCheckMode, number>> = { off: 0, flag: 1, quarantine: 2 };
+
+/**
+ * The hidden-text mode of a queued job: the stricter of the current variable and the job's snapshot (D-33). The worker checked the
+ * original under the snapshot's mode, so a later relaxation of RAG_HIDDEN_TEXT_CHECK does not let the job skip it; a snapshot without
+ * the field (off) changes nothing.
+ */
+export function withSnapshotChecks(config: IngestConfig, job: Pick<IngestionJob, 'settings'>): IngestConfig {
+  const snapshot = job.settings.hidden_text_check ?? 'off';
+  return CHECK_RANK[snapshot] > CHECK_RANK[config.hiddenTextCheck] ? { ...config, hiddenTextCheck: snapshot } : config;
+}
+
 /**
  * The stage context of a queued job, rebuilt from the job row, the tenant-scoped document row, the stored original and the
  * queued-input record. Every read goes through the writer of the scope that was minted from the job, so another tenant's document
@@ -131,8 +160,15 @@ export async function buildQueuedContext(input: BuildQueuedContextInput): Promis
   if (input.withOriginal) {
     const ref = job.original_ref;
     const prefix = versionPrefix(tenantKey, origin.lineageId, row.version);
-    if (!ref || ref.bucket !== ORIGINALS_BUCKET || !ref.path.startsWith(prefix)) return { ok: false, reason: 'original_unavailable' };
-    const original = await getObjectStore().get(ref.path, { signal });
+    // A backfill job keeps its staged original_ref; begin stored the version's own copy, which the document row records (D-31).
+    const path =
+      ref && ref.bucket === ORIGINALS_BUCKET && ref.path.startsWith(prefix)
+        ? ref.path
+        : origin.originalPath && origin.originalPath.startsWith(prefix)
+          ? origin.originalPath
+          : null;
+    if (!path) return { ok: false, reason: 'original_unavailable' };
+    const original = await getObjectStore().get(path, { signal });
     if (!original) return { ok: false, reason: 'original_unavailable' };
     bytes = original.bytes;
   }
@@ -148,6 +184,9 @@ export async function buildQueuedContext(input: BuildQueuedContextInput): Promis
     filename: record.filename,
     mimeType: record.mimeType,
     ...(record.docType ? { docType: record.docType as DocType | 'auto' } : {}),
+    ...(record.scopes && record.scopes.length > 0 ? { scopes: record.scopes } : {}),
+    ...(record.attributes !== undefined ? { attributes: record.attributes } : {}),
+    ...(record.replacesDocumentId ? { replacesDocumentId: record.replacesDocumentId } : {}),
     ...(record.options !== undefined ? { options: record.options } : {}),
     ...(state.typeChange ? { typeChange: state.typeChange } : {}),
     signal,
@@ -162,7 +201,7 @@ export async function buildQueuedContext(input: BuildQueuedContextInput): Promis
     input: ingestInput,
     deps,
     writer,
-    config: loadIngestConfig(deps.ingestEnv()),
+    config: withSnapshotChecks(loadIngestConfig(deps.ingestEnv()), job),
     signal,
     deadline: deps.now() + input.deadlineMs,
     state,

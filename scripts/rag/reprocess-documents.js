@@ -46,9 +46,18 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function embeddingsClientOptions() {
+  const via = (process.env.RAG_OPENAI_EMBEDDINGS_VIA || '').trim().toLowerCase();
+  if (via !== 'openrouter') return { apiKey: process.env.OPENAI_API_KEY };
+  const key = (process.env.OPENROUTER_API_KEY || '').trim();
+  if (!key) {
+    console.error('[Reprocess] RAG_OPENAI_EMBEDDINGS_VIA=openrouter needs OPENROUTER_API_KEY');
+    process.exit(1);
+  }
+  return { apiKey: key, baseURL: 'https://openrouter.ai/api/v1' };
+}
+
+const openai = new OpenAI(embeddingsClientOptions());
 
 // Configuration
 const CHUNK_SIZE = parseInt(process.env.LLAMACLOUD_CHUNK_SIZE || '1500');

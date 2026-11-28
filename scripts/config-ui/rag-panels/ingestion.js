@@ -87,7 +87,7 @@ const INGESTION_LABELS = {
     "filter.failed": "Failed",
     "filter.legend": "Status",
     "filter.needs_review": "Needs review",
-    "filter.other": "Quarantined or skipped",
+    "filter.other": "Held or skipped",
     "filter.ready": "Ready",
     "jobs.caption": "Ingestion jobs, newest first",
     "jobs.col.actions": "Actions",
@@ -322,7 +322,7 @@ const INGESTION_LABELS = {
     "filter.failed": "失败",
     "filter.legend": "状态",
     "filter.needs_review": "待审核",
-    "filter.other": "已隔离或已跳过",
+    "filter.other": "已暂缓或跳过",
     "filter.ready": "已就绪",
     "jobs.caption": "入库任务（最新在前）",
     "jobs.col.actions": "操作",
@@ -557,7 +557,7 @@ const INGESTION_LABELS = {
     "filter.failed": "Non riusciti",
     "filter.legend": "Stato",
     "filter.needs_review": "Da rivedere",
-    "filter.other": "In quarantena o saltati",
+    "filter.other": "Trattenuti o saltati",
     "filter.ready": "Pronti",
     "jobs.caption": "Job di acquisizione, dal più recente",
     "jobs.col.actions": "Azioni",
@@ -764,6 +764,15 @@ function tierLabel(tier, locale) {
   return tier ? ingestionLabel('tier.' + tier, locale) : '—';
 }
 
+/** Status filter radios to the job statuses each one asks for. 'other' holds every held or skipped status (UI-SPEC decision 16). */
+const INGESTION_STATUS_FILTERS = {
+  failed: ['failed'],
+  needs_review: ['needs_review'],
+  active: ['queued', 'preflight', 'parsing', 'checking', 'chunking', 'embedding'],
+  ready: ['ready'],
+  other: ['quarantined', 'skipped_duplicate', 'pending_review'],
+};
+
 function statusBadgeKey(job) {
   const status = String(job.status || '');
   const terminal = !NON_TERMINAL.has(status);
@@ -885,7 +894,14 @@ function buildTierPutBody(docType, minTier, maxTier) {
   };
 }
 
-function mapIngestionError(result, locale, context) {
+function ingestionAppUrl(fallback) {
+  if (fallback) return fallback;
+  if (typeof window !== 'undefined' && typeof window.getConfiguredMyRAGAppUrl === 'function') return window.getConfiguredMyRAGAppUrl();
+  if (typeof window !== 'undefined' && window.location && window.location.origin) return window.location.origin;
+  return 'http://localhost:3000';
+}
+
+function mapIngestionError(result, locale, context, appUrl) {
   const status = result && result.status;
   const body = (result && result.body) || {};
   const err = body && body.error;
@@ -893,7 +909,7 @@ function mapIngestionError(result, locale, context) {
     return { key: 'error.network', message: resolveSharedLabel('error.network', locale) };
   }
   if (status === 401 || (status === 403 && err === 'Admin access required')) {
-    return { key: 'error.signIn', message: resolveSharedLabel('error.signIn', locale, { appUrl: '{appUrl}' }) };
+    return { key: 'error.signIn', message: resolveSharedLabel('error.signIn', locale, { appUrl: ingestionAppUrl(appUrl) }) };
   }
   if (status === 403 && err === 'Forbidden') {
     return { key: 'error.workspace', message: ingestionLabel('error.workspace', locale) };
@@ -941,6 +957,7 @@ class IngestionPanel {
     this.openJobId = null;
     this.listController = null;
     this.filters = { status: 'all', kind: 'all' };
+    this.appUrl = (root && root.dataset && root.dataset.appUrl) || null;
   }
 
   refresh() {
@@ -1043,13 +1060,7 @@ class IngestionPanel {
     this.listController = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const params = new URLSearchParams({ limit: '50' });
     if (this.organizationId) params.set('organizationId', this.organizationId);
-    const statusMap = {
-      failed: ['failed'],
-      needs_review: ['needs_review'],
-      active: ['queued', 'preflight', 'parsing', 'checking', 'chunking', 'embedding'],
-      ready: ['ready'],
-      other: ['quarantined', 'skipped_duplicate'],
-    };
+    const statusMap = INGESTION_STATUS_FILTERS;
     if (this.filters.status !== 'all' && statusMap[this.filters.status]) {
       for (const s of statusMap[this.filters.status]) params.append('status', s);
     }
@@ -1061,7 +1072,7 @@ class IngestionPanel {
     const statusEl = this.root.querySelector('[data-ingestion-jobs-status]');
     const tbody = this.root.querySelector('[data-ingestion-jobs-tbody]');
     if (!result.ok) {
-      const mapped = mapIngestionError(result, this.locale, 'jobs');
+      const mapped = mapIngestionError(result, this.locale, 'jobs', this.appUrl);
       if (mapped.key === 'error.signIn' || mapped.key === 'error.workspace') {
         this.showAuthAlert(mapped.message);
         return;
@@ -1084,7 +1095,19 @@ class IngestionPanel {
         fileTd.appendChild(fileBtn);
         tr.appendChild(fileTd);
         const statusTd = document.createElement('td');
-        statusTd.textContent = view.statusLabel;
+        if (view.status === 'pending_review') {
+          const badge = document.createElement('span');
+          badge.className = 'badge badge-sm badge-outline border-info text-base-content gap-1';
+          const icon = document.createElement('i');
+          icon.className = 'bi bi-hourglass text-info';
+          icon.setAttribute('aria-hidden', 'true');
+          const word = document.createElement('span');
+          word.textContent = view.statusLabel;
+          badge.append(icon, word);
+          statusTd.appendChild(badge);
+        } else {
+          statusTd.textContent = view.statusLabel;
+        }
         tr.appendChild(statusTd);
         const actionsTd = document.createElement('td');
         if (view.showRetry) {
@@ -1138,7 +1161,7 @@ class IngestionPanel {
     if (!host) return;
     host.replaceChildren();
     if (!result.ok) {
-      const mapped = mapIngestionError(result, this.locale, 'budget');
+      const mapped = mapIngestionError(result, this.locale, 'budget', this.appUrl);
       const p = document.createElement('p');
       p.className = 'text-error text-sm';
       p.textContent = mapped.message;
@@ -1163,7 +1186,7 @@ class IngestionPanel {
     });
   const statusEl = this.root.querySelector('[data-ingestion-jobs-status]');
     if (!result.ok) {
-      const mapped = mapIngestionError(result, this.locale, 'jobs');
+      const mapped = mapIngestionError(result, this.locale, 'jobs', this.appUrl);
       if (statusEl) statusEl.textContent = mapped.message;
       if (mapped.key === 'error.notFound' || mapped.key === 'error.notRetryable') this.loadJobs();
       return;
@@ -1222,7 +1245,7 @@ class IngestionPanel {
     const result = await this.rag('admin/ingest-jobs/' + encodeURIComponent(jobId) + this.orgQuery(), { method: 'DELETE' });
     const statusEl = this.root.querySelector('[data-ingestion-jobs-status]');
     if (!result.ok) {
-      const mapped = mapIngestionError(result, this.locale, 'jobs');
+      const mapped = mapIngestionError(result, this.locale, 'jobs', this.appUrl);
       if (statusEl) statusEl.textContent = mapped.message;
       if (mapped.key === 'error.notDeletable' || mapped.key === 'error.notFound') this.loadJobs();
       return;
@@ -1232,6 +1255,10 @@ class IngestionPanel {
   }
 
   applySettingsI18n() {
+    this.root.querySelectorAll('input[name="ingestion-status"]').forEach((input) => {
+      const value = input.getAttribute('value');
+      if (value) input.setAttribute('aria-label', ingestionLabel('filter.' + value, this.locale));
+    });
     this.root.querySelectorAll('[data-ingestion-i18n]').forEach((el) => {
       const key = el.getAttribute('data-ingestion-i18n');
       if (key) el.textContent = ingestionLabel(key, this.locale);
@@ -1253,6 +1280,14 @@ function initIngestionPanel() {
   }
 }
 
+function bindIngestionPanel() {
+  document.querySelectorAll('[data-tab="rag-administration"]').forEach((link) => {
+    if (link.getAttribute('data-ingestion-bound')) return;
+    link.setAttribute('data-ingestion-bound', '1');
+    link.addEventListener('click', () => initIngestionPanel());
+  });
+}
+
 if (typeof window !== 'undefined') {
   window.initIngestionPanel = initIngestionPanel;
   window.ingestionLabel = ingestionLabel;
@@ -1261,18 +1296,18 @@ if (typeof window !== 'undefined') {
   window.buildBudgetView = buildBudgetView;
   window.buildTierPutBody = buildTierPutBody;
   window.mapIngestionError = mapIngestionError;
+  bindIngestionPanel();
   document.addEventListener('DOMContentLoaded', () => {
+    bindIngestionPanel();
     const active = document.getElementById('rag-administration');
     if (active && active.classList.contains('active')) initIngestionPanel();
-  });
-  document.querySelectorAll('[data-tab="rag-administration"]').forEach((tab) => {
-    tab.addEventListener('click', () => initIngestionPanel());
   });
 }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     INGESTION_LABELS,
+    INGESTION_STATUS_FILTERS,
     ingestionLabel,
     buildJobRowView,
     buildJobDetailView,

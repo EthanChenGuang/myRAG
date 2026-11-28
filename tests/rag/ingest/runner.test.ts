@@ -295,9 +295,14 @@ describe('runner: ordered stages, deadline, state and resume', () => {
 
     for (const calls of [first, second]) {
       expect(callsOf(calls, 'rag_begin_document_version')).toHaveLength(0);
-      // The only field a resume after images writes is the parsed text, once, at the write stage.
-      expect(callsOf(calls, 'rag_set_document_fields').map((call) => call.args.p_fields)).toEqual([{ content: MARKDOWN }]);
+      // A resume after images writes the parsed text once at the write stage, then the ingestion fingerprint at publish (D-10).
+      expect(callsOf(calls, 'rag_set_document_fields').map((call) => call.args.p_fields)).toEqual([
+        { content: MARKDOWN },
+        { ingest_fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/), metadata: { ingest_fingerprint_parts: expect.objectContaining({ parser_used: 'text' }) } },
+      ]);
     }
+    const fingerprints = [first, second].map((calls) => callsOf(calls, 'rag_set_document_fields')[1]?.args.p_fields);
+    expect(fingerprints[0]).toEqual(fingerprints[1]);
     const writes = (calls: RecordedRpc[]) =>
       callsOf(calls, 'rag_write_chunks').map((call) => ({
         document: call.args.p_document_id,

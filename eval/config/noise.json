@@ -4,7 +4,8 @@
     "overall",
     "language:",
     "category:cross_lingual",
-    "pair:"
+    "pair:",
+    "category:table_split"
   ],
   "k": 3,
   "metrics": {

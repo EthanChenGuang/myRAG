@@ -1,0 +1,175 @@
+{
+  "$defs": {
+    "MetricValue": {
+      "additionalProperties": false,
+      "properties": {
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value",
+        "n"
+      ],
+      "title": "MetricValue",
+      "type": "object"
+    },
+    "SliceMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "attribute_filter_fallback_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "boilerplate_token_share": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "correct_refusal_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "false_answer_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "false_refusal_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "false_refusal_upper_95": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "False Refusal Upper 95"
+        },
+        "identifier_precision": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "intent_coverage": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "k_zero": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "mrr": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "named_document_recall": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "ndcg_at_context_k": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "near_miss_leakage": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "quantity_match_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "recall_at_10": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "recall_at_5": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "topk_redundancy": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "variant_accuracy": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "wrong_document_at_1": {
+          "$ref": "#/$defs/MetricValue"
+        }
+      },
+      "required": [
+        "recall_at_5",
+        "recall_at_10",
+        "mrr",
+        "correct_refusal_rate",
+        "false_refusal_rate"
+      ],
+      "title": "SliceMetrics",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "by_doc_type": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SliceMetrics"
+      },
+      "title": "By Doc Type",
+      "type": "object"
+    },
+    "by_language": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SliceMetrics"
+      },
+      "title": "By Language",
+      "type": "object"
+    },
+    "by_language_pair": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SliceMetrics"
+      },
+      "title": "By Language Pair",
+      "type": "object"
+    },
+    "doc_type_slice": {
+      "$ref": "#/$defs/SliceMetrics"
+    },
+    "latency_ms": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "minimum": 0,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": "Latency Ms",
+      "type": "object"
+    },
+    "profile_id": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "title": "Profile Id",
+      "type": "string"
+    },
+    "report_path": {
+      "minLength": 1,
+      "title": "Report Path",
+      "type": "string"
+    }
+  },
+  "required": [
+    "profile_id",
+    "report_path",
+    "doc_type_slice",
+    "by_language",
+    "by_language_pair",
+    "by_doc_type"
+  ],
+  "title": "BindingArm",
+  "type": "object"
+}

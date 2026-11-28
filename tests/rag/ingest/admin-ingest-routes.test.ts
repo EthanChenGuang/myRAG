@@ -504,6 +504,22 @@ describe('admin ingest job routes', () => {
       expect(dry.items.map((item: Row) => item.id)).toEqual([id(1)]);
     });
 
+    it('accepts the held and skipped group of the Ingestion panel, pending_review included (UI-SPEC decision 16)', async () => {
+      asAdminA();
+      const tenant = `u:${ADMIN_A}`;
+      state.jobs = [
+        jobRow(1, tenant, { status: 'pending_review' }),
+        jobRow(2, tenant, { status: 'quarantined' }),
+        jobRow(3, tenant, { status: 'ready' }),
+      ];
+      const { list } = await loadRoutes();
+      const response = await list.GET(req(`${BASE}?status=quarantined&status=skipped_duplicate&status=pending_review`));
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.items.map((item: Row) => item.id)).toEqual([id(2), id(1)]);
+      expect(body.items.find((item: Row) => item.id === id(1)).status).toBe('pending_review');
+    });
+
     it('two tenants: admin A lists only tenant A jobs and the ledger is asked for tenant A only', async () => {
       asAdminA();
       state.jobs = [jobRow(1, `u:${ADMIN_A}`), jobRow(2, `u:${ADMIN_B}`), jobRow(3, `o:${ORG_X}`), jobRow(4, 's:default')];

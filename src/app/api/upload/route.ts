@@ -5,7 +5,7 @@ import { processImageDocument } from '@/lib/document-processor';
 import { logger } from '@/lib/logger';
 import { isSingleTenant } from '@/lib/deployment-mode';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
-import type { RagAdminDb, TenantScope } from '@/lib/rag';
+import type { EnqueueResult, RagAdminDb, TenantScope } from '@/lib/rag';
 
 /**
  * Dedicated file upload endpoint for MCP tool compatibility
@@ -55,7 +55,7 @@ function getDownloadUrl(filePath: string): string {
   return `${baseUrl}/storage/v1/object/public/${BUCKET_NAME}/${filePath}?download`;
 }
 
-type UploadPipeline = 'legacy' | 'unified';
+type UploadPipeline = 'legacy' | 'unified' | 'blocked';
 
 /**
  * Which write path an upload takes, read per request after the session check. A switch that cannot be read means the legacy path.
@@ -64,10 +64,23 @@ type UploadPipeline = 'legacy' | 'unified';
 async function uploadPipeline(): Promise<UploadPipeline> {
   try {
     const { currentIngestConfig } = await import('@/lib/rag');
-    return currentIngestConfig().pipeline === 'unified' ? 'unified' : 'legacy';
+    const config = currentIngestConfig();
+    if (config.pipeline === 'unified' && config.pipelineBlocked) return 'blocked';
+    return config.pipeline === 'unified' ? 'unified' : 'legacy';
   } catch {
     logger.warn('Upload API', 'Ingest switch unavailable, using the legacy pipeline');
     return 'legacy';
+  }
+}
+
+/** D-56: the legacy image writer cannot hold a document; with upload approval on a knowledge-base upload refuses before storage. */
+async function legacyUploadRefused(): Promise<boolean> {
+  try {
+    const { legacyWriteRefused } = await import('@/lib/rag');
+    return legacyWriteRefused();
+  } catch {
+    const raw = (process.env.RAG_UPLOAD_APPROVAL ?? '').trim().toLowerCase();
+    return raw === 'members' || raw === 'all';
   }
 }
 
@@ -170,10 +183,64 @@ export async function POST(request: NextRequest) {
 
     // The unified pipeline resolves its scope here, before any storage write, from the session already verified above
     let ingestScope: TenantScope | null = null;
-    if (processRag && (await uploadPipeline()) === 'unified') {
+    const pipeline = processRag ? await uploadPipeline() : 'legacy';
+    if (pipeline === 'blocked') {
+      return NextResponse.json({ error: 'languages_not_configured' }, { status: 503 });
+    }
+    if (processRag && pipeline === 'legacy' && (await legacyUploadRefused())) {
+      const { legacyApprovalRefusal } = await import('@/lib/rag');
+      return legacyApprovalRefusal();
+    }
+    const requestedScopes = formData.getAll('scopes');
+    let uploadScopes: string[] | undefined;
+    let uploadAttributes: Record<string, string | string[]> | undefined;
+    let uploadReplaces: string | undefined;
+    if (pipeline === 'unified') {
       const resolved = await resolveUploadScope(request, formData, sessionUser);
       if ('response' in resolved) return resolved.response;
       ingestScope = resolved.scope;
+      // D-40: the uploader's tags, checked against the workspace's active vocabulary before any file is stored.
+      const { validateUploadScopes } = await import('@/lib/rag');
+      const scopeCheck = await validateUploadScopes(ingestScope, requestedScopes, { signal: request.signal });
+      if (!scopeCheck.ok) {
+        console.warn('[Ingest] upload scope tags refused', { reason: scopeCheck.reason });
+        return scopeCheck.reason === 'unavailable'
+          ? NextResponse.json({ error: 'scope_tags_unavailable' }, { status: 503 })
+          : NextResponse.json({ success: false, error: scopeCheck.reason }, { status: 400 });
+      }
+      uploadScopes = scopeCheck.scopes;
+      // D-22, D-23: attribute values go on every file of the request, checked before any file is stored.
+      const { attributesFormField, uploadAttributesRefusal, validateUploadAttributes } = await import('@/lib/rag');
+      const attributeCheck = await validateUploadAttributes(ingestScope, attributesFormField(formData.get('attributes')), { signal: request.signal });
+      if (!attributeCheck.ok) {
+        console.warn('[Ingest] upload attributes refused', { reason: attributeCheck.reason });
+        const refusal = uploadAttributesRefusal(attributeCheck);
+        return NextResponse.json(refusal.body, { status: refusal.status });
+      }
+      uploadAttributes = attributeCheck.attributes;
+      // D-41: "Replaces…" names one current document of the same workspace; it applies to a single ingested file only.
+      const requestedReplaces = formData.get('replaces_document_id');
+      if (typeof requestedReplaces === 'string' && requestedReplaces.trim() !== '' && files.length > 1) {
+        return NextResponse.json({ success: false, error: 'replaces_needs_one_file' }, { status: 400 });
+      }
+      const { validateUploadReplaces } = await import('@/lib/rag');
+      // Every image upload starts its own lineage (a unique storage path), so it can never be the named document's lineage.
+      const replacesCheck = await validateUploadReplaces(ingestScope, requestedReplaces, { signal: request.signal, source: 'image_upload', sourceKey: '' });
+      if (!replacesCheck.ok) {
+        console.warn('[Ingest] upload replaces refused', { reason: replacesCheck.reason });
+        return replacesCheck.reason === 'unavailable'
+          ? NextResponse.json({ error: 'replaces_unavailable' }, { status: 503 })
+          : NextResponse.json({ success: false, error: replacesCheck.reason }, { status: 400 });
+      }
+      uploadReplaces = replacesCheck.replacesDocumentId;
+    } else if (formData.get('attributes') !== null) {
+      // D-22a: attributes count only where the unified pipeline ingests; elsewhere they are refused, never dropped.
+      console.warn('[Ingest] upload attributes refused', { reason: 'attributes_not_enabled' });
+      return NextResponse.json({ success: false, error: 'attributes_not_enabled' }, { status: 400 });
+    }
+    if (pipeline !== 'unified' && requestedScopes.length > 0) {
+      // Tags count only where the unified pipeline ingests; the legacy path loads nothing new for them.
+      console.warn('[Ingest] upload scope tags ignored', { count: requestedScopes.length, reason: processRag ? 'legacy_pipeline' : 'not_ingested' });
     }
     const pendingImages: PendingImage[] = [];
 
@@ -266,8 +333,9 @@ export async function POST(request: NextRequest) {
     // We don't await this to keep the upload response fast
     const imageContext = formData.get('image_context') as string | undefined;
 
+    let queuedIngest: EnqueueResult[] | null = null;
     if (ingestScope && pendingImages.length > 0) {
-      await scheduleImageIngest(ingestScope, pendingImages, imageContext || undefined, startedAt);
+      queuedIngest = await scheduleImageIngest(ingestScope, sessionUser.id, pendingImages, imageContext || undefined, startedAt, uploadScopes, uploadReplaces, uploadAttributes);
     }
 
     (async () => {
@@ -317,6 +385,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(response, { status: 400 });
     }
 
+    if (queuedIngest) {
+      const failed = queuedIngest.some((row) => row.status === 'failed');
+      const queued = queuedIngest.some((row) => row.status === 'queued');
+      if (failed && !queued) {
+        return NextResponse.json({ ...response, status: 'failed' }, { status: 500 });
+      }
+      const ingestPayload =
+        queuedIngest.length === 1
+          ? {
+              jobId: queuedIngest[0]!.jobId,
+              documentId: queuedIngest[0]!.documentId,
+              status: queuedIngest[0]!.status,
+            }
+          : { ingestJobs: queuedIngest };
+      return NextResponse.json(
+        { ...response, ...ingestPayload },
+        { status: queued ? 202 : 200 },
+      );
+    }
+
     return NextResponse.json(response, { status: 200 });
 
   } catch (error) {
@@ -338,43 +426,74 @@ export async function POST(request: NextRequest) {
  * the bytes and never reads the session or the form again. Each image gets what is left of the request budget and a document that
  * runs out of time stays processing and resumable.
  */
-async function scheduleImageIngest(scope: TenantScope, images: PendingImage[], imageContext: string | undefined, startedAt: number): Promise<void> {
+async function scheduleImageIngest(
+  scope: TenantScope,
+  uploaderId: string,
+  images: PendingImage[],
+  imageContext: string | undefined,
+  startedAt: number,
+  scopes?: string[],
+  replacesDocumentId?: string,
+  attributes?: Record<string, string | string[]>,
+): Promise<EnqueueResult[] | null> {
   const deadlineAt = startedAt + INGEST_BUDGET_MS;
 
-  const ingestOne = async (ingest: typeof import('@/lib/rag').ingest, image: PendingImage): Promise<void> => {
-    const budgetMs = Math.max(MIN_INGEST_MS, deadlineAt - Date.now());
-    try {
-      const result = await ingest({
-        scope,
-        source: 'image_upload',
-        sourceKey: image.filePath,
-        file: image.bytes,
-        filename: image.name,
-        mimeType: image.type,
-        signal: AbortSignal.timeout(budgetMs),
-        deadlineMs: budgetMs,
-        options: {
-          imageUrl: image.downloadUrl,
-          ...(imageContext ? { imageContext } : {}),
-          origin: { sourceFileId: image.filePath },
-          documentMetadata: { image_type: image.type },
-        },
-      });
-      console.log('[Ingest] image upload finished', { status: result.status, ...(result.reason ? { reason: result.reason } : {}) });
-    } catch (error) {
-      console.error('[Ingest] image upload failed', { error: error instanceof Error ? error.name : 'unknown' });
-    }
-  };
+  const buildInput = (image: PendingImage, budgetMs: number) => ({
+    scope,
+    source: 'image_upload' as const,
+    sourceKey: image.filePath,
+    uploaderId,
+    ...(scopes ? { scopes } : {}),
+    ...(attributes !== undefined ? { attributes } : {}),
+    ...(replacesDocumentId ? { replacesDocumentId } : {}),
+    file: image.bytes,
+    filename: image.name,
+    mimeType: image.type,
+    signal: AbortSignal.timeout(budgetMs),
+    deadlineMs: budgetMs,
+    options: {
+      imageUrl: image.downloadUrl,
+      ...(imageContext ? { imageContext } : {}),
+      origin: { sourceFileId: image.filePath },
+      documentMetadata: { image_type: image.type },
+    },
+  });
 
   try {
-    const { ingest } = await import('@/lib/rag');
+    const { ingest, submitIngest, queueConfigFromProcessEnv, scheduleIngestWake } = await import('@/lib/rag');
+    const queueConfig = queueConfigFromProcessEnv();
+    if (queueConfig.ingestAsync) {
+      const results: EnqueueResult[] = [];
+      let queued = false;
+      for (const image of images) {
+        const budgetMs = Math.max(MIN_INGEST_MS, deadlineAt - Date.now());
+        const result = await submitIngest(buildInput(image, budgetMs), { queueConfig: () => queueConfig });
+        if ('status' in result && result.status === 'queued') queued = true;
+        results.push(result as EnqueueResult);
+      }
+      if (queued) scheduleIngestWake();
+      return results;
+    }
+
+    const ingestOne = async (image: PendingImage): Promise<void> => {
+      const budgetMs = Math.max(MIN_INGEST_MS, deadlineAt - Date.now());
+      try {
+        const result = await ingest(buildInput(image, budgetMs));
+        console.log('[Ingest] image upload finished', { status: result.status, ...(result.reason ? { reason: result.reason } : {}) });
+      } catch (error) {
+        console.error('[Ingest] image upload failed', { error: error instanceof Error ? error.name : 'unknown' });
+      }
+    };
+
     after(async () => {
       for (let index = 0; index < images.length; index += INGEST_CONCURRENCY) {
-        await Promise.allSettled(images.slice(index, index + INGEST_CONCURRENCY).map((image) => ingestOne(ingest, image)));
+        await Promise.allSettled(images.slice(index, index + INGEST_CONCURRENCY).map((image) => ingestOne(image)));
       }
     });
+    return null;
   } catch {
     logger.error('Upload API', 'Could not schedule the background ingestion');
+    return null;
   }
 }
 

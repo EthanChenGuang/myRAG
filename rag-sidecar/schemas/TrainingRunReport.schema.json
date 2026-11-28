@@ -1,0 +1,98 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "best_dev_ndcg_at_10": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Best Dev Ndcg At 10"
+    },
+    "best_step": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Best Step"
+    },
+    "device": {
+      "enum": [
+        "cpu",
+        "cuda",
+        "mps"
+      ],
+      "title": "Device",
+      "type": "string"
+    },
+    "duration_seconds": {
+      "minimum": 0,
+      "title": "Duration Seconds",
+      "type": "number"
+    },
+    "examples": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "enum": [
+          "ntuple",
+          "pairs"
+        ]
+      },
+      "title": "Examples",
+      "type": "object"
+    },
+    "final_train_loss": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Final Train Loss"
+    },
+    "run_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "steps": {
+      "minimum": 0,
+      "title": "Steps",
+      "type": "integer"
+    },
+    "training_config_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Training Config Sha256",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "training_config_sha256",
+    "examples",
+    "steps",
+    "duration_seconds",
+    "device"
+  ],
+  "title": "TrainingRunReport",
+  "type": "object"
+}

@@ -45,8 +45,8 @@ function stageContext(docType: Parameters<typeof getProcessingProfile>[0], work:
 }
 
 describe('chunker dispatch', () => {
-  it('registers markdown_sections, table_aware, legal_clauses, invoice and image_caption, and refuses a kind nothing registers', () => {
-    expect(Object.keys(CHUNKERS).sort()).toEqual(['image_caption', 'invoice', 'legal_clauses', 'markdown_sections', 'table_aware']);
+  it('registers markdown_sections, table_aware, legal_clauses, invoice, image_caption and rule_sections, and refuses a kind nothing registers', () => {
+    expect(Object.keys(CHUNKERS).sort()).toEqual(['image_caption', 'invoice', 'legal_clauses', 'markdown_sections', 'rule_sections', 'table_aware']);
     expect(chunkDocument(config('invoice_receipt'), { markdown: MARKDOWN }).chunks.length).toBeGreaterThan(0);
     expect(chunkDocument({ ...config('general'), kind: 'image_caption' }, { markdown: MARKDOWN })).toEqual({ chunks: [], warnings: [], captionOnly: true });
     expect(() => chunkDocument({ ...config('general'), kind: 'future_kind' as never }, { markdown: MARKDOWN })).toThrow(ChunkerUnavailableError);
@@ -91,6 +91,42 @@ describe('chunker dispatch', () => {
     expect(legal.chunks).toHaveLength(1);
     expect(legal.chunks[0]?.section_path).toEqual(['第5条 适用范围']);
     expect(legal.chunks[0]?.content).toContain('（二）已停用的设备。');
+  });
+});
+
+const SECTION_RULES = {
+  rule_set_id: '00000000-0000-4000-8000-000000000001',
+  version: 1,
+  skip_toc: true,
+  toc_min_run: 3,
+  hits: {
+    '1 Alpha': { name: 'Alpha', level: 1, restart: false },
+    '2 Beta': { name: 'Beta', level: 1, restart: false },
+  },
+};
+const RULE_MARKDOWN = ['1 Alpha', 'Zorvik plent masu.', '', '## Unlisted', 'Quorel defti.', '', '2 Beta', '| Key | Count |', '| --- | --- |', '| 1 | 10 |', '', '| 2 | 20 |', ''].join('\n');
+
+describe('rule_sections dispatch', () => {
+  it('cuts the Markdown by the hit data and ignores Docling chunks', () => {
+    const result = chunkDocument({ ...config('general'), kind: 'rule_sections', section_rules: SECTION_RULES }, { markdown: RULE_MARKDOWN, chunks: DOCLING_CHUNKS });
+    expect([...new Set(result.chunks.map((chunk) => chunk.section_path.join('/')))]).toEqual(['Alpha', 'Beta']);
+    expect(result.chunks.some((chunk) => chunk.content.includes('## Unlisted'))).toBe(true);
+    expect(result.chunks.every((chunk) => chunk.page_start === null && chunk.page_end === null)).toBe(true);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('warns and keeps one section when the effective chunker carries no rule data', () => {
+    const result = chunkDocument({ ...config('general'), kind: 'rule_sections' }, { markdown: RULE_MARKDOWN });
+    expect(result.chunks.map((chunk) => chunk.section_path)).toEqual(result.chunks.map(() => []));
+    expect(result.warnings).toEqual(['rule_sections_without_rules']);
+  });
+
+  it('gives the same section paths with the table-header carry as without it', () => {
+    const chunker = { ...config('financial_report'), kind: 'rule_sections' as const, section_rules: SECTION_RULES };
+    const always = chunkDocument(chunker, { markdown: RULE_MARKDOWN }, { tableHeaderRepeat: 'always' });
+    const profile = chunkDocument(chunker, { markdown: RULE_MARKDOWN }, { tableHeaderRepeat: 'profile' });
+    expect(always.chunks.map((chunk) => chunk.section_path)).toEqual(profile.chunks.map((chunk) => chunk.section_path));
+    expect(always.chunks.some((chunk) => chunk.metadata.table_header_carried === true)).toBe(true);
   });
 });
 

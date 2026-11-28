@@ -3,6 +3,7 @@ import type { Uploadable } from 'openai/uploads';
 import { env } from '@/lib/env';
 import type { RpcClient } from '../../backend/supabase-rpc';
 import type { EmbeddingProfile } from '../../embeddings/active-profile';
+import { batchApiAllowed } from '../../embeddings/openai-client';
 import { OPENAI_NATIVE_DIMS } from '../../embeddings/types';
 
 export const MAX_BATCH_INPUTS = 50_000;
@@ -193,6 +194,7 @@ export class EmbedBatchError extends Error {
 }
 
 export function createBatchApiClient(): BatchApiClient {
+  if (!batchApiAllowed()) throw new EmbedBatchError('client', 'batch_api_unavailable_via_openrouter');
   return new OpenAI({ apiKey: env.OPENAI_API_KEY }) as unknown as BatchApiClient;
 }
 

@@ -2,6 +2,8 @@ import { removeArtifacts } from '../artifacts';
 import { callerDocumentMetadata } from '../document-metadata';
 import { HASH_NORMALIZATION_VERSION, contentHash } from '../hash';
 import { originFields } from '../origin';
+import { applyDocumentAttributes } from '../attributes/apply';
+import { applyUploadScopes } from '../scopes/upload';
 import {
   requireDocument,
   requireIdentity,
@@ -43,14 +45,22 @@ async function runFileHashDedup(ctx: StageContext): Promise<StageOutcome> {
   if (callerMetadata) await ctx.writer.setFields(begun.documentId, { metadata: callerMetadata });
   const origin = originFields(ctx.input.options);
   if (origin !== null) await ctx.writer.setFields(begun.documentId, origin);
+  // D-40: the uploader's tags go on the document before any chunk is written, so the chunk writers copy them to every chunk.
+  await applyUploadScopes(ctx);
+  // D-23: the version's attributes (explicit, staged or inherited) also go on before any chunk; applyDocumentAttributes is a no-op while off.
+  await applyDocumentAttributes(ctx);
   return { kind: 'next' };
+}
+
+/** The normalised content hash of a parsed version. A picture parses to no text, so its content is the file itself; otherwise every image would match every other. */
+export function versionContentHash(chunkerKind: string, fileSha256: string, parseText: string | null): string {
+  return contentHash(chunkerKind === 'image_caption' ? `image:${fileSha256}` : (parseText ?? ''));
 }
 
 async function runContentHashDedup(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'content_hash_dedup');
-  // A picture parses to no text, so its content is the file itself; otherwise every image would match every other.
   const identity = requireIdentity(ctx, 'content_hash_dedup');
-  const hash = contentHash(identity.profile.chunker.kind === 'image_caption' ? `image:${identity.fileSha256}` : (ctx.work.parseText ?? ''));
+  const hash = versionContentHash(identity.profile.chunker.kind, identity.fileSha256, ctx.work.parseText);
   // A type change re-processes the same content as a new version of the same document: the version it replaces always has this hash.
   const duplicateOf = ctx.state.typeChange ? null : await ctx.writer.findContentDuplicate(hash, document.id);
   if (duplicateOf !== null) {

@@ -1,0 +1,53 @@
+{
+  "ceilings": {
+    "false_answer_rate": {
+      "balanced": null,
+      "flexible": null,
+      "strict": 0.05
+    },
+    "false_refusal_rate": {
+      "balanced": 0.25,
+      "flexible": 0.25,
+      "strict": 0.25
+    },
+    "min_n": 10
+  },
+  "composition": {
+    "excluded_categories": [
+      "small_talk"
+    ],
+    "min_items_per_language": 20,
+    "no_answer_share_min": 0.15,
+    "no_answer_share_target": 0.2,
+    "required_no_answer_kinds": []
+  },
+  "config_hash": "0e868609f82d94478a2ab9eabecc3af2494ad17a2d1c0aac9b50fa4b55721b87",
+  "floors": {
+    "nightly": {
+      "answer_relevance": 0.75,
+      "faithfulness": 0.85
+    },
+    "smoke": {}
+  },
+  "judge": {
+    "accuracy_floor": 0.8,
+    "kappa_floor": 0.6,
+    "length_bias_max_delta": 0.1,
+    "max_age_days": 35,
+    "min_labels_per_language": 100,
+    "pass_threshold": {
+      "answer_relevance": 0.7,
+      "faithfulness": 0.8
+    },
+    "perturbation_max_delta": 0.1,
+    "seed_min_labels_per_language": 50
+  },
+  "lifecycle": {
+    "max_stale_share": 0.1,
+    "re_review_days": 90
+  },
+  "provenance": {
+    "source": "defaults"
+  },
+  "schema_version": 1
+}

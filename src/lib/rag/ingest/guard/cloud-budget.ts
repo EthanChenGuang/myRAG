@@ -136,7 +136,7 @@ async function call(
   fn: string,
   args: Record<string, unknown>,
   signal: AbortSignal | undefined,
-): Promise<unknown[] | null> {
+): Promise<unknown> {
   if (!db) throw new CloudGuardError(fn, 'db_unavailable');
   let response;
   try {

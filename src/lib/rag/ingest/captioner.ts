@@ -1,5 +1,6 @@
 import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
+import { captionPromptFor } from './caption-language';
 
 /** The prompt processImageDocument sends; a test reads document-processor.ts and compares, so the two cannot drift. */
 export const IMAGE_CAPTION_PROMPT =
@@ -21,6 +22,8 @@ const MEDIA_TYPES: Readonly<Record<string, string>> = {
 
 export interface CaptionOptions {
   signal?: AbortSignal;
+  /** RAG_CAPTION_LANGUAGE=document only: the language the caption is asked for (D-23). Absent: the pinned English prompt. */
+  targetLanguage?: string | null;
 }
 
 export type CaptionFn = (_bytes: Uint8Array, _mimeType: string, _options: CaptionOptions) => Promise<string>;
@@ -66,7 +69,7 @@ export async function captionImage(bytes: Uint8Array, mimeType: string, options:
       {
         role: 'user',
         content: [
-          { type: 'text', text: IMAGE_CAPTION_PROMPT },
+          { type: 'text', text: captionPromptFor(options.targetLanguage) },
           { type: 'image', image: `data:${mediaType};base64,${base64}` },
         ],
       },

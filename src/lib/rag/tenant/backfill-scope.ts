@@ -76,3 +76,31 @@ export async function backfillScope(tenantKey: string, deps?: BackfillScopeDeps)
     return refuse('unavailable');
   }
 }
+/**
+ * The scope a backfill job's document version is written with. A backfill has no uploader, and in multi-tenant mode every document
+ * needs an owner (documents.user_id is NOT NULL), so an organization tenant's versions belong to the organization's owner. The
+ * organization comes from the job row; only its owner is looked up. Null when the organization or its owner is gone.
+ */
+export async function backfillDocumentScope(
+  scope: TenantScope,
+  deps: { admin?: BackfillScopeAdmin | null; signal: AbortSignal },
+): Promise<TenantScope | null> {
+  if (scope.kind !== 'org' || scope.userId !== null || scope.organizationId === null) return scope;
+  let admin = deps.admin;
+  if (admin === undefined) {
+    const { getRagDeps } = await import('../deps');
+    admin = getRagDeps().adminClient();
+  }
+  if (!admin) throw new Error('[Backfill] admin client unavailable');
+  deps.signal.throwIfAborted();
+  const { data, error } = await admin
+    .from('organizations')
+    .select('owner_id')
+    .eq('id', scope.organizationId)
+    .abortSignal(deps.signal)
+    .maybeSingle();
+  if (error) throw new Error('[Backfill] organization lookup failed');
+  const owner = (data as { owner_id?: unknown } | null)?.owner_id;
+  if (typeof owner !== 'string' || owner === '') return null;
+  return mintScope('org', owner.toLowerCase(), scope.organizationId);
+}

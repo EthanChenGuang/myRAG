@@ -23,6 +23,8 @@ import { isMultiTenant } from '@/lib/deployment-mode';
 import type { Chat } from '@/lib/supabase';
 import type { ExtendedMessage, APIMessage, ContentPart, DocumentContent } from '@/types/chat';
 import { toAPIMessage, toDBMessages, updateMessages, appendMessage, toExtendedMessages, fromUIMessage } from '@/types/chat';
+import { extractStreamAnswerMetadata, withRefusalFeedback, type RefusalFeedbackValue, type StreamAnswerMetadata } from '@/lib/chat/answer-metadata';
+import { canSaveMessages, isPersistedChatId, useAnswerRecords } from '@/lib/chat/use-answer-records';
 import { motion, useScroll, useSpring, AnimatePresence } from 'framer-motion';
 import { createChat, updateChat } from '@/lib/chat-store';
 import { nanoid } from 'nanoid';
@@ -41,6 +43,7 @@ import { clearCache as clearMcpCache } from '@/lib/mcp-cache';
 import { useReasoningStore } from '@/lib/stores/reasoning-store';
 import { useGhostModeStore } from '@/lib/ghost-mode-store';
 import { GhostModeIndicator } from '@/components/ui/ghost-mode-indicator';
+import { useChatViewport } from '@/lib/hooks/use-chat-viewport';
 import { useToast } from '@/components/ui/use-toast';
 
 
@@ -686,6 +689,13 @@ export default function Home() {
     }, 500); // 500ms debounce
   }, []);
 
+  const chatRequestChatId = (): string | null => {
+    const ghost = useGhostModeStore.getState();
+    const chatId = currentChatIdRef.current;
+    if (ghost.isGhostMode) return ghost.ghostChatId ?? (chatId?.startsWith('ghost-') ? chatId : 'ghost-incognito');
+    return chatId ?? null;
+  };
+
   const [input, setInput] = useState('');
 
   // Removed fetchedEmails state
@@ -817,7 +827,8 @@ export default function Home() {
     },
 
     transport: new DefaultChatTransport({
-      api: '/api/chat'
+      api: '/api/chat',
+      body: () => ({ data: { capabilities: { citations: true }, chatId: chatRequestChatId() } })
     })
   } as any) as any;
   const isChatLoadingRef = useLatestRef(isChatLoading);
@@ -884,6 +895,14 @@ export default function Home() {
   const [showBottomGradient, setShowBottomGradient] = useState(false);
   const [showScrollIndicator, setShowScrollIndicator] = useState(false); // Start hidden
   const [isSwitchingChat, setIsSwitchingChat] = useState(false); // Prevents welcome screen flash during chat switches
+
+  useAnswerRecords({
+    chatId: isGhostMode ? (ghostChatId ?? currentChatId) : currentChatId,
+    messages,
+    setMessages,
+    save: isGhostMode || isSwitchingChat ? undefined : debouncedSave,
+  });
+
   const [isChatTransitionAnimating, setIsChatTransitionAnimating] = useState(false);
   const [isVoiceModeActive, setIsVoiceModeActive] = useState(false); // Voice mode layout state
   const { toast } = useToast();
@@ -949,6 +968,9 @@ export default function Home() {
 
     return shouldShowWelcome;
   }, [messages.length, currentChatId, isSwitchingChat, isVoiceModeActive]);
+
+  const chatDockRef = useRef<HTMLDivElement>(null);
+  useChatViewport(chatDockRef, isInitialView);
 
   const handleStop = useCallback(async () => {
     console.log('=== Stop Requested ===');
@@ -1671,7 +1693,9 @@ export default function Home() {
           messages: apiMessages,
           data: {
             settings,
-            organizationId // Pass organization context for workspace-scoped RAG
+            organizationId, // Pass organization context for workspace-scoped RAG
+            capabilities: { citations: true },
+            chatId: chatRequestChatId()
           }
         }),
         signal: abortControllerRef.current.signal
@@ -1889,6 +1913,13 @@ export default function Home() {
 
         let sseBuffer = '';
         let streamClosed = false;
+        let streamAnswerMetadata: StreamAnswerMetadata = {};
+        const captureAnswerMetadata = (messageMetadata: unknown) => {
+          streamAnswerMetadata = extractStreamAnswerMetadata(messageMetadata, streamAnswerMetadata);
+          if (Object.keys(streamAnswerMetadata).length > 0) {
+            streamingMessage.metadata = { ...streamingMessage.metadata, ...streamAnswerMetadata };
+          }
+        };
         const toolCallNameById = new Map<string, string>();
 
         const updateStreamingText = (text: string) => {
@@ -2246,7 +2277,13 @@ export default function Home() {
               updateStreamingText(display);
               break;
             }
+            case 'start':
+            case 'message-metadata': {
+              captureAnswerMetadata(event.messageMetadata);
+              break;
+            }
             case 'finish': {
+              captureAnswerMetadata(event.messageMetadata);
               const finishMetadata = event.messageMetadata;
               if (finishMetadata && typeof finishMetadata === 'object') {
                 handleMultiStepMetadata(finishMetadata.multiStep);
@@ -2445,7 +2482,8 @@ export default function Home() {
             id: generateMessageId(),
             role: 'assistant',
             content: messageContent,
-            createdAt: new Date()
+            createdAt: new Date(),
+            ...(Object.keys(streamAnswerMetadata).length > 0 ? { metadata: { ...streamAnswerMetadata } } : {})
           };
 
           console.log('[Manual onFinish] Creating final message with content:', messageContent);
@@ -2503,6 +2541,25 @@ export default function Home() {
   };
 
   const handleSubmitRef = useLatestRef(handleSubmit);
+
+  const isResponseInFlight = isChatLoading || isStreaming;
+
+  const handleRefusalFeedback = (messageId: string, value: RefusalFeedbackValue) => {
+    setMessages((previous) => withRefusalFeedback(previous, messageId, value));
+    const next = withRefusalFeedback(messages, messageId, value);
+    if (next !== messages && !isGhostMode && !isSwitchingChat && isPersistedChatId(currentChatId) && canSaveMessages(next)) {
+      debouncedSave(currentChatId, next);
+    }
+  };
+
+  const handleFollowupSelect = (question: string) => {
+    if (isResponseInFlight) return;
+    setInput(question);
+    setTimeout(() => {
+      const form = document.querySelector<HTMLFormElement>('form[data-chat-input-form]') ?? document.querySelector('form');
+      form?.requestSubmit();
+    }, 100);
+  };
 
   /**
    * Handles creating a new chat. The order of operations is critical:
@@ -4500,7 +4557,7 @@ export default function Home() {
 
   return (
     <main className={cn(
-      "flex flex-col h-screen transition-[margin] duration-200 ease-in-out relative",
+      "flex flex-col h-screen h-dvh transition-[margin] duration-200 ease-in-out relative",
       isSidebarOpen ? "lg:ml-64" : "",
       !backgroundImage ? (theme === 'dark' ? "bg-[#212121]" : "bg-[#FFF1E5]") : ""
     )}>
@@ -4535,41 +4592,6 @@ export default function Home() {
           "absolute inset-0 flex flex-col",
           !backgroundImage && (theme === 'dark' ? "bg-[#212121]" : "bg-[#FFF1E5]")
         )}>
-          {/* Add keyboard aware handler */}
-          <script
-            dangerouslySetInnerHTML={{
-              __html: `
-                // Handle keyboard visibility for header buttons
-                function handleKeyboardVisibility() {
-                  const header = document.querySelector('.header-container');
-                  if (!header) return;
-                  
-                  // Add class for transition
-                  header.classList.add('keyboard-visible-transition');
-                  
-                  // Handle input focus (keyboard appears)
-                  document.addEventListener('focusin', (e) => {
-                    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
-                      header.style.transform = 'translateY(0)';
-                      header.style.opacity = '1';
-                    }
-                  });
-                  
-                  // Handle input blur (keyboard disappears)
-                  document.addEventListener('focusout', (e) => {
-                    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
-                      header.style.transform = 'translateY(0)';
-                      header.style.opacity = '1';
-                    }
-                  });
-                }
-                
-                // Run immediately and on page load
-                handleKeyboardVisibility();
-                window.addEventListener('load', handleKeyboardVisibility);
-              `,
-            }}
-          />
           <div className="flex-1 flex flex-col group/chat relative">
             {/* Global Ghost Mode Indicator under header */}
             <div className="fixed top-0 left-0 right-0 z-[60] flex justify-center px-4 pointer-events-none">
@@ -4581,7 +4603,7 @@ export default function Home() {
                 <div
                   ref={chatContainerRef}
                   id="main-chat-container"
-                  className="absolute inset-0 overflow-y-auto scrollbar scroll-container chat-message-container main-content-mobile-padding chat-messages-fade-mask scrollbar-w-3 scrollbar-track-[#FFF1E5] dark:scrollbar-track-[#212121] scrollbar-thumb-[#EADDD7] dark:scrollbar-thumb-[#2F2F2F] group-hover/chat:scrollbar-thumb-[#D4C0B6] group-hover/chat:dark:scrollbar-thumb-[#424242] group-data-[state=dimmed]/root:scrollbar-thumb-[#EADDD7] group-data-[state=dimmed]/root:dark:scrollbar-thumb-[#2F2F2F]"
+                  className="absolute inset-0 overflow-y-auto scrollbar scroll-container chat-message-container chat-scroll scrollbar-w-3 scrollbar-track-[#FFF1E5] dark:scrollbar-track-[#212121] scrollbar-thumb-[#EADDD7] dark:scrollbar-thumb-[#2F2F2F] group-hover/chat:scrollbar-thumb-[#D4C0B6] group-hover/chat:dark:scrollbar-thumb-[#424242] group-data-[state=dimmed]/root:scrollbar-thumb-[#EADDD7] group-data-[state=dimmed]/root:dark:scrollbar-thumb-[#2F2F2F]"
                   style={{
                     backgroundColor: !backgroundImage ? (theme === 'dark' ? '#212121' : '#FFF1E5') : 'transparent'
                   }}
@@ -4599,7 +4621,7 @@ export default function Home() {
                         }
                       }}
                       style={{ willChange: 'opacity, transform' }}
-                      className="w-full max-w-[52rem] mx-auto pt-0 pb-[120px] relative mobile-message-wrapper"
+                      className="w-full max-w-[52rem] mx-auto relative chat-list"
                     >
                       <div className="space-y-0.5" ref={messageContainerRef}>
                         {displayMessages.map((message, index) => {
@@ -4614,6 +4636,9 @@ export default function Home() {
                               isThinking={isThinkingMessage || (isLastAssistantMessage && isChatLoading && !message.content)}
                               isStreaming={Boolean(isLastAssistantMessage && isChatLoading && message.content)}
                               sessionId={sessionIdRef.current || undefined}
+                              onFollowupSelect={handleFollowupSelect}
+                              followupsDisabled={isResponseInFlight}
+                              onRefusalFeedback={handleRefusalFeedback}
                             />
                           );
                         })}
@@ -4625,7 +4650,7 @@ export default function Home() {
               </div>
             ) : (
               <div
-                className="flex-1 flex flex-col relative main-content-mobile-padding"
+                className="flex-1 flex flex-col relative"
                 style={{
                   backgroundColor: !backgroundImage ? (theme === 'dark' ? '#212121' : '#FFF1E5') : 'transparent'
                 }}
@@ -4731,7 +4756,7 @@ export default function Home() {
                         handleSubmit={handleSubmit}
                         handleStop={handleStop}
                         isLoading={isChatLoading || isStreaming}
-                        placeholder={isGhostMode ? "Send a private message..." : t('messagePlaceholder')}
+                        placeholder={isGhostMode ? "Send a private message…" : t('messagePlaceholder')}
                         onSubmit={handleSubmit}
                         setInput={setInput}
                         isVoiceModeActive={isVoiceModeActive}
@@ -4821,7 +4846,8 @@ export default function Home() {
             {isInitialView && (
               <div
                 id="mobile-dock"
-                className="sm:hidden flex flex-col justify-end fixed bottom-0 left-0 right-0 z-50 bg-transparent pb-safe mobile-chat-container"
+                ref={chatDockRef}
+                className="sm:hidden flex flex-col justify-end fixed bottom-0 left-0 right-0 z-50 mobile-chat-container chat-dock"
                 style={{
                   pointerEvents: 'none' // allow clicks to pass through the empty container space
                 }}
@@ -4898,7 +4924,7 @@ export default function Home() {
                     handleSubmit={handleSubmit}
                     handleStop={handleStop}
                     isLoading={isChatLoading || isStreaming}
-                    placeholder={isGhostMode ? "Send a private message..." : t('messagePlaceholder')}
+                    placeholder={isGhostMode ? "Send a private message…" : t('messagePlaceholder')}
                     onSubmit={handleSubmit}
                     setInput={setInput}
                     isVoiceModeActive={isVoiceModeActive}
@@ -4909,11 +4935,14 @@ export default function Home() {
             )}
 
             {!isInitialView && (
-              <div className={cn(
-                "fixed bottom-0 right-0 z-10 pb-safe sm:pb-0 desktop-narrow-pb-remove transition-[left] duration-200 ease-in-out mobile-chat-input-wrapper",
-                "flex flex-col", // Add flex column for proper stacking on mobile
-                isSidebarOpen ? "lg:left-64" : "left-0"
-              )}>
+              <div
+                ref={chatDockRef}
+                className={cn(
+                  "fixed bottom-0 right-0 z-10 transition-[left] duration-200 ease-in-out mobile-chat-input-wrapper chat-dock",
+                  "flex flex-col",
+                  isSidebarOpen ? "lg:left-64" : "left-0"
+                )}
+              >
                 <ScrollIndicator
                   direction="up"
                   show={showTopScrollIndicator}
@@ -4953,40 +4982,17 @@ export default function Home() {
                   handleSubmit={handleSubmit}
                   handleStop={handleStop}
                   isLoading={isChatLoading || isStreaming}
-                  placeholder={isGhostMode ? "Send a private message..." : t('messagePlaceholder')}
+                  placeholder={isGhostMode ? "Send a private message…" : t('messagePlaceholder')}
                   onSubmit={handleSubmit}
                   setInput={setInput}
                   isVoiceModeActive={isVoiceModeActive}
                   onVoiceModeChange={setIsVoiceModeActive}
                 />
 
-                {/* Mobile disclaimer for conversation view - fixed at absolute bottom, above ChatInput */}
-                {/* ios-hidden: On iOS, this is hidden via CSS because chat-input.tsx already shows the disclaimer */}
-                <div
-                  className="sm:hidden ios-hidden fixed bottom-0 left-0 right-0 text-center pointer-events-none bg-[#FFF1E5] dark:bg-[#212121] z-50"
-                  style={{
-                    paddingTop: '4px',
-                    paddingBottom: '12px'
-                  }}
-                >
-                  <p className="text-gray-500 dark:text-gray-400 text-center" style={{ fontSize: '10px' }}>
-                    {t('mobileDisclaimer')}
-                  </p>
-                </div>
-
-                {/* Disclaimer text - narrow desktop (640px-1024px) */}
-                <div className="absolute bottom-0 left-0 right-0 text-center hidden sm:block lg:hidden pointer-events-none">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 pb-2">
-                    {t('disclaimer')}
-                  </p>
-                </div>
-
-                {/* Disclaimer text at the bottom - hidden on mobile to keep chat input flush */}
-                <div className="absolute bottom-0 left-0 right-0 text-center hidden lg:block pointer-events-none">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 pb-1">
-                    {t('disclaimer')}
-                  </p>
-                </div>
+                {/* Desktop disclaimer; phones show the compact one inside ChatInput */}
+                <p className="chat-disclaimer hidden sm:block absolute bottom-0 left-0 right-0 pb-2 pointer-events-none">
+                  {t('disclaimer')}
+                </p>
               </div>
             )}
           </div>

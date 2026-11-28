@@ -173,6 +173,7 @@ Set these environment variables in your deployment platform (Fly.io, Railway, et
 | `WEBHOOK_SECRET` | Signs webhooks to myRAG. Must match `WHATSAPP_WEBHOOK_SECRET`. myRAG also registers it at runtime; webhooks are not sent without one | (Required in production) |
 | `USE_PAIRING_CODE` | Use code instead of QR | `false` |
 | `PHONE_NUMBER` | Phone # if using Pairing Code | (Required if `USE_PAIRING_CODE=true`) |
+| `WHATSAPP_LINK_PREVIEW_HOSTS` | Comma-separated exact hostnames the service may fetch to build link previews for URLs in replies. Empty sends no previews and fetches nothing | (empty) |
 
 ---
 

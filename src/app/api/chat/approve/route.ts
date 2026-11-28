@@ -12,7 +12,7 @@ import {
   readImageContext,
 } from '@/lib/mcp/caller-scope';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { isAdminUser, type RagAdminDb } from '@/lib/rag';
+import { escapeTags, isAdminUser, readSecurityConfig, scanToolOutput, TOOL_RESULT_NOTICE, wrapToolResultsForPrompt, type RagAdminDb } from '@/lib/rag';
 import { isUrlMcpCompatible } from '@/lib/mcp/url-validator';
 
 function describeConnections(client: unknown): { server: string; connected: boolean }[] {
@@ -2512,7 +2512,7 @@ export async function POST(req: NextRequest) {
                 } else {
                   // Use GPT-5 Nano to intelligently summarize the email content
                   console.log('🔍 [SUMMARY] Calling GPT-5 Nano for email summarization');
-                  const summarizedContent = await summarizeEmailsWithGPT(emails, params.instructions || params.query || 'Find my recent emails');
+                  const summarizedContent = await summarizeEmailsWithGPT(emails, params.instructions || params.query || 'Find my recent emails', toolName);
                   
                   return {
                     content: [makeText(summarizedContent)],
@@ -3669,7 +3669,71 @@ function generatePreviewFromBody(body: string | null, existingSnippet: string | 
 // The stripGmailPayload function now handles all necessary payload processing.
 
 /* GPT-5 Nano email summarization function */
-async function summarizeEmailsWithGPT(emails: any[], userQuery: string): Promise<string> {
+interface SummaryEmail {
+  index: number;
+  subject: unknown;
+  from: unknown;
+  date: unknown;
+  snippet: unknown;
+  body: unknown;
+  isUnread: unknown;
+  fullDate: unknown;
+}
+
+/** D-10: instructions first, each email as escaped data in a tool_result element, then the tool-result notice. */
+function guardedEmailSummaryPrompt(userQuery: string, emailData: SummaryEmail[], single: boolean): string {
+  const asked = escapeTags(userQuery);
+  const items = emailData.map((email) => {
+    const body = typeof email.body === 'string' ? email.body : '';
+    const content = body ? (single ? body : `${body.substring(0, 200)}${body.length > 200 ? '...' : ''}`) : undefined;
+    return {
+      ...(single ? {} : { index: email.index }),
+      subject: email.subject,
+      from: email.from,
+      date: email.fullDate,
+      ...(email.isUnread ? { unread: true } : {}),
+      ...(content !== undefined ? { content } : { preview: email.snippet }),
+    };
+  });
+  const data = wrapToolResultsForPrompt('gmail', items);
+  if (single) {
+    return `You are an AI assistant helping to summarize a Gmail search result. The user asked: "${asked}"
+
+The most recent email found is in the tool_result element below.
+
+Please provide a focused summary that:
+1. Clearly states this is the most recent email matching their request.
+2. Highlights the key information from this specific email, including the actual content and any important details. The summary MUST explicitly state the email's subject line.
+3. Mentions if this appears urgent or time-sensitive.
+4. Suggests relevant next actions (read full email, reply, etc.).
+5. Uses a conversational, helpful tone.
+6. Keeps the response under 200 words.
+
+Focus on being precise and actionable since they asked for their most recent email. Include specific details from the email content.
+
+${data}
+
+${TOOL_RESULT_NOTICE}`;
+  }
+  return `You are an AI assistant helping to summarize Gmail search results. The user asked: "${asked}"
+
+The ${emailData.length} most recent emails found are in the tool_result elements below.
+
+Please provide a concise, helpful summary that:
+1. Highlights the most important/relevant emails based on the user's query. For each highlighted email, the summary MUST explicitly state its subject line.
+2. Groups similar emails if applicable (e.g., newsletters, notifications, etc.).
+3. Mentions any urgent or time-sensitive items.
+4. Keeps the response under 300 words.
+5. Uses a conversational, helpful tone.
+
+Focus on what the user would find most useful given their original request.
+
+${data}
+
+${TOOL_RESULT_NOTICE}`;
+}
+
+async function summarizeEmailsWithGPT(emails: any[], userQuery: string, toolName = 'gmail_find_email'): Promise<string> {
   try {
     devLog.verbose('🔍 [GPT SUMMARY] Starting email summarization for', emails.length, 'emails');
     
@@ -3800,6 +3864,20 @@ Please provide a concise, helpful summary that:
 5. Uses a conversational, helpful tone.
 
 Focus on what the user would find most useful given their original request.`;
+    }
+
+    const toolResultGuard = readSecurityConfig().toolResultGuard;
+    if (toolResultGuard !== 'off') {
+      if (toolResultGuard === 'tag_and_flag') {
+        let ruleIds: string[] = [];
+        try {
+          ruleIds = scanToolOutput(emailData);
+        } catch {
+          console.warn('[RAG Security] Tool result rules failed; the result is passed on escaped', { tool: toolName });
+        }
+        if (ruleIds.length > 0) console.warn('[RAG Security] Tool result flagged; passed on escaped', { tool: toolName, ruleIds });
+      }
+      prompt = guardedEmailSummaryPrompt(userQuery, emailData, wantsSingleEmail && emailData.length === 1);
     }
 
     const controller = new AbortController();

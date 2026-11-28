@@ -1,5 +1,6 @@
 import { z } from 'zod/v3';
 import { completeScores, RerankError } from './scores';
+import { rerankerSupportedLanguages } from './languages';
 import type { Reranker, RerankOptions, RerankScore } from './types';
 
 const DEFAULT_BASE = 'https://api.cohere.com';
@@ -55,6 +56,7 @@ export function createCohereReranker(deps: CohereRerankerDeps): Reranker {
     id: 'cohere',
     model: deps.model,
     scoreSemantics: 'calibrated',
+    supportedLanguages: rerankerSupportedLanguages('cohere'),
     async rerank(query, docs, opts) {
       if (opts.signal.aborted) {
         throw opts.signal.reason ?? new DOMException('Aborted', 'AbortError');

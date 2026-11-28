@@ -1,6 +1,32 @@
 {
   "additionalProperties": false,
   "properties": {
+    "attributes": {
+      "maxProperties": 30,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]{0,39}$": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "title": "Attributes",
+      "type": "object"
+    },
     "doc_type": {
       "anyOf": [
         {

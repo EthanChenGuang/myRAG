@@ -1,0 +1,53 @@
+{
+  "$defs": {
+    "DupClusterProfileEntry": {
+      "additionalProperties": false,
+      "description": "D-49: a duplicate threshold for one embedding profile; a fixture-fitted value applies in eval only.",
+      "properties": {
+        "source": {
+          "enum": [
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "threshold": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "threshold",
+        "source"
+      ],
+      "title": "DupClusterProfileEntry",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "by_profile": {
+      "additionalProperties": {
+        "$ref": "#/$defs/DupClusterProfileEntry"
+      },
+      "propertyNames": {
+        "maxLength": 128,
+        "minLength": 1
+      },
+      "title": "By Profile",
+      "type": "object"
+    },
+    "threshold": {
+      "default": 0.95,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Threshold",
+      "type": "number"
+    }
+  },
+  "title": "DupClusterParams",
+  "type": "object"
+}

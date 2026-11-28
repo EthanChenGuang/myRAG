@@ -41,6 +41,9 @@ function checkProfile(profile: ProcessingProfile): void {
   if (id !== `${profile.doc_type}@${profile.version}`) fail(`${id}: id must equal <doc_type>@<version>`);
   if (chunker.overlap_tokens >= chunker.max_tokens) fail(`${id}: overlap_tokens must be smaller than max_tokens`);
   if (chunker.min_chunk_tokens > chunker.max_tokens) fail(`${id}: min_chunk_tokens must not exceed max_tokens`);
+  if (chunker.kind === 'rule_sections') {
+    fail(`${id}: chunker kind rule_sections is selected per document from tenant rule data and cannot be named by a repository profile`);
+  }
   requireUnique(profile.parser.preference, id, 'parser preference');
   requireUnique(profile.parser.ocr_languages, id, 'ocr_languages');
   requireUnique(profile.extractors, id, 'extractors');

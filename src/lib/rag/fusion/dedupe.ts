@@ -5,6 +5,8 @@ export interface DedupeCounts {
   deduped: number;
   rerank_input: number;
   capped_from: number;
+  /** D-34: set only when the terminology reservation ran; absent keeps the serialized counts unchanged. */
+  term_reserved?: number;
 }
 
 export interface DedupeResult {

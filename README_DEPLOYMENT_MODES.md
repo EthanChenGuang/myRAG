@@ -781,6 +781,16 @@ DROP TABLE IF EXISTS tenant_usage CASCADE;
 npm run dev
 ```
 
+### Opting in to hybrid retrieval (v2)
+
+Both modes ship with `RAG_PIPELINE=legacy`; an unset `RAG_PIPELINE` also serves legacy (Phase 4.1 kept the default, see `eval/decisions/04.1-retrieval-defaults.md`). To run v2:
+
+1. Choose the supported languages: the language picker in the Config UI, or `RAG_SUPPORTED_LANGUAGES` and `RAG_PRIMARY_LANGUAGE` on hosted deployments.
+2. Apply the Phase 4 migrations under `supabase/migrations/` (or start from the folded setup file of your mode), then run `npm run rag:relex`.
+3. Set `RAG_PIPELINE=v2` and redeploy.
+
+An explicit `RAG_PIPELINE=v2` fails loudly instead of falling back: retrieval answers `languages_not_configured` while the languages are not chosen and `backend_error` while `hybrid_search_chunks` is missing. Set `RAG_PIPELINE=legacy` (or remove the variable) to switch back.
+
 ---
 
 ## API Reference

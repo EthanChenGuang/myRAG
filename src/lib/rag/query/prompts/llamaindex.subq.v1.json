@@ -1,0 +1,11 @@
+{
+  "id": "llamaindex.subq",
+  "version": 1,
+  "source": "@llamaindex/core@0.6.23 prompts defaultSubQuestionPrompt (SubQuestionQueryEngine question generator)",
+  "license": "MIT",
+  "attribution": "Copyright (c) LlamaIndex. Prompt structure and wording reused under the MIT License. Changed by myRAG: the tool list, the <Tools> blocks and toolName are dropped (D-14); the example question and output are replaced with a neutral synthetic example (domain-neutrality rule) in the {\"questions\": [...]} output shape; placeholder {queryStr} renamed to {{query_str}}.",
+  "template": "Given a user question, output a list of relevant sub-questions that when composed can help answer the full user question:\n\n# Example 1\n<User Question>\nCompare the length and the weight of Component A and Component B\n\n<Output>\n```json\n{\n    \"questions\": [\n        \"What is the length of Component A\",\n        \"What is the weight of Component A\",\n        \"What is the length of Component B\",\n        \"What is the weight of Component B\"\n    ]\n}\n```\n\n# Example 2\n<User Question>\n{{query_str}}\n\n<Output>\n",
+  "placeholders": [
+    "query_str"
+  ]
+}

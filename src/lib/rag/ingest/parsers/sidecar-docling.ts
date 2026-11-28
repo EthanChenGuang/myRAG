@@ -8,6 +8,7 @@ import {
   type ParseJobState,
   type ParseResult,
 } from '@/lib/rag-eval/contracts.generated';
+import { PARSE_JOB_REQUEST_PHASE32_DEFAULTS, omitDefaultFields } from '../wire-defaults';
 import {
   MAX_ARTIFACTS,
   MAX_ARTIFACT_BYTES,
@@ -92,22 +93,28 @@ export function createSidecarParser(config: SidecarConfig): DocumentParser {
   }
 
   async function submit(request: ParseRequest, format: SidecarInputFormat, attempt: number): Promise<PendingJob> {
+    const effective = request.settings;
     const parsedRequest = ParseJobRequestSchema.safeParse({
       profile_id: request.profile.id,
       profile_version: request.profile.version,
       input_format: format,
       docling: request.profile.parser.docling,
-      ocr_languages: request.profile.parser.ocr_languages,
+      ocr_languages: effective?.ocrLanguages ?? request.profile.parser.ocr_languages,
       tokenizer: 'cl100k_base',
       max_tokens: request.profile.chunker.max_tokens,
-      repeat_table_header: request.profile.chunker.repeat_table_header,
+      repeat_table_header: effective?.repeatTableHeader ?? request.profile.chunker.repeat_table_header,
       page_cap: null,
+      // Dropped by omitDefaultFields at their defaults, so a sidecar deployed before them still accepts the body (research Pitfall 17).
+      language_aware: effective?.languageAware ?? false,
+      languages: effective?.languages ?? [],
+      primary_language: effective?.primaryLanguage ?? null,
+      carry_table_header: effective?.carryTableHeader ?? false,
     });
     if (!parsedRequest.success) throw new ParserError('docling', 'invalid_request');
     const form = new FormData();
     // The upload is always named input.bin: a filename never reaches the sidecar.
     form.set('file', new Blob([request.bytes as unknown as BlobPart]), 'input.bin');
-    form.set('request', JSON.stringify(parsedRequest.data));
+    form.set('request', JSON.stringify(omitDefaultFields(parsedRequest.data, PARSE_JOB_REQUEST_PHASE32_DEFAULTS)));
     const response = await fetchParser('docling', `${base}/v1/parse/jobs`, { method: 'POST', headers: headers(), body: form }, request.signal, timeoutFor(request));
     if (response.status !== 202 && response.status !== 200) throw await refusal(response, request.signal);
     const accepted = ParseJobAcceptedSchema.safeParse(await readJson('docling', response, 4096, request.signal));

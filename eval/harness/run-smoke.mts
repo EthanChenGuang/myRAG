@@ -1,10 +1,12 @@
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { ingestModeGoldenPaths, mergeGoldenFiles } from './ingest-mode.mts';
+import { ingestModeGoldenPaths, mergeGoldenFiles, parseIngestRoutingFlags } from './ingest-mode.mts';
+import { dropTableSplitItems } from './table-split.mts';
 import { runEval, type EvalRequestOptions } from './run-eval.mts';
-import { loadRunConfig, RunConfigError } from './run-config.mts';
+import { CHUNKING_PROFILES_NEED_INGEST, loadRunConfig, RunConfigError } from './run-config.mts';
 import type { DeploymentMode, FixtureMode } from './pglite-supabase.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -14,6 +16,7 @@ const DEFAULT_BASELINES: Record<FixtureMode, string> = {
 };
 const DEFAULT_GOLDEN = 'eval/fixtures/golden.jsonl';
 const NOISE_PATH = path.join(REPO_ROOT, 'eval/config/noise.json');
+const SEC_LOG_SWITCHES = ['RAG_CONTEXT_TAGGING', 'RAG_INJECTION_CHECK', 'RAG_INJECTION_PROMPT_GUARD', 'RAG_INJECTION_LAKERA', 'RAG_TOOL_RESULT_GUARD'] as const;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function runPython(module: string, args: string[]): number {
@@ -43,6 +46,14 @@ async function main(): Promise<number> {
       'run-config': { type: 'string' },
       org: { type: 'string' },
       user: { type: 'string' },
+      routing: { type: 'string' },
+      'force-tier': { type: 'string' },
+      citations: { type: 'boolean', default: false },
+      groundedness: { type: 'boolean', default: false },
+      'table-split-doc-type': { type: 'string' },
+      'table-header-repeat': { type: 'string' },
+      'cache-pairs': { type: 'boolean', default: false },
+      'allow-live-cache': { type: 'boolean', default: false },
     },
     strict: true,
   });
@@ -59,6 +70,10 @@ async function main(): Promise<number> {
   if (fixtureMode === 'ingest' && values['base-url']) {
     throw new Error('--fixture-mode ingest builds the fixture database itself and cannot be combined with --base-url');
   }
+  // --routing fixed|tiered sends every document through the queue and the sidecar job function; --force-tier fast|structured|premium
+  // pins every page to one tier (D-40).
+  const ingestRouting = parseIngestRoutingFlags({ routing: values.routing, 'force-tier': values['force-tier'] });
+  if (ingestRouting && fixtureMode !== 'ingest') throw new Error('--routing and --force-tier need --fixture-mode ingest');
 
   let maxResults: number | undefined;
   if (values['max-results'] !== undefined) {
@@ -83,6 +98,17 @@ async function main(): Promise<number> {
   if (runConfig && baseUrl && Object.keys(runConfig.env).length > 0) {
     throw new RunConfigError('[Eval Harness] a run-config env overlay applies to in-process runs only; omit --base-url or drop its env');
   }
+  if (runConfig?.chunkingProfiles?.length && fixtureMode !== 'ingest') throw new RunConfigError(CHUNKING_PROFILES_NEED_INGEST);
+  if (runConfig) {
+    // The SEC overlay decides the injection report's configuration label (recommended is gated at absolute zero, D-14).
+    const security = SEC_LOG_SWITCHES.filter((name) => runConfig.env[name] !== undefined).map((name) => `${name}=${runConfig.env[name]}`);
+    if (security.length > 0) console.log(`[Eval Harness] run-config ${runConfig.name} SEC switches: ${security.join(', ')}`);
+    // D-39: with the layer on, the in-process run answers every query-LLM call from the fake table.
+    const queryLayer = Object.keys(runConfig.env)
+      .filter((name) => name.startsWith('RAG_QUERY_') || name.startsWith('RAG_SEMANTIC_CACHE'))
+      .map((name) => `${name}=${runConfig.env[name]}`);
+    if (queryLayer.length > 0) console.log(`[Eval Harness] run-config ${runConfig.name} query-layer switches: ${queryLayer.join(', ')}`);
+  }
 
   const requestOptions: EvalRequestOptions = {};
   if (maxResults !== undefined) requestOptions.max_results = maxResults;
@@ -98,8 +124,29 @@ async function main(): Promise<number> {
     requestOptions[key] = value.toLowerCase();
   }
 
+  // Eval check only (D-46): load the table_split documents under another processing profile; such a run is never gated.
+  const tableSplitDocType = values['table-split-doc-type']?.trim();
+  if (tableSplitDocType !== undefined) {
+    if (fixtureMode !== 'ingest' || ingestRouting) throw new Error('--table-split-doc-type needs the inline --fixture-mode ingest');
+    const profiles = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'config/rag/processing-profiles.json'), 'utf8')) as {
+      profiles: Array<{ doc_type: string }>;
+    };
+    const docTypes = profiles.profiles.map((profile) => profile.doc_type);
+    if (!docTypes.includes(tableSplitDocType)) throw new Error(`--table-split-doc-type must be one of ${docTypes.join(', ')}`);
+  }
+
+  const tableHeaderRepeat = values['table-header-repeat']?.trim();
+  if (tableHeaderRepeat !== undefined) {
+    if (fixtureMode !== 'ingest' || ingestRouting || baseUrl) throw new Error('--table-header-repeat needs the inline --fixture-mode ingest');
+    if (tableHeaderRepeat !== 'profile' && tableHeaderRepeat !== 'always') throw new Error('--table-header-repeat must be profile or always');
+  }
+
+  if (values['allow-live-cache'] && !values['cache-pairs']) throw new Error('--allow-live-cache needs --cache-pairs');
   let gate = !values['no-gate'];
+  if (tableSplitDocType !== undefined || tableHeaderRepeat !== undefined) gate = false;
   if (embeddingProfileId) gate = false;
+  // A queued build has its own corpus hash; it is compared with another routing mode by the parser gate, not with the inline baseline.
+  if (ingestRouting && values.baseline === undefined) gate = false;
   if (gate && baseUrl && values.baseline === undefined) {
     console.error('[Eval Harness] a --base-url run needs --baseline <live baseline> or --no-gate');
     return 2;
@@ -107,10 +154,14 @@ async function main(): Promise<number> {
   const baselinePath = path.resolve(values.baseline ?? DEFAULT_BASELINES[fixtureMode]);
 
   const outDir = path.resolve(values.out as string);
+  if (ingestRouting) ingestRouting.ledgerOut = path.join(outDir, 'ingest-ledger.json');
   // Ingest mode scores the golden files it names itself unless --golden says otherwise, so its ingest-only items need no change here.
   const defaultGolden = fixtureMode === 'ingest' ? ingestModeGoldenPaths() : [DEFAULT_GOLDEN];
   const goldenFiles = values.golden !== undefined ? [path.resolve(values.golden)] : defaultGolden.map((file) => path.resolve(REPO_ROOT, file));
-  const goldenPath = mergeGoldenFiles(goldenFiles, path.join(outDir, 'golden.merged.jsonl'));
+  const mergedGolden = mergeGoldenFiles(goldenFiles, path.join(outDir, 'golden.merged.jsonl'));
+  // table_split items run only against the isolated tenants of the inline ingest mode; other runs score without them.
+  const goldenPath =
+    fixtureMode === 'ingest' && !ingestRouting ? mergedGolden : dropTableSplitItems(mergedGolden, path.join(outDir, 'golden.no-table-split.jsonl'));
   if (runPython('rag_sidecar.contracts.validate', ['--model', 'GoldenItem', '--jsonl', goldenPath]) !== 0) {
     console.error('[Eval Harness] golden file failed Pydantic validation; nothing was run');
     return 2;
@@ -126,8 +177,22 @@ async function main(): Promise<number> {
     baseUrl,
     includeDrafts: values['include-drafts'],
     embeddingProfileId,
+    ...(ingestRouting ? { ingestRouting } : {}),
     ...(runConfig ? { runConfig } : {}),
+    ...(tableSplitDocType ? { tableSplitDocType } : {}),
+    ...(tableHeaderRepeat ? { ingestBuildEnv: { RAG_TABLE_HEADER_REPEAT: tableHeaderRepeat } } : {}),
+    // Either flag implies include_answer; fixture runs answer with the fake citation generator and score against the fake sidecar.
+    ...(values.citations ? { citations: true } : {}),
+    ...(values.groundedness ? { groundedness: true } : {}),
+    // D-37: the golden cache pairs instead of the item run; cache-pairs.json feeds python -m rag_eval.calibrate cache.
+    ...(values['cache-pairs'] ? { cachePairs: true } : {}),
+    ...(values['allow-live-cache'] ? { allowLiveCache: true } : {}),
   });
+
+  if (result.cachePairsPath) {
+    console.log(`[Eval Harness] wrote cache pairs to ${result.cachePairsPath}`);
+    return 0;
+  }
 
   console.log(`[Eval Harness] wrote ${result.itemCount} trace(s) to ${result.tracesPath} (${result.skippedCount} golden item(s) not approved, skipped)`);
 

@@ -1,0 +1,117 @@
+{
+  "$defs": {
+    "HeadingPattern": {
+      "additionalProperties": false,
+      "properties": {
+        "flags": {
+          "default": "u",
+          "enum": [
+            "u",
+            "iu"
+          ],
+          "title": "Flags",
+          "type": "string"
+        },
+        "level": {
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Level",
+          "type": "integer"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "pattern": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Pattern",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "restart": {
+          "default": false,
+          "title": "Restart",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "pattern",
+        "name",
+        "level"
+      ],
+      "title": "HeadingPattern",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Tenant rule set body; the binding `(doc_type | null, source | null)` follows D-18.",
+  "properties": {
+    "doc_type": {
+      "enum": [
+        "general",
+        "financial_report",
+        "contract_legal",
+        "invoice_receipt",
+        "product_technical",
+        "scanned_image"
+      ],
+      "title": "Doc Type",
+      "type": "string"
+    },
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "headings": {
+      "items": {
+        "$ref": "#/$defs/HeadingPattern"
+      },
+      "maxItems": 60,
+      "minItems": 1,
+      "title": "Headings",
+      "type": "array"
+    },
+    "name": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "require_increasing_numbers": {
+      "default": false,
+      "title": "Require Increasing Numbers",
+      "type": "boolean"
+    },
+    "skip_toc": {
+      "default": true,
+      "title": "Skip Toc",
+      "type": "boolean"
+    },
+    "source": {
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+      "title": "Source",
+      "type": "string"
+    },
+    "toc_min_run": {
+      "default": 3,
+      "maximum": 20,
+      "minimum": 2,
+      "title": "Toc Min Run",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "name",
+    "headings"
+  ],
+  "title": "SectionRuleSet",
+  "type": "object"
+}

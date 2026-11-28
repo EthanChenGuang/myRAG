@@ -1,8 +1,95 @@
 {
   "$defs": {
+    "GroundednessBudgets": {
+      "additionalProperties": false,
+      "properties": {
+        "hhem_2_1_open": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScorerBudget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hhem_2_3_vectara": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScorerBudget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "report_only": {
+          "const": true,
+          "default": true,
+          "title": "Report Only",
+          "type": "boolean"
+        }
+      },
+      "title": "GroundednessBudgets",
+      "type": "object"
+    },
+    "GroupBudget": {
+      "additionalProperties": false,
+      "description": "D-29: a budget for a group of stages measured as one span, such as the pre-retrieval query stage.",
+      "properties": {
+        "p50_ms": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "P50 Ms"
+        },
+        "p95_ms": {
+          "exclusiveMinimum": 0,
+          "title": "P95 Ms",
+          "type": "number"
+        }
+      },
+      "required": [
+        "p95_ms"
+      ],
+      "title": "GroupBudget",
+      "type": "object"
+    },
+    "PreGenerationBudget": {
+      "additionalProperties": false,
+      "description": "D-26: time until the generator call starts, per channel; the CI gate reads p95.",
+      "properties": {
+        "p95_ms": {
+          "exclusiveMinimum": 0,
+          "title": "P95 Ms",
+          "type": "number"
+        }
+      },
+      "required": [
+        "p95_ms"
+      ],
+      "title": "PreGenerationBudget",
+      "type": "object"
+    },
     "ProfileBudget": {
       "additionalProperties": false,
       "properties": {
+        "groups": {
+          "additionalProperties": {
+            "$ref": "#/$defs/GroupBudget"
+          },
+          "title": "Groups",
+          "type": "object"
+        },
         "stages": {
           "additionalProperties": {
             "type": "number"
@@ -27,10 +114,78 @@
       ],
       "title": "ProfileBudget",
       "type": "object"
+    },
+    "ScorerBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "p50_ms": {
+          "exclusiveMinimum": 0,
+          "title": "P50 Ms",
+          "type": "number"
+        },
+        "p95_ms": {
+          "exclusiveMinimum": 0,
+          "title": "P95 Ms",
+          "type": "number"
+        }
+      },
+      "required": [
+        "p50_ms",
+        "p95_ms"
+      ],
+      "title": "ScorerBudget",
+      "type": "object"
+    },
+    "TtftBudget": {
+      "additionalProperties": false,
+      "description": "D-26: time to first answer text delta, per channel and cache state; report-only for live traffic.",
+      "properties": {
+        "p50_ms": {
+          "exclusiveMinimum": 0,
+          "title": "P50 Ms",
+          "type": "number"
+        },
+        "p95_ms": {
+          "exclusiveMinimum": 0,
+          "title": "P95 Ms",
+          "type": "number"
+        }
+      },
+      "required": [
+        "p50_ms",
+        "p95_ms"
+      ],
+      "title": "TtftBudget",
+      "type": "object"
     }
   },
   "additionalProperties": false,
   "properties": {
+    "groundedness": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/GroundednessBudgets"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "pre_generation": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PreGenerationBudget"
+      },
+      "propertyNames": {
+        "enum": [
+          "chat",
+          "embed",
+          "voice"
+        ]
+      },
+      "title": "Pre Generation",
+      "type": "object"
+    },
     "profiles": {
       "additionalProperties": {
         "$ref": "#/$defs/ProfileBudget"
@@ -50,6 +205,30 @@
       "default": 1,
       "title": "Schema Version",
       "type": "integer"
+    },
+    "ttft": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "$ref": "#/$defs/TtftBudget"
+        },
+        "propertyNames": {
+          "enum": [
+            "hit",
+            "miss",
+            "bypass"
+          ]
+        },
+        "type": "object"
+      },
+      "propertyNames": {
+        "enum": [
+          "chat",
+          "embed",
+          "voice"
+        ]
+      },
+      "title": "Ttft",
+      "type": "object"
     }
   },
   "required": [

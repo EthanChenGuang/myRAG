@@ -1,0 +1,23 @@
+{
+  "profiles": [
+    {
+      "dev": {
+        "near_miss_pairs": 11,
+        "near_miss_wrong_hit_rate": 0.0,
+        "paraphrase_hit_rate": 0.0,
+        "paraphrase_pairs": 9
+      },
+      "embedding_profile_id": "fixture-ngram",
+      "fitted_at": "2026-11-26T15:04:08.791857Z",
+      "max_distance": 0.05,
+      "source": "default",
+      "test": {
+        "near_miss_pairs": 4,
+        "near_miss_wrong_hit_rate": 0.0,
+        "paraphrase_hit_rate": 0.0,
+        "paraphrase_pairs": 3
+      }
+    }
+  ],
+  "schema_version": 1
+}

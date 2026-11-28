@@ -10,7 +10,7 @@ spec.loader.exec_module(check_workflows)
 
 
 def workflow(run: str) -> dict:
-    return {"jobs": {"ts": {"steps": [{"run": run}]}}}
+    return {"jobs": {"ts-tsx": {"steps": [{"run": run}]}}}
 
 
 class TsxCoverageTest(unittest.TestCase):
@@ -136,6 +136,161 @@ class EvalSmokeJobTest(unittest.TestCase):
         self.assertEqual(self.errors_for(None), [])
 
 
+class SecSmokeStepTest(unittest.TestCase):
+    """D-14, T-05.1-59: the recommended SEC configuration is gated at absolute zero on every pull request."""
+
+    def job(self) -> dict:
+        return check_workflows.load(check_workflows.PR)[0]["jobs"]["eval-smoke"]
+
+    def errors_for(self, job: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_eval_smoke(job, errors)
+        return errors
+
+    def sec_step(self, job: dict) -> dict:
+        return next(step for step in job["steps"] if "sec-recommended.json" in str(step.get("run", "")))
+
+    def test_missing_sec_step_is_reported(self):
+        job = self.job()
+        job["steps"] = [step for step in job["steps"] if "sec-recommended.json" not in str(step.get("run", ""))]
+        self.assertTrue(any("sec-recommended.json" in e for e in self.errors_for(job)))
+
+    def test_an_ungated_sec_step_is_reported(self):
+        for suffix in (" --no-gate", " || true"):
+            job = self.job()
+            self.sec_step(job)["run"] += suffix
+            self.assertTrue(any("fail the job" in e for e in self.errors_for(job)), suffix)
+
+    def test_continue_on_error_is_reported(self):
+        job = self.job()
+        self.sec_step(job)["continue-on-error"] = True
+        self.assertTrue(any("fail the job" in e for e in self.errors_for(job)))
+
+    def test_the_sec_output_must_be_uploaded(self):
+        job = self.job()
+        for step in job["steps"]:
+            if str(step.get("uses", "")).startswith("actions/upload-artifact@"):
+                step["with"]["path"] = "eval/out/smoke\neval/out/smoke-ingest"
+        self.assertTrue(any("must upload eval/out/smoke-sec" in e for e in self.errors_for(job)))
+
+    def test_the_all_off_smoke_step_stays(self):
+        job = self.job()
+        job["steps"] = [step for step in job["steps"] if "npm run test-rag -- --out eval/out/smoke" not in str(step.get("run", ""))]
+        self.assertTrue(any("after the all-off smoke step" in e for e in self.errors_for(job)))
+
+
+class FrameworkAndCacheGateTest(unittest.TestCase):
+    """D-40, D-42 e, T-06-92: every PR compares both query-layer frameworks and gates cache near-miss wrong hits at zero."""
+
+    def job(self) -> dict:
+        return check_workflows.load(check_workflows.PR)[0]["jobs"]["eval-smoke"]
+
+    def errors_for(self, job: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_eval_smoke(job, errors)
+        return errors
+
+    def without(self, job: dict, needle: str) -> dict:
+        job["steps"] = [step for step in job["steps"] if needle not in str(step.get("run", ""))]
+        return job
+
+    def step_with(self, job: dict, needle: str) -> dict:
+        return next(step for step in job["steps"] if needle in str(step.get("run", "")))
+
+    def test_repository_workflow_runs_both_gates(self):
+        self.assertEqual(self.errors_for(self.job()), [])
+
+    def test_missing_framework_comparison_is_reported(self):
+        job = self.without(self.job(), "rag_eval.compare frameworks")
+        self.assertTrue(any(check_workflows.FRAMEWORKS_STEP in e for e in self.errors_for(job)))
+
+    def test_a_soft_framework_comparison_is_reported(self):
+        job = self.job()
+        self.step_with(job, "rag_eval.compare frameworks")["run"] += " || true"
+        self.assertTrue(any("framework comparison" in e and "fail the job" in e for e in self.errors_for(job)))
+        job = self.job()
+        self.step_with(job, "rag_eval.compare frameworks")["continue-on-error"] = True
+        self.assertTrue(any("framework comparison" in e and "fail the job" in e for e in self.errors_for(job)))
+
+    def test_missing_cache_check_is_reported(self):
+        job = self.job()
+        step = self.step_with(job, check_workflows.CACHE_CHECK_STEP)
+        step["run"] = "\n".join(line for line in step["run"].splitlines() if check_workflows.CACHE_CHECK_STEP not in line)
+        self.assertTrue(any(check_workflows.CACHE_CHECK_STEP in e for e in self.errors_for(job)))
+
+    def test_missing_cache_pair_run_is_reported(self):
+        job = self.job()
+        step = self.step_with(job, check_workflows.CACHE_CHECK_STEP)
+        step["run"] = "\n".join(line for line in step["run"].splitlines() if "--cache-pairs" not in line)
+        self.assertTrue(any("--cache-pairs" in e for e in self.errors_for(job)))
+
+    def test_a_check_before_the_fresh_pair_run_is_reported(self):
+        job = self.job()
+        step = self.step_with(job, check_workflows.CACHE_CHECK_STEP)
+        step["run"] = "\n".join(reversed(step["run"].splitlines()))
+        self.assertTrue(any("fresh pair run" in e for e in self.errors_for(job)))
+
+    def test_a_soft_cache_check_is_reported(self):
+        job = self.job()
+        self.step_with(job, check_workflows.CACHE_CHECK_STEP)["run"] += " || true"
+        self.assertTrue(any("cache" in e and "fail the job" in e for e in self.errors_for(job)))
+
+    def test_both_gates_run_after_the_installs(self):
+        job = self.job()
+        steps = job["steps"]
+        for needle in ("rag_eval.compare frameworks", check_workflows.CACHE_CHECK_STEP):
+            step = self.step_with(job, needle)
+            steps.remove(step)
+            steps.insert(1, step)
+        errors = self.errors_for(job)
+        self.assertTrue(any("after npm ci and uv sync" in e for e in errors), errors)
+
+
+class InjectionSecJobTest(unittest.TestCase):
+    """D-14, A-13, T-05.1-60: the live SEC matrix runs nightly; the Lakera key is reachable from nightly.yml only."""
+
+    def nightly(self) -> dict:
+        return check_workflows.load(check_workflows.NIGHTLY)[0]
+
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_injection_sec(data, errors)
+        return errors
+
+    def runner(self, data: dict) -> dict:
+        steps = data["jobs"]["injection-sec"]["steps"]
+        return next(step for step in steps if check_workflows.SEC_NIGHTLY_STEP in str(step.get("run", "")))
+
+    def test_repository_nightly_has_a_valid_injection_job(self):
+        self.assertEqual(self.errors_for(self.nightly()), [])
+
+    def test_missing_job_is_reported(self):
+        data = self.nightly()
+        del data["jobs"]["injection-sec"]
+        self.assertTrue(any("'injection-sec' missing" in e for e in self.errors_for(data)))
+
+    def test_the_lakera_key_must_come_from_secrets_by_name(self):
+        data = self.nightly()
+        del self.runner(data)["env"]["LAKERA_GUARD_API_KEY"]
+        self.assertTrue(any("LAKERA_GUARD_API_KEY" in e for e in self.errors_for(data)))
+
+    def test_a_secret_inside_run_is_reported(self):
+        data = self.nightly()
+        self.runner(data)["run"] += " ${{ secrets.LAKERA_GUARD_API_KEY }}"
+        self.assertTrue(any("not interpolated into run" in e for e in self.errors_for(data)))
+
+    def test_an_ungated_step_is_reported(self):
+        data = self.nightly()
+        del self.runner(data)["if"]
+        self.assertTrue(any("skip-notice step of injection-sec" in e for e in self.errors_for(data)))
+
+    def test_the_repository_keeps_the_lakera_key_out_of_other_workflows(self):
+        errors: list[str] = []
+        check_workflows.check_lakera_secret_scope(errors)
+        self.assertEqual(errors, [])
+        self.assertNotIn("LAKERA_GUARD_API_KEY", check_workflows.PR.read_text(encoding="utf-8"))
+
+
 class RealDoclingJobTest(unittest.TestCase):
     def nightly(self) -> dict:
         return check_workflows.load(check_workflows.NIGHTLY)[0]
@@ -172,6 +327,317 @@ class RealDoclingJobTest(unittest.TestCase):
             step["run"] = str(step.get("run", "")).replace("-m real_docling", "")
         self.assertTrue(any("-m real_docling" in e for e in self.errors_for(data)))
 
+    def test_the_docling_image_must_load_a_processing_profile(self):
+        data = self.nightly()
+        for step in data["jobs"]["real-docling"]["steps"]:
+            step["run"] = str(step.get("run", "")).replace('load_profile("general@1")', "")
+        self.assertTrue(any('load_profile("general@1")' in e for e in self.errors_for(data)))
+
+
+class RayOptionalJobTest(unittest.TestCase):
+    def text(self) -> str:
+        return check_workflows.RAY_OPTIONAL.read_text(encoding="utf-8")
+
+    def errors_for(self, text: str) -> list[str]:
+        import yaml
+
+        errors: list[str] = []
+        check_workflows.check_ray_optional(yaml.safe_load(text), text, errors)
+        return errors
+
+    def test_repository_workflow_is_valid(self):
+        self.assertEqual(self.errors_for(self.text()), [])
+
+    def test_a_pull_request_trigger_is_reported(self):
+        text = self.text().replace("  workflow_dispatch:\n", "  workflow_dispatch:\n  pull_request:\n")
+        self.assertTrue(any("'pull_request' must not be used" in e for e in self.errors_for(text)))
+
+    def test_a_secret_is_reported(self):
+        text = self.text().replace("UV_FROZEN: '1'", "UV_FROZEN: '1'\n          TOKEN: ${{ secrets.GITHUB_TOKEN }}")
+        self.assertTrue(any("must not reference secrets" in e for e in self.errors_for(text)))
+
+    def test_the_equality_step_must_opt_in(self):
+        text = self.text().replace("RAG_TEST_RAY: '1'", "RAG_TEST_RAY: '0'")
+        self.assertTrue(any("RAG_TEST_RAY" in e for e in self.errors_for(text)))
+
+    def test_the_ray_extra_must_be_synced_from_the_lock(self):
+        text = self.text().replace(check_workflows.RAY_SYNC, "uv sync --directory rag-sidecar --extra ray")
+        self.assertTrue(any(check_workflows.RAY_SYNC in e for e in self.errors_for(text)))
+
+    def test_an_unpinned_action_is_reported(self):
+        text = self.text().replace("actions/checkout@11d5960a326750d5838078e36cf38b85af677262", "actions/checkout@v4")
+        self.assertTrue(any("40-hex commit sha" in e for e in self.errors_for(text)))
+
+    def test_the_default_workflows_never_install_the_ray_extra(self):
+        for path in (check_workflows.PR, check_workflows.NIGHTLY):
+            errors: list[str] = []
+            check_workflows.check_no_ray_extra(path.stem, path.read_text(encoding="utf-8"), errors)
+            self.assertEqual(errors, [], path.name)
+        errors = []
+        check_workflows.check_no_ray_extra("pr-smoke", "run: uv sync --directory rag-sidecar --locked --extra ray", errors)
+        self.assertEqual(len(errors), 1)
+
+
+class NextBuildJobTest(unittest.TestCase):
+    def job(self) -> dict:
+        return check_workflows.load(check_workflows.PR)[0]["jobs"]["next-build"]
+
+    def errors_for(self, job: dict | None) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_next_build(job, errors)
+        return errors
+
+    def test_repository_workflow_runs_next_build(self):
+        self.assertIn("next-build", check_workflows.PR_JOBS)
+        self.assertEqual(self.errors_for(self.job()), [])
+
+    def test_missing_build_step_is_reported(self):
+        job = self.job()
+        job["steps"] = [step for step in job["steps"] if "next build" not in str(step.get("run", ""))]
+        self.assertTrue(any("must run 'npx next build'" in e for e in self.errors_for(job)))
+
+    def test_missing_install_is_reported(self):
+        job = self.job()
+        job["steps"] = [step for step in job["steps"] if "npm ci" not in str(step.get("run", ""))]
+        self.assertTrue(any("npm ci" in e for e in self.errors_for(job)))
+
+    def test_missing_placeholder_env_is_reported(self):
+        job = self.job()
+        del job["env"]["SUPABASE_SERVICE_ROLE_KEY"]
+        self.assertTrue(any("SUPABASE_SERVICE_ROLE_KEY" in e for e in self.errors_for(job)))
+
+    def test_a_secret_is_reported(self):
+        job = self.job()
+        job["env"]["SUPABASE_SERVICE_ROLE_KEY"] = "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
+        errors = self.errors_for(job)
+        self.assertTrue(any("must not reference secrets" in e for e in errors), errors)
+
+    def test_a_workflow_without_the_job_has_nothing_to_check(self):
+        self.assertEqual(self.errors_for(None), [])
+
+
+class TsJobsTest(unittest.TestCase):
+    def jobs(self) -> dict:
+        return check_workflows.load(check_workflows.PR)[0]["jobs"]
+
+    def errors_for(self, jobs: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_ts_jobs(jobs, errors)
+        return errors
+
+    def test_repository_workflow_passes(self):
+        jobs = self.jobs()
+        self.assertNotIn("ts", jobs)
+        for name in check_workflows.TS_JOB_NEEDLES:
+            self.assertIn(name, check_workflows.PR_JOBS)
+            self.assertIn(name, jobs)
+        self.assertEqual(self.errors_for(jobs), [])
+
+    def test_a_dropped_check_is_reported(self):
+        jobs = self.jobs()
+        jobs["ts-checks"]["steps"] = [s for s in jobs["ts-checks"]["steps"] if "next typegen" not in str(s.get("run", ""))]
+        self.assertTrue(any("ts-checks is missing 'next typegen'" in e for e in self.errors_for(jobs)))
+
+    def test_a_check_moved_to_another_job_is_reported(self):
+        jobs = self.jobs()
+        jobs["ts-db"]["steps"] = [s for s in jobs["ts-db"]["steps"] if "tests/rag-db/" not in str(s.get("run", ""))]
+        jobs["ts-tsx"]["steps"].append({"run": "node --import tsx --test tests/rag-db/*.test.mts"})
+        self.assertTrue(any("ts-db is missing" in e for e in self.errors_for(jobs)))
+
+    def test_a_missing_shard_is_reported(self):
+        jobs = self.jobs()
+        jobs["ts-db"]["strategy"]["matrix"]["shard"] = ["1/4", "2/4", "3/4"]
+        self.assertTrue(any("ts-db matrix.shard" in e for e in self.errors_for(jobs)))
+
+    def test_a_shard_flag_not_from_the_matrix_is_reported(self):
+        jobs = self.jobs()
+        for step in jobs["ts-vitest"]["steps"]:
+            if "vitest run" in str(step.get("run", "")):
+                step["run"] = "npx vitest run --shard=1/2"
+        self.assertTrue(any("ts-vitest must pass --shard=" in e for e in self.errors_for(jobs)))
+
+    def test_a_long_timeout_is_reported(self):
+        jobs = self.jobs()
+        jobs["ts-tsx"]["timeout-minutes"] = 60
+        self.assertTrue(any("ts-tsx must set timeout-minutes" in e for e in self.errors_for(jobs)))
+
+    def test_the_root_ratchet_is_reported(self):
+        jobs = self.jobs()
+        jobs["ts-checks"]["steps"].append({"run": "node scripts/ci/tsc-ratchet.mjs --baseline scripts/ci/tsc-baseline.json"})
+        self.assertTrue(any("must run plain tsc" in e for e in self.errors_for(jobs)))
+
+    def test_continue_on_error_is_reported(self):
+        jobs = self.jobs()
+        jobs["ts-db"]["continue-on-error"] = True
+        self.assertTrue(any("continue-on-error" in e for e in self.errors_for(jobs)))
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+WEEKLY_CRON = "23 4 * * 1"
+
+
+def weekly_fixture() -> dict:
+    gate = "env.HAS_PRIVATE_EVAL == 'true'"
+    return {
+        "on": {"schedule": [{"cron": "0 3 * * *"}, {"cron": WEEKLY_CRON}], "workflow_dispatch": None},
+        "jobs": {
+            "weekly-report": {
+                "if": f"github.event_name == 'workflow_dispatch' || github.event.schedule == '{WEEKLY_CRON}'",
+                "runs-on": "ubuntu-latest",
+                "steps": [
+                    {
+                        "name": "Detect private eval data",
+                        "run": (
+                            'if [ -d eval/golden/private ] && [ -n "$(ls -A eval/golden/private)" ]; then\n'
+                            '  echo "HAS_PRIVATE_EVAL=true" >> "$GITHUB_ENV"\n'
+                            "else\n"
+                            '  echo "HAS_PRIVATE_EVAL=false" >> "$GITHUB_ENV"\n'
+                            '  echo "::notice::no private eval data on this runner, skipping weekly report"\n'
+                            "fi\n"
+                        ),
+                    },
+                    {"uses": "actions/checkout@" + "a" * 40, "if": gate, "with": {"clean": False}},
+                    {"name": "Sync eval project", "if": gate, "run": "uv sync --directory eval --locked --all-extras"},
+                    {"name": "Failure report", "if": gate, "run": "uv run --directory eval python -m rag_eval.failure_report --since x"},
+                    {
+                        "name": "Weekly report",
+                        "if": gate,
+                        "env": {"RAG_ADMIN_BEARER": "${{ secrets.RAG_ADMIN_BEARER }}"},
+                        "run": "uv run --directory eval python -m rag_eval.weekly_report --since x",
+                    },
+                ],
+            }
+        },
+    }
+
+
+class WeeklyReportJobTest(unittest.TestCase):
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_weekly_report(data, errors)
+        return errors
+
+    def steps(self, data: dict) -> list[dict]:
+        return data["jobs"]["weekly-report"]["steps"]
+
+    def test_the_fixture_is_valid(self):
+        self.assertEqual(self.errors_for(weekly_fixture()), [])
+
+    def test_repository_nightly_has_a_valid_weekly_job(self):
+        self.assertEqual(self.errors_for(check_workflows.load(check_workflows.NIGHTLY)[0]), [])
+
+    def test_missing_job_is_reported(self):
+        data = weekly_fixture()
+        del data["jobs"]["weekly-report"]
+        self.assertTrue(any("'weekly-report' missing" in e for e in self.errors_for(data)))
+
+    def test_missing_notice_step_is_reported(self):
+        data = weekly_fixture()
+        del self.steps(data)[0]
+        self.assertTrue(any("first step" in e for e in self.errors_for(data)))
+
+    def test_a_first_step_without_the_notice_is_reported(self):
+        data = weekly_fixture()
+        self.steps(data)[0]["run"] = self.steps(data)[0]["run"].replace("::notice::", "")
+        self.assertTrue(any("first step" in e for e in self.errors_for(data)))
+
+    def test_an_ungated_step_is_reported(self):
+        data = weekly_fixture()
+        del self.steps(data)[3]["if"]
+        self.assertTrue(any("HAS_PRIVATE_EVAL == 'true'" in e for e in self.errors_for(data)))
+
+    def test_an_upload_artifact_step_is_reported(self):
+        data = weekly_fixture()
+        self.steps(data).append(
+            {"uses": "actions/upload-artifact@" + "b" * 40, "if": "env.HAS_PRIVATE_EVAL == 'true'", "with": {"path": "eval/golden/private"}}
+        )
+        self.assertTrue(any("upload" in e for e in self.errors_for(data)))
+
+    def test_a_secret_interpolated_in_a_run_script_is_reported(self):
+        data = weekly_fixture()
+        self.steps(data)[4]["run"] += ' --base-url "${{ secrets.RAG_APP_BASE_URL }}"'
+        self.assertTrue(any("not interpolated into run" in e for e in self.errors_for(data)))
+
+    def test_both_reports_must_run(self):
+        data = weekly_fixture()
+        del self.steps(data)[3]
+        self.assertTrue(any("rag_eval.failure_report" in e for e in self.errors_for(data)))
+
+    def test_the_job_runs_only_on_the_weekly_schedule_or_dispatch(self):
+        data = weekly_fixture()
+        del data["jobs"]["weekly-report"]["if"]
+        self.assertTrue(any("weekly schedule" in e for e in self.errors_for(data)))
+
+    def test_the_weekly_cron_must_be_scheduled(self):
+        data = weekly_fixture()
+        data["on"]["schedule"] = [{"cron": "0 3 * * *"}]
+        self.assertTrue(any("weekly schedule" in e for e in self.errors_for(data)))
+
+    def test_checkout_must_keep_the_private_data(self):
+        data = weekly_fixture()
+        del self.steps(data)[1]["with"]
+        self.assertTrue(any("clean: false" in e for e in self.errors_for(data)))
+
+
+class SidecarPythonJobTest(unittest.TestCase):
+    """The sidecar tests need chunking, preflight and hidden-text together; a sync or run that names fewer removes the others."""
+
+    def job(self) -> dict:
+        return check_workflows.load(check_workflows.PR)[0]["jobs"]["python"]
+
+    def errors_for(self, job: dict | None) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_python_job(job, errors)
+        return errors
+
+    def with_runs(self, *runs: str) -> dict:
+        return {"steps": [{"run": run} for run in runs]}
+
+    def test_repository_job_syncs_and_runs_every_test_extra(self):
+        self.assertEqual(self.errors_for(self.job()), [])
+
+    def test_a_later_sync_with_fewer_extras_is_reported(self):
+        job = self.with_runs(
+            "uv sync --directory rag-sidecar --locked --extra chunking --extra preflight --extra hidden-text",
+            "uv sync --directory rag-sidecar --locked --extra preflight --extra hidden-text",
+            "uv run --directory rag-sidecar --locked --extra chunking --extra preflight --extra hidden-text pytest -q",
+        )
+        self.assertTrue(any("sync must name every test extra (missing chunking)" in e for e in self.errors_for(job)))
+
+    def test_a_pytest_run_with_one_extra_is_reported(self):
+        job = self.with_runs(
+            "uv sync --directory rag-sidecar --locked --extra chunking --extra preflight --extra hidden-text",
+            "uv run --directory rag-sidecar --extra chunking pytest -q",
+        )
+        errors = self.errors_for(job)
+        self.assertTrue(any("pytest run must name every test extra (missing preflight, hidden-text)" in e for e in errors))
+        self.assertTrue(any("pytest run must use --locked" in e for e in errors))
+
+    def test_the_docling_extra_is_reported(self):
+        job = self.job()
+        job["steps"].append({"run": "uv sync --directory rag-sidecar --locked --extra docling"})
+        self.assertTrue(any("heavy docling extra" in e for e in self.errors_for(job)))
+
+
+class DockerConfigCopiesTest(unittest.TestCase):
+    def job(self) -> dict:
+        return check_workflows.load(check_workflows.PR)[0]["jobs"]["docker-build"]
+
+    def errors_for(self, job: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_docker_build(job, errors)
+        return errors
+
+    def test_repository_job_compares_every_sidecar_config_copy(self):
+        self.assertIn("language-packs.json", check_workflows.sidecar_config_copies())
+        self.assertEqual(self.errors_for(self.job()), [])
+
+    def test_a_copy_left_out_of_the_comparison_is_reported(self):
+        job = self.job()
+        for step in job["steps"]:
+            if "run" in step:
+                step["run"] = str(step["run"]).replace(" hidden-text-rules.json", "")
+        self.assertTrue(any("config/rag/hidden-text-rules.json" in e for e in self.errors_for(job)))

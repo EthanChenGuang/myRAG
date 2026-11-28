@@ -50,3 +50,10 @@ def write_golden(path: Path, items: list[GoldenItem]) -> None:
 
 def golden_sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def item_sha256(item: GoldenItem) -> str:
+    """sha256 of the canonical JSON of one validated item, so JSONL whitespace and key order do not change it."""
+
+    text = json.dumps(item.model_dump(mode="json"), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()

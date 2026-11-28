@@ -1,5 +1,28 @@
 {
   "$defs": {
+    "BudgetedLatency": {
+      "additionalProperties": false,
+      "properties": {
+        "latency": {
+          "$ref": "#/$defs/StageLatency"
+        },
+        "status": {
+          "enum": [
+            "within",
+            "over",
+            "no_budget"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "latency",
+        "status"
+      ],
+      "title": "BudgetedLatency",
+      "type": "object"
+    },
     "DateRangeFilter": {
       "additionalProperties": false,
       "properties": {
@@ -7,6 +30,11 @@
           "format": "date",
           "title": "From",
           "type": "string"
+        },
+        "include_undated": {
+          "default": false,
+          "title": "Include Undated",
+          "type": "boolean"
         },
         "to": {
           "format": "date",
@@ -19,6 +47,79 @@
         "to"
       ],
       "title": "DateRangeFilter",
+      "type": "object"
+    },
+    "DiversityParams": {
+      "additionalProperties": false,
+      "description": "D-21, D-48: MMR over the reranked list; lambda 0.7 until a live sweep sets the shipped value.",
+      "properties": {
+        "mmr_lambda": {
+          "default": 0.7,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Mmr Lambda",
+          "type": "number"
+        },
+        "mmr_window_factor": {
+          "default": 3,
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Mmr Window Factor",
+          "type": "integer"
+        }
+      },
+      "title": "DiversityParams",
+      "type": "object"
+    },
+    "DupClusterParams": {
+      "additionalProperties": false,
+      "properties": {
+        "by_profile": {
+          "additionalProperties": {
+            "$ref": "#/$defs/DupClusterProfileEntry"
+          },
+          "propertyNames": {
+            "maxLength": 128,
+            "minLength": 1
+          },
+          "title": "By Profile",
+          "type": "object"
+        },
+        "threshold": {
+          "default": 0.95,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "title": "DupClusterParams",
+      "type": "object"
+    },
+    "DupClusterProfileEntry": {
+      "additionalProperties": false,
+      "description": "D-49: a duplicate threshold for one embedding profile; a fixture-fitted value applies in eval only.",
+      "properties": {
+        "source": {
+          "enum": [
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "threshold": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "threshold",
+        "source"
+      ],
+      "title": "DupClusterProfileEntry",
       "type": "object"
     },
     "GoldenFilter": {
@@ -47,6 +148,122 @@
         "gate_split"
       ],
       "title": "GoldenFilter",
+      "type": "object"
+    },
+    "GroundednessLabelCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "not_checked": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Not Checked",
+          "type": "integer"
+        },
+        "possibly_unreliable": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Possibly Unreliable",
+          "type": "integer"
+        },
+        "verified": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Verified",
+          "type": "integer"
+        }
+      },
+      "title": "GroundednessLabelCounts",
+      "type": "object"
+    },
+    "GroupBudget": {
+      "additionalProperties": false,
+      "description": "D-29: a budget for a group of stages measured as one span, such as the pre-retrieval query stage.",
+      "properties": {
+        "p50_ms": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "P50 Ms"
+        },
+        "p95_ms": {
+          "exclusiveMinimum": 0,
+          "title": "P95 Ms",
+          "type": "number"
+        }
+      },
+      "required": [
+        "p95_ms"
+      ],
+      "title": "GroupBudget",
+      "type": "object"
+    },
+    "InjectionReport": {
+      "additionalProperties": false,
+      "properties": {
+        "attack_success_rate": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MetricValue"
+          },
+          "title": "Attack Success Rate",
+          "type": "object"
+        },
+        "config_label": {
+          "enum": [
+            "all_off",
+            "recommended",
+            "tagging_only",
+            "other"
+          ],
+          "title": "Config Label",
+          "type": "string"
+        },
+        "exposure_rate": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MetricValue"
+          },
+          "title": "Exposure Rate",
+          "type": "object"
+        },
+        "false_positive_rate": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MetricValue"
+          },
+          "title": "False Positive Rate",
+          "type": "object"
+        },
+        "gate": {
+          "enum": [
+            "absolute_zero",
+            "report_only"
+          ],
+          "title": "Gate",
+          "type": "string"
+        },
+        "items": {
+          "minimum": 0,
+          "title": "Items",
+          "type": "integer"
+        },
+        "rules_false_positive_count": {
+          "minimum": 0,
+          "title": "Rules False Positive Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "config_label",
+        "items",
+        "rules_false_positive_count",
+        "gate"
+      ],
+      "title": "InjectionReport",
       "type": "object"
     },
     "InvoiceFilter": {
@@ -90,6 +307,10 @@
           "title": "Answerable",
           "type": "boolean"
         },
+        "attribute_filter_fallback": {
+          "title": "Attribute Filter Fallback",
+          "type": "boolean"
+        },
         "category": {
           "enum": [
             "multi_turn",
@@ -103,10 +324,25 @@
             "ambiguous",
             "typo",
             "cross_lingual",
-            "selective_filter"
+            "selective_filter",
+            "injection",
+            "injection_evasive",
+            "cache_paraphrase",
+            "cache_near_miss",
+            "small_talk",
+            "table_split",
+            "duplicate_flood",
+            "identifier_near_miss",
+            "templated_collection",
+            "implicit_condition"
           ],
           "title": "Category",
           "type": "string"
+        },
+        "context_k": {
+          "minimum": 0,
+          "title": "Context K",
+          "type": "integer"
         },
         "doc_type": {
           "anyOf": [
@@ -150,6 +386,19 @@
           "default": null,
           "title": "First Hit Rank"
         },
+        "group_count": {
+          "minimum": 0,
+          "title": "Group Count",
+          "type": "integer"
+        },
+        "identifier_precise": {
+          "title": "Identifier Precise",
+          "type": "boolean"
+        },
+        "intent_coverage": {
+          "title": "Intent Coverage",
+          "type": "boolean"
+        },
         "item_id": {
           "title": "Item Id",
           "type": "string"
@@ -175,16 +424,36 @@
           "default": null,
           "title": "Lexical Hit At 10"
         },
+        "named_document_hit": {
+          "title": "Named Document Hit",
+          "type": "boolean"
+        },
+        "ndcg_at_context_k": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Ndcg At Context K",
+          "type": "number"
+        },
+        "near_miss_leak": {
+          "title": "Near Miss Leak",
+          "type": "boolean"
+        },
         "provenance": {
           "enum": [
             "synthetic_fixture",
             "claude_draft",
             "ragas_generated",
             "human",
-            "production"
+            "production",
+            "historical",
+            "paraphrased"
           ],
           "title": "Provenance",
           "type": "string"
+        },
+        "quantity_matched": {
+          "title": "Quantity Matched",
+          "type": "boolean"
         },
         "question_kind": {
           "anyOf": [
@@ -206,6 +475,11 @@
         "refused": {
           "title": "Refused",
           "type": "boolean"
+        },
+        "report_only_reason": {
+          "const": "native_review_pending",
+          "title": "Report Only Reason",
+          "type": "string"
         },
         "rerank_status": {
           "anyOf": [
@@ -241,6 +515,20 @@
           ],
           "title": "Split",
           "type": "string"
+        },
+        "topk_redundancy": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Topk Redundancy",
+          "type": "number"
+        },
+        "variant_correct": {
+          "title": "Variant Correct",
+          "type": "boolean"
+        },
+        "wrong_document_at_1": {
+          "title": "Wrong Document At 1",
+          "type": "boolean"
         }
       },
       "required": [
@@ -285,9 +573,426 @@
       "title": "MetricValue",
       "type": "object"
     },
+    "NativeReviewBacklogEntry": {
+      "additionalProperties": false,
+      "description": "One item a native speaker still has to read (D-45, XLG-02 delta).",
+      "properties": {
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "existing_unreviewed"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "language",
+        "state"
+      ],
+      "title": "NativeReviewBacklogEntry",
+      "type": "object"
+    },
+    "QueryBudgetMsOverride": {
+      "additionalProperties": false,
+      "properties": {
+        "chat": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chat"
+        },
+        "embed": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embed"
+        },
+        "voice": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Voice"
+        }
+      },
+      "title": "QueryBudgetMsOverride",
+      "type": "object"
+    },
+    "QueryLayerReport": {
+      "additionalProperties": false,
+      "description": "D-29, D-38: what the query layer did; counts, rates and latencies only, never query text (T-06-73).",
+      "properties": {
+        "budget_profile": {
+          "enum": [
+            "chat",
+            "embed",
+            "voice"
+          ],
+          "title": "Budget Profile",
+          "type": "string"
+        },
+        "gate_rules": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Gate Rules",
+          "type": "object"
+        },
+        "items": {
+          "minimum": 0,
+          "title": "Items",
+          "type": "integer"
+        },
+        "items_with_plan": {
+          "minimum": 0,
+          "title": "Items With Plan",
+          "type": "integer"
+        },
+        "llm_transform_share": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "protected_token_losses": {
+          "minimum": 0,
+          "title": "Protected Token Losses",
+          "type": "integer"
+        },
+        "query_budget": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupBudget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "query_latency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BudgetedLatency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "query_latency_by_category": {
+          "additionalProperties": {
+            "$ref": "#/$defs/BudgetedLatency"
+          },
+          "title": "Query Latency By Category",
+          "type": "object"
+        },
+        "query_latency_by_language": {
+          "additionalProperties": {
+            "$ref": "#/$defs/BudgetedLatency"
+          },
+          "title": "Query Latency By Language",
+          "type": "object"
+        },
+        "transforms": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TransformOutcomeCounts"
+          },
+          "title": "Transforms",
+          "type": "object"
+        }
+      },
+      "required": [
+        "items",
+        "items_with_plan",
+        "llm_transform_share",
+        "protected_token_losses",
+        "budget_profile"
+      ],
+      "title": "QueryLayerReport",
+      "type": "object"
+    },
+    "QueryParamsOverride": {
+      "additionalProperties": false,
+      "properties": {
+        "group_deadline_ms": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Group Deadline Ms"
+        },
+        "history_turn_chars": {
+          "anyOf": [
+            {
+              "maximum": 4000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "History Turn Chars"
+        },
+        "history_turns": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "History Turns"
+        },
+        "max_llm_variants": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Llm Variants"
+        },
+        "max_searches": {
+          "anyOf": [
+            {
+              "maximum": 8,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Searches"
+        },
+        "max_sub_questions": {
+          "anyOf": [
+            {
+              "maximum": 4,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Sub Questions"
+        },
+        "max_translations": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Translations"
+        },
+        "query_budget_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QueryBudgetMsOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "variant_max_chars": {
+          "anyOf": [
+            {
+              "maximum": 4000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Variant Max Chars"
+        },
+        "variant_max_ratio": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 20,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Variant Max Ratio"
+        }
+      },
+      "title": "QueryParamsOverride",
+      "type": "object"
+    },
+    "QueryTransformToggles": {
+      "additionalProperties": false,
+      "properties": {
+        "condense": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Condense"
+        },
+        "decompose": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decompose"
+        },
+        "expand": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expand"
+        },
+        "hyde": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hyde"
+        },
+        "normalize_dates": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Normalize Dates"
+        },
+        "translate": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Translate"
+        }
+      },
+      "title": "QueryTransformToggles",
+      "type": "object"
+    },
     "RagRunOptions": {
       "additionalProperties": false,
       "properties": {
+        "cache_seed_answer": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Seed Answer"
+        },
+        "citations": {
+          "default": false,
+          "title": "Citations",
+          "type": "boolean"
+        },
         "degrade": {
           "anyOf": [
             {
@@ -314,11 +1019,20 @@
                   "post_filter",
                   "assemble",
                   "voice_keyword_fallback",
-                  "local_rerank"
+                  "local_rerank",
+                  "injection_check",
+                  "query_gate",
+                  "condense",
+                  "normalize_dates",
+                  "expand",
+                  "hyde",
+                  "decompose",
+                  "terminology",
+                  "semantic_cache"
                 ],
                 "type": "string"
               },
-              "maxItems": 9,
+              "maxItems": 18,
               "type": "array"
             },
             {
@@ -327,6 +1041,53 @@
           ],
           "default": null,
           "title": "Disabled Stages"
+        },
+        "domain_control_leg": {
+          "anyOf": [
+            {
+              "enum": [
+                "general",
+                "financial_report",
+                "contract_legal",
+                "invoice_receipt",
+                "product_technical",
+                "scanned_image"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Domain Control Leg"
+        },
+        "embedding_bindings": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              "maxProperties": 6,
+              "propertyNames": {
+                "enum": [
+                  "general",
+                  "financial_report",
+                  "contract_legal",
+                  "invoice_receipt",
+                  "product_technical",
+                  "scanned_image"
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embedding Bindings"
         },
         "embedding_profile": {
           "anyOf": [
@@ -351,6 +1112,11 @@
           ],
           "default": null,
           "title": "Generator Model"
+        },
+        "groundedness": {
+          "default": false,
+          "title": "Groundedness",
+          "type": "boolean"
         },
         "max_results": {
           "anyOf": [
@@ -378,6 +1144,56 @@
           "default": null,
           "title": "Organization Id"
         },
+        "query_framework": {
+          "anyOf": [
+            {
+              "enum": [
+                "llamaindex",
+                "langchain"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Framework"
+        },
+        "query_layer": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Layer"
+        },
+        "query_params": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QueryParamsOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "query_transforms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QueryTransformToggles"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "retrieval_filters": {
           "anyOf": [
             {
@@ -399,6 +1215,23 @@
             }
           ],
           "default": null
+        },
+        "semantic_cache": {
+          "anyOf": [
+            {
+              "enum": [
+                "off",
+                "pgvector",
+                "redisvl"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Semantic Cache"
         },
         "stage_timeouts_ms": {
           "anyOf": [
@@ -430,6 +1263,24 @@
     "RetrievalFilters": {
       "additionalProperties": false,
       "properties": {
+        "attributes": {
+          "maxProperties": 30,
+          "minProperties": 1,
+          "patternProperties": {
+            "^[a-z][a-z0-9_]{0,39}$": {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "title": "Attributes",
+          "type": "object"
+        },
         "current_only": {
           "const": true,
           "default": true,
@@ -486,6 +1337,10 @@
           "default": null,
           "title": "Document Ids"
         },
+        "include_untagged": {
+          "title": "Include Untagged",
+          "type": "boolean"
+        },
         "invoice": {
           "anyOf": [
             {
@@ -517,6 +1372,9 @@
           "default": null,
           "title": "Languages"
         },
+        "scopes": {
+          "$ref": "#/$defs/ScopeFilter"
+        },
         "sources": {
           "anyOf": [
             {
@@ -531,6 +1389,21 @@
           ],
           "default": null,
           "title": "Sources"
+        },
+        "versions": {
+          "anyOf": [
+            {
+              "enum": [
+                "current",
+                "all"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/VersionRange"
+            }
+          ],
+          "title": "Versions"
         }
       },
       "title": "RetrievalFilters",
@@ -545,6 +1418,11 @@
           "title": "Dense",
           "type": "number"
         },
+        "domain": {
+          "exclusiveMinimum": 0,
+          "title": "Domain",
+          "type": "number"
+        },
         "exact_id": {
           "default": 1.0,
           "exclusiveMinimum": 0,
@@ -556,6 +1434,11 @@
           "exclusiveMinimum": 0,
           "title": "Lexical",
           "type": "number"
+        },
+        "translation": {
+          "exclusiveMinimum": 0,
+          "title": "Translation",
+          "type": "number"
         }
       },
       "title": "RetrievalLegWeights",
@@ -564,6 +1447,15 @@
     "RetrievalOverrides": {
       "additionalProperties": false,
       "properties": {
+        "backend": {
+          "enum": [
+            "pgvector",
+            "weaviate",
+            "qdrant"
+          ],
+          "title": "Backend",
+          "type": "string"
+        },
         "candidate_pool_size": {
           "anyOf": [
             {
@@ -577,6 +1469,31 @@
           ],
           "default": null,
           "title": "Candidate Pool Size"
+        },
+        "chunking_profile_by_doc_type": {
+          "additionalProperties": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "general",
+              "financial_report",
+              "contract_legal",
+              "invoice_receipt",
+              "product_technical",
+              "scanned_image"
+            ]
+          },
+          "title": "Chunking Profile By Doc Type",
+          "type": "object"
+        },
+        "diversity": {
+          "$ref": "#/$defs/DiversityParams"
+        },
+        "dup_cluster": {
+          "$ref": "#/$defs/DupClusterParams"
         },
         "final_top_k": {
           "anyOf": [
@@ -607,7 +1524,7 @@
           "anyOf": [
             {
               "maximum": 100,
-              "minimum": 50,
+              "minimum": 25,
               "type": "integer"
             },
             {
@@ -642,15 +1559,161 @@
           ],
           "default": null,
           "title": "Rrf K"
+        },
+        "table_lookup": {
+          "$ref": "#/$defs/TableLookupParams"
         }
       },
       "title": "RetrievalOverrides",
       "type": "object"
     },
+    "ScopeFilter": {
+      "additionalProperties": false,
+      "description": "DATA-08 scope filter (D-39): OR within a dimension, AND across dimensions; only the three fixed dimensions.",
+      "properties": {
+        "department": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Department",
+          "type": "array"
+        },
+        "legal_entity": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Legal Entity",
+          "type": "array"
+        },
+        "region": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Region",
+          "type": "array"
+        }
+      },
+      "title": "ScopeFilter",
+      "type": "object"
+    },
+    "SemanticCacheReport": {
+      "additionalProperties": false,
+      "description": "D-42 e, spec rule 8: cache checks, bypasses, hits and misses, hit versus miss latency, near-miss wrong hits.",
+      "properties": {
+        "bypasses": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Bypasses",
+          "type": "object"
+        },
+        "checks": {
+          "minimum": 0,
+          "title": "Checks",
+          "type": "integer"
+        },
+        "failures": {
+          "minimum": 0,
+          "title": "Failures",
+          "type": "integer"
+        },
+        "hit_latency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageLatency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hit_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "hits": {
+          "minimum": 0,
+          "title": "Hits",
+          "type": "integer"
+        },
+        "miss_latency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageLatency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "misses": {
+          "minimum": 0,
+          "title": "Misses",
+          "type": "integer"
+        },
+        "near_miss_checks": {
+          "minimum": 0,
+          "title": "Near Miss Checks",
+          "type": "integer"
+        },
+        "near_miss_wrong_hit_rate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "near_miss_wrong_hits": {
+          "minimum": 0,
+          "title": "Near Miss Wrong Hits",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "checks",
+        "hits",
+        "misses",
+        "failures",
+        "hit_rate",
+        "near_miss_checks",
+        "near_miss_wrong_hits"
+      ],
+      "title": "SemanticCacheReport",
+      "type": "object"
+    },
     "SliceMetrics": {
       "additionalProperties": false,
       "properties": {
+        "attribute_filter_fallback_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "boilerplate_token_share": {
+          "$ref": "#/$defs/MetricValue"
+        },
         "correct_refusal_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "false_answer_rate": {
           "$ref": "#/$defs/MetricValue"
         },
         "false_refusal_rate": {
@@ -670,13 +1733,43 @@
           "default": null,
           "title": "False Refusal Upper 95"
         },
+        "identifier_precision": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "intent_coverage": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "k_zero": {
+          "$ref": "#/$defs/MetricValue"
+        },
         "mrr": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "named_document_recall": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "ndcg_at_context_k": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "near_miss_leakage": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "quantity_match_rate": {
           "$ref": "#/$defs/MetricValue"
         },
         "recall_at_10": {
           "$ref": "#/$defs/MetricValue"
         },
         "recall_at_5": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "topk_redundancy": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "variant_accuracy": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "wrong_document_at_1": {
           "$ref": "#/$defs/MetricValue"
         }
       },
@@ -748,6 +1841,34 @@
           "default": null,
           "title": "Assemble"
         },
+        "condense": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Condense"
+        },
+        "decompose": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decompose"
+        },
         "embed": {
           "anyOf": [
             {
@@ -761,6 +1882,48 @@
           ],
           "default": null,
           "title": "Embed"
+        },
+        "expand": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expand"
+        },
+        "hyde": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hyde"
+        },
+        "injection_check": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Injection Check"
         },
         "legacy_rank": {
           "anyOf": [
@@ -790,6 +1953,20 @@
           "default": null,
           "title": "Local Rerank"
         },
+        "normalize_dates": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Normalize Dates"
+        },
         "post_filter": {
           "anyOf": [
             {
@@ -803,6 +1980,20 @@
           ],
           "default": null,
           "title": "Post Filter"
+        },
+        "query_gate": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Gate"
         },
         "refs": {
           "anyOf": [
@@ -832,6 +2023,34 @@
           "default": null,
           "title": "Search"
         },
+        "semantic_cache": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Semantic Cache"
+        },
+        "terminology": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Terminology"
+        },
         "voice_keyword_fallback": {
           "anyOf": [
             {
@@ -848,6 +2067,336 @@
         }
       },
       "title": "StageTimeoutsMs",
+      "type": "object"
+    },
+    "StrategySlice": {
+      "additionalProperties": false,
+      "properties": {
+        "citation_coverage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cited_gold_hit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "faithfulness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "generation_latency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageLatency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "invalid_citation_rate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "items": {
+          "minimum": 0,
+          "title": "Items",
+          "type": "integer"
+        },
+        "raw_invalid_markers": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw Invalid Markers"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "title": "StrategySlice",
+      "type": "object"
+    },
+    "TableLookupParams": {
+      "additionalProperties": false,
+      "description": "D-15, D-16: the structured table leg; a row matches when at least min_cells distinct cells match.",
+      "properties": {
+        "limit": {
+          "default": 10,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "min_cells": {
+          "default": 2,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Min Cells",
+          "type": "integer"
+        },
+        "weight": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "title": "TableLookupParams",
+      "type": "object"
+    },
+    "TableSplitItemRow": {
+      "additionalProperties": false,
+      "description": "One scored table_split item (D-46): where its row chunk ranks, whether that chunk holds the header, the answer verdict.",
+      "properties": {
+        "answer_verdict": {
+          "anyOf": [
+            {
+              "enum": [
+                "correct",
+                "wrong",
+                "ambiguous"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Answer Verdict"
+        },
+        "counts_in_gate": {
+          "title": "Counts In Gate",
+          "type": "boolean"
+        },
+        "header_in_context": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Header In Context"
+        },
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "row_rank": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Rank"
+        },
+        "split": {
+          "enum": [
+            "dev",
+            "test"
+          ],
+          "title": "Split",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "language",
+        "split",
+        "counts_in_gate"
+      ],
+      "title": "TableSplitItemRow",
+      "type": "object"
+    },
+    "TableSplitReport": {
+      "additionalProperties": false,
+      "description": "D-46, EVAL-18: row Recall@k, header_in_context_rate and the deterministic answer check for table_split items.",
+      "properties": {
+        "answer_mode": {
+          "title": "Answer Mode",
+          "type": "boolean"
+        },
+        "by_language": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TableSplitSlice"
+          },
+          "title": "By Language",
+          "type": "object"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/TableSplitItemRow"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "overall": {
+          "$ref": "#/$defs/TableSplitSlice"
+        }
+      },
+      "required": [
+        "answer_mode",
+        "overall"
+      ],
+      "title": "TableSplitReport",
+      "type": "object"
+    },
+    "TableSplitSlice": {
+      "additionalProperties": false,
+      "description": "table_split metrics of one slice; answer_correct_rate is None when the run produced no answers (not run, never 0).",
+      "properties": {
+        "answer_correct_rate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "counting_items": {
+          "minimum": 0,
+          "title": "Counting Items",
+          "type": "integer"
+        },
+        "header_in_context_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "items": {
+          "minimum": 0,
+          "title": "Items",
+          "type": "integer"
+        },
+        "row_recall_at_10": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "row_recall_at_5": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "status": {
+          "enum": [
+            "gated",
+            "report_only"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "items",
+        "counting_items",
+        "row_recall_at_5",
+        "row_recall_at_10",
+        "header_in_context_rate"
+      ],
+      "title": "TableSplitSlice",
+      "type": "object"
+    },
+    "TransformOutcomeCounts": {
+      "additionalProperties": false,
+      "description": "Per transform: traces where it ran, was off by config, or was skipped, with the skip reasons (D-28, D-38).",
+      "properties": {
+        "disabled": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Disabled",
+          "type": "integer"
+        },
+        "run": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Run",
+          "type": "integer"
+        },
+        "skip_reasons": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Skip Reasons",
+          "type": "object"
+        },
+        "skipped": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Skipped",
+          "type": "integer"
+        }
+      },
+      "title": "TransformOutcomeCounts",
+      "type": "object"
+    },
+    "VersionRange": {
+      "additionalProperties": false,
+      "description": "D-12: a version period; either bound may be left open, not both.",
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "title": "VersionRange",
       "type": "object"
     }
   },
@@ -916,6 +2465,35 @@
       "title": "By Split",
       "type": "object"
     },
+    "by_strategy": {
+      "additionalProperties": {
+        "$ref": "#/$defs/StrategySlice"
+      },
+      "title": "By Strategy",
+      "type": "object"
+    },
+    "citation_coverage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricValue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "cited_gold_hit": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricValue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "corpus_sha256": {
       "anyOf": [
         {
@@ -972,7 +2550,8 @@
       "default": "all",
       "enum": [
         "all",
-        "production"
+        "production",
+        "real"
       ],
       "title": "Gate Population",
       "type": "string"
@@ -980,9 +2559,72 @@
     "golden_filter": {
       "$ref": "#/$defs/GoldenFilter"
     },
+    "golden_manifest_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Golden Manifest Sha256",
+      "type": "string"
+    },
+    "golden_set_version": {
+      "minimum": 1,
+      "title": "Golden Set Version",
+      "type": "integer"
+    },
     "golden_sha256": {
       "title": "Golden Sha256",
       "type": "string"
+    },
+    "groundedness_labels": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "$ref": "#/$defs/GroundednessLabelCounts"
+        },
+        "type": "object"
+      },
+      "propertyNames": {
+        "enum": [
+          "hhem_2_3_vectara",
+          "hhem_2_1_open",
+          "llm_judge",
+          "none"
+        ]
+      },
+      "title": "Groundedness Labels",
+      "type": "object"
+    },
+    "groundedness_latency": {
+      "additionalProperties": {
+        "$ref": "#/$defs/StageLatency"
+      },
+      "propertyNames": {
+        "enum": [
+          "hhem_2_3_vectara",
+          "hhem_2_1_open"
+        ]
+      },
+      "title": "Groundedness Latency",
+      "type": "object"
+    },
+    "injection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InjectionReport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "invalid_citation_rate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricValue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "items": {
       "items": {
@@ -1024,6 +2666,13 @@
       ],
       "default": null
     },
+    "native_review_backlog": {
+      "items": {
+        "$ref": "#/$defs/NativeReviewBacklogEntry"
+      },
+      "title": "Native Review Backlog",
+      "type": "array"
+    },
     "notes": {
       "items": {
         "type": "string"
@@ -1033,6 +2682,53 @@
     },
     "overall": {
       "$ref": "#/$defs/SliceMetrics"
+    },
+    "pre_generation": {
+      "additionalProperties": {
+        "$ref": "#/$defs/StageLatency"
+      },
+      "propertyNames": {
+        "enum": [
+          "chat",
+          "embed",
+          "voice"
+        ]
+      },
+      "title": "Pre Generation",
+      "type": "object"
+    },
+    "query_layer": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QueryLayerReport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "rag_mode": {
+      "enum": [
+        "strict",
+        "balanced",
+        "flexible"
+      ],
+      "title": "Rag Mode",
+      "type": "string"
+    },
+    "raw_invalid_markers": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Raw Invalid Markers"
     },
     "request_options": {
       "$ref": "#/$defs/RagRunOptions"
@@ -1062,6 +2758,31 @@
       "title": "Schema Version",
       "type": "integer"
     },
+    "semantic_cache": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SemanticCacheReport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "stale_count": {
+      "minimum": 0,
+      "title": "Stale Count",
+      "type": "integer"
+    },
+    "stale_share": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Stale Share",
+      "type": "number"
+    },
+    "table_split": {
+      "$ref": "#/$defs/TableSplitReport"
+    },
     "tier": {
       "enum": [
         "smoke",
@@ -1070,6 +2791,20 @@
       ],
       "title": "Tier",
       "type": "string"
+    },
+    "ttft": {
+      "additionalProperties": {
+        "$ref": "#/$defs/StageLatency"
+      },
+      "propertyNames": {
+        "enum": [
+          "hit",
+          "miss",
+          "bypass"
+        ]
+      },
+      "title": "Ttft",
+      "type": "object"
     }
   },
   "required": [

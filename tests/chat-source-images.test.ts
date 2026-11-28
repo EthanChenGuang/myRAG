@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chatRequest, installChatPipeline, readSse, retrievalWith } from './helpers/chat-route-fakes';
 
 const IMAGE_URL = 'https://example.com/fixtures/diagram.png';
@@ -70,8 +70,16 @@ async function postImageQuery() {
   );
 }
 
+const previousTagging = process.env.RAG_CONTEXT_TAGGING;
+
 describe('chat route source_images', () => {
+  afterEach(() => {
+    if (previousTagging === undefined) delete process.env.RAG_CONTEXT_TAGGING;
+    else process.env.RAG_CONTEXT_TAGGING = previousTagging;
+  });
+
   beforeEach(() => {
+    delete process.env.RAG_CONTEXT_TAGGING;
     h.capture.reset();
     h.retrieval.mockReset();
     h.supabase.store.documents = [];
@@ -118,5 +126,68 @@ describe('chat route source_images', () => {
     const serialized = JSON.stringify(h.capture.calls[0].messages);
     expect(serialized).toContain('RELEVANT INFORMATION FROM DOCUMENTS');
     expect(serialized).not.toContain('Diagram of the architecture');
+  });
+
+  it('streams and persists identical source_images with RAG_CONTEXT_TAGGING on', async () => {
+    const run = async () => {
+      h.capture.reset();
+      const body = await readSse(await postImageQuery());
+      const toolResults: Array<Record<string, any>> = [];
+      await h.capture.calls[0].onStepFinish({ text: '', toolCalls: [], toolResults });
+      const streamed = body
+        .split('\n')
+        .filter((line) => line.startsWith('data:') && line.includes('source_images'))
+        .map((line) => line.replace(/"id":"[^"]*"/g, '"id":"<id>"'));
+      return {
+        streamed,
+        persisted: toolResults.filter((part) => part.type === 'source_images').map((part) => part.source_images),
+        images: toolResults.find((part) => part.toolName === 'query_documents')?.output.images,
+        messages: JSON.stringify(h.capture.calls[0].messages),
+      };
+    };
+    h.supabase.store.documents.push({
+      id: 'doc-text-1',
+      filename: 'relay-notes.md',
+      created_at: '2026-01-01T00:00:00.000Z',
+      content: 'Relay notes',
+      metadata: {},
+    });
+    h.supabase.store.document_chunks.push({ id: 'chunk-text-1', document_id: 'doc-text-1', metadata: null });
+    h.retrieval.mockResolvedValue(
+      retrievalWith([
+        {
+          chunk_id: 'chunk-text-1',
+          document_id: 'doc-text-1',
+          content: 'The relay calibrates its phase offset at startup.',
+          similarity: 0.9,
+          metadata: null,
+          temporal_score: 0,
+          financial_score: 0,
+          final_score: 0.9,
+          match_reason: 'similarity',
+        },
+        {
+          chunk_id: 'chunk-image-1',
+          document_id: 'doc-image-1',
+          content: 'Diagram of the architecture',
+          similarity: 0.3,
+          metadata: { image_url: IMAGE_URL },
+          temporal_score: 0,
+          financial_score: 0,
+          final_score: 0.3,
+          match_reason: 'similarity',
+        },
+      ]),
+    );
+    const off = await run();
+    process.env.RAG_CONTEXT_TAGGING = 'true';
+    const on = await run();
+    expect(off.streamed.length).toBeGreaterThan(0);
+    expect(on.streamed).toEqual(off.streamed);
+    expect(on.persisted).toEqual(off.persisted);
+    expect(on.images).toEqual(off.images);
+    expect(off.messages).not.toContain('<documents>');
+    expect(on.messages).toContain('<documents>');
+    expect(on.persisted).toEqual([[{ name: 'diagram.png', size: 0, type: 'image/jpeg', url: IMAGE_URL }]]);
   });
 });

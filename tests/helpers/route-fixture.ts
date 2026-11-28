@@ -62,8 +62,15 @@ export interface RouteFixtureOptions {
   deploymentMode: DeploymentMode;
   /** Two users, a personal document each and an organization document (multi-tenant only). Also lets the edge answer filename lookups. */
   twoTenant?: boolean;
+  /** Lets the edge answer filename lookups (the chat route resolves @mentions that way) without the two-tenant corpus. */
+  documentFilenameFilter?: boolean;
   /** Extra rows inserted into the fixture database before the fake edge starts. */
   seed?: (db: PGlite) => Promise<void>;
+  /**
+   * Applied after the pinned eval env and the fixture process env, restored on close. `undefined` removes the variable
+   * for the fixture's life (an unset pipeline or unset languages).
+   */
+  env?: Record<string, string | undefined>;
 }
 
 export async function startRouteFixture(options: RouteFixtureOptions): Promise<RouteFixture> {
@@ -84,7 +91,7 @@ export async function startRouteFixture(options: RouteFixtureOptions): Promise<R
   }
   let edge: FakeEdge;
   try {
-    edge = await startFakeEdge({ db: fixture.db, documentFilenameFilter: options.twoTenant === true });
+    edge = await startFakeEdge({ db: fixture.db, documentFilenameFilter: options.twoTenant === true || options.documentFilenameFilter === true });
   } catch (error) {
     await fixture.db.close().catch(() => undefined);
     throw error;
@@ -104,6 +111,15 @@ export async function startRouteFixture(options: RouteFixtureOptions): Promise<R
   env.NEXT_PUBLIC_EMBED_ALLOWED_DOMAINS = '*';
   env.EMBED_RATE_LIMIT = '100000';
   env.MYRAG_INTERNAL_API_KEY = INTERNAL_API_KEY;
+  const overrides = options.env ?? {};
+  for (const [name, value] of Object.entries(overrides)) {
+    if (value === undefined) delete env[name];
+    else env[name] = value;
+  }
+  // Phase 4.1: `auto` models a keyless install unless the caller sets the key, so the fake edge's key must not choose Cohere.
+  if (env.RAG_RERANKER?.trim().toLowerCase() === 'auto' && !Object.prototype.hasOwnProperty.call(overrides, 'COHERE_API_KEY')) {
+    env.COHERE_API_KEY = '';
+  }
 
   return {
     edge,

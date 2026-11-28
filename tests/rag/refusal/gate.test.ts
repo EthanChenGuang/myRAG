@@ -1,6 +1,8 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { cellKey, decideRefusal, type GateInput, type ThresholdCell } from '@/lib/rag/refusal/gate';
-import { loadThresholdsFromData } from '@/lib/rag/refusal/thresholds';
+import fs from 'node:fs';
+import path from 'node:path';
+import { loadThresholdsFromData, parseThresholds } from '@/lib/rag/refusal/thresholds';
 
 function calibratedCell(overrides: Partial<ThresholdCell> = {}): ThresholdCell {
   return {
@@ -160,5 +162,17 @@ describe('loadThresholdsFromData', () => {
     expect(b.cells.size).toBe(0);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0]?.[0]).toContain('[RAG Config]');
+  });
+
+  it('applies the contract rule that schema_version is 2 exactly when a cell carries a mode', () => {
+    const fixture = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'eval/config/refusal-thresholds.json'), 'utf8'));
+    expect(parseThresholds(fixture)).not.toBeNull();
+    expect(parseThresholds({ schema_version: 2 })).toBeNull();
+    const cells = (fixture.cells ?? []) as Record<string, unknown>[];
+    if (cells.length > 0) {
+      const withMode = { ...fixture, cells: [{ ...cells[0], mode: 'strict', key: `${cells[0].key}|strict` }, ...cells.slice(1)] };
+      expect(parseThresholds(withMode)).toBeNull();
+      expect(parseThresholds({ ...withMode, schema_version: 2 })).not.toBeNull();
+    }
   });
 });

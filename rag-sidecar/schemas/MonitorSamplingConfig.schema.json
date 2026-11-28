@@ -1,0 +1,54 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "drift_fill_share": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Drift Fill Share",
+      "type": "number"
+    },
+    "max_queries": {
+      "minimum": 1,
+      "title": "Max Queries",
+      "type": "integer"
+    },
+    "min_queries": {
+      "minimum": 1,
+      "title": "Min Queries",
+      "type": "integer"
+    },
+    "pilot_cap_share": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Pilot Cap Share",
+      "type": "number"
+    },
+    "pilot_multiplier": {
+      "minimum": 1,
+      "title": "Pilot Multiplier",
+      "type": "number"
+    },
+    "quota_tolerance": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Quota Tolerance",
+      "type": "number"
+    },
+    "weekly_cap": {
+      "minimum": 1,
+      "title": "Weekly Cap",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "weekly_cap",
+    "pilot_multiplier",
+    "pilot_cap_share",
+    "drift_fill_share",
+    "max_queries",
+    "min_queries",
+    "quota_tolerance"
+  ],
+  "title": "MonitorSamplingConfig",
+  "type": "object"
+}

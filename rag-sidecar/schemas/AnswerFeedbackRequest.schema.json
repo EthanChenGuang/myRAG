@@ -1,0 +1,59 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "chatId": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Chatid"
+    },
+    "comment": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Comment"
+    },
+    "reasons": {
+      "items": {
+        "enum": [
+          "wrong",
+          "incomplete",
+          "not_from_documents",
+          "bad_citation"
+        ],
+        "type": "string"
+      },
+      "maxItems": 4,
+      "title": "Reasons",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "vote": {
+      "enum": [
+        "helpful",
+        "not_helpful"
+      ],
+      "title": "Vote",
+      "type": "string"
+    }
+  },
+  "required": [
+    "vote"
+  ],
+  "title": "AnswerFeedbackRequest",
+  "type": "object"
+}

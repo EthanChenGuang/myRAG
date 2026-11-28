@@ -1,0 +1,62 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "enum": [
+        "conflict",
+        "chain",
+        "cycle",
+        "invalid_variant",
+        "invalid_language",
+        "invalid_translation",
+        "limit",
+        "duplicate",
+        "override"
+      ],
+      "title": "Code",
+      "type": "string"
+    },
+    "entry_ids": {
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "title": "Entry Ids",
+      "type": "array"
+    },
+    "message": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+    },
+    "row": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Row"
+    },
+    "severity": {
+      "enum": [
+        "error",
+        "warning"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "severity",
+    "message"
+  ],
+  "title": "TerminologyValidationIssue",
+  "type": "object"
+}

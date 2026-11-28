@@ -1,0 +1,65 @@
+{
+  "additionalProperties": false,
+  "description": "Decision of the upload approval gate in `submitIngest()` (D-36, D-37).",
+  "properties": {
+    "decided_at": {
+      "format": "date-time",
+      "title": "Decided At",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "off",
+        "members",
+        "all"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "enum": [
+            "member_upload",
+            "all_uploads",
+            "admin_upload",
+            "personal_workspace",
+            "exempt_connector",
+            "exempt_uploader",
+            "unknown_uploader"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "required": {
+      "title": "Required",
+      "type": "boolean"
+    },
+    "uploader_id": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Uploader Id"
+    }
+  },
+  "required": [
+    "mode",
+    "required",
+    "decided_at"
+  ],
+  "title": "UploadApproval",
+  "type": "object"
+}

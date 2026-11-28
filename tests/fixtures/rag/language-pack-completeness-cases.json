@@ -1,0 +1,12 @@
+{
+  "description": "Phase 3.2 D-04: one shipped pack with one completeness part removed; read by rag-sidecar/tests/test_language_registry.py and tests/rag/lang-registry.test.ts.",
+  "cases": [
+    { "name": "no_segmentation", "base": "en", "change": { "op": "set", "path": ["segmentation"], "value": null }, "missing": ["segmentation"] },
+    { "name": "no_docling_ocr_code", "base": "zh", "change": { "op": "delete", "path": ["ocr_codes", "docling"] }, "missing": ["ocr_codes.docling"] },
+    { "name": "no_llamaparse_ocr_code", "base": "zh", "change": { "op": "delete", "path": ["ocr_codes", "llamaparse"] }, "missing": ["ocr_codes.llamaparse"] },
+    { "name": "no_rewrite_gate_lexicon", "base": "it", "change": { "op": "set", "path": ["rewrite_gate_lexicon"], "value": null }, "missing": ["rewrite_gate_lexicon"] },
+    { "name": "no_strict_refusal", "base": "en", "change": { "op": "delete", "path": ["texts", "strict_refusal"] }, "missing": ["texts.strict_refusal"] },
+    { "name": "no_fixture_corpus", "base": "it", "change": { "op": "set", "path": ["fixtures", "corpus"], "value": false }, "missing": ["fixtures.corpus"] },
+    { "name": "no_golden_slices", "base": "zh", "change": { "op": "set", "path": ["fixtures", "golden_slices"], "value": false }, "missing": ["fixtures.golden_slices"] }
+  ]
+}

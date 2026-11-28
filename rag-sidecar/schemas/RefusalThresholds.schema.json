@@ -32,6 +32,11 @@
         "dev": {
           "$ref": "#/$defs/RefusalMetricBlock"
         },
+        "embedding_model": {
+          "minLength": 1,
+          "title": "Embedding Model",
+          "type": "string"
+        },
         "holdout": {
           "$ref": "#/$defs/RefusalMetricBlock"
         },
@@ -43,6 +48,15 @@
         "key": {
           "minLength": 1,
           "title": "Key",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "strict",
+            "balanced",
+            "flexible"
+          ],
+          "title": "Mode",
           "type": "string"
         },
         "model": {
@@ -205,8 +219,11 @@
       "$ref": "#/$defs/ConfigProvenance"
     },
     "schema_version": {
-      "const": 1,
       "default": 1,
+      "enum": [
+        1,
+        2
+      ],
       "title": "Schema Version",
       "type": "integer"
     }

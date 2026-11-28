@@ -1,0 +1,49 @@
+{
+  "additionalProperties": false,
+  "description": "One row of the `rag:attributes` import file (D-24).",
+  "properties": {
+    "attributes": {
+      "maxProperties": 30,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]{0,39}$": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "title": "Attributes",
+      "type": "object"
+    },
+    "source": {
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+      "title": "Source",
+      "type": "string"
+    },
+    "source_key": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "title": "Source Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source_key",
+    "attributes"
+  ],
+  "title": "AttributeImportRow",
+  "type": "object"
+}

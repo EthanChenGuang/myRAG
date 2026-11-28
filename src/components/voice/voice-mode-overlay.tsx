@@ -88,9 +88,13 @@ export default function VoiceModeOverlay({ isActive, onEnd }: VoiceModeOverlayPr
 
                 if (data.error) {
                     console.error('[VoiceModeOverlay] Failed to get token:', data.error);
-                    if (data.error === 'voice_busy') {
-                        setError(new Error('Voice is busy, try again in a moment'));
-                    }
+                    setError(new Error(
+                        data.error === 'voice_busy'
+                            ? 'Voice is busy, try again in a moment'
+                            : resp.status >= 500
+                                ? 'Voice mode is not set up on this server yet'
+                                : 'Voice mode could not start'
+                    ));
                     return;
                 }
 
@@ -98,6 +102,7 @@ export default function VoiceModeOverlay({ isActive, onEnd }: VoiceModeOverlayPr
                 setServerUrl(data.serverUrl);
             } catch (e) {
                 console.error('[VoiceModeOverlay] Token fetch error:', e);
+                setError(new Error('Voice mode could not start'));
             } finally {
                 setIsConnecting(false);
             }

@@ -1,0 +1,59 @@
+{
+  "additionalProperties": false,
+  "description": "D-45: one parsed Markdown table row; cell_tokens holds one token array per cell.",
+  "properties": {
+    "cell_tokens": {
+      "items": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Cell Tokens",
+      "type": "array"
+    },
+    "cells": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Cells",
+      "type": "array"
+    },
+    "chunk_ids": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Chunk Ids",
+      "type": "array"
+    },
+    "header": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Header",
+      "type": "array"
+    },
+    "row_index": {
+      "minimum": 0,
+      "title": "Row Index",
+      "type": "integer"
+    },
+    "table_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Table Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "table_key",
+    "row_index",
+    "cells",
+    "cell_tokens",
+    "chunk_ids"
+  ],
+  "title": "TableRow",
+  "type": "object"
+}

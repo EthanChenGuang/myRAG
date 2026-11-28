@@ -1,0 +1,41 @@
+{
+  "artifacts": [
+    "docling.json"
+  ],
+  "chunks": [
+    {
+      "contextualized_text": "中文与意大利文混合扫描页\n本页用于检验扫描件的逐字识别：每个句子都使用全角标点，包括逗号，分号；以及句号。\n第二段说明识别结果必须与预期文本完全一致。",
+      "headings": [
+        "中文与意大利文混合扫描页"
+      ],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "本页用于检验扫描件的逐字识别：每个句子都使用全角标点，包括逗号，分号；以及句号。\n第二段说明识别结果必须与预期文本完全一致。"
+    },
+    {
+      "contextualized_text": "中文与意大利文混合扫描页\nSezione in italiano\nLa qualità del testo è verificata più volte; ciò vale per ogni unità di prova già registrata.",
+      "headings": [
+        "中文与意大利文混合扫描页",
+        "Sezione in italiano"
+      ],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "La qualità del testo è verificata più volte; ciò vale per ogni unità di prova già registrata."
+    }
+  ],
+  "language": "it",
+  "markdown": "## 中文与意大利文混合扫描页\n\n本页用于检验扫描件的逐字识别：每个句子都使用全角标点，包括逗号，分号；以及句号。\n\n第二段说明识别结果必须与预期文本完全一致。\n\n### Sezione in italiano\n\nLa qualità del testo è verificata più volte; ciò vale per ogni unità di prova già registrata.",
+  "page_count": 1,
+  "parser": "docling",
+  "parser_version": "docling-2.107.1",
+  "partial": false,
+  "pictures": [],
+  "text_layer_page_share": 0.0,
+  "warnings": []
+}

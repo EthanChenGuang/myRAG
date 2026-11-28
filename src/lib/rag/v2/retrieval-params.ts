@@ -22,8 +22,8 @@ function guardCap(
   previous: number,
 ): number {
   if (next === undefined) return previous;
-  if (next < 50 || next > 100) {
-    problem(`params-cap:${next}`, 'rerank_input_cap must be 50..100, entry ignored', { cap: next });
+  if (next < 25 || next > 100) {
+    problem(`params-cap:${next}`, 'rerank_input_cap must be 25..100, entry ignored', { cap: next });
     return previous;
   }
   return next;
@@ -98,10 +98,20 @@ export function effectiveRetrievalParams(
   }
   const parsed = RetrievalParamsSchema.safeParse(params);
   if (!parsed.success) {
-    return params;
+    return clampCapToPool(params);
   }
-  return {
+  return clampCapToPool({
     ...parsed.data,
     rerank_input_cap: guardCap(parsed.data.rerank_input_cap, COMMITTED.rerank_input_cap),
-  };
+  });
+}
+
+function clampCapToPool(params: RetrievalParams): RetrievalParams {
+  if (params.rerank_input_cap <= params.candidate_pool_size) return params;
+  problem(
+    `params-cap-pool:${params.candidate_pool_size}:${params.rerank_input_cap}`,
+    'rerank_input_cap above candidate_pool_size, cap clamped to the pool',
+    { cap: params.rerank_input_cap, pool: params.candidate_pool_size },
+  );
+  return { ...params, rerank_input_cap: params.candidate_pool_size };
 }

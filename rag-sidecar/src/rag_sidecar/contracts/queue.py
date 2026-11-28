@@ -7,7 +7,10 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from rag_sidecar.contracts.ingest import DocType, OcrLanguage, ParseResult
+from rag_sidecar.contracts.ingest import DocType, OcrLanguage, ParseResult, check_language_selection
+from rag_sidecar.contracts.ingest_security import HiddenTextReport, UploadApproval
+from rag_sidecar.contracts.languages import Language
+from rag_sidecar.contracts.omit import OmitNoneModel, omit_none_schema
 from rag_sidecar.contracts.routing import (
     DetectCounts,
     PageRange,
@@ -30,10 +33,12 @@ JobStatus = Literal[
     "quarantined",
     "needs_review",
     "skipped_duplicate",
+    "pending_review",
 ]
-JobKind = Literal["ingest", "dry_run", "delete"]
+JobKind = Literal["ingest", "dry_run", "delete", "translate"]
 RunnerKind = Literal["worker", "ray"]
 RoutingMode = Literal["fixed", "tiered"]
+HiddenTextCheckMode = Literal["off", "flag", "quarantine"]
 EmbedMode = Literal["sync", "batch_api"]
 AdvancePhase = Literal["begin", "post_parse"]
 ParseExternalMode = Literal["chain", "native", "premium"]
@@ -54,6 +59,12 @@ class OriginalRef(_Contract):
 
 
 class JobSettingsSnapshot(_Contract):
+    """Settings frozen on a ledger job at enqueue.
+
+    The Phase 3.2 fields default to today's behaviour and are written only when they differ from it. The model
+    keeps extra="forbid", so an older sidecar rejects a snapshot carrying them: deploy the sidecar first.
+    """
+
     routing: RoutingMode
     cloud_allowed: bool
     escalation: bool
@@ -70,11 +81,29 @@ class JobSettingsSnapshot(_Contract):
     embed_mode: EmbedMode
     ocr_languages: list[OcrLanguage] = Field(min_length=1)
     routing_config_version: str
+    # Phase 3.2 (D-13, D-19 to D-21, D-33, D-36): every default reproduces the behaviour before this phase.
+    language_aware: bool = False
+    languages: list[Language] = Field(default_factory=list)
+    primary_language: Language | None = None
+    # None means "use repeat_table_header of the processing profile".
+    repeat_table_header_effective: bool | None = None
+    carry_table_header: bool = False
+    row_serialization: bool = False
+    hidden_text_check: HiddenTextCheckMode = "off"
+    approval: UploadApproval | None = None
+    hold_publish: bool = False
+    # D-17: the primary of the configured languages ocr_languages was built from; None when the profile's list applies.
+    ocr_primary_language: Language | None = None
+    # D-29: the language a job of kind translate produces; None (and left out of the wire) for every other kind.
+    target_language: Language | None = None
 
     @model_validator(mode="after")
     def _tiers_are_ordered(self) -> JobSettingsSnapshot:
         if self.min_tier and self.max_tier and _TIER_ORDER[self.min_tier] > _TIER_ORDER[self.max_tier]:
             raise ValueError("min_tier must not rank above max_tier")
+        check_language_selection(self.languages, self.primary_language)
+        if self.ocr_primary_language is not None and self.ocr_primary_language not in self.ocr_languages:
+            raise ValueError("ocr_primary_language must be one of ocr_languages")
         return self
 
 
@@ -117,6 +146,7 @@ class IngestionJob(_Contract):
     est_cost_usd: float | None = Field(default=None, ge=0)
     embedding_profile: str | None = None
     error_class: str | None = None
+    dead_letter_at: datetime | None = None
     needs_review_reason: str | None = None
     routing_note: str | None = None
     provisional_published_at: datetime | None = None
@@ -231,18 +261,26 @@ class ParseExternalResponse(_Contract):
         return self
 
 
-class AdvanceRequest(_Contract):
+class AdvanceRequest(_Contract, OmitNoneModel):
+    _omit_when_none = ("hidden_text_report",)
+
     worker_id: WorkerId
     attempt_no: int = Field(ge=1)
     phase: AdvancePhase
     parse_cache_id: str | None = None
     deadline_ms: int = Field(ge=1, le=40_000)
     cursor: str | None = None
+    # Progressive mode (D-30): the run publishes the provisional fast version and the job stays open for the routed run.
+    provisional: bool = False
+    # D-33: the hidden-text report the worker made at preflight (tiered routing, check not off); left out of the body otherwise.
+    hidden_text_report: HiddenTextReport | None = Field(default=None, json_schema_extra=omit_none_schema)
 
     @model_validator(mode="after")
     def _post_parse_requires_cache(self) -> AdvanceRequest:
         if self.phase == "post_parse" and self.parse_cache_id is None:
             raise ValueError("post_parse requires parse_cache_id")
+        if self.phase != "post_parse" and self.hidden_text_report is not None:
+            raise ValueError("hidden_text_report is sent with post_parse only")
         return self
 
 
@@ -255,7 +293,35 @@ class AdvanceResponse(_Contract):
     reason: str | None = None
 
 
-REQUEST_BODY_MODELS = (DetectVlmRequest, ParseExternalRequest, AdvanceRequest)
+TranslateOutcome = Literal["done", "continue", "retry"]
+
+
+class TranslateCallbackRequest(_Contract):
+    """The worker's call for a job of kind translate (D-29): the app reads the tenant, document and language from the job row."""
+
+    worker_id: WorkerId
+    deadline_ms: int = Field(ge=1, le=40_000)
+
+
+class TranslateCallbackResponse(_Contract):
+    """done: the ledger row is terminal (status); continue: the time budget ran out with chunks remaining, call again; retry: fail the job retryably."""
+
+    worker_id: WorkerId
+    outcome: TranslateOutcome
+    status: JobStatus | None = None
+    remaining: int | None = Field(default=None, ge=0)
+    reason: str | None = Field(default=None, max_length=64)
+
+    @model_validator(mode="after")
+    def _outcome_fields(self) -> TranslateCallbackResponse:
+        if self.outcome == "done" and self.status is None:
+            raise ValueError("done requires status")
+        if self.outcome == "retry" and self.reason is None:
+            raise ValueError("retry requires reason")
+        return self
+
+
+REQUEST_BODY_MODELS = (DetectVlmRequest, ParseExternalRequest, AdvanceRequest, TranslateCallbackRequest)
 
 
 def request_bodies_must_not_carry_tenant() -> None:

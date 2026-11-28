@@ -6,9 +6,10 @@ from pathlib import Path
 
 from pydantic import ValidationError
 from rag_sidecar.contracts.baseline import Baseline, NoiseConfig, PairedReport, PairedStat
+from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
 from rag_sidecar.contracts.report import EvalReport, ItemResult
 
-from rag_eval.metrics import CROSS_LINGUAL, language_pair_key
+from rag_eval.metrics import CROSS_LINGUAL, language_pair_key, report_gate_items
 from rag_eval.paths import resolve_cli_path
 
 SEED = 20261123
@@ -52,13 +53,13 @@ def _baseline_value(runs: list[float | None] | None) -> float | None:
     return math.fsum(present) / len(present)
 
 
-def _bootstrap_interval(differences: list[float]) -> tuple[float, float]:
+def _bootstrap_interval(differences: list[float], seed: int = SEED, resamples: int = RESAMPLES) -> tuple[float, float]:
     if all(d == 0 for d in differences):
         return 0.0, 0.0
-    rng = random.Random(SEED)
+    rng = random.Random(seed)
     n = len(differences)
-    means = sorted(math.fsum(differences[i] for i in rng.choices(range(n), k=n)) / n for _ in range(RESAMPLES))
-    return means[math.ceil(RESAMPLES * 0.025) - 1], means[math.ceil(RESAMPLES * 0.975) - 1]
+    means = sorted(math.fsum(differences[i] for i in rng.choices(range(n), k=n)) / n for _ in range(resamples))
+    return means[math.ceil(resamples * 0.025) - 1], means[math.ceil(resamples * 0.975) - 1]
 
 
 def _stat(differences: list[float]) -> PairedStat:
@@ -85,12 +86,12 @@ def _slice_members(items: list[ItemResult]) -> dict[str, list[ItemResult]]:
     return members
 
 
-def paired_report(report: EvalReport, baseline: Baseline, noise: NoiseConfig) -> PairedReport | None:
+def paired_report(
+    report: EvalReport, baseline: Baseline, noise: NoiseConfig, population: GatePopulationConfig | None = None
+) -> PairedReport | None:
     if baseline.items is None:
         return None
-    gated_items = [item for item in report.items if item.split == report.golden_filter.gate_split]
-    if report.gate_population == "production":
-        gated_items = [item for item in gated_items if item.provenance == "production"]
+    gated_items = report_gate_items(report.items, report.golden_filter.gate_split, report.gate_population, population)
     slices: dict[str, dict[str, PairedStat]] = {}
     for slice_name, members in sorted(_slice_members(gated_items).items()):
         if not is_gated_slice(slice_name, noise):

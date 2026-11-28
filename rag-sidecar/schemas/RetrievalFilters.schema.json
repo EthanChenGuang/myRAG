@@ -8,6 +8,11 @@
           "title": "From",
           "type": "string"
         },
+        "include_undated": {
+          "default": false,
+          "title": "Include Undated",
+          "type": "boolean"
+        },
         "to": {
           "format": "date",
           "title": "To",
@@ -54,10 +59,90 @@
       ],
       "title": "InvoiceFilter",
       "type": "object"
+    },
+    "ScopeFilter": {
+      "additionalProperties": false,
+      "description": "DATA-08 scope filter (D-39): OR within a dimension, AND across dimensions; only the three fixed dimensions.",
+      "properties": {
+        "department": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Department",
+          "type": "array"
+        },
+        "legal_entity": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Legal Entity",
+          "type": "array"
+        },
+        "region": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Region",
+          "type": "array"
+        }
+      },
+      "title": "ScopeFilter",
+      "type": "object"
+    },
+    "VersionRange": {
+      "additionalProperties": false,
+      "description": "D-12: a version period; either bound may be left open, not both.",
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "title": "VersionRange",
+      "type": "object"
     }
   },
   "additionalProperties": false,
   "properties": {
+    "attributes": {
+      "maxProperties": 30,
+      "minProperties": 1,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]{0,39}$": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "title": "Attributes",
+      "type": "object"
+    },
     "current_only": {
       "const": true,
       "default": true,
@@ -114,6 +199,10 @@
       "default": null,
       "title": "Document Ids"
     },
+    "include_untagged": {
+      "title": "Include Untagged",
+      "type": "boolean"
+    },
     "invoice": {
       "anyOf": [
         {
@@ -145,6 +234,9 @@
       "default": null,
       "title": "Languages"
     },
+    "scopes": {
+      "$ref": "#/$defs/ScopeFilter"
+    },
     "sources": {
       "anyOf": [
         {
@@ -159,6 +251,21 @@
       ],
       "default": null,
       "title": "Sources"
+    },
+    "versions": {
+      "anyOf": [
+        {
+          "enum": [
+            "current",
+            "all"
+          ],
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/VersionRange"
+        }
+      ],
+      "title": "Versions"
     }
   },
   "title": "RetrievalFilters",

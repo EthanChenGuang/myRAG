@@ -155,7 +155,7 @@ describe('expand_parents on the two-tenant fixture', () => {
     });
     const rpc = await anon.rpc('rag_fetch_parents', { p_tenant_key: KEY_A, p_parent_ids: [PARENT_A] });
     assert.ok(rpc.error, 'anon must be refused');
-    assert.ok(!rpc.data || (rpc.data as unknown[]).length === 0);
+    assert.equal(rpc.data, null);
   });
 
   test('a refused request makes no parent call and records the stage with zero candidates', async () => {

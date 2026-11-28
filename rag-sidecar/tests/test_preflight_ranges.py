@@ -92,6 +92,31 @@ class TestLiftBetweenRuns:
         assert len(ranges) == 3
 
 
+class TestEdgeRuns:
+    def test_single_trailing_fast_page_stays_fast(self, cfg: ParseRoutingConfig):
+        pages = (
+            [_tp(i) for i in range(1, 7)]
+            + [_tp(7, "structured_full"), _tp(8, "structured_full"), _tp(9, "structured_ocr")]
+            + [_tp(10)]
+        )
+        ranges = build_ranges(pages, cfg)
+        assert [(r.start, r.end, r.preset) for r in ranges] == [
+            (1, 6, "fast"),
+            (7, 8, "structured_full"),
+            (9, 9, "structured_ocr"),
+            (10, 10, "fast"),
+        ]
+
+    def test_single_leading_fast_page_stays_fast(self, cfg: ParseRoutingConfig):
+        pages = [_tp(1)] + [_tp(2, "structured_full"), _tp(3, "structured_full")] + [_tp(i) for i in range(4, 11)]
+        ranges = build_ranges(pages, cfg)
+        assert [(r.start, r.end, r.preset) for r in ranges] == [
+            (1, 1, "fast"),
+            (2, 3, "structured_full"),
+            (4, 10, "fast"),
+        ]
+
+
 class TestTableContinuation:
     def test_pull_neighbor(self, cfg: ParseRoutingConfig):
         pages = [

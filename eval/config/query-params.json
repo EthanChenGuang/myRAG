@@ -1,0 +1,21 @@
+{
+  "config_hash": "fbdfcf0b6bb7e6318960bc1a6b8fad008ed5afcfe0dd24789b1b99576a8046fe",
+  "group_deadline_ms": 900,
+  "history_turn_chars": 1000,
+  "history_turns": 6,
+  "max_llm_variants": 2,
+  "max_searches": 8,
+  "max_sub_questions": 4,
+  "max_translations": 2,
+  "provenance": {
+    "source": "defaults"
+  },
+  "query_budget_ms": {
+    "chat": 1200,
+    "embed": 1200,
+    "voice": 300
+  },
+  "schema_version": 1,
+  "variant_max_chars": 500,
+  "variant_max_ratio": 4.0
+}

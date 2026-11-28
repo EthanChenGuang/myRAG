@@ -1,0 +1,288 @@
+{
+  "version": 1,
+  "description": "Shared identifier normalization and near-miss vectors (plans 04.2-34 and 04.2-12). Synthetic identifiers only.",
+  "normalization": "NFKC, then lower case, then remove whitespace and - _ . /",
+  "distance": "restricted Damerau-Levenshtein (optimal string alignment) over code points of the normalized forms",
+  "near_miss": "false when the normalized forms are equal or the asked form is empty; otherwise distance <= 1 when the asked form has at most 6 code points, distance <= 2 above",
+  "cases": [
+    {
+      "id": "width-fold",
+      "asked": "ＱＸ－４４７１",
+      "other": "QX-4471",
+      "asked_norm": "qx4471",
+      "other_norm": "qx4471",
+      "distance": 0,
+      "near_miss": false
+    },
+    {
+      "id": "case-fold",
+      "asked": "qx-4471",
+      "other": "QX-4471",
+      "asked_norm": "qx4471",
+      "other_norm": "qx4471",
+      "distance": 0,
+      "near_miss": false
+    },
+    {
+      "id": "hyphen",
+      "asked": "QX-4471",
+      "other": "QX4471",
+      "asked_norm": "qx4471",
+      "other_norm": "qx4471",
+      "distance": 0,
+      "near_miss": false
+    },
+    {
+      "id": "underscore",
+      "asked": "QX_4471",
+      "other": "qx4471",
+      "asked_norm": "qx4471",
+      "other_norm": "qx4471",
+      "distance": 0,
+      "near_miss": false
+    },
+    {
+      "id": "dot",
+      "asked": "QX.4471",
+      "other": "QX4471",
+      "asked_norm": "qx4471",
+      "other_norm": "qx4471",
+      "distance": 0,
+      "near_miss": false
+    },
+    {
+      "id": "slash-vs-space",
+      "asked": "QX/4471",
+      "other": "QX 4471",
+      "asked_norm": "qx4471",
+      "other_norm": "qx4471",
+      "distance": 0,
+      "near_miss": false
+    },
+    {
+      "id": "whitespace-runs",
+      "asked": "QX  44 71",
+      "other": "qx4471",
+      "asked_norm": "qx4471",
+      "other_norm": "qx4471",
+      "distance": 0,
+      "near_miss": false
+    },
+    {
+      "id": "ideographic-space",
+      "asked": "QX　4471",
+      "other": "QX4471",
+      "asked_norm": "qx4471",
+      "other_norm": "qx4471",
+      "distance": 0,
+      "near_miss": false
+    },
+    {
+      "id": "mixed-separators",
+      "asked": "q.x_44-7/1",
+      "other": "QX4471",
+      "asked_norm": "qx4471",
+      "other_norm": "qx4471",
+      "distance": 0,
+      "near_miss": false
+    },
+    {
+      "id": "short-substitution",
+      "asked": "QX4471",
+      "other": "QX4472",
+      "asked_norm": "qx4471",
+      "other_norm": "qx4472",
+      "distance": 1,
+      "near_miss": true
+    },
+    {
+      "id": "short-insertion",
+      "asked": "QX447",
+      "other": "QX4471",
+      "asked_norm": "qx447",
+      "other_norm": "qx4471",
+      "distance": 1,
+      "near_miss": true
+    },
+    {
+      "id": "short-deletion",
+      "asked": "QX4471",
+      "other": "QX471",
+      "asked_norm": "qx4471",
+      "other_norm": "qx471",
+      "distance": 1,
+      "near_miss": true
+    },
+    {
+      "id": "short-transposition",
+      "asked": "QX4471",
+      "other": "QX4417",
+      "asked_norm": "qx4471",
+      "other_norm": "qx4417",
+      "distance": 1,
+      "near_miss": true
+    },
+    {
+      "id": "short-distance-two",
+      "asked": "QX4471",
+      "other": "QX4482",
+      "asked_norm": "qx4471",
+      "other_norm": "qx4482",
+      "distance": 2,
+      "near_miss": false
+    },
+    {
+      "id": "short-asked-long-other",
+      "asked": "QX447",
+      "other": "QX44710",
+      "asked_norm": "qx447",
+      "other_norm": "qx44710",
+      "distance": 2,
+      "near_miss": false
+    },
+    {
+      "id": "short-unrelated",
+      "asked": "QX4471",
+      "other": "LM9902",
+      "asked_norm": "qx4471",
+      "other_norm": "lm9902",
+      "distance": 6,
+      "near_miss": false
+    },
+    {
+      "id": "long-substitution",
+      "asked": "ZR7B-30915",
+      "other": "ZR7B-30916",
+      "asked_norm": "zr7b30915",
+      "other_norm": "zr7b30916",
+      "distance": 1,
+      "near_miss": true
+    },
+    {
+      "id": "long-deletion",
+      "asked": "ZR7B-30915",
+      "other": "ZR7B-3091",
+      "asked_norm": "zr7b30915",
+      "other_norm": "zr7b3091",
+      "distance": 1,
+      "near_miss": true
+    },
+    {
+      "id": "long-transposition",
+      "asked": "ZR7B-30915",
+      "other": "ZR7B-39015",
+      "asked_norm": "zr7b30915",
+      "other_norm": "zr7b39015",
+      "distance": 1,
+      "near_miss": true
+    },
+    {
+      "id": "long-distance-two",
+      "asked": "ZR7B-30915",
+      "other": "ZR7B-30926",
+      "asked_norm": "zr7b30915",
+      "other_norm": "zr7b30926",
+      "distance": 2,
+      "near_miss": true
+    },
+    {
+      "id": "long-distance-three",
+      "asked": "ZR7B-30915",
+      "other": "ZR7B-30826",
+      "asked_norm": "zr7b30915",
+      "other_norm": "zr7b30826",
+      "distance": 3,
+      "near_miss": false
+    },
+    {
+      "id": "boundary-seven-transposition",
+      "asked": "AB12345",
+      "other": "AB12354",
+      "asked_norm": "ab12345",
+      "other_norm": "ab12354",
+      "distance": 1,
+      "near_miss": true
+    },
+    {
+      "id": "boundary-seven-distance-two",
+      "asked": "AB12345",
+      "other": "AB12399",
+      "asked_norm": "ab12345",
+      "other_norm": "ab12399",
+      "distance": 2,
+      "near_miss": true
+    },
+    {
+      "id": "boundary-six-distance-two",
+      "asked": "AB1234",
+      "other": "AB1299",
+      "asked_norm": "ab1234",
+      "other_norm": "ab1299",
+      "distance": 2,
+      "near_miss": false
+    },
+    {
+      "id": "no-digit-separators",
+      "asked": "Kelvoran-Tusk",
+      "other": "kelvorantusk",
+      "asked_norm": "kelvorantusk",
+      "other_norm": "kelvorantusk",
+      "distance": 0,
+      "near_miss": false
+    },
+    {
+      "id": "no-digit-near-miss",
+      "asked": "Kelvoran-Tusk",
+      "other": "kelvoran-task",
+      "asked_norm": "kelvorantusk",
+      "other_norm": "kelvorantask",
+      "distance": 1,
+      "near_miss": true
+    },
+    {
+      "id": "written-with-space",
+      "asked": "MV 3302 K",
+      "other": "mv-3302-k",
+      "asked_norm": "mv3302k",
+      "other_norm": "mv3302k",
+      "distance": 0,
+      "near_miss": false
+    },
+    {
+      "id": "written-with-space-near-miss",
+      "asked": "MV 3302 K",
+      "other": "MV 3302 X",
+      "asked_norm": "mv3302k",
+      "other_norm": "mv3302x",
+      "distance": 1,
+      "near_miss": true
+    },
+    {
+      "id": "width-case-transposition",
+      "asked": "ｑｘ－４４１７",
+      "other": "QX4471",
+      "asked_norm": "qx4417",
+      "other_norm": "qx4471",
+      "distance": 1,
+      "near_miss": true
+    },
+    {
+      "id": "restricted-transposition",
+      "asked": "CA1",
+      "other": "ABC1",
+      "asked_norm": "ca1",
+      "other_norm": "abc1",
+      "distance": 3,
+      "near_miss": false
+    },
+    {
+      "id": "separators-only",
+      "asked": "-/_.",
+      "other": "QX4471",
+      "asked_norm": "",
+      "other_norm": "qx4471",
+      "distance": 6,
+      "near_miss": false
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+import { UploadApprovalSchema } from '@/lib/rag-eval/contracts.generated';
+import { validHiddenTextReport } from '../security/hidden-text';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { isTerminal } from './callbacks/common';
 import { loadIngestConfig } from './config';
@@ -10,8 +12,11 @@ import { createIngestTrace, finishIngestTrace } from './trace';
 import {
   DEFAULT_INGEST_DEADLINE_MS,
   INGEST_SOURCES,
+  type EmbedProgress,
   emptyIngestState,
   type DocTypeOrigin,
+  type ChunkPrepSnapshot,
+  type HiddenTextState,
   type IngestResult,
   type IngestSource,
   type IngestState,
@@ -35,6 +40,11 @@ export interface ResumeIngestOptions {
   signal?: AbortSignal;
   /** Request budget for the resumed run. Defaults to DEFAULT_INGEST_DEADLINE_MS. */
   deadlineMs?: number;
+  /**
+   * Single-tenant non-administrator callers: the session user, who must be the uploader the version recorded. Any other
+   * version (another uploader, or none recorded) reads exactly like an unknown id and nothing runs.
+   */
+  requireUploader?: string;
 }
 
 const LOOKUP_TIMEOUT_MS = 10_000;
@@ -208,7 +218,65 @@ function typeChangeOf(value: unknown): TypeChangeState | null {
     parser && REUSED_PARSERS.some((name) => name === parser.parser) && typeof parser.version === 'string' && parser.version !== ''
       ? { parser: parser.parser as (typeof REUSED_PARSERS)[number], version: parser.version }
       : null;
-  return { reuseParseOfVersion: version, reusedParser: reused };
+  return { reuseParseOfVersion: version, reusedParser: reused, ...(slice.sanitizedParse === true ? { sanitizedParse: true } : {}) };
+}
+
+/** The hidden-text slice of a saved state; a report that does not validate is dropped, so a retried scan asks the sidecar again. */
+function hiddenTextOf(value: unknown): HiddenTextState | null {
+  const slice = objectOf<Record<string, unknown>>(value);
+  if (!slice || typeof slice.fileSha256 !== 'string') return null;
+  const report = slice.report === null ? null : validHiddenTextReport(slice.report);
+  if (slice.report !== null && report === null) return null;
+  const removedSpans = Array.isArray(slice.removedSpans) ? slice.removedSpans.filter((span): span is string => typeof span === 'string') : [];
+  const unlocated = typeof slice.unlocated === 'number' && Number.isInteger(slice.unlocated) && slice.unlocated >= 0 ? slice.unlocated : 0;
+  return { fileSha256: slice.fileSha256, report, removedSpans, unlocated, sanitized: slice.sanitized === true };
+}
+
+const BOILERPLATE_MODES = ['detect', 'rules', 'both'] as const;
+const isPositiveInt = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 1;
+const isStringList = (value: unknown): value is string[] => Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+
+/** The chunk-preparation snapshot of a saved state (D-09); a slice that does not have the shape is dropped, so the stage prepares again. */
+function chunkPrepOf(value: unknown): ChunkPrepSnapshot | null {
+  const slice = objectOf<Record<string, unknown>>(value);
+  if (!slice || typeof slice.fingerprint !== 'string' || !isStringList(slice.warnings) || typeof slice.truncated !== 'boolean') return null;
+  const snapshot: ChunkPrepSnapshot = { fingerprint: slice.fingerprint, warnings: [...slice.warnings], truncated: slice.truncated };
+  if (slice.boilerplate !== undefined) {
+    const part = objectOf<Record<string, unknown>>(slice.boilerplate);
+    if (!part) return null;
+    const mode = BOILERPLATE_MODES.find((entry) => entry === part.mode);
+    if (!mode || !isPositiveInt(part.cleanerVersion) || !isPositiveInt(part.rulesVersion) || !isStringList(part.removedLineKeys)) return null;
+    if (!Array.isArray(part.ruleIds)) return null;
+    const ruleIds: Array<{ id: string; version: number }> = [];
+    for (const entry of part.ruleIds) {
+      const id = objectOf<Record<string, unknown>>(entry);
+      if (!id || typeof id.id !== 'string' || !isPositiveInt(id.version)) return null;
+      ruleIds.push({ id: id.id, version: id.version });
+    }
+    snapshot.boilerplate = { mode, cleanerVersion: part.cleanerVersion, rulesVersion: part.rulesVersion, ruleIds, removedLineKeys: [...part.removedLineKeys] };
+  }
+  if (slice.sectionRules !== undefined) {
+    const part = objectOf<Record<string, unknown>>(slice.sectionRules);
+    if (!part) return null;
+    snapshot.sectionRules = part as unknown as NonNullable<ChunkPrepSnapshot['sectionRules']>;
+  }
+  return snapshot;
+}
+
+const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
+
+function embedProgressOf(value: unknown): EmbedProgress | null {
+  const slice = objectOf<Record<string, unknown>>(value);
+  if (!slice || !isCount(slice.batchesDone) || !isCount(slice.written) || !isCount(slice.total)) return null;
+  if (!Array.isArray(slice.targets) || !slice.targets.every((id) => typeof id === 'string')) return null;
+  if (!Array.isArray(slice.gaps)) return null;
+  const gaps: EmbedProgress['gaps'] = [];
+  for (const gap of slice.gaps) {
+    const entry = objectOf<Record<string, unknown>>(gap);
+    if (!entry || typeof entry.profileId !== 'string' || !isCount(entry.chunkIndex)) return null;
+    gaps.push({ profileId: entry.profileId, chunkIndex: entry.chunkIndex });
+  }
+  return { batchesDone: slice.batchesDone, written: slice.written, total: slice.total, targets: slice.targets as string[], gaps };
 }
 
 /** A persisted state record (a document row's processing_state or a ledger row's stage_state), with every slice checked for shape; anything unreadable falls back to its empty value. */
@@ -227,6 +295,22 @@ export function ingestStateFromRecord(raw: Record<string, unknown>): IngestState
   if (typeChange) state.typeChange = typeChange;
   if (Array.isArray(raw.embeddingTargets)) state.embeddingTargets = raw.embeddingTargets.filter((id): id is string => typeof id === 'string');
   if (Array.isArray(raw.embeddingGaps)) state.embeddingGaps = raw.embeddingGaps as IngestState['embeddingGaps'];
+  if (raw.approval !== undefined && raw.approval !== null) {
+    const approval = UploadApprovalSchema.safeParse(raw.approval);
+    // A stored decision that does not validate is kept as "approval required": a resumed run can only hold, never skip the gate.
+    state.approval = approval.success
+      ? approval.data
+      : { mode: 'all', required: true, reason: 'unknown_uploader', uploader_id: null, decided_at: new Date(0).toISOString() };
+  }
+  const hiddenText = hiddenTextOf(raw.hiddenText);
+  if (hiddenText) state.hiddenText = hiddenText;
+  const chunkPrep = chunkPrepOf(raw.chunkPrep);
+  if (chunkPrep) state.chunkPrep = chunkPrep;
+  if (typeof raw.uploaderId === 'string' && UUID.test(raw.uploaderId)) state.uploaderId = raw.uploaderId.toLowerCase();
+  const embedProgress = embedProgressOf(raw.embedProgress);
+  if (embedProgress) state.embedProgress = embedProgress;
+  const hold = objectOf<{ batchId?: unknown }>(raw.publishHold);
+  if (hold && typeof hold.batchId === 'string' && hold.batchId !== '') state.publishHold = { batchId: hold.batchId };
   return state;
 }
 
@@ -235,7 +319,7 @@ function stateOf(row: IngestDocumentRow): IngestState {
 }
 
 function settledResult(row: IngestDocumentRow, state: IngestState, documentId: string): IngestResult | null {
-  if (row.status === 'ready' || row.status === 'quarantined') {
+  if (row.status === 'ready' || row.status === 'quarantined' || row.status === 'pending_review') {
     return {
       status: row.status,
       documentId,
@@ -320,6 +404,8 @@ export async function resumeIngest(scope: TenantScope, documentId: string, optio
     return failed('invalid_scope');
   }
   if (!UUID.test(documentId)) return failed('document_not_found');
+  const blocked = loadIngestConfig(getIngestDeps().ingestEnv()).pipelineBlocked;
+  if (blocked) return failed(blocked);
   const signal = options.signal ?? AbortSignal.timeout(DEFAULT_INGEST_DEADLINE_MS);
   const writer = writerFor(scope, signal);
   if (!writer) {
@@ -340,6 +426,9 @@ export async function resumeIngest(scope: TenantScope, documentId: string, optio
   if (!row) return failed('document_not_found');
 
   const state = stateOf(row);
+  if (options.requireUploader !== undefined && (state.uploaderId === undefined || state.uploaderId !== options.requireUploader.toLowerCase())) {
+    return failed('document_not_found');
+  }
   const settled = settledResult(row, state, documentId);
   if (settled) return settled;
 

@@ -90,7 +90,7 @@ describe('hybrid_search_chunks two-tenant isolation', () => {
         const got = await hybridIds(db, scope.tenant, leg);
         assert.ok(got.every((id) => allowed.has(id)), `${scope.label} ${leg}`);
         assert.ok(got.includes(scope.own));
-        const foreign = scopes.filter((s) => s.tenant !== scope.tenant).flatMap((s) => [s.own]);
+        const foreign: string[] = scopes.filter((s) => s.tenant !== scope.tenant).map((s) => s.own);
         assert.ok(got.every((id) => !foreign.includes(id)));
       });
     }

@@ -1,0 +1,44 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "document_prompt": {
+      "maxLength": 1024,
+      "title": "Document Prompt",
+      "type": "string"
+    },
+    "query_prompt": {
+      "maxLength": 1024,
+      "title": "Query Prompt",
+      "type": "string"
+    },
+    "texts": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 3,
+      "minItems": 3,
+      "title": "Texts",
+      "type": "array"
+    },
+    "vectors": {
+      "items": {
+        "items": {
+          "type": "number"
+        },
+        "type": "array"
+      },
+      "maxItems": 3,
+      "minItems": 3,
+      "title": "Vectors",
+      "type": "array"
+    }
+  },
+  "required": [
+    "texts",
+    "query_prompt",
+    "document_prompt",
+    "vectors"
+  ],
+  "title": "ProbeSet",
+  "type": "object"
+}

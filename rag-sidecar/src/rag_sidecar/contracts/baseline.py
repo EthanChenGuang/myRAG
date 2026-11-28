@@ -3,6 +3,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from rag_sidecar.contracts.eval_run import GoldenFilter, RagRunOptions
+from rag_sidecar.contracts.omit import omit_none_schema
+from rag_sidecar.contracts.quality_gates import AbsoluteGateResult
 
 
 def _default_metric_directions() -> dict[str, Literal["higher", "lower"]]:
@@ -13,6 +15,10 @@ def _default_metric_directions() -> dict[str, Literal["higher", "lower"]]:
         "correct_refusal_rate": "higher",
         "false_refusal_rate": "lower",
     }
+
+
+def _omit_none(value: object) -> bool:
+    return value is None
 
 
 class _Contract(BaseModel):
@@ -57,7 +63,7 @@ class Baseline(_Contract):
     corpus_sha256: str | None = None
     golden_sha256: str
     golden_filter: GoldenFilter
-    gate_population: Literal["all", "production"] = "all"
+    gate_population: Literal["all", "production", "real"] = "all"
     embedder_id: str | None = None
     embedder_version: int | None = None
     embedder_source_sha256: str | None = None
@@ -65,6 +71,10 @@ class Baseline(_Contract):
     runs: list[BaselineRun] = Field(min_length=3)
     slices: dict[str, dict[str, BaselineMetricStat]]
     items: dict[str, dict[str, list[float | None]]] | None = None
+    golden_set_version: int | None = Field(default=None, ge=1, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    golden_manifest_sha256: str | None = Field(
+        default=None, pattern=r"^[a-f0-9]{64}$", exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
 
 
 class NoiseConfig(_Contract):
@@ -84,6 +94,8 @@ class GateOffender(_Contract):
     threshold: float
     observed: float
     direction: Literal["higher", "lower"]
+    kind: Literal["noise_band", "absolute_zero"] = "noise_band"
+    reason: str | None = None
 
 
 class GateResult(_Contract):
@@ -92,3 +104,4 @@ class GateResult(_Contract):
     skipped: list[str]
     mismatches: list[str]
     paired: PairedReport | None = None
+    absolute: AbsoluteGateResult | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)

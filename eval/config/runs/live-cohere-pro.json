@@ -1,0 +1,15 @@
+{
+  "name": "live-cohere-pro",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_LEXICAL_SEARCH": "true",
+    "RAG_RERANKER": "cohere",
+    "RAG_REFUSAL_THRESHOLD": "false",
+    "RAG_REFUSAL_FLOOR": "legacy_rule",
+    "COHERE_API_KEY": "proxy-injected",
+    "COHERE_BASE_URL": "https://api.cohere.com"
+  },
+  "overrides": {
+    "rerank_model": "rerank-v5.0-pro"
+  }
+}

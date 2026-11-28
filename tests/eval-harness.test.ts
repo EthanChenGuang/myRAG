@@ -38,7 +38,11 @@ fs.writeFileSync(
   fs
     .readFileSync(FULL_GOLDEN_PATH, 'utf8')
     .split('\n')
-    .filter((line) => line.includes(`"id": "${TRACER_ITEM_ID}"`))
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return false;
+      return (JSON.parse(trimmed) as { id: string }).id === TRACER_ITEM_ID;
+    })
     .map((line) => `${line}\n`)
     .join(''),
 );
@@ -266,6 +270,31 @@ describe('live runs against a multi-tenant server', () => {
       warn.mockRestore();
     }
     expect((received.at(-1)?.options as Record<string, unknown>).user_id).toBe(USER_ID);
+  });
+
+  test('binding overrides are sent unchanged and recorded in the manifest request options (D-23)', async () => {
+    const { runEval } = await import('../eval/harness/run-eval.mts');
+    const base = { goldenPath: GOLDEN_PATH, corpusDir: CORPUS_DIR, deploymentMode: 'single-tenant' as const, tier: 'live' as const, baseUrl: url };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const bindings = { contract_legal: 'voyage-law-2-1024' };
+      const result = await runEval({
+        ...base,
+        outDir: makeOutDir(),
+        requestOptions: { user_id: USER_ID, embedding_bindings: bindings, domain_control_leg: 'contract_legal' },
+      });
+      expect(result.manifest.request_options.embedding_bindings).toEqual(bindings);
+      expect(result.manifest.request_options.domain_control_leg).toBe('contract_legal');
+      const sent = received.at(-1)?.options as Record<string, unknown>;
+      expect(sent.embedding_bindings).toEqual(bindings);
+      expect(sent.domain_control_leg).toBe('contract_legal');
+
+      const plain = await runEval({ ...base, outDir: makeOutDir(), requestOptions: { user_id: USER_ID } });
+      expect('embedding_bindings' in plain.manifest.request_options && plain.manifest.request_options.embedding_bindings !== null).toBe(false);
+      expect(plain.manifest.run_config_hash).not.toBe(result.manifest.run_config_hash);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

@@ -1,3 +1,4 @@
+<!-- fixture-meta {"doc_type":"general"} -->
 ## Piani annuali
 
 Valle Verde Strumenti accetta richieste di rimborso per i piani con fatturazione annuale. La richiesta va inviata all'ufficio amministrazione insieme al numero d'ordine. Il rimborso viene accreditato sul metodo di pagamento originale entro 12 giorni lavorativi. Per i piani annuali il termine per chiedere il rimborso è di 60 giorni dalla data di acquisto.

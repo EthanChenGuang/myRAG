@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "ClaimVerdict": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "timeout",
+                "too_many",
+                "unsupported_language",
+                "judge_not_configured",
+                "judge_same_family",
+                "judge_uncalibrated",
+                "error"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score"
+        },
+        "scorer": {
+          "enum": [
+            "hhem_2_3_vectara",
+            "hhem_2_1_open",
+            "llm_judge",
+            "none"
+          ],
+          "title": "Scorer",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "scored",
+            "not_checked"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "status",
+        "scorer"
+      ],
+      "title": "ClaimVerdict",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "claims": {
+      "items": {
+        "$ref": "#/$defs/ClaimVerdict"
+      },
+      "maxItems": 40,
+      "title": "Claims",
+      "type": "array"
+    },
+    "latency_ms": {
+      "minimum": 0,
+      "title": "Latency Ms",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "claims",
+    "latency_ms"
+  ],
+  "title": "ClaimCheckResult",
+  "type": "object"
+}

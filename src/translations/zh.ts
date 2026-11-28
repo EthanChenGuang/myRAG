@@ -202,6 +202,7 @@ export const zh = {
   // Input and actions
   messagePlaceholder: "询问任何问题",
   sendPrompt: "发送提示",
+  thinkingStatus: "思考中",
   stopGenerating: "停止生成",
   useVoice: "语音输入",
   stopRecording: "停止录音",

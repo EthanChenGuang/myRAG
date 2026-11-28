@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from rag_sidecar.contracts.languages import Language
 
 from rag_eval.paths import REPO_ROOT
 
@@ -22,7 +23,7 @@ class DraftConfig(_Config):
     max_tokens: int = Field(ge=1)
     min_items: int = Field(ge=1)
     max_items: int = Field(ge=1)
-    languages: list[Literal["zh", "en", "it"]] = Field(min_length=1)
+    languages: list[Language] = Field(min_length=1)
     claude_share: float = Field(ge=0.0, le=1.0)
     batch_chars: int = Field(ge=1000)
     ragas_styles: list[Literal["PERFECT_GRAMMAR", "POOR_GRAMMAR", "WEB_SEARCH_LIKE", "MISSPELLED"]] = Field(min_length=1)

@@ -1,0 +1,93 @@
+{
+  "additionalProperties": false,
+  "description": "D-47: the uploader as an admin route returns it; email only for deployment admins.",
+  "properties": {
+    "display_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Display Name"
+    },
+    "email": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Email"
+    },
+    "event_count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Event Count",
+      "type": "integer"
+    },
+    "held": {
+      "default": false,
+      "title": "Held",
+      "type": "boolean"
+    },
+    "held_since": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Held Since"
+    },
+    "last_event_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Event At"
+    },
+    "tenant_key": {
+      "minLength": 1,
+      "title": "Tenant Key",
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "title": "User Id",
+      "type": "string"
+    },
+    "workspace_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Name"
+    }
+  },
+  "required": [
+    "user_id",
+    "tenant_key"
+  ],
+  "title": "SecurityUploaderView",
+  "type": "object"
+}

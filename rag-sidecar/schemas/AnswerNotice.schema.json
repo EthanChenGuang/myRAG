@@ -1,0 +1,27 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "title": "Kind",
+      "type": "string"
+    },
+    "language": {
+      "minLength": 1,
+      "title": "Language",
+      "type": "string"
+    },
+    "text": {
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "text",
+    "language"
+  ],
+  "title": "AnswerNotice",
+  "type": "object"
+}

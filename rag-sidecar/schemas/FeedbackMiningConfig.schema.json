@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "ScoreThresholds": {
+      "additionalProperties": false,
+      "properties": {
+        "rerank": {
+          "title": "Rerank",
+          "type": "number"
+        },
+        "similarity": {
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Similarity",
+          "type": "number"
+        }
+      },
+      "required": [
+        "similarity",
+        "rerank"
+      ],
+      "title": "ScoreThresholds",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "D-13 thresholds per scorer kind; reported, never tuned automatically.",
+  "properties": {
+    "low_score_ceiling": {
+      "$ref": "#/$defs/ScoreThresholds"
+    },
+    "open_item_ttl_days": {
+      "default": 90,
+      "maximum": 365,
+      "minimum": 1,
+      "title": "Open Item Ttl Days",
+      "type": "integer"
+    },
+    "per_tenant_limit": {
+      "default": 50,
+      "maximum": 500,
+      "minimum": 1,
+      "title": "Per Tenant Limit",
+      "type": "integer"
+    },
+    "refused_high_score_floor": {
+      "$ref": "#/$defs/ScoreThresholds"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "window_days": {
+      "default": 7,
+      "maximum": 31,
+      "minimum": 1,
+      "title": "Window Days",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "low_score_ceiling",
+    "refused_high_score_floor"
+  ],
+  "title": "FeedbackMiningConfig",
+  "type": "object"
+}

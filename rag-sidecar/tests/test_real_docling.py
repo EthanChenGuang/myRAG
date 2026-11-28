@@ -215,3 +215,43 @@ def test_real_docling_ocr_reads_the_key_phrases_of_the_scans(conversions, spec_i
 def test_real_docling_keeps_the_injection_phrase_once(conversions, spec_id):
     phrase = ENTRIES[spec_id]["expected"]["injection"]["phrase"]
     assert _strict(conversions[spec_id].markdown).count(_strict(phrase)) == 1
+
+
+# scan_zh_it (03.2-25, D-18): real OCR on the character-exact zh/it parse fixture, with the registry OCR codes the app sends
+# for RAG_SUPPORTED_LANGUAGES=zh,it. CI only checks the recordings (eval/tests/test_parse_fixtures.py); this is the nightly check.
+# The encoding properties are hard assertions; the text similarity floor is provisional until the first measured nightly run.
+PARSE = REPO_ROOT / "eval" / "fixtures" / "parse"
+SCAN_ZH_IT_SIMILARITY_FLOOR = 0.9
+_COMBINING_AFTER_LETTER = re.compile(r"[A-Za-z][̀-ͯ]")
+_HALF_WIDTH_AFTER_HAN = re.compile(r"[一-鿿][.,;:]")
+
+
+def _blocks(markdown: str) -> str:
+    lines = [re.sub(r"^#+\s+", "", line.strip()) for line in markdown.splitlines()]
+    return "\n".join(line for line in lines if line) + "\n"
+
+
+def test_real_docling_reads_the_zh_it_scan_without_decomposed_accents_or_half_width_punctuation(tmp_path):
+    import difflib
+
+    expected = (PARSE / "expected" / "scan-zh-it.txt").read_text(encoding="utf-8")
+    profiles = ProcessingProfileSet.model_validate_json(PROFILES.read_text(encoding="utf-8"))
+    profile = next(item for item in profiles.profiles if item.doc_type == "scanned_image")
+    request = ParseJobRequest(
+        profile_id=profile.id,
+        profile_version=profile.version,
+        docling=profile.parser.docling,
+        ocr_languages=["zh", "it"],
+        max_tokens=profile.chunker.max_tokens,
+        repeat_table_header=profile.chunker.repeat_table_header,
+        input_format="pdf",
+    )
+    result = DoclingConverter().convert(PARSE / "pdf" / "scan-zh-it.pdf", request, tmp_path)
+    assert not _COMBINING_AFTER_LETTER.search(result.markdown), "an accented vowel came back as a base letter and a combining mark"
+    assert not _HALF_WIDTH_AFTER_HAN.search(result.markdown), "Chinese punctuation came back in half-width form"
+    actual = _blocks(unicodedata.normalize("NFC", result.markdown))
+    ratio = difflib.SequenceMatcher(None, re.sub(r"\s+", "", actual), re.sub(r"\s+", "", expected)).ratio()
+    if REPORT_PATH:
+        report = Path(REPORT_PATH).with_name("real-docling-scan-zh-it.json")
+        report.write_text(json.dumps({"exact": actual == expected, "similarity": ratio, "text": actual}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    assert ratio >= SCAN_ZH_IT_SIMILARITY_FLOOR, (ratio, actual)

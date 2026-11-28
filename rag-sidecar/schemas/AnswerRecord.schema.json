@@ -1,0 +1,893 @@
+{
+  "$defs": {
+    "AnswerChecks": {
+      "additionalProperties": false,
+      "description": "D-23: per-answer checks; `{}` validates so rows written before this column keep loading.",
+      "properties": {
+        "claims": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClaimsSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "finish_reason": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finish Reason"
+        },
+        "output_guard": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OutputGuardSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sentences": {
+          "items": {
+            "$ref": "#/$defs/AnswerSentence"
+          },
+          "title": "Sentences",
+          "type": "array"
+        },
+        "text_language": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text Language"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        },
+        "version_conflict": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionConflict"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "AnswerChecks",
+      "type": "object"
+    },
+    "AnswerFeedback": {
+      "additionalProperties": false,
+      "properties": {
+        "comment": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Comment"
+        },
+        "reasons": {
+          "items": {
+            "enum": [
+              "wrong",
+              "incomplete",
+              "not_from_documents",
+              "bad_citation"
+            ],
+            "type": "string"
+          },
+          "maxItems": 4,
+          "title": "Reasons",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "updatedAt": {
+          "minLength": 1,
+          "title": "Updatedat",
+          "type": "string"
+        },
+        "vote": {
+          "enum": [
+            "helpful",
+            "not_helpful"
+          ],
+          "title": "Vote",
+          "type": "string"
+        }
+      },
+      "required": [
+        "vote",
+        "updatedAt"
+      ],
+      "title": "AnswerFeedback",
+      "type": "object"
+    },
+    "AnswerGroundedness": {
+      "additionalProperties": false,
+      "properties": {
+        "checkedAt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checkedat"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "enum": [
+                "verified",
+                "possibly_unreliable",
+                "not_checked"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "latencyMs": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latencyms"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score"
+        },
+        "scorer": {
+          "anyOf": [
+            {
+              "enum": [
+                "hhem_2_3_vectara",
+                "hhem_2_1_open",
+                "llm_judge",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scorer"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "scored",
+            "not_checked"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold"
+        },
+        "thresholdSource": {
+          "anyOf": [
+            {
+              "enum": [
+                "default",
+                "calibrated"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thresholdsource"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "AnswerGroundedness",
+      "type": "object"
+    },
+    "AnswerSentence": {
+      "additionalProperties": false,
+      "properties": {
+        "cited": {
+          "title": "Cited",
+          "type": "boolean"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "integer"
+        },
+        "factual": {
+          "title": "Factual",
+          "type": "boolean"
+        },
+        "index": {
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "sentence",
+            "list_item",
+            "table",
+            "heading",
+            "code",
+            "truncated"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "part": {
+          "minimum": 0,
+          "title": "Part",
+          "type": "integer"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "scorer": {
+          "anyOf": [
+            {
+              "enum": [
+                "hhem_2_3_vectara",
+                "hhem_2_1_open",
+                "llm_judge",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scorer"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        },
+        "support": {
+          "default": "not_checked",
+          "enum": [
+            "supported",
+            "unsupported",
+            "not_checked"
+          ],
+          "title": "Support",
+          "type": "string"
+        },
+        "text_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Text Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "part",
+        "start",
+        "end",
+        "kind",
+        "text_hash",
+        "factual",
+        "cited"
+      ],
+      "title": "AnswerSentence",
+      "type": "object"
+    },
+    "BlockedRange": {
+      "additionalProperties": false,
+      "description": "Offsets are UTF-16 code units into text part `part`, valid only while its hash matches.",
+      "properties": {
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "integer"
+        },
+        "part": {
+          "minimum": 0,
+          "title": "Part",
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        },
+        "text_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Text Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "part",
+        "start",
+        "end",
+        "text_hash"
+      ],
+      "title": "BlockedRange",
+      "type": "object"
+    },
+    "CitationAlsoIn": {
+      "additionalProperties": false,
+      "description": "D-21: a duplicate of the cited chunk in another document, collapsed under this citation.",
+      "properties": {
+        "chunkId": {
+          "minLength": 1,
+          "title": "Chunkid",
+          "type": "string"
+        },
+        "documentId": {
+          "minLength": 1,
+          "title": "Documentid",
+          "type": "string"
+        },
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        }
+      },
+      "required": [
+        "documentId",
+        "filename",
+        "chunkId"
+      ],
+      "title": "CitationAlsoIn",
+      "type": "object"
+    },
+    "CitationRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "alias": {
+          "pattern": "^S[1-9][0-9]*$",
+          "title": "Alias",
+          "type": "string"
+        },
+        "alsoIn": {
+          "items": {
+            "$ref": "#/$defs/CitationAlsoIn"
+          },
+          "title": "Alsoin",
+          "type": "array"
+        },
+        "chunkIds": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Chunkids",
+          "type": "array"
+        },
+        "documentId": {
+          "minLength": 1,
+          "title": "Documentid",
+          "type": "string"
+        },
+        "documentName": {
+          "title": "Documentname",
+          "type": "string"
+        },
+        "documentVersion": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Documentversion"
+        },
+        "effectiveFrom": {
+          "format": "date",
+          "title": "Effectivefrom",
+          "type": "string"
+        },
+        "effectiveTo": {
+          "format": "date",
+          "title": "Effectiveto",
+          "type": "string"
+        },
+        "isCurrent": {
+          "title": "Iscurrent",
+          "type": "boolean"
+        },
+        "n": {
+          "minimum": 1,
+          "title": "N",
+          "type": "integer"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "quote": {
+          "minLength": 1,
+          "title": "Quote",
+          "type": "string"
+        },
+        "quoteHash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Quotehash",
+          "type": "string"
+        },
+        "sectionPath": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sectionpath"
+        },
+        "strategy": {
+          "enum": [
+            "claude-citations",
+            "chunk-alias"
+          ],
+          "title": "Strategy",
+          "type": "string"
+        },
+        "versionLabel": {
+          "maxLength": 40,
+          "title": "Versionlabel",
+          "type": "string"
+        }
+      },
+      "required": [
+        "n",
+        "alias",
+        "chunkIds",
+        "documentId",
+        "documentName",
+        "quote",
+        "quoteHash",
+        "strategy"
+      ],
+      "title": "CitationRecord",
+      "type": "object"
+    },
+    "ClaimsSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "judge_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Judge Version"
+        },
+        "not_checked": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Not Checked",
+          "type": "integer"
+        },
+        "reasons": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]{0,63}$": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "title": "Reasons",
+          "type": "object"
+        },
+        "scorer": {
+          "anyOf": [
+            {
+              "enum": [
+                "hhem_2_3_vectara",
+                "hhem_2_1_open",
+                "llm_judge",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scorer"
+        },
+        "total": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        },
+        "unsupported": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unsupported",
+          "type": "integer"
+        }
+      },
+      "title": "ClaimsSummary",
+      "type": "object"
+    },
+    "OutputGuardSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "blocked_ranges": {
+          "items": {
+            "$ref": "#/$defs/BlockedRange"
+          },
+          "title": "Blocked Ranges",
+          "type": "array"
+        },
+        "credential_blocked": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Credential Blocked",
+          "type": "integer"
+        },
+        "credential_warned": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Credential Warned",
+          "type": "integer"
+        },
+        "event_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Event Ids",
+          "type": "array"
+        },
+        "links_checked": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Links Checked",
+          "type": "integer"
+        },
+        "links_removed": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Links Removed",
+          "type": "integer"
+        },
+        "mode": {
+          "enum": [
+            "flag",
+            "enforce"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "rule_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Rule Ids",
+          "type": "array"
+        },
+        "rules_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Rules Version",
+          "type": "string"
+        },
+        "source_chunk_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Chunk Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "mode",
+        "rules_version"
+      ],
+      "title": "OutputGuardSummary",
+      "type": "object"
+    },
+    "VersionConflict": {
+      "additionalProperties": false,
+      "properties": {
+        "document_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 2,
+          "title": "Document Ids",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "group_rule": {
+          "enum": [
+            "supersession_link",
+            "supersession_candidate",
+            "title_match"
+          ],
+          "title": "Group Rule",
+          "type": "string"
+        },
+        "latest_document_id": {
+          "minLength": 1,
+          "title": "Latest Document Id",
+          "type": "string"
+        },
+        "mixed_versions": {
+          "default": false,
+          "title": "Mixed Versions",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "document_ids",
+        "latest_document_id",
+        "group_rule"
+      ],
+      "title": "VersionConflict",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "answerId": {
+      "format": "uuid",
+      "title": "Answerid",
+      "type": "string"
+    },
+    "answerLanguage": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Answerlanguage"
+    },
+    "chatId": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Chatid"
+    },
+    "checks": {
+      "$ref": "#/$defs/AnswerChecks"
+    },
+    "citationStrategy": {
+      "anyOf": [
+        {
+          "enum": [
+            "claude-citations",
+            "chunk-alias"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Citationstrategy"
+    },
+    "citations": {
+      "items": {
+        "$ref": "#/$defs/CitationRecord"
+      },
+      "title": "Citations",
+      "type": "array"
+    },
+    "createdAt": {
+      "minLength": 1,
+      "title": "Createdat",
+      "type": "string"
+    },
+    "documents": {
+      "additionalProperties": {
+        "enum": [
+          "current",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "title": "Documents",
+      "type": "object"
+    },
+    "feedback": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AnswerFeedback"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "feedbackEnabled": {
+      "default": false,
+      "title": "Feedbackenabled",
+      "type": "boolean"
+    },
+    "groundedness": {
+      "$ref": "#/$defs/AnswerGroundedness"
+    },
+    "invalidCitations": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Invalidcitations",
+      "type": "integer"
+    },
+    "modelId": {
+      "minLength": 1,
+      "title": "Modelid",
+      "type": "string"
+    },
+    "ragMode": {
+      "enum": [
+        "strict",
+        "balanced",
+        "flexible",
+        "bypass"
+      ],
+      "title": "Ragmode",
+      "type": "string"
+    },
+    "textsSource": {
+      "enum": [
+        "registry",
+        "legacy"
+      ],
+      "title": "Textssource",
+      "type": "string"
+    },
+    "traceId": {
+      "minLength": 1,
+      "title": "Traceid",
+      "type": "string"
+    },
+    "updatedAt": {
+      "minLength": 1,
+      "title": "Updatedat",
+      "type": "string"
+    }
+  },
+  "required": [
+    "answerId",
+    "traceId",
+    "modelId",
+    "ragMode",
+    "groundedness",
+    "createdAt",
+    "updatedAt"
+  ],
+  "title": "AnswerRecord",
+  "type": "object"
+}

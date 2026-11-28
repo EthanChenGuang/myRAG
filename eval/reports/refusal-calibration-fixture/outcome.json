@@ -1,0 +1,139 @@
+{
+  "comparison": {
+    "dev_correct_refusal_delta": 0.0,
+    "dev_correct_refusal_improved": false,
+    "dev_false_refusal_delta": -0.03488372093023256,
+    "dev_false_refusal_upper_95_at_or_below_target": false,
+    "dev_false_refusal_within_target_plus_noise": true
+  },
+  "dev": {
+    "v2_all_off": {
+      "answered_no_answer": [
+        "en-no-answer-001",
+        "en-no-answer-002",
+        "en-no-answer-005",
+        "en-no-answer-009",
+        "en-no-answer-010",
+        "it-no-answer-001",
+        "it-no-answer-002",
+        "it-no-answer-007",
+        "it-no-answer-008",
+        "it-no-answer-009",
+        "zh-no-answer-001",
+        "zh-no-answer-002",
+        "zh-no-answer-009",
+        "zh-no-answer-010"
+      ],
+      "correct_refusal": 0.3333333333333333,
+      "correct_refusal_n": 21,
+      "correct_refusal_upper_95": 0.5359359076092926,
+      "false_refusal": 0.046511627906976744,
+      "false_refusal_n": 86,
+      "false_refusal_upper_95": 0.10327809264274575,
+      "refused_answerable": [
+        "en-table-003",
+        "it-selective-filter-004",
+        "xl-zh-en-04",
+        "xl-zh-it-01"
+      ]
+    },
+    "v2_recommended": {
+      "answered_no_answer": [
+        "en-no-answer-001",
+        "en-no-answer-002",
+        "en-no-answer-005",
+        "en-no-answer-009",
+        "en-no-answer-010",
+        "it-no-answer-001",
+        "it-no-answer-002",
+        "it-no-answer-007",
+        "it-no-answer-008",
+        "it-no-answer-009",
+        "zh-no-answer-001",
+        "zh-no-answer-002",
+        "zh-no-answer-009",
+        "zh-no-answer-010"
+      ],
+      "correct_refusal": 0.3333333333333333,
+      "correct_refusal_n": 21,
+      "correct_refusal_upper_95": 0.5359359076092926,
+      "false_refusal": 0.011627906976744186,
+      "false_refusal_n": 86,
+      "false_refusal_upper_95": 0.05397496344755209,
+      "refused_answerable": [
+        "it-selective-filter-004"
+      ]
+    }
+  },
+  "fixture_floor": {
+    "context_threshold": 0.11585847749171707,
+    "fixture_mode": "prechunked",
+    "source": "fixture"
+  },
+  "noise_floor": 0.02,
+  "notes": [
+    "Dev false refusal with thresholds applied: 0.012 (95% upper 0.054); the point estimate is within target plus noise floor (0.07), but the upper bound is above the 0.05 target, so it is not shown to meet it.",
+    "Dev correct refusal: v2-recommended 0.333 versus v2-all-off 0.333. Both runs use the dev-fitted fixture floor; on the fixture the fake reranker scores track the fixture embedder, so the threshold cells refuse the same no-answer items the floor refuses and the gain shows up as fewer false refusals.",
+    "Every cross cell is insufficient_data on the fixture (translation off), so cross-lingual items fall back to the floor."
+  ],
+  "runs": {
+    "v2_all_off": {
+      "golden_sha256": "425aa830422844d8a4856775c8ec50f4be73f090ed7097b9d9dec2d85a12fa67",
+      "run_config": "eval/config/runs/v2-all-off.json",
+      "run_config_hash": "51d65679f17f4c6dec36a2dd632f2bfd2d531aefa5c424a9d03c333dd31db5b4"
+    },
+    "v2_recommended": {
+      "golden_sha256": "425aa830422844d8a4856775c8ec50f4be73f090ed7097b9d9dec2d85a12fa67",
+      "run_config": "eval/config/runs/v2-recommended.json",
+      "run_config_hash": "15b06c64707ec8ce198c626818bea4c5077fefa47b57a57b20b975b81eed3536"
+    }
+  },
+  "schema_version": 1,
+  "source": "fixture",
+  "target_false_refusal": 0.05,
+  "test": {
+    "v2_all_off": {
+      "answered_no_answer": [
+        "en-no-answer-006",
+        "it-no-answer-004",
+        "it-no-answer-005",
+        "it-no-answer-006",
+        "it-no-answer-010",
+        "zh-no-answer-005"
+      ],
+      "correct_refusal": 0.3333333333333333,
+      "correct_refusal_n": 9,
+      "correct_refusal_upper_95": 0.6550586340562969,
+      "false_refusal": 0.1,
+      "false_refusal_n": 30,
+      "false_refusal_upper_95": 0.23859785729325095,
+      "refused_answerable": [
+        "xl-en-zh-02",
+        "xl-zh-en-03",
+        "xl-zh-it-04"
+      ]
+    },
+    "v2_recommended": {
+      "answered_no_answer": [
+        "en-no-answer-006",
+        "it-no-answer-004",
+        "it-no-answer-005",
+        "it-no-answer-006",
+        "it-no-answer-010",
+        "zh-no-answer-003",
+        "zh-no-answer-005"
+      ],
+      "correct_refusal": 0.2222222222222222,
+      "correct_refusal_n": 9,
+      "correct_refusal_upper_95": 0.5496416495066102,
+      "false_refusal": 0.06666666666666667,
+      "false_refusal_n": 30,
+      "false_refusal_upper_95": 0.1953260436549261,
+      "refused_answerable": [
+        "xl-en-zh-02",
+        "xl-it-en-03"
+      ]
+    }
+  },
+  "xlg_03": "not comparable on fixture — deferred to live calibration (04-43)"
+}

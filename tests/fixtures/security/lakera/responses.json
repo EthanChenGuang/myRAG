@@ -1,0 +1,156 @@
+{
+  "_source": "Written from the documented Lakera Guard v2 /v2/guard response shape (docs.lakera.ai screen-content). Synthetic: placeholder ids only, no key, no real request.",
+  "flagged": {
+    "status": 200,
+    "body": {
+      "flagged": true,
+      "action": "enforce",
+      "breakdown": [
+        {
+          "project_id": "project-placeholder",
+          "policy_id": "policy-placeholder",
+          "detector_id": "detector-placeholder-prompt-attack",
+          "detector_type": "prompt_attack",
+          "detected": true,
+          "result": "l1_confident",
+          "message_id": 0
+        },
+        {
+          "project_id": "project-placeholder",
+          "policy_id": "policy-placeholder",
+          "detector_id": "detector-placeholder-pii-email",
+          "detector_type": "pii/email",
+          "detected": false,
+          "result": "no_level",
+          "message_id": 0
+        }
+      ],
+      "payload": [],
+      "metadata": { "request_uuid": "request-uuid-placeholder" }
+    }
+  },
+  "clean": {
+    "status": 200,
+    "body": {
+      "flagged": false,
+      "action": "enforce",
+      "breakdown": [
+        {
+          "project_id": "project-placeholder",
+          "policy_id": "policy-placeholder",
+          "detector_id": "detector-placeholder-prompt-attack",
+          "detector_type": "prompt_attack",
+          "detected": false,
+          "result": "l5_unlikely",
+          "message_id": 0
+        }
+      ],
+      "payload": [],
+      "metadata": { "request_uuid": "request-uuid-placeholder" }
+    }
+  },
+  "detect_mode": {
+    "status": 200,
+    "body": {
+      "flagged": false,
+      "action": "detect",
+      "breakdown": [
+        {
+          "project_id": "project-placeholder",
+          "policy_id": "policy-placeholder",
+          "detector_id": "detector-placeholder-prompt-attack",
+          "detector_type": "prompt_attack",
+          "detected": true,
+          "result": "l2_very_likely",
+          "message_id": 0
+        }
+      ],
+      "payload": [],
+      "metadata": { "request_uuid": "request-uuid-placeholder" }
+    }
+  },
+  "less_likely_detected": {
+    "status": 200,
+    "body": {
+      "flagged": true,
+      "action": "enforce",
+      "breakdown": [
+        {
+          "project_id": "project-placeholder",
+          "policy_id": "policy-placeholder",
+          "detector_id": "detector-placeholder-prompt-attack",
+          "detector_type": "prompt_attack",
+          "detected": true,
+          "result": "l4_less_likely",
+          "message_id": 0
+        }
+      ],
+      "payload": [],
+      "metadata": { "request_uuid": "request-uuid-placeholder" }
+    }
+  },
+  "flagged_by_other_detector": {
+    "status": 200,
+    "body": {
+      "flagged": true,
+      "action": "enforce",
+      "breakdown": [
+        {
+          "project_id": "project-placeholder",
+          "policy_id": "policy-placeholder",
+          "detector_id": "detector-placeholder-prompt-attack",
+          "detector_type": "prompt_attack",
+          "detected": false,
+          "result": "l5_unlikely",
+          "message_id": 0
+        },
+        {
+          "project_id": "project-placeholder",
+          "policy_id": "policy-placeholder",
+          "detector_id": "detector-placeholder-moderation",
+          "detector_type": "moderated_content/hate",
+          "detected": true,
+          "result": "l1_confident",
+          "message_id": 0
+        }
+      ],
+      "payload": [],
+      "metadata": { "request_uuid": "request-uuid-placeholder" }
+    }
+  },
+  "no_prompt_attack_detector": {
+    "status": 200,
+    "body": {
+      "flagged": false,
+      "action": "enforce",
+      "breakdown": [
+        {
+          "project_id": "project-placeholder",
+          "policy_id": "policy-placeholder",
+          "detector_id": "detector-placeholder-pii-email",
+          "detector_type": "pii/email",
+          "detected": false,
+          "result": "no_level",
+          "message_id": 0
+        }
+      ],
+      "payload": [],
+      "metadata": { "request_uuid": "request-uuid-placeholder" }
+    }
+  },
+  "no_breakdown": {
+    "status": 200,
+    "body": {
+      "flagged": true,
+      "action": "enforce",
+      "payload": [],
+      "metadata": { "request_uuid": "request-uuid-placeholder" }
+    }
+  },
+  "error_400": { "status": 400, "body": { "error": "invalid request (placeholder)" } },
+  "error_401": { "status": 401, "body": { "error": "unauthorized (placeholder)" } },
+  "error_422": { "status": 422, "body": { "error": "content cannot be screened (placeholder)" } },
+  "error_429": { "status": 429, "body": { "error": "rate limited (placeholder)" } },
+  "error_500": { "status": 500, "body": { "error": "internal error (placeholder)" } },
+  "error_503": { "status": 503, "body": { "error": "screening timed out (placeholder)" } }
+}

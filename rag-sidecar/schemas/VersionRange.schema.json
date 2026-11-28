@@ -1,0 +1,18 @@
+{
+  "additionalProperties": false,
+  "description": "D-12: a version period; either bound may be left open, not both.",
+  "properties": {
+    "from": {
+      "format": "date",
+      "title": "From",
+      "type": "string"
+    },
+    "to": {
+      "format": "date",
+      "title": "To",
+      "type": "string"
+    }
+  },
+  "title": "VersionRange",
+  "type": "object"
+}

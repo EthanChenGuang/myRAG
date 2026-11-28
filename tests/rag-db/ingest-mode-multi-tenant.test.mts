@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { loadCorpus } from '../../eval/harness/corpus.mts';
 import { FIXTURE_USER_ID, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
-import { buildIngestFixtureDatabase } from '../../eval/harness/ingest-mode.mts';
+import { buildIngestFixtureDatabase, ingestModeParseFixtures } from '../../eval/harness/ingest-mode.mts';
 
 const CORPUS_DIR = path.join(process.cwd(), 'eval/fixtures/corpus');
 
@@ -25,7 +25,9 @@ describe('ingest fixture mode in a multi-tenant deployment', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'eval/fixtures/ingest/manifest.json'), 'utf8')) as {
       fixtures: unknown[];
     };
-    const expectedDocuments = corpus.documents.length + manifest.fixtures.length;
+    // The parse fixtures joined the ingest corpus in 03.1-47; a typed twin (the scans, invoice-en) is the typed fixture itself.
+    const parseDocuments = ingestModeParseFixtures().filter((fixture) => !fixture.typedTwin).length;
+    const expectedDocuments = corpus.documents.length + manifest.fixtures.length + parseDocuments;
     const documents = await fixture.db.query<{ filename: string; status: string; tenant_key: string; user_id: string }>(
       'SELECT filename, status, tenant_key, user_id FROM documents ORDER BY filename',
     );

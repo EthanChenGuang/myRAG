@@ -2,13 +2,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { resetRagDepsForTests, setRagDepsForTests } from '@/lib/rag/deps';
+import { setDefaultPipelineForTests } from '@/lib/rag/config';
+import { deferredEmbedStage } from '@/lib/rag/ingest/stages/embed-write';
+import { emptyIngestState, type StageContext } from '@/lib/rag/ingest/types';
+import { isV2Available, markV2Unavailable, resetV2ReadinessForTests } from '@/lib/rag/v2/readiness';
 import { resetActiveProfileForTests } from '@/lib/rag/embeddings/active-profile';
 import { resetEmbeddingProvidersForTests, setEmbeddingProvidersForTests } from '@/lib/rag/embeddings/registry';
 import type { EmbeddingProvider } from '@/lib/rag/embeddings/types';
 import { ingest } from '@/lib/rag/ingest';
 import { chunkParentChild } from '@/lib/rag/ingest/chunkers/parent-child';
 import { buildProfileChunks, type ChunkingProfileRow } from '@/lib/rag/ingest/profile-chunks';
-import { profileRowIdFor } from '@/lib/rag/ingest/writer';
+import { IngestWriterError, profileRowIdFor } from '@/lib/rag/ingest/writer';
 import { getProcessingProfile } from '@/lib/rag/ingest/profiles/load';
 import { buildEmbeddingText } from '@/lib/rag/ingest/text/embedding-text';
 import { chunkLexicalText } from '@/lib/rag/lexical/chunk-text';
@@ -276,5 +280,161 @@ describe('ingestion dual-write of chunking profiles', () => {
     const gaps = callsOf(failing.calls, 'rag_record_backfill_gap').filter((call) => (call.args.p_chunk_ids as string[]).includes(firstChild));
     expect(gaps.map((call) => [call.args.p_run_id, call.args.p_profile_id, call.args.p_reason])).toEqual([['run-voyage', VOYAGE, 'provider_failed']]);
     expect(gaps[0]?.args.p_chunk_ids).toEqual((secondWrite.p_children as Array<{ chunk_index: number }>).map((child) => profileRowIdFor(FAKE_DOCUMENT_ID, 'p256', 'child', child.chunk_index)));
+  });
+});
+
+describe('the dual write follows the effective pipeline (D-07, D-24)', () => {
+  const MISSING = { code: 'PGRST202', message: 'Could not find the function' };
+
+  beforeEach(() => {
+    setDefaultPipelineForTests(null);
+    resetV2ReadinessForTests();
+  });
+  afterEach(() => {
+    setDefaultPipelineForTests(null);
+    resetV2ReadinessForTests();
+  });
+
+  async function runWithDb(options: { pipeline?: string; languages?: boolean | null; failures?: Record<string, { code: string; message: string }> }) {
+    pipeline = options.pipeline;
+    if (options.languages !== undefined) setRagDepsForTests({ languagesConfigured: () => options.languages ?? null });
+    const { db, calls } = fakeIngestDb({ chunkingProfiles: [LEGACY_CONTRACT, chunkingRow('p256', 'contract_legal', 'building')], failures: options.failures });
+    installIngestDeps({ db });
+    const result = await upload();
+    return { result, calls };
+  }
+
+  function reset(): void {
+    uninstallIngestDeps();
+    resetRagDepsForTests();
+    setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: pipeline }) });
+  }
+
+  test('when the resolver says legacy the listing is never called and the legacy writes are unchanged', async () => {
+    const baseline = await runWith({ pipeline: 'legacy', profiles: [LEGACY_CONTRACT, chunkingRow('p256', 'contract_legal', 'building')] });
+    reset();
+
+    setDefaultPipelineForTests('v2');
+    const languages = await runWithDb({ languages: false });
+    expect(languages.result.status).toBe('ready');
+    expect(names(languages.calls)).toEqual(names(baseline.calls));
+    expect(callsOf(languages.calls, 'rag_write_chunks').map((call) => call.args)).toEqual(callsOf(baseline.calls, 'rag_write_chunks').map((call) => call.args));
+    reset();
+
+    markV2Unavailable('hybrid_search_chunks');
+    const unavailable = await runWithDb({});
+    expect(unavailable.result.status).toBe('ready');
+    expect(names(unavailable.calls)).toEqual(names(baseline.calls));
+  });
+
+  test('default v2 with a missing listing function completes as legacy, logs once and stops calling it', async () => {
+    const baseline = await runWith({ pipeline: 'legacy', profiles: [LEGACY_CONTRACT, chunkingRow('p256', 'contract_legal', 'building')] });
+    reset();
+
+    setDefaultPipelineForTests('v2');
+    for (const code of ['PGRST202', '42883']) {
+      resetV2ReadinessForTests();
+      const error = vi.mocked(console.error);
+      error.mockClear();
+      const first = await runWithDb({ failures: { rag_list_chunking_profiles: { ...MISSING, code } } });
+      expect(first.result.status, code).toBe('ready');
+      expect(callsOf(first.calls, 'rag_list_chunking_profiles'), code).toHaveLength(1);
+      expect(callsOf(first.calls, 'rag_write_profile_chunks'), code).toHaveLength(0);
+      expect(names(first.calls).filter((fn) => fn !== 'rag_list_chunking_profiles'), code).toEqual(names(baseline.calls));
+      expect(isV2Available(), code).toBe(false);
+      expect(error.mock.calls.filter((call) => String(call[0]).startsWith('[RAG Config]')), code).toHaveLength(1);
+      reset();
+
+      const second = await runWithDb({ failures: { rag_list_chunking_profiles: { ...MISSING, code } } });
+      expect(second.result.status, code).toBe('ready');
+      expect(callsOf(second.calls, 'rag_list_chunking_profiles'), code).toHaveLength(0);
+      reset();
+    }
+  });
+
+  test('explicit v2 with a missing listing function still fails with chunking_profiles_unavailable', async () => {
+    const run = await runWithDb({ pipeline: 'v2', failures: { rag_list_chunking_profiles: MISSING } });
+    expect(run.result.status).toBe('failed');
+    expect(run.result.reason).toBe('chunking_profiles_unavailable');
+    expect(isV2Available()).toBe(true);
+  });
+
+  test('default v2 with another listing failure still fails with chunking_profiles_unavailable', async () => {
+    setDefaultPipelineForTests('v2');
+    for (const code of ['57014', 'XX000']) {
+      const run = await runWithDb({ failures: { rag_list_chunking_profiles: { code, message: 'boom' } } });
+      expect(run.result.status, code).toBe('failed');
+      expect(run.result.reason, code).toBe('chunking_profiles_unavailable');
+      expect(isV2Available(), code).toBe(true);
+      reset();
+    }
+  });
+
+  test('default v2 with languages configured or no reader still dual writes', async () => {
+    setDefaultPipelineForTests('v2');
+    for (const languages of [true, null]) {
+      const run = await runWithDb({ languages });
+      expect(run.result.status).toBe('ready');
+      expect(callsOf(run.calls, 'rag_write_profile_chunks')).toHaveLength(1);
+      reset();
+    }
+  });
+
+  describe('deferred embed', () => {
+    function deferredContext(listing: () => Promise<ChunkingProfileRow[]>) {
+      const writer = {
+        listChunkingProfiles: vi.fn(listing),
+        writeChunks: vi.fn(async (_id: string, batch: unknown[]) => ({ chunksWritten: batch.length, chunksDeleted: 0 })),
+        writeProfileChunks: vi.fn(async () => ({ parentsWritten: 0, childrenWritten: 0, parentsDeleted: 0, childrenDeleted: 0 })),
+        findBackfillRuns: vi.fn(async () => []),
+      };
+      const ctx = {
+        identity: {
+          tenantKey: 's:default',
+          filename: 'contract.md',
+          fileSha256: 'x',
+          docType: 'contract_legal',
+          docTypeOrigin: 'picked',
+          profile: getProcessingProfile('contract_legal'),
+          bytes: null,
+        },
+        document: { id: FAKE_DOCUMENT_ID, version: 1, lineageId: null },
+        writer,
+        signal: new AbortController().signal,
+        warnings: [],
+        state: emptyIngestState(),
+        work: { parseText: CONTRACT, parserVersion: null, chunks: [], chunksWritten: 0 },
+      } as unknown as StageContext;
+      return { ctx, writer };
+    }
+
+    const missing = async (): Promise<ChunkingProfileRow[]> => {
+      throw new IngestWriterError('rag_list_chunking_profiles', 'PGRST202');
+    };
+
+    test('resolver legacy: the listing is never called', async () => {
+      setDefaultPipelineForTests('v2');
+      setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: undefined }), languagesConfigured: () => false });
+      const { ctx, writer } = deferredContext(missing);
+      await expect(deferredEmbedStage.run(ctx)).resolves.toMatchObject({ kind: 'next', outcome: 'deferred' });
+      expect(writer.listChunkingProfiles).not.toHaveBeenCalled();
+    });
+
+    test('default v2 with a missing listing function completes without the dual write', async () => {
+      setDefaultPipelineForTests('v2');
+      setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: undefined }) });
+      const { ctx, writer } = deferredContext(missing);
+      await expect(deferredEmbedStage.run(ctx)).resolves.toMatchObject({ kind: 'next', outcome: 'deferred' });
+      expect(writer.listChunkingProfiles).toHaveBeenCalledTimes(1);
+      expect(writer.writeProfileChunks).not.toHaveBeenCalled();
+      expect(isV2Available()).toBe(false);
+    });
+
+    test('explicit v2 with a missing listing function fails with chunking_profiles_unavailable', async () => {
+      setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: 'v2' }) });
+      const { ctx } = deferredContext(missing);
+      await expect(deferredEmbedStage.run(ctx)).rejects.toMatchObject({ reason: 'chunking_profiles_unavailable' });
+      expect(isV2Available()).toBe(true);
+    });
   });
 });

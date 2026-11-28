@@ -9,11 +9,26 @@ import {
   assertCloudAllowed,
   buildSourceKey,
   currentIngestConfig,
+  unifiedIngestRefusal,
+  legacyApprovalRefusal,
+  legacyWriteRefused,
+  legacyLlamaparseLanguages,
+  currentLegacyUploadRoute,
   embedText,
   ingest,
+  submitIngest,
+  scheduleIngestWake,
+  queueConfigFromProcessEnv,
   repairOwnerMembership,
   resolveAdminWorkspaceScope,
   resolveTenantScope,
+  validateUploadReplaces,
+  validateUploadScopes,
+  attributesFormField,
+  uploadAttributesRefusal,
+  validateUploadAttributes,
+  type EnqueueResult,
+  type IngestResult,
   type RagAdminDb,
   type TenantScope,
 } from '@/lib/rag';
@@ -207,13 +222,21 @@ async function uploadToLlamaCloud(buffer: Buffer, filename: string): Promise<Lla
     // balanced mode is default, no additional flag needed
   };
 
-  const output_config = {
-    result_type: "markdown",
-    language: "en"
-  };
+  // D-16: with configured languages LlamaParse takes the top-level language field (registry codes, primary first).
+  const llamaparseLanguages = legacyLlamaparseLanguages();
+  if (llamaparseLanguages.length === 0) {
+    const output_config = {
+      result_type: "markdown",
+      language: "en"
+    };
 
-  formData.append('parsing_config', JSON.stringify(parsing_config));
-  formData.append('output_config', JSON.stringify(output_config));
+    formData.append('parsing_config', JSON.stringify(parsing_config));
+    formData.append('output_config', JSON.stringify(output_config));
+  } else {
+    formData.append('parsing_config', JSON.stringify(parsing_config));
+    formData.append('output_config', JSON.stringify({ result_type: "markdown" }));
+    formData.append('language', llamaparseLanguages.join(','));
+  }
   formData.append('auto_mode', 'true');
   formData.append('auto_mode_trigger_on_table', 'true');
   formData.append('auto_mode_trigger_on_image', 'true');
@@ -636,6 +659,10 @@ function acceptedMediaType(name: string, declaredType: string): string | null {
   return ALLOWED_MIME_TYPES.has(declared) ? declared : null;
 }
 
+function isEnqueueResult(result: IngestResult | EnqueueResult): result is EnqueueResult {
+  return 'jobId' in result;
+}
+
 function documentTypeOf(name: string): DocumentContent['type'] {
   const extension = fileExtension(name);
   return extension === 'pdf' || extension === 'doc' || extension === 'docx' || extension === 'txt' ||
@@ -651,7 +678,7 @@ function scopeRefusal(status: 401 | 403 | 503): NextResponse {
 
 async function uploadThroughIngest(input: {
   req: Request;
-  formData: { get(name: string): FormDataEntryValue | null };
+  formData: { get(name: string): FormDataEntryValue | null; getAll(name: string): FormDataEntryValue[] };
   file: File;
   userId: string | null;
   orgIdFromForm: string | null;
@@ -720,26 +747,102 @@ async function uploadThroughIngest(input: {
     scope = tenant.scope;
   }
 
+  // D-40: the uploader's tags, checked against the workspace's active vocabulary before anything is stored; ignored with one warning
+  // while RAG_SCOPE_TAGS is off or the pipeline is legacy.
+  const scopeCheck = await validateUploadScopes(scope, input.formData.getAll('scopes'), { signal: req.signal });
+  if (!scopeCheck.ok) {
+    console.warn('[ProcessDocument] upload scope tags refused', { reason: scopeCheck.reason });
+    return scopeCheck.reason === 'unavailable'
+      ? NextResponse.json({ error: 'scope_tags_unavailable' }, { status: 503 })
+      : NextResponse.json({ success: false, error: scopeCheck.reason }, { status: 400 });
+  }
+
+  // D-22, D-23: the uploader's attribute values, checked against the workspace's schema before anything is stored; refused, never
+  // ignored, while RAG_DOC_ATTRIBUTES is effectively off.
+  const attributeCheck = await validateUploadAttributes(scope, attributesFormField(input.formData.get('attributes')), { signal: req.signal });
+  if (!attributeCheck.ok) {
+    console.warn('[ProcessDocument] upload attributes refused', { reason: attributeCheck.reason });
+    const refusal = uploadAttributesRefusal(attributeCheck);
+    return NextResponse.json(refusal.body, { status: refusal.status });
+  }
+
+  // D-41: the document this upload replaces must be a current document of the same workspace outside the upload's own lineage.
+  const sourceKey = buildSourceKey(source, { folderId: form.folder_id, filename: file.name });
+  const replacesCheck = await validateUploadReplaces(scope, input.formData.get('replaces_document_id'), { signal: req.signal, source, sourceKey });
+  if (!replacesCheck.ok) {
+    console.warn('[ProcessDocument] upload replaces refused', { reason: replacesCheck.reason });
+    return replacesCheck.reason === 'unavailable'
+      ? NextResponse.json({ error: 'replaces_unavailable' }, { status: 503 })
+      : NextResponse.json({ success: false, error: replacesCheck.reason }, { status: 400 });
+  }
+
   const bytes = new Uint8Array(await file.arrayBuffer());
   const deadlineMs = Math.max(MIN_INGEST_BUDGET_MS, UPLOAD_BUDGET_MS - (Date.now() - input.startedAt));
 
-  let result;
+  const ingestInput = {
+    scope,
+    source,
+    sourceKey,
+    uploaderId: userId,
+    file: bytes,
+    filename: file.name,
+    mimeType,
+    ...(form.doc_type ? { docType: form.doc_type } : {}),
+    ...(scopeCheck.scopes ? { scopes: scopeCheck.scopes } : {}),
+    ...(attributeCheck.attributes !== undefined ? { attributes: attributeCheck.attributes } : {}),
+    ...(replacesCheck.replacesDocumentId ? { replacesDocumentId: replacesCheck.replacesDocumentId } : {}),
+    signal: req.signal,
+    deadlineMs,
+  };
+
+  let result: IngestResult | EnqueueResult;
   try {
-    result = await ingest({
-      scope,
-      source,
-      sourceKey: buildSourceKey(source, { folderId: form.folder_id, filename: file.name }),
-      file: bytes,
-      filename: file.name,
-      mimeType,
-      ...(form.doc_type ? { docType: form.doc_type } : {}),
-      signal: req.signal,
-      deadlineMs,
-    });
+    result = queueConfigFromProcessEnv().ingestAsync ? await submitIngest(ingestInput) : await ingest(ingestInput);
   } catch (error) {
     console.error('[ProcessDocument] ingest threw', error instanceof Error ? error.name : 'unknown');
     return NextResponse.json({ error: 'Failed to process document', status: 'failed' }, { status: 500 });
   }
+
+  if (isEnqueueResult(result)) {
+    console.log('[ProcessDocument] Enqueued upload', {
+      source,
+      status: result.status,
+      documentId: result.documentId,
+      jobId: result.jobId,
+      ...(result.reason ? { reason: result.reason } : {}),
+    });
+    if (result.status === 'failed') {
+      return NextResponse.json({ error: 'Failed to process document', status: 'failed' }, { status: 500 });
+    }
+    if (result.status === 'skipped_duplicate') {
+      return NextResponse.json(
+        {
+          id: result.documentId,
+          documentId: result.documentId,
+          jobId: result.jobId,
+          name: file.name,
+          filename: file.name,
+          type: documentTypeOf(file.name),
+          status: 'skipped_duplicate',
+        },
+        { status: 200 },
+      );
+    }
+    scheduleIngestWake();
+    return NextResponse.json(
+      {
+        jobId: result.jobId,
+        documentId: result.documentId,
+        status: 'queued',
+        id: result.documentId,
+        name: file.name,
+        filename: file.name,
+        type: documentTypeOf(file.name),
+      },
+      { status: 202 },
+    );
+  }
+
   console.log('[ProcessDocument] Ingested upload', {
     source,
     status: result.status,
@@ -881,9 +984,34 @@ export async function POST(req: Request) {
     // Knowledge-base uploads switch to ingest() only here, after the session and organization checks above.
     // Temporary attachments stay on the legacy parse call in both pipelines.
     if (!isTemporary && uploadPipeline() === 'unified') {
+      const refusal = unifiedIngestRefusal();
+      if (refusal) return NextResponse.json(refusal, { status: 503 });
       return await uploadThroughIngest({ req, formData, file, userId, orgIdFromForm, startedAt });
     }
+    // D-56: the legacy writer below cannot hold a document, so a knowledge-base upload refuses while upload approval is on.
+    if (!isTemporary && legacyWriteRefused()) return legacyApprovalRefusal();
+    // D-16: with RAG_LANGUAGE_AWARE_INGEST=on a knowledge-base upload skips the legacy writer for the unified pipeline.
+    if (!isTemporary) {
+      const languageAwareIngest = currentLegacyUploadRoute();
+      if (languageAwareIngest === 'languages_not_configured') {
+        console.warn('[ProcessDocument] language-aware ingestion refused: supported languages are not configured');
+        return NextResponse.json({ error: 'languages_not_configured' }, { status: 503 });
+      }
+      if (languageAwareIngest === 'unified') {
+        return await uploadThroughIngest({ req, formData, file, userId, orgIdFromForm, startedAt });
+      }
+    }
 
+    // D-22a: attributes count only where the unified pipeline ingests; elsewhere they are refused, never dropped.
+    if (formData.get('attributes') !== null) {
+      console.warn('[ProcessDocument] upload attributes refused', { reason: 'attributes_not_enabled' });
+      return NextResponse.json({ success: false, error: 'attributes_not_enabled' }, { status: 400 });
+    }
+    // Tags count only where the unified pipeline ingests (D-40); the legacy path loads nothing new for them.
+    const ignoredScopes = formData.getAll('scopes').length;
+    if (ignoredScopes > 0) {
+      console.warn('[Ingest] upload scope tags ignored', { count: ignoredScopes, reason: isTemporary ? 'not_ingested' : 'legacy_pipeline' });
+    }
     console.log('Processing file', isTemporary ? '(temporary)' : '(permanent)');
     const buffer = Buffer.from(await file.arrayBuffer());
     const extension = file.name.split('.').pop()?.toLowerCase();

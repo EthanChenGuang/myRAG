@@ -106,7 +106,7 @@ class ConnectorsConfigManager {
     // Add event listeners to toggles
     this.config.providers.forEach(provider => {
       const enableToggle = document.getElementById(
-        `provider-enabled-${provider.provider}`
+        `provider-enabled-${this.safeProviderKey(provider.provider)}`
       );
       if (enableToggle) {
         enableToggle.addEventListener('change', e => {
@@ -120,7 +120,7 @@ class ConnectorsConfigManager {
       }
 
       const dashboardToggle = document.getElementById(
-        `provider-dashboard-${provider.provider}`
+        `provider-dashboard-${this.safeProviderKey(provider.provider)}`
       );
       if (dashboardToggle) {
         dashboardToggle.addEventListener('change', e => {
@@ -136,6 +136,8 @@ class ConnectorsConfigManager {
   }
 
   createProviderElement(provider) {
+    const esc = (value) => this.escapeText(value);
+    const key = this.safeProviderKey(provider.provider);
     const isConnected = provider.user_connection && provider.user_connection.connected;
     const connectionStatus = isConnected ? 'Connected' : 'Not Connected';
     const statusIcon = isConnected ? ' ✓' : '○';
@@ -150,7 +152,7 @@ class ConnectorsConfigManager {
         connectionInfo += `
           <div class="mt-2 text-sm">
             <span class="text-base-content/70">Folder:</span>
-            <span class="font-medium text-success">${conn.sync_folder_name}</span>
+            <span class="font-medium text-success">${esc(conn.sync_folder_name)}</span>
           </div>
         `;
       }
@@ -159,7 +161,7 @@ class ConnectorsConfigManager {
         connectionInfo += `
           <div class="mt-1 text-sm">
             <span class="text-base-content/70">Files:</span>
-            <span class="font-medium text-success">${conn.sync_file_ids.length} selected</span>
+            <span class="font-medium text-success">${esc(conn.sync_file_ids.length)} selected</span>
           </div>
         `;
       }
@@ -168,7 +170,7 @@ class ConnectorsConfigManager {
         const lastSync = new Date(conn.last_sync_at).toLocaleDateString();
         connectionInfo += `
           <div class="mt-1 text-xs text-base-content/60">
-            Last synced: ${lastSync}
+            Last synced: ${esc(lastSync)}
           </div>
         `;
       }
@@ -182,12 +184,12 @@ class ConnectorsConfigManager {
               <span class="text-xl ${statusColor}">${statusIcon}</span>
               <div>
                 <div class="flex items-center gap-2">
-                  <h4 class="font-semibold">${provider.button_label}</h4>
+                  <h4 class="font-semibold">${esc(provider.button_label)}</h4>
                   <span class="badge badge-sm ${isConnected ? 'badge-success' : 'badge-ghost'}">
                     ${connectionStatus}
                   </span>
                 </div>
-                <p class="text-sm text-base-content/70">${provider.stats.connected_users} total user${provider.stats.connected_users !== 1 ? 's' : ''}</p>
+                <p class="text-sm text-base-content/70">${esc(provider.stats.connected_users)} total user${provider.stats.connected_users !== 1 ? 's' : ''}</p>
                 ${connectionInfo}
               </div>
             </div>
@@ -195,17 +197,17 @@ class ConnectorsConfigManager {
               ${isConnected ? `
                 <button
                   class="btn btn-sm btn-error btn-outline"
-                  onclick="connectorsConfig.handleDisconnect('${provider.provider}')"
-                  title="Disconnect from ${provider.button_label}"
-                  aria-label="Disconnect from ${provider.button_label}"
+                  onclick="connectorsConfig.handleDisconnect('${key}')"
+                  title="Disconnect from ${esc(provider.button_label)}"
+                  aria-label="Disconnect from ${esc(provider.button_label)}"
                 >
                   Disconnect
                 </button>
                 <button
                   class="btn btn-sm btn-primary"
-                  onclick="connectorsConfig.handleSync('${provider.provider}')"
-                  title="Sync documents from ${provider.button_label}"
-                  aria-label="Sync documents from ${provider.button_label}${!provider.user_connection.sync_folder_id && !provider.user_connection.sync_file_ids?.length ? ' (select folder or files first)' : ''}"
+                  onclick="connectorsConfig.handleSync('${key}')"
+                  title="Sync documents from ${esc(provider.button_label)}"
+                  aria-label="Sync documents from ${esc(provider.button_label)}${!provider.user_connection.sync_folder_id && !provider.user_connection.sync_file_ids?.length ? ' (select folder or files first)' : ''}"
                   ${!provider.user_connection.sync_folder_id && !provider.user_connection.sync_file_ids?.length ? 'disabled' : ''}
                 >
                   Sync
@@ -213,19 +215,19 @@ class ConnectorsConfigManager {
               ` : `
                 <button
                   class="btn btn-sm btn-primary"
-                  onclick="connectorsConfig.handleConnect('${provider.provider}')"
-                  title="Connect to ${provider.button_label}"
-                  aria-label="Connect to ${provider.button_label} provider"
+                  onclick="connectorsConfig.handleConnect('${key}')"
+                  title="Connect to ${esc(provider.button_label)}"
+                  aria-label="Connect to ${esc(provider.button_label)} provider"
                 >
                   Connect
                 </button>
               `}
               <button
                 class="btn btn-sm btn-ghost"
-                onclick="document.getElementById('provider-details-${provider.provider}').classList.toggle('hidden')"
-                aria-label="Toggle ${provider.button_label} settings"
+                onclick="document.getElementById('provider-details-${key}').classList.toggle('hidden')"
+                aria-label="Toggle ${esc(provider.button_label)} settings"
                 aria-expanded="false"
-                aria-controls="provider-details-${provider.provider}"
+                aria-controls="provider-details-${key}"
               >
                 Settings
               </button>
@@ -237,20 +239,20 @@ class ConnectorsConfigManager {
             <div class="mt-3 space-y-2">
               <button
                 class="w-full flex items-center gap-2 p-2 rounded-md text-left text-sm transition-colors border border-dashed ${provider.user_connection.sync_folder_id ? 'border-success/30 bg-success/5 hover:bg-success/10' : 'border-base-300 hover:bg-base-200'}" 
-                onclick="connectorsConfig.openFolderPicker('${provider.provider}')"
-                aria-label="Select folder to sync from ${provider.button_label}"
+                onclick="connectorsConfig.openFolderPicker('${key}')"
+                aria-label="Select folder to sync from ${esc(provider.button_label)}"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ${provider.user_connection.sync_folder_id ? 'text-success' : 'text-base-content/50'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                 </svg>
                 <span class="${provider.user_connection.sync_folder_id ? 'text-success font-medium' : 'text-base-content/70'}">
-                  ${provider.user_connection.sync_folder_name || 'Select Folder to Sync'}
+                  ${esc(provider.user_connection.sync_folder_name || 'Select Folder to Sync')}
                 </span>
               </button>
               <button
                 class="w-full flex items-center gap-2 p-2 rounded-md text-left text-sm transition-colors border border-dashed ${provider.user_connection.sync_file_ids?.length > 0 ? 'border-success/30 bg-success/5 hover:bg-success/10' : 'border-base-300 hover:bg-base-200'}" 
-                onclick="connectorsConfig.openFilePicker('${provider.provider}')"
-                aria-label="Select files to sync from ${provider.button_label}"
+                onclick="connectorsConfig.openFilePicker('${key}')"
+                aria-label="Select files to sync from ${esc(provider.button_label)}"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ${provider.user_connection.sync_file_ids?.length > 0 ? 'text-success' : 'text-base-content/50'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -273,7 +275,7 @@ class ConnectorsConfigManager {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <span class="${provider.user_connection.sync_folder_id ? 'text-success font-medium' : 'text-base-content/70'}">
-                  ${provider.user_connection.sync_folder_name || 'Select Top-Level Pages'}
+                  ${esc(provider.user_connection.sync_folder_name || 'Select Top-Level Pages')}
                 </span>
               </button>
               <button
@@ -291,12 +293,12 @@ class ConnectorsConfigManager {
           ` : ''}
 
           <!-- Provider Details (Hidden by default) -->
-          <div id="provider-details-${provider.provider}" class="hidden mt-4 pt-4 border-t border-base-100 space-y-3">
+          <div id="provider-details-${key}" class="hidden mt-4 pt-4 border-t border-base-100 space-y-3">
             <div class="flex items-center justify-between">
               <label class="label cursor-pointer flex items-center gap-2">
                 <input
                   type="checkbox"
-                  id="provider-enabled-${provider.provider}"
+                  id="provider-enabled-${key}"
                   class="checkbox checkbox-sm"
                   ${provider.enabled ? 'checked' : ''}
                 />
@@ -308,7 +310,7 @@ class ConnectorsConfigManager {
               <label class="label cursor-pointer flex items-center gap-2">
                 <input
                   type="checkbox"
-                  id="provider-dashboard-${provider.provider}"
+                  id="provider-dashboard-${key}"
                   class="checkbox checkbox-sm"
                   ${provider.show_on_dashboard ? 'checked' : ''}
                 />
@@ -319,11 +321,11 @@ class ConnectorsConfigManager {
             <div class="grid grid-cols-2 gap-2 text-sm">
               <div>
                 <p class="text-base-content/70">File Types</p>
-                <p class="font-mono text-xs">${provider.supported_file_types.join(', ')}</p>
+                <p class="font-mono text-xs">${esc((provider.supported_file_types || []).join(', '))}</p>
               </div>
               <div>
                 <p class="text-base-content/70">Max Files</p>
-                <p class="font-mono text-xs">${provider.max_files_per_sync}</p>
+                <p class="font-mono text-xs">${esc(provider.max_files_per_sync)}</p>
               </div>
             </div>
 
@@ -331,11 +333,11 @@ class ConnectorsConfigManager {
             <div class="grid grid-cols-2 gap-2 mt-3">
               <div class="stat bg-base-100 rounded p-2">
                 <p class="stat-title text-xs">Total Syncs</p>
-                <p class="stat-value text-lg">${provider.stats.total_syncs}</p>
+                <p class="stat-value text-lg">${esc(provider.stats.total_syncs)}</p>
               </div>
               <div class="stat bg-base-100 rounded p-2">
                 <p class="stat-title text-xs">Failed</p>
-                <p class="stat-value text-lg text-error">${provider.stats.failed_syncs}</p>
+                <p class="stat-value text-lg text-error">${esc(provider.stats.failed_syncs)}</p>
               </div>
             </div>
           </div>
@@ -365,9 +367,9 @@ class ConnectorsConfigManager {
 
         return `
           <tr>
-            <td>${provider.button_label}</td>
-            <td>${provider.stats.connected_users}</td>
-            <td class="text-sm">${lastSync}</td>
+            <td>${this.escapeText(provider.button_label)}</td>
+            <td>${this.escapeText(provider.stats.connected_users)}</td>
+            <td class="text-sm">${this.escapeText(lastSync)}</td>
             <td>
               <span class="badge ${successRate === 100 ? 'badge-success' : 'badge-warning'}">
                 ${successRate}%
@@ -483,6 +485,17 @@ class ConnectorsConfigManager {
         card.style.display = show ? 'none' : 'block';
       });
     }
+  }
+
+  escapeText(value) {
+    return String(value === null || value === undefined ? '' : value).replace(/[&<>"'`]/g, (ch) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;',
+    })[ch]);
+  }
+
+  /** Provider keys go into element ids and inline handlers; anything but [a-z0-9_-] is dropped. */
+  safeProviderKey(value) {
+    return String(value ?? '').replace(/[^a-z0-9_-]/gi, '');
   }
 
   showError(message) {
@@ -643,9 +656,12 @@ class ConnectorsConfigManager {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
         `}
       </svg>
-      <span>${message}</span>
-      <button class="btn btn-sm btn-ghost" onclick="this.parentElement.remove()">✕</button>
+      <span data-notification-text></span>
+      <button type="button" class="btn btn-sm btn-ghost" aria-label="Dismiss notification" data-notification-close>✕</button>
     `;
+    notification.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    notification.querySelector('[data-notification-text]').textContent = String(message ?? '');
+    notification.querySelector('[data-notification-close]').addEventListener('click', () => notification.remove());
 
     container.insertBefore(notification, container.firstChild);
 
@@ -697,22 +713,22 @@ class ConnectorsConfigManager {
 
       dialog.innerHTML = `
         <div class="modal-box max-w-sm">
-          <h3 id="dialog-title" class="font-bold text-lg mb-4">${title}</h3>
-          <p id="dialog-message" class="py-4 text-base-content/70">${message}</p>
+          <h3 id="dialog-title" class="font-bold text-lg mb-4">${this.escapeText(title)}</h3>
+          <p id="dialog-message" class="py-4 text-base-content/70">${this.escapeText(message)}</p>
           <div class="modal-action gap-2">
             <button 
               class="btn btn-ghost" 
               aria-label="Cancel dialog"
               onclick="this.closest('.modal').remove()"
             >
-              ${cancelText}
+              ${this.escapeText(cancelText)}
             </button>
             <button 
               class="btn btn-primary" 
               aria-label="Confirm action"
               onclick="this.closest('.modal').remove()"
             >
-              ${confirmText}
+              ${this.escapeText(confirmText)}
             </button>
           </div>
         </div>

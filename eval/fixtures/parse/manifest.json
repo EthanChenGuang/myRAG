@@ -82,6 +82,15 @@
       "sha256": "34db8c840cb74f72864ea8b2ccdb0aa5a37024d65252c66f2845927358c61724"
     },
     {
+      "class": "scan_zh_it",
+      "expected_path": "fixtures/parse/expected/scan-zh-it.json",
+      "id": "scan-zh-it",
+      "language": "zh",
+      "page_count": 1,
+      "pdf_path": "fixtures/parse/pdf/scan-zh-it.pdf",
+      "sha256": "9d98a980420948c2cfb6ad2025cf5d6057d2df62b7914e8f917ff3ef2ed14ae0"
+    },
+    {
       "class": "table",
       "expected_path": "fixtures/parse/expected/table-en.json",
       "id": "table-en",

@@ -1,0 +1,43 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "chunk_ref": {
+      "minimum": 0,
+      "title": "Chunk Ref",
+      "type": "integer"
+    },
+    "language": {
+      "enum": [
+        "zh",
+        "en",
+        "it"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "query": {
+      "maxLength": 400,
+      "minLength": 1,
+      "title": "Query",
+      "type": "string"
+    },
+    "style": {
+      "enum": [
+        "keyword",
+        "question",
+        "colloquial",
+        "cross_language"
+      ],
+      "title": "Style",
+      "type": "string"
+    }
+  },
+  "required": [
+    "chunk_ref",
+    "language",
+    "style",
+    "query"
+  ],
+  "title": "SyntheticQuery",
+  "type": "object"
+}

@@ -1,4 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { env } from '@/lib/env';
+import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
+import { resetRagDepsForTests, setRagDepsForTests } from '@/lib/rag/deps';
+import { resetActiveProfileForTests, verifyActiveEmbeddingProfileAtStartup } from '@/lib/rag/embeddings/active-profile';
+import { resetIngestDepsForTests, setIngestDepsForTests } from '@/lib/rag/ingest/deps';
 import { EmbeddingProfileMismatch, truncateAndNormalize } from '@/lib/rag/embeddings/mrl';
 import { createOpenAiProvider } from '@/lib/rag/embeddings/openai-provider';
 import type { OpenAiEmbeddingsClient } from '@/lib/rag/embeddings/openai-provider';
@@ -6,6 +11,8 @@ import { estimateCostUsd, priceFor } from '@/lib/rag/embeddings/prices';
 import {
   canonicalModelId,
   getEmbeddingProvider,
+  getEmbeddingProviderFor,
+  maxInputTokensFor,
   resetEmbeddingProvidersForTests,
   setEmbeddingProvidersForTests,
   validateProfileShape,
@@ -89,6 +96,18 @@ describe('validateProfileShape (EMB-03 registry rules)', () => {
     expect(storage.ok === false && storage.reason).toBe('storage_unknown');
     const dims = validateProfileShape({ provider: 'voyage', dims: 1024.5, storage: 'halfvec' });
     expect(dims.ok === false && dims.reason).toBe('dims_invalid');
+  });
+
+  it('uses the catalog dims of the named model (voyage-law-2 is 1024 only)', () => {
+    const law = validateProfileShape({ provider: 'voyage', dims: 2048, storage: 'halfvec', model: 'voyage-law-2' });
+    expect(law.ok === false && law.reason).toBe('dims_unsupported');
+    expect(validateProfileShape({ provider: 'voyage', dims: 1024, storage: 'halfvec', model: 'voyage-law-2' })).toEqual({ ok: true });
+    expect(validateProfileShape({ provider: 'voyage', dims: 2048, storage: 'halfvec', model: 'voyage-4-large' })).toEqual({ ok: true });
+  });
+
+  it('rejects a model the provider does not serve', () => {
+    const unknown = validateProfileShape({ provider: 'voyage', dims: 1024, storage: 'halfvec', model: 'voyage-9' });
+    expect(unknown.ok === false && unknown.reason).toBe('model_unknown');
   });
 });
 
@@ -200,6 +219,18 @@ describe('prices', () => {
     expect(estimateCostUsd('voyage', 1_000_000)).toEqual({ usd: 0.12, estimated: true });
     expect(estimateCostUsd('openai', 500_000)).toEqual({ usd: 0.01, estimated: false });
   });
+
+  it('prices per model from the catalog', () => {
+    expect(estimateCostUsd('voyage', 'voyage-law-2', 1_000_000)).toEqual({ usd: 0.12, estimated: true });
+    expect(estimateCostUsd('voyage', 'voyage-finance-2', 1_000_000)).toEqual({ usd: 0.12, estimated: true });
+    expect(estimateCostUsd('openai', 'text-embedding-3-small', 1_000_000)).toEqual({ usd: 0.02, estimated: false });
+    expect(priceFor('voyage', 'voyage-law-2')).toMatchObject({ provider: 'voyage', model: 'voyage-law-2', usdPerMillionTokens: 0.12, tokensAreEstimates: true });
+    expect(priceFor('voyage').model).toBe('voyage-4-large');
+  });
+
+  it('throws for a model with no catalog price', () => {
+    expect(() => estimateCostUsd('voyage', 'voyage-9', 1_000)).toThrow('[Embedding Profile] unknown embedding model');
+  });
 });
 
 describe('registry', () => {
@@ -240,5 +271,227 @@ describe('registry', () => {
     expect(getEmbeddingProvider('openai')).toBe(fake);
     resetEmbeddingProvidersForTests();
     expect(getEmbeddingProvider('openai')).not.toBe(fake);
+  });
+});
+
+describe('maxInputTokensFor', () => {
+  it.each([
+    ['openai', 8191],
+    ['voyage', 32000],
+    ['qwen3', 32768],
+  ])('returns the documented input limit of %s', (id, limit) => {
+    expect(maxInputTokensFor(id)).toBe(limit);
+  });
+
+  it('agrees with the maxInputTokens each registered provider declares', () => {
+    for (const id of ['openai', 'voyage', 'qwen3']) {
+      expect(maxInputTokensFor(id)).toBe(getEmbeddingProvider(id).maxInputTokens);
+    }
+  });
+
+  it('throws for an unknown provider id and for ids that only exist on Object.prototype', () => {
+    expect(() => maxInputTokensFor('cohere')).toThrow('[Embedding Profile] unknown provider cohere');
+    expect(() => maxInputTokensFor('constructor')).toThrow('[Embedding Profile] unknown provider constructor');
+  });
+
+  it('follows a provider swapped in for tests', () => {
+    const fake: EmbeddingProvider = {
+      id: 'openai',
+      model: 'fake-model',
+      maxInputTokens: 1234,
+      supportedDims: [1536],
+      normalize: true,
+      embedDocuments: async () => ({ vectors: [], model: 'fake-model', host: 'fake', usage: { tokens: 0 } }),
+      embedQuery: async () => ({ vectors: [], model: 'fake-model', host: 'fake', usage: { tokens: 0 } }),
+    };
+    setEmbeddingProvidersForTests({ openai: fake });
+    expect(maxInputTokensFor('openai')).toBe(1234);
+  });
+});
+
+describe('getEmbeddingProviderFor (D-02)', () => {
+  function fakeProvider(id: 'openai' | 'voyage' | 'qwen3', model: string): EmbeddingProvider {
+    return {
+      id,
+      model,
+      maxInputTokens: 1000,
+      supportedDims: [1024],
+      normalize: true,
+      embedDocuments: async () => ({ vectors: [], model, host: 'fake', usage: { tokens: 0 } }),
+      embedQuery: async () => ({ vectors: [], model, host: 'fake', usage: { tokens: 0 } }),
+    };
+  }
+
+  it('resolves a Voyage domain model and keeps the provider default unchanged', () => {
+    const law = getEmbeddingProviderFor('voyage', 'voyage-law-2');
+    expect(law.id).toBe('voyage');
+    expect(law.model).toBe('voyage-law-2');
+    expect(law.supportedDims).toEqual([1024]);
+    expect(law.maxInputTokens).toBe(16000);
+    expect(getEmbeddingProviderFor('voyage', 'voyage-finance-2').model).toBe('voyage-finance-2');
+    expect(getEmbeddingProvider('voyage').model).toBe('voyage-4-large');
+    expect(getEmbeddingProviderFor('voyage', 'voyage-4-large')).toBe(getEmbeddingProvider('voyage'));
+  });
+
+  it('returns the same instance for repeated lookups of one model', () => {
+    expect(getEmbeddingProviderFor('voyage', 'voyage-law-2')).toBe(getEmbeddingProviderFor('voyage', 'mongodb/voyage-law-2'));
+  });
+
+  it('throws for a pair that is not in the catalog', () => {
+    expect(() => getEmbeddingProviderFor('voyage', 'voyage-9')).toThrow('[Embedding Profile] unknown embedding model');
+    expect(() => getEmbeddingProviderFor('openai', 'voyage-law-2')).toThrow('[Embedding Profile] unknown embedding model');
+    expect(() => getEmbeddingProviderFor('cohere', 'embed-v4.0')).toThrow('[Embedding Profile] unknown embedding model');
+  });
+
+  it('keeps a provider-keyed test override working for its own model only', () => {
+    const fake = fakeProvider('voyage', 'voyage-4-large');
+    setEmbeddingProvidersForTests({ voyage: fake });
+    expect(getEmbeddingProviderFor('voyage', 'voyage-4-large')).toBe(fake);
+    expect(getEmbeddingProviderFor('voyage', 'voyage-law-2')).not.toBe(fake);
+    expect(getEmbeddingProviderFor('voyage', 'voyage-law-2').model).toBe('voyage-law-2');
+  });
+
+  it('lets a provider:model override replace only that model', () => {
+    const fake = fakeProvider('voyage', 'voyage-law-2');
+    setEmbeddingProvidersForTests({ 'voyage:voyage-law-2': fake });
+    expect(getEmbeddingProviderFor('voyage', 'voyage-law-2')).toBe(fake);
+    expect(getEmbeddingProviderFor('voyage', 'voyage-finance-2')).not.toBe(fake);
+    expect(getEmbeddingProvider('voyage').model).toBe('voyage-4-large');
+  });
+
+  it('resolves a provider-keyed override for a model outside the catalog (Phase 3 fakes)', () => {
+    const fake = fakeProvider('openai', 'fake-openai-model');
+    setEmbeddingProvidersForTests({ openai: fake });
+    expect(getEmbeddingProviderFor('openai', 'fake-openai-model')).toBe(fake);
+  });
+});
+
+describe('fine-tune slot providers (06.1 D-02, D-22)', () => {
+  const slotEnv = env as unknown as Record<string, unknown>;
+  const SLOT_NAMES = ['RAG_FINETUNE', 'RAG_FT_SLOT_A_BASE_URL', 'RAG_FT_SLOT_A_MODEL', 'RAG_FT_SLOT_B_BASE_URL', 'RAG_FT_SLOT_B_MODEL'];
+  const saved = Object.fromEntries(SLOT_NAMES.map((name) => [name, slotEnv[name]]));
+
+  function slotRow(id: string, provider: string, model: string): Record<string, unknown> {
+    return {
+      id,
+      provider,
+      model,
+      dims: 1024,
+      storage: 'halfvec',
+      status: 'active',
+      query_instruction: null,
+      score_calibration: {},
+      activated_at: null,
+      activated_by: null,
+      previous_active_id: null,
+      has_evidence: true,
+      created_at: '2026-01-01T00:00:00Z',
+    };
+  }
+
+  function installRegistry(rows: Record<string, unknown>[]): void {
+    const respond = (fn: string): RpcResponse => ({ data: fn === 'rag_list_embedding_profiles' ? rows : [], error: null });
+    const client: RpcClient = {
+      rpc: (fn) => {
+        const pending: RpcRequest = {
+          abortSignal: () => pending,
+          then: (onFulfilled, onRejected) => Promise.resolve(respond(fn)).then(onFulfilled, onRejected),
+        };
+        return pending;
+      },
+    };
+    setRagDepsForTests({ adminClient: () => client as never, now: () => 1_000_000 });
+    setIngestDepsForTests({ ingestEnv: () => ({ RAG_EMBEDDING_PROFILES: 'on' }) });
+  }
+
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    for (const name of SLOT_NAMES) slotEnv[name] = saved[name];
+    resetRagDepsForTests();
+    resetIngestDepsForTests();
+    resetActiveProfileForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('accepts the ft-a-1024 and ft-b-1024 shapes and rejects other dims and the legacy column', () => {
+    for (const provider of ['ft_slot_a', 'ft_slot_b']) {
+      expect(validateProfileShape({ provider, dims: 1024, storage: 'halfvec' })).toEqual({ ok: true });
+      expect(validateProfileShape({ provider, dims: 1024, storage: 'halfvec', model: 'unbound' })).toEqual({ ok: true });
+      expect(validateProfileShape({ provider, dims: 1024, storage: 'halfvec', model: 'ft-neutral-v1' })).toEqual({ ok: true });
+      for (const dims of [768, 512, 2048]) {
+        const result = validateProfileShape({ provider, dims, storage: 'halfvec' });
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.reason).toBe('dims_unsupported');
+      }
+      expect(validateProfileShape({ provider, dims: 1024, storage: 'legacy_column' }).ok).toBe(false);
+    }
+  });
+
+  it('keeps the slot providers out of the registry while RAG_FINETUNE is off', () => {
+    slotEnv.RAG_FINETUNE = 'off';
+    slotEnv.RAG_FT_SLOT_A_BASE_URL = 'http://127.0.0.1:9/v1';
+    slotEnv.RAG_FT_SLOT_A_MODEL = 'ft-neutral-v1';
+    expect(() => getEmbeddingProvider('ft_slot_a')).toThrow(/unknown embedding provider/);
+    expect(() => getEmbeddingProvider('ft_slot_b')).toThrow(/unknown embedding provider/);
+    expect(() => getEmbeddingProviderFor('ft_slot_a', 'ft-neutral-v1')).toThrow(/unknown embedding model/);
+  });
+
+  it('registers both slots while RAG_FINETUNE is on, with the env model as the provider model', () => {
+    slotEnv.RAG_FINETUNE = 'on';
+    slotEnv.RAG_FT_SLOT_A_BASE_URL = 'http://127.0.0.1:9/v1';
+    slotEnv.RAG_FT_SLOT_A_MODEL = 'ft-neutral-v1';
+    slotEnv.RAG_FT_SLOT_B_MODEL = 'ft-neutral-v2';
+    const a = getEmbeddingProvider('ft_slot_a');
+    expect(a.id).toBe('ft_slot_a');
+    expect(a.model).toBe('ft-neutral-v1');
+    expect([...a.supportedDims]).toEqual([1024]);
+    expect(getEmbeddingProvider('ft_slot_b').model).toBe('ft-neutral-v2');
+    expect(getEmbeddingProviderFor('ft_slot_a', 'ft-neutral-v1')).toBe(a);
+    expect(getEmbeddingProviderFor('ft_slot_a', 'ft-other-v9').model).toBe('ft-neutral-v1');
+  });
+
+  it('prices a slot at zero (no list price) for any bound version', () => {
+    expect(priceFor('ft_slot_a', 'ft-neutral-v1').usdPerMillionTokens).toBe(0);
+    expect(estimateCostUsd('ft_slot_b', 1_000_000).usd).toBe(0);
+  });
+
+  it('startup check: a slot profile with RAG_FINETUNE off is provider_unconfigured', async () => {
+    slotEnv.RAG_FINETUNE = 'off';
+    slotEnv.RAG_FT_SLOT_A_BASE_URL = 'http://127.0.0.1:9/v1';
+    slotEnv.RAG_FT_SLOT_A_MODEL = 'ft-neutral-v1';
+    installRegistry([slotRow('ft-a-1024', 'ft_slot_a', 'ft-neutral-v1')]);
+    const verdict = await verifyActiveEmbeddingProfileAtStartup();
+    expect(verdict).toMatchObject({ status: 'mismatch', reason: 'provider_unconfigured', profile: 'ft-a-1024' });
+  });
+
+  it('startup check: RAG_FINETUNE on with an empty slot base URL is provider_unconfigured', async () => {
+    slotEnv.RAG_FINETUNE = 'on';
+    slotEnv.RAG_FT_SLOT_A_BASE_URL = '';
+    slotEnv.RAG_FT_SLOT_A_MODEL = 'ft-neutral-v1';
+    installRegistry([slotRow('ft-a-1024', 'ft_slot_a', 'ft-neutral-v1')]);
+    const verdict = await verifyActiveEmbeddingProfileAtStartup();
+    expect(verdict).toMatchObject({ status: 'mismatch', reason: 'provider_unconfigured', profile: 'ft-a-1024' });
+  });
+
+  it('startup check: an env model that differs from the bound profile model is model_mismatch', async () => {
+    slotEnv.RAG_FINETUNE = 'on';
+    slotEnv.RAG_FT_SLOT_A_BASE_URL = 'http://127.0.0.1:9/v1';
+    slotEnv.RAG_FT_SLOT_A_MODEL = 'ft-neutral-v2';
+    installRegistry([slotRow('ft-a-1024', 'ft_slot_a', 'ft-neutral-v1')]);
+    const verdict = await verifyActiveEmbeddingProfileAtStartup();
+    expect(verdict).toMatchObject({ status: 'mismatch', reason: 'model_mismatch', profile: 'ft-a-1024' });
+  });
+
+  it('startup check: a configured slot whose env model equals the bound model is ok', async () => {
+    slotEnv.RAG_FINETUNE = 'on';
+    slotEnv.RAG_FT_SLOT_B_BASE_URL = 'http://127.0.0.1:9/v1';
+    slotEnv.RAG_FT_SLOT_B_MODEL = 'ft-neutral-v1';
+    installRegistry([slotRow('ft-b-1024', 'ft_slot_b', 'ft-neutral-v1')]);
+    const verdict = await verifyActiveEmbeddingProfileAtStartup();
+    expect(verdict).toMatchObject({ status: 'ok', profile: 'ft-b-1024', dims: 1024 });
   });
 });

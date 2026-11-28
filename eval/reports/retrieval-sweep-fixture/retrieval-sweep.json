@@ -1,0 +1,404 @@
+{
+  "cells": [
+    {
+      "candidate_pool_size": 25,
+      "final_top_k": 5,
+      "k_zero": 2,
+      "latency_p95_ms": 50.0,
+      "mean_context_tokens": 618.6025641025641,
+      "mrr": 0.7772727272727272,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.7941998598605772,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-25_k-5",
+      "recall_at_k": 0.8636363636363636,
+      "rerank_input_cap": 25,
+      "run_config_hash": "22a87d3b888a406b726ec3b12894ef24f93c33fe81ddc01625225940f03d935a"
+    },
+    {
+      "candidate_pool_size": 25,
+      "final_top_k": 8,
+      "k_zero": 2,
+      "latency_p95_ms": 49.0,
+      "mean_context_tokens": 951.6346153846154,
+      "mrr": 0.7785353535353535,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.7980834464447863,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-25_k-8",
+      "recall_at_k": 0.8737373737373737,
+      "rerank_input_cap": 25,
+      "run_config_hash": "532c5d2b3e5af1b320d665a5699c5ad02c65c398c254081958f4b2703e143443"
+    },
+    {
+      "candidate_pool_size": 25,
+      "final_top_k": 10,
+      "k_zero": 2,
+      "latency_p95_ms": 49.0,
+      "mean_context_tokens": 1161.0641025641025,
+      "mrr": 0.7792929292929293,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.8002733314926491,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-25_k-10",
+      "recall_at_k": 0.8813131313131313,
+      "rerank_input_cap": 25,
+      "run_config_hash": "37c358cbd92a30e134c1063d1db925d0dda8d8194850678d326f050dfbfe211b"
+    },
+    {
+      "candidate_pool_size": 25,
+      "final_top_k": 15,
+      "k_zero": 2,
+      "latency_p95_ms": 58.0,
+      "mean_context_tokens": 1694.5641025641025,
+      "mrr": 0.7799242424242424,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.803312271982009,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-25_k-15",
+      "recall_at_k": 0.8914141414141414,
+      "rerank_input_cap": 25,
+      "run_config_hash": "084847d1c1f9a48fb4daf4f96601962f9ae35af82ede8b9adf14a8e92edc2d1a"
+    },
+    {
+      "candidate_pool_size": 25,
+      "final_top_k": 20,
+      "k_zero": 2,
+      "latency_p95_ms": 43.0,
+      "mean_context_tokens": 2223.7115384615386,
+      "mrr": 0.7803030303030303,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.8050370465933496,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-25_k-20",
+      "recall_at_k": 0.898989898989899,
+      "rerank_input_cap": 25,
+      "run_config_hash": "d93e54f91304de7ff7c247d20c679aa3e1ce53aa2b966ef5974048825b7967c8"
+    },
+    {
+      "candidate_pool_size": 50,
+      "final_top_k": 5,
+      "k_zero": 2,
+      "latency_p95_ms": 78.0,
+      "mean_context_tokens": 618.1089743589744,
+      "mrr": 0.7763888888888889,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.79132886051768,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-50_k-5",
+      "recall_at_k": 0.8560606060606061,
+      "rerank_input_cap": 50,
+      "run_config_hash": "c4d1dc0ed9759f5f4dddf840c7d63833734ece466ec0ca5350e44a9eb7fe79e0"
+    },
+    {
+      "candidate_pool_size": 50,
+      "final_top_k": 8,
+      "k_zero": 2,
+      "latency_p95_ms": 76.0,
+      "mean_context_tokens": 953.4615384615385,
+      "mrr": 0.7787337662337662,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.7977376996271417,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-50_k-8",
+      "recall_at_k": 0.8737373737373737,
+      "rerank_input_cap": 50,
+      "run_config_hash": "7cfcd7b75edf16ab4157edf0646c8c7e7bee7e200cdf41130366e1f0a16ea165"
+    },
+    {
+      "candidate_pool_size": 50,
+      "final_top_k": 10,
+      "k_zero": 2,
+      "latency_p95_ms": 73.0,
+      "mean_context_tokens": 1164.8846153846155,
+      "mrr": 0.779491341991342,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.8009977890148516,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-50_k-10",
+      "recall_at_k": 0.8838383838383839,
+      "rerank_input_cap": 50,
+      "run_config_hash": "2f5e21a56e82cead06cd2f223ba6f7f6ae94f928228d4aa38acd1d0755cce6fa"
+    },
+    {
+      "candidate_pool_size": 50,
+      "final_top_k": 15,
+      "k_zero": 2,
+      "latency_p95_ms": 76.0,
+      "mean_context_tokens": 1697.9038461538462,
+      "mrr": 0.7801226551226552,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.8030450477605132,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-50_k-15",
+      "recall_at_k": 0.8914141414141414,
+      "rerank_input_cap": 50,
+      "run_config_hash": "6a45ea04cac8c1e98da64b392eb9cfa84f4436d2f9db93db4b0c69389571c2e8"
+    },
+    {
+      "candidate_pool_size": 50,
+      "final_top_k": 20,
+      "k_zero": 2,
+      "latency_p95_ms": 77.0,
+      "mean_context_tokens": 2228.128205128205,
+      "mrr": 0.780501443001443,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.8047698223718538,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-50_k-20",
+      "recall_at_k": 0.898989898989899,
+      "rerank_input_cap": 50,
+      "run_config_hash": "3e528d0f33c97b607f7f05a4867049c27a8433bf4e591149001fca339406cac3"
+    },
+    {
+      "candidate_pool_size": 75,
+      "final_top_k": 5,
+      "k_zero": 1,
+      "latency_p95_ms": 101.0,
+      "mean_context_tokens": 626.3653846153846,
+      "mrr": 0.7763888888888889,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.79132886051768,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-75_k-5",
+      "recall_at_k": 0.8560606060606061,
+      "rerank_input_cap": 75,
+      "run_config_hash": "e9273b34f625d6a5b9998d31d4ede4d309026371cac17601938382e5bd4ba50f"
+    },
+    {
+      "candidate_pool_size": 75,
+      "final_top_k": 8,
+      "k_zero": 1,
+      "latency_p95_ms": 94.0,
+      "mean_context_tokens": 968.7179487179487,
+      "mrr": 0.7787337662337662,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.7977376996271417,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-75_k-8",
+      "recall_at_k": 0.8737373737373737,
+      "rerank_input_cap": 75,
+      "run_config_hash": "2db25807c1ba1f8293ec77077afbe5406ff370837b3cb246d81ca7d0e1022d8c"
+    },
+    {
+      "candidate_pool_size": 75,
+      "final_top_k": 10,
+      "k_zero": 1,
+      "latency_p95_ms": 90.0,
+      "mean_context_tokens": 1182.0833333333333,
+      "mrr": 0.779491341991342,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.8009977890148516,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-75_k-10",
+      "recall_at_k": 0.8838383838383839,
+      "rerank_input_cap": 75,
+      "run_config_hash": "6b35c3abc3ddbb63c3135d7f1b972892c2fa67eef21844e82b93a360dcf75912"
+    },
+    {
+      "candidate_pool_size": 75,
+      "final_top_k": 15,
+      "k_zero": 1,
+      "latency_p95_ms": 92.0,
+      "mean_context_tokens": 1722.3589743589744,
+      "mrr": 0.7801226551226552,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.8030450477605132,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-75_k-15",
+      "recall_at_k": 0.8914141414141414,
+      "rerank_input_cap": 75,
+      "run_config_hash": "87685b945dcfde5e4abe145c330bce750d2fe28e96ea4685ce83955080e09b2c"
+    },
+    {
+      "candidate_pool_size": 75,
+      "final_top_k": 20,
+      "k_zero": 1,
+      "latency_p95_ms": 82.0,
+      "mean_context_tokens": 2262.7115384615386,
+      "mrr": 0.780501443001443,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.8047698223718538,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-75_k-20",
+      "recall_at_k": 0.898989898989899,
+      "rerank_input_cap": 75,
+      "run_config_hash": "5b3402d020b96de7cfd5b9ad547b76d7681828c3e01da836e1b72573a3f8087a"
+    },
+    {
+      "candidate_pool_size": 100,
+      "final_top_k": 5,
+      "k_zero": 1,
+      "latency_p95_ms": 108.0,
+      "mean_context_tokens": 627.0320512820513,
+      "mrr": 0.7763888888888889,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.79132886051768,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-100_k-5",
+      "recall_at_k": 0.8560606060606061,
+      "rerank_input_cap": 100,
+      "run_config_hash": "1f8ad2fc98c77e09d6f877f7a75b1e1fe0bf7bd05d8617fed498d577fd00d624"
+    },
+    {
+      "candidate_pool_size": 100,
+      "final_top_k": 8,
+      "k_zero": 1,
+      "latency_p95_ms": 91.0,
+      "mean_context_tokens": 967.9358974358975,
+      "mrr": 0.7787337662337662,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.7977376996271417,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-100_k-8",
+      "recall_at_k": 0.8737373737373737,
+      "rerank_input_cap": 100,
+      "run_config_hash": "8bd18cf5ce4af9d411598264c0d01db8971b7523489da9bc37972679ba3ee4f7"
+    },
+    {
+      "candidate_pool_size": 100,
+      "final_top_k": 10,
+      "k_zero": 1,
+      "latency_p95_ms": 105.0,
+      "mean_context_tokens": 1182.4871794871794,
+      "mrr": 0.779491341991342,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.8009977890148516,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-100_k-10",
+      "recall_at_k": 0.8838383838383839,
+      "rerank_input_cap": 100,
+      "run_config_hash": "0d233989ff19e1c6aabbf302359fefac6d22b95aab4bfe4438b6732f74cace3c"
+    },
+    {
+      "candidate_pool_size": 100,
+      "final_top_k": 15,
+      "k_zero": 1,
+      "latency_p95_ms": 98.0,
+      "mean_context_tokens": 1722.3974358974358,
+      "mrr": 0.7801226551226552,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.8030450477605132,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-100_k-15",
+      "recall_at_k": 0.8914141414141414,
+      "rerank_input_cap": 100,
+      "run_config_hash": "517f2a822670d64d294fd4bcfccb1306c5905596c109393d14ee0ea5fee65010"
+    },
+    {
+      "candidate_pool_size": 100,
+      "final_top_k": 20,
+      "k_zero": 1,
+      "latency_p95_ms": 113.0,
+      "mean_context_tokens": 2262.9679487179487,
+      "mrr": 0.7805213792055898,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.8047979130117235,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-100_k-20",
+      "recall_at_k": 0.898989898989899,
+      "rerank_input_cap": 100,
+      "run_config_hash": "b659558667480d7b9ffdb458c258ac42c32ad0f422b0d6898cf84b2a27d992ab"
+    }
+  ],
+  "dev_only": true,
+  "golden_sha256": "36b1de436619f02168f50400f14628fe6e5aef78643f607b7107cabed4a0e30b",
+  "grid": {
+    "pools": [
+      25,
+      50,
+      75,
+      100
+    ],
+    "top_ks": [
+      5,
+      8,
+      10,
+      15,
+      20
+    ]
+  },
+  "grid_sha256": "79f993d5a30b23bc54949bb2f903d89770ad60221782dd5e9b2deb6822abb418",
+  "mode": "fixture",
+  "noise": {
+    "band": 0.02,
+    "floor": 0.02,
+    "k": 3.0,
+    "spread": 0.0
+  },
+  "notes": [
+    "Fixture run: the params file was not touched (D-12)."
+  ],
+  "params_path": null,
+  "params_written": false,
+  "proposed_params": {
+    "candidate_pool_size": 25,
+    "config_hash": "8feaa6cd7851723170aa403edb7b9786c207ed66394c332fc5f48d6e9397e82a",
+    "final_top_k": 10,
+    "leg_weights": {
+      "dense": 1.0,
+      "exact_id": 1.0,
+      "lexical": 1.0
+    },
+    "provenance": {
+      "source": "sweep"
+    },
+    "rerank_input_cap": 25,
+    "rrf_k": 60,
+    "schema_version": 1,
+    "sub_question_coverage": true
+  },
+  "rule": "Smallest candidate pool whose Recall@k and MRR are both within the noise band of the best cell; ties on pool size go to the lower mean context tokens, then the lower latency p95.",
+  "run_config_name": "v2-recommended",
+  "run_config_sha256": "a6c8b44ea3551b70c0d70856af6b8dbe24b6361521d50f990bfb2ef04e99e9d2",
+  "schema_version": 1,
+  "selection": {
+    "best_mrr": 0.7805213792055898,
+    "best_recall": 0.898989898989899,
+    "chosen": {
+      "candidate_pool_size": 25,
+      "final_top_k": 10,
+      "k_zero": 2,
+      "latency_p95_ms": 49.0,
+      "mean_context_tokens": 1161.0641025641025,
+      "mrr": 0.7792929292929293,
+      "n_items": 132,
+      "ndcg_at_context_k": 0.8002733314926491,
+      "out_dir": "eval/reports/retrieval-sweep-fixture/cells/pool-25_k-10",
+      "recall_at_k": 0.8813131313131313,
+      "rerank_input_cap": 25,
+      "run_config_hash": "37c358cbd92a30e134c1063d1db925d0dda8d8194850678d326f050dfbfe211b"
+    },
+    "noise_band": 0.02,
+    "within_band": [
+      [
+        25,
+        10
+      ],
+      [
+        25,
+        15
+      ],
+      [
+        25,
+        20
+      ],
+      [
+        50,
+        10
+      ],
+      [
+        50,
+        15
+      ],
+      [
+        50,
+        20
+      ],
+      [
+        75,
+        10
+      ],
+      [
+        75,
+        15
+      ],
+      [
+        75,
+        20
+      ],
+      [
+        100,
+        10
+      ],
+      [
+        100,
+        15
+      ],
+      [
+        100,
+        20
+      ]
+    ]
+  }
+}

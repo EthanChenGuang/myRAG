@@ -8,7 +8,14 @@ import { RetrievalParamsSchema, type RetrievalOverrides, type RetrievalParams } 
 import rawCommitted from '../../../eval/config/retrieval-params.json';
 import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
 import { v2ProfileSettings } from '@/lib/rag/v2/profiles';
-import { computeRetrievalConfigHash, type RetrievalConfigHashInput } from '@/lib/rag/v2/config-hash';
+import { computeRetrievalConfigHash, securityHashComponent, type RetrievalConfigHashInput } from '@/lib/rag/v2/config-hash';
+import { readSecurityConfig } from '@/lib/rag/security/config';
+import { requestRetrievalConfigHash } from '@/lib/rag/v2/result';
+import { effectiveTuningParams, tuningHashComponent } from '@/lib/rag/v2/tuning-params';
+import { resetRetrievalBackendForTests, setRetrievalBackendForTests } from '@/lib/rag/backend/registry';
+import type { RetrievalBackend } from '@/lib/rag/backend/types';
+import type { RunRetrievalInput } from '@/lib/rag/types';
+import { describeReranker } from '@/lib/rag/rerank/select';
 import {
   getActiveChunkingProfiles,
   refreshActiveChunkingProfiles,
@@ -17,6 +24,9 @@ import {
 } from '@/lib/rag/chunking/active';
 
 const COMMITTED = RetrievalParamsSchema.parse(rawCommitted);
+
+/** requestRetrievalConfigHash(requestInput()) on the code before 04.2-06 (base ci/merge-train-24). */
+const PINNED_REQUEST_OFF_HASH = '1bbdc29901e372073c7a9d899a9a9fce1198b05c42d234f3958de0dd1fdc5273';
 
 function baseConfig(overrides: Record<string, string> = {}): RagConfig {
   return loadRagConfig({
@@ -38,7 +48,7 @@ function baseHashInput(chunking: Record<string, string> | null = { pdf: 'legacy-
     lexicalVersion: LEXICAL_VERSION,
     rerankTextVersion: RERANK_TEXT_VERSION,
     params,
-    reranker: { id: config.v2.reranker, model: 'none' },
+    reranker: describeReranker(config, 'chat', ''),
     thresholdsConfigHash: 'abcd'.repeat(16),
     activeChunkingProfiles: chunking,
     switches: {
@@ -92,7 +102,7 @@ describe('effectiveRetrievalParams', () => {
     expect(effectiveRetrievalParams('voice', config, overrides).final_top_k).toBe(COMMITTED.final_top_k);
   });
 
-  it('rejects rerank_input_cap outside 50..100 and keeps the prior value', () => {
+  it('rejects rerank_input_cap outside 25..100 and keeps the prior value', () => {
     const config = baseConfig();
     const overrides: RetrievalOverrides = {
       rerank_input_cap: 120,
@@ -175,13 +185,29 @@ describe('computeRetrievalConfigHash', () => {
       }),
       (i) => ({ ...i, reranker: { id: 'cohere', model: 'rerank-v5.0-fast' } }),
       (i) => ({ ...i, rerankTextVersion: i.rerankTextVersion + 1 }),
-      (i) => ({ ...i, thresholdsConfigHash: 'eeee'.repeat(16) }),
       (i) => ({ ...i, activeChunkingProfiles: { pdf: 'other' } }),
       (i) => ({ ...i, switches: { ...i.switches, lexicalSearch: !i.switches.lexicalSearch } }),
     ];
     for (const mutate of parts) {
       expect(computeRetrievalConfigHash(mutate(baseHashInput()))).not.toBe(base);
     }
+  });
+
+  it('counts the thresholds file only while the refusal threshold switch is on', () => {
+    const on = (i: RetrievalConfigHashInput): RetrievalConfigHashInput => ({
+      ...i,
+      switches: { ...i.switches, refusalThreshold: true },
+    });
+    const off = (i: RetrievalConfigHashInput): RetrievalConfigHashInput => ({
+      ...i,
+      switches: { ...i.switches, refusalThreshold: false },
+    });
+    const other = (i: RetrievalConfigHashInput): RetrievalConfigHashInput => ({ ...i, thresholdsConfigHash: 'eeee'.repeat(16) });
+    expect(computeRetrievalConfigHash(other(on(baseHashInput())))).not.toBe(computeRetrievalConfigHash(on(baseHashInput())));
+    expect(computeRetrievalConfigHash(other(off(baseHashInput())))).toBe(computeRetrievalConfigHash(off(baseHashInput())));
+    expect(computeRetrievalConfigHash({ ...off(baseHashInput()), thresholdsConfigHash: null })).toBe(
+      computeRetrievalConfigHash(off(baseHashInput())),
+    );
   });
 
   it('hashes unavailable chunking differently from an empty map', () => {
@@ -262,5 +288,381 @@ describe('getActiveChunkingProfiles', () => {
     const map = await getActiveChunkingProfiles();
     expect(map).toEqual({ pdf: 'seeded' });
     expect(rpc).not.toHaveBeenCalled();
+  });
+});
+describe('eval chunking override in the retrieval config hash', () => {
+  it('the eval override replaces the active pointer for its doc type and only for the eval profile', async () => {
+    const { hashedChunkingProfiles } = await import('@/lib/rag/v2/overrides');
+    const active = { contract_legal: 'legacy', general: 'legacy' };
+    const override = { chunkingProfileByDocType: { contract_legal: 'p256-1024-contract_legal' } };
+    expect(hashedChunkingProfiles('eval', active, override)).toEqual({ contract_legal: 'p256-1024-contract_legal', general: 'legacy' });
+    expect(hashedChunkingProfiles('chat', active, override)).toBe(active);
+    expect(hashedChunkingProfiles('eval', active, undefined)).toBe(active);
+    expect(hashedChunkingProfiles('eval', null, undefined)).toBeNull();
+    expect(hashedChunkingProfiles('eval', null, override)).toEqual({ contract_legal: 'p256-1024-contract_legal' });
+    const withOverride = computeRetrievalConfigHash({ ...baseHashInput(), activeChunkingProfiles: hashedChunkingProfiles('eval', active, override) });
+    const without = computeRetrievalConfigHash({ ...baseHashInput(), activeChunkingProfiles: hashedChunkingProfiles('eval', active, undefined) });
+    expect(withOverride).not.toBe(without);
+  });
+});
+
+/** A hash input built only from literals, so the pinned value does not move with the committed params file. */
+function literalHashInput(): RetrievalConfigHashInput {
+  return {
+    backendId: 'pgvector',
+    embeddingProfileId: 'openai-3-small-1536',
+    lexicalVersion: 1,
+    rerankTextVersion: 1,
+    params: {
+      candidate_pool_size: 75,
+      config_hash: 'a808a46f380d35f92c15bd2fb19d37a13b02c7827372c73e4dd76480714433f7',
+      final_top_k: 8,
+      leg_weights: { dense: 1, exact_id: 1, lexical: 1 },
+      provenance: { source: 'defaults' },
+      rerank_input_cap: 75,
+      rrf_k: 60,
+      schema_version: 1,
+      sub_question_coverage: true,
+    } as RetrievalParams,
+    reranker: { id: 'none', model: 'none' },
+    thresholdsConfigHash: null,
+    activeChunkingProfiles: { general: 'legacy' },
+    switches: {
+      lexicalSearch: false,
+      refusalThreshold: false,
+      edgeOrder: false,
+      compression: false,
+      tokenBudget: 6000,
+      parentChild: false,
+      iterativeScan: 'off',
+      exactScanCutoff: 0,
+      lexicalTranslation: false,
+      exactIdLookup: false,
+      rerankTierChat: 'quality',
+      rerankTierVoice: 'fast',
+    },
+  };
+}
+
+/** The hash of literalHashInput() before the security component existed (05.1-14 base). */
+const PINNED_DEFAULT_HASH = 'f0bbcf06e9a792e368b2bcf880adf10f17336aa167a2c9fe5597198df3fc4fac';
+
+const SECURITY_DEFAULT = {
+  contextTagging: false,
+  injectionCheck: 'off',
+  promptGuard: false,
+  lakera: false,
+  lakeraMultiTenantAck: false,
+  lakeraEffective: false,
+  toolResultGuard: 'off',
+  rulesVersion: 'rules-v1',
+  detectorsVersion: 'detectors-v1',
+} as const;
+
+describe('computeRetrievalConfigHash security component (D-18)', () => {
+  it('with no security component the hash equals the pinned pre-5.1 value', () => {
+    expect(computeRetrievalConfigHash(literalHashInput())).toBe(PINNED_DEFAULT_HASH);
+    expect(computeRetrievalConfigHash({ ...literalHashInput(), security: null })).toBe(PINNED_DEFAULT_HASH);
+  });
+
+  it('a security component changes the hash, and each single change gives a distinct hash', () => {
+    const variants = [
+      { ...SECURITY_DEFAULT, contextTagging: true },
+      { ...SECURITY_DEFAULT, injectionCheck: 'flag' },
+      { ...SECURITY_DEFAULT, injectionCheck: 'drop' },
+      { ...SECURITY_DEFAULT, injectionCheck: 'downweight' },
+      { ...SECURITY_DEFAULT, promptGuard: true },
+      { ...SECURITY_DEFAULT, lakera: true },
+      { ...SECURITY_DEFAULT, lakeraMultiTenantAck: true },
+      { ...SECURITY_DEFAULT, lakeraEffective: true },
+      { ...SECURITY_DEFAULT, toolResultGuard: 'tag' },
+      { ...SECURITY_DEFAULT, rulesVersion: 'rules-v2' },
+      { ...SECURITY_DEFAULT, detectorsVersion: 'detectors-v2' },
+    ] as const;
+    const hashes = variants.map((security) => computeRetrievalConfigHash({ ...literalHashInput(), security }));
+    expect(new Set([...hashes, PINNED_DEFAULT_HASH]).size).toBe(variants.length + 1);
+  });
+});
+
+describe('securityHashComponent (D-18, plan-check W2)', () => {
+  const VERSIONS = { rulesVersion: 'rules-v1', detectorsVersion: 'detectors-v1' };
+  const hashFor = (env: Record<string, string>, multiTenant: boolean, versions: { rulesVersion: string; detectorsVersion: string } = VERSIONS) =>
+    computeRetrievalConfigHash({ ...literalHashInput(), security: securityHashComponent(readSecurityConfig(env), { multiTenant, ...versions }) });
+  const LAKERA_ON = { RAG_INJECTION_CHECK: 'drop', RAG_INJECTION_LAKERA: 'true', LAKERA_GUARD_API_KEY: 'placeholder-key' };
+
+  it('is null with every switch at its default, so the hash is the pinned value in both deployment modes', () => {
+    expect(securityHashComponent(readSecurityConfig({}), { multiTenant: false })).toBeNull();
+    expect(hashFor({}, false)).toBe(PINNED_DEFAULT_HASH);
+    expect(hashFor({}, true)).toBe(PINNED_DEFAULT_HASH);
+    expect(hashFor({ LAKERA_GUARD_API_KEY: 'placeholder-key', LAKERA_GUARD_BASE_URL: 'https://guard.example.test' }, true)).toBe(PINNED_DEFAULT_HASH);
+  });
+
+  it('gives a distinct hash for each single switch change', () => {
+    const envs: Array<Record<string, string>> = [
+      { RAG_CONTEXT_TAGGING: 'true' },
+      { RAG_INJECTION_CHECK: 'flag' },
+      { RAG_INJECTION_CHECK: 'drop' },
+      { RAG_INJECTION_CHECK: 'downweight' },
+      { RAG_INJECTION_PROMPT_GUARD: 'true' },
+      { RAG_INJECTION_LAKERA: 'true' },
+      { RAG_TOOL_RESULT_GUARD: 'tag' },
+      { RAG_INJECTION_LAKERA_MULTI_TENANT_ACK: 'true' },
+    ];
+    const hashes = envs.map((env) => hashFor(env, false));
+    expect(new Set([...hashes, PINNED_DEFAULT_HASH]).size).toBe(envs.length + 1);
+  });
+
+  it("multi-tenant: the acknowledgement and the key move Lakera's effective state and the hash", () => {
+    const acked = securityHashComponent(readSecurityConfig({ ...LAKERA_ON, RAG_INJECTION_LAKERA_MULTI_TENANT_ACK: 'true' }), { multiTenant: true, ...VERSIONS });
+    const unacked = securityHashComponent(readSecurityConfig(LAKERA_ON), { multiTenant: true, ...VERSIONS });
+    expect(acked?.lakeraEffective).toBe(true);
+    expect(unacked?.lakeraEffective).toBe(false);
+    expect(hashFor({ ...LAKERA_ON, RAG_INJECTION_LAKERA_MULTI_TENANT_ACK: 'true' }, true)).not.toBe(hashFor(LAKERA_ON, true));
+
+    const { LAKERA_GUARD_API_KEY: _key, ...noKey } = { ...LAKERA_ON, RAG_INJECTION_LAKERA_MULTI_TENANT_ACK: 'true' };
+    expect(securityHashComponent(readSecurityConfig(noKey), { multiTenant: true, ...VERSIONS })?.lakeraEffective).toBe(false);
+    expect(hashFor(noKey, true)).not.toBe(hashFor({ ...LAKERA_ON, RAG_INJECTION_LAKERA_MULTI_TENANT_ACK: 'true' }, true));
+  });
+
+  it('single-tenant: the acknowledgement does not change the effective state but is still part of the component', () => {
+    const acked = securityHashComponent(readSecurityConfig({ ...LAKERA_ON, RAG_INJECTION_LAKERA_MULTI_TENANT_ACK: 'true' }), { multiTenant: false, ...VERSIONS });
+    const unacked = securityHashComponent(readSecurityConfig(LAKERA_ON), { multiTenant: false, ...VERSIONS });
+    expect(acked?.lakeraEffective).toBe(true);
+    expect(unacked?.lakeraEffective).toBe(true);
+    expect(acked?.lakeraMultiTenantAck).toBe(true);
+    expect(hashFor({ ...LAKERA_ON, RAG_INJECTION_LAKERA_MULTI_TENANT_ACK: 'true' }, false)).not.toBe(hashFor(LAKERA_ON, false));
+  });
+
+  it('never carries the key, only its presence through the effective state', () => {
+    const component = securityHashComponent(readSecurityConfig(LAKERA_ON), { multiTenant: false, ...VERSIONS });
+    expect(JSON.stringify(component)).not.toContain('placeholder-key');
+  });
+
+  it('the rules and detector versions move the hash while the check is on and not while every switch is off', () => {
+    const on = { RAG_INJECTION_CHECK: 'drop' };
+    expect(hashFor(on, false, { ...VERSIONS, rulesVersion: 'rules-v2' })).not.toBe(hashFor(on, false));
+    expect(hashFor(on, false, { ...VERSIONS, detectorsVersion: 'detectors-v2' })).not.toBe(hashFor(on, false));
+    expect(hashFor({}, false, { ...VERSIONS, rulesVersion: 'rules-v2' })).toBe(PINNED_DEFAULT_HASH);
+    expect(hashFor({}, false, { ...VERSIONS, detectorsVersion: 'detectors-v2' })).toBe(PINNED_DEFAULT_HASH);
+  });
+
+  it('reads the real rules and detector config versions when none are given', () => {
+    const component = securityHashComponent(readSecurityConfig({ RAG_INJECTION_CHECK: 'flag' }), { multiTenant: false });
+    expect(component?.rulesVersion).toMatch(/^[0-9a-f]{12}$/);
+    expect(component?.detectorsVersion).toMatch(/\S/);
+  });
+});
+
+describe('computeRetrievalConfigHash binding legs (03.1.1-09)', () => {
+  beforeEach(() => {
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetRagConfigForTests();
+  });
+
+  it('is unchanged without a planned leg and changes with the binding map or the control leg', () => {
+    const base = computeRetrievalConfigHash(baseHashInput());
+    expect(computeRetrievalConfigHash({ ...baseHashInput(), embeddingBindings: {} })).toBe(base);
+    expect(computeRetrievalConfigHash({ ...baseHashInput(), embeddingBindings: null, domainControlLeg: null })).toBe(base);
+    const law = computeRetrievalConfigHash({ ...baseHashInput(), embeddingBindings: { contract_legal: 'voyage-law-2-1024' } });
+    const domain = computeRetrievalConfigHash({ ...baseHashInput(), embeddingBindings: { contract_legal: 'voyage-4-large-1024-domain' } });
+    const control = computeRetrievalConfigHash({ ...baseHashInput(), domainControlLeg: 'contract_legal' });
+    expect(new Set([base, law, domain, control]).size).toBe(4);
+  });
+});
+
+describe('requestRetrievalConfigHash with every Phase 4.2 switch off (04.2-06, D-34)', () => {
+  beforeEach(() => {
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    setRetrievalBackendForTests({ id: 'pgvector' } as unknown as RetrievalBackend);
+    setActiveChunkingProfilesForTests({ general: 'legacy' });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetRetrievalBackendForTests();
+    resetActiveChunkingProfilesForTests();
+    resetRagConfigForTests();
+  });
+
+  function requestInput(env: Record<string, string> = {}) {
+    return {
+      input: { scope: null, query: 'q', profile: 'chat', signal: new AbortController().signal } as RunRetrievalInput,
+      config: baseConfig({ RAG_LEXICAL_SEARCH: 'true', ...env }),
+      profile: 'chat' as const,
+      embeddingProfileId: 'openai-3-small-1536',
+      queryLanguage: 'en',
+      security: readSecurityConfig({}),
+    };
+  }
+
+  it('equals the hash pinned before the plan', async () => {
+    expect(await requestRetrievalConfigHash(requestInput())).toBe(PINNED_REQUEST_OFF_HASH);
+  });
+
+  it('explicit off values for every new switch keep the pinned hash', async () => {
+    const off = requestInput({
+      RAG_LEXICAL_DICTIONARY: 'false',
+      RAG_LEXICAL_STEM_IT: 'false',
+      RAG_VERSION_SCOPE: 'false',
+      RAG_TABLE_LOOKUP: 'false',
+      RAG_DUP_CLUSTERS: 'false',
+      RAG_RESULT_DIVERSITY: 'off',
+      RAG_IDENTIFIER_INDEX: 'false',
+      RAG_IDENTIFIER_FILTER: 'false',
+    });
+    expect(await requestRetrievalConfigHash(off)).toBe(PINNED_REQUEST_OFF_HASH);
+  });
+
+  it('invalid combinations that resolve to off keep the pinned hash', async () => {
+    const filterOnly = requestInput({ RAG_IDENTIFIER_FILTER: 'true' });
+    const scopeWithoutLexical = { ...requestInput(), config: baseConfig({ RAG_LEXICAL_SEARCH: 'false', RAG_VERSION_SCOPE: 'true' }) };
+    const lexicalOff = { ...requestInput(), config: baseConfig({ RAG_LEXICAL_SEARCH: 'false' }) };
+    expect(await requestRetrievalConfigHash(filterOnly)).toBe(PINNED_REQUEST_OFF_HASH);
+    expect(await requestRetrievalConfigHash(scopeWithoutLexical)).toBe(await requestRetrievalConfigHash(lexicalOff));
+  });
+
+  it('each on-switch gives its own hash', async () => {
+    const envs: Record<string, string>[] = [
+      { RAG_LEXICAL_DICTIONARY: 'true' },
+      { RAG_LEXICAL_STEM_IT: 'true' },
+      { RAG_LEXICAL_DICTIONARY: 'true', RAG_LEXICAL_STEM_IT: 'true' },
+      { RAG_VERSION_SCOPE: 'true' },
+      { RAG_TABLE_LOOKUP: 'true' },
+      { RAG_DUP_CLUSTERS: 'true' },
+      { RAG_DUP_CLUSTERS: 'true', RAG_RESULT_DIVERSITY: 'collapse' },
+      { RAG_DUP_CLUSTERS: 'true', RAG_RESULT_DIVERSITY: 'mmr' },
+      { RAG_IDENTIFIER_INDEX: 'true' },
+      { RAG_IDENTIFIER_INDEX: 'true', RAG_IDENTIFIER_FILTER: 'true' },
+    ];
+    const hashes = [PINNED_REQUEST_OFF_HASH];
+    for (const env of envs) hashes.push(await requestRetrievalConfigHash(requestInput(env)));
+    expect(new Set(hashes).size).toBe(envs.length + 1);
+  });
+});
+
+describe('computeRetrievalConfigHash tuning block (04.2-06, D-34, D-42)', () => {
+  beforeEach(() => {
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetRagConfigForTests();
+  });
+
+  function tuningFor(env: Record<string, string>, overrides?: Parameters<typeof effectiveTuningParams>[2]) {
+    const config = baseConfig({ RAG_LEXICAL_SEARCH: 'true', ...env });
+    return tuningHashComponent(config, effectiveTuningParams('eval', config, overrides));
+  }
+
+  it('is null with every switch off and with the lexical switches alone', () => {
+    expect(tuningFor({})).toBeNull();
+    expect(tuningFor({ RAG_LEXICAL_DICTIONARY: 'true', RAG_LEXICAL_STEM_IT: 'true' })).toBeNull();
+    expect(tuningFor({ RAG_IDENTIFIER_FILTER: 'true' })).toBeNull();
+  });
+
+  it('a null or empty tuning input leaves the pinned hash unchanged', () => {
+    expect(computeRetrievalConfigHash({ ...literalHashInput(), tuning: null })).toBe(PINNED_DEFAULT_HASH);
+    expect(computeRetrievalConfigHash({ ...literalHashInput(), tuning: {} })).toBe(PINNED_DEFAULT_HASH);
+  });
+
+  it('holds only the entries of the switches that are on, with their effective parameters', () => {
+    expect(tuningFor({ RAG_TABLE_LOOKUP: 'true' })).toEqual({ table_lookup: { min_cells: 2, limit: 10, weight: 1 } });
+    expect(tuningFor({ RAG_DUP_CLUSTERS: 'true', RAG_RESULT_DIVERSITY: 'collapse' })).toEqual({
+      dup_clusters: true,
+      diversity: { mode: 'collapse' },
+    });
+    expect(tuningFor({ RAG_RESULT_DIVERSITY: 'mmr' })).toEqual({ diversity: { mode: 'mmr', mmr_lambda: 0.7, mmr_window_factor: 3 } });
+    expect(tuningFor({ RAG_VERSION_SCOPE: 'true' })).toEqual({ version_scope: true });
+    expect(tuningFor({ RAG_IDENTIFIER_INDEX: 'true' })).toEqual({ identifier_index: true });
+    expect(tuningFor({ RAG_IDENTIFIER_INDEX: 'true', RAG_IDENTIFIER_FILTER: 'true' })).toEqual({ identifier_index: true, identifier_filter: true });
+  });
+
+  it('min_cells moves the hash only while the table lookup is on', () => {
+    const hash = (env: Record<string, string>, minCells: number) =>
+      computeRetrievalConfigHash({ ...literalHashInput(), tuning: tuningFor(env, { table_lookup: { min_cells: minCells } }) });
+    expect(hash({ RAG_TABLE_LOOKUP: 'true' }, 2)).not.toBe(hash({ RAG_TABLE_LOOKUP: 'true' }, 3));
+    expect(hash({}, 2)).toBe(hash({}, 3));
+    expect(hash({}, 3)).toBe(PINNED_DEFAULT_HASH);
+  });
+
+  it('two mmr lambdas give two hashes', () => {
+    const hash = (lambda: number) =>
+      computeRetrievalConfigHash({ ...literalHashInput(), tuning: tuningFor({ RAG_RESULT_DIVERSITY: 'mmr' }, { diversity: { mmr_lambda: lambda } }) });
+    expect(hash(0.5)).not.toBe(hash(0.7));
+  });
+});
+
+describe('lexical dictionary version and identifier patterns in the hash (04.2-22, D-34)', () => {
+  const STAMP = { dictVersion: 's2.w5', patterns: 'pabcdef012345' };
+
+  beforeEach(() => {
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    setRetrievalBackendForTests({ id: 'pgvector' } as unknown as RetrievalBackend);
+    setActiveChunkingProfilesForTests({ general: 'legacy' });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetRetrievalBackendForTests();
+    resetActiveChunkingProfilesForTests();
+    resetRagConfigForTests();
+  });
+
+  function requestInput(env: Record<string, string> = {}, lexicalStamp?: typeof STAMP | { dictVersion: string | null; patterns: string | null }) {
+    return {
+      input: { scope: null, query: 'q', profile: 'chat', signal: new AbortController().signal } as RunRetrievalInput,
+      config: baseConfig({ RAG_LEXICAL_SEARCH: 'true', ...env }),
+      profile: 'chat' as const,
+      embeddingProfileId: 'openai-3-small-1536',
+      queryLanguage: 'en',
+      security: readSecurityConfig({}),
+      ...(lexicalStamp ? { lexicalStamp } : {}),
+    };
+  }
+
+  it('with the switches off a stamp keeps the pinned off-hash', async () => {
+    expect(await requestRetrievalConfigHash(requestInput({}, STAMP))).toBe(PINNED_REQUEST_OFF_HASH);
+  });
+
+  it('dictionary on adds the version string; a new version gives a new hash', async () => {
+    const config = baseConfig({ RAG_LEXICAL_SEARCH: 'true', RAG_LEXICAL_DICTIONARY: 'true' });
+    expect(tuningHashComponent(config, effectiveTuningParams('chat', config, null), STAMP)).toEqual({ lexical_dictionary_version: 's2.w5' });
+    const first = await requestRetrievalConfigHash(requestInput({ RAG_LEXICAL_DICTIONARY: 'true' }, STAMP));
+    const second = await requestRetrievalConfigHash(requestInput({ RAG_LEXICAL_DICTIONARY: 'true' }, { ...STAMP, dictVersion: 's2.w6' }));
+    const without = await requestRetrievalConfigHash(requestInput({ RAG_LEXICAL_DICTIONARY: 'true' }));
+    expect(new Set([first, second, without]).size).toBe(3);
+  });
+
+  it('dictionary on without a loaded version records it as unavailable', () => {
+    const config = baseConfig({ RAG_LEXICAL_SEARCH: 'true', RAG_LEXICAL_DICTIONARY: 'true' });
+    expect(tuningHashComponent(config, effectiveTuningParams('chat', config, null), { dictVersion: null, patterns: null })).toEqual({
+      lexical_dictionary_version: 'lexical_dictionary:unavailable',
+    });
+  });
+
+  it('identifier index on adds the patterns fingerprint next to identifier_index', async () => {
+    const config = baseConfig({ RAG_LEXICAL_SEARCH: 'true', RAG_IDENTIFIER_INDEX: 'true' });
+    expect(tuningHashComponent(config, effectiveTuningParams('chat', config, null), STAMP)).toEqual({
+      identifier_index: true,
+      identifier_patterns: 'pabcdef012345',
+    });
+    const a = await requestRetrievalConfigHash(requestInput({ RAG_IDENTIFIER_INDEX: 'true' }, STAMP));
+    const b = await requestRetrievalConfigHash(requestInput({ RAG_IDENTIFIER_INDEX: 'true' }, { ...STAMP, patterns: 'p000000000000' }));
+    expect(a).not.toBe(b);
+  });
+
+  it('with a switch off a changed dictionary or pattern set does not change the hash', async () => {
+    const stemOnly = (stamp: typeof STAMP) => requestRetrievalConfigHash(requestInput({ RAG_LEXICAL_STEM_IT: 'true' }, stamp));
+    expect(await stemOnly(STAMP)).toBe(await stemOnly({ dictVersion: 's9.w9', patterns: 'p999999999999' }));
+    expect(await stemOnly(STAMP)).toBe(await requestRetrievalConfigHash(requestInput({ RAG_LEXICAL_STEM_IT: 'true' })));
   });
 });

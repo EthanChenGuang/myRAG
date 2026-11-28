@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { countTokens } from '@/lib/rag/ingest/text/tokens';
 import { createQwenProvider } from '@/lib/rag/embeddings/qwen';
 import type { QwenConfig } from '@/lib/rag/embeddings/qwen';
@@ -130,6 +130,125 @@ describe('Voyage provider', () => {
       actual: 512,
       expected: 1024,
     });
+  });
+});
+
+describe('Voyage provider with a fixed-dimension catalog model (D-02)', () => {
+  interface Recorded {
+    url: string;
+    body: Record<string, unknown>;
+    authorization: string | null;
+  }
+
+  function stubFetch(options: { status?: number; dims?: number; echoModel?: string; errorText?: string } = {}): Recorded[] {
+    const recorded: Recorded[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      recorded.push({ url, body, authorization: new Headers(init.headers).get('authorization') });
+      if (options.status && options.status >= 400) {
+        return new Response(options.errorText ?? 'error', { status: options.status });
+      }
+      const inputs = body.input as string[];
+      const size = options.dims ?? 1024;
+      return new Response(
+        JSON.stringify({
+          data: inputs.map((_, index) => ({ embedding: new Array<number>(size).fill(0.01), index })),
+          model: options.echoModel ?? body.model,
+          usage: { total_tokens: inputs.length * 3 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    return recorded;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function domainVoyage(model: string, apiKey = VOYAGE_KEY): EmbeddingProvider {
+    return createVoyageProvider({ model, config: () => ({ apiKey, baseUrl: 'https://voyage.invalid/v1', timeoutMs: 5000 }) });
+  }
+
+  it('reports the catalog model, dims and input limit', () => {
+    const provider = domainVoyage('voyage-law-2');
+    expect(provider.model).toBe('voyage-law-2');
+    expect(provider.supportedDims).toEqual([1024]);
+    expect(provider.maxInputTokens).toBe(16000);
+    expect(domainVoyage('voyage-finance-2').maxInputTokens).toBe(32000);
+  });
+
+  it('sends the model, input_type document, truncation false and no output_dimension for documents', async () => {
+    const recorded = stubFetch();
+    const out = await domainVoyage('voyage-law-2').embedDocuments(['first neutral sentence', 'second neutral sentence'], {
+      dims: 1024,
+      signal: signal(),
+    });
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].body).toMatchObject({ model: 'voyage-law-2', input_type: 'document', truncation: false });
+    expect(Object.prototype.hasOwnProperty.call(recorded[0].body, 'output_dimension')).toBe(false);
+    expect(out.model).toBe('voyage-law-2');
+    expect(out.vectors[0]).toHaveLength(1024);
+  });
+
+  it('sends input_type query and no output_dimension for a query', async () => {
+    const recorded = stubFetch();
+    await domainVoyage('voyage-finance-2').embedQuery('a neutral question', { dims: 1024, signal: signal() });
+    expect(recorded[0].body).toMatchObject({ model: 'voyage-finance-2', input_type: 'query', truncation: false });
+    expect(Object.prototype.hasOwnProperty.call(recorded[0].body, 'output_dimension')).toBe(false);
+  });
+
+  it('canonicalises a host-prefixed model echo', async () => {
+    stubFetch({ echoModel: 'mongodb/voyage-law-2' });
+    const out = await domainVoyage('voyage-law-2').embedQuery('q', { dims: 1024, signal: signal() });
+    expect(out.model).toBe('voyage-law-2');
+  });
+
+  it('rejects a response with 1536-length vectors', async () => {
+    stubFetch({ dims: 1536 });
+    await expect(domainVoyage('voyage-law-2').embedQuery('q', { dims: 1024, signal: signal() })).rejects.toMatchObject({
+      name: 'EmbeddingProfileMismatch',
+      kind: 'dims',
+      actual: 1536,
+      expected: 1024,
+    });
+  });
+
+  it('refuses dims the fixed model cannot produce before any request', async () => {
+    const recorded = stubFetch();
+    await expect(domainVoyage('voyage-law-2').embedDocuments(['a'], { dims: 2048, signal: signal() })).rejects.toMatchObject({
+      name: 'EmbeddingProfileMismatch',
+      kind: 'dims',
+      actual: 2048,
+      expected: 1024,
+    });
+    expect(recorded).toHaveLength(0);
+  });
+
+  it('keeps output_dimension for voyage-4-large', async () => {
+    const recorded = stubFetch({ dims: 512 });
+    await domainVoyage('voyage-4-large').embedQuery('q', { dims: 512, signal: signal() });
+    expect(recorded[0].body).toMatchObject({ model: 'voyage-4-large', output_dimension: 512 });
+  });
+
+  it('keeps the key and the vendor response text out of a 401 error', async () => {
+    stubFetch({ status: 401, errorText: `invalid key ${VOYAGE_KEY.slice(0, 12)} vendor-detail-text` });
+    let caught: unknown;
+    try {
+      await domainVoyage('voyage-law-2').embedQuery('q', { dims: 1024, signal: signal() });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    const serialized = `${(caught as Error).message} ${JSON.stringify(caught, Object.getOwnPropertyNames(caught))}`;
+    expect((caught as Error).message).toContain('401');
+    expect(serialized).not.toContain(VOYAGE_KEY);
+    expect(serialized).not.toContain(VOYAGE_KEY.slice(0, 12));
+    expect(serialized).not.toContain('vendor-detail-text');
+  });
+
+  it('throws for a model that is not a Voyage catalog model', () => {
+    expect(() => domainVoyage('voyage-9')).toThrow('[Embedding Profile] unknown embedding model');
   });
 });
 
@@ -287,6 +406,96 @@ describe('Qwen3 provider', () => {
       expect(dump).not.toContain(DEEPINFRA_KEY);
       expect(dump).not.toContain(OPENROUTER_KEY);
     }
+  });
+
+  it('defaults to DeepInfra as the primary host when no primary is given', async () => {
+    const out = await qwen({ primary: undefined }).embedQuery('q', { dims: 1024, signal: signal() });
+    expect(fake.callsFor('deepinfra')).toHaveLength(1);
+    expect(fake.callsFor('openrouter')).toHaveLength(0);
+    expect(out.host).toBe('deepinfra');
+  });
+
+  it('with the default primary still requires the DeepInfra key', async () => {
+    await expect(
+      qwen({ primary: 'deepinfra' }, { deepinfra: '' }).embedQuery('q', { dims: 1024, signal: signal() }),
+    ).rejects.toThrow('[Embedding Profile] DEEPINFRA_API_KEY not configured');
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  describe('with OpenRouter as the primary host', () => {
+    it('embeds through OpenRouter without a DeepInfra key', async () => {
+      const out = await qwen({ primary: 'openrouter' }, { deepinfra: '' }).embedQuery('notice period', {
+        dims: 1024,
+        signal: signal(),
+      });
+      expect(fake.callsFor('deepinfra')).toHaveLength(0);
+      expect(fake.callsFor('openrouter')).toHaveLength(1);
+      const [call] = fake.callsFor('openrouter');
+      expect(call.body.model).toBe('qwen/qwen3-embedding-8b');
+      expect(call.body.input).toEqual([`${QWEN_QUERY}notice period`]);
+      expect(call.body.encoding_format).toBe('float');
+      expect(Object.keys(call.body)).not.toContain('dimensions');
+      expect(call.headers.authorization).toBe(`Bearer ${OPENROUTER_KEY}`);
+      expect(out.host).toBe('openrouter');
+      expect(out.model).toBe('Qwen/Qwen3-Embedding-8B');
+      expect(out.vectors[0]).toHaveLength(1024);
+      const norm = Math.sqrt(out.vectors[0].reduce((sum, value) => sum + value * value, 0));
+      expect(norm).toBeCloseTo(1, 6);
+      expect(out.usage.tokens).toBeGreaterThan(0);
+    });
+
+    it('throws a configuration error before any request when the OpenRouter key is missing', async () => {
+      await expect(
+        qwen({ primary: 'openrouter' }, { openrouter: '' }).embedQuery('q', { dims: 1024, signal: signal() }),
+      ).rejects.toThrow('[Embedding Profile] OPENROUTER_API_KEY not configured');
+      expect(fake.calls).toHaveLength(0);
+    });
+
+    it('retries OpenRouter after two 500s and stays on OpenRouter', async () => {
+      fake.failNext('openrouter', 500, 500);
+      const out = await qwen({ primary: 'openrouter' }).embedQuery('q', { dims: 1024, signal: signal() });
+      expect(fake.callsFor('openrouter')).toHaveLength(3);
+      expect(fake.callsFor('deepinfra')).toHaveLength(0);
+      expect(out.host).toBe('openrouter');
+    });
+
+    it('falls back to DeepInfra on 5xx when the fallback is allowed and a DeepInfra key exists', async () => {
+      fake.failNext('openrouter', 503, 503, 503);
+      const out = await qwen({ primary: 'openrouter' }).embedQuery('notice period', { dims: 1024, signal: signal() });
+      expect(fake.callsFor('openrouter')).toHaveLength(3);
+      expect(fake.callsFor('deepinfra')).toHaveLength(1);
+      const [fallback] = fake.callsFor('deepinfra');
+      expect(fallback.body.model).toBe('Qwen/Qwen3-Embedding-8B');
+      expect(fallback.body.input).toEqual([`${QWEN_QUERY}notice period`]);
+      expect(fallback.headers.authorization).toBe(`Bearer ${DEEPINFRA_KEY}`);
+      expect(out.host).toBe('deepinfra');
+      expect(out.model).toBe('Qwen/Qwen3-Embedding-8B');
+    });
+
+    it('does not fall back when the fallback switch is none', async () => {
+      fake.failNext('openrouter', 503, 503, 503);
+      await expect(
+        qwen({ primary: 'openrouter', fallback: 'none' }).embedQuery('q', { dims: 1024, signal: signal() }),
+      ).rejects.toMatchObject({ name: 'EmbeddingProviderError', host: 'openrouter', status: 503 });
+      expect(fake.callsFor('deepinfra')).toHaveLength(0);
+    });
+
+    it('does not fall back when no DeepInfra key is configured', async () => {
+      fake.failNext('openrouter', 500, 500, 500);
+      await expect(
+        qwen({ primary: 'openrouter' }, { deepinfra: '' }).embedQuery('q', { dims: 1024, signal: signal() }),
+      ).rejects.toMatchObject({ name: 'EmbeddingProviderError', host: 'openrouter', status: 500 });
+      expect(fake.callsFor('deepinfra')).toHaveLength(0);
+    });
+
+    it('does not retry or fall back on a client error', async () => {
+      fake.failNext('openrouter', 400);
+      await expect(qwen({ primary: 'openrouter' }).embedQuery('q', { dims: 1024, signal: signal() })).rejects.toMatchObject({
+        status: 400,
+      });
+      expect(fake.callsFor('openrouter')).toHaveLength(1);
+      expect(fake.callsFor('deepinfra')).toHaveLength(0);
+    });
   });
 
   it('stops without retrying when the signal aborts', async () => {

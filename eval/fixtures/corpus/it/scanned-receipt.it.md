@@ -1,3 +1,4 @@
+<!-- fixture-meta {"doc_type":"invoice_receipt"} -->
 ## Intestazione scontrino
 
 VALLE VERDE STRUMENTI S.R.L.

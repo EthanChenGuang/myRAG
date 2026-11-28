@@ -19,6 +19,7 @@ let finishTrace: typeof import('../src/lib/rag/trace/finish.ts').finishTrace;
 let readLangfuseConfig: typeof import('../src/lib/rag/trace/config.ts').readLangfuseConfig;
 let hasLangfuseProcessor: typeof import('../src/lib/rag/trace/langfuse.ts').hasLangfuseProcessor;
 let resetLangfuseForTests: typeof import('../src/lib/rag/trace/langfuse.ts').resetLangfuseForTests;
+let exportReviewCandidate: typeof import('../src/lib/rag/trace/review-export.ts').exportReviewCandidate;
 
 const PLACEHOLDER_PUBLIC_KEY = 'pk-lf-placeholder-0000';
 const PLACEHOLDER_SECRET_KEY = 'sk-lf-placeholder-0000';
@@ -38,6 +39,7 @@ before(async () => {
   ({ finishTrace } = await import('../src/lib/rag/trace/finish.ts'));
   ({ readLangfuseConfig } = await import('../src/lib/rag/trace/config.ts'));
   ({ hasLangfuseProcessor, resetLangfuseForTests } = await import('../src/lib/rag/trace/langfuse.ts'));
+  ({ exportReviewCandidate } = await import('../src/lib/rag/trace/review-export.ts'));
   fake = await startFakeLangfuse();
 });
 
@@ -229,5 +231,58 @@ describe('review-candidate export', () => {
     assert.equal(readLangfuseConfig({ LANGFUSE_REVIEW_SAMPLE_RATE: '0.25' }).reviewSampleRate, 0.25);
     assert.equal(readLangfuseConfig({ LANGFUSE_REVIEW_SAMPLE_RATE: '7' }).reviewSampleRate, 1);
     assert.equal(readLangfuseConfig({ LANGFUSE_REVIEW_SAMPLE_RATE: 'nope' }).reviewSampleRate, 0);
+  });
+});
+
+describe('review export for feedback_negative and groundedness_flagged (D-19)', () => {
+  const TRACE_ID = '0123456789abcdef0123456789abcdef';
+
+  for (const reason of ['feedback_negative', 'groundedness_flagged'] as const) {
+    test(`${reason}: one masked observation on the same trace, tagged review_candidate and review:${reason}, with both sample rates at 0`, async () => {
+      const status = await exportReviewCandidate(
+        { traceId: TRACE_ID, tenantKey: TENANT_KEY, reason, query: QUERY_TEXT, answer: ANSWER_TEXT, citedQuotes: [CONTEXT_TEXT, 'Second quote, call +44 20 7946 0958.'], model: MODEL_ID },
+        { config: configFor({ sampleRate: 0, reviewSampleRate: 0 }) },
+      );
+      assert.equal(status, 'exported');
+      await waitForCompleted(1);
+      assert.deepEqual(fake.errors, []);
+      assert.ok(fake.spans.length >= 1);
+      for (const span of fake.spans) {
+        assert.equal(span.traceId, TRACE_ID);
+        assert.ok(tagsOf(span).includes('review_candidate'), `${span.name} carries review_candidate`);
+        assert.ok(tagsOf(span).includes(`review:${reason}`), `${span.name} carries review:${reason}`);
+        assert.ok(tagsOf(span).includes(`tenant:${TENANT_KEY}`));
+      }
+      const root = rootOf(fake.spans);
+      assert.ok(String(root.attributes[`${ATTR}input`]).includes('refund window'));
+      assert.ok(String(root.attributes[`${ATTR}output`]).includes('30 days'));
+      const context = String(root.attributes[`${ATTR}metadata.context`]);
+      assert.ok(context.includes('Escalations') && context.includes('Second quote'));
+      const everything = attributeText(fake.spans);
+      assert.ok(!everything.includes(MARKER_EMAIL));
+      assert.ok(!everything.includes('second.marker@example.org'));
+      assert.ok(!everything.includes('7946 0958'));
+    });
+  }
+
+  test('with Langfuse off nothing is sent and nothing throws', async () => {
+    const status = await exportReviewCandidate(
+      { traceId: TRACE_ID, tenantKey: TENANT_KEY, reason: 'feedback_negative', query: QUERY_TEXT, answer: ANSWER_TEXT, citedQuotes: [], model: MODEL_ID },
+      { config: configFor({ enabled: false }) },
+    );
+    assert.equal(status, 'skipped');
+    await settle();
+    assert.equal(fake.requests.length, 0);
+    assert.equal(hasLangfuseProcessor(), false);
+  });
+
+  test('a trace id that is not a 32-hex OTel id is skipped', async () => {
+    const status = await exportReviewCandidate(
+      { traceId: 'not-an-otel-id', tenantKey: TENANT_KEY, reason: 'feedback_negative', query: QUERY_TEXT, answer: ANSWER_TEXT, citedQuotes: [], model: MODEL_ID },
+      { config: configFor() },
+    );
+    assert.equal(status, 'skipped');
+    await settle();
+    assert.equal(fake.requests.length, 0);
   });
 });

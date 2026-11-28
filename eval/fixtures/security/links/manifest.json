@@ -1,0 +1,90 @@
+{
+  "allowlist": "example.com",
+  "fixtures": {
+    "bad-annotation.pdf": {
+      "annotation_targets": [
+        "https://outside.example.net/reference/overview"
+      ],
+      "expected": "quarantined",
+      "language": "en",
+      "mime": "application/pdf",
+      "sha256": "447ccf2fb9b67e0d0e671b28dcde41e1256c832e700a27b82cd8b899a73f1491",
+      "targets": [
+        {
+          "kind": "annotation",
+          "target": "https://outside.example.net/reference/overview"
+        }
+      ],
+      "visible_text": "The quarterly review lists three open items for the team.\nEach item has an owner and a target date in the next cycle.\nThe reference overview is linked from this page.\n"
+    },
+    "bad-domain.md": {
+      "expected": "quarantined",
+      "language": "en",
+      "mime": "text/markdown",
+      "sha256": "0f312319bad21a216513d339b3327c4b8ef260f028fb12c10d7d9744bdbbeae5",
+      "targets": [
+        {
+          "kind": "domain",
+          "target": "phish-example.net"
+        }
+      ]
+    },
+    "bad-email.md": {
+      "expected": "quarantined",
+      "language": "it",
+      "mime": "text/markdown",
+      "sha256": "145fbaaadda1439a5485ac0f9126c9a165502f6459634b252f3319e3e9bc9420",
+      "targets": [
+        {
+          "kind": "email",
+          "target": "supporto@outside-example.net"
+        }
+      ]
+    },
+    "bad-url.md": {
+      "expected": "quarantined",
+      "language": "en",
+      "mime": "text/markdown",
+      "sha256": "6fcf00b1a9bf429eab3971d8467eb2dfc346a0b2d759692f02ba4d927aba0a25",
+      "targets": [
+        {
+          "kind": "url",
+          "target": "https://phish.example.net/login"
+        }
+      ]
+    },
+    "clean-annotation.pdf": {
+      "annotation_targets": [
+        "https://docs.example.com/reference/overview"
+      ],
+      "expected": "ready",
+      "language": "en",
+      "mime": "application/pdf",
+      "sha256": "46ba59d1da3f6756b57479f761bc84a513683dac508e1d2965a4856dc9465e2e",
+      "targets": [],
+      "visible_text": "The quarterly review lists three open items for the team.\nEach item has an owner and a target date in the next cycle.\nThe reference overview is linked from this page.\n"
+    },
+    "clean-en.md": {
+      "expected": "ready",
+      "language": "en",
+      "mime": "text/markdown",
+      "sha256": "2d6128f93ce0834e7c254db7bd64a41b5cf45df0cb824211620966d9ab70e709",
+      "targets": []
+    },
+    "clean-it.md": {
+      "expected": "ready",
+      "language": "it",
+      "mime": "text/markdown",
+      "sha256": "1e3b6f95f7fa10c6df06be2e8ac4d4f56effe77ea089a9868d0c066968adb949",
+      "targets": []
+    },
+    "clean-zh.md": {
+      "expected": "ready",
+      "language": "zh",
+      "mime": "text/markdown",
+      "sha256": "07b69c12ded53bcdac763d2c96de7a112a2b05c41878bd51b9767d99c9831154",
+      "targets": []
+    }
+  },
+  "schema_version": 1
+}

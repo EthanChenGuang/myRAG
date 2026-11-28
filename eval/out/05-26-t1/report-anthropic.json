@@ -1,0 +1,188 @@
+{
+  "anthropic": {
+    "anthropic/claude-opus-5.5 plain": {
+      "path": "anthropic",
+      "ttftMs": 652,
+      "totalMs": 1562,
+      "text": "The Velmora lighthouse was painted green: The Velmora lighthouse was painted green in 1931.[S1]\n\n**Source:** Harbor notes\n\nThe Tarn footbridge is 84 metres long: The Tarn footbridge is 84 metres long.[S3]\n\n**Source:** Bridge log",
+      "strategy": "claude-citations",
+      "fallbackReason": null,
+      "traceRules": [],
+      "citations": [
+        {
+          "alias": "S1",
+          "documentName": "Harbor notes.txt",
+          "quote": "The Velmora lighthouse was painted green in 1931. "
+        },
+        {
+          "alias": "S3",
+          "documentName": "Bridge log.txt",
+          "quote": "The Tarn footbridge is 84 metres long. "
+        }
+      ],
+      "invalidCitations": 0
+    },
+    "anthropic/claude-opus-5.5 reasoning": {
+      "path": "anthropic",
+      "ttftMs": 375,
+      "totalMs": 1381,
+      "text": "The lighthouse lamp replacement happened first.\n\n- **Lighthouse:** Its lamp was replaced with an electric one in 1952.[S1]\n- **Footbridge:** It was closed for repairs in the spring of 2019.[S3]\n\nThe lamp was replaced 67 years before the footbridge repairs.\n\n**Source:** Harbor notes; Bridge log",
+      "strategy": "claude-citations",
+      "fallbackReason": null,
+      "traceRules": [],
+      "citations": [
+        {
+          "alias": "S1",
+          "documentName": "Harbor notes.txt",
+          "quote": "Its lamp was replaced with an electric one in 1952."
+        },
+        {
+          "alias": "S3",
+          "documentName": "Bridge log.txt",
+          "quote": "It was closed for repairs in the spring of 2019. "
+        }
+      ],
+      "invalidCitations": 0
+    },
+    "anthropic/claude-opus-5.5 zh": {
+      "path": "anthropic",
+      "ttftMs": 1291,
+      "totalMs": 2196,
+      "text": "Oskel 社区花园种植了四十种豆子：The Oskel community garden grows forty kinds of beans.[S2]\n\n志愿者在每周二早上浇水：Volunteers water the beds every Tuesday morning.[S2]\n\n**来源：** Garden records",
+      "strategy": "claude-citations",
+      "fallbackReason": null,
+      "traceRules": [],
+      "citations": [
+        {
+          "alias": "S2",
+          "documentName": "Garden records.txt",
+          "quote": "The Oskel community garden grows forty kinds of beans. "
+        }
+      ],
+      "invalidCitations": 0
+    },
+    "anthropic/claude-sonnet-5.5 plain": {
+      "path": "anthropic",
+      "ttftMs": 725,
+      "totalMs": 1120,
+      "text": "The Velmora lighthouse was painted green in 1931.[S1]\n\nThe Tarn footbridge is 84 metres long.[S3]\n\n**Source:** Harbor notes; Bridge log",
+      "strategy": "claude-citations",
+      "fallbackReason": null,
+      "traceRules": [],
+      "citations": [
+        {
+          "alias": "S1",
+          "documentName": "Harbor notes.txt",
+          "quote": "The Velmora lighthouse was painted green in 1931. "
+        },
+        {
+          "alias": "S3",
+          "documentName": "Bridge log.txt",
+          "quote": "The Tarn footbridge is 84 metres long. "
+        }
+      ],
+      "invalidCitations": 0
+    },
+    "anthropic/claude-sonnet-5.5 reasoning": {
+      "path": "anthropic",
+      "ttftMs": 1743,
+      "totalMs": 2570,
+      "text": "The lighthouse lamp replacement happened first.\n\n- The Velmora lighthouse's lamp was replaced with an electric one in 1952.[S1]\n- The Tarn footbridge was closed for repairs in the spring of 2019.[S3]\n\nThe lamp replacement came about 67 years before the footbridge repairs.\n\n**Source:** Harbor notes, Bridge log",
+      "strategy": "claude-citations",
+      "fallbackReason": null,
+      "traceRules": [],
+      "citations": [
+        {
+          "alias": "S1",
+          "documentName": "Harbor notes.txt",
+          "quote": "Its lamp was replaced with an electric one in 1952."
+        },
+        {
+          "alias": "S3",
+          "documentName": "Bridge log.txt",
+          "quote": "It was closed for repairs in the spring of 2019. "
+        }
+      ],
+      "invalidCitations": 0
+    },
+    "anthropic/claude-sonnet-5.5 zh": {
+      "path": "anthropic",
+      "ttftMs": 859,
+      "totalMs": 1983,
+      "text": "Oskel 社区花园的情况如下：\n\n- **豆子种类：**Oskel 社区花园种植了四十种豆子。[S2]\n- **浇水时间：**志愿者每周二早上给花床浇水。[S2]\n\n**Source:** Garden records",
+      "strategy": "claude-citations",
+      "fallbackReason": null,
+      "traceRules": [],
+      "citations": [
+        {
+          "alias": "S2",
+          "documentName": "Garden records.txt",
+          "quote": "The Oskel community garden grows forty kinds of beans. "
+        }
+      ],
+      "invalidCitations": 0
+    },
+    "anthropic/claude-haiku-5.5 plain": {
+      "path": "anthropic",
+      "ttftMs": 848,
+      "totalMs": 1197,
+      "text": "The Velmora lighthouse was painted green. The Velmora lighthouse was painted green in 1931.[S1]\n\nThe Tarn footbridge is 84 metres long. The Tarn footbridge is 84 metres long.[S3]\n\n**Source:** Harbor notes; Bridge log",
+      "strategy": "claude-citations",
+      "fallbackReason": null,
+      "traceRules": [],
+      "citations": [
+        {
+          "alias": "S1",
+          "documentName": "Harbor notes.txt",
+          "quote": "The Velmora lighthouse was painted green in 1931. "
+        },
+        {
+          "alias": "S3",
+          "documentName": "Bridge log.txt",
+          "quote": "The Tarn footbridge is 84 metres long. "
+        }
+      ],
+      "invalidCitations": 0
+    },
+    "anthropic/claude-haiku-5.5 reasoning": {
+      "path": "anthropic",
+      "ttftMs": 1276,
+      "totalMs": 1900,
+      "text": "The lighthouse lamp replacement happened first. Its lamp was replaced with an electric one in 1952.[S1] The footbridge repairs came much later, since the bridge was closed for repairs in the spring of 2019.[S3]\n\nThe bridge log also contains a note saying \"see [S9],\" but the documents don't include that reference, so it doesn't affect this answer.\n\n**Source:** Harbor notes; Bridge log",
+      "strategy": "claude-citations",
+      "fallbackReason": null,
+      "traceRules": [],
+      "citations": [
+        {
+          "alias": "S1",
+          "documentName": "Harbor notes.txt",
+          "quote": "Its lamp was replaced with an electric one in 1952."
+        },
+        {
+          "alias": "S3",
+          "documentName": "Bridge log.txt",
+          "quote": "It was closed for repairs in the spring of 2019. "
+        }
+      ],
+      "invalidCitations": 1
+    },
+    "anthropic/claude-haiku-5.5 zh": {
+      "path": "anthropic",
+      "ttftMs": 822,
+      "totalMs": 1241,
+      "text": "Oskel 社区花园种植了四十种豆子。The Oskel community garden grows forty kinds of beans.[S2]\n\n志愿者每周二上午浇水。Volunteers water the beds every Tuesday morning.[S2]\n\n**Source:** Garden records",
+      "strategy": "claude-citations",
+      "fallbackReason": null,
+      "traceRules": [],
+      "citations": [
+        {
+          "alias": "S2",
+          "documentName": "Garden records.txt",
+          "quote": "The Oskel community garden grows forty kinds of beans. "
+        }
+      ],
+      "invalidCitations": 0
+    }
+  },
+  "requests": 9
+}

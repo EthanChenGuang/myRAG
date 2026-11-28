@@ -1,0 +1,369 @@
+{
+  "$defs": {
+    "ConfigGateLayer": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/GateCheckRow"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "layer": {
+          "enum": [
+            "deterministic",
+            "live",
+            "real_set"
+          ],
+          "title": "Layer",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "enum": [
+            "pass",
+            "fail",
+            "error",
+            "skipped"
+          ],
+          "title": "Result",
+          "type": "string"
+        },
+        "set_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Set Hash"
+        }
+      },
+      "required": [
+        "layer",
+        "result"
+      ],
+      "title": "ConfigGateLayer",
+      "type": "object"
+    },
+    "ConfigGateNotEvaluated": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "reason": {
+          "pattern": "^[a-z0-9_]+$",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "reason"
+      ],
+      "title": "ConfigGateNotEvaluated",
+      "type": "object"
+    },
+    "GateCheckRow": {
+      "additionalProperties": false,
+      "description": "One absolute check on one slice; skipped and insufficient_n are never counted as passed.",
+      "properties": {
+        "check": {
+          "pattern": "^[a-z0-9_]+$",
+          "title": "Check",
+          "type": "string"
+        },
+        "denominator": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Denominator"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
+        },
+        "limit_kind": {
+          "enum": [
+            "max",
+            "min"
+          ],
+          "title": "Limit Kind",
+          "type": "string"
+        },
+        "measured": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Measured"
+        },
+        "numerator": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Numerator"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "enum": [
+            "passed",
+            "failed",
+            "insufficient_n",
+            "report_only",
+            "skipped"
+          ],
+          "title": "Result",
+          "type": "string"
+        },
+        "slice": {
+          "pattern": "^[a-z0-9_]+(:[A-Za-z0-9_.|-]+)*$",
+          "title": "Slice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "check",
+        "slice",
+        "limit_kind",
+        "result"
+      ],
+      "title": "GateCheckRow",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The check object of GET /api/config/rag-gate/check/:id (D-13, D-14). An error counts as not passed.",
+  "properties": {
+    "cached": {
+      "default": false,
+      "title": "Cached",
+      "type": "boolean"
+    },
+    "changed_keys": {
+      "items": {
+        "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+        "type": "string"
+      },
+      "title": "Changed Keys",
+      "type": "array"
+    },
+    "check_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$",
+      "title": "Check Id",
+      "type": "string"
+    },
+    "error_reason": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9_]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Reason"
+    },
+    "finished_at": {
+      "anyOf": [
+        {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})?)?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finished At"
+    },
+    "layers": {
+      "items": {
+        "$ref": "#/$defs/ConfigGateLayer"
+      },
+      "title": "Layers",
+      "type": "array"
+    },
+    "mode": {
+      "enum": [
+        "warn",
+        "enforce"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "not_evaluated": {
+      "items": {
+        "$ref": "#/$defs/ConfigGateNotEvaluated"
+      },
+      "title": "Not Evaluated",
+      "type": "array"
+    },
+    "not_evaluated_on_real_set": {
+      "items": {
+        "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+        "type": "string"
+      },
+      "title": "Not Evaluated On Real Set",
+      "type": "array"
+    },
+    "rag_settings_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Rag Settings Hash",
+      "type": "string"
+    },
+    "result": {
+      "anyOf": [
+        {
+          "enum": [
+            "pass",
+            "fail",
+            "error"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Result"
+    },
+    "saved_as": {
+      "anyOf": [
+        {
+          "enum": [
+            "pass",
+            "override",
+            "warn",
+            "skipped",
+            "not_saved"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Saved As"
+    },
+    "stage": {
+      "anyOf": [
+        {
+          "enum": [
+            "deterministic",
+            "live",
+            "real_set"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stage"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})?)?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Started At"
+    },
+    "status": {
+      "enum": [
+        "queued",
+        "running",
+        "done"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "uncalibrated_cells": {
+      "items": {
+        "pattern": "^[A-Za-z0-9_.:/@+-]{1,128}(\\|[A-Za-z0-9_.:/@+-]{1,128}){1,7}$",
+        "type": "string"
+      },
+      "title": "Uncalibrated Cells",
+      "type": "array"
+    }
+  },
+  "required": [
+    "check_id",
+    "status",
+    "mode",
+    "rag_settings_hash",
+    "layers"
+  ],
+  "title": "ConfigGateCheck",
+  "type": "object"
+}

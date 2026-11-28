@@ -1,11 +1,12 @@
 import { enrichChunkWithURLs } from '@/lib/url-extractor';
 import { detectLanguage } from '../../lang/detect';
-import { lexicalText } from '../../lexical/tokenize';
 import { scanText, type InjectionScanResult } from '../../security/injection-scan';
 import { isArtifactName, loadArtifact, originalName, saveArtifact } from '../artifacts';
+import { captionLanguageOf, captionTargetForRun } from '../caption-language';
 import { CaptionError, captionImage } from '../captioner';
 import { contentHash } from '../hash';
 import { imageContextOf, validImageUrl } from '../image-options';
+import { ingestLexical, lexicalFieldsFor } from '../lexical-options';
 import { PUBLIC_IMAGE_MAX_BYTES, getPublicImageStore, publicImageExtension, publicImageKey } from '../images/public-store';
 import { selectPictures, type ParsedPicture } from '../images/select';
 import {
@@ -43,13 +44,20 @@ async function saveCaption(ctx: StageContext, index: number, caption: string): P
   }
 }
 
+/** RAG_CAPTION_LANGUAGE=document: the target of this run's captions; a picture document has no text of its own. */
+function captionTarget(ctx: StageContext): Promise<string | null> {
+  return captionTargetForRun(ctx, ctx.work.captionOnly ? null : (ctx.work.parseText ?? ctx.work.chunks.map((draft) => draft.content).join('\n')));
+}
+
 /** One vision call inside the request budget. Null means the budget ran out and the run should yield. */
 async function captionWithinBudget(ctx: StageContext, bytes: Uint8Array, mimeType: string): Promise<string | null | { failure: string }> {
   const remaining = ctx.deadline - ctx.deps.now();
   if (remaining < CAPTION_MIN_MS) return null;
+  const target = await captionTarget(ctx);
   const budget = AbortSignal.timeout(remaining - CAPTION_RESERVE_MS);
   try {
-    return (await captionImage(bytes, mimeType, { signal: AbortSignal.any([ctx.signal, budget]) })).trim();
+    const signal = AbortSignal.any([ctx.signal, budget]);
+    return (await captionImage(bytes, mimeType, target === null ? { signal } : { signal, targetLanguage: target })).trim();
   } catch (error) {
     if (ctx.signal.aborted) throw error;
     if (budget.aborted) return null;
@@ -104,27 +112,38 @@ async function runCaptionOnly(ctx: StageContext): Promise<StageOutcome> {
 
   const imageContext = imageContextOf(slot.imageContext);
   const type = mimeType.split(';')[0]?.trim().toLowerCase() ?? '';
+  const lexical = lexicalFieldsFor(await ingestLexical(ctx), [], caption);
   const draft: ChunkDraft = {
     content: caption,
     section_path: [],
     chunk_kind: 'image',
     page_start: 1,
     page_end: 1,
-    metadata: enrichChunkWithURLs(caption, {
-      image_url: imageUrl,
-      image_type: type === 'image/jpg' ? 'image/jpeg' : type,
-      ...(imageContext !== null ? { image_context: imageContext } : {}),
-      document_title: identity.filename,
-      chunk_index: 0,
-      chunk_position: 1,
-      total_chunks: 1,
-    }) as Record<string, unknown>,
+    metadata: {
+      ...(enrichChunkWithURLs(caption, {
+        image_url: imageUrl,
+        image_type: type === 'image/jpg' ? 'image/jpeg' : type,
+        ...(imageContext !== null ? { image_context: imageContext } : {}),
+        document_title: identity.filename,
+        chunk_index: 0,
+        chunk_position: 1,
+        total_chunks: 1,
+      }) as Record<string, unknown>),
+      ...lexical.metadata,
+    },
     content_hash: contentHash(caption),
-    lexical_text: lexicalText([], caption),
+    lexical_text: lexical.lexical_text,
   };
+  if (ctx.config.captionLanguage === 'document') {
+    const written = captionLanguageOf(caption);
+    if (written !== null) {
+      draft.language = written;
+      draft.metadata = { ...draft.metadata, caption_language: written };
+    }
+  }
   ctx.work.chunks = [draft];
 
-  const language = detectLanguage(caption);
+  const language = ctx.config.captionLanguage === 'document' ? (draft.language ?? null) : detectLanguage(caption);
   if (language !== null) await ctx.writer.setFields(document.id, { language });
   return { kind: 'next', outcome };
 }
@@ -313,6 +332,7 @@ async function runPictures(ctx: StageContext): Promise<StageOutcome> {
 
   const text = ctx.work.chunks.filter((chunk) => chunk.chunk_kind !== 'image');
   const images: ChunkDraft[] = [];
+  const documentLexical = await ingestLexical(ctx);
   for (let index = 0; index < kept.length; index += 1) {
     const stored = urls.get(index);
     const caption = captions.get(index);
@@ -320,21 +340,28 @@ async function runPictures(ctx: StageContext): Promise<StageOutcome> {
     const picture = kept[index] as ParsedPicture;
     const section_path = sectionPathAt(text, picture.page);
     const position = text.length + images.length;
+    const written = ctx.config.captionLanguage === 'document' ? captionLanguageOf(caption) : null;
+    const lexical = lexicalFieldsFor(documentLexical, section_path, caption);
     images.push({
+      ...(written !== null ? { language: written } : {}),
       content: caption,
       section_path,
       chunk_kind: 'image',
       page_start: picture.page,
       page_end: picture.page,
-      metadata: enrichChunkWithURLs(caption, {
-        image_url: stored.url,
-        image_type: stored.mimeType,
-        document_title: identity.filename,
-        chunk_index: position,
-        chunk_position: position + 1,
-      }) as Record<string, unknown>,
+      metadata: {
+        ...(enrichChunkWithURLs(caption, {
+          image_url: stored.url,
+          image_type: stored.mimeType,
+          document_title: identity.filename,
+          chunk_index: position,
+          chunk_position: position + 1,
+          ...(written !== null ? { caption_language: written } : {}),
+        }) as Record<string, unknown>),
+        ...lexical.metadata,
+      },
       content_hash: contentHash(caption),
-      lexical_text: lexicalText(section_path, caption),
+      lexical_text: lexical.lexical_text,
     });
   }
   const all = [...text, ...images];

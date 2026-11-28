@@ -3,6 +3,12 @@
     "children": [
       {
         "$ref": "#/texts/0"
+      },
+      {
+        "$ref": "#/texts/1"
+      },
+      {
+        "$ref": "#/texts/2"
       }
     ],
     "content_layer": "body",
@@ -73,6 +79,60 @@
       ],
       "self_ref": "#/texts/0",
       "text": "Bulletin body"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Left column copy explains maintenance intervals and torque limits for example valves.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 127.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 291.64,
+            "t": 96.0
+          },
+          "charspan": [
+            0,
+            85
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/1",
+      "text": "Left column copy explains maintenance intervals and torque limits for example valves."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Right column copy lists example SKUs and replacement kits used only in routing tests.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 127.0,
+            "coord_origin": "TOPLEFT",
+            "l": 297.64,
+            "r": 532.5799999999999,
+            "t": 96.0
+          },
+          "charspan": [
+            0,
+            85
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/2",
+      "text": "Right column copy lists example SKUs and replacement kits used only in routing tests."
     }
   ],
   "version": "1.11.0"

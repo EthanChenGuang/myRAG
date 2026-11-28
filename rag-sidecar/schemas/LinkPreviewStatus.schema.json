@@ -1,0 +1,41 @@
+{
+  "additionalProperties": false,
+  "description": "D-40: Baileys preview hosts against the output allowlist; host names only.",
+  "properties": {
+    "hosts_not_allowlisted": {
+      "items": {
+        "maxLength": 253,
+        "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$",
+        "type": "string"
+      },
+      "title": "Hosts Not Allowlisted",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "preview_hosts": {
+      "items": {
+        "maxLength": 253,
+        "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$",
+        "type": "string"
+      },
+      "title": "Preview Hosts",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "state": {
+      "enum": [
+        "unknown",
+        "none",
+        "subset",
+        "mismatch"
+      ],
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "state"
+  ],
+  "title": "LinkPreviewStatus",
+  "type": "object"
+}

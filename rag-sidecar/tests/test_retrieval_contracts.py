@@ -37,7 +37,7 @@ def test_retrieval_params_defaults():
     assert params.provenance.source == "defaults"
 
 
-@pytest.mark.parametrize("cap", [49, 101])
+@pytest.mark.parametrize("cap", [24, 101])
 def test_retrieval_params_rejects_rerank_cap_out_of_range(cap):
     with pytest.raises(ValidationError):
         RetrievalParams(rerank_input_cap=cap)

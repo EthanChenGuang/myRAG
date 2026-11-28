@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "generator_model": "claude-sonnet-5-5",
+  "judge_model": "claude-sonnet-5-5",
+  "prompts": {
+    "generate": "ft-generate-v1",
+    "judge": "ft-judge-v1"
+  },
+  "generation": {
+    "queries_per_chunk": 3,
+    "styles": ["keyword", "question", "colloquial"],
+    "cross_language_share": 0.15,
+    "min_chunk_tokens": 40,
+    "batch_chars": 60000,
+    "max_tokens": 8000
+  },
+  "filters": {
+    "min_query_chars": {"zh": 2, "en": 3, "it": 3},
+    "max_query_chars": {"zh": 120, "en": 300, "it": 300},
+    "containment_ngram": 5,
+    "verbatim_containment": 0.6,
+    "lcs_ratio": 0.7,
+    "near_dup_ngram": 3,
+    "near_dup_jaccard": 0.8,
+    "judge_min_confidence": 0.7,
+    "golden_overlap_jaccard": 0.8
+  },
+  "mined": {
+    "mined_weight": 2
+  },
+  "mining": {
+    "relative_margin": 0.05,
+    "absolute_margin": null,
+    "range_min": 0,
+    "range_max": 50,
+    "max_score": null,
+    "min_score": null,
+    "num_negatives": 5,
+    "sampling_strategy": "top",
+    "neighbour_window": 1,
+    "fn_audit_sample": 50,
+    "fn_audit_max_upper": 0.15,
+    "round_trip_k": null
+  },
+  "split": {
+    "rule": "ft-sha256-first8hex-mod100-80-10-10"
+  },
+  "base_models": [
+    {
+      "id": "Qwen/Qwen3-Embedding-0.6B",
+      "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+      "dims": 1024,
+      "licence": "Apache-2.0",
+      "max_seq_length": 512,
+      "default": true,
+      "query_prompt": "Instruct: Given a question, retrieve passages from the knowledge base that answer it\nQuery:",
+      "document_prompt": "",
+      "prompt_version": "qwen3-instruct-v1"
+    },
+    {
+      "id": "BAAI/bge-m3",
+      "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+      "dims": 1024,
+      "licence": "MIT",
+      "max_seq_length": 512,
+      "default": false,
+      "query_prompt": "",
+      "document_prompt": "",
+      "prompt_version": "bge-m3-none-v1"
+    },
+    {
+      "id": "intfloat/multilingual-e5-large-instruct",
+      "revision": "274baa43b0e13e37fafa6428dbc7938e62e5c439",
+      "dims": 1024,
+      "licence": "MIT",
+      "max_seq_length": 512,
+      "default": false,
+      "query_prompt": "query: ",
+      "document_prompt": "passage: ",
+      "prompt_version": "e5-prefix-v1"
+    }
+  ],
+  "training": {
+    "loss": "CachedMultipleNegativesRankingLoss",
+    "mini_batch_size": 32,
+    "per_device_train_batch_size": 256,
+    "batch_sampler": "no_duplicates",
+    "learning_rate": 2e-5,
+    "warmup_ratio": 0.1,
+    "num_train_epochs": 1,
+    "bf16": true,
+    "seed": 42,
+    "eval_steps": 100,
+    "metric_for_best_model": "ndcg_at_10",
+    "load_best_model_at_end": true,
+    "gist": {"enabled": false, "cached": true, "guide": "base_model"},
+    "matryoshka": {"enabled": false, "dims": [1024, 512, 256]}
+  },
+  "evaluation": {
+    "k": 10,
+    "bootstrap_resamples": 1000,
+    "bootstrap_seed": 42,
+    "noise_config": "eval/config/noise.json"
+  },
+  "retention": {
+    "retention_days": 30
+  },
+  "export": {
+    "batch_rows": 1000
+  },
+  "prices": {
+    "generator": {"input_usd_per_mtok": null, "output_usd_per_mtok": null},
+    "judge": {"input_usd_per_mtok": null, "output_usd_per_mtok": null},
+    "gpu_hour_usd": null,
+    "reembed_usd_per_mtok": null
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "additionalProperties": false,
+  "description": "Per-tenant translation targets (D-31); the subset check against the supported languages is the route's job.",
+  "properties": {
+    "enabled": {
+      "default": false,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "target_languages": {
+      "items": {
+        "enum": [
+          "zh",
+          "en",
+          "it"
+        ],
+        "type": "string"
+      },
+      "title": "Target Languages",
+      "type": "array"
+    },
+    "updated_by": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated By"
+    }
+  },
+  "title": "TranslationSettings",
+  "type": "object"
+}

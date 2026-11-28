@@ -1,0 +1,44 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "part": {
+      "enum": [
+        "nightly_absolute",
+        "judge_floors",
+        "ship_check",
+        "pr_smoke"
+      ],
+      "title": "Part",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9_]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "result": {
+      "enum": [
+        "passed",
+        "failed",
+        "skipped",
+        "not_applicable"
+      ],
+      "title": "Result",
+      "type": "string"
+    }
+  },
+  "required": [
+    "part",
+    "result"
+  ],
+  "title": "ReleaseGatePart",
+  "type": "object"
+}

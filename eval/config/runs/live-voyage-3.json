@@ -1,0 +1,16 @@
+{
+  "name": "live-voyage-3",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_LEXICAL_SEARCH": "true",
+    "RAG_RERANKER": "voyage",
+    "RAG_REFUSAL_THRESHOLD": "false",
+    "RAG_REFUSAL_FLOOR": "legacy_rule",
+    "COHERE_API_KEY": "",
+    "VOYAGE_API_KEY": "proxy-injected",
+    "VOYAGE_BASE_URL": "https://api.voyageai.com/v1"
+  },
+  "overrides": {
+    "rerank_model": "rerank-3"
+  }
+}

@@ -2,11 +2,15 @@ import argparse
 import sys
 from pathlib import Path
 
+from rag_sidecar.contracts.judge import JudgeReport
+
+from rag_eval.config_files import load_gate_population
 from rag_eval.corpus import load_corpus
 from rag_eval.golden_io import load_golden, select_golden
-from rag_eval.metrics import score_items
+from rag_eval.metrics import RealSetTooSmall, score_items
 from rag_eval.paths import REPO_ROOT, resolve_cli_path
 from rag_eval.report import build_report, write_report
+from rag_eval.split import DOCGROUP_SPLIT_RULE, load_group_manifest
 from rag_eval.traces import load_manifest, load_traces
 
 
@@ -30,7 +34,32 @@ def _cross_check(golden_ids: list[str], trace_ids: list[str | None]) -> list[str
     return problems
 
 
+def _missing_from_manifest(golden_path: Path, golden_ids: list[str], explicit: Path | None) -> list[str]:
+    """Ids of the set's split manifest that the golden file lacks (D-20: the set only grows, deletions are refused).
+
+    Without --split-manifest only a docgroup-rule manifest next to the golden file is the set's own; an item-rule
+    manifest there may be shared by several files (the private root) and is not checked.
+    """
+    path = explicit if explicit is not None else golden_path.with_name("split-manifest.json")
+    manifest = load_group_manifest(path)
+    if manifest is None:
+        if explicit is not None:
+            raise ValueError(f"split manifest {path} does not exist")
+        return []
+    if explicit is None and manifest.rule != DOCGROUP_SPLIT_RULE:
+        return []
+    return sorted(set(manifest.assignments) - set(golden_ids))
+
+
 DEFAULT_CORPUS_DIR = REPO_ROOT / "eval" / "fixtures" / "corpus"
+EXIT_REAL_SET_TOO_SMALL = 3
+REPORT_FILES = ("report.json", "report.md")
+
+
+def _remove_stale_report(out_dir: Path) -> None:
+    """A failed real run must not leave an older report behind that a gate could pick up."""
+    for name in REPORT_FILES:
+        (out_dir / name).unlink(missing_ok=True)
 
 
 def _doc_types(corpus_dir: Path | None, corpus_sha256: str | None) -> dict[str, str] | None:
@@ -51,8 +80,27 @@ def _score(args: argparse.Namespace) -> int:
         golden = load_golden(resolve_cli_path(args.golden))
         traces = load_traces(resolve_cli_path(args.traces))
         manifest = load_manifest(resolve_cli_path(args.manifest))
+        judge = (
+            JudgeReport.model_validate_json(resolve_cli_path(args.judge).read_text(encoding="utf-8"))
+            if args.judge
+            else None
+        )
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
+        return 2
+    try:
+        missing = _missing_from_manifest(
+            resolve_cli_path(args.golden),
+            [item.id for item in golden],
+            resolve_cli_path(args.split_manifest) if args.split_manifest else None,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if missing:
+        print("error: the golden file lacks items its split manifest froze (deleted items are refused):", file=sys.stderr)
+        for item_id in missing:
+            print(f"  {item_id}", file=sys.stderr)
         return 2
     golden = select_golden(golden, manifest.golden_filter)
 
@@ -68,9 +116,25 @@ def _score(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    try:
+        gate_config = load_gate_population(resolve_cli_path(args.gate_population) if args.gate_population else None)
+    except (OSError, ValueError) as exc:
+        print(f"error: gate population: {exc}", file=sys.stderr)
+        return 2
     results = score_items(traces, golden, rank_field=args.rank_source, doc_types=doc_types)
-    report = build_report(manifest, results, golden, traces)
-    write_report(report, resolve_cli_path(args.out))
+    out_dir = resolve_cli_path(args.out)
+    try:
+        report = build_report(manifest, results, golden, traces, judge=judge, gate_population_config=gate_config)
+    except RealSetTooSmall as exc:
+        _remove_stale_report(out_dir)
+        print(
+            f"error: {exc.reason}: the real gate population has {exc.count} approved item(s) in split "
+            f"{manifest.golden_filter.gate_split}, min_items is {exc.min_items}; no report written",
+            file=sys.stderr,
+        )
+        return EXIT_REAL_SET_TOO_SMALL
+    write_report(report, out_dir)
+    print(f"gate_population={report.gate_population} sha256={gate_config[1]} (mode {gate_config[0].mode})")
     overall = report.overall
     print(
         "overall: "
@@ -109,6 +173,26 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="corpus directory whose fixture-meta doc_type keys feed by_doc_type "
         "(default: the fixture corpus when the manifest records a corpus hash, else every item is general)",
+    )
+    score.add_argument(
+        "--judge",
+        type=Path,
+        default=None,
+        help="judge.json from rag_eval.judge.run; fills Faithfulness per citation strategy (report-only)",
+    )
+    score.add_argument(
+        "--gate-population",
+        type=Path,
+        default=None,
+        help="GatePopulationConfig JSON (default: eval/config/gate-population.json); real mode below min_items "
+        f"exits {EXIT_REAL_SET_TOO_SMALL} with real_set_too_small",
+    )
+    score.add_argument(
+        "--split-manifest",
+        type=Path,
+        default=None,
+        help="split manifest whose every item id must be in the golden file (default: a docgroup-rule "
+        "split-manifest.json next to the golden file; a deleted item is refused)",
     )
     score.set_defaults(handler=_score)
     args = parser.parse_args(argv)

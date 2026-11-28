@@ -80,6 +80,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_advance_ingestion_job(uuid, text, text, text, jsonb, integer, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_advance_ingestion_job(uuid, text, text, text, jsonb, integer, jsonb) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_approve_upload(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_approve_upload(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_approve_upload(uuid, uuid) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_batch_has_room(uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_batch_has_room(uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_batch_has_room(uuid) TO service_role;
@@ -91,6 +95,10 @@ BEGIN
   IF to_regprocedure('public.rag_begin_document_version(text, uuid, uuid, text, text, text, text, text, text, text, integer, boolean)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_begin_document_version(text, uuid, uuid, text, text, text, text, text, text, text, integer, boolean) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_begin_document_version(text, uuid, uuid, text, text, text, text, text, text, text, integer, boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_begin_progressive_final(uuid, text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_begin_progressive_final(uuid, text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_begin_progressive_final(uuid, text, uuid) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_chunk_embeddings_guard()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_chunk_embeddings_guard() FROM PUBLIC, anon, authenticated;
@@ -112,6 +120,14 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_claim_ingestion_jobs(text, integer, boolean, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_claim_ingestion_jobs(text, integer, boolean, text) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_clear_provisional(uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_clear_provisional(uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_clear_provisional(uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_confirm_supersession(uuid, uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_confirm_supersession(uuid, uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_confirm_supersession(uuid, uuid, uuid) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_create_ingestion_batch(text, text, text, numeric, integer, text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_create_ingestion_batch(text, text, text, numeric, integer, text, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_create_ingestion_batch(text, text, text, numeric, integer, text, text) TO service_role;
@@ -127,6 +143,98 @@ BEGIN
   IF to_regprocedure('public.rag_delete_quarantined(uuid, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_delete_quarantined(uuid, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_delete_quarantined(uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_dismiss_supersession(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_dismiss_supersession(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_dismiss_supersession(uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_dismiss_effective_date_proposal(uuid, text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_dismiss_effective_date_proposal(uuid, text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_dismiss_effective_date_proposal(uuid, text, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_set_document_effective_dates(uuid, text, date, date, text, real, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_set_document_effective_dates(uuid, text, date, date, text, real, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_set_document_effective_dates(uuid, text, date, date, text, real, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_embedding_bindings_guard()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_embedding_bindings_guard() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_embedding_bindings_guard() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_activate_embedding_binding(uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_activate_embedding_binding(uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_activate_embedding_binding(uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_create_embedding_binding(text, text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_create_embedding_binding(text, text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_create_embedding_binding(text, text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_deactivate_embedding_binding(text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_deactivate_embedding_binding(text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_deactivate_embedding_binding(text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_embedding_bindings()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_embedding_bindings() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_embedding_bindings() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_embedding_profile_scopes()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_embedding_profile_scopes() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_embedding_profile_scopes() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_supersession(uuid, text, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_supersession(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_supersession(uuid, text, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_hook_supersession(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_hook_supersession(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_hook_supersession(text, uuid, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_hook_scope_tags(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_hook_scope_tags(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_hook_scope_tags(text, uuid, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_names_taken(text, text, text[], uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_names_taken(text, text, text[], uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_names_taken(text, text, text[], uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_admin(uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_admin(uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_admin(uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_vocabulary_list(uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_vocabulary_list(uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_vocabulary_list(uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_vocabulary_for(text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_vocabulary_for(text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_vocabulary_for(text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_vocabulary_create(uuid, text, text, text, text, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_vocabulary_create(uuid, text, text, text, text, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_vocabulary_create(uuid, text, text, text, text, text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_vocabulary_update(uuid, text, uuid, text, text[], boolean, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_vocabulary_update(uuid, text, uuid, text, text[], boolean, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_vocabulary_update(uuid, text, uuid, text, text[], boolean, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_set_document_scopes(uuid, text, text[], uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_set_document_scopes(uuid, text, text[], uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_set_document_scopes(uuid, text, text[], uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_documents_with_scopes(uuid, text, text[], text, integer, integer, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_documents_with_scopes(uuid, text, text[], text, integer, integer, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_documents_with_scopes(uuid, text, text[], text, integer, integer, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_record_binding_evidence(uuid, jsonb, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_record_binding_evidence(uuid, jsonb, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_record_binding_evidence(uuid, jsonb, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rollback_embedding_binding(text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rollback_embedding_binding(text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rollback_embedding_binding(text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_set_embedding_binding_status(uuid, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_set_embedding_binding_status(uuid, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_set_embedding_binding_status(uuid, text, text) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_enqueue_backfill_jobs(uuid, jsonb)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_enqueue_backfill_jobs(uuid, jsonb) FROM PUBLIC, anon, authenticated;
@@ -146,7 +254,47 @@ BEGIN
   END IF;
   IF to_regprocedure('public.rag_fail_ingestion_job(uuid, text, text, boolean)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean) FROM PUBLIC, anon, authenticated;
-    GRANT EXECUTE ON FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean) TO service_role;
+    DROP FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean);
+  END IF;
+  IF to_regprocedure('public.rag_fail_ingestion_job(uuid, text, text, boolean, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_count_ingestion_dead_letters(text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_count_ingestion_dead_letters(text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_count_ingestion_dead_letters(text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_quarantine_reasons(uuid, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_quarantine_reasons(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_quarantine_reasons(uuid, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_release_quarantine_reasons(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_release_quarantine_reasons(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_release_quarantine_reasons(uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_not_checked(uuid, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_not_checked(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_not_checked(uuid, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_pending_uploads(uuid, text, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_pending_uploads(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_pending_uploads(uuid, text, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_stale_ingestion_jobs(integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_stale_ingestion_jobs(integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_stale_ingestion_jobs(integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_retrieval_log(integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_retrieval_log(integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_retrieval_log(integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_feedback_loop_on_chat_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_feedback_loop_on_chat_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_feedback_loop_on_chat_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_mine_failed_queries(timestamptz, timestamptz, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_mine_failed_queries(timestamptz, timestamptz, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_mine_failed_queries(timestamptz, timestamptz, jsonb) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_find_content_duplicate(text, text, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_find_content_duplicate(text, text, uuid) FROM PUBLIC, anon, authenticated;
@@ -219,6 +367,10 @@ BEGIN
   IF to_regprocedure('public.rag_list_quarantine(uuid, integer, integer)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_list_quarantine(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_list_quarantine(uuid, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_mark_provisional(uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_mark_provisional(uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_mark_provisional(uuid, text) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_mark_document_failed(uuid, text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_mark_document_failed(uuid, text, text) FROM PUBLIC, anon, authenticated;
@@ -360,6 +512,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_reembed_write_batch(uuid, jsonb, uuid, bigint) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_reembed_write_batch(uuid, jsonb, uuid, bigint) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_reject_upload(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_reject_upload(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_reject_upload(uuid, uuid) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_release_ingestion_job(uuid, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_release_ingestion_job(uuid, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_release_ingestion_job(uuid, text) TO service_role;
@@ -396,6 +552,18 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_save_ingest_state(uuid, text, text, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_save_ingest_state(uuid, text, text, jsonb) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_semantic_cache_on_documents_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_semantic_cache_on_documents_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_semantic_cache_on_documents_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_semantic_cache_on_documents_insert()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_semantic_cache_on_documents_insert() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_semantic_cache_on_documents_insert() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_semantic_cache_on_documents_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_semantic_cache_on_documents_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_semantic_cache_on_documents_update() TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_set_doc_type_default(text, text, text, text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_set_doc_type_default(text, text, text, text, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_set_doc_type_default(text, text, text, text, text) TO service_role;
@@ -420,6 +588,18 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_settle_parse_budget(uuid, integer, text, integer) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_settle_parse_budget(uuid, integer, text, integer) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_soft_delete_document(text, uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_soft_delete_document(text, uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_soft_delete_document(text, uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_supersession_raise(text, uuid, uuid, jsonb, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_supersession_raise(text, uuid, uuid, jsonb, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_supersession_raise(text, uuid, uuid, jsonb, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_undo_supersession(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_undo_supersession(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_undo_supersession(uuid, uuid) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_update_embed_batch(uuid, text, text, text, text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_update_embed_batch(uuid, text, text, text, text, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_update_embed_batch(uuid, text, text, text, text, text) TO service_role;
@@ -428,13 +608,125 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_update_ingestion_batch(uuid, text, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_update_ingestion_batch(uuid, text, jsonb, jsonb) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_upload_approval_keys(uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_upload_approval_keys(uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_upload_approval_keys(uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_upload_exemption_add(uuid, text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_upload_exemption_add(uuid, text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_upload_exemption_add(uuid, text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_upload_exemption_list(uuid, text, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_upload_exemption_list(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_upload_exemption_list(uuid, text, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_upload_exemption_remove(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_upload_exemption_remove(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_upload_exemption_remove(uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_chunking_profiles()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_chunking_profiles() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_chunking_profiles() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_chunks_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_chunks_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_chunks_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_chunks_insert()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_chunks_insert() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_chunks_insert() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_chunks_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_chunks_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_chunks_update() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_documents_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_documents_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_documents_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_documents_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_documents_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_documents_update() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_embedding_profiles()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_embedding_profiles() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_embedding_profiles() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_embeddings_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_embeddings_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_embeddings_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_embeddings_insert()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_embeddings_insert() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_embeddings_insert() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_vector_sync_embeddings_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_vector_sync_embeddings_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_vector_sync_embeddings_update() TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_sync_parent_currency()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_sync_parent_currency() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_sync_parent_currency() TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_apply_import(uuid, text, jsonb, text, bigint)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_apply_import(uuid, text, jsonb, text, bigint) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_apply_import(uuid, text, jsonb, text, bigint) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_delete_entry(uuid, text, uuid, bigint)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_delete_entry(uuid, text, uuid, bigint) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_delete_entry(uuid, text, uuid, bigint) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_list_audit(uuid, text, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_list_audit(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_list_audit(uuid, text, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_list_entries(uuid, text, integer, integer, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_upsert_entry(uuid, text, jsonb, bigint)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_upsert_entry(uuid, text, jsonb, bigint) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_upsert_entry(uuid, text, jsonb, bigint) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_corpus_df(text, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_corpus_df(text, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_corpus_df(text, text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_decide_candidate(uuid, uuid, text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_decide_candidate(uuid, uuid, text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_decide_candidate(uuid, uuid, text, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_list_candidates(uuid, text, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_list_candidates(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_list_candidates(uuid, text, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_purge_misses(integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_purge_misses(integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_purge_misses(integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_read_misses(text, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_read_misses(text, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_read_misses(text, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_record_miss(text, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_record_miss(text, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_record_miss(text, jsonb) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_upsert_candidates(text, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_upsert_candidates(text, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_upsert_candidates(text, jsonb) TO service_role;
   END IF;
   IF to_regprocedure('public.share_chat(uuid, jsonb)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.share_chat(uuid, jsonb) FROM PUBLIC, anon, authenticated;
@@ -443,6 +735,131 @@ BEGIN
   IF to_regprocedure('public.unshare_chat(uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.unshare_chat(uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.unshare_chat(uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_table_rows_follow_document()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_table_rows_follow_document() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_table_rows_follow_document() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_hook_table_rows(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_hook_table_rows(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_hook_table_rows(text, uuid, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_dup_clusters_mark_dirty_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_dup_clusters_mark_dirty_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_dup_clusters_mark_dirty_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_dup_clusters_mark_dirty_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_dup_clusters_mark_dirty_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_dup_clusters_mark_dirty_update() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_hook_dup_clusters(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_hook_dup_clusters(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_hook_dup_clusters(text, uuid, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_hook_identifiers(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_hook_duplicate_clusters(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_hook_duplicate_clusters(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_hook_duplicate_clusters(text, uuid, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_set_consent(text, text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_set_consent(text, text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_set_consent(text, text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_list_consent()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_list_consent() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_list_consent() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_consent_for_export(text[], text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_consent_for_export(text[], text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_consent_for_export(text[], text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_register_model(jsonb, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_register_model(jsonb, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_register_model(jsonb, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_list_models(boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_list_models(boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_list_models(boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_set_model_status(text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_set_model_status(text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_set_model_status(text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_bind_slot(text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_bind_slot(text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_bind_slot(text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_clear_slot(text, text, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_release_rollback(text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_release_rollback(text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_release_rollback(text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_slot_guard()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_slot_guard() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_slot_guard() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_version_taint_guard()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_version_taint_guard() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_version_taint_guard() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_export_vectors(text, text, text, uuid, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_export_vectors(text, text, text, uuid, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_export_vectors(text, text, text, uuid, integer) TO service_role;
+  END IF;
+  -- Phase 5.2, migrations 0940 to 0943: document version label, security events, alerts and uploader holds (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_set_document_version_label(text, uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_set_document_version_label(text, uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_set_document_version_label(text, uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_record_security_events(text, jsonb, integer, integer, boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_record_security_events(text, jsonb, integer, integer, boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_record_security_events(text, jsonb, integer, integer, boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_hold_uploader(text, uuid, uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_hold_uploader(text, uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_hold_uploader(text, uuid, uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_release_uploader_hold(text, uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_release_uploader_hold(text, uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_release_uploader_hold(text, uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_acknowledge_security_alert(text, uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_acknowledge_security_alert(text, uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_acknowledge_security_alert(text, uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_uploader_hold_active(text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_uploader_hold_active(text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_uploader_hold_active(text, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_active_uploader_holds(text, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_active_uploader_holds(text, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_active_uploader_holds(text, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_security_events(text[], text, uuid, timestamptz, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_security_events(text[], text, uuid, timestamptz, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_security_events(text[], text, uuid, timestamptz, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_security_alerts(text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_security_alerts(text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_security_alerts(text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_security_uploaders(text[], integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_security_uploaders(text[], integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_security_uploaders(text[], integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_bind_scoped_slot(text, text, text[], text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_bind_scoped_slot(text, text, text[], text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_bind_scoped_slot(text, text, text[], text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_scope_slot(text, text[], text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_scope_slot(text, text[], text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_scope_slot(text, text[], text) TO service_role;
   END IF;
 END
 $service_role_only$;
@@ -492,6 +909,10 @@ BEGIN
   IF to_regprocedure('public.move_chats_to_folder(uuid[], uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.move_chats_to_folder(uuid[], uuid) FROM PUBLIC, anon;
     GRANT EXECUTE ON FUNCTION public.move_chats_to_folder(uuid[], uuid) TO authenticated, service_role;
+  END IF;
+  IF to_regprocedure('public.rag_is_domain_expert(text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_is_domain_expert(text) FROM PUBLIC, anon;
+    GRANT EXECUTE ON FUNCTION public.rag_is_domain_expert(text) TO authenticated, service_role;
   END IF;
   IF to_regprocedure('public.rag_ingest_realtime_topic_allowed(text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_ingest_realtime_topic_allowed(text) FROM PUBLIC, anon;

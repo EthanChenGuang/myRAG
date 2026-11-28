@@ -1,5 +1,40 @@
 {
   "$defs": {
+    "AttackSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "canary": {
+          "maxLength": 128,
+          "minLength": 6,
+          "pattern": "^[A-Za-z0-9._:-]+$",
+          "title": "Canary",
+          "type": "string"
+        },
+        "forbidden_claims": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Forbidden Claims",
+          "type": "array"
+        },
+        "injected_quotes": {
+          "items": {
+            "$ref": "#/$defs/GoldSpan"
+          },
+          "minItems": 1,
+          "title": "Injected Quotes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "canary",
+        "injected_quotes",
+        "forbidden_claims"
+      ],
+      "title": "AttackSpec",
+      "type": "object"
+    },
     "ConversationTurn": {
       "additionalProperties": false,
       "properties": {
@@ -32,6 +67,11 @@
           "title": "From",
           "type": "string"
         },
+        "include_undated": {
+          "default": false,
+          "title": "Include Undated",
+          "type": "boolean"
+        },
         "to": {
           "format": "date",
           "title": "To",
@@ -50,6 +90,11 @@
       "properties": {
         "document": {
           "title": "Document",
+          "type": "string"
+        },
+        "document_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "title": "Document Id",
           "type": "string"
         },
         "quote": {
@@ -104,9 +149,83 @@
       "title": "InvoiceFilter",
       "type": "object"
     },
+    "NativeReview": {
+      "additionalProperties": false,
+      "description": "Native-speaker review state of an item (D-45, XLG-02 delta); provenance is unchanged.",
+      "properties": {
+        "origin": {
+          "enum": [
+            "native",
+            "machine_translated",
+            "llm_drafted"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "reviewed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed At"
+        },
+        "reviewer": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewer"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "approved"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin",
+        "status"
+      ],
+      "title": "NativeReview",
+      "type": "object"
+    },
     "RetrievalFilters": {
       "additionalProperties": false,
       "properties": {
+        "attributes": {
+          "maxProperties": 30,
+          "minProperties": 1,
+          "patternProperties": {
+            "^[a-z][a-z0-9_]{0,39}$": {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "title": "Attributes",
+          "type": "object"
+        },
         "current_only": {
           "const": true,
           "default": true,
@@ -163,6 +282,10 @@
           "default": null,
           "title": "Document Ids"
         },
+        "include_untagged": {
+          "title": "Include Untagged",
+          "type": "boolean"
+        },
         "invoice": {
           "anyOf": [
             {
@@ -194,6 +317,9 @@
           "default": null,
           "title": "Languages"
         },
+        "scopes": {
+          "$ref": "#/$defs/ScopeFilter"
+        },
         "sources": {
           "anyOf": [
             {
@@ -208,9 +334,115 @@
           ],
           "default": null,
           "title": "Sources"
+        },
+        "versions": {
+          "anyOf": [
+            {
+              "enum": [
+                "current",
+                "all"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/VersionRange"
+            }
+          ],
+          "title": "Versions"
         }
       },
       "title": "RetrievalFilters",
+      "type": "object"
+    },
+    "ScopeFilter": {
+      "additionalProperties": false,
+      "description": "DATA-08 scope filter (D-39): OR within a dimension, AND across dimensions; only the three fixed dimensions.",
+      "properties": {
+        "department": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Department",
+          "type": "array"
+        },
+        "legal_entity": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Legal Entity",
+          "type": "array"
+        },
+        "region": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Region",
+          "type": "array"
+        }
+      },
+      "title": "ScopeFilter",
+      "type": "object"
+    },
+    "TableAnswer": {
+      "additionalProperties": false,
+      "description": "The one cell a table_split item asks for, plus same-unit values from other cells (D-45).",
+      "properties": {
+        "column": {
+          "minLength": 1,
+          "title": "Column",
+          "type": "string"
+        },
+        "distractor_values": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Distractor Values",
+          "type": "array"
+        },
+        "value": {
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "column"
+      ],
+      "title": "TableAnswer",
+      "type": "object"
+    },
+    "VersionRange": {
+      "additionalProperties": false,
+      "description": "D-12: a version period; either bound may be left open, not both.",
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "title": "VersionRange",
       "type": "object"
     }
   },
@@ -219,6 +451,17 @@
     "answerable": {
       "title": "Answerable",
       "type": "boolean"
+    },
+    "attack": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AttackSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "category": {
       "enum": [
@@ -233,7 +476,17 @@
         "ambiguous",
         "typo",
         "cross_lingual",
-        "selective_filter"
+        "selective_filter",
+        "injection",
+        "injection_evasive",
+        "cache_paraphrase",
+        "cache_near_miss",
+        "small_talk",
+        "table_split",
+        "duplicate_flood",
+        "identifier_near_miss",
+        "templated_collection",
+        "implicit_condition"
       ],
       "title": "Category",
       "type": "string"
@@ -243,6 +496,17 @@
         "$ref": "#/$defs/ConversationTurn"
       },
       "title": "Conversation",
+      "type": "array"
+    },
+    "evidence_groups": {
+      "items": {
+        "items": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "title": "Evidence Groups",
       "type": "array"
     },
     "evidence_language": {
@@ -295,13 +559,31 @@
       "title": "Language",
       "type": "string"
     },
+    "native_review": {
+      "$ref": "#/$defs/NativeReview"
+    },
+    "pair_of": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pair Of"
+    },
     "provenance": {
       "enum": [
         "synthetic_fixture",
         "claude_draft",
         "ragas_generated",
         "human",
-        "production"
+        "production",
+        "historical",
+        "paraphrased"
       ],
       "title": "Provenance",
       "type": "string"
@@ -337,6 +619,9 @@
       ],
       "title": "Split",
       "type": "string"
+    },
+    "table_answer": {
+      "$ref": "#/$defs/TableAnswer"
     },
     "tags": {
       "items": {

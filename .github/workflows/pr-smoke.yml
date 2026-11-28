@@ -13,14 +13,19 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
   DEEPEVAL_TELEMETRY_OPT_OUT: '1'
   DEEPEVAL_UPDATE_WARNING_OPT_IN: '0'
   RAGAS_DO_NOT_TRACK: 'true'
 
 jobs:
-  ts:
+  ts-vitest:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ['1/2', '2/2']
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -38,14 +43,70 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Node runtime check
         run: node scripts/ci/check-node-runtime.mjs
-      - run: uv sync --directory rag-sidecar --locked
+      - run: uv sync --directory rag-sidecar --locked --extra chunking --extra preflight
       - run: uv sync --directory eval --locked --all-extras
-      - name: Vitest suite
-        run: npx vitest run
+      - name: Fill the tiktoken encoding cache (tests never download it)
+        run: python3 scripts/ci/fill-tiktoken-cache.py
+      - name: Vitest suite (shard ${{ matrix.shard }})
+        run: npx vitest run --shard=${{ matrix.shard }}
+
+  ts-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ['1/4', '2/4', '3/4', '4/4']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - run: npm ci --ignore-scripts
+      - name: Node runtime check
+        run: node scripts/ci/check-node-runtime.mjs
+      - run: uv sync --directory rag-sidecar --locked --extra chunking --extra preflight
+      - run: uv sync --directory eval --locked --all-extras
+      - name: Fill the tiktoken encoding cache (tests never download it)
+        run: python3 scripts/ci/fill-tiktoken-cache.py
+      - name: tsx DB tests (shard ${{ matrix.shard }})
+        run: node --import tsx --test --test-shard=${{ matrix.shard }} tests/rag-db/*.test.mts
+
+  ts-tsx:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - run: npm ci --ignore-scripts
+      - name: Node runtime check
+        run: node scripts/ci/check-node-runtime.mjs
+      - run: uv sync --directory rag-sidecar --locked --extra chunking --extra preflight
+      - run: uv sync --directory eval --locked --all-extras
+      - name: Fill the tiktoken encoding cache (tests never download it)
+        run: python3 scripts/ci/fill-tiktoken-cache.py
       - name: tsx tests
         run: node --import tsx --test tests/*.test.mts
-      - name: tsx DB tests
-        run: node --import tsx --test tests/rag-db/*.test.mts
       - name: tsx rag-e2e tests
         shell: bash
         run: |
@@ -54,14 +115,44 @@ jobs:
           if ((${#files[@]})); then
             node --import tsx --test tests/rag-e2e/*.test.mts
           fi
+
+  ts-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - run: npm ci --ignore-scripts
+      - name: Node runtime check
+        run: node scripts/ci/check-node-runtime.mjs
+      - name: Zod isolation check (zod 4 stays nested under LangChain)
+        run: |
+          node scripts/ci/check-zod-isolation.mjs
+          node --test scripts/tests/check-zod-isolation.node-test.mjs
+      - run: uv sync --directory eval --locked --all-extras
       - name: Config drift check
         run: node scripts/check-config.mjs
       - name: RAG boundary check
         run: |
           node scripts/ci/check-rag-boundary.mjs
           node --test scripts/tests/check-rag-boundary.node-test.mjs
+          node scripts/ci/check-language-literals.mjs
+          node --test scripts/tests/check-language-literals.node-test.mjs
+          node scripts/ci/check-settings-classification.mjs
+          node --test scripts/tests/check-settings-classification.node-test.mjs
       - name: Config check and type-check self-tests
-        run: node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs scripts/tests/check-node-runtime.node-test.mjs
+        run: node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs scripts/tests/check-node-runtime.node-test.mjs scripts/tests/config-server-security.node-test.mjs
       - name: Zod generator self-test
         run: node --test scripts/tests/gen-zod.node-test.mjs
       - name: New-code type-check
@@ -74,6 +165,26 @@ jobs:
         run: |
           uv run --directory eval python ../scripts/ci/check-workflows.py
           uv run --directory eval python -m unittest discover -s ../scripts/tests -p 'test_check_workflows.py'
+
+  next-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
+      OPENAI_API_KEY: placeholder-openai-key
+      OPENROUTER_API_KEY: placeholder-openrouter-key
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Production build (what Vercel runs)
+        run: npx next build
 
   sibling-types:
     runs-on: ubuntu-latest
@@ -149,11 +260,12 @@ jobs:
           python-version: '3.12'
           enable-cache: true
           cache-dependency-glob: '**/uv.lock'
-      - run: uv sync --directory rag-sidecar --locked --extra chunking
-      - run: uv sync --directory rag-sidecar --locked --extra preflight
+      - run: uv sync --directory rag-sidecar --locked --extra chunking --extra preflight --extra hidden-text
       - run: uv sync --directory eval --locked --all-extras
+      - name: Fill the tiktoken encoding cache (tests never download it)
+        run: python3 scripts/ci/fill-tiktoken-cache.py
       - name: rag-sidecar pytest
-        run: uv run --directory rag-sidecar --extra chunking pytest -q
+        run: uv run --directory rag-sidecar --locked --extra chunking --extra preflight --extra hidden-text pytest -q
       - name: eval pytest
         run: uv run --directory eval pytest -q
 
@@ -175,10 +287,28 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: uv sync --directory rag-sidecar --locked
       - run: uv sync --directory eval --locked --all-extras
+      - name: Fill the tiktoken encoding cache (tests never download it)
+        run: python3 scripts/ci/fill-tiktoken-cache.py
       - name: Smoke tier against the committed baseline
         run: npm run test-rag -- --out eval/out/smoke
       - name: Ingest-mode smoke tier against the ingest baseline
         run: npm run test-rag -- --fixture-mode ingest --out eval/out/smoke-ingest
+      - name: Legacy smoke tier, explicit RAG_PIPELINE=legacy, paired differences all zero
+        run: |
+          npm run test-rag -- --run-config eval/config/runs/legacy.json --baseline eval/baselines/fixture-baseline.json --out eval/out/smoke-legacy
+          jq -e '.paired.all_zero == true' eval/out/smoke-legacy/gate.json
+      - name: Legacy ingest-mode smoke tier, explicit RAG_PIPELINE=legacy, paired differences all zero
+        run: |
+          npm run test-rag -- --run-config eval/config/runs/legacy.json --fixture-mode ingest --baseline eval/baselines/fixture-ingest-baseline.json --out eval/out/smoke-legacy-ingest
+          jq -e '.paired.all_zero == true' eval/out/smoke-legacy-ingest/gate.json
+      - name: Injection absolute-zero gate under the recommended SEC configuration
+        run: npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec
+      - name: Framework comparison on fixtures, LlamaIndex against LangChain with paired differences
+        run: uv run --directory eval python -m rag_eval.compare frameworks --fixtures --out eval/out/frameworks
+      - name: Semantic cache near-miss gate on a fresh pair run (any wrong hit fails)
+        run: |
+          npm run test-rag -- --run-config eval/config/runs/query-layer-llamaindex.json --cache-pairs --no-gate --out eval/out/cache-pairs
+          uv run --directory eval python -m rag_eval.calibrate cache --check --pairs eval/out/cache-pairs/cache-pairs.json
       - name: Upload smoke output
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -187,6 +317,11 @@ jobs:
           path: |
             eval/out/smoke
             eval/out/smoke-ingest
+            eval/out/smoke-legacy
+            eval/out/smoke-legacy-ingest
+            eval/out/smoke-sec
+            eval/out/frameworks
+            eval/out/cache-pairs
           if-no-files-found: warn
 
   gate-negative-control:
@@ -245,6 +380,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Build the sidecar image
         run: docker build -t rag-sidecar:ci rag-sidecar
+      - name: Routing data, processing profiles, language packs and security rules ship in the image
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in parse-routing.json processing-profiles.json language-packs.json hidden-text-rules.json table-header-rules.json; do
+            docker run --rm rag-sidecar:ci cat "/app/config/rag/$name" | cmp - "config/rag/$name"
+          done
+          docker run --rm rag-sidecar:ci python -c 'from rag_sidecar.preflight.config import default_routing_config_path, load_processing_profiles, load_routing_config; assert str(default_routing_config_path()) == "/app/config/rag/parse-routing.json"; load_routing_config(); load_processing_profiles()'
       - name: Probes without a secret (fail closed)
         shell: bash
         run: |

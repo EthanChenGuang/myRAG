@@ -1,0 +1,83 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "backend_count": {
+      "minimum": 0,
+      "title": "Backend Count",
+      "type": "integer"
+    },
+    "extra": {
+      "minimum": 0,
+      "title": "Extra",
+      "type": "integer"
+    },
+    "mismatched_buckets": {
+      "minimum": 0,
+      "title": "Mismatched Buckets",
+      "type": "integer"
+    },
+    "missing": {
+      "minimum": 0,
+      "title": "Missing",
+      "type": "integer"
+    },
+    "profile_id": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "title": "Profile Id",
+      "type": "string"
+    },
+    "repairs_enqueued": {
+      "minimum": 0,
+      "title": "Repairs Enqueued",
+      "type": "integer"
+    },
+    "stale": {
+      "minimum": 0,
+      "title": "Stale",
+      "type": "integer"
+    },
+    "state": {
+      "enum": [
+        "building",
+        "ready",
+        "stale",
+        "failed"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "supabase_count": {
+      "minimum": 0,
+      "title": "Supabase Count",
+      "type": "integer"
+    },
+    "target": {
+      "enum": [
+        "weaviate",
+        "qdrant"
+      ],
+      "title": "Target",
+      "type": "string"
+    },
+    "tenant_key": {
+      "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+      "title": "Tenant Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "target",
+    "profile_id",
+    "tenant_key",
+    "supabase_count",
+    "backend_count",
+    "mismatched_buckets",
+    "missing",
+    "extra",
+    "stale",
+    "repairs_enqueued",
+    "state"
+  ],
+  "title": "ReconcileReport",
+  "type": "object"
+}

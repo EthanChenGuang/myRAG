@@ -1,0 +1,213 @@
+{
+  "$defs": {
+    "IrMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "mrr_at_10": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Mrr At 10",
+          "type": "number"
+        },
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "ndcg_at_10": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Ndcg At 10",
+          "type": "number"
+        },
+        "recall_at_10": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Recall At 10",
+          "type": "number"
+        }
+      },
+      "required": [
+        "n",
+        "recall_at_10",
+        "mrr_at_10",
+        "ndcg_at_10"
+      ],
+      "title": "IrMetrics",
+      "type": "object"
+    },
+    "MetricDelta": {
+      "additionalProperties": false,
+      "properties": {
+        "ci_high": {
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Ci High",
+          "type": "number"
+        },
+        "ci_low": {
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Ci Low",
+          "type": "number"
+        },
+        "comparison": {
+          "enum": [
+            "finetuned_vs_production",
+            "finetuned_vs_base"
+          ],
+          "title": "Comparison",
+          "type": "string"
+        },
+        "delta": {
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Delta",
+          "type": "number"
+        },
+        "metric": {
+          "enum": [
+            "recall_at_10",
+            "mrr_at_10",
+            "ndcg_at_10"
+          ],
+          "title": "Metric",
+          "type": "string"
+        },
+        "slice": {
+          "pattern": "^(overall|language:[a-z]{2,3}|pair:[a-z]{2,3}->[a-z]{2,3}|source:(synthetic|mined))$",
+          "title": "Slice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "comparison",
+        "metric",
+        "slice",
+        "delta",
+        "ci_low",
+        "ci_high"
+      ],
+      "title": "MetricDelta",
+      "type": "object"
+    },
+    "ModelMetricsBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "by_language": {
+          "additionalProperties": {
+            "$ref": "#/$defs/IrMetrics"
+          },
+          "propertyNames": {
+            "enum": [
+              "zh",
+              "en",
+              "it"
+            ]
+          },
+          "title": "By Language",
+          "type": "object"
+        },
+        "by_pair": {
+          "patternProperties": {
+            "^[a-z]{2,3}->[a-z]{2,3}$": {
+              "$ref": "#/$defs/IrMetrics"
+            }
+          },
+          "title": "By Pair",
+          "type": "object"
+        },
+        "by_source": {
+          "additionalProperties": {
+            "$ref": "#/$defs/IrMetrics"
+          },
+          "propertyNames": {
+            "enum": [
+              "synthetic",
+              "mined"
+            ]
+          },
+          "title": "By Source",
+          "type": "object"
+        },
+        "overall": {
+          "$ref": "#/$defs/IrMetrics"
+        }
+      },
+      "required": [
+        "overall",
+        "by_language",
+        "by_pair",
+        "by_source"
+      ],
+      "title": "ModelMetricsBlock",
+      "type": "object"
+    },
+    "OfflineModels": {
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "$ref": "#/$defs/ModelMetricsBlock"
+        },
+        "finetuned": {
+          "$ref": "#/$defs/ModelMetricsBlock"
+        },
+        "production": {
+          "$ref": "#/$defs/ModelMetricsBlock"
+        }
+      },
+      "required": [
+        "base",
+        "finetuned",
+        "production"
+      ],
+      "title": "OfflineModels",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "deltas": {
+      "items": {
+        "$ref": "#/$defs/MetricDelta"
+      },
+      "title": "Deltas",
+      "type": "array"
+    },
+    "models": {
+      "$ref": "#/$defs/OfflineModels"
+    },
+    "noise_band": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Noise Band",
+      "type": "number"
+    },
+    "passed": {
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "reasons": {
+      "items": {
+        "enum": [
+          "below_production_overall",
+          "language_slice_below_production",
+          "below_base",
+          "empty_test_split"
+        ],
+        "type": "string"
+      },
+      "title": "Reasons",
+      "type": "array"
+    }
+  },
+  "required": [
+    "models",
+    "deltas",
+    "noise_band",
+    "passed",
+    "reasons"
+  ],
+  "title": "OfflineEvalReport",
+  "type": "object"
+}

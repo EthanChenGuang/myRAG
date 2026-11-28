@@ -1,0 +1,55 @@
+-- Optional: a weekly pg_cron schedule for the Phase 5.1.1 feedback loop (D-06, D-15). OPT-IN, NOT A MIGRATION.
+--
+-- No setup script, migration runner or test applies this file. Every statement below is commented out; an operator who wants the
+-- database to run retention (and, optionally, mining) on its own copies the statements into the Supabase SQL editor after reading them.
+-- The same work runs without pg_cron through `npm run rag:feedback-loop -- purge` or POST /api/rag/admin/feedback-loop/purge (admin).
+--
+-- Requirements:
+--   * the pg_cron extension (Supabase: Database > Extensions > pg_cron); jobs run as the role that schedules them (postgres);
+--   * migrations 0531 to 0535 applied (rag_retrieval_log, rag_review_items, rag_purge_retrieval_log, rag_mine_failed_queries).
+--
+-- This file holds no secret: pg_cron calls the two service-role functions inside the database, so no key, URL or token is needed.
+-- Keep the retention below equal to RAG_RETRIEVAL_LOG_RETENTION_DAYS (default 30).
+
+-- 1. Weekly purge, Mondays 03:17 UTC: expired retrieval log rows in batches of 1000 (oldest first, by ctid), then open review items
+--    whose expires_at has passed. Labelled items stay until exported. Purge runs before mining (D-15).
+--
+-- SELECT cron.schedule(
+--   'myrag-feedback-loop-purge',
+--   '17 3 * * 1',
+--   $job$
+--   DO $purge$
+--   DECLARE
+--     v_deleted integer;
+--   BEGIN
+--     LOOP
+--       v_deleted := public.rag_purge_retrieval_log(30, 1000);
+--       EXIT WHEN v_deleted < 1000;
+--     END LOOP;
+--     DELETE FROM public.rag_review_items WHERE status = 'open' AND expires_at < now();
+--   END
+--   $purge$;
+--   $job$
+-- );
+
+-- 2. Optional weekly mining, Mondays 03:47 UTC, after the purge. Schedule it only while RAG_DOMAIN_EXPERT_REVIEW=true and
+--    RAG_RETRIEVAL_LOG=masked_query: the database cannot read those switches, and the app's mining entry points refuse to mine without
+--    them. Paste the current contents of config/rag/feedback-mining.json as the third argument (add "source_open_signal": true only
+--    while RAG_SOURCE_OPEN_SIGNAL=true), and re-paste it whenever that file changes. The window is the previous ISO week in UTC.
+--
+-- SELECT cron.schedule(
+--   'myrag-feedback-loop-mine',
+--   '47 3 * * 1',
+--   $job$
+--   SELECT public.rag_mine_failed_queries(
+--     date_trunc('week', now(), 'UTC') - interval '7 days',
+--     date_trunc('week', now(), 'UTC'),
+--     '<contents of config/rag/feedback-mining.json>'::jsonb
+--   );
+--   $job$
+-- );
+
+-- To inspect or remove the jobs:
+-- SELECT jobid, jobname, schedule, active FROM cron.job WHERE jobname LIKE 'myrag-feedback-loop-%';
+-- SELECT cron.unschedule('myrag-feedback-loop-purge');
+-- SELECT cron.unschedule('myrag-feedback-loop-mine');

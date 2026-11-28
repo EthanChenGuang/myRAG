@@ -1,6 +1,6 @@
 import { z } from 'zod/v3';
 import { requireAdminOrDeny } from '@/lib/admin-route-auth';
-import { getEmbeddingProfileCompleteness, getEmbeddingProfileStatus } from '@/lib/rag';
+import { embeddingProfileListFacts, getEmbeddingProfileCompleteness, getEmbeddingProfileStatus } from '@/lib/rag';
 import type { ProfileCompleteness } from '@/lib/rag';
 import { invalidRequest, jsonNoStore, profileUnavailable } from './_responses';
 
@@ -15,7 +15,8 @@ function completenessBody(entry: ProfileCompleteness | undefined): Record<string
 }
 
 /**
- * Every embedding profile with its status, storage and whether evidence exists; never an evidence body. `?completeness=true` also counts, per
+ * Every embedding profile with its status, storage, whether evidence exists, the languages its model declares and, for BGE-M3, the serving
+ * mode; never an evidence body. `?completeness=true` also counts, per
  * vector-table profile, the current ready chunks that already have a vector, which scans the corpus and is left off by default.
  */
 export async function GET(request: Request): Promise<Response> {
@@ -30,6 +31,7 @@ export async function GET(request: Request): Promise<Response> {
   try {
     const status = await getEmbeddingProfileStatus();
     const completeness = parsed.data.completeness === 'true' ? await getEmbeddingProfileCompleteness(status.profiles, request.signal) : null;
+    const facts = embeddingProfileListFacts(status.profiles);
     console.log('[Embedding Profile] admin action', { action: 'list', count: status.profiles.length });
     return jsonNoStore({
       success: true,
@@ -47,6 +49,7 @@ export async function GET(request: Request): Promise<Response> {
         activated_by: profile.activatedBy,
         previous_active_id: profile.previousActiveId,
         ...(completeness ? { completeness: completenessBody(completeness[profile.id]) } : {}),
+        ...facts.get(profile.id),
       })),
     });
   } catch (error) {

@@ -7,8 +7,15 @@ export interface RpcError {
 }
 
 export interface RpcResponse {
-  data: unknown[] | null;
+  /** PostgREST answers a SETOF function with an array and any other function with one JSON value: an object, a scalar or null. */
+  data: unknown;
   error: RpcError | null;
+}
+
+/** The rows of an RPC answer: the array of a SETOF function, the single value of any other function, none for null. */
+export function rpcRows(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data;
+  return data === null || data === undefined ? [] : [data];
 }
 
 export interface RpcRequest extends PromiseLike<RpcResponse> {

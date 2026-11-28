@@ -1,6 +1,21 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { embedText, ingest, loadIngestConfig, repairOwnerMembership, resolveTenantScope, type RagAdminDb, type TenantScope } from '@/lib/rag';
+import {
+  embedText,
+  ingest,
+  legacyApprovalRefusal,
+  legacyWriteRefused,
+  loadIngestConfig,
+  queueConfigFromProcessEnv,
+  repairOwnerMembership,
+  resolveTenantScope,
+  scheduleIngestWake,
+  submitIngest,
+  type EnqueueResult,
+  type IngestResult,
+  type RagAdminDb,
+  type TenantScope,
+} from '@/lib/rag';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import { v4 as uuidv4 } from 'uuid';
@@ -70,6 +85,15 @@ function createTokenBasedChunks(text: string, maxTokens: number = 600, overlapTo
   return chunks;
 }
 
+function plainTitle(text: string): string {
+  return text
+    .replace(/^\s*(#{1,6}\s+|[-*+>]\s+|\d+\.\s+)/gm, '')
+    .replace(/[*_`~]+/g, '')
+    .replace(/^["'\u201c\u2018]+|["'\u201d\u2019]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Generate a title using OpenAI
 async function generateTitle(content: string): Promise<string> {
   try {
@@ -89,13 +113,15 @@ async function generateTitle(content: string): Promise<string> {
       temperature: 0.7,
     });
 
-    const title = response.choices[0]?.message?.content?.trim() || 'AI Response';
-    return title;
+    return plainTitle(response.choices[0]?.message?.content ?? '') || 'AI Response';
   } catch (error) {
     console.error('[AI to RAG] Title generation failed:', error instanceof Error ? error.message : 'unknown error');
     // Fallback: Extract first sentence or use default
-    const firstSentence = content.match(/^[^.!?]+[.!?]/)?.[0]?.trim();
-    return firstSentence ? firstSentence.substring(0, 50) + '...' : 'AI Response';
+    const firstLine = content.split('\n').find((line) => plainTitle(line) !== '') ?? '';
+    const plain = plainTitle(firstLine);
+    const firstSentence = plain.match(/^[^.!?]+[.!?]?/)?.[0]?.trim();
+    if (!firstSentence) return 'AI Response';
+    return firstSentence.length > 50 ? firstSentence.substring(0, 50).trim() + '...' : firstSentence;
   }
 }
 
@@ -197,6 +223,10 @@ const unifiedSaveSchema = z.object({
   chatId: z.string().trim().min(1).max(200).regex(/^[^\p{Cc}]*$/u).nullish(),
 });
 
+function isEnqueueResult(result: IngestResult | EnqueueResult): result is EnqueueResult {
+  return !('chunkCount' in result);
+}
+
 function filenameFromTitle(title: string): string {
   const cleaned = title
     .replace(/[\\/]+/g, '-')
@@ -213,6 +243,7 @@ async function saveThroughIngest(input: {
   content: string;
   body: Record<string, unknown>;
   scope: TenantScope;
+  uploaderId: string;
   signal: AbortSignal;
 }): Promise<NextResponse> {
   const parsed = unifiedSaveSchema.safeParse({
@@ -236,10 +267,11 @@ async function saveThroughIngest(input: {
   const title = await generateTitle(input.content);
   const filename = filenameFromTitle(title);
 
-  const result = await ingest({
+  const ingestInput = {
     scope: input.scope,
-    source: 'ai_to_rag',
+    source: 'ai_to_rag' as const,
     sourceKey: `chat:${chatId ?? 'none'}/message:${messageId}`,
+    uploaderId: input.uploaderId,
     text: input.content,
     filename,
     mimeType: 'text/markdown',
@@ -252,17 +284,51 @@ async function saveThroughIngest(input: {
       },
     },
     signal: input.signal,
-  });
+  };
+  const result = queueConfigFromProcessEnv().ingestAsync
+    ? await submitIngest(ingestInput)
+    : await ingest(ingestInput);
   console.log('[AI to RAG] Ingested AI response', {
     status: result.status,
-    documentId: result.documentId ?? result.duplicateOf ?? null,
-    chunks: result.chunkCount,
-    ...(result.reason ? { reason: result.reason } : {}),
+    documentId: isEnqueueResult(result)
+      ? result.documentId
+      : (result.documentId ?? result.duplicateOf ?? null),
+    ...(isEnqueueResult(result) ? { jobId: result.jobId } : { chunks: result.chunkCount }),
+    ...(result.status === 'failed' && 'reason' in result && result.reason ? { reason: result.reason } : {}),
   });
 
   if (result.status === 'failed') {
     return NextResponse.json({ success: false, error: 'Failed to save to the knowledge base', status: result.status }, { status: 500 });
   }
+
+  if (isEnqueueResult(result)) {
+    if (result.status === 'queued') {
+      scheduleIngestWake();
+      return NextResponse.json(
+        {
+          success: true,
+          jobId: result.jobId,
+          documentId: result.documentId,
+          filename,
+          title,
+          status: 'queued',
+        },
+        { status: 202 },
+      );
+    }
+    return NextResponse.json(
+      {
+        success: true,
+        documentId: result.documentId,
+        filename,
+        title,
+        status: 'skipped_duplicate',
+        version: null,
+      },
+      { status: 200 },
+    );
+  }
+
   return NextResponse.json(
     {
       success: true,
@@ -351,9 +417,13 @@ export async function POST(req: Request) {
       }
     }
 
-    if (loadIngestConfig({ RAG_INGEST_PIPELINE: env.RAG_INGEST_PIPELINE }).pipeline === 'unified') {
-      return await saveThroughIngest({ content, body, scope: tenant.scope, signal: req.signal });
+    const ingestConfig = loadIngestConfig({ RAG_INGEST_PIPELINE: env.RAG_INGEST_PIPELINE });
+    if (ingestConfig.pipeline === 'unified') {
+      if (ingestConfig.pipelineBlocked) return NextResponse.json({ error: ingestConfig.pipelineBlocked }, { status: 503 });
+      return await saveThroughIngest({ content, body, scope: tenant.scope, uploaderId: sessionUser.id, signal: req.signal });
     }
+    // D-56: the legacy writer below cannot hold a document.
+    if (legacyWriteRefused()) return legacyApprovalRefusal();
 
     const owner = {
       userId: sessionUser.id,

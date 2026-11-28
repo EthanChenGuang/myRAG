@@ -1,15 +1,20 @@
 import { isEmbeddingProfilesEnabled, ProfileUnavailableError } from '../../embeddings/active-profile';
 import { EmbeddingProfileMismatch } from '../../embeddings/mrl';
-import { canonicalModelId, getEmbeddingProvider } from '../../embeddings/registry';
+import { canonicalModelId, getEmbeddingProviderFor } from '../../embeddings/registry';
+import type { BoilerplateReport } from '@/lib/rag-eval/contracts.generated';
 import type { RpcClient } from '../../backend/supabase-rpc';
+import { TENANT_LINE_DEFAULT_DEADLINE_MS } from '../../patterns/tenant-line-pattern';
 import { backfillScope } from '../../tenant/backfill-scope';
 import type { TenantScope } from '../../tenant/scope';
 import { PARSE_ARTIFACT, loadArtifact, type ArtifactContext } from '../artifacts';
+import { currentIngestConfig } from '../current-config';
 import { getIngestDeps } from '../deps';
 import { resolveEmbeddingTargets, type EmbeddingTarget } from '../embedding-targets';
 import { ObjectStoreError } from '../object-store';
+import { PREPARE_FAILED, applyPrepareOutcome, loadPageLines, needsPageLines, prepareChunkInput, type ReviewCode, type SectionRulesReport } from '../prepare';
 import { buildProfileChunks, writeProfileChunks, type BuiltProfileChunks, type ChunkingProfileRow } from '../profile-chunks';
-import { getProcessingProfile, profileFor, type DocType } from '../profiles/load';
+import { getProcessingProfile, profileFor, type DocType, type ProcessingProfile } from '../profiles/load';
+import { loadTenantRules } from '../rules/load';
 import { templateHeaderFor } from '../text/embedding-text';
 import { countTokens } from '../text/tokens';
 import { INGEST_SOURCES, type IngestSource } from '../types';
@@ -115,6 +120,8 @@ export interface DryRunRechunkInput {
   tenantKey?: string | null;
   batchSize?: number;
   signal?: AbortSignal;
+  /** The scope of a document's own tenant for page cleaning (D-11); defaults to the backfill scope resolver. */
+  scopeFor?: (tenantKey: string, signal: AbortSignal) => Promise<TenantScope | null>;
 }
 
 export interface DryRunRechunkTenant {
@@ -317,7 +324,73 @@ async function listGaps(db: RpcClient, signal: AbortSignal, runId: string): Prom
   }));
 }
 
-type Prepared = { kind: 'ready'; built: BuiltProfileChunks; tokens: number } | { kind: 'gap'; reason: 'no_parse_output' | 'failed'; detail: string };
+/** What the preparation step left for the real run to store after its profile write (D-10, D-17). */
+interface PrepOutcome {
+  report: BoilerplateReport | null;
+  review: ReviewCode[];
+  sectionRules: SectionRulesReport | null;
+}
+
+type Prepared =
+  | { kind: 'ready'; built: BuiltProfileChunks; tokens: number; prep: PrepOutcome | null }
+  | { kind: 'gap'; reason: 'no_parse_output' | 'failed'; detail: string };
+
+/** Resolves the scope of the document's own tenant (the session's scopeFor, or the default resolver in the dry run). */
+type ScopeOf = (tenantKey: string) => Promise<TenantScope | null>;
+
+/**
+ * Chunk preparation from the stored parse output with the tenant's current rules (D-06, D-07, D-21): the same preparation the chunk stage
+ * runs, without a snapshot, so a cleaning rule or a section rule set changed since ingestion takes effect without a parser call. Returns
+ * the cleaned Markdown and the effective chunker (the rule-driven one, or the profile's own).
+ */
+async function prepareMarkdown(
+  doc: RechunkDocument,
+  markdown: string,
+  chunker: ProcessingProfile['chunker'],
+  scopeOf: ScopeOf,
+  signal: AbortSignal,
+): Promise<
+  | { kind: 'ok'; markdown: string; chunker: ProcessingProfile['chunker']; prep: PrepOutcome | null; warnings: string[] }
+  | { kind: 'gap'; detail: string }
+> {
+  const { pageBoilerplate: mode, sectionRules } = currentIngestConfig();
+  if ((mode === 'off' && sectionRules === 'off') || chunker.kind === 'image_caption') return { kind: 'ok', markdown, chunker, prep: null, warnings: [] };
+  const scope = await scopeOf(doc.tenantKey);
+  if (!scope) return { kind: 'gap', detail: 'tenant_scope_refused' };
+  try {
+    const rules = mode === 'rules' || mode === 'both' || sectionRules === 'on'
+      ? await loadTenantRules(scope, { docType: doc.docType, source: doc.source }, { signal })
+      : null;
+    const context: ArtifactContext = {
+      identity: { tenantKey: doc.tenantKey },
+      document: { lineageId: doc.lineageId as string, version: doc.version },
+      signal,
+      state: { artifacts: {} },
+    };
+    const pageLines = needsPageLines(mode, rules) ? await loadPageLines(context) : null;
+    const prepared = await prepareChunkInput({
+      markdown,
+      parseChunks: null,
+      pageLines,
+      baseChunker: chunker,
+      mode,
+      sectionRules,
+      rules,
+      deadlineMs: TENANT_LINE_DEFAULT_DEADLINE_MS,
+      signal,
+    });
+    return {
+      kind: 'ok',
+      markdown: prepared.markdown,
+      chunker: prepared.chunker,
+      prep: { report: mode === 'off' ? null : prepared.report, review: prepared.review, sectionRules: prepared.sectionRules },
+      warnings: prepared.warnings,
+    };
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return { kind: 'gap', detail: PREPARE_FAILED };
+  }
+}
 
 /** The stored parse output of the document's version, or null when it was never stored (written before Phase 3) or its key is not valid. */
 async function loadParseText(doc: RechunkDocument, signal: AbortSignal): Promise<string | null> {
@@ -349,7 +422,7 @@ function processingProfileOf(doc: RechunkDocument) {
  * Cuts the document's stored parse output into the parents and children of the profile. Pure apart from the object-store read: the parser is
  * never called (D-21). A document with no stored parse output, an unknown type or nothing to index becomes a gap.
  */
-async function prepare(doc: RechunkDocument, profile: ChunkingProfileRow, signal: AbortSignal, warnings: Set<string>): Promise<Prepared> {
+async function prepare(doc: RechunkDocument, profile: ChunkingProfileRow, signal: AbortSignal, warnings: Set<string>, scopeOf: ScopeOf): Promise<Prepared> {
   const markdown = await loadParseText(doc, signal);
   if (markdown === null) return { kind: 'gap', reason: 'no_parse_output', detail: 'no_parse_output' };
   if (markdown.trim() === '') return { kind: 'gap', reason: 'failed', detail: 'empty_parse_output' };
@@ -360,24 +433,31 @@ async function prepare(doc: RechunkDocument, profile: ChunkingProfileRow, signal
   } catch {
     return { kind: 'gap', reason: 'failed', detail: 'unknown_doc_type' };
   }
+  const cleaned = await prepareMarkdown(doc, markdown, processing.chunker, scopeOf, signal);
+  if (cleaned.kind === 'gap') return { kind: 'gap', reason: 'failed', detail: cleaned.detail };
+  for (const warning of cleaned.warnings) warnings.add(warning);
   let built: BuiltProfileChunks;
   try {
     const templateHeader = templateHeaderFor(processing.embedding_text_template, doc.templateRow);
-    built = buildProfileChunks({ filename: doc.filename, chunker: processing.chunker, templateHeader }, markdown, profile);
+    built = buildProfileChunks(
+      { filename: doc.filename, chunker: cleaned.chunker, templateHeader, languageAwareIngest: currentIngestConfig().languageAwareIngest, tableHeaderRepeat: currentIngestConfig().tableHeaderRepeat },
+      cleaned.markdown,
+      profile,
+    );
   } catch (error) {
     if (signal.aborted) throw error;
     return { kind: 'gap', reason: 'failed', detail: 'chunking_failed' };
   }
   for (const warning of built.warnings) warnings.add(warning);
   if (built.children.length === 0) return { kind: 'gap', reason: 'failed', detail: 'no_children' };
-  return { kind: 'ready', built, tokens: built.embeddingTexts.reduce((sum, embeddingText) => sum + countTokens(embeddingText), 0) };
+  return { kind: 'ready', built, tokens: built.embeddingTexts.reduce((sum, embeddingText) => sum + countTokens(embeddingText), 0), prep: cleaned.prep };
 }
 
 function assertProviderFits(target: EmbeddingTarget): void {
   const { profile } = target;
   let provider;
   try {
-    provider = getEmbeddingProvider(profile.provider);
+    provider = getEmbeddingProviderFor(profile.provider, profile.model);
   } catch {
     throw new TargetFailure('embed_failed');
   }
@@ -405,7 +485,7 @@ async function embedForTarget(target: EmbeddingTarget, texts: string[], signal: 
         assertShape(target, part, group.length);
         vectors.push(...part);
       } else {
-        const output = await getEmbeddingProvider(profile.provider).embedDocuments(group, { dims: profile.dims, signal });
+        const output = await getEmbeddingProviderFor(profile.provider, profile.model).embedDocuments(group, { dims: profile.dims, signal });
         if (canonicalModelId(output.model) !== canonicalModelId(profile.model)) throw new TargetFailure('embedding_profile_mismatch');
         assertShape(target, output.vectors, group.length);
         vectors.push(...output.vectors);
@@ -432,23 +512,32 @@ interface Session {
   scopeFor: NonNullable<RunRechunkInput['scopeFor']>;
   warnings: Set<string>;
   writers: Map<string, IngestWriter | null>;
+  scopes: Map<string, TenantScope | null>;
   targets: Map<string, EmbeddingTarget[]>;
+}
+
+async function scopeFor(session: Session, tenantKey: string): Promise<TenantScope | null> {
+  if (session.scopes.has(tenantKey)) return session.scopes.get(tenantKey) ?? null;
+  const scope = await session.scopeFor(tenantKey, session.signal);
+  session.scopes.set(tenantKey, scope);
+  return scope;
 }
 
 async function writerFor(session: Session, tenantKey: string): Promise<IngestWriter | null> {
   if (session.writers.has(tenantKey)) return session.writers.get(tenantKey) ?? null;
-  const scope = await session.scopeFor(tenantKey, session.signal);
+  const scope = await scopeFor(session, tenantKey);
   const writer = scope ? createIngestWriter({ db: session.db, scope, signal: session.signal }) : null;
   session.writers.set(tenantKey, writer);
   return writer;
 }
 
-async function targetsFor(session: Session, tenantKey: string, writer: IngestWriter): Promise<EmbeddingTarget[]> {
-  const known = session.targets.get(tenantKey);
+async function targetsFor(session: Session, doc: RechunkDocument, writer: IngestWriter): Promise<EmbeddingTarget[]> {
+  const key = JSON.stringify([doc.tenantKey, doc.docType]);
+  const known = session.targets.get(key);
   if (known) return known;
   try {
-    const targets = await resolveEmbeddingTargets(writer);
-    session.targets.set(tenantKey, targets);
+    const targets = await resolveEmbeddingTargets(writer, { docType: doc.docType, tenantKey: doc.tenantKey });
+    session.targets.set(key, targets);
     return targets;
   } catch (error) {
     if (session.signal.aborted) throw error;
@@ -463,16 +552,16 @@ type Outcome =
 
 /**
  * Builds one document's profile from its stored parse output, embeds the children for the active, backfilling and previous embedding profiles
- * and writes them under the document's own tenant scope in one transaction. A failing active target stops the run; a failing other target
- * leaves its vectors out. A refusal by the writer (a tenant that does not match, a document that is no longer writable) leaves the document as a gap.
+ * and the binding profiles of the document's doc type and tenant (D-15), and writes them under the document's own tenant scope in one
+ * transaction. A failing active target stops the run; a failing other target leaves its vectors out. A refusal by the writer (a tenant that does not match, a document that is no longer writable) leaves the document as a gap.
  */
 async function buildDocument(session: Session, doc: RechunkDocument): Promise<Outcome> {
-  const prepared = await prepare(doc, session.profile, session.signal, session.warnings);
+  const prepared = await prepare(doc, session.profile, session.signal, session.warnings, (tenantKey) => scopeFor(session, tenantKey));
   if (prepared.kind === 'gap') return prepared;
 
   const writer = await writerFor(session, doc.tenantKey);
   if (!writer) return { kind: 'gap', reason: 'failed', detail: 'tenant_scope_refused' };
-  const targets = await targetsFor(session, doc.tenantKey, writer);
+  const targets = await targetsFor(session, doc, writer);
   const { built } = prepared;
 
   const outcomes = await Promise.all(
@@ -503,6 +592,14 @@ async function buildDocument(session: Session, doc: RechunkDocument): Promise<Ou
     if (session.signal.aborted) throw error;
     if (error instanceof IngestWriterError && error.reason !== null) return { kind: 'gap', reason: 'failed', detail: error.reason };
     throw new RunFailure('profile_write_failed');
+  }
+  if (prepared.prep) {
+    try {
+      await applyPrepareOutcome({ writer, db: session.db, documentId: doc.id, tenantKey: doc.tenantKey }, prepared.prep, { signal: session.signal });
+    } catch (error) {
+      if (session.signal.aborted) throw error;
+      session.warnings.add('review_flag_failed');
+    }
   }
   return { kind: 'written', parents: built.parents.length, children: built.children.length, tokens: prepared.tokens };
 }
@@ -546,6 +643,7 @@ async function execute(input: RunRechunkInput, resumeOpen: boolean): Promise<Rec
     scopeFor: input.scopeFor ?? defaultScopeFor,
     warnings: new Set(),
     writers: new Map(),
+    scopes: new Map(),
     targets: new Map(),
   };
   const tenants: RechunkReport['tenants'] = {};
@@ -728,6 +826,11 @@ export async function dryRunRechunk(input: DryRunRechunkInput): Promise<DryRunRe
   }
 
   const warnings = new Set<string>();
+  const scopes = new Map<string, TenantScope | null>();
+  const scopeOf: ScopeOf = async (key) => {
+    if (!scopes.has(key)) scopes.set(key, await (input.scopeFor ?? defaultScopeFor)(key, signal));
+    return scopes.get(key) ?? null;
+  };
   const tenants = new Map<string, DryRunRechunkTenant>();
   const gaps: RechunkGap[] = [];
   const entryOf = (key: string): DryRunRechunkTenant => {
@@ -745,7 +848,7 @@ export async function dryRunRechunk(input: DryRunRechunkInput): Promise<DryRunRe
       const page = await listDocuments(input.db, signal, profile, tenantKey, after, batchSize);
       if (page.length === 0) break;
       for (const doc of page) {
-        const prepared = await prepare(doc, profile, signal, warnings);
+        const prepared = await prepare(doc, profile, signal, warnings, scopeOf);
         const entry = entryOf(doc.tenantKey);
         if (prepared.kind === 'gap') {
           entry.gapDocuments += 1;
@@ -767,8 +870,27 @@ export async function dryRunRechunk(input: DryRunRechunkInput): Promise<DryRunRe
   const rows = [...tenants.values()].sort((a, b) => (a.tenantKey < b.tenantKey ? -1 : a.tenantKey > b.tenantKey ? 1 : 0));
   const totals: Record<string, { chunks: number; tokens: number }> = {};
   for (const row of rows) totals[row.tenantKey] = { chunks: row.children, tokens: row.tokens };
+  const bindings = new Map<string, { target: EmbeddingTarget; tenantKeys: string[] }>();
+  for (const row of rows) {
+    let scoped: EmbeddingTarget[];
+    try {
+      scoped = await resolveEmbeddingTargets({ findBackfillRuns: async () => [] }, { docType: profile.docType, tenantKey: row.tenantKey });
+    } catch (error) {
+      if (error instanceof ProfileUnavailableError) throw new RechunkInputError('embedding_profile_unavailable');
+      throw error;
+    }
+    for (const target of scoped) {
+      if (target.role !== 'binding' || targets.some((global) => global.profile.id === target.profile.id)) continue;
+      const entry = bindings.get(target.profile.id) ?? { target, tenantKeys: [] };
+      entry.tenantKeys.push(row.tenantKey);
+      bindings.set(target.profile.id, entry);
+    }
+  }
   const cost = estimateRechunkCost(
-    targets.map((target) => ({ profileId: target.profile.id, provider: target.profile.provider })),
+    [
+      ...targets.map((target) => ({ profileId: target.profile.id, provider: target.profile.provider })),
+      ...[...bindings.values()].map(({ target, tenantKeys }) => ({ profileId: target.profile.id, provider: target.profile.provider, tenantKeys })),
+    ],
     totals,
   );
   return {
@@ -779,7 +901,7 @@ export async function dryRunRechunk(input: DryRunRechunkInput): Promise<DryRunRe
     parentMode: profile.parentMode,
     tenants: rows,
     gaps,
-    embeddingProfiles: targets.map((target) => target.profile.id),
+    embeddingProfiles: [...targets, ...[...bindings.values()].map(({ target }) => target)].map((target) => target.profile.id),
     cost,
   };
 }

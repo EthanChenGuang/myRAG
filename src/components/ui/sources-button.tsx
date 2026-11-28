@@ -212,25 +212,19 @@ export function SourcesButton({ disabled = false, alwaysShowText = false, skipIf
         data-sources-toggle="true"
         disabled={disabled}
         className={`
-          flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm
-          ${isSourcesOpen 
-            ? 'bg-orange-100 text-[#FF6417] dark:bg-gray-800 dark:text-gray-300' 
-            : 'text-[#FF6417] hover:bg-orange-50 dark:text-gray-300 dark:hover:bg-gray-800/50'}
+          chat-source-pill flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium
+          ${isSourcesOpen ? 'is-open' : ''}
           ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
         `}
         aria-label={isSourcesOpen ? 'Hide sources' : 'Show sources'}
       >
-        <Search className="h-4 w-4" />
+        <Search className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
         <span className={alwaysShowText ? '' : 'hidden sm:inline'}>
           Sources
         </span>
         {/* Show badge if we have any sources */}
         {(hasWebSearchSources || hasRelevantToolSources || hasDocumentSources) && (
-          <span className={`ml-0.5 text-xs rounded-full px-1.5 py-0.5 text-[10px] leading-none ${
-            isSourcesOpen 
-              ? 'bg-orange-200 dark:bg-gray-700' 
-              : 'bg-orange-200 dark:bg-gray-700'
-          }`}>
+          <span className="chat-source-pill__count ml-0.5 rounded-full px-1.5 py-0.5 text-[11px] leading-none tabular-nums">
             {displayCount}
           </span>
         )}

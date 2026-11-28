@@ -1,0 +1,28 @@
+{
+  "additionalProperties": false,
+  "description": "D-15, D-16: the structured table leg; a row matches when at least min_cells distinct cells match.",
+  "properties": {
+    "limit": {
+      "default": 10,
+      "maximum": 100,
+      "minimum": 1,
+      "title": "Limit",
+      "type": "integer"
+    },
+    "min_cells": {
+      "default": 2,
+      "maximum": 20,
+      "minimum": 1,
+      "title": "Min Cells",
+      "type": "integer"
+    },
+    "weight": {
+      "default": 1.0,
+      "exclusiveMinimum": 0,
+      "title": "Weight",
+      "type": "number"
+    }
+  },
+  "title": "TableLookupParams",
+  "type": "object"
+}

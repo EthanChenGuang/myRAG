@@ -9,7 +9,7 @@ import { createTraceCollector } from '@/lib/rag/trace/collector';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import type { Profile } from '@/lib/rag/types';
 import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
-import { runContextStages, type ContextStagesInput } from '@/lib/rag/v2/stages/context';
+import { ALSO_IN_MAX, ALSO_IN_SOURCES_UNAVAILABLE, mergeAlsoIn, runContextStages, type ContextStagesInput } from '@/lib/rag/v2/stages/context';
 import { hit } from '../fusion/helpers';
 import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
 import { resetRagDepsForTests, setRagDepsForTests } from '@/lib/rag/deps';
@@ -544,5 +544,133 @@ describe('runContextStages expand_parents (D-20)', () => {
 
     const control = await run([{ ...spec, parentId: null, content: longParent }], { RAG_CONTEXT_COMPRESSION: 'true' }).promise;
     expect(control.assembly!.context).not.toContain(longParent);
+  });
+});
+
+describe('runContextStages cluster sources (D-21)', () => {
+  const CLUSTER = 'cluster-one';
+  const clusterSpecs: Spec[] = [
+    { chunkId: 'k-1', documentId: 'doc-k', filename: 'kept.md', chunkIndex: 0 },
+    { chunkId: 'o-1', documentId: 'doc-o', filename: 'other.md', chunkIndex: 0 },
+  ];
+  const dropped = [
+    { documentId: 'doc-d2', filename: 'dropped-2.md', chunkId: 'd2-1' },
+    { documentId: 'doc-d1', filename: 'dropped-1.md', chunkId: 'd1-1' },
+  ];
+
+  function clusterRun(over: Record<string, string>, extra: Partial<ContextStagesInput> = {}, clustered = true) {
+    const cfg = config(over);
+    const collector = createTraceCollector({ profile: 'chat', tenantKey: 's:default' });
+    const params = { ...effectiveRetrievalParams('chat', cfg, null), final_top_k: 20 };
+    const fusedHits = fusedList(clusterSpecs).map((row, index) =>
+      clustered && index === 0 ? { ...row, hit: { ...row.hit, dupClusterId: CLUSTER } } : row,
+    );
+    const promise = runContextStages({
+      input: { scope, query: 'kept other', profile: 'chat', signal: new AbortController().signal },
+      config: cfg,
+      profile: 'chat',
+      params,
+      fusedHits,
+      referenced: null,
+      signal: new AbortController().signal,
+      collector,
+      alsoIn: new Map([['k-1', dropped]]),
+      ...extra,
+    });
+    return { promise, collector };
+  }
+
+  function sourcesAdmin(rows: Array<{ cluster_id: string; document_id: string; filename: string; chunk_id: string }>, error?: { message: string; code?: string }) {
+    const calls: Array<{ fn: string; args: Record<string, unknown> }> = [];
+    const client: RpcClient = {
+      rpc(fn: string, args: Record<string, unknown>): RpcRequest {
+        calls.push({ fn, args });
+        const request: RpcRequest = {
+          abortSignal: () => request,
+          then(onFulfilled, onRejected) {
+            const response: RpcResponse = error ? { data: null, error } : { data: rows, error: null };
+            return Promise.resolve(response).then(onFulfilled, onRejected);
+          },
+        };
+        return request;
+      },
+    };
+    return { client, calls };
+  }
+
+  const clusterRows = [
+    { cluster_id: CLUSTER, document_id: 'doc-a', filename: 'a.md', chunk_id: 'a-1' },
+    { cluster_id: CLUSTER, document_id: 'doc-d1', filename: 'dropped-1.md', chunk_id: 'd1-9' },
+    { cluster_id: CLUSTER, document_id: 'doc-k', filename: 'kept.md', chunk_id: 'k-1' },
+    { cluster_id: CLUSTER, document_id: 'doc-z', filename: 'z.md', chunk_id: 'z-1' },
+  ];
+  const collapse = { RAG_DUP_CLUSTERS: 'true', RAG_RESULT_DIVERSITY: 'collapse' };
+
+  beforeEach(() => {
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetRagDepsForTests();
+    resetRagConfigForTests();
+  });
+
+  it('lists the dropped candidates first, then the other sources, without the own document or duplicates', async () => {
+    const { client, calls } = sourcesAdmin(clusterRows);
+    setRagDepsForTests({ adminClient: () => client as never });
+    const { promise, collector } = clusterRun(collapse);
+    const { assembly } = await promise;
+
+    const sourceCalls = calls.filter((call) => call.fn === 'rag_dup_cluster_sources');
+    expect(sourceCalls).toHaveLength(1);
+    expect(sourceCalls[0]!.args).toEqual({ p_tenant_key: 's:default', p_cluster_ids: [CLUSTER], p_limit: 30 });
+    const expected = [
+      { documentId: 'doc-d2', filename: 'dropped-2.md', chunkId: 'd2-1' },
+      { documentId: 'doc-d1', filename: 'dropped-1.md', chunkId: 'd1-1' },
+      { documentId: 'doc-a', filename: 'a.md', chunkId: 'a-1' },
+      { documentId: 'doc-z', filename: 'z.md', chunkId: 'z-1' },
+    ];
+    expect(assembly!.kept.find((row) => row.chunk_id === 'k-1')?.alsoIn).toEqual(expected);
+    expect(assembly!.usedDocuments.find((doc) => doc.id === 'doc-k')?.alsoIn).toEqual(expected);
+    expect(assembly!.usedDocuments.find((doc) => doc.id === 'doc-o')).not.toHaveProperty('alsoIn');
+    expect(stageCounts(collector, 'assemble')?.status).toBe('ok');
+  });
+
+  it('cuts the list at the cap', () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({ documentId: `doc-${i}`, filename: `${i}.md`, chunkId: `c-${i}` }));
+    expect(mergeAlsoIn('doc-0', [many])).toHaveLength(ALSO_IN_MAX);
+    expect(mergeAlsoIn('doc-0', [many], 5).map((entry) => entry.documentId)).toEqual(['doc-1', 'doc-2', 'doc-3', 'doc-4', 'doc-5']);
+  });
+
+  it('makes no call with diversity off', async () => {
+    const { client, calls } = sourcesAdmin(clusterRows);
+    setRagDepsForTests({ adminClient: () => client as never });
+    const { promise } = clusterRun({ RAG_DUP_CLUSTERS: 'true' }, { alsoIn: undefined });
+    const { assembly } = await promise;
+    expect(calls.filter((call) => call.fn === 'rag_dup_cluster_sources')).toHaveLength(0);
+    expect(assembly!.usedDocuments.every((doc) => !('alsoIn' in doc))).toBe(true);
+  });
+
+  it('makes no call when no candidate carries a cluster id', async () => {
+    const { client, calls } = sourcesAdmin(clusterRows);
+    setRagDepsForTests({ adminClient: () => client as never });
+    const { promise } = clusterRun(collapse, { alsoIn: undefined }, false);
+    const { assembly } = await promise;
+    expect(calls.filter((call) => call.fn === 'rag_dup_cluster_sources')).toHaveLength(0);
+    expect(assembly!.usedDocuments.every((doc) => !('alsoIn' in doc))).toBe(true);
+  });
+
+  it('keeps the dropped candidates and marks the assemble stage degraded when the lookup fails', async () => {
+    const { client } = sourcesAdmin([], { message: 'boom', code: 'XX000' });
+    setRagDepsForTests({ adminClient: () => client as never });
+    const { promise, collector } = clusterRun(collapse);
+    const { assembly } = await promise;
+    expect(assembly).not.toBeNull();
+    expect(assembly!.usedDocuments.find((doc) => doc.id === 'doc-k')?.alsoIn).toEqual(dropped);
+    const stage = stageCounts(collector, 'assemble');
+    expect(stage?.status).toBe('degraded');
+    expect(stage?.detail).toContain(ALSO_IN_SOURCES_UNAVAILABLE);
   });
 });

@@ -1,0 +1,194 @@
+{
+  "$defs": {
+    "TerminologyEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Canonical",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "kind": {
+          "enum": [
+            "synonym",
+            "abbreviation",
+            "alias",
+            "identifier",
+            "translation",
+            "misspelling"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it",
+            "any"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "layer": {
+          "enum": [
+            "shared",
+            "workspace"
+          ],
+          "title": "Layer",
+          "type": "string"
+        },
+        "mode": {
+          "default": "one_way",
+          "enum": [
+            "one_way",
+            "equivalent"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "source_language": {
+          "anyOf": [
+            {
+              "enum": [
+                "zh",
+                "en",
+                "it"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Language"
+        },
+        "suppresses_entry_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Suppresses Entry Id"
+        },
+        "target_language": {
+          "anyOf": [
+            {
+              "enum": [
+                "zh",
+                "en",
+                "it"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Language"
+        },
+        "variants": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Variants",
+          "type": "array"
+        }
+      },
+      "required": [
+        "language",
+        "kind",
+        "layer",
+        "canonical"
+      ],
+      "title": "TerminologyEntry",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "draft_entries": {
+      "items": {
+        "$ref": "#/$defs/TerminologyEntry"
+      },
+      "maxItems": 50,
+      "title": "Draft Entries",
+      "type": "array"
+    },
+    "layer": {
+      "enum": [
+        "shared",
+        "workspace"
+      ],
+      "title": "Layer",
+      "type": "string"
+    },
+    "organization_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Organization Id"
+    },
+    "query": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Query",
+      "type": "string"
+    }
+  },
+  "required": [
+    "query",
+    "layer"
+  ],
+  "title": "TerminologyPreviewRequest",
+  "type": "object"
+}

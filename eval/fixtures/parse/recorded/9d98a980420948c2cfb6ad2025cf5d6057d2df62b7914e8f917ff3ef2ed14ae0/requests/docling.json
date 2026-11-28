@@ -1,0 +1,20 @@
+{
+  "docling": {
+    "force_full_page_ocr": false,
+    "generate_picture_images": true,
+    "heading_hierarchy": true,
+    "ocr": true,
+    "table_mode": "fast"
+  },
+  "input_format": "pdf",
+  "max_tokens": 512,
+  "ocr_languages": [
+    "zh",
+    "it"
+  ],
+  "page_cap": null,
+  "profile_id": "general@1",
+  "profile_version": 1,
+  "repeat_table_header": false,
+  "tokenizer": "cl100k_base"
+}

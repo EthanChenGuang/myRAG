@@ -339,6 +339,38 @@ for (const mode of MODES) {
       assert.equal((await parentRows(other, P256)).length, 0);
     });
 
+    test('a null vector entry writes that child without a vector, a scalar entry is rejected with invalid_embeddings, and a wrong length next to a null is still refused', async () => {
+      const documentId = await begin(a);
+      const children = childrenOf(3, 1);
+      await write(documentId, a, P256, parentsOf(1), children, {
+        [LEGACY_EMBEDDING]: [vector(1536, 0), null, vector(1536, 2)],
+        [VOYAGE]: { vectors: [null, vector(2048, 1), null], host: 'fixture' },
+      });
+      assert.deepEqual(
+        (await childRows(documentId, P256)).map((row) => row.has_embedding),
+        [true, false, true],
+      );
+      const halfvec = await query(
+        `SELECT c.chunk_index FROM chunk_embeddings e JOIN document_chunks c ON c.id = e.chunk_id
+         WHERE c.document_id = $1 AND c.chunking_profile_id = $2 AND e.profile_id = $3 ORDER BY c.chunk_index`,
+        [documentId, P256, VOYAGE],
+      );
+      assert.deepEqual(
+        halfvec.map((row) => row.chunk_index),
+        [1],
+      );
+
+      const other = await begin(a);
+      for (const scalar of [42, 'not a vector', true, { values: [] }]) {
+        const message = await writeError(other, a.key, P256, parentsOf(1), childrenOf(2, 1), { [LEGACY_EMBEDDING]: [vector(1536, 0), scalar] });
+        assert.match(message ?? 'no error', /invalid_embeddings/, JSON.stringify(scalar));
+      }
+      const shortVector = await writeError(other, a.key, P256, parentsOf(1), childrenOf(2, 1), { [VOYAGE]: [null, vector(100, 1)] });
+      assert.match(shortVector ?? 'no error', /embedding_profile_mismatch/);
+      assert.equal((await childRows(other, P256)).length, 0);
+      assert.equal((await parentRows(other, P256)).length, 0);
+    });
+
     test('a rewrite with changed text drops the old vectors of that child', async () => {
       const documentId = await begin(a);
       const children = childrenOf(2, 1);

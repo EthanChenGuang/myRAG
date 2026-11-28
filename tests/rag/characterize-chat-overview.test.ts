@@ -100,7 +100,7 @@ describe('chat route characterization (general overview fallback, single tenant)
   beforeAll(async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-    fixture = await startRouteFixture({ deploymentMode: 'single-tenant', seed: seedOverview });
+    fixture = await startRouteFixture({ deploymentMode: 'single-tenant', seed: seedOverview, env: { RAG_PIPELINE: 'legacy' } });
   });
 
   afterAll(async () => {

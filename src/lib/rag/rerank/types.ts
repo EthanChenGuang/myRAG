@@ -28,6 +28,8 @@ export interface Reranker {
   readonly id: RerankProviderId;
   readonly model: string;
   readonly scoreSemantics: RerankScoreSemantics;
+  /** Registry codes this adapter is declared for (D-07); the language validator refuses a set it lacks. */
+  readonly supportedLanguages: readonly string[];
   rerank(
     query: string,
     docs: string[],

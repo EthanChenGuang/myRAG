@@ -1,0 +1,119 @@
+{
+  "$defs": {
+    "CredentialRule": {
+      "additionalProperties": false,
+      "description": "D-39: a request form and a secret or log-in term inside one sentence; security vocabulary only.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it",
+            "any"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "request_terms": {
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Request Terms",
+          "type": "array"
+        },
+        "secret_terms": {
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Secret Terms",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "language",
+        "request_terms",
+        "secret_terms"
+      ],
+      "title": "CredentialRule",
+      "type": "object"
+    },
+    "ObfuscationPattern": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "pattern": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Pattern",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "pattern"
+      ],
+      "title": "ObfuscationPattern",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "D-39: `config/rag/output-guard-rules.json`, versioned; `version` is the rules_version on every summary.",
+  "properties": {
+    "credential_rules": {
+      "items": {
+        "$ref": "#/$defs/CredentialRule"
+      },
+      "title": "Credential Rules",
+      "type": "array"
+    },
+    "obfuscation_patterns": {
+      "items": {
+        "$ref": "#/$defs/ObfuscationPattern"
+      },
+      "title": "Obfuscation Patterns",
+      "type": "array"
+    },
+    "opaque_schemes": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9+.-]{0,31}$",
+        "type": "string"
+      },
+      "title": "Opaque Schemes",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "title": "OutputGuardRules",
+  "type": "object"
+}

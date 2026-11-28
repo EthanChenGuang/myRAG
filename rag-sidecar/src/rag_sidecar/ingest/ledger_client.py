@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -10,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from rag_sidecar.contracts.queue import IngestionJob
 from rag_sidecar.ingest.supabase_headers import supabase_headers
+from rag_sidecar.ingest.supabase_url import assert_supabase_api_url
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,20 @@ class ParseCacheEntry(BaseModel):
     object_prefix: str
     result: dict[str, Any] = Field(default_factory=dict)
     byte_size: int | None = None
+
+
+class BatchJobRef(BaseModel):
+    """What a runner needs to choose jobs from a batch listing. Inventory rows (duplicates recorded as terminal, with empty
+    settings) do not satisfy the full job contract, so a listing reads only these columns."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    id: str
+    kind: str
+    status: str
+    stage: str | None = None
+    run_after: datetime | None = None
+    lease_until: datetime | None = None
 
 
 _STRIPPED_JOB_COLUMNS = ("error",)
@@ -91,9 +107,8 @@ class LedgerClient:
         connect_timeout: float = _DEFAULT_CONNECT_TIMEOUT,
         read_timeout: float = _DEFAULT_READ_TIMEOUT,
     ) -> None:
-        if not base_url.strip():
-            raise ValueError("base_url must not be empty")
-        self._base_url = base_url.rstrip("/")
+        api = assert_supabase_api_url(base_url, label="NEXT_PUBLIC_SUPABASE_URL")
+        self._base_url = api.rstrip("/")
         self._service_key = service_key
         self._owns_client = client is None
         timeout = httpx.Timeout(connect=connect_timeout, read=read_timeout, write=read_timeout, pool=connect_timeout)
@@ -143,6 +158,15 @@ class LedgerClient:
             return payload
         return [payload]
 
+    @classmethod
+    def _scalar(cls, payload: Any) -> Any:
+        """The value of a scalar function: bare on PostgREST, a one-column row on the fake edge."""
+        rows = cls._rows(payload)
+        value = rows[0] if rows else None
+        if isinstance(value, dict) and len(value) == 1:
+            value = next(iter(value.values()))
+        return value
+
     async def claim(
         self,
         *,
@@ -170,21 +194,46 @@ class LedgerClient:
         rows = self._rows(payload)
         if not rows:
             return None
-        return _job_from_row(rows[0])
+        row = rows[0]
+        # A NULL composite arrives as an object whose columns are all null: nothing was claimed.
+        if row is None or (isinstance(row, dict) and row.get("id") is None):
+            return None
+        return _job_from_row(row)
+
+    async def list_batch_jobs(
+        self,
+        batch_id: str,
+        *,
+        status: str | None = None,
+        page_size: int = 500,
+    ) -> list[BatchJobRef]:
+        """Every job of a batch in (created_at, id) order, read page by page through rag_list_batch_jobs."""
+        jobs: list[BatchJobRef] = []
+        after: str | None = None
+        while True:
+            payload = await self._rpc(
+                "rag_list_batch_jobs",
+                {"p_batch_id": batch_id, "p_status": status, "p_after_id": after, "p_limit": page_size},
+            )
+            page = [BatchJobRef.model_validate(row) for row in self._rows(payload)]
+            jobs.extend(page)
+            if len(page) < page_size:
+                return jobs
+            after = page[-1].id
 
     async def heartbeat(self, job_id: str, worker: str) -> bool:
         payload = await self._rpc(
             "rag_heartbeat_ingestion_job",
             {"p_job_id": job_id, "p_worker": worker},
         )
-        return bool(payload)
+        return bool(self._scalar(payload))
 
     async def release(self, job_id: str, worker: str) -> bool:
         payload = await self._rpc(
             "rag_release_ingestion_job",
             {"p_job_id": job_id, "p_worker": worker},
         )
-        return bool(payload)
+        return bool(self._scalar(payload))
 
     async def advance(
         self,
@@ -232,16 +281,39 @@ class LedgerClient:
             return int(first)
         raise LedgerError("record_attempt returned unexpected payload")
 
-    async def fail(self, job_id: str, worker: str, *, error_class: str, retryable: bool) -> IngestionJob:
+    async def count_dead_letters(self, tenant_key: str | None = None) -> int:
+        value = self._scalar(await self._rpc("rag_count_ingestion_dead_letters", {"p_tenant_key": tenant_key}))
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return int(value)
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
+        return 0
+
+    async def purge_stale(self, *, retention_days: int, batch_size: int = 500) -> dict[str, Any]:
         payload = await self._rpc(
-            "rag_fail_ingestion_job",
-            {
-                "p_job_id": job_id,
-                "p_worker": worker,
-                "p_error_class": error_class,
-                "p_retryable": retryable,
-            },
+            "rag_purge_stale_ingestion_jobs",
+            {"p_retention_days": retention_days, "p_batch_size": batch_size},
         )
+        return payload if isinstance(payload, dict) else {"archived": 0, "purged": 0}
+
+    async def fail(
+        self,
+        job_id: str,
+        worker: str,
+        *,
+        error_class: str,
+        retryable: bool,
+        last_error: str | None = None,
+    ) -> IngestionJob:
+        body = {
+            "p_job_id": job_id,
+            "p_worker": worker,
+            "p_error_class": error_class,
+            "p_retryable": retryable,
+        }
+        if last_error is not None:
+            body["p_last_error"] = last_error
+        payload = await self._rpc("rag_fail_ingestion_job", body)
         rows = self._rows(payload)
         if not rows:
             raise LedgerError("fail returned no row")
@@ -263,14 +335,7 @@ class LedgerClient:
                 "p_options_hash": options_hash,
             },
         )
-        if payload is None:
-            return None
-        if isinstance(payload, str):
-            return payload
-        rows = self._rows(payload)
-        if not rows:
-            return None
-        value = rows[0]
+        value = self._scalar(payload)
         return str(value) if value is not None else None
 
     async def cache_lookup(

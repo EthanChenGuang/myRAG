@@ -1,0 +1,49 @@
+{
+  "additionalProperties": false,
+  "description": "Deployment language setting as returned by `getLanguageSettings()` (D-01).",
+  "properties": {
+    "configured": {
+      "title": "Configured",
+      "type": "boolean"
+    },
+    "languages": {
+      "items": {
+        "enum": [
+          "zh",
+          "en",
+          "it"
+        ],
+        "type": "string"
+      },
+      "title": "Languages",
+      "type": "array"
+    },
+    "monolingual": {
+      "title": "Monolingual",
+      "type": "boolean"
+    },
+    "primary": {
+      "anyOf": [
+        {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Primary"
+    }
+  },
+  "required": [
+    "configured",
+    "monolingual"
+  ],
+  "title": "LanguageSettings",
+  "type": "object"
+}

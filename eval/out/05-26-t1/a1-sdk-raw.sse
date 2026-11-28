@@ -1,0 +1,199 @@
+event: message_start
+data: {"type":"message_start","message":{"model":"claude-haiku-5-5","id":"msg_011ChRbGWhxZprSps1yHMTun","type":"message","role":"assistant","content":[],"container":null,"stop_reason":null,"stop_sequence":null,"stop_details":null,"usage":{"input_tokens":1332,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"output_tokens":3,"service_tier":"standard","inference_geo":"global","speed":"standard"},"diagnostics":null}            }
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}   }
+
+event: ping
+data: {"type": "ping"}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":""}               }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"CAQSqgYKEAgUGAI4AUIIdGhpbmtpbmcSDFxwaUONwkedWKeUbxoMsTyTvnxQTJ/KAzzrIjDWiEyzGFhGm5bJFLc70EdJ6YV1dYLOMkxB1EMaAxrBSLLuwZ1DKsfJw9SwxaSeoE0qxwW71ZxlAgXhPRw+lsZldEAlBQpbSHEUa/nCWcwXkAWNteYHeDAy67CAtBE1JBLtHyd9YaLiqU48RZT7H0u1od38Dwcu2PvkE1VXhmlF0xazNOojV0gYZPIHEBr5urmU3rwlYgnsUcKaUQmXg2cpE637pjv7N1+h3f1m3tXOrm97Owi6n1MO2AL+sVQgMbu8tCmgtRZ/Cr4kyxS8tCDVw+TeC3XwutD24o1JrZ1AEcmeesqVX7euF099+lO3M3H+Z8B7zC0z+1pYP54j1Vs4Wc6qfI5bY8jdBJyQ+QEevuHYksYNPH+0vpvOpS8H6uBX0M0bXnzXFwQ/e8a7U2vLlJ9JE5iyjgWYiUAQokevAsYBSKkGjFRD8pcc17C9+HFd8BMI9BkwnibYlctwKLeT040jZu+bzh79L79hrET7lZtFMARPx3kFCaQ3qskDKOKl1BGeBNLKZ+GjpcT/+dnfpBxO7MM6/HiHAtBOL3pZlnvk+pRM4WPQiqhwXb22GBxUf16OnN65iG7ae7vwsNDCxdaFB7CCw5fgABU3KfwION/Ae+pDD0l1n689b68yUW5hr0Th+yA8gfIs5vGqsNX83IseT0LNonFSW5CCudVn62k+lwl7NfPkUN/ixNL0SewXuBvmZrf0yElRjfny+TDkmmj0F1J8wgGclSSN1L44ZIBaAJBh0xH7obJYNWsV1GJUGy5cD0ETb3DAeQE2Xzzgnt9iVnOSuNXAZjz7ewhKdjJDEX/n3OV+4h/IoR9xfC5pbPvdNIGCDo2Z/5JqhFZBdwn36fpc6+cYWDE6HTNeUMobnM4OOg8Mhb44G84B6cdQpdROIZ2wTzRCCUl9ijyHaCPcPNq1fTiZyFOh+pCqUjCBUwxMr0UtaVP0zmpmo87vQaaQ5mtSlfxhmf5Ktv3zvGB65/i5uWYgLUQAlPrke8lgH0XdIbIYQuAYAQ=="}          }
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0  }
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_01QvJtB1qKXCFXVfJSB8EDwL","name":"webSearch","input":{},"caller":{"type":"direct"}}            }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":""}              }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"query\": \"year"}           }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" first"}         }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" electric lighthouse l"}      }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"amp tested"}        }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"}"}           }
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1          }
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null,"stop_details":null,"container":null},"usage":{"input_tokens":1332,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":129,"output_tokens_details":{"thinking_tokens":67}}}
+
+event: message_stop
+data: {"type":"message_stop"            }
+
+
+
+===== next request =====
+
+event: message_start
+data: {"type":"message_start","message":{"model":"claude-haiku-5-5","id":"msg_011ChRbGaJ1WCukWyJ3CTCBk","type":"message","role":"assistant","content":[],"container":null,"stop_reason":null,"stop_sequence":null,"stop_details":null,"usage":{"input_tokens":1531,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"output_tokens":3,"service_tier":"standard","inference_geo":"global","speed":"standard"},"diagnostics":null}        }
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}           }
+
+event: ping
+data: {"type": "ping"}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":""}       }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"CAQS+woKEAgUGAI4AUIIdGhpbmtpbmcSDGjtaHLtcmH2hJJ1bRoM5v1gTQMXaUdNLvsZIjAcB6yzW/zVIpGSeyF8gYm2KXOUnAVug6bLgE2UrqmnxiigIaVmxO1t4zVq8Af4BrkqmAor9qdSJj9SKkqWaVeQXhafO15t6QcXjq5/8LcC3ayH6m+2fVF1Nal1ntF+YKI+3XeLTh5vCoxybJmfRiJuTG7hPyeVJiGmr+MEbNqbHY8E3TXy47u90vN9db4kt2rdYa5/kWfh2qYq4bR61ZzEnLe7O77D+kKIcBx9EGl4DUttlW9NQeU2e/45pQYy4I3rxO0Oqp0DCehHIJZfbRx3WKKXlBNf5s9ClJ/gf8QTYLlfLbuaQPgeW61YakSBHBWcTVigegpKNl5J6IEVTQktdOqLsNtNyPA/aWPpn6GfhFKO52VBAK/ZM/EWHLtY4RmK5X4d3xH1YW4FjeS1/eW+ibOVTm41ccFQom6gO+jbb+fU3wlEXzfCoc4pi4V5jW3vlIHB+Ewv3q3vhsRL+8XiaA4D6L+nfwxn30lk8RsAhILWUuwXOv3UDv4WfsgtqRpZn5YavxDtIDdsphKPlpy/9Dj+gD+NJn52H9uTr3xCkSAl78WInpo7vguzhAPPRreD1EPefg1jR2J8Wit6XLkUjavZ69TEdZpBnzf6PQVrKtR86pOs0qhBnQoI6lRBl+nHWZO0SpcJrC+C3KkPRlrVbPOth+nWqLzYe311Le77IrtaliJpU1FKyUdCd+M0KwfKoK68a0NsK7TFAS9l4p3ogxSQRz9LbiJ8v4xO2rJ9/7YFYpidlLOkUjcJCCXkBxNZRL9uejLWKzbNPvQb1sCL60MrQHblRznxBA1ONgWX3fb9gknLLUaSDGi8d4mooic5kasID6GqiA3HQVkAg2kUSx65VYTbawTLdQkeTZlMhaXJtox20yiEt07brAp8iufebb4h6DqoZ1XiMcA5KcE6g8tG3/1Iaa+UV7c6Url8rG+QqUthsXIf70d8/jKZkTOCTAhD70NOFiHSDknTFQoWrejwEDhrTEVY3W2TpyImu514ZmNhgZ9Gn7XlajksrEwmTYJBRTicpIxeSGfDjfYEUzVprIQ69Scrs6ceU1suP4IYbTZQz8wOld6AEmLusj+qhC7BpO9M6zrS6pcem07buviP/IIc2raY1/kVKo2Pet9CdBRaHKiGKS733ZxdCEL7UwbvPTS5ftnulWvaJcCzkZy+hVRjJy6ynNEY1vConQCsKPQb3gprI2NNNpMhGjo81Z5Il9zLV+bBd/OcxCUDG7rwOSw2TjL/EnOoP8J9Rg+xARiiV4OJP2QRZZwgUOJR73tbciTjAkHr3w2z/TlRdfP5AB0yeGwyXxzXAMe43+c32DhC6os61NMDnUd1tTRvM07zg9LiJUk6WcVxB/bRYEGn0D190fOMS/GyjN8uC3/GebGeHjO1UgDhN0Rriw4znVxldK72TPJkV3Yk0eaiPW3b4DzbNBYmgoWNMqtZIiZbSo4zMJdimQiH5f/PDoswhsNFMyZLrchpHeVGXVV6COdnCOZB+tgFtxRzjF0ngYRdWDDMdcpGJlBUBugCSLZgLFM6839Vhj2BpNcg+owb9cePc3OhEMOWBUqo2Qm0IEANL55zICiTmfEH8lKcgZOspuuHA3JWFz6P+iXICc7A279YSSgPBZv7C9ZgGAv9lSZdt0iXzp40M1FmxuHU/+HlLfhZTCZ8CLa0iZellDmcd5kI0PuM2feULvW9br8KIFD6lqz2BHmS2b6UZJT4lOinhpC5rzRnn0JuI64ofIOCUSN+oeZkIu1XZhSRXmujf1VZ038wQwWCPa83nihCqmxXT3f7fkkYrZIOXhgB"}               }
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0        }
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""} }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"**"}         }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"From the document:** The"}            }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" Velmora lighthou"}          }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"se was painted green. "}   }
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1  }
+
+event: content_block_start
+data: {"type":"content_block_start","index":2,"content_block":{"citations":[],"type":"text","text":""}     }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":2,"delta":{"type":"citations_delta","citation":{"type":"char_location","cited_text":"The Velmora lighthouse was painted green in 1931. ","document_index":0,"document_title":"Harbor notes","start_char_index":0,"end_char_index":50}}           }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":2,"delta":{"type":"text_delta","text":"The Velmora l"}            }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":2,"delta":{"type":"text_delta","text":"ighthouse was painted green"}            }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":2,"delta":{"type":"text_delta","text":" in 1931."}            }
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":2              }
+
+event: content_block_start
+data: {"type":"content_block_start","index":3,"content_block":{"type":"text","text":""}      }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":"\n\n**From"}           }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" web"}         }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" search:** The first electric l"} }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":"ighthouse lamp was"}     }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" tested in 1858. The"}        }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" only"}               }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" result"}          }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" I found was a single page"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":", and"}    }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" its"}        }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" domain is a placeholder"}         }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":", so I can't fully v"}       }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":"ouch for it. From general"}     }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" knowledge, the South"}   }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" Foreland Lighthou"}         }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":"se in Kent,"}          }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" England, is commonly cited"}             }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" as the first to use an electric"}      }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" light"}               }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":","}         }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" in 1858, which f"}        }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":"its."}              }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" Checking a"}      }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" more auth"}       }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":"oritative source would conf"}    }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":"irm it"} }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":"."}           }
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":3 }
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null,"stop_details":null,"container":null},"usage":{"input_tokens":1531,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":429,"output_tokens_details":{"thinking_tokens":241}}     }
+
+event: message_stop
+data: {"type":"message_stop"            }
+

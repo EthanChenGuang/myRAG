@@ -1,23 +1,58 @@
 import { afterEach, beforeEach, describe, expect, test, vi, type MockInstance } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   CORE_STAGES,
   OPTIONAL_STAGES,
   PROFILE_STAGE_DEFAULTS,
+  QUERY_LAYER_STAGES,
   loadRagConfig,
   resetRagConfigForTests,
+  setLangChainResolverForTests,
   resolveFinalResultCount,
+  terminologyDenseFor,
+  warnInjectionCheckDisabled,
 } from '@/lib/rag/config';
+import { loadIngestConfig, resetIngestConfigForTests } from '@/lib/rag/ingest/config';
 
 let warn: MockInstance<(...args: unknown[]) => void>;
 
 beforeEach(() => {
   resetRagConfigForTests();
+  resetIngestConfigForTests();
   warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
 afterEach(() => {
   warn.mockRestore();
 });
+
+const PHASE42_STAGES = ['table_lookup', 'diversify', 'identifier_resolve', 'identifier_guard'];
+const PHASE33_STAGES = ['attribute_resolve'];
+
+function phase4Disabled(config: { disabledStages: ReadonlySet<string> }): string[] {
+  const skip = new Set<string>([...QUERY_LAYER_STAGES, ...PHASE42_STAGES, ...PHASE33_STAGES]);
+  return [...config.disabledStages].filter((name) => !skip.has(name)).sort();
+}
+
+const PHASE42_V2_FIELDS = [
+  'lexicalDictionary',
+  'lexicalStemIt',
+  'versionScope',
+  'embedVersionScope',
+  'tableLookup',
+  'dupClusters',
+  'resultDiversity',
+  'identifierIndex',
+  'identifierFilter',
+  'lexicalVersion',
+  'attributeFilter',
+  'lexicalQuantity',
+];
+
+function withoutPhase42(v2: object): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(v2).filter(([key]) => !PHASE42_V2_FIELDS.includes(key)));
+}
 
 function configWarnings(): string[] {
   return warn.mock.calls
@@ -36,11 +71,25 @@ const CHAT_DEFAULTS = {
   assemble: 10000,
   exact_id_lookup: 1000,
   translate: 1000,
+  terminology: 50,
   dedupe: 1000,
   rerank: 600,
   refusal: 1000,
   expand_parents: 3000,
   compress: 1000,
+  injection_check: 400,
+  query_gate: 50,
+  condense: 600,
+  normalize_dates: 50,
+  expand: 700,
+  hyde: 900,
+  decompose: 800,
+  semantic_cache: 150,
+  table_lookup: 1000,
+  diversify: 1000,
+  identifier_resolve: 1000,
+  identifier_guard: 1000,
+  attribute_resolve: 1000,
 };
 
 describe('stage tables', () => {
@@ -61,6 +110,20 @@ describe('stage tables', () => {
       'refusal',
       'expand_parents',
       'compress',
+      'injection_check',
+      'query_gate',
+      'condense',
+      'normalize_dates',
+      'expand',
+      'hyde',
+      'decompose',
+      'semantic_cache',
+      'table_lookup',
+      'diversify',
+      'identifier_resolve',
+      'identifier_guard',
+      'terminology',
+      'attribute_resolve',
     ]);
   });
 
@@ -70,12 +133,20 @@ describe('stage tables', () => {
     }
     expect(PROFILE_STAGE_DEFAULTS.eval.rerank).toBe(60000);
     expect(PROFILE_STAGE_DEFAULTS.eval.expand_parents).toBe(10000);
+    expect(PROFILE_STAGE_DEFAULTS.eval.injection_check).toBe(60000);
+    expect(PROFILE_STAGE_DEFAULTS.voice.injection_check).toBe(1000);
     expect(PROFILE_STAGE_DEFAULTS.voice).toMatchObject({
       embed: 5000,
       rerank: 250,
       expand_parents: 1000,
       translate: 300,
+      terminology: 30,
     });
+    expect(PROFILE_STAGE_DEFAULTS.voice).toMatchObject({ table_lookup: 500, identifier_resolve: 500, diversify: 300, identifier_guard: 300 });
+    expect(PROFILE_STAGE_DEFAULTS.eval).toMatchObject({ table_lookup: 1000, identifier_resolve: 1000, diversify: 1000, identifier_guard: 1000 });
+    expect(PROFILE_STAGE_DEFAULTS.eval.terminology).toBe(1000);
+    expect(PROFILE_STAGE_DEFAULTS.voice.attribute_resolve).toBe(500);
+    expect(PROFILE_STAGE_DEFAULTS.eval.attribute_resolve).toBe(1000);
   });
 });
 
@@ -83,7 +154,7 @@ describe('loadRagConfig', () => {
   test('empty values give legacy, v2 switch-off stages disabled and profile defaults', () => {
     const config = loadRagConfig({});
     expect(config.pipeline).toBe('legacy');
-    expect([...config.disabledStages].sort()).toEqual(['compress', 'expand_parents', 'rerank', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'rerank', 'terminology', 'translate']);
     expect(config.timeouts.chat).toEqual(PROFILE_STAGE_DEFAULTS.chat);
     expect(config.v2.reranker).toBe('none');
     expect(config.v2.tokenBudget).toBe(6000);
@@ -107,19 +178,19 @@ describe('loadRagConfig', () => {
 
   test('optional stages can be disabled explicitly', () => {
     const config = loadRagConfig({ RAG_DISABLED_STAGES: 'legacy_rank, assemble' });
-    expect([...config.disabledStages].sort()).toEqual(['assemble', 'compress', 'expand_parents', 'legacy_rank', 'rerank', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['assemble', 'compress', 'expand_parents', 'legacy_rank', 'rerank', 'terminology', 'translate']);
   });
 
   test('a core stage in the disabled list is dropped and logged once', () => {
     const env = { RAG_DISABLED_STAGES: 'embed,legacy_rank,search' };
     const config = loadRagConfig(env);
-    expect([...config.disabledStages].sort()).toEqual(['compress', 'expand_parents', 'legacy_rank', 'rerank', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'legacy_rank', 'rerank', 'terminology', 'translate']);
     expect(configWarnings()).toHaveLength(2);
   });
 
   test('rerank is a valid optional stage name in RAG_DISABLED_STAGES', () => {
     const config = loadRagConfig({ RAG_DISABLED_STAGES: 'rerank,post_filter' });
-    expect([...config.disabledStages].sort()).toEqual(['compress', 'expand_parents', 'post_filter', 'rerank', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'post_filter', 'rerank', 'terminology', 'translate']);
     expect(configWarnings()).toEqual([]);
   });
 
@@ -161,10 +232,19 @@ describe('loadRagConfig', () => {
     expect(configWarnings().join(' ')).toMatch(/cap|foo/);
   });
 
+  test('rerank_input_cap accepts 25..100 (D-41)', () => {
+    expect(loadRagConfig({ RAG_RETRIEVAL_PARAMS_OVERRIDE: 'cap=25' }).v2.paramsOverride).toEqual({ rerank_input_cap: 25 });
+    expect(loadRagConfig({ RAG_RETRIEVAL_PARAMS_OVERRIDE: 'cap=24' }).v2.paramsOverride).toEqual({});
+    expect(loadRagConfig({ RAG_RETRIEVAL_PARAMS_OVERRIDE: 'cap=101' }).v2.paramsOverride).toEqual({});
+    const text = configWarnings().join(' ');
+    expect(text).toContain('rerank_input_cap must be 25..100, entry ignored');
+    expect(text).not.toContain('50..100');
+  });
+
   test('RAG_RERANKER=cohere removes rerank from disabledStages', () => {
     const config = loadRagConfig({ RAG_RERANKER: 'cohere' });
     expect(config.disabledStages.has('rerank')).toBe(false);
-    expect([...config.disabledStages].sort()).toEqual(['compress', 'expand_parents', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'terminology', 'translate']);
   });
 
   test('hasCohereKey reflects presence only and warnings never echo the key', () => {
@@ -198,6 +278,33 @@ describe('loadRagConfig', () => {
   });
 });
 
+describe('injection_check stage', () => {
+  test('RAG_STAGE_TIMEOUTS accepts injection_check globally and per profile', () => {
+    const config = loadRagConfig({ RAG_STAGE_TIMEOUTS: 'injection_check=50,voice.injection_check=700' });
+    expect(config.timeouts.chat.injection_check).toBe(50);
+    expect(config.timeouts.eval.injection_check).toBe(50);
+    expect(config.timeouts.voice.injection_check).toBe(700);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('injection_check can be listed in RAG_DISABLED_STAGES', () => {
+    const config = loadRagConfig({ RAG_DISABLED_STAGES: 'injection_check' });
+    expect(config.disabledStages.has('injection_check')).toBe(true);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('disabling it while RAG_INJECTION_CHECK is on warns once; with the check off it never warns', () => {
+    const disabled = loadRagConfig({ RAG_DISABLED_STAGES: 'injection_check' });
+    expect(warnInjectionCheckDisabled(disabled, 'off')).toBe(false);
+    expect(configWarnings()).toHaveLength(0);
+    for (let i = 0; i < 3; i += 1) expect(warnInjectionCheckDisabled(disabled, 'drop')).toBe(true);
+    expect(configWarnings()).toHaveLength(1);
+    expect(configWarnings()[0]).toContain('injection_check');
+    expect(warnInjectionCheckDisabled(loadRagConfig({}), 'drop')).toBe(false);
+    expect(disabled.warnings).toEqual([]);
+  });
+});
+
 describe('resolveFinalResultCount', () => {
   test.each<[unknown, string | undefined, number]>([
     [undefined, undefined, 25],
@@ -222,5 +329,1044 @@ describe('resolveFinalResultCount', () => {
     resolveFinalResultCount(undefined, 'abc');
     resolveFinalResultCount(undefined, 'abc');
     expect(configWarnings()).toHaveLength(1);
+  });
+});
+function ingestConfigWarnings(): string[] {
+  return warn.mock.calls
+    .filter((call) => String(call[0]).includes('[Ingest Config]'))
+    .map((call) => call.map((part) => (typeof part === 'string' ? part : JSON.stringify(part))).join(' '));
+}
+
+describe('Phase 3.2 ingestion switches (D-47)', () => {
+  test('RAG_LANGUAGE_AWARE_INGEST defaults to off, accepts on, and falls back to off with one warning', () => {
+    expect(loadIngestConfig({}).languageAwareIngest).toBe('off');
+    expect(loadIngestConfig({ RAG_LANGUAGE_AWARE_INGEST: 'on' }).languageAwareIngest).toBe('on');
+    expect(loadIngestConfig({ RAG_LANGUAGE_AWARE_INGEST: 'off' }).languageAwareIngest).toBe('off');
+    expect(ingestConfigWarnings()).toEqual([]);
+    expect(loadIngestConfig({ RAG_LANGUAGE_AWARE_INGEST: 'yes' }).languageAwareIngest).toBe('off');
+    loadIngestConfig({ RAG_LANGUAGE_AWARE_INGEST: 'yes' });
+    expect(ingestConfigWarnings()).toHaveLength(1);
+    expect(ingestConfigWarnings()[0]).toContain('RAG_LANGUAGE_AWARE_INGEST');
+  });
+});
+
+describe('Phase 3.2 typed switches (D-47)', () => {
+  test('ingestion-side fields default to D-47 with an empty environment', () => {
+    const config = loadIngestConfig({});
+    expect({
+      tableHeaderRepeat: config.tableHeaderRepeat,
+      tableRowSerialization: config.tableRowSerialization,
+      captionLanguage: config.captionLanguage,
+      docTranslation: config.docTranslation,
+      docTranslationModel: config.docTranslationModel,
+      hiddenTextCheck: config.hiddenTextCheck,
+      ingestLinkCheck: config.ingestLinkCheck,
+      outputLinkAllowlist: config.outputLinkAllowlist,
+      uploadApproval: config.uploadApproval,
+      scopeTags: config.scopeTags,
+      scopeTagSuggest: config.scopeTagSuggest,
+      supersessionDetect: config.supersessionDetect,
+      effectiveDateLlmExtract: config.effectiveDateLlmExtract,
+    }).toEqual({
+      tableHeaderRepeat: 'always',
+      tableRowSerialization: false,
+      captionLanguage: 'en',
+      docTranslation: 'off',
+      docTranslationModel: '',
+      hiddenTextCheck: 'off',
+      ingestLinkCheck: 'off',
+      outputLinkAllowlist: '',
+      uploadApproval: 'off',
+      scopeTags: false,
+      scopeTagSuggest: false,
+      supersessionDetect: 'off',
+      effectiveDateLlmExtract: false,
+    });
+    expect(config.warnings).toEqual([]);
+  });
+
+  // The default of RAG_TABLE_HEADER_REPEAT is the outcome recorded in eval/decisions/03.2-table-header-default.json (D-19).
+  test('RAG_TABLE_HEADER_REPEAT defaults to always and profile restores the processing profile flag', () => {
+    const decision = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'eval/decisions/03.2-table-header-default.json'), 'utf8')) as { decision: string };
+    expect(loadIngestConfig({}).tableHeaderRepeat).toBe(decision.decision);
+    expect(decision.decision).toBe('always');
+    const explicit = loadIngestConfig({ RAG_TABLE_HEADER_REPEAT: 'profile' });
+    expect(explicit.tableHeaderRepeat).toBe('profile');
+    expect(explicit.warnings).toEqual([]);
+  });
+
+  test('ingestion-side fields accept every D-47 value', () => {
+    const config = loadIngestConfig({
+      RAG_TABLE_HEADER_REPEAT: 'always',
+      RAG_TABLE_ROW_SERIALIZATION: 'true',
+      RAG_CAPTION_LANGUAGE: 'document',
+      RAG_DOC_TRANSLATION: 'on',
+      RAG_DOC_TRANSLATION_MODEL: 'vendor/model-a',
+      RAG_HIDDEN_TEXT_CHECK: 'quarantine',
+      RAG_INGEST_LINK_CHECK: 'flag',
+      RAG_OUTPUT_LINK_ALLOWLIST: 'example.com,example.org',
+      RAG_UPLOAD_APPROVAL: 'members',
+      RAG_SCOPE_TAGS: 'true',
+      RAG_SCOPE_TAG_SUGGEST: 'true',
+      RAG_SUPERSESSION_DETECT: 'on',
+      RAG_EFFECTIVE_DATE_LLM_EXTRACT: 'true',
+    });
+    expect(config.tableHeaderRepeat).toBe('always');
+    expect(config.tableRowSerialization).toBe(true);
+    expect(config.captionLanguage).toBe('document');
+    expect(config.docTranslation).toBe('on');
+    expect(config.docTranslationModel).toBe('vendor/model-a');
+    expect(config.hiddenTextCheck).toBe('quarantine');
+    expect(config.ingestLinkCheck).toBe('flag');
+    expect(config.outputLinkAllowlist).toBe('example.com,example.org');
+    expect(config.uploadApproval).toBe('members');
+    expect(config.scopeTags).toBe(true);
+    expect(config.scopeTagSuggest).toBe(true);
+    expect(config.supersessionDetect).toBe('on');
+    expect(config.effectiveDateLlmExtract).toBe(true);
+    expect(loadIngestConfig({ RAG_HIDDEN_TEXT_CHECK: 'flag', RAG_INGEST_LINK_CHECK: 'quarantine', RAG_UPLOAD_APPROVAL: 'all' })).toMatchObject({
+      hiddenTextCheck: 'flag',
+      ingestLinkCheck: 'quarantine',
+      uploadApproval: 'all',
+    });
+    expect(ingestConfigWarnings()).toEqual([]);
+  });
+
+  test.each([
+    ['RAG_TABLE_HEADER_REPEAT', 'tableHeaderRepeat', 'sometimes', 'always'],
+    ['RAG_TABLE_ROW_SERIALIZATION', 'tableRowSerialization', 'yes', false],
+    ['RAG_TABLE_ROW_SERIALIZATION', 'tableRowSerialization', '1', false],
+    ['RAG_CAPTION_LANGUAGE', 'captionLanguage', 'fr', 'en'],
+    ['RAG_DOC_TRANSLATION', 'docTranslation', 'true', 'off'],
+    ['RAG_HIDDEN_TEXT_CHECK', 'hiddenTextCheck', 'block', 'off'],
+    ['RAG_INGEST_LINK_CHECK', 'ingestLinkCheck', 'on', 'off'],
+    ['RAG_UPLOAD_APPROVAL', 'uploadApproval', 'admins', 'off'],
+    ['RAG_SCOPE_TAGS', 'scopeTags', 'on', false],
+    ['RAG_SCOPE_TAG_SUGGEST', 'scopeTagSuggest', 'on', false],
+    ['RAG_SUPERSESSION_DETECT', 'supersessionDetect', 'true', 'off'],
+    ['RAG_EFFECTIVE_DATE_LLM_EXTRACT', 'effectiveDateLlmExtract', 'on', false],
+    ['RAG_SECTION_RULES', 'sectionRules', 'true', 'off'],
+    ['RAG_PAGE_BOILERPLATE', 'pageBoilerplate', 'all', 'off'],
+    ['RAG_DOC_ATTRIBUTES', 'docAttributes', 'on', false],
+    ['RAG_ATTRIBUTE_HEADER', 'attributeHeader', 'yes', false],
+  ] as const)('ingest %s=%s falls back to the default with one [Ingest Config] warning', (name, field, raw, fallback) => {
+    const config = loadIngestConfig({ [name]: raw });
+    expect((config as unknown as Record<string, unknown>)[field]).toBe(fallback);
+    loadIngestConfig({ [name]: raw });
+    const warnings = ingestConfigWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(name);
+  });
+
+  test('query-side fields default to D-47 with an empty environment', () => {
+    const config = loadRagConfig({});
+    expect({
+      effectiveDates: config.effectiveDates,
+      scopeTags: config.scopeTags,
+      docTranslation: config.docTranslation,
+      bgeM3Serving: config.bgeM3Serving,
+      outputLinkAllowlist: config.outputLinkAllowlist,
+    }).toEqual({ effectiveDates: false, scopeTags: false, docTranslation: 'off', bgeM3Serving: 'hosted', outputLinkAllowlist: '' });
+  });
+
+  test('query-side fields accept every D-47 value', () => {
+    const config = loadRagConfig({
+      RAG_EFFECTIVE_DATES: 'true',
+      RAG_SCOPE_TAGS: 'true',
+      RAG_DOC_TRANSLATION: 'on',
+      RAG_BGE_M3_SERVING: 'sidecar',
+      RAG_OUTPUT_LINK_ALLOWLIST: 'example.com',
+    });
+    expect(config).toMatchObject({ effectiveDates: true, scopeTags: true, docTranslation: 'on', bgeM3Serving: 'sidecar', outputLinkAllowlist: 'example.com' });
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test.each([
+    ['RAG_EFFECTIVE_DATES', 'effectiveDates', 'yes', false],
+    ['RAG_SCOPE_TAGS', 'scopeTags', 'on', false],
+    ['RAG_DOC_TRANSLATION', 'docTranslation', 'enabled', 'off'],
+    ['RAG_BGE_M3_SERVING', 'bgeM3Serving', 'local', 'hosted'],
+    ['RAG_DOC_ATTRIBUTES', 'docAttributes', 'on', false],
+  ] as const)('rag %s=%s falls back to the default with one [RAG Config] warning', (name, field, raw, fallback) => {
+    const config = loadRagConfig({ [name]: raw });
+    expect((config as unknown as Record<string, unknown>)[field]).toBe(fallback);
+    loadRagConfig({ [name]: raw });
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(name);
+  });
+
+  test('the language variables are not parsed config (D-01)', () => {
+    const env = { RAG_SUPPORTED_LANGUAGES: 'zh,en,it', RAG_PRIMARY_LANGUAGE: 'en' } as Record<string, string>;
+    const ingest = loadIngestConfig(env) as unknown as Record<string, unknown>;
+    const rag = loadRagConfig(env) as unknown as Record<string, unknown>;
+    for (const config of [ingest, rag]) {
+      expect(JSON.stringify(config)).not.toContain('zh,en,it');
+      expect(Object.keys(config).some((key) => /language/i.test(key) && key !== 'languageAwareIngest' && key !== 'captionLanguage')).toBe(false);
+    }
+  });
+
+  test('all-off parity: pre-existing fields equal the snapshot from before Phase 3.2 (D-46)', () => {
+    const ingest = loadIngestConfig({});
+    expect({
+      pipeline: ingest.pipeline,
+      parser: ingest.parser,
+      parsePollBudgetMs: ingest.parsePollBudgetMs,
+      docTypeLlmDetect: ingest.docTypeLlmDetect,
+      invoiceLlmExtract: ingest.invoiceLlmExtract,
+      exactIdLookup: ingest.exactIdLookup,
+      pdfImageChunks: ingest.pdfImageChunks,
+      injectionScan: ingest.injectionScan,
+      embeddingProfiles: ingest.embeddingProfiles,
+      qwenFallback: ingest.qwenFallback,
+      warnings: ingest.warnings,
+    }).toEqual({
+      pipeline: 'legacy',
+      parser: 'llamaparse',
+      parsePollBudgetMs: 45000,
+      docTypeLlmDetect: false,
+      invoiceLlmExtract: false,
+      exactIdLookup: false,
+      pdfImageChunks: false,
+      injectionScan: 'off',
+      embeddingProfiles: 'off',
+      qwenFallback: 'openrouter',
+      warnings: [],
+    });
+
+    const rag = loadRagConfig({});
+    expect({
+      pipeline: rag.pipeline,
+      disabledStages: phase4Disabled(rag),
+      timeouts: rag.timeouts,
+      exactIdLookup: rag.exactIdLookup,
+      v2: withoutPhase42(rag.v2),
+      warnings: rag.warnings,
+    }).toEqual({
+      pipeline: 'legacy',
+      disabledStages: ['compress', 'expand_parents', 'rerank', 'terminology', 'translate'],
+      timeouts: PROFILE_STAGE_DEFAULTS,
+      exactIdLookup: false,
+      v2: {
+        lexicalSearch: false,
+        reranker: 'none',
+        rerankTier: { chat: 'quality', voice: 'fast' },
+        voyageModelByLang: {},
+        refusalThreshold: false,
+        refusalFloor: 'similarity',
+        edgeOrder: false,
+        compression: false,
+        tokenBudget: 6000,
+        parentChild: false,
+        iterativeScan: 'off',
+        exactScanCutoff: 0,
+        lexicalTranslation: false,
+        terminology: false,
+        terminologyDense: false,
+        terminologyMining: false,
+        paramsOverride: {},
+        hasCohereKey: false,
+        hasVoyageKey: false,
+        domainEmbeddings: { enabled: false, maxLegs: 2, timeoutMs: 800 },
+      },
+      warnings: [],
+    });
+  });
+});
+
+describe('domain embeddings switches', () => {
+  test('defaults: off, two legs, 800 ms, and the ingest switch is off', () => {
+    const config = loadRagConfig({});
+    expect(config.v2.domainEmbeddings).toEqual({ enabled: false, maxLegs: 2, timeoutMs: 800 });
+    expect(loadIngestConfig({}).domainEmbeddings).toBe('off');
+    expect(config.warnings).toEqual([]);
+  });
+
+  test('on with embedding profiles on enables both', () => {
+    const env = { RAG_EMBEDDING_PROFILES: 'on', RAG_DOMAIN_EMBEDDINGS: 'on' };
+    expect(loadRagConfig(env).v2.domainEmbeddings?.enabled).toBe(true);
+    expect(loadIngestConfig(env).domainEmbeddings).toBe('on');
+    expect(loadRagConfig(env).warnings).toEqual([]);
+  });
+
+  test('on with embedding profiles off stays off with one warning', () => {
+    const env = { RAG_EMBEDDING_PROFILES: 'off', RAG_DOMAIN_EMBEDDINGS: 'on' };
+    const config = loadRagConfig(env);
+    expect(config.v2.domainEmbeddings?.enabled).toBe(false);
+    expect(config.warnings.filter((w) => w.includes('domain-embeddings needs embedding profiles'))).toHaveLength(1);
+    const ingest = loadIngestConfig(env);
+    expect(ingest.domainEmbeddings).toBe('off');
+    expect(ingest.warnings.filter((w) => w.includes('domain-embeddings needs embedding profiles'))).toHaveLength(1);
+  });
+
+  test('profiles on but domain embeddings unset stays off without a warning', () => {
+    const config = loadRagConfig({ RAG_EMBEDDING_PROFILES: 'on' });
+    expect(config.v2.domainEmbeddings?.enabled).toBe(false);
+    expect(config.warnings).toEqual([]);
+  });
+
+  test('an unsupported switch value falls back to off with a warning', () => {
+    const env = { RAG_EMBEDDING_PROFILES: 'on', RAG_DOMAIN_EMBEDDINGS: 'yes' };
+    const config = loadRagConfig(env);
+    expect(config.v2.domainEmbeddings?.enabled).toBe(false);
+    expect(config.warnings).toHaveLength(1);
+    expect(loadIngestConfig(env).domainEmbeddings).toBe('off');
+  });
+
+  test('max legs is bounded 0..5; zero is accepted', () => {
+    const nine = loadRagConfig({ RAG_DOMAIN_EMBEDDING_MAX_LEGS: '9' });
+    expect(nine.v2.domainEmbeddings?.maxLegs).toBe(2);
+    expect(nine.warnings).toHaveLength(1);
+    const zero = loadRagConfig({ RAG_DOMAIN_EMBEDDING_MAX_LEGS: '0' });
+    expect(zero.v2.domainEmbeddings?.maxLegs).toBe(0);
+    expect(zero.warnings).toEqual([]);
+    expect(loadRagConfig({ RAG_DOMAIN_EMBEDDING_MAX_LEGS: '5' }).v2.domainEmbeddings?.maxLegs).toBe(5);
+    expect(loadRagConfig({ RAG_DOMAIN_EMBEDDING_MAX_LEGS: 'two' }).v2.domainEmbeddings?.maxLegs).toBe(2);
+  });
+
+  test('timeout is bounded 100..5000', () => {
+    const low = loadRagConfig({ RAG_DOMAIN_EMBEDDING_TIMEOUT_MS: '50' });
+    expect(low.v2.domainEmbeddings?.timeoutMs).toBe(800);
+    expect(low.warnings).toHaveLength(1);
+    expect(loadRagConfig({ RAG_DOMAIN_EMBEDDING_TIMEOUT_MS: '5001' }).v2.domainEmbeddings?.timeoutMs).toBe(800);
+    expect(loadRagConfig({ RAG_DOMAIN_EMBEDDING_TIMEOUT_MS: '100' }).v2.domainEmbeddings?.timeoutMs).toBe(100);
+    expect(loadRagConfig({ RAG_DOMAIN_EMBEDDING_TIMEOUT_MS: '5000' }).v2.domainEmbeddings?.timeoutMs).toBe(5000);
+    expect(loadRagConfig({ RAG_DOMAIN_EMBEDDING_TIMEOUT_MS: '1.5e3' }).v2.domainEmbeddings?.timeoutMs).toBe(800);
+  });
+
+  test('the switches are part of the memo key', () => {
+    const on = loadRagConfig({ RAG_EMBEDDING_PROFILES: 'on', RAG_DOMAIN_EMBEDDINGS: 'on' });
+    const off = loadRagConfig({ RAG_EMBEDDING_PROFILES: 'on', RAG_DOMAIN_EMBEDDINGS: 'off' });
+    expect(on.v2.domainEmbeddings?.enabled).toBe(true);
+    expect(off.v2.domainEmbeddings?.enabled).toBe(false);
+  });
+});
+
+function queryLayerWarnings(prefix: '[Query Layer]' | '[Semantic Cache]'): string[] {
+  return warn.mock.calls
+    .filter((call) => String(call[0]).includes(prefix))
+    .map((call) => call.map((part) => (typeof part === 'string' ? part : JSON.stringify(part))).join(' '));
+}
+
+const PHASE4_CHAT_TIMEOUTS = Object.fromEntries(
+  Object.entries(CHAT_DEFAULTS).filter(([name]) => !(QUERY_LAYER_STAGES as readonly string[]).includes(name)),
+);
+
+describe('query layer', () => {
+  test('the default config disables every query-layer stage and keeps the Phase 4 fields for legacy and v2', () => {
+    for (const pipeline of ['legacy', 'v2'] as const) {
+      resetRagConfigForTests();
+      const config = loadRagConfig({ RAG_PIPELINE: pipeline });
+      for (const stage of QUERY_LAYER_STAGES) expect(config.disabledStages.has(stage)).toBe(true);
+      expect(config.queryLayer.enabled).toBe(false);
+      expect(config.semanticCache.backend).toBe('off');
+      expect({
+        disabled: phase4Disabled(config),
+        chat: Object.fromEntries(Object.entries(config.timeouts.chat).filter(([name]) => name in PHASE4_CHAT_TIMEOUTS)),
+        evalTranslate: config.timeouts.eval.translate,
+        voiceTranslate: config.timeouts.voice.translate,
+        v2: config.v2,
+        warnings: config.warnings,
+      }).toEqual({
+        disabled: ['compress', 'expand_parents', 'rerank', 'terminology', 'translate'],
+        chat: PHASE4_CHAT_TIMEOUTS,
+        evalTranslate: 1000,
+        voiceTranslate: 300,
+        v2: loadRagConfig({}).v2,
+        warnings: [],
+      });
+    }
+    expect(queryLayerWarnings('[Query Layer]')).toEqual([]);
+    expect(queryLayerWarnings('[Semantic Cache]')).toEqual([]);
+  });
+
+  test('v2 with RAG_QUERY_LAYER=true turns the layer on with the recommended profile', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true' });
+    expect(config.queryLayer).toEqual({
+      enabled: true,
+      framework: 'llamaindex',
+      model: 'openai/gpt-4.1-nano',
+      transforms: { condense: true, expand: true, decompose: true, translate: true, normalizeDates: true, hyde: false },
+      translateDisabledProfiles: [],
+      voiceTransforms: ['condense_history', 'normalize_dates'],
+    });
+    for (const stage of ['query_gate', 'condense', 'normalize_dates', 'expand', 'decompose'] as const) {
+      expect(config.disabledStages.has(stage)).toBe(false);
+    }
+    expect(config.disabledStages.has('hyde')).toBe(true);
+    expect(config.disabledStages.has('semantic_cache')).toBe(true);
+    expect(config.warnings).toEqual([]);
+  });
+
+  test('a sub-switch turned off disables only its stage while the layer is on', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_EXPAND: 'false', RAG_QUERY_HYDE: 'true' });
+    expect(config.queryLayer.transforms.expand).toBe(false);
+    expect(config.disabledStages.has('expand')).toBe(true);
+    expect(config.disabledStages.has('hyde')).toBe(false);
+    expect(config.disabledStages.has('condense')).toBe(false);
+  });
+
+  test('the layer and the cache under legacy stay off with one warning each across calls', () => {
+    const env = { RAG_PIPELINE: 'legacy', RAG_QUERY_LAYER: 'true', RAG_SEMANTIC_CACHE: 'pgvector' };
+    const first = loadRagConfig(env);
+    const second = loadRagConfig({ ...env, RAG_RERANK_TIER_CHAT: 'quality' });
+    expect(second).not.toBe(first);
+    for (const config of [first, second]) {
+      expect(config.queryLayer.enabled).toBe(false);
+      expect(config.semanticCache.backend).toBe('off');
+      for (const stage of QUERY_LAYER_STAGES) expect(config.disabledStages.has(stage)).toBe(true);
+    }
+    expect(queryLayerWarnings('[Query Layer]')).toHaveLength(1);
+    expect(queryLayerWarnings('[Semantic Cache]')).toHaveLength(1);
+  });
+
+  test('pgvector under v2 enables the semantic_cache stage without the layer', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_SEMANTIC_CACHE: 'pgvector' });
+    expect(config.semanticCache).toEqual({ backend: 'pgvector', ttl: 3600, refusalTtl: 600, maxDistance: 0.05, embedStore: false });
+    expect(config.disabledStages.has('semantic_cache')).toBe(false);
+    expect(config.queryLayer.enabled).toBe(false);
+  });
+
+  test('an unknown framework falls back to llamaindex with one warning', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_FRAMEWORK: 'bogus' });
+    expect(config.queryLayer.framework).toBe('llamaindex');
+    expect(queryLayerWarnings('[Query Layer]')).toHaveLength(1);
+    expect(config.warnings).toHaveLength(1);
+  });
+
+  test('langchain with resolvable packages and no tracing variable is kept without a warning', () => {
+    setLangChainResolverForTests(() => true);
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_FRAMEWORK: 'langchain', LANGSMITH_TRACING: 'false' });
+    expect(config.queryLayer.framework).toBe('langchain');
+    expect(config.warnings).toEqual([]);
+    expect(queryLayerWarnings('[Query Layer]')).toEqual([]);
+  });
+
+  test.each([['LANGSMITH_TRACING'], ['LANGSMITH_TRACING_V2'], ['LANGCHAIN_TRACING'], ['LANGCHAIN_TRACING_V2']] as const)(
+    'langchain with %s=true warns once naming the variable, never a value, and falls back to llamaindex (P-10)',
+    (name) => {
+      setLangChainResolverForTests(() => true);
+      const env = {
+        RAG_PIPELINE: 'v2',
+        RAG_QUERY_LAYER: 'true',
+        RAG_QUERY_FRAMEWORK: 'langchain',
+        LANGSMITH_API_KEY: 'sentinel-langsmith-value-7f3a',
+        LANGSMITH_ENDPOINT: 'https://sentinel-endpoint.invalid',
+        [name]: 'true',
+      };
+      const first = loadRagConfig(env);
+      const second = loadRagConfig({ ...env, RAG_RERANK_TIER_CHAT: 'quality' });
+      for (const config of [first, second]) expect(config.queryLayer.framework).toBe('llamaindex');
+      const logged = queryLayerWarnings('[Query Layer]');
+      expect(logged).toHaveLength(1);
+      expect(logged[0]).toContain(name);
+      expect(JSON.stringify([logged, first.warnings])).not.toMatch(/sentinel/u);
+      expect(first.warnings).toHaveLength(1);
+    },
+  );
+
+  test('a tracing variable does not change the llamaindex framework and logs nothing', () => {
+    setLangChainResolverForTests(() => true);
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', LANGSMITH_TRACING: 'true' });
+    expect(config.queryLayer.framework).toBe('llamaindex');
+    expect(config.warnings).toEqual([]);
+    expect(queryLayerWarnings('[Query Layer]')).toEqual([]);
+  });
+
+  test('langchain whose packages cannot be resolved falls back to llamaindex with one warning (D-44)', () => {
+    setLangChainResolverForTests(() => false);
+    const env = { RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_FRAMEWORK: 'langchain' };
+    const config = loadRagConfig(env);
+    expect(config.queryLayer.framework).toBe('llamaindex');
+    expect(loadRagConfig({ ...env, RAG_RERANK_TIER_CHAT: 'quality' }).queryLayer.framework).toBe('llamaindex');
+    const logged = queryLayerWarnings('[Query Layer]');
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain('@langchain');
+  });
+
+  test('the default RagEnvInput carries the tracing variables LangChain reads from process.env', async () => {
+    const { langchainTracingEnv } = await import('@/lib/rag/deps');
+    expect(
+      langchainTracingEnv({ LANGSMITH_TRACING: 'true', LANGCHAIN_TRACING_V2: 'false', LANGCHAIN_API_KEY: 'x', RAG_PIPELINE: 'v2' }),
+    ).toEqual({ LANGSMITH_TRACING: 'true', LANGCHAIN_TRACING_V2: 'false' });
+  });
+
+  test('the shipped resolver finds the installed @langchain packages', () => {
+    setLangChainResolverForTests(null);
+    expect(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_FRAMEWORK: 'langchain' }).queryLayer.framework).toBe('langchain');
+  });
+
+  test('expand, hyde and decompose are dropped from the voice allow-list with one warning naming them', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_VOICE_TRANSFORMS: 'condense_history,hyde,expand' });
+    expect(config.queryLayer.voiceTransforms).toEqual(['condense_history']);
+    const logged = queryLayerWarnings('[Query Layer]');
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain('hyde');
+    expect(logged[0]).toContain('expand');
+    expect(loadRagConfig({ RAG_QUERY_VOICE_TRANSFORMS: 'translate,normalize_dates' }).queryLayer.voiceTransforms).toEqual([
+      'translate',
+      'normalize_dates',
+    ]);
+  });
+
+  test('translate-disabled profiles keep embedding-profile ids and drop malformed entries with a warning (D-24)', () => {
+    const config = loadRagConfig({ RAG_QUERY_TRANSLATE_DISABLED_PROFILES: 'openai-3-small-1536, synthetic.profile_b,openai-3-small-1536,bad id,<x>' });
+    expect(config.queryLayer.translateDisabledProfiles).toEqual(['openai-3-small-1536', 'synthetic.profile_b']);
+    expect(queryLayerWarnings('[Query Layer]')).toHaveLength(1);
+    expect(loadRagConfig({ RAG_QUERY_TRANSLATE_DISABLED_PROFILES: 'synthetic-profile-c' }).queryLayer.translateDisabledProfiles).toEqual(['synthetic-profile-c']);
+  });
+
+  test('profile timeouts follow D-27 and RAG_STAGE_TIMEOUTS overrides only the named profile', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_STAGE_TIMEOUTS: 'chat.condense=400' });
+    for (const profile of ['chat', 'embed'] as const) {
+      expect(config.timeouts[profile]).toMatchObject({
+        translate: 600,
+        expand: 700,
+        decompose: 800,
+        hyde: 900,
+        semantic_cache: 150,
+        query_gate: 50,
+        normalize_dates: 50,
+      });
+    }
+    expect(config.timeouts.chat.condense).toBe(400);
+    expect(config.timeouts.embed.condense).toBe(600);
+    expect(config.timeouts.voice).toMatchObject({ condense: 300, query_gate: 50, normalize_dates: 50, translate: 300 });
+    for (const stage of [...QUERY_LAYER_STAGES, 'translate'] as const) expect(config.timeouts.eval[stage]).toBe(60000);
+    expect(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_STAGE_TIMEOUTS: 'translate=900' }).timeouts.chat.translate).toBe(900);
+  });
+
+  test('the cache distance is capped at 0.2 and TTLs are bounded', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_SEMANTIC_CACHE: 'pgvector', RAG_SEMANTIC_CACHE_MAX_DISTANCE: '0.5' });
+    expect(config.semanticCache.maxDistance).toBe(0.05);
+    expect(queryLayerWarnings('[Semantic Cache]')).toHaveLength(1);
+    expect(loadRagConfig({ RAG_SEMANTIC_CACHE_MAX_DISTANCE: '0.12' }).semanticCache.maxDistance).toBe(0.12);
+    expect(loadRagConfig({ RAG_SEMANTIC_CACHE_MAX_DISTANCE: '0' }).semanticCache.maxDistance).toBe(0.05);
+    expect(loadRagConfig({ RAG_SEMANTIC_CACHE_TTL: '0' }).semanticCache.ttl).toBe(3600);
+    expect(loadRagConfig({ RAG_SEMANTIC_CACHE_REFUSAL_TTL: '120', RAG_SEMANTIC_CACHE_EMBED_STORE: 'true' }).semanticCache).toMatchObject({
+      refusalTtl: 120,
+      embedStore: true,
+    });
+    expect(loadRagConfig({ RAG_SEMANTIC_CACHE: 'redis' }).semanticCache.backend).toBe('off');
+  });
+
+  test('a malformed model id falls back to the default and the warning does not echo it', () => {
+    const config = loadRagConfig({ RAG_QUERY_LLM_MODEL: 'bad model<script>' });
+    expect(config.queryLayer.model).toBe('openai/gpt-4.1-nano');
+    expect(loadRagConfig({ RAG_QUERY_LLM_MODEL: 'mistralai/mistral-small-3.2-24b-instruct' }).queryLayer.model).toBe(
+      'mistralai/mistral-small-3.2-24b-instruct',
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('<script>');
+  });
+
+  test('the new switches are part of the memo key', () => {
+    const off = loadRagConfig({ RAG_PIPELINE: 'v2' });
+    const on = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true' });
+    expect(off).not.toBe(on);
+    expect(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_HYDE: 'true' })).not.toBe(on);
+  });
+});
+
+describe('retrieval backend (D-11, D-24)', () => {
+  test('an empty env input gives pgvector for chat and voice and a 300 s lag bound', () => {
+    expect(loadRagConfig({}).backend).toEqual({ default: 'pgvector', voice: 'pgvector', maxLagSeconds: 300 });
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('parses the chat and voice backends separately, normalising case and spaces', () => {
+    const config = loadRagConfig({ RAG_RETRIEVAL_BACKEND: 'qdrant', RAG_RETRIEVAL_BACKEND_VOICE: 'weaviate' });
+    expect(config.backend.default).toBe('qdrant');
+    expect(config.backend.voice).toBe('weaviate');
+    const mixed = loadRagConfig({ RAG_RETRIEVAL_BACKEND: '  Weaviate ', RAG_RETRIEVAL_BACKEND_VOICE: ' QDRANT' });
+    expect(mixed.backend).toMatchObject({ default: 'weaviate', voice: 'qdrant' });
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('an unknown backend falls back to pgvector with one [RAG Config] warning naming the variable', () => {
+    const env = { RAG_RETRIEVAL_BACKEND: 'milvus', QDRANT_READ_API_KEY: 'placeholder-read-key' };
+    const config = loadRagConfig(env);
+    expect(config.backend.default).toBe('pgvector');
+    expect(config.backend.voice).toBe('pgvector');
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_RETRIEVAL_BACKEND');
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('placeholder-read-key');
+    loadRagConfig({ ...env });
+    expect(configWarnings()).toHaveLength(1);
+  });
+
+  test('an unknown voice backend falls back to pgvector without touching the chat backend', () => {
+    const config = loadRagConfig({ RAG_RETRIEVAL_BACKEND: 'qdrant', RAG_RETRIEVAL_BACKEND_VOICE: 'faiss' });
+    expect(config.backend).toMatchObject({ default: 'qdrant', voice: 'pgvector' });
+    expect(configWarnings()).toHaveLength(1);
+    expect(configWarnings()[0]).toContain('RAG_RETRIEVAL_BACKEND_VOICE');
+  });
+
+  test.each(['0', '-5', 'abc', '1.5', ''])('a lag of %j falls back to 300', (value) => {
+    expect(loadRagConfig({ RAG_VECTOR_SYNC_MAX_LAG_SECONDS: value }).backend.maxLagSeconds).toBe(300);
+  });
+
+  test('a positive integer lag is kept', () => {
+    expect(loadRagConfig({ RAG_VECTOR_SYNC_MAX_LAG_SECONDS: ' 120 ' }).backend.maxLagSeconds).toBe(120);
+  });
+
+  test('RAG_PIPELINE=legacy still parses the backend values (the factory applies the legacy rule)', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'legacy', RAG_RETRIEVAL_BACKEND: 'qdrant', RAG_VECTOR_SYNC_MAX_LAG_SECONDS: '60' });
+    expect(config.pipeline).toBe('legacy');
+    expect(config.backend).toEqual({ default: 'qdrant', voice: 'pgvector', maxLagSeconds: 60 });
+  });
+
+  test('the backend values are part of the memo key', () => {
+    const base = loadRagConfig({});
+    expect(loadRagConfig({ RAG_RETRIEVAL_BACKEND: 'qdrant' })).not.toBe(base);
+    expect(loadRagConfig({ RAG_RETRIEVAL_BACKEND_VOICE: 'qdrant' })).not.toBe(base);
+    expect(loadRagConfig({ RAG_VECTOR_SYNC_MAX_LAG_SECONDS: '60' })).not.toBe(base);
+  });
+});
+
+describe('Phase 4.2 tuning switches (D-04, D-40, D-42, D-53)', () => {
+  const BOOLEANS = [
+    ['RAG_LEXICAL_DICTIONARY', 'lexicalDictionary'],
+    ['RAG_LEXICAL_STEM_IT', 'lexicalStemIt'],
+    ['RAG_VERSION_SCOPE', 'versionScope'],
+    ['RAG_TABLE_LOOKUP', 'tableLookup'],
+    ['RAG_DUP_CLUSTERS', 'dupClusters'],
+    ['RAG_IDENTIFIER_INDEX', 'identifierIndex'],
+    ['RAG_IDENTIFIER_FILTER', 'identifierFilter'],
+  ] as const;
+  const PREREQS: Record<string, Record<string, string>> = {
+    RAG_VERSION_SCOPE: { RAG_LEXICAL_SEARCH: 'true' },
+    RAG_IDENTIFIER_FILTER: { RAG_IDENTIFIER_INDEX: 'true' },
+  };
+
+  test('unset: every switch is off, diversity is off, the lexical version is 2 and no warning is logged', () => {
+    const config = loadRagConfig({});
+    for (const [, field] of BOOLEANS) expect(config.v2[field], field).toBe(false);
+    expect(config.v2.resultDiversity).toBe('off');
+    expect(config.v2.lexicalVersion).toBe(2);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('unset: every pre-existing v2 field keeps its value', () => {
+    const rest = withoutPhase42(loadRagConfig({ RAG_PIPELINE: 'v2' }).v2);
+    expect(rest).toEqual({
+      lexicalSearch: false,
+      reranker: 'none',
+      rerankTier: { chat: 'quality', voice: 'fast' },
+      voyageModelByLang: {},
+      refusalThreshold: false,
+      refusalFloor: 'similarity',
+      edgeOrder: false,
+      compression: false,
+      tokenBudget: 6000,
+      parentChild: false,
+      iterativeScan: 'off',
+      exactScanCutoff: 0,
+      lexicalTranslation: false,
+      paramsOverride: {},
+      hasCohereKey: false,
+      hasVoyageKey: false,
+      domainEmbeddings: { enabled: false, maxLegs: 2, timeoutMs: 800 },
+      terminology: false,
+      terminologyDense: false,
+      terminologyMining: false,
+    });
+  });
+
+  test.each(BOOLEANS)('%s accepts true and false', (name, field) => {
+    expect(loadRagConfig({ ...PREREQS[name], [name]: 'true' }).v2[field]).toBe(true);
+    expect(loadRagConfig({ ...PREREQS[name], [name]: 'TRUE' }).v2[field]).toBe(true);
+    expect(loadRagConfig({ ...PREREQS[name], [name]: 'false' }).v2[field]).toBe(false);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test.each(BOOLEANS)('%s: any other value warns once and uses false', (name, field) => {
+    for (let i = 0; i < 3; i += 1) {
+      expect(loadRagConfig({ ...PREREQS[name], [name]: 'on' }).v2[field]).toBe(false);
+    }
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('[RAG Config]');
+  });
+
+  test('RAG_RESULT_DIVERSITY accepts off, collapse and mmr; anything else warns once and uses off', () => {
+    const clusters = { RAG_DUP_CLUSTERS: 'true' };
+    expect(loadRagConfig({ ...clusters, RAG_RESULT_DIVERSITY: 'off' }).v2.resultDiversity).toBe('off');
+    expect(loadRagConfig({ ...clusters, RAG_RESULT_DIVERSITY: 'collapse' }).v2.resultDiversity).toBe('collapse');
+    expect(loadRagConfig({ ...clusters, RAG_RESULT_DIVERSITY: 'MMR' }).v2.resultDiversity).toBe('mmr');
+    expect(configWarnings()).toEqual([]);
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'random' }).v2.resultDiversity).toBe('off');
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'random', RAG_PIPELINE: 'v2' }).v2.resultDiversity).toBe('off');
+    expect(configWarnings()).toHaveLength(1);
+    expect(configWarnings()[0]).toContain('RAG_RESULT_DIVERSITY');
+  });
+
+  test('identifier filter without the identifier index warns once and runs unfiltered', () => {
+    const a = loadRagConfig({ RAG_IDENTIFIER_FILTER: 'true' });
+    const b = loadRagConfig({ RAG_IDENTIFIER_FILTER: 'true', RAG_IDENTIFIER_INDEX: 'false' });
+    for (const config of [a, b]) {
+      expect(config.v2.identifierFilter).toBe(false);
+      expect(config.disabledStages.has('identifier_resolve')).toBe(true);
+      expect(config.disabledStages.has('identifier_guard')).toBe(true);
+    }
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_IDENTIFIER_INDEX');
+  });
+
+  test('version scope without the lexical leg warns once and scopes to current versions only', () => {
+    const config = loadRagConfig({ RAG_VERSION_SCOPE: 'true' });
+    loadRagConfig({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'false' });
+    expect(config.v2.versionScope).toBe(false);
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_LEXICAL_SEARCH');
+    expect(loadRagConfig({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' }).v2.versionScope).toBe(true);
+  });
+
+  test('collapse without duplicate clusters warns once and keeps the value', () => {
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'collapse' }).v2.resultDiversity).toBe('collapse');
+    loadRagConfig({ RAG_RESULT_DIVERSITY: 'collapse', RAG_DUP_CLUSTERS: 'false' });
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_DUP_CLUSTERS');
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'mmr' }).v2.resultDiversity).toBe('mmr');
+    expect(configWarnings()).toHaveLength(1);
+  });
+
+  test('changing any one of the eight variables returns a different configuration object', () => {
+    const base = loadRagConfig({});
+    for (const [name] of BOOLEANS) expect(loadRagConfig({ [name]: 'true' }), name).not.toBe(base);
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'mmr' })).not.toBe(base);
+  });
+
+  test('the four stages are disabled while their switch is off', () => {
+    const off = loadRagConfig({});
+    for (const stage of PHASE42_STAGES) expect(off.disabledStages.has(stage as never), stage).toBe(true);
+    const on = loadRagConfig({
+      RAG_TABLE_LOOKUP: 'true',
+      RAG_DUP_CLUSTERS: 'true',
+      RAG_RESULT_DIVERSITY: 'collapse',
+      RAG_IDENTIFIER_INDEX: 'true',
+      RAG_IDENTIFIER_FILTER: 'true',
+    });
+    for (const stage of PHASE42_STAGES) expect(on.disabledStages.has(stage as never), stage).toBe(false);
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'mmr' }).disabledStages.has('diversify' as never)).toBe(false);
+    expect(loadRagConfig({ RAG_IDENTIFIER_INDEX: 'true' }).disabledStages.has('identifier_resolve' as never)).toBe(true);
+  });
+
+  test('RAG_DISABLED_STAGES accepts the four stage names', () => {
+    const config = loadRagConfig({ RAG_TABLE_LOOKUP: 'true', RAG_DISABLED_STAGES: 'table_lookup,diversify,identifier_resolve,identifier_guard' });
+    for (const stage of PHASE42_STAGES) expect(config.disabledStages.has(stage as never), stage).toBe(true);
+    expect(configWarnings()).toEqual([]);
+  });
+});
+
+describe('terminology switches (D-15, D-18, D-19)', () => {
+  test('default env: switches off, stage disabled, timeouts in every profile', () => {
+    const config = loadRagConfig({});
+    expect(config.v2.terminology).toBe(false);
+    expect(config.v2.terminologyDense).toBe(false);
+    expect(config.v2.terminologyMining).toBe(false);
+    expect(config.disabledStages.has('terminology')).toBe(true);
+    expect(config.timeouts.chat.terminology).toBe(50);
+    expect(config.timeouts.embed.terminology).toBe(50);
+    expect(config.timeouts.voice.terminology).toBe(30);
+    expect(config.timeouts.eval.terminology).toBe(1000);
+    expect(config.warnings).toEqual([]);
+  });
+
+  test('RAG_TERMINOLOGY=true enables the stage whatever the pipeline value', () => {
+    for (const pipeline of [undefined, 'legacy', 'v2']) {
+      const config = loadRagConfig({ RAG_PIPELINE: pipeline, RAG_TERMINOLOGY: 'true' });
+      expect(config.v2.terminology).toBe(true);
+      expect(config.disabledStages.has('terminology')).toBe(false);
+    }
+  });
+
+  test('an unparseable value warns and stays false', () => {
+    const config = loadRagConfig({ RAG_TERMINOLOGY: 'yes-please' });
+    expect(config.v2.terminology).toBe(false);
+    expect(config.disabledStages.has('terminology')).toBe(true);
+    expect(config.warnings).toHaveLength(1);
+    expect(configWarnings()).toHaveLength(1);
+    expect(loadRagConfig({ RAG_TERMINOLOGY: 'true', RAG_TERMINOLOGY_MINING: 'maybe' }).v2.terminologyMining).toBe(false);
+  });
+
+  test('RAG_TERMINOLOGY_DENSE without RAG_TERMINOLOGY is off with a warning', () => {
+    const config = loadRagConfig({ RAG_TERMINOLOGY: 'false', RAG_TERMINOLOGY_DENSE: 'true' });
+    expect(config.v2.terminologyDense).toBe(false);
+    expect(config.warnings).toHaveLength(1);
+    expect(configWarnings().join(' ')).toContain('RAG_TERMINOLOGY_DENSE');
+  });
+
+  test('the dense variant is ignored for the voice profile', () => {
+    expect(typeof terminologyDenseFor).toBe('function');
+    const config = loadRagConfig({ RAG_TERMINOLOGY: 'true', RAG_TERMINOLOGY_DENSE: 'true' });
+    expect(config.v2.terminologyDense).toBe(true);
+    expect(terminologyDenseFor(config, 'chat')).toBe(true);
+    expect(terminologyDenseFor(config, 'embed')).toBe(true);
+    expect(terminologyDenseFor(config, 'voice')).toBe(false);
+    expect(terminologyDenseFor(loadRagConfig({ RAG_TERMINOLOGY_DENSE: 'true' }), 'chat')).toBe(false);
+  });
+
+  test('RAG_DISABLED_STAGES=terminology disables the stage while the switch is on', () => {
+    const config = loadRagConfig({ RAG_TERMINOLOGY: 'true', RAG_DISABLED_STAGES: 'terminology' });
+    expect(config.v2.terminology).toBe(true);
+    expect(config.disabledStages.has('terminology')).toBe(true);
+    expect(config.operatorDisabledStages?.has('terminology')).toBe(true);
+  });
+
+  test('RAG_STAGE_TIMEOUTS can set the terminology budget', () => {
+    expect(loadRagConfig({ RAG_STAGE_TIMEOUTS: 'terminology=80' }).timeouts.chat.terminology).toBe(80);
+  });
+
+  test('the three switches are part of the memo key', () => {
+    const base = { RAG_TERMINOLOGY: 'true' };
+    expect(loadRagConfig({}).v2.terminology).toBe(false);
+    expect(loadRagConfig(base).v2.terminology).toBe(true);
+    expect(loadRagConfig({ ...base, RAG_TERMINOLOGY_DENSE: 'true' }).v2.terminologyDense).toBe(true);
+    expect(loadRagConfig(base).v2.terminologyDense).toBe(false);
+    expect(loadRagConfig({ ...base, RAG_TERMINOLOGY_MINING: 'true' }).v2.terminologyMining).toBe(true);
+    expect(loadRagConfig(base).v2.terminologyMining).toBe(false);
+  });
+});
+
+describe('RAG_EMBED_VERSION_SCOPE (D-58, D-40)', () => {
+  const FULL = { RAG_EMBED_VERSION_SCOPE: 'true', RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' };
+
+  function embedWarnings(): string[] {
+    return configWarnings().filter((line) => line.includes('RAG_EMBED_VERSION_SCOPE'));
+  }
+
+  test('unset: the embed switch is false and no warning is logged', () => {
+    expect(loadRagConfig({}).v2.embedVersionScope).toBe(false);
+    expect(loadRagConfig({ RAG_PIPELINE: 'v2' }).v2.embedVersionScope).toBe(false);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('unset: every other v2 field equals the configuration without the variable', () => {
+    const { embedVersionScope: _a, ...withEmbedUnset } = loadRagConfig({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' }).v2;
+    resetRagConfigForTests();
+    const { embedVersionScope: _b, ...withEmbedFalse } = loadRagConfig({
+      RAG_VERSION_SCOPE: 'true',
+      RAG_LEXICAL_SEARCH: 'true',
+      RAG_EMBED_VERSION_SCOPE: 'false',
+    }).v2;
+    expect(withEmbedFalse).toEqual(withEmbedUnset);
+    expect(withEmbedUnset.versionScope).toBe(true);
+  });
+
+  test('true together with the effective version scope: true, no warning', () => {
+    expect(loadRagConfig(FULL).v2.embedVersionScope).toBe(true);
+    expect(loadRagConfig({ ...FULL, RAG_EMBED_VERSION_SCOPE: 'TRUE' }).v2.embedVersionScope).toBe(true);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('true while RAG_VERSION_SCOPE is off: one warning naming both variables, false', () => {
+    for (const versionScope of [undefined, 'false']) {
+      const env: Record<string, string> = { RAG_EMBED_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' };
+      if (versionScope) env.RAG_VERSION_SCOPE = versionScope;
+      expect(loadRagConfig(env).v2.embedVersionScope).toBe(false);
+    }
+    const warnings = embedWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('[RAG Config]');
+    expect(warnings[0]).toContain('RAG_VERSION_SCOPE');
+  });
+
+  test('true while the version scope is invalid because lexical search is off: one embed warning, false', () => {
+    const config = loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'true', RAG_VERSION_SCOPE: 'true' });
+    expect(config.v2.versionScope).toBe(false);
+    expect(config.v2.embedVersionScope).toBe(false);
+    loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'true', RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'false' });
+    const warnings = embedWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_VERSION_SCOPE');
+  });
+
+  test('false never warns, whatever the version scope', () => {
+    expect(loadRagConfig({ ...FULL, RAG_EMBED_VERSION_SCOPE: 'false' }).v2.embedVersionScope).toBe(false);
+    expect(loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'false' }).v2.embedVersionScope).toBe(false);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('any other value warns once and is false', () => {
+    for (let i = 0; i < 3; i += 1) {
+      expect(loadRagConfig({ ...FULL, RAG_EMBED_VERSION_SCOPE: 'on' }).v2.embedVersionScope).toBe(false);
+    }
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('[RAG Config]');
+  });
+
+  test('the variable is part of the memo key', () => {
+    const base = loadRagConfig({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' });
+    expect(loadRagConfig(FULL)).not.toBe(base);
+    expect(loadRagConfig({})).not.toBe(loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'true' }));
+  });
+});
+
+describe('Phase 3.3 switches (D-03, D-29, D-33)', () => {
+  const UNIFIED = { RAG_INGEST_PIPELINE: 'unified' };
+
+  function ragV2(extra: Record<string, string>) {
+    return loadRagConfig({ RAG_PIPELINE: 'v2', ...extra });
+  }
+
+  test('unset: everything off, nothing logged, no new field changes an existing one', () => {
+    const rag = loadRagConfig({});
+    expect(rag.v2.attributeFilter).toBe('off');
+    expect(rag.v2.lexicalQuantity).toBe(false);
+    expect(rag.docAttributes).toBe(false);
+    expect(rag.v2.lexicalVersion).toBe(2);
+    expect(rag.disabledStages.has('attribute_resolve')).toBe(true);
+    const ingest = loadIngestConfig({});
+    expect({
+      sectionRules: ingest.sectionRules,
+      pageBoilerplate: ingest.pageBoilerplate,
+      docAttributes: ingest.docAttributes,
+      attributeHeader: ingest.attributeHeader,
+    }).toEqual({ sectionRules: 'off', pageBoilerplate: 'off', docAttributes: false, attributeHeader: false });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test('explicit off values equal the unset configuration for every existing field', () => {
+    const offEnv = {
+      RAG_SECTION_RULES: 'off',
+      RAG_PAGE_BOILERPLATE: 'off',
+      RAG_DOC_ATTRIBUTES: 'false',
+      RAG_ATTRIBUTE_HEADER: 'false',
+      RAG_ATTRIBUTE_FILTER: 'off',
+      RAG_LEXICAL_QUANTITY: 'false',
+    };
+    const { warnings: _a, ...ingestUnset } = loadIngestConfig({});
+    const { warnings: _b, ...ingestOff } = loadIngestConfig(offEnv);
+    expect(ingestOff).toEqual(ingestUnset);
+    const ragUnset = loadRagConfig({});
+    const ragOff = loadRagConfig(offEnv);
+    expect({ ...ragOff, disabledStages: [...ragOff.disabledStages].sort() }).toEqual({ ...ragUnset, disabledStages: [...ragUnset.disabledStages].sort() });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test('accepted values with every need met are kept and log nothing', () => {
+    for (const mode of ['off', 'detect', 'rules', 'both'] as const) {
+      expect(loadIngestConfig({ ...UNIFIED, RAG_PAGE_BOILERPLATE: mode }).pageBoilerplate).toBe(mode);
+    }
+    const ingest = loadIngestConfig({ ...UNIFIED, RAG_SECTION_RULES: 'on', RAG_DOC_ATTRIBUTES: 'true', RAG_ATTRIBUTE_HEADER: 'true' });
+    expect(ingest).toMatchObject({ sectionRules: 'on', docAttributes: true, attributeHeader: true });
+    for (const mode of ['hard', 'soft'] as const) {
+      const rag = ragV2({ RAG_DOC_ATTRIBUTES: 'true', RAG_ATTRIBUTE_FILTER: mode });
+      expect(rag.v2.attributeFilter).toBe(mode);
+      expect(rag.docAttributes).toBe(true);
+      expect(rag.disabledStages.has('attribute_resolve')).toBe(false);
+    }
+    expect(loadRagConfig({ RAG_LEXICAL_QUANTITY: 'true' }).v2.lexicalQuantity).toBe(true);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['RAG_ATTRIBUTE_FILTER', 'maybe'],
+    ['RAG_LEXICAL_QUANTITY', 'on'],
+  ] as const)('rag %s=%s falls back to off with one [RAG Config] warning', (name, raw) => {
+    const config = ragV2({ RAG_DOC_ATTRIBUTES: 'true', [name]: raw });
+    loadRagConfig({ RAG_PIPELINE: 'v2', RAG_DOC_ATTRIBUTES: 'true', [name]: raw });
+    expect(config.v2.attributeFilter).toBe('off');
+    expect(config.v2.lexicalQuantity).toBe(false);
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(name);
+  });
+
+  test('the filter without document attributes warns once naming both variables and is off', () => {
+    const config = ragV2({ RAG_ATTRIBUTE_FILTER: 'hard' });
+    loadRagConfig({ RAG_PIPELINE: 'v2', RAG_ATTRIBUTE_FILTER: 'hard' });
+    expect(config.v2.attributeFilter).toBe('off');
+    expect(config.disabledStages.has('attribute_resolve')).toBe(true);
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_ATTRIBUTE_FILTER');
+    expect(warnings[0]).toContain('RAG_DOC_ATTRIBUTES');
+  });
+
+  test.each([
+    ['set to legacy', { RAG_PIPELINE: 'legacy' }],
+    ['defaulted', {}],
+  ] as const)('the filter while the pipeline is %s warns once and is off', (_label, pipelineEnv) => {
+    const config = loadRagConfig({ ...pipelineEnv, RAG_DOC_ATTRIBUTES: 'true', RAG_ATTRIBUTE_FILTER: 'soft' });
+    expect(config.pipeline).toBe('legacy');
+    expect(config.v2.attributeFilter).toBe('off');
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_PIPELINE');
+  });
+
+  test('both filter needs unmet give two warnings, one per need', () => {
+    const config = loadRagConfig({ RAG_ATTRIBUTE_FILTER: 'hard' });
+    expect(config.v2.attributeFilter).toBe('off');
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(2);
+    expect(warnings.some((line) => line.includes('RAG_DOC_ATTRIBUTES'))).toBe(true);
+    expect(warnings.some((line) => line.includes('RAG_PIPELINE'))).toBe(true);
+  });
+
+  test.each([
+    ['RAG_SECTION_RULES', 'on', 'sectionRules', 'off'],
+    ['RAG_PAGE_BOILERPLATE', 'both', 'pageBoilerplate', 'off'],
+    ['RAG_DOC_ATTRIBUTES', 'true', 'docAttributes', false],
+  ] as const)('ingest %s=%s without the unified pipeline warns once under [RAG Config] and is off', (name, raw, field, effective) => {
+    const config = loadIngestConfig({ [name]: raw });
+    loadIngestConfig({ [name]: raw, RAG_INGEST_PIPELINE: 'legacy' });
+    expect((config as unknown as Record<string, unknown>)[field]).toBe(effective);
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(name);
+    expect(warnings[0]).toContain('RAG_INGEST_PIPELINE');
+    expect(ingestConfigWarnings()).toEqual([]);
+  });
+
+  test('the header without effective attributes warns exactly once and is off', () => {
+    const config = loadIngestConfig({ ...UNIFIED, RAG_ATTRIBUTE_HEADER: 'true' });
+    expect(config.attributeHeader).toBe(false);
+    expect(configWarnings()).toHaveLength(1);
+    expect(configWarnings()[0]).toContain('RAG_DOC_ATTRIBUTES');
+  });
+
+  test('the header with attributes requested on a legacy pipeline: one warning per unmet need, both off', () => {
+    const config = loadIngestConfig({ RAG_DOC_ATTRIBUTES: 'true', RAG_ATTRIBUTE_HEADER: 'true' });
+    expect(config).toMatchObject({ docAttributes: false, attributeHeader: false });
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(2);
+    expect(warnings.filter((line) => line.includes('RAG_ATTRIBUTE_HEADER'))).toHaveLength(1);
+  });
+
+  test('a second load logs nothing more; changing any one variable returns a different object', () => {
+    const env = { RAG_ATTRIBUTE_FILTER: 'hard' };
+    loadRagConfig(env);
+    const count = warn.mock.calls.length;
+    loadRagConfig(env);
+    expect(warn.mock.calls.length).toBe(count);
+
+    const rag = loadRagConfig({});
+    for (const [name, value] of [['RAG_ATTRIBUTE_FILTER', 'soft'], ['RAG_LEXICAL_QUANTITY', 'true'], ['RAG_DOC_ATTRIBUTES', 'true']]) {
+      expect(loadRagConfig({ [name]: value }), name).not.toBe(rag);
+    }
+    const ingest = loadIngestConfig({});
+    for (const [name, value] of [['RAG_SECTION_RULES', 'on'], ['RAG_PAGE_BOILERPLATE', 'detect'], ['RAG_DOC_ATTRIBUTES', 'true'], ['RAG_ATTRIBUTE_HEADER', 'true']]) {
+      expect(loadIngestConfig({ [name]: value }), name).not.toBe(ingest);
+    }
+  });
+
+  test('attribute_resolve is accepted by RAG_DISABLED_STAGES and RAG_STAGE_TIMEOUTS', () => {
+    const config = ragV2({
+      RAG_DOC_ATTRIBUTES: 'true',
+      RAG_ATTRIBUTE_FILTER: 'hard',
+      RAG_DISABLED_STAGES: 'attribute_resolve',
+      RAG_STAGE_TIMEOUTS: 'chat.attribute_resolve=250',
+    });
+    expect(config.v2.attributeFilter).toBe('hard');
+    expect(config.disabledStages.has('attribute_resolve')).toBe(true);
+    expect(config.timeouts.chat.attribute_resolve).toBe(250);
+    expect(configWarnings()).toEqual([]);
   });
 });

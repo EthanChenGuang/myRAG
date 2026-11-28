@@ -131,7 +131,7 @@ for (const mode of MODES) {
         ? await createTwoTenantDatabase()
         : await createFixtureDatabase({ deploymentMode: mode, corpusDir: CORPUS, supabaseGrants: true, migrations: true });
       db = fixture.db;
-      await applyMigrations(db);
+      await applyMigrations(db, mode);
       await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2)', [ADMIN, 'admin@example.invalid']);
       await db.query('INSERT INTO admin_users (id) VALUES ($1)', [ADMIN]);
       if (mode === 'multi-tenant') {

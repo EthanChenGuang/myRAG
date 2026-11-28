@@ -83,7 +83,13 @@ function send(response: ServerResponse, status: number, body: unknown): void {
 }
 
 /** A local stand-in for the LlamaParse v2 upload and job endpoints and for the presigned image host. */
-export async function startFakeLlamaParse(options: { apiKey?: string } = {}): Promise<FakeLlamaParse> {
+export interface FakeLlamaParseOptions {
+  apiKey?: string;
+  /** Consulted on every upload before the queued specs; a returned spec answers that upload. */
+  resolveSpec?: () => FakeLlamaJobSpec | undefined;
+}
+
+export async function startFakeLlamaParse(options: FakeLlamaParseOptions = {}): Promise<FakeLlamaParse> {
   const apiKey = options.apiKey ?? 'llx-test-key-0000';
   const calls: FakeLlamaCall[] = [];
   const uploads: FakeLlamaUpload[] = [];
@@ -133,7 +139,7 @@ export async function startFakeLlamaParse(options: { apiKey?: string } = {}): Pr
           fileName: file instanceof File ? file.name : '',
           configuration: typeof configuration === 'string' ? (JSON.parse(configuration) as unknown) : null,
         });
-        const spec = specs[Math.min(uploadCount, specs.length - 1)] ?? {};
+        const spec = options.resolveSpec?.() ?? specs[Math.min(uploadCount, specs.length - 1)] ?? {};
         uploadCount += 1;
         if (spec.uploadStatus !== undefined) return send(response, spec.uploadStatus, { detail: 'upload refused' });
         const id = `job-${uploadCount}`;

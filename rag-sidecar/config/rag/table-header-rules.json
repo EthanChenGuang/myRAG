@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "rules_version": "2026-11-25.1",
+  "description": "D-20 header carry-forward: a table that follows another table across blank lines only, with the same column count, takes the previous table's header when its first row is not header-like. A row is header-like when at least min_non_numeric_share of its non-empty cells are not numeric and at most max_repeated_value_share of them reappear as values in the same column of the neighbouring rows. Fitted on the six long-table ingest fixtures (headers 1.0 / 0.0, every data row 0.6 / 0.6).",
+  "numeric_cell_pattern": "^[+-]?\\d+(?:[.,\\u00a0 ]\\d+)*\\s*%?$",
+  "min_non_numeric_share": 0.8,
+  "max_repeated_value_share": 0.3
+}

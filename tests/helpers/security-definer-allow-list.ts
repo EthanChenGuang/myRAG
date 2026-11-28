@@ -5,6 +5,21 @@ import type { AllowListEntry } from './sql-function-acl';
  * Keys are normalised full signatures (name and argument types, as `signatureKey` and `regprocedure::text` print them), so a new overload that
  * shares an allow-listed name is not approved. Look entries up with allowListEntryFor, never by name.
  * anon says whether anon keeps EXECUTE (only where an RLS policy without a TO clause evaluates the function for anon).
+ * Service-role-only definers such as rag_purge_retrieval_log(integer,integer), rag_feedback_loop_on_chat_delete() and
+ * rag_mine_failed_queries(timestamptz,timestamptz,jsonb) are deliberately absent: their lock is section 1 of 0410, and
+ * tests/rag-db/retrieval-log-purge.test.mts and tests/rag-db/review-items-mining.test.mts assert they never appear here.
+ * The 0651 fine-tune consent and registry functions (rag_finetune_set_consent, rag_finetune_list_consent, rag_finetune_consent_for_export,
+ * rag_finetune_register_model, rag_finetune_list_models, rag_finetune_set_model_status) are service_role only too, revoked in 0651 itself;
+ * tests/rag-db/finetune-registry.test.mts asserts they never appear here.
+ * The 0652 fine-tune slot functions (rag_finetune_bind_slot, rag_finetune_clear_slot, rag_finetune_release_rollback) and trigger functions
+ * (rag_finetune_slot_guard, rag_finetune_version_taint_guard) are service_role only as well; tests/rag-db/finetune-slots.test.mts asserts it.
+ * The 0653 export function rag_finetune_export_vectors(text,text,text,uuid,integer) is service_role only; tests/rag-db/finetune-export.test.mts
+ * asserts it.
+ * The Phase 5.2 functions of 0941 and 0943 (rag_set_document_version_label, rag_record_security_events, the uploader hold and alert functions and
+ * the three rag_list_security_* readers) are SECURITY INVOKER and service_role only; tests/rag-db/security-alerts.test.mts asserts they never appear here.
+ * The 0654 binding-route functions (rag_finetune_bind_scoped_slot, rag_finetune_scope_slot, rag_finetune_normalize_doc_types, the replaced
+ * rag_finetune_clear_slot) and trigger functions (rag_finetune_binding_guard, rag_finetune_backfill_run_guard) are service_role only;
+ * tests/rag-db/finetune-binding.test.mts asserts they never appear here.
  */
 export const AUTHENTICATED_ALLOW_LIST: Record<string, AllowListEntry> = {
   'delete_folder(uuid,boolean)': { anon: false, reason: 'called with the user session from chat-store.ts and /api/folders/[id]; checks auth.uid() ownership' },
@@ -19,6 +34,7 @@ export const AUTHENTICATED_ALLOW_LIST: Record<string, AllowListEntry> = {
   'is_subscribed(uuid)': { anon: false, reason: 'caller-bound subscription check; contract asserted by tests/security-gaps-rls.test.mts' },
   'get_nango_stats(uuid)': { anon: false, reason: 'caller-bound connection stats; contract asserted by tests/security-gaps-rls.test.mts' },
   'kb_writes_locked()': { anon: false, reason: 'RLS helper in single-tenant knowledge-base write policies (TO authenticated)' },
+  'rag_is_domain_expert(text)': { anon: false, reason: 'RLS helper in the rag_review_items policies (TO authenticated); answers only for auth.uid() against rag_domain_experts or, single-tenant, admin_users for s:default' },
   'rag_ingest_realtime_topic_allowed(text)': { anon: false, reason: 'RLS helper in the realtime.messages policy for ingestion job topics; reads auth.uid() and realtime.topic()' },
 };
 

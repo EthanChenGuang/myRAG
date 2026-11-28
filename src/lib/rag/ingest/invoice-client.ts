@@ -5,6 +5,7 @@ import {
   InvoiceFieldsSchema,
   type InvoiceFields,
 } from '@/lib/rag-eval/contracts.generated';
+import type { Language } from '@/lib/rag/lang/registry';
 
 /** A small, cheap model from the default OpenRouter list in src/lib/env.ts, so no new setting is needed. */
 export const INVOICE_LLM_MODEL_ID = 'google/gemini-2.5-flash-lite';
@@ -39,7 +40,7 @@ export class InvoiceClientError extends Error {
 export interface InvoiceExtractCall {
   markdown: string;
   tables?: string[];
-  languageHint?: 'zh' | 'en' | 'it' | null;
+  languageHint?: Language | null;
   signal: AbortSignal;
 }
 

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { tenantPredicate, type TenantPredicate, type TenantScope } from '../tenant/scope';
-import type { DocumentPartRef, ReferencedState, UsedDocument } from '../types';
+import type { DocumentPartRef, ReferencedSection, ReferencedState, UsedDocument } from '../types';
 
 export interface ResolveDocumentRefsInput {
   scope: TenantScope;
@@ -12,6 +12,7 @@ export interface ResolveDocumentRefsInput {
 }
 
 export interface ResolvedDocumentRefs extends ReferencedState {
+  sections: ReferencedSection[];
   ignored: number;
 }
 
@@ -48,8 +49,25 @@ interface DocumentRef {
   name: string;
 }
 
-function section(name: string, body: string): string {
-  return `\n\n=== DOCUMENT: "${name}" ===\n${body}\n=== END OF DOCUMENT ===\n`;
+/** Renders one referenced section; with a header (a citation label) it goes on its own line before the text. */
+export function renderReferencedSection(section: ReferencedSection, header?: string): string {
+  if (section.missing) return `\n\nDocument "${section.documentName}" was referenced but no content could be retrieved.\n`;
+  const body = header === undefined ? section.text : `${header}\n${section.text}`;
+  return `\n\n=== DOCUMENT: "${section.documentName}" ===\n${body}\n=== END OF DOCUMENT ===\n`;
+}
+
+interface ChunkText {
+  id?: string | null;
+  content: string;
+}
+
+function chunkSection(docRef: DocumentRef, chunks: ChunkText[]): ReferencedSection {
+  return {
+    documentId: docRef.id,
+    documentName: docRef.name,
+    chunkIds: chunks.map((chunk) => chunk.id).filter((id): id is string => typeof id === 'string'),
+    text: chunks.map((chunk) => chunk.content).join('\n\n'),
+  };
 }
 
 export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Promise<ResolvedDocumentRefs> {
@@ -84,7 +102,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
 
   const references: DocumentRef[] = [...mentionRefs, ...documentParts.map((part) => ({ id: part.id, name: part.name }))];
   const usedDocuments: UsedDocument[] = [];
-  let context = '';
+  const sections: ReferencedSection[] = [];
   let ignored = 0;
 
   for (const docRef of references) {
@@ -110,7 +128,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
       external_url: docMetadata.metadata?.external_url,
     });
 
-    const { data: chunks, error } = await currentChunks(admin.from('document_chunks').select('content').eq('document_id', docRef.id))
+    const { data: chunks, error } = await currentChunks(admin.from('document_chunks').select('id, content').eq('document_id', docRef.id))
       .limit(REFERENCE_CHUNK_LIMIT)
       .abortSignal(signal);
 
@@ -120,7 +138,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
     }
 
     if (chunks && chunks.length > 0) {
-      context += section(docRef.name, chunks.map((chunk) => chunk.content).join('\n\n'));
+      sections.push(chunkSection(docRef, chunks as ChunkText[]));
       continue;
     }
 
@@ -133,7 +151,7 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
 
     if (!docError && docData) {
       const fullText = docData.text || docData.content || '';
-      if (fullText) context += section(docRef.name, fullText);
+      if (fullText) sections.push({ documentId: docRef.id, documentName: docRef.name, chunkIds: [], text: fullText });
       continue;
     }
 
@@ -142,9 +160,9 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
       .abortSignal(signal);
 
     if (!allChunksError && allChunks && allChunks.length > 0) {
-      context += section(docRef.name, allChunks.map((chunk) => chunk.content).join('\n\n'));
+      sections.push(chunkSection(docRef, allChunks as ChunkText[]));
     } else {
-      context += `\n\nDocument "${docRef.name}" was referenced but no content could be retrieved.\n`;
+      sections.push({ documentId: docRef.id, documentName: docRef.name, chunkIds: [], text: '', missing: true });
     }
   }
 
@@ -152,5 +170,6 @@ export async function resolveDocumentRefs(input: ResolveDocumentRefsInput): Prom
     console.warn('[RAG Tenant] Ignored document references outside the caller scope', { ignoredReferences: ignored });
   }
 
-  return { usedDocuments, context, ignored };
+  const context = sections.map((section) => renderReferencedSection(section)).join('');
+  return { usedDocuments, context, sections, ignored };
 }

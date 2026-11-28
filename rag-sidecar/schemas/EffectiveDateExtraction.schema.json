@@ -1,0 +1,50 @@
+{
+  "additionalProperties": false,
+  "description": "Structured model output for effective dates (D-43); accepted only when evidence_quote is found verbatim.",
+  "properties": {
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "effective_from": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Effective From"
+    },
+    "effective_to": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Effective To"
+    },
+    "evidence_quote": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Evidence Quote",
+      "type": "string"
+    }
+  },
+  "required": [
+    "confidence",
+    "evidence_quote"
+  ],
+  "title": "EffectiveDateExtraction",
+  "type": "object"
+}

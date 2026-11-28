@@ -469,6 +469,7 @@ describe('identify resolves the type and the profile', () => {
     const ctx = {
       document: { id: 'doc-1', version: 1, resumed: false },
       identity: { tenantKey: 's:default', filename: 'a.pdf', fileSha256: 'x', docType: 'invoice_receipt', docTypeOrigin: 'auto', profile, bytes: null },
+      config: loadIngestConfig({}),
       state,
       work: { parseText: 'Invoice 1', parserVersion: null, chunks: [], chunksWritten: 0 },
       writer: { setFields } as unknown as IngestWriter,

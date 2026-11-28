@@ -1,0 +1,12 @@
+{
+  "name": "v2-lexical-terminology-on",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_LEXICAL_SEARCH": "true",
+    "RAG_REFUSAL_THRESHOLD": "false",
+    "RAG_RERANKER": "none",
+    "RAG_REFUSAL_FLOOR": "similarity",
+    "RAG_TERMINOLOGY": "true"
+  },
+  "overrides": null
+}

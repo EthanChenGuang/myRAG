@@ -23,6 +23,7 @@ const state = {
   rpcCalls: [] as Array<{ fn: string; args: Record<string, unknown> }>,
   outcomes: {} as Record<string, RpcOutcome>,
   dbAvailable: true,
+  users: {} as Record<string, string>,
 };
 
 function fakeGuardClient() {
@@ -31,6 +32,9 @@ function fakeGuardClient() {
       getUser: async (token: string) => {
         const id = state.tokens[token];
         return id ? { data: { user: { id } }, error: null } : { data: { user: null }, error: { message: 'invalid' } };
+      },
+      admin: {
+        getUserById: async (id: string) => ({ data: { user: state.users[id] ? { id, email: state.users[id] } : null }, error: null }),
       },
     },
     from(table: string) {
@@ -167,9 +171,10 @@ describe('quarantine admin routes', () => {
     state.lookupFails = false;
     state.rpcCalls = [];
     state.dbAvailable = true;
+    state.users = {};
     state.outcomes = {
-      rag_list_quarantine: { data: [LIST_ROW], error: null },
-      rag_release_quarantine: { data: [RELEASE_ROW], error: null },
+      rag_list_quarantine_reasons: { data: [LIST_ROW], error: null },
+      rag_release_quarantine_reasons: { data: [RELEASE_ROW], error: null },
       rag_delete_quarantined: { data: [DELETE_ROW], error: null },
     };
     logged = [];
@@ -273,10 +278,14 @@ describe('quarantine admin routes', () => {
           snippets: [SNIPPET],
           quarantined_at: '2026-11-24T10:00:00.000Z',
           detected_by: 'injection_scan',
+          reasons: [{ kind: 'injection_rule', detail: 'Matched injection rules: inj-en-ignore-previous', unlocated: 0 }],
+          unlocated: 0,
+          uploader: null,
+          pending_approval: false,
         },
       ],
     });
-    expect(state.rpcCalls).toEqual([{ fn: 'rag_list_quarantine', args: { p_actor: ADMIN_ID, p_limit: 20, p_offset: 40 } }]);
+    expect(state.rpcCalls).toEqual([{ fn: 'rag_list_quarantine_reasons', args: { p_actor: ADMIN_ID, p_limit: 20, p_offset: 40 } }]);
     expect(logged.join('\n')).not.toContain(SNIPPET);
   });
 
@@ -298,7 +307,7 @@ describe('quarantine admin routes', () => {
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true, id: DOC_ID, status: 'ready', version: 1, superseded_document_id: null, rule_ids: ['inj-en-ignore-previous'] });
-    expect(state.rpcCalls).toEqual([{ fn: 'rag_release_quarantine', args: { p_document_id: DOC_ID, p_actor: ADMIN_ID } }]);
+    expect(state.rpcCalls).toEqual([{ fn: 'rag_release_quarantine_reasons', args: { p_document_id: DOC_ID, p_actor: ADMIN_ID } }]);
     expect(logged.some((line) => line.includes('[RAG Admin]') && line.includes(DOC_ID))).toBe(true);
     expect(logged.join('\n')).not.toContain(SNIPPET);
   });
@@ -350,7 +359,7 @@ describe('quarantine admin routes', () => {
     }
     expect(state.rpcCalls).toEqual([]);
 
-    state.outcomes.rag_release_quarantine = { data: null, error: { code: 'P0001', message: 'not_found' } };
+    state.outcomes.rag_release_quarantine_reasons = { data: null, error: { code: 'P0001', message: 'not_found' } };
     state.outcomes.rag_delete_quarantined = { data: null, error: { code: 'P0001', message: 'not_found' } };
     const released = await loaded.release.POST(req(`/api/rag/admin/quarantine/${DOC_ID}/release`, { method: 'POST' }), params(DOC_ID));
     const deleted = await loaded.del.DELETE(req(`/api/rag/admin/quarantine/${DOC_ID}`, { method: 'DELETE' }), params(DOC_ID));
@@ -362,9 +371,9 @@ describe('quarantine admin routes', () => {
   it('gives 409 to a document that is not quarantined, 403 when the database refuses the actor, and 503 when the database is unavailable', async () => {
     const loaded = await load();
     state.session = { id: ADMIN_ID };
-    state.outcomes.rag_release_quarantine = { data: null, error: { code: 'P0001', message: 'not_quarantined' } };
+    state.outcomes.rag_release_quarantine_reasons = { data: null, error: { code: 'P0001', message: 'not_quarantined' } };
     expect((await loaded.release.POST(req(`/api/rag/admin/quarantine/${DOC_ID}/release`, { method: 'POST' }), params(DOC_ID))).status).toBe(409);
-    state.outcomes.rag_release_quarantine = { data: null, error: { code: 'P0001', message: 'not_admin' } };
+    state.outcomes.rag_release_quarantine_reasons = { data: null, error: { code: 'P0001', message: 'not_admin' } };
     expect((await loaded.release.POST(req(`/api/rag/admin/quarantine/${DOC_ID}/release`, { method: 'POST' }), params(DOC_ID))).status).toBe(403);
     state.outcomes.rag_delete_quarantined = { data: null, error: { code: 'XX000', message: 'connection reset by peer: secret text' } };
     const failed = await loaded.del.DELETE(req(`/api/rag/admin/quarantine/${DOC_ID}`, { method: 'DELETE' }), params(DOC_ID));
@@ -372,6 +381,112 @@ describe('quarantine admin routes', () => {
     expect(JSON.stringify(await failed.json())).not.toContain('secret text');
     state.dbAvailable = false;
     expect((await loaded.list.GET(req('/api/rag/admin/quarantine'))).status).toBe(503);
+  });
+
+  it('returns the reasons with their spans and targets, the unlocated count, the uploader display and the approval flag, never a bounding box or checker version', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.users = { [MEMBER_ID]: 'member@example.invalid' };
+    const hidden = 'A sentence <img src=x onerror=alert(1)> written in white.';
+    state.outcomes.rag_list_quarantine_reasons = {
+      data: [
+        {
+          ...LIST_ROW,
+          rule_ids: [],
+          snippets: [],
+          reasons: [
+            {
+              kind: 'hidden_text',
+              detail: '1 hidden spans (color_near_background)',
+              spans: [{ page: 3, text: hidden, reason: 'color_near_background' }],
+              checker_version: 'hidden-text/1/2026-11-25.1',
+              unlocated: 2,
+            },
+            {
+              kind: 'untrusted_link',
+              detail: '1 link targets outside the allowlist (url: 1)',
+              targets: ['https://phish.example.net/login'],
+              checker_version: 'link-check/2026-11-25.1',
+              unlocated: 0,
+            },
+            { kind: 'hidden_text', detail: 'a span with a box', spans: [{ page: 1, text: 'boxed text', reason: 'font_too_small', bbox: [0, 0, 1, 1] }], checker_version: 'x', unlocated: 0 },
+          ],
+          unlocated: 2,
+          hidden_text_check: 'hidden_found',
+          pending_approval: true,
+          uploader_id: MEMBER_ID,
+        },
+        { ...LIST_ROW, document_id: OTHER_ADMIN_ID, rule_ids: [], snippets: [], reasons: [], uploader_id: OWNER_ID },
+      ],
+      error: null,
+    };
+    const response = await loaded.list.GET(req('/api/rag/admin/quarantine'));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    const [first, second] = body.items;
+    expect(first.reasons).toEqual([
+      { kind: 'hidden_text', detail: '1 hidden spans (color_near_background)', spans: [{ page: 3, text: hidden, reason: 'color_near_background' }], unlocated: 2 },
+      { kind: 'untrusted_link', detail: '1 link targets outside the allowlist (url: 1)', targets: ['https://phish.example.net/login'], unlocated: 0 },
+    ]);
+    expect(first.unlocated).toBe(2);
+    expect(first.pending_approval).toBe(true);
+    expect(first.uploader).toEqual({ id: MEMBER_ID, display: 'member@example.invalid' });
+    expect(second.reasons).toEqual([]);
+    expect(second.uploader).toEqual({ id: OWNER_ID, display: OWNER_ID });
+    const raw = JSON.stringify(body);
+    expect(raw).not.toContain('checker_version');
+    expect(raw).not.toContain('bbox');
+    expect(raw).not.toContain('boxed text');
+    const lines = logged.join('\n');
+    expect(lines).not.toContain(hidden);
+    expect(lines).not.toContain('phish.example.net');
+    expect(lines).not.toContain('member@example.invalid');
+  });
+
+  it('view=not_checked lists the documents recorded not_checked with their total, one page, for the verified admin', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_list_not_checked = {
+      data: [
+        { document_id: DOC_ID, lineage_id: LINEAGE_ID, tenant_key: `u:${OWNER_ID}`, filename: 'deck.pptx', doc_type: 'general', source: 'config_upload', uploaded_at: '2026-11-24T09:00:00.000Z', total_count: 7 },
+      ],
+      error: null,
+    };
+    const response = await loaded.list.GET(req('/api/rag/admin/quarantine?view=not_checked&limit=1&offset=3', { headers: { 'x-actor-id': OTHER_ADMIN_ID } }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toEqual({
+      success: true,
+      view: 'not_checked',
+      total: 7,
+      limit: 1,
+      offset: 3,
+      items: [{ id: DOC_ID, lineage_id: LINEAGE_ID, tenant_key: `u:${OWNER_ID}`, filename: 'deck.pptx', doc_type: 'general', source: 'config_upload', uploaded_at: '2026-11-24T09:00:00.000Z' }],
+    });
+    expect(state.rpcCalls).toEqual([{ fn: 'rag_list_not_checked', args: { p_actor: ADMIN_ID, p_limit: 1, p_offset: 3 } }]);
+    expect(logged.join('\n')).not.toContain('deck.pptx');
+  });
+
+  it('view=quarantined is the default list; an unknown view is 400 before any function runs; an unavailable not_checked list is 503', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    expect((await loaded.list.GET(req('/api/rag/admin/quarantine?view=quarantined'))).status).toBe(200);
+    expect(state.rpcCalls.map((call) => call.fn)).toEqual(['rag_list_quarantine_reasons']);
+    state.rpcCalls = [];
+    for (const view of ['all', 'NOT_CHECKED', '', 'not_checked ']) {
+      expect((await loaded.list.GET(req(`/api/rag/admin/quarantine?view=${encodeURIComponent(view)}`))).status, view).toBe(400);
+    }
+    expect(state.rpcCalls).toEqual([]);
+    state.outcomes.rag_list_not_checked = { data: null, error: { code: 'XX000', message: 'boom' } };
+    expect((await loaded.list.GET(req('/api/rag/admin/quarantine?view=not_checked'))).status).toBe(503);
+  });
+
+  it('view=not_checked keeps the guard: no credential is 401 and a non-admin is 403, and no function runs', async () => {
+    const loaded = await load();
+    expect((await loaded.list.GET(req('/api/rag/admin/quarantine?view=not_checked'))).status).toBe(401);
+    state.session = { id: OWNER_ID };
+    expect((await loaded.list.GET(req('/api/rag/admin/quarantine?view=not_checked'))).status).toBe(403);
+    expect(state.rpcCalls).toEqual([]);
   });
 
   it('keeps the route files on the shared guard: checkAdmin or requireAdminOrDeny, no direct guard, no direct RPC name', () => {

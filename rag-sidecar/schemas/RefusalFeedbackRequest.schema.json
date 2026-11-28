@@ -1,0 +1,32 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "reasons": {
+      "items": {
+        "enum": [
+          "answer_exists",
+          "wrong_language",
+          "other"
+        ],
+        "type": "string"
+      },
+      "maxItems": 3,
+      "title": "Reasons",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "vote": {
+      "enum": [
+        "expected_answer",
+        "correct_refusal"
+      ],
+      "title": "Vote",
+      "type": "string"
+    }
+  },
+  "required": [
+    "vote"
+  ],
+  "title": "RefusalFeedbackRequest",
+  "type": "object"
+}

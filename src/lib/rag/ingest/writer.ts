@@ -32,6 +32,7 @@ const KNOWN_REASONS = new Set([
   'document_not_writable',
   'document_not_publishable',
   'document_is_current',
+  'not_holdable',
 ]);
 
 /** A failed writer RPC. Carries the function name and the error code only: the database message can echo row content. */
@@ -69,6 +70,8 @@ export type BeginResult =
 export interface DocumentFields {
   content_hash?: string | null;
   language?: string | null;
+  /** D-13: every language with at least 10% of the detected tokens, in registry order. */
+  languages?: string[];
   doc_date?: string | null;
   doc_type?: string | null;
   doc_type_origin?: string | null;
@@ -89,6 +92,10 @@ export interface DocumentFields {
   /** The parsed text, kept for the relevance filter and the source preview that read documents.content. */
   content?: string;
   status?: 'processing' | 'quarantined' | 'failed' | 'deleted';
+  /** D-10: sha256 of the ingestion fingerprint parts, written at publish with the parts in metadata.ingest_fingerprint_parts. */
+  ingest_fingerprint?: string;
+  /** D-34: the hidden-text outcome of the version (0801 column). */
+  hidden_text_check?: 'clean' | 'hidden_found' | 'not_checked';
   metadata?: Record<string, unknown>;
 }
 
@@ -102,6 +109,10 @@ export interface ChunkWrite {
   page_end?: number | null;
   content_hash?: string | null;
   lexical_text?: string | null;
+  /** The chunk's own language (D-13, RAG_LANGUAGE_AWARE_INGEST=on); without the key the chunk mirrors the document language. */
+  language?: string;
+  /** 0..1, rounded to 4 decimals; without the key the column stays null. */
+  language_confidence?: number;
   metadata: Record<string, unknown>;
 }
 
@@ -157,7 +168,10 @@ export interface ChunkingProfileRow {
   status: 'building' | 'ready' | 'active' | 'retired';
 }
 
-export type PublishOutcome = 'published' | 'already_current' | 'quarantined';
+/** pending_review and held come from the publish guard of 0803: the version stays out of retrieval and nothing is swapped. */
+export type PublishOutcome = 'published' | 'already_current' | 'quarantined' | 'pending_review' | 'held';
+
+const PUBLISH_OUTCOMES: ReadonlySet<string> = new Set<PublishOutcome>(['published', 'already_current', 'quarantined', 'pending_review', 'held']);
 
 export interface PublishResult {
   outcome: PublishOutcome;
@@ -211,6 +225,32 @@ export function chunkIdFor(documentId: string, chunkIndex: number): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
+/** One chunk of a document as the lookup indexers read it back (rag_index_document_chunks), every chunking profile. */
+export interface IndexChunkRow {
+  id: string;
+  chunkingProfileId: string;
+  chunkIndex: number;
+  sectionPath: string[];
+  content: string;
+}
+
+export interface ChunkIdentifierWrite {
+  chunkId: string;
+  raw: string[];
+  norm: string[];
+}
+
+/** One rag_table_rows row as rag_write_table_rows takes it. */
+export interface TableRowWrite {
+  table_key: string;
+  row_index: number;
+  header: string[];
+  cells: Record<string, string>;
+  cell_tokens: string[][];
+  cell_norm: string[];
+  chunk_ids: string[];
+}
+
 export interface IngestWriter {
   begin(args: BeginArgs): Promise<BeginResult>;
   findContentDuplicate(contentHash: string, documentId: string | null): Promise<string | null>;
@@ -225,11 +265,32 @@ export interface IngestWriter {
   /** The chunking profile registry (every doc type, every status). */
   listChunkingProfiles(): Promise<ChunkingProfileRow[]>;
   publish(documentId: string): Promise<PublishResult>;
+  /** Moves a processing version and its chunks to pending_review (rag_hold_document_for_review); refused with not_holdable otherwise. */
+  holdForReview(documentId: string): Promise<{ documentId: string; version: number }>;
+  /** rag_is_tenant_admin for this tenant: the Quarantine panel's access rule. */
+  isTenantAdmin(userId: string): Promise<boolean>;
+  /** The tenant's upload-approval exemptions (rag_upload_exemptions_for). */
+  uploadExemptions(): Promise<Array<{ kind: string; ref: string }>>;
   /** Per profile the newest backfill run that applies to this tenant, a running one first. */
   findBackfillRuns(): Promise<BackfillRunRow[]>;
   /** Records chunks that have no vector for a profile; returns how many rows were written. */
   recordBackfillGap(args: BackfillGapArgs): Promise<number>;
   markFailed(documentId: string, reason: string): Promise<void>;
+  /**
+   * The link targets an admin reviewed when releasing an earlier version of this document's lineage (metadata.quarantine.released_targets,
+   * D-35), sorted; empty for a first version. Never another lineage's or another tenant's.
+   */
+  releasedLinkTargets?(documentId: string): Promise<string[]>;
+  /** The scope tenant's language shares over its current ready documents (rag_tenant_language_shares), largest first. */
+  tenantLanguageShares?(): Promise<Array<{ language: string; share: number }>>;
+  /** RAG_CAPTION_LANGUAGE=document: the language detected on each written picture caption, by image URL, onto this version's image chunks. */
+  setImageChunkLanguages?(documentId: string, items: Array<{ imageUrl: string; language: string }>): Promise<number>;
+  /** RET-12, RET-15: a keyset page (id order) of this version's chunks of every chunking profile, for the lookup indexers. */
+  listDocumentChunksForIndex?(documentId: string, after: string | null, limit: number): Promise<IndexChunkRow[]>;
+  /** RET-15: identifiers of a batch of this version's chunks, then the document union (rewritten only when it changed). */
+  writeChunkIdentifiers?(documentId: string, rows: ChunkIdentifierWrite[]): Promise<{ chunksWritten: number; documentChanged: boolean }>;
+  /** RET-12: replaces the table rows of this version and one chunking profile. */
+  writeTableRows?(documentId: string, chunkingProfileId: string, rows: TableRowWrite[]): Promise<{ rowsWritten: number; rowsDeleted: number }>;
 }
 
 export interface CreateIngestWriterInput {
@@ -406,6 +467,17 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
       };
     },
 
+    async releasedLinkTargets(documentId) {
+      const rows = await call('rag_released_link_targets', {
+        p_document_id: documentId,
+        p_tenant_key: identity().tenantKey,
+      });
+      return rows
+        .map((row) => text(row, 'target'))
+        .filter((target): target is string => target !== null)
+        .sort();
+    },
+
     async getOrigin(documentId) {
       const rows = await call('rag_get_ingest_origin', {
         p_document_id: documentId,
@@ -476,15 +548,53 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
         p_tenant_key: identity().tenantKey,
       });
       const outcome = text(row, 'outcome');
-      if (outcome !== 'published' && outcome !== 'already_current' && outcome !== 'quarantined') {
+      if (outcome === null || !PUBLISH_OUTCOMES.has(outcome)) {
         throw new IngestWriterError('rag_publish_document_version', 'bad_response');
       }
       return {
-        outcome,
+        outcome: outcome as PublishOutcome,
         documentId: requireText('rag_publish_document_version', row, 'document_id'),
         version: integer(row, 'version') ?? 0,
         supersededDocumentId: text(row, 'superseded_document_id'),
       };
+    },
+
+    async holdForReview(documentId) {
+      const row = await callOne('rag_hold_document_for_review', {
+        p_document_id: documentId,
+        p_tenant_key: identity().tenantKey,
+      });
+      if (text(row, 'outcome') !== 'pending_review') throw new IngestWriterError('rag_hold_document_for_review', 'bad_response');
+      return { documentId: requireText('rag_hold_document_for_review', row, 'document_id'), version: integer(row, 'version') ?? 0 };
+    },
+
+    async isTenantAdmin(userId) {
+      signal.throwIfAborted();
+      const response = await db.rpc('rag_is_tenant_admin', { p_user: userId, p_tenant_key: identity().tenantKey }).abortSignal(signal);
+      signal.throwIfAborted();
+      if (response.error) throw new IngestWriterError('rag_is_tenant_admin', response.error.code ?? null, reasonOf(response.error.message));
+      const data: unknown = response.data;
+      if (typeof data === 'boolean') return data;
+      if (Array.isArray(data) && data.length === 1) {
+        const first: unknown = data[0];
+        if (typeof first === 'boolean') return first;
+        if (first && typeof first === 'object') {
+          const value = (first as Row).rag_is_tenant_admin;
+          if (typeof value === 'boolean') return value;
+        }
+      }
+      throw new IngestWriterError('rag_is_tenant_admin', 'bad_response');
+    },
+
+    async uploadExemptions() {
+      const rows = await call('rag_upload_exemptions_for', { p_tenant_key: identity().tenantKey });
+      const exemptions: Array<{ kind: string; ref: string }> = [];
+      for (const row of rows) {
+        const kind = text(row, 'kind');
+        const ref = text(row, 'ref');
+        if (kind !== null && ref !== null) exemptions.push({ kind, ref });
+      }
+      return exemptions;
     },
 
     async findBackfillRuns() {
@@ -517,6 +627,69 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
         p_tenant_key: identity().tenantKey,
         p_reason: reason,
       });
+    },
+
+    async tenantLanguageShares() {
+      const rows = await call('rag_tenant_language_shares', { p_tenant_key: identity().tenantKey });
+      const shares: Array<{ language: string; share: number }> = [];
+      for (const row of rows) {
+        const language = text(row, 'language');
+        const share = typeof row.share === 'number' ? row.share : Number(row.share);
+        if (language !== null && Number.isFinite(share)) shares.push({ language, share });
+      }
+      return shares;
+    },
+
+    async setImageChunkLanguages(documentId, items) {
+      if (items.length === 0) return 0;
+      const row = await callOne('rag_set_image_chunk_languages', {
+        p_document_id: documentId,
+        p_tenant_key: identity().tenantKey,
+        p_items: items.map((item) => ({ image_url: item.imageUrl, language: item.language })),
+      });
+      return integer(row, 'chunks_updated') ?? 0;
+    },
+
+    async listDocumentChunksForIndex(documentId, after, limit) {
+      const rows = await call('rag_index_document_chunks', {
+        p_tenant_key: identity().tenantKey,
+        p_document_id: documentId,
+        p_after: after,
+        p_limit: limit,
+      });
+      const chunks: IndexChunkRow[] = [];
+      for (const row of rows) {
+        const id = text(row, 'id');
+        if (id === null) throw new IngestWriterError('rag_index_document_chunks', 'bad_response');
+        const path = row.section_path;
+        chunks.push({
+          id,
+          chunkingProfileId: text(row, 'chunking_profile_id') ?? 'legacy',
+          chunkIndex: integer(row, 'chunk_index') ?? 0,
+          sectionPath: Array.isArray(path) ? path.filter((part): part is string => typeof part === 'string') : [],
+          content: text(row, 'content') ?? '',
+        });
+      }
+      return chunks;
+    },
+
+    async writeChunkIdentifiers(documentId, rows) {
+      const row = await callOne('rag_write_chunk_identifiers', {
+        p_tenant_key: identity().tenantKey,
+        p_document_id: documentId,
+        p_rows: rows.map((entry) => ({ chunk_id: entry.chunkId, raw: entry.raw, norm: entry.norm })),
+      });
+      return { chunksWritten: integer(row, 'chunks_written') ?? 0, documentChanged: row.document_changed === true };
+    },
+
+    async writeTableRows(documentId, chunkingProfileId, rows) {
+      const row = await callOne('rag_write_table_rows', {
+        p_tenant_key: identity().tenantKey,
+        p_document_id: documentId,
+        p_chunking_profile_id: chunkingProfileId,
+        p_rows: rows,
+      });
+      return { rowsWritten: integer(row, 'rows_written') ?? 0, rowsDeleted: integer(row, 'rows_deleted') ?? 0 };
     },
   };
 }
@@ -605,6 +778,8 @@ export interface ReembedWriter {
   count(profileId: string, tenantKey: string | null): Promise<ReembedCountRow[]>;
   previewBatch(profileId: string, tenantKey: string | null, after: string | null, limit: number): Promise<ReembedChunk[]>;
   legacyGuard(): Promise<ReembedLegacyGuard>;
+  /** The profile's doc types (0440), or null for an unscoped profile or an unknown id. */
+  profileScope(profileId: string): Promise<string[] | null>;
 }
 
 function reembedRefusal(message: string | undefined): { reason: string | null; detail: string | null } {
@@ -767,6 +942,13 @@ export function createReembedWriter(input: { db: RpcClient; signal: AbortSignal 
         versionedDocuments: count(row, 'versioned_documents'),
         profilesInUse: Array.isArray(row.profiles_in_use) ? row.profiles_in_use.filter((id): id is string => typeof id === 'string') : [],
       };
+    },
+
+    async profileScope(profileId) {
+      const row = (await call('rag_list_embedding_profile_scopes', {})).find((entry) => entry.id === profileId);
+      if (!row || !Array.isArray(row.doc_types)) return null;
+      const scope = row.doc_types.filter((entry): entry is string => typeof entry === 'string');
+      return scope.length > 0 ? scope : null;
     },
   };
   return writer;

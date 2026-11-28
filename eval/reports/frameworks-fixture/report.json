@@ -1,0 +1,1069 @@
+{
+  "schema_version": 1,
+  "reference": "llamaindex",
+  "candidate": "langchain",
+  "difference": "langchain minus llamaindex, per item",
+  "seed": 20261123,
+  "resamples": 10000,
+  "fixture": true,
+  "runs": [
+    {
+      "framework": "llamaindex",
+      "items": 229,
+      "run_config_hash": "7d8a8b9638118c9e7b4c76675c2ad61885d77318c8dc23b9e9e8b580617828aa",
+      "embedder": "fixture-ngram"
+    },
+    {
+      "framework": "langchain",
+      "items": 229,
+      "run_config_hash": "9c011e5f78901e738bdd40cd92aac20a62ee540424d36721c00cfa32994edacc",
+      "embedder": "fixture-ngram"
+    }
+  ],
+  "items": 229,
+  "all_zero": false,
+  "overall": {
+    "recall_at_5": {
+      "n": 193,
+      "n_nonzero": 0,
+      "mean_d": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    "recall_at_10": {
+      "n": 193,
+      "n_nonzero": 0,
+      "mean_d": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    "mrr": {
+      "n": 193,
+      "n_nonzero": 2,
+      "mean_d": -0.003282,
+      "ci_low": -0.009154,
+      "ci_high": 0.0
+    },
+    "correct_refusal_rate": {
+      "n": 36,
+      "n_nonzero": 0,
+      "mean_d": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    "false_refusal_rate": {
+      "n": 193,
+      "n_nonzero": 0,
+      "mean_d": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    }
+  },
+  "languages": {
+    "en": {
+      "recall_at_5": {
+        "n": 66,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 66,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 66,
+        "n_nonzero": 1,
+        "mean_d": -0.007576,
+        "ci_low": -0.022727,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "false_refusal_rate": {
+        "n": 66,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "it": {
+      "recall_at_5": {
+        "n": 66,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 66,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 66,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "false_refusal_rate": {
+        "n": 66,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "zh": {
+      "recall_at_5": {
+        "n": 61,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 61,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 61,
+        "n_nonzero": 1,
+        "mean_d": -0.002186,
+        "ci_low": -0.006557,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "false_refusal_rate": {
+        "n": 61,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    }
+  },
+  "categories": {
+    "ambiguous": {
+      "recall_at_5": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "cache_near_miss": {
+      "recall_at_5": {
+        "n": 15,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 15,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 15,
+        "n_nonzero": 1,
+        "mean_d": -0.008889,
+        "ci_low": -0.026667,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 15,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "cache_paraphrase": {
+      "recall_at_5": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "colloquial": {
+      "recall_at_5": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "compound": {
+      "recall_at_5": {
+        "n": 15,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 15,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 15,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 15,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "cross_lingual": {
+      "recall_at_5": {
+        "n": 34,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 34,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 34,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 34,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "exact_term": {
+      "recall_at_5": {
+        "n": 9,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 9,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 9,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 9,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "general": {
+      "recall_at_5": {
+        "n": 18,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 18,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 18,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 18,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "injection": {
+      "recall_at_5": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "injection_evasive": {
+      "recall_at_5": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "multi_turn": {
+      "recall_at_5": {
+        "n": 27,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 27,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 27,
+        "n_nonzero": 1,
+        "mean_d": -0.018519,
+        "ci_low": -0.055556,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 27,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "no_answer": {
+      "recall_at_5": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "recall_at_10": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "mrr": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "correct_refusal_rate": {
+        "n": 30,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "false_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      }
+    },
+    "scanned": {
+      "recall_at_5": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "selective_filter": {
+      "recall_at_5": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 12,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "small_talk": {
+      "recall_at_5": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "recall_at_10": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "mrr": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "correct_refusal_rate": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "false_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      }
+    },
+    "table": {
+      "recall_at_5": {
+        "n": 9,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 9,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 9,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 9,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "typo": {
+      "recall_at_5": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 6,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    }
+  },
+  "language_pairs": {
+    "en->it": {
+      "recall_at_5": {
+        "n": 5,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 5,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 5,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 5,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "en->zh": {
+      "recall_at_5": {
+        "n": 8,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 8,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 8,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 8,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "it->en": {
+      "recall_at_5": {
+        "n": 5,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 5,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 5,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 5,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "it->zh": {
+      "recall_at_5": {
+        "n": 8,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 8,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 8,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 8,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "zh->en": {
+      "recall_at_5": {
+        "n": 4,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 4,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 4,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 4,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    },
+    "zh->it": {
+      "recall_at_5": {
+        "n": 4,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "recall_at_10": {
+        "n": 4,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "mrr": {
+        "n": 4,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "correct_refusal_rate": {
+        "n": 0,
+        "n_nonzero": 0,
+        "mean_d": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false_refusal_rate": {
+        "n": 4,
+        "n_nonzero": 0,
+        "mean_d": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      }
+    }
+  },
+  "transforms": [
+    {
+      "transform": "decompose",
+      "n_items": 1,
+      "items": [
+        {
+          "item_id": "zh-cache-near-miss-015",
+          "fields": [
+            "sub_questions",
+            "variants[sub_question].count",
+            "status"
+          ]
+        }
+      ]
+    }
+  ],
+  "fused_order": {
+    "compared": 229,
+    "identical": 222,
+    "tie_only": 6,
+    "rank": 1,
+    "tie_only_items": [
+      "en-multi-turn-012",
+      "it-multi-turn-008",
+      "zh-multi-turn-001",
+      "zh-multi-turn-005",
+      "zh-multi-turn-007",
+      "zh-multi-turn-011"
+    ],
+    "rank_items": [
+      "zh-cache-near-miss-015"
+    ]
+  },
+  "problems": [],
+  "notes": [
+    "translate is compared as plumbing only: both frameworks render the same shared translate prompt, so a translate difference shows wiring, not prompt quality.",
+    "Fused order: LangChain's EnsembleRetriever keeps first-seen order on tied fused scores while the native fusion breaks ties by chunk id, so tie-order differences are counted apart from rank differences.",
+    "Fixture numbers reflect the lexical fixture embedder (word and n-gram hashing, not cross-lingual) and the scripted fake query LLM; they prove the comparison runs and the frameworks agree, not which framework retrieves better. The live comparison on the real golden set is a separate operator run."
+  ]
+}

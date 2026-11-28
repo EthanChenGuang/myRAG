@@ -1,0 +1,45 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "chunk_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Chunk Id",
+      "type": "string"
+    },
+    "dims": {
+      "minimum": 1,
+      "title": "Dims",
+      "type": "integer"
+    },
+    "model": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$",
+      "title": "Model",
+      "type": "string"
+    },
+    "profile_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "title": "Profile Id",
+      "type": "string"
+    },
+    "row_index": {
+      "minimum": 0,
+      "title": "Row Index",
+      "type": "integer"
+    },
+    "tenant_key": {
+      "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+      "title": "Tenant Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_key",
+    "chunk_id",
+    "row_index",
+    "profile_id",
+    "model",
+    "dims"
+  ],
+  "title": "ChunkVectorRow",
+  "type": "object"
+}

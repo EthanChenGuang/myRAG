@@ -1,0 +1,11 @@
+{
+  "id": "langchain.contextualize",
+  "version": 1,
+  "source": "LangChain JS conversational RAG tutorial, contextualizeQSystemPrompt (https://js.langchain.com/docs/tutorials/qa_chat_history), text as cited in 06-RESEARCH.md (retrieved 2026-11-24); not pulled from the LangChain Hub",
+  "license": "MIT",
+  "attribution": "Copyright (c) LangChain, Inc. Prompt text reused under the MIT License, verbatim; the chat history is rendered into the {{history}} data block by renderPrompt instead of a MessagesPlaceholder, and the question is the human message.",
+  "template": "Given a chat history and the latest user question which might reference context in the chat history, formulate a standalone question which can be understood without the chat history. Do NOT answer the question, just reformulate it if needed and otherwise return it as is.\n\n{{history}}",
+  "placeholders": [
+    "history"
+  ]
+}

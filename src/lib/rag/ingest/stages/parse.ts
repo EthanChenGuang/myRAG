@@ -16,6 +16,7 @@ import { buildParserChain, parseWithFallback, type ChainOutcome } from '../parse
 import type { ParseArtifact, PendingJob } from '../parsers/shared';
 import { profileFor } from '../profiles/load';
 import { refineDocTypeAfterParse } from '../profiles/resolve-doc-type';
+import { effectiveIngestSettings, ingestLanguageSettings } from '../routing/effective-settings';
 import { saveContextState } from '../state-store';
 import {
   IngestStageError,
@@ -37,7 +38,7 @@ export interface Parsed {
   warnings: string[];
 }
 
-const stripBom = (text: string): string => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+export const stripBom = (text: string): string => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
 
 function warn(ctx: StageContext, code: string): void {
   if (!ctx.warnings.includes(code)) ctx.warnings.push(code);
@@ -136,7 +137,8 @@ async function reuseStoredParse(ctx: StageContext, previousVersion: number): Pro
       chunks = [];
     }
   }
-  const docling = await loadArtifact(earlier, DOCLING_ARTIFACT);
+  // A sanitized version's docling.json still holds the hidden spans (F-17): it is never carried over.
+  const docling = ctx.state.typeChange?.sanitizedParse ? null : await loadArtifact(earlier, DOCLING_ARTIFACT);
   const result: ParseResult = {
     markdown: new TextDecoder('utf-8').decode(markdown.bytes),
     chunks,
@@ -185,6 +187,7 @@ async function runChain(ctx: StageContext, bytes: Uint8Array, resume: PendingJob
       ctx.state.parseJob = { ...job };
       await saveContextState(ctx, 'processing');
     },
+    settings: effectiveIngestSettings({ ingestConfig: ctx.config, profile: identity.profile, languageSettings: ingestLanguageSettings(ctx.config) }),
   });
   for (const fallback of outcome.fallbacks) warn(ctx, `parser_fallback:${fallback.parser}:${fallback.reason}`);
   return outcome;
@@ -211,6 +214,7 @@ export async function applyParseResult(ctx: StageContext, parsed: Parsed): Promi
   ctx.work.parseChunks = result.chunks.length > 0 ? result.chunks : null;
   ctx.work.pictures = result.pictures.length > 0 ? result.pictures : null;
   ctx.work.parserVersion = result.parser_version;
+  ctx.state.parserVersion = result.parser_version;
   ctx.parserUsed = result.parser;
   for (const code of [...(result.warnings ?? []), ...parsed.warnings]) warn(ctx, code);
   if (result.partial) warn(ctx, 'parse_partial');
@@ -267,6 +271,8 @@ export async function parseToResult(ctx: StageContext): Promise<ParseToResult> {
     if (bytes === null) return { kind: 'stopped', outcome: { kind: 'fail', reason: 'no_parser_available' } };
     const previousVersion = ctx.state.typeChange?.reuseParseOfVersion ?? null;
     const reused = previousVersion === null ? null : await reuseStoredParse(ctx, previousVersion);
+    // The original of a sanitized version holds the hidden spans: without its sanitized parse output the run stops instead of parsing it.
+    if (reused === null && ctx.state.typeChange?.sanitizedParse) return { kind: 'stopped', outcome: { kind: 'fail', reason: 'sanitized_parse_unavailable' } };
     if (reused !== null) {
       parsed = reused;
     } else {
@@ -288,7 +294,7 @@ export async function parseToResult(ctx: StageContext): Promise<ParseToResult> {
   if (refined.changed) await persistRefinedType(ctx);
 
   // At most one re-parse, and only when a parser ran: plain text has no options to change.
-  if (refined.parserOptionsDiffer && parsed.result.parser !== 'text' && bytes !== null) {
+  if (refined.parserOptionsDiffer && parsed.result.parser !== 'text' && bytes !== null && !ctx.state.typeChange?.sanitizedParse) {
     if (ctx.state.docTypeDetection) ctx.state.docTypeDetection.reparsed = true;
     ctx.state.parseJob = null;
     const second = await runChain(ctx, bytes, null);

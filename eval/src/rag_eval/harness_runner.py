@@ -4,9 +4,10 @@ import json
 import os
 import subprocess
 import tempfile
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from pydantic import ValidationError
 from rag_sidecar.contracts.eval_run import RagTrace, RunManifest
@@ -56,10 +57,22 @@ def default_spawner(argv: list[str], cwd: Path) -> subprocess.CompletedProcess[s
     return subprocess.run(argv, cwd=cwd, capture_output=True, text=True, check=False, env=os.environ.copy())
 
 
-def golden_for_splits(path: Path, dest: Path | None = None, splits: tuple[str, ...] = ("dev",)) -> Path:
-    """Write the items whose rule split and split field agree and are in `splits`; mismatched items never pass."""
+GoldenSource = Path | Sequence[Path]
+
+
+def _golden_paths(source: GoldenSource) -> list[Path]:
+    return [Path(source)] if isinstance(source, (str, Path)) else [Path(path) for path in source]
+
+
+def golden_for_splits(path: GoldenSource, dest: Path | None = None, splits: tuple[str, ...] = ("dev",)) -> Path:
+    """Write the items of one golden file, or of several in order, whose rule split and split field agree and are in `splits`."""
     wanted = set(splits)
-    items = [item for item in load_golden(Path(path)) if assign_split(item.id) == item.split and item.split in wanted]
+    items = [
+        item
+        for source in _golden_paths(path)
+        for item in load_golden(source)
+        if assign_split(item.id) == item.split and item.split in wanted
+    ]
     if dest is None:
         handle, name = tempfile.mkstemp(prefix="golden-" + "-".join(splits) + "-", suffix=".jsonl")
         os.close(handle)
@@ -70,8 +83,8 @@ def golden_for_splits(path: Path, dest: Path | None = None, splits: tuple[str, .
     return target
 
 
-def dev_only_golden(path: Path, dest: Path | None = None) -> Path:
-    """Write the dev-split items of a golden file (rule split and split field both dev); the test split never passes."""
+def dev_only_golden(path: GoldenSource, dest: Path | None = None) -> Path:
+    """Write the dev-split items of one golden file or a list of them (rule split and split field both dev); the test split never passes."""
     return golden_for_splits(path, dest, ("dev",))
 
 
@@ -85,7 +98,14 @@ def _read_run_config(path: Path) -> dict[str, Any]:
     return payload
 
 
-def merged_run_config(base: dict[str, Any], overrides: dict[str, Any] | None, *, live: bool) -> dict[str, Any]:
+def merged_run_config(
+    base: dict[str, Any],
+    overrides: dict[str, Any] | None,
+    *,
+    live: bool,
+    env_overlay: dict[str, str] | None = None,
+    chunking_profiles: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     merged = dict(base)
     combined = dict(base.get("overrides") or {})
     combined.update(overrides or {})
@@ -93,6 +113,12 @@ def merged_run_config(base: dict[str, Any], overrides: dict[str, Any] | None, *,
         merged["overrides"] = combined
     else:
         merged.pop("overrides", None)
+    if env_overlay:
+        merged["env"] = {**(base.get("env") or {}), **env_overlay}
+    if chunking_profiles:
+        if live:
+            raise HarnessError("chunking_profiles seed the fixture database only; a live run cannot use them")
+        merged["chunking_profiles"] = list(chunking_profiles)
     if live:
         merged["env"] = {}
     return merged
@@ -101,7 +127,7 @@ def merged_run_config(base: dict[str, Any], overrides: dict[str, Any] | None, *,
 def run_harness(
     *,
     run_config: Path,
-    golden: Path,
+    golden: GoldenSource,
     out: Path,
     overrides: dict[str, Any] | None = None,
     base_url: str | None = None,
@@ -109,19 +135,29 @@ def run_harness(
     spawner: Spawner | None = None,
     repo_root: Path = REPO_ROOT,
     splits: tuple[str, ...] = ("dev",),
+    env_overlay: dict[str, str] | None = None,
+    chunking_profiles: list[dict[str, Any]] | None = None,
 ) -> HarnessRun:
     out_dir = Path(out)
     inputs = out_dir / INPUTS_DIR
     inputs.mkdir(parents=True, exist_ok=True)
 
-    golden_path = golden_for_splits(Path(golden), inputs / f"golden.{'-'.join(splits)}.jsonl", splits)
+    golden_path = golden_for_splits(golden, inputs / f"golden.{'-'.join(splits)}.jsonl", splits)
     base = _read_run_config(Path(run_config))
     notes: list[str] = []
     if base_url and base.get("env"):
         notes.append("run-config env overlay dropped: it applies to in-process runs only and a live run uses the deployed environment")
     config_path = inputs / "run-config.json"
     config_path.write_text(
-        json.dumps(merged_run_config(base, overrides, live=bool(base_url)), sort_keys=True, indent=2) + "\n", encoding="utf-8"
+        json.dumps(
+            merged_run_config(
+                base, overrides, live=bool(base_url), env_overlay=env_overlay, chunking_profiles=chunking_profiles
+            ),
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
     )
 
     argv = [

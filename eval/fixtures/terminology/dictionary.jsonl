@@ -1,0 +1,16 @@
+{"canonical": "term alpha beta", "variants": ["termalpha"], "language": "en", "kind": "synonym", "mode": "one_way"}
+{"canonical": "term gamma delta", "variants": ["termgamma"], "language": "en", "kind": "synonym", "mode": "one_way"}
+{"canonical": "term epsilon zeta", "variants": ["termepsilon"], "language": "en", "kind": "synonym", "mode": "one_way"}
+{"canonical": "term eta theta", "variants": ["termeta"], "language": "en", "kind": "synonym", "mode": "one_way"}
+{"canonical": "AB-1234-C", "variants": ["codekappa"], "language": "en", "kind": "identifier", "mode": "one_way"}
+{"canonical": "termine alfa beta", "variants": ["vocealfa"], "language": "it", "kind": "synonym", "mode": "one_way"}
+{"canonical": "termine gamma delta", "variants": ["vocegamma"], "language": "it", "kind": "synonym", "mode": "one_way"}
+{"canonical": "termine epsilon zeta", "variants": ["voceepsilon"], "language": "it", "kind": "synonym", "mode": "one_way"}
+{"canonical": "termine eta theta", "variants": ["voceeta"], "language": "it", "kind": "synonym", "mode": "one_way"}
+{"canonical": "EF-9012-G", "variants": ["codicelambda"], "language": "it", "kind": "identifier", "mode": "one_way"}
+{"canonical": "术语甲乙丙", "variants": ["卯辰巳"], "language": "zh", "kind": "synonym", "mode": "one_way"}
+{"canonical": "术语丁戊己", "variants": ["酉戌亥"], "language": "zh", "kind": "synonym", "mode": "one_way"}
+{"canonical": "术语庚辛壬", "variants": ["乾坤震"], "language": "zh", "kind": "synonym", "mode": "one_way"}
+{"canonical": "术语癸子丑", "variants": ["巽坎艮"], "language": "zh", "kind": "synonym", "mode": "one_way"}
+{"canonical": "CD-5678-E", "variants": ["兑离"], "language": "zh", "kind": "identifier", "mode": "one_way"}
+{"canonical": "term alpha beta", "variants": ["voceomega"], "language": "it", "kind": "translation", "mode": "one_way", "source_language": "it", "target_language": "en"}

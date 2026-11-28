@@ -5,12 +5,11 @@ import ClientLayout from "./client-layout";
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: 'cover',
+  interactiveWidget: 'resizes-content',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#000000' },
+    { media: '(prefers-color-scheme: light)', color: '#FFF1E5' },
+    { media: '(prefers-color-scheme: dark)', color: '#212121' },
   ],
 };
 

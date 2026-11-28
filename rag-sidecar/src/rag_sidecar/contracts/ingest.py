@@ -3,6 +3,9 @@ from typing import Annotated, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .languages import LANGUAGE_CODES, Language, build_language_type
+from .omit import OmitNoneModel, omit_none_schema
+
 DocType = Literal[
     "general",
     "financial_report",
@@ -22,13 +25,13 @@ DocTypeChoice = Literal[
 ]
 ParserPreference = Literal["configured", "docling", "llamaparse"]
 TableMode = Literal["off", "fast", "accurate"]
-OcrLanguage = Literal["zh", "en", "it"]
-ChunkerKind = Literal["markdown_sections", "legal_clauses", "table_aware", "invoice", "image_caption"]
+OcrLanguage = Language
+ChunkerKind = Literal["markdown_sections", "legal_clauses", "table_aware", "invoice", "image_caption", "rule_sections"]
 Extractor = Literal["dates", "financial", "invoice", "urls"]
 Tier = Literal["fast", "structured", "premium"]
 RuleKind = Literal["phrase", "regex"]
 RuleSeverity = Literal["low", "medium", "high"]
-RuleLanguage = Literal["zh", "en", "it", "any"]
+RuleLanguage = build_language_type(LANGUAGE_CODES, extra=("any",))
 DetectionMethod = Literal["rules", "llm"]
 InputFormat = Literal["pdf", "docx", "html", "image", "json_docling"]
 ParserUsed = Literal["docling", "llamaparse", "text"]
@@ -99,6 +102,44 @@ class ParserSettings(_Contract):
         return _require_unique(value, "ocr_languages")
 
 
+SECTION_HIT_LINE_MAX_LENGTH = 1000
+SECTION_HITS_MAX = 5000
+RuleRowId = Annotated[str, Field(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")]
+SectionName = Annotated[str, Field(min_length=1, max_length=80)]
+SectionLevel = Annotated[int, Field(ge=1, le=6)]
+SectionHitLine = Annotated[str, Field(min_length=1, max_length=SECTION_HIT_LINE_MAX_LENGTH)]
+
+
+def _omit_unset(value: object) -> bool:
+    return value is None
+
+
+class SectionHeadingHit(_Contract):
+    """Canonical heading a matched line opens (Phase 3.3 D-17)."""
+
+    name: SectionName
+    level: SectionLevel
+    restart: bool = False
+
+
+class ResolvedSectionRules(_Contract):
+    """Plain heading-hit data the `rule_sections` chunker reads (Phase 3.3 D-17, D-19); no pattern reaches a chunker."""
+
+    rule_set_id: RuleRowId
+    version: int = Field(ge=1)
+    skip_toc: bool = True
+    toc_min_run: int = Field(default=3, ge=2, le=20)
+    hits: dict[SectionHitLine, SectionHeadingHit] = Field(max_length=SECTION_HITS_MAX)
+
+    @field_validator("hits")
+    @classmethod
+    def _keys_are_trimmed(cls, value: dict[str, SectionHeadingHit]) -> dict[str, SectionHeadingHit]:
+        for key in value:
+            if key.strip() != key:
+                raise ValueError("hit keys must be trimmed line text")
+        return value
+
+
 class ChunkerSettings(_Contract):
     kind: ChunkerKind
     max_tokens: int = Field(ge=64, le=4096)
@@ -107,6 +148,9 @@ class ChunkerSettings(_Contract):
     min_chunk_tokens: int = Field(ge=0)
     clause_patterns: list[str] = Field(default_factory=list)
     lead_in_phrases: list[str] = Field(default_factory=list)
+    section_rules: ResolvedSectionRules | None = Field(
+        default=None, exclude_if=_omit_unset, json_schema_extra=omit_none_schema
+    )
 
     @model_validator(mode="after")
     def _budgets_are_consistent(self) -> "ChunkerSettings":
@@ -209,7 +253,20 @@ class DocTypeDetection(_Contract):
 
 
 
+def check_language_selection(languages: list[str], primary: str | None) -> None:
+    """Shared rule of the Phase 3.2 language fields: no repeats, and a primary only from the selected languages."""
+    _require_unique(languages, "languages")
+    if primary is not None and primary not in languages:
+        raise ValueError("primary_language must be one of languages")
+
+
 class ParseJobRequest(_Contract):
+    """Body of `POST /v1/parse/jobs`.
+
+    The Phase 3.2 fields default to today's behaviour and the app sends them only when they differ from it. The
+    model keeps extra="forbid", so an older sidecar rejects a request carrying them: deploy the sidecar first.
+    """
+
     profile_id: str = Field(pattern=r"^[a-z][a-z_]*@[1-9][0-9]*$")
     profile_version: int = Field(ge=1)
     docling: DoclingOptions
@@ -219,29 +276,45 @@ class ParseJobRequest(_Contract):
     repeat_table_header: bool
     input_format: InputFormat | None = None
     page_cap: int | None = Field(default=None, ge=1)
+    # Phase 3.2 (D-13, D-20): defaults reproduce the behaviour before this phase.
+    language_aware: bool = False
+    languages: list[Language] = Field(default_factory=list)
+    primary_language: Language | None = None
+    carry_table_header: bool = False
 
     @field_validator("ocr_languages")
     @classmethod
     def _languages_unique(cls, value: list[str]) -> list[str]:
         return _require_unique(value, "ocr_languages")
 
+    @model_validator(mode="after")
+    def _language_selection(self) -> "ParseJobRequest":
+        check_language_selection(self.languages, self.primary_language)
+        return self
+
 
 class ParseJobAccepted(_Contract):
     job_id: JobId
 
 
-class ParseChunk(_Contract):
+class ParseChunk(OmitNoneModel):
+    _omit_when_none = ("table_header_carried",)
+
     text: str
     contextualized_text: str
     headings: list[str]
     pages: list[Annotated[int, Field(ge=1)]]
     is_table: bool
     table_header: str | None = None
+    # D-20: true on a chunk of a table that took a carried header; left out of the serialised chunk otherwise.
+    table_header_carried: bool | None = Field(default=None, json_schema_extra=omit_none_schema)
 
     @model_validator(mode="after")
     def _only_table_chunks_have_a_header(self) -> "ParseChunk":
         if self.table_header is not None and not self.is_table:
             raise ValueError("table_header is only allowed on table chunks")
+        if self.table_header_carried is not None and not self.is_table:
+            raise ValueError("table_header_carried is only allowed on table chunks")
         return self
 
 

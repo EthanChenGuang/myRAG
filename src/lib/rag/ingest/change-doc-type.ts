@@ -1,5 +1,6 @@
+import { rpcRows } from '../backend/supabase-rpc';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
-import { isArtifactName, loadArtifact, versionPrefix, type ArtifactContext } from './artifacts';
+import { HIDDEN_TEXT_SANITIZED_KEY, isArtifactName, loadArtifact, versionPrefix, type ArtifactContext } from './artifacts';
 import { getIngestDeps } from './deps';
 import { submitIngest } from './enqueue';
 import { queueConfigFromProcessEnv } from './queue-config';
@@ -47,7 +48,7 @@ function sourceOf(value: string | null): IngestSource | null {
 }
 
 /** What the new version carries over from the one it replaces: the origin fields, the caller metadata and, for a picture, its URL and context. */
-function optionsOf(row: Row): IngestOptions {
+export function optionsOf(row: Row): IngestOptions {
   const origin: IngestOrigin = {};
   const provider = text(row, 'source_provider');
   const fileId = text(row, 'source_file_id');
@@ -70,6 +71,10 @@ function typeChangeOf(row: Row, source: IngestSource, from: DocType, to: DocType
   const stored = profileFor(source, from);
   const parser = REUSABLE_PARSERS.find((name) => name === text(row, 'parser_used'));
   const parserVersion = text(row, 'parser_version');
+  // F-17: a version whose hidden spans were removed is rebuilt from its sanitized parse.md and chunks.json only, never from the original.
+  if (objectOf(row.metadata)?.[HIDDEN_TEXT_SANITIZED_KEY] === true) {
+    return { reuseParseOfVersion: version, reusedParser: { parser: parser ?? 'text', version: parserVersion ?? 'stored' }, sanitizedParse: true };
+  }
   const reusable =
     parser !== undefined && parserVersion !== null && text(row, 'processing_profile_id') === stored.id && storedParseServes(stored, profileFor(source, to));
   return reusable ? { reuseParseOfVersion: version, reusedParser: { parser, version: parserVersion } } : { reuseParseOfVersion: null, reusedParser: null };
@@ -89,7 +94,7 @@ async function readDocument(scope: TenantScope, documentId: string, signal: Abor
       console.error('[Ingest] type change lookup failed', { code: response.error.code ?? null });
       return 'unavailable';
     }
-    return ((response.data ?? [])[0] as Row | undefined) ?? null;
+    return (rpcRows(response.data)[0] as Row | undefined) ?? null;
   } catch (error) {
     if (signal.aborted) throw error;
     console.error('[Ingest] type change lookup failed', { error: error instanceof Error ? error.name : 'unknown' });

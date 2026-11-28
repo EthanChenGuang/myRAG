@@ -41,7 +41,7 @@ export interface QueuedHarness {
   /** Runs `work` while a background heartbeat keeps the lease of the job alive, as the worker's per-job heartbeat task does. */
   withHeartbeat<T>(jobId: string, worker: string, work: () => Promise<T>): Promise<T>;
   /** Posts to an internal callback route with the right secret unless `headers` says otherwise (a header set to null is left out). */
-  callback(jobId: string, action: 'parse-external' | 'advance', body: unknown, headers?: Record<string, string | null>): Promise<CallbackReply>;
+  callback(jobId: string, action: 'parse-external' | 'advance' | 'translate', body: unknown, headers?: Record<string, string | null>): Promise<CallbackReply>;
   runWorker(jobId: string, extraEnv?: Record<string, string>): Promise<SpawnSidecarResult>;
   close(): Promise<void>;
 }
@@ -113,7 +113,8 @@ export async function startQueuedHarness(options: QueuedHarnessOptions = {}): Pr
 
     const parseExternal = (await import('@/app/api/internal/rag/ingest/jobs/[id]/parse-external/route')) as { POST: IngestRouteHandler };
     const advance = (await import('@/app/api/internal/rag/ingest/jobs/[id]/advance/route')) as { POST: IngestRouteHandler };
-    app = await startIngestAppServer({ 'parse-external': parseExternal.POST, advance: advance.POST });
+    const translate = (await import('@/app/api/internal/rag/ingest/jobs/[id]/translate/route')) as { POST: IngestRouteHandler };
+    app = await startIngestAppServer({ 'parse-external': parseExternal.POST, advance: advance.POST, translate: translate.POST });
 
     const { mintScope } = await import('@/lib/rag/tenant/scope');
     const scopeA = deploymentMode === 'multi-tenant' ? mintScope('personal', QUEUED_IDS.userA, null) : mintScope('single', null, null);

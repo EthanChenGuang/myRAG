@@ -1,0 +1,236 @@
+{
+  "$defs": {
+    "GistOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "cached": {
+          "title": "Cached",
+          "type": "boolean"
+        },
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "guide": {
+          "const": "base_model",
+          "title": "Guide",
+          "type": "string"
+        }
+      },
+      "required": [
+        "enabled",
+        "cached",
+        "guide"
+      ],
+      "title": "GistOptions",
+      "type": "object"
+    },
+    "LibraryVersions": {
+      "additionalProperties": false,
+      "properties": {
+        "datasets": {
+          "pattern": "^[0-9][0-9A-Za-z.+-]{0,63}$",
+          "title": "Datasets",
+          "type": "string"
+        },
+        "sentence_transformers": {
+          "pattern": "^[0-9][0-9A-Za-z.+-]{0,63}$",
+          "title": "Sentence Transformers",
+          "type": "string"
+        },
+        "torch": {
+          "pattern": "^[0-9][0-9A-Za-z.+-]{0,63}$",
+          "title": "Torch",
+          "type": "string"
+        },
+        "transformers": {
+          "pattern": "^[0-9][0-9A-Za-z.+-]{0,63}$",
+          "title": "Transformers",
+          "type": "string"
+        }
+      },
+      "required": [
+        "torch",
+        "transformers",
+        "sentence_transformers",
+        "datasets"
+      ],
+      "title": "LibraryVersions",
+      "type": "object"
+    },
+    "MatryoshkaOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "dims": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Dims",
+          "type": "array"
+        },
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled",
+        "dims"
+      ],
+      "title": "MatryoshkaOptions",
+      "type": "object"
+    },
+    "TrainingRecipe": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_sampler": {
+          "const": "no_duplicates",
+          "title": "Batch Sampler",
+          "type": "string"
+        },
+        "bf16": {
+          "title": "Bf16",
+          "type": "boolean"
+        },
+        "eval_steps": {
+          "minimum": 1,
+          "title": "Eval Steps",
+          "type": "integer"
+        },
+        "gist": {
+          "$ref": "#/$defs/GistOptions"
+        },
+        "learning_rate": {
+          "exclusiveMinimum": 0,
+          "maximum": 0.01,
+          "title": "Learning Rate",
+          "type": "number"
+        },
+        "load_best_model_at_end": {
+          "title": "Load Best Model At End",
+          "type": "boolean"
+        },
+        "loss": {
+          "enum": [
+            "CachedMultipleNegativesRankingLoss",
+            "MultipleNegativesRankingLoss"
+          ],
+          "title": "Loss",
+          "type": "string"
+        },
+        "matryoshka": {
+          "$ref": "#/$defs/MatryoshkaOptions"
+        },
+        "metric_for_best_model": {
+          "const": "ndcg_at_10",
+          "title": "Metric For Best Model",
+          "type": "string"
+        },
+        "mini_batch_size": {
+          "minimum": 1,
+          "title": "Mini Batch Size",
+          "type": "integer"
+        },
+        "num_train_epochs": {
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Num Train Epochs",
+          "type": "integer"
+        },
+        "per_device_train_batch_size": {
+          "minimum": 2,
+          "title": "Per Device Train Batch Size",
+          "type": "integer"
+        },
+        "seed": {
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "warmup_ratio": {
+          "maximum": 0.5,
+          "minimum": 0,
+          "title": "Warmup Ratio",
+          "type": "number"
+        }
+      },
+      "required": [
+        "loss",
+        "mini_batch_size",
+        "per_device_train_batch_size",
+        "batch_sampler",
+        "learning_rate",
+        "warmup_ratio",
+        "num_train_epochs",
+        "bf16",
+        "seed",
+        "eval_steps",
+        "metric_for_best_model",
+        "load_best_model_at_end",
+        "gist",
+        "matryoshka"
+      ],
+      "title": "TrainingRecipe",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "base_model": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$",
+      "title": "Base Model",
+      "type": "string"
+    },
+    "base_revision": {
+      "pattern": "^[a-f0-9]{40}$",
+      "title": "Base Revision",
+      "type": "string"
+    },
+    "config_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Config Sha256",
+      "type": "string"
+    },
+    "dataset_manifest_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Dataset Manifest Sha256",
+      "type": "string"
+    },
+    "git_commit": {
+      "pattern": "^[a-f0-9]{7,40}$",
+      "title": "Git Commit",
+      "type": "string"
+    },
+    "library_versions": {
+      "$ref": "#/$defs/LibraryVersions"
+    },
+    "recipe": {
+      "$ref": "#/$defs/TrainingRecipe"
+    },
+    "run_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "seed": {
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "run_id",
+    "base_model",
+    "base_revision",
+    "dataset_manifest_sha256",
+    "config_sha256",
+    "seed",
+    "git_commit",
+    "library_versions",
+    "recipe"
+  ],
+  "title": "TrainingRunConfig",
+  "type": "object"
+}

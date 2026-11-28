@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { env } from '@/lib/env';
+import { openAiEmbeddingsClientOptions } from './openai-client';
 
 const BATCH_SIZE = 100;
 
@@ -7,7 +8,7 @@ let client: OpenAI | null = null;
 
 function getClient(): OpenAI {
   if (!client) {
-    client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+    client = new OpenAI(openAiEmbeddingsClientOptions());
   }
   return client;
 }

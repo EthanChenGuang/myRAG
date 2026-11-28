@@ -1,0 +1,74 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "canonical": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Canonical",
+      "type": "string"
+    },
+    "end": {
+      "minimum": 1,
+      "title": "End",
+      "type": "integer"
+    },
+    "entry_id": {
+      "format": "uuid",
+      "title": "Entry Id",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "synonym",
+        "abbreviation",
+        "alias",
+        "identifier",
+        "translation",
+        "misspelling"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "language": {
+      "enum": [
+        "zh",
+        "en",
+        "it",
+        "any"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "layer": {
+      "enum": [
+        "shared",
+        "workspace"
+      ],
+      "title": "Layer",
+      "type": "string"
+    },
+    "start": {
+      "minimum": 0,
+      "title": "Start",
+      "type": "integer"
+    },
+    "surface": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Surface",
+      "type": "string"
+    }
+  },
+  "required": [
+    "surface",
+    "canonical",
+    "entry_id",
+    "kind",
+    "language",
+    "layer",
+    "start",
+    "end"
+  ],
+  "title": "TerminologyMatch",
+  "type": "object"
+}

@@ -48,10 +48,6 @@ async function asRole<T>(db: PGlite, role: Role, run: () => Promise<T>): Promise
   }
 }
 
-async function applyClaimMigration(db: PGlite): Promise<void> {
-  await db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION_0352), 'utf8'));
-}
-
 interface EnqueueArgs {
   tenant: string;
   sourceKey: string;
@@ -122,7 +118,6 @@ for (const mode of MODES) {
 
     before(async () => {
       fixture = await createFixtureDatabase({ deploymentMode: mode, corpusDir: REAL_CORPUS, supabaseGrants: true, migrations: true });
-      await applyClaimMigration(fixture.db);
     });
 
     after(async () => {
@@ -258,8 +253,16 @@ for (const mode of MODES) {
         [jobId],
       );
       assert.deepEqual(await claimRows(db, 'fail', 1, true), []);
-      const terminal = (await db.query<{ status: string; error_class: string }>('SELECT status, error_class FROM ingestion_jobs WHERE id = $1', [jobId])).rows[0];
-      assert.deepEqual(terminal, { status: 'failed', error_class: 'lease_expired' });
+      const terminal = (
+        await db.query<{ status: string; error_class: string; error: string; dead_letter_at: string | null }>(
+          'SELECT status, error_class, error, dead_letter_at::text FROM ingestion_jobs WHERE id = $1',
+          [jobId],
+        )
+      ).rows[0];
+      assert.equal(terminal?.status, 'failed');
+      assert.equal(terminal?.error_class, 'lease_expired');
+      assert.equal(terminal?.error, 'lease expired');
+      assert.ok(terminal?.dead_letter_at);
     });
 
     test('release resumes at stored stage', async () => {
@@ -267,7 +270,7 @@ for (const mode of MODES) {
       const tenant = tenantFor(mode);
       const jobId = await enqueue(db, { tenant, sourceKey: `resume/${crypto.randomUUID()}` });
       await claimRows(db, 'w', 1, true);
-      await db.query(`UPDATE ingestion_jobs SET status = 'chunking', stage = 'chunking', stage_state = '{"cursor":1}'::jsonb WHERE id = $1`, [jobId]);
+      await db.query(`UPDATE ingestion_jobs SET status = 'chunking', stage = 'chunk', stage_state = '{"cursor":1}'::jsonb WHERE id = $1`, [jobId]);
       const released = (
         await db.query<{ rag_release_ingestion_job: boolean }>('SELECT rag_release_ingestion_job($1, $2)', [jobId, 'w'])
       ).rows[0]?.rag_release_ingestion_job;
@@ -275,7 +278,7 @@ for (const mode of MODES) {
       const [claimed] = await claimRows(db, 'w2', 1, true);
       assert.equal(claimed, jobId);
       const row = (await db.query<{ status: string; stage: string }>('SELECT status, stage FROM ingestion_jobs WHERE id = $1', [jobId])).rows[0];
-      assert.deepEqual(row, { status: 'chunking', stage: 'chunking' });
+      assert.deepEqual(row, { status: 'chunking', stage: 'chunk' });
     });
 
     test('batch concurrency, allow_batch slot rule, named claim, heartbeat and release', async () => {

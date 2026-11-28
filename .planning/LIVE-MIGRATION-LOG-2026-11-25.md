@@ -1,0 +1,951 @@
+# Live migration log: Supabase project myRAG (<live-project-ref>), 2026-11-25
+
+**Result: STOPPED at step 29.** The 0425 pre-check found 24 legacy functions whose live body differs from the expected pre-0425 body, and 2 more that are missing. As instructed, 0425 was not applied. Nothing after 0424 was applied either: 0425, 0501, 0502, 0601, 0602, 0603, 0701, 0702, 0703 and the 0410 re-run (r2) are all still pending.
+
+## Before starting
+- `git pull --ff-only`: already up to date on claude/ecstatic-hamilton-86gtwv.
+- `ls supabase/migrations`: every file between 0320 and 0703 is on the planned list. No file numbers or mode pairs are missing from it.
+- Baseline data: document `<document-id>`, chunk `<chunk-id>`.
+
+## Migrations (one apply_migration call per file, full file text)
+| # | Name | Result |
+|---|------|--------|
+| 1 | 0320_ingest_state_guard | ok |
+| 2 | 0351_ingestion_schema_r2 | ok |
+| 3 | 0352_ingestion_claim | ok |
+| 4 | 0353_ingestion_transitions | ok |
+| 4 | 0353_ingestion_transitions_multi_tenant | ok |
+| 5 | 0354_parse_budget | ok |
+| 6 | 0355_parse_cache | ok |
+| 7 | 0356_backfill | ok |
+| 8 | 0357_soft_delete | ok |
+| 9 | 0358_progressive | ok |
+| 10 | 0359_vectors_complete | ok |
+| 11 | 0401_lexical_index | ok |
+| 12 | 0402_relex_batch | ok |
+| 13 | 0403_tenant_key_guard_multi_tenant | ok |
+| 14 | 0404_document_parents | ok |
+| 15 | 0405_document_parents_rls_multi_tenant | ok |
+| 16 | 0406_chunking_profiles | ok |
+| 17 | 0407_hybrid_search_chunks | ok |
+| 18 | 0408_profile_chunk_writer | ok |
+| 19 | 0409_search_rpc_revoke | ok |
+| 20 | 0410_security_definer_rpc_grants | ok (as written, it drops the old 4-argument rag_fail_ingestion_job; 0422 then creates the 5-argument version) |
+| 21 | 0411_security_definer_search_path | ok |
+| 22 | 0412_rechunk_functions | ok |
+| 23 | 0413_chunking_activation | ok |
+| 24 | 0420_ingestion_queue_retention | ok |
+| 25 | 0421_ingestion_queue_indexes | ok |
+| 26 | 0422_ingestion_dead_letter | ok |
+| 27 | 0423_ingestion_claim_lease_dead_letter | ok |
+| 28 | 0424_write_chunks_null_vector | ok |
+| 29 | 0425 pre-checks | **failed: STOP** |
+| 30–38 | 0425 (both files), 0501, 0502 (multi-tenant), 0601, 0602, 0603, 0701, 0702, 0703, 0410_r2 | not applied |
+
+list_migrations shows all 28 new names from 0320_ingest_state_guard through 0424_write_chunks_null_vector, after the 22 earlier entries.
+
+## 0425 pre-check
+- pgvector schema: `public` (pass).
+- md5 dry run: I used the multi-tenant key of supabase/migrations/0425_expected_pre_hashes.json (135 signatures), with the header query run unchanged. The coordinator's inlined JSON was confirmed equal to the repo file.
+- **Every rag_*, hybrid_search_chunks and match_chunks_by_profile target matches**, including all functions from 0301–0319 and all functions that this session applied. Nothing from 0301 onward was edited by hand.
+- **26 rows differ. All of them are legacy functions from the original multi-tenant setup, not from 0301+:**
+  - md5 differs (24): can_view_org_member(uuid,uuid), check_admin_status(), create_organization_safe(text,text,uuid,boolean), delete_folder(uuid,boolean), get_admin_organization_id(), get_documents_by_type_slug(uuid,text,text), get_documents_by_type_slug_workspace(uuid,uuid,text,text), get_folder_stats(uuid), get_nango_stats(uuid), get_user_current_org(), get_user_org_ids(uuid), get_user_role_in_org(uuid), get_workspace_context(text,uuid), is_admin(uuid), is_org_member(uuid,uuid), is_subscribed(uuid), move_chats_to_folder(uuid[],uuid), set_last_updated_timestamp(), share_chat(uuid,jsonb), share_personal_organization(uuid), unshare_chat(uuid), update_org_storage(), update_updated_at_column()
+  - missing (2): is_org_admin(uuid), is_org_owner(uuid). Neither exists in the live database under any signature.
+  - The likely cause is that the live database was created from an older multi-tenant setup file than the one 0425 was generated from. 0425 would replace those 24 bodies with the repo versions without notice, and its existence guard would stop with 55000 on the 2 missing functions. Before 0425 can run, someone must compare pg_get_functiondef for each of these with supabase/multi-tenant-setup.sql and decide how to bring them into line, for example by adding is_org_admin and is_org_owner.
+
+## Verification at the current state (after 0424; read-only)
+- a. list_migrations: all 28 names from this session through 0424 are present. The names from 0425 onward are absent because those migrations were not applied.
+- b. Definers without `search_path=""`: expected at this stage, because 0425 is what sets the empty path. About 110 rows: every rag_* SECURITY DEFINER function except those already created with `''` (0320, 0357, 0358, 0413, 0420, 0422, 0424 functions), all the legacy definers listed above, match_* and get_documents_by_type_slug*, plus `rls_auto_enable()` (search_path=pg_catalog). rls_auto_enable is not a repo function, and anon and authenticated can execute it.
+- c. anon or authenticated EXECUTE on rag_*/hybrid_search_chunks/match_chunks_by_profile: one row, `rag_ingest_realtime_topic_allowed(text)` (authenticated=true, anon=false). This is by design: 0353 mode file and 0410 section 2 grant it to authenticated for the Realtime RLS policy. service_role can execute all of them (0 rows lack it, trigger functions excluded).
+- d. RLS: enabled on every new table that exists (document_parents, chunking_profiles, chunking_build_runs, chunking_build_gaps, ingestion_jobs, ingestion_jobs_archive, ingestion_batches, rag_parse_*, rag_embed_batches and the 0301–0319 tables). rag_answer_records, rag_semantic_cache, vector_sync_outbox, rag_vector_sync_targets and rag_backend_index_state do not exist yet, because 0501+ were not applied.
+- e. Security advisors: no ERROR-level items. There are WARN items: function_search_path_mutable on 10 legacy functions, extension_in_public for vector and pg_trgm (expected, do not act), GraphQL table exposure, and anon/authenticated-executable definers (check_admin_status, is_org_member, rls_auto_enable, and others). There is also INFO rls_enabled_no_policy on 17 server-only tables, and leaked password protection is disabled.
+- f. Data intact: document `<document-id>` and chunk `<chunk-id>` are the same as before. The count is still 1 and 1.
+
+## Unexpected
+- 24 legacy function bodies differ and is_org_admin and is_org_owner are missing (details above). This is the reason for the stop.
+- `public.rls_auto_enable()` is a SECURITY DEFINER function that is not in the repo, and anon and authenticated can execute it.
+- `is_org_member`, `is_subscribed` and `get_nango_stats` are definers with no search_path at all. 0411 does not cover them; 0425 would.
+
+## Continuation (patch, 0425–0703)
+
+**Result: done.** The security patch, the line-ending fix, 0425 (both files), 0501–0703 and the 0410 re-run (r2) are applied. The 0425 pre-check returned 0 rows before 0425 ran. 0426 was not applied (not on trunk yet).
+
+### Before starting
+- `git pull --ff-only`: already up to date.
+- Step 1 checks (read-only):
+  - Live counts: nango_connections 0, tool_execution_states 0, organizations 1, organization_members 1.
+  - pg_get_functiondef of create_organization_safe, get_nango_stats, is_org_member and is_subscribed, with `\r` removed, has the same md5 as the dumps the legacy-diff report was built from. Nothing changed since the report.
+- Coordinator change mid-run: 0501–0603 and 0701–0703 went in as two batch migrations (the files' exact texts joined by a newline) instead of eight separate calls. Each file keeps its own BEGIN/COMMIT, so a batch is not atomic across files. Neither batch failed.
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | read-only checks | ok (matches report) |
+| 2 | patch_2026_11_security_review_multi_tenant | ok. File text applied without its top-level `BEGIN;` (line 13) and `COMMIT;` (line 345); no other transaction control and no psql meta commands. |
+| 3 | normalize_legacy_function_line_endings | ok. Before it ran, a read-only check confirmed all 19 listed functions existed and contained `\r`. The DO block was applied as given in the report. |
+| 4 | 0425 pre-check (`0425-precheck.multi-tenant.sql`) | **0 rows** (pgvector in public; all 135 multi-tenant targets match the expected md5) |
+| 5a | 0425_search_path_empty | ok |
+| 5b | 0425_search_path_empty_multi_tenant | ok |
+| 6a | 0501_0603_answers_lang_cache (0501, 0502 mt, 0601, 0602, 0603) | ok |
+| 6b | 0701_0703_vector_sync (0701, 0702, 0703) | ok |
+| 7 | 0410_security_definer_rpc_grants_r2 | ok on the second call. The first call returned a gateway error (502). Afterwards nothing was recorded in list_migrations and no matching session was running. The file only changes grants and is safe to run twice, so the same text was sent once more and succeeded. |
+
+Body check: after each apply, an aggregate md5 over `proname=md5(prosrc)` of every function each file defines matched the value computed locally from the repo files:
+- 0425 common: 111/111 bodies match.
+- 0425 multi-tenant: 24/24.
+- Batch A and Batch B together: 28/28.
+- Every one of these functions has `search_path=""`.
+- Exactly one `hybrid_search_chunks` overload exists.
+
+### Verification after step 7 (post-verify.sql a–e, get_advisors security)
+- **a.** SECURITY DEFINER functions in public without `search_path=""`: one row, `rls_auto_enable()` (`search_path=pg_catalog`). This is Supabase's own event-trigger function, not a repo function, as expected.
+- **b.** rag_*, hybrid_search_chunks and match_chunks_by_profile executable by anon or authenticated: one row, `rag_ingest_realtime_topic_allowed(text)` (anon=false, authenticated=true). This is by design.
+- **c.** The same functions that service_role cannot execute (trigger functions excluded): 0 rows.
+- **d.** The 23 tables created by 0301+ that are missing or have RLS off: 0 rows. rag_answer_records, rag_semantic_cache, vector_sync_outbox, rag_vector_sync_targets and rag_backend_index_state now exist with RLS on.
+- **e.** public function count: 343. This matches the PGlite end state in the legacy-diff report.
+- **Security advisors:** no ERROR-level items. WARN and INFO items:
+  - function_search_path_mutable on 4 legacy non-definer functions that are not 0425 targets: match_documents_by_organization, check_storage_quota, get_workspace_type and get_user_workspace_summary. This is down from 10.
+  - extension_in_public for vector and pg_trgm. This is expected; do not act on it.
+  - GraphQL table exposure (lints 0026/0027).
+  - Definers executable by anon: check_admin_status, is_org_admin, is_org_member, is_org_owner and rls_auto_enable. All are by design per 0410 section 2, except rls_auto_enable.
+  - Definers executable by authenticated: the 0410 section 2 list plus rls_auto_enable.
+  - rls_enabled_no_policy (INFO) on 21 server-only tables.
+  - Leaked password protection is disabled.
+- **Data intact:** document `<document-id>` and chunk `<chunk-id>` are the same ids as before. The count is still 1 and 1.
+- **Nango:** anon and authenticated have no INSERT, UPDATE or DELETE on nango_connections or nango_sync_records; SELECT remains. Nango write policies: 0. `unique_nango_connection_id` exists.
+- **tool_execution_states.user_id** exists.
+- **is_org_admin(uuid) and is_org_owner(uuid)** exist as SECURITY DEFINER with `search_path=""`. Grants are authenticated, anon and service_role, per 0410.
+
+### Still pending
+- 0426_quarantined_job_keeps_document.sql (not on trunk yet).
+
+## 0426 (applied after merge train 8, 2026-11-25)
+
+- Applied `0426_quarantined_job_keeps_document` to `<live-project-ref>` after train 8 (PR #30) merged into trunk with all 8 pr-smoke checks green. Only the file's top-level `BEGIN;` and `COMMIT;` were left out; the rest is the exact file text.
+- Check: the live `public.rag_advance_ingestion_job` body md5 equals the repo file's body md5 (8f7099570eef907e07d36e24b022b3cb, 5570 characters). One overload, SECURITY DEFINER, `search_path=""`; EXECUTE for service_role only (anon and authenticated refused).
+- Re-run note: re-running 0353 or 0425 restores the old quarantine transition, so re-run 0426 after either of them.
+
+## 0427 (applied after merge train 10, 2026-11-25)
+
+- Applied `0427_parse_attempt_cost_key` to `<live-project-ref>` after train 10 (PR #36) merged into trunk with all 8 pr-smoke checks green. Only the file's top-level `BEGIN;` and `COMMIT;` were left out.
+- Check: the live `public.rag_record_parse_attempt` body md5 equals the repo file's body md5 (2334fc23d88d057214cdee4394f5b971, 1195 characters). One overload, SECURITY DEFINER, `search_path=""`; EXECUTE for service_role only (anon and authenticated refused).
+
+## 03.1-53 live checks (2026-11-25, through the database)
+
+- Realtime: `realtime.messages` has RLS on and one read policy, `rag_ingest_broadcast_read`, that allows only broadcast messages on topics `rag_ingest_realtime_topic_allowed` accepts. That function runs for `authenticated` only (anon refused).
+- Backups: `archive_mode` is on (WAL archiving). The backup list itself was not read: the Management API token was not provided, so it needs the dashboard (Database → Backups).
+- Security advisor: no errors. `auth_leaked_password_protection` still reports the protection is off; the Realtime "Allow public access" project setting is not visible through SQL. Both are dashboard settings for the owner.
+
+## 03.1-53 project settings (2026-11-25, Management API, owner-authorized)
+
+- Realtime: `private_only` set to true (was unset, so public channels were allowed). The app's only Realtime channel (`use-ingest-job-status`) already subscribes with `private: true`, so nothing breaks. Verified by reading the config back.
+- Leaked password protection: not enabled. The API answered 402 `entitlement_required`: HaveIBeenPwned checks need the Pro plan. `password_min_length` stays 6. Owner decision pending: upgrade, or raise the minimum length and required characters as a substitute.
+- Backups: the project lists 0 scheduled backups and point-in-time recovery is off (WAL-G is enabled internally, but no downloadable backup exists). So there was no backup before the 2026-11-25 migrations. The live data is small (1 document, 1 chunk, 1 organization). Owner decision pending: upgrade to get daily backups or PITR, or take a manual `pg_dump` with the database connection string.
+- Free substitute for leaked-password protection (owner: avoid paid plans): `password_min_length` 6 → 10 and `password_required_characters` = letters (lower and upper) plus digits, set through the Management API and read back. Applies to new sign-ups and password changes only. The app has no client-side length rule, so Supabase's own error message is shown.
+- Backup: direct Postgres connections are refused from the cloud session, so `pg_dump` cannot run here. Free path: the owner takes a local `pg_dump` (schema, data and roles) and keeps the files off the repository.
+- Owner decision (2026-11-25): no backup for now, because the project is not in production yet. Revisit before going live.
+
+## 0440 and 0801 (applied after train 14, 2026-11-25)
+
+Applied to `<live-project-ref>` from `origin/main` 207ba4b1 (train 14, PR #61), before the app redeploy. Neither file has a `.single-tenant`/`.multi-tenant` variant. For each file, only the top-level `BEGIN;` and `COMMIT;` were left out; the rest is the exact file text. No statement failed and nothing was retried.
+
+### 0440 precondition
+- Live `public.rag_chunk_embeddings_guard()` body md5 = `f7aa72d3c0bcc173f7dd103cced69c03` (777 characters), the 0425 body the file names. It matched, so 0440 could be applied. The function was SECURITY DEFINER with `search_path=""`.
+- No live migration after 0440 (0501–0703, 0410_r2, 0426, 0427) redefines the guard.
+- 0440 is numbered before 0501–0703, which are already live. It touches none of their objects, so applying it now is equivalent.
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | 0440_embedding_bindings | ok |
+| 2 | 0410_security_definer_rpc_grants_r3 | ok. Re-run because the repo's 0410 changed since r2. 03.1.1-04 added `rag_embedding_bindings_guard()`, and the same file now also lists the three `rag_semantic_cache_on_documents_*` trigger functions. The file only changes grants. |
+| 3 | 0801_phase32_columns_checks | ok |
+
+### Verification
+- **0440 body md5 matches the repo:**
+  - `rag_chunk_embeddings_guard`: 985c1dd4957184b824b1dfd34f03637d, 1227 characters.
+  - `rag_embedding_bindings_guard`: fc58a4c08e42f465f5ecfbd44956f886.
+  - `rag_embedding_profiles_scope_guard`: 4106d1bb6132698b026c3439ba28aea4.
+- **0440 function settings:**
+  - Each function has one overload and `search_path=""`.
+  - The two guards are SECURITY DEFINER.
+  - The scope guard is SECURITY INVOKER, as the file defines it.
+  - EXECUTE is granted to service_role only; anon and authenticated are refused.
+- **0440 table:** `embedding_profile_bindings` exists with RLS on and no anon or authenticated grants. It has 0 rows.
+- **0440 seeded profiles:** three scoped profiles were added with status `available` (5 → 8 profiles), each with its partial HNSW index.
+- **0410 r3 grants:** after the re-run, `rag_embedding_bindings_guard`, `rag_chunk_embeddings_guard` and the three `rag_semantic_cache_on_documents_*` functions are service_role only.
+- **0801 body md5 matches the repo:** all 13 replaced functions match (13/13):
+  - rag_set_document_fields
+  - rag_write_chunks
+  - rag_write_profile_chunks
+  - rag_advance_ingestion_job: adc43aa306d5c659051ccf69fd05209f, replacing the 0426 body
+  - rag_claim_ingestion_job
+  - rag_claim_ingestion_jobs
+  - rag_enqueue_backfill_jobs
+  - rag_enqueue_ingestion_job
+  - rag_list_batch_jobs
+  - rag_purge_stale_ingestion_jobs
+  - rag_ingest_job_status_for_stage
+  - rag_ingest_mirror_processing_status
+  - rag_publish_deferred_ingestion_job
+- **0801 function settings:**
+  - Each function has one overload and `search_path=""`.
+  - SECURITY mode is unchanged from before. These three are invokers: rag_ingest_job_status_for_stage, rag_ingest_mirror_processing_status and rag_publish_deferred_ingestion_job. The other ten are definers.
+  - EXECUTE is granted to service_role only.
+- **0801 columns, checks and indexes:**
+  - 15 new columns are present.
+  - Rebuilt checks: documents, document_chunks and ingestion_jobs status, and ingestion_jobs kind.
+  - Six new value and order checks.
+  - Indexes `document_chunks_scopes_gin` and `documents_tenant_fingerprint_idx`.
+- **Whole database:**
+  - Public functions: 343 → 345 (the two new 0440 functions).
+  - Public tables with RLS off: 0.
+  - Only one SECURITY DEFINER function lacks `search_path=""`: `rls_auto_enable()`, Supabase's own function, as before.
+- **Security advisors:**
+  - No ERROR.
+  - No new WARN. The same set as after the continuation: function_search_path_mutable on the same 4 legacy functions, extension_in_public (vector, pg_trgm), GraphQL exposure (0026/0027), the by-design anon and authenticated definers plus rls_auto_enable, and leaked password protection.
+  - The only new item is INFO rls_enabled_no_policy on `embedding_profile_bindings` (21 → 22 server-only tables), as intended.
+- **Data intact:** documents 1, chunks 1, chunk_embeddings 0, ingestion_jobs 0 and vector_sync_outbox 0, the same as before. All document and chunk statuses are `ready`.
+
+### Re-run notes
+- Re-running 0425 restores the guard without the scope check, so re-run 0440 after it.
+- Re-running any migration below 0801 that defines one of its 13 functions (0359, 0420, 0424, 0425, 0426) restores that older body, so re-run 0801 after it.
+
+## 0441, 0802, 0803 and 0410 r4 (applied after train 15, 2026-11-25)
+
+Applied to `<live-project-ref>` from `origin/main` 61cf1bcd (train 15). None of the four files has a `.single-tenant`/`.multi-tenant` variant. For each file, only the top-level `BEGIN;` and `COMMIT;` were left out; the rest is the exact file text (0803's trailing `NOTIFY` after `COMMIT` kept). No statement failed and nothing was retried.
+
+### Preconditions
+- 0441: `embedding_profile_bindings` and `rag_embedding_bindings_guard()` exist (0440 live); the file's own precheck passed. None of its eight functions existed before.
+- 0802: no live migration after 0602 (0501_0603) redefines `hybrid_search_chunks`; only 0407, 0413 and 0602 define it, all live and older. Before: one overload, the 0602 signature (21 arguments, ending in `boolean`).
+- 0803: `rag_publish_document_version` was last defined by 0425 (live md5 9f89d02ef0115e7ca5b2f31fab0c3c17); no later live migration touches it. `rag_admin_audit` had 0 rows, so the rebuilt action check could not fail. None of the eleven new functions existed. Dependencies present: `rag_admin_tenant_keys`, `rag_soft_delete_document`, `rag_assert_tenant_key`, `documents.approved_by`/`approved_at` and `document_chunks.approved_by` (0801).
+- 0410: the repo file changed since r3 by +60 lines only, adding guarded REVOKE/GRANT blocks for the 0441 and 0803 definer functions. Grants only (its existing guarded `DROP` of the stale 4-argument `rag_fail_ingestion_job` was a no-op; only the 5-argument overload exists).
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | 0441_binding_gate | ok |
+| 2 | 0802_hybrid_search_scopes_dates_und | ok |
+| 3 | 0803_publish_hold | ok |
+| 4 | 0410_security_definer_rpc_grants_r4 | ok |
+
+### Verification
+- **Body md5 matches the repo (21/21)**, one overload each, `search_path=""`, EXECUTE for service_role only (anon and authenticated refused):
+  - 0441 (all SECURITY DEFINER; activate and rollback also carry `statement_timeout=120s` as the file defines):
+    - rag_list_embedding_bindings 292a9c9d9596afd8bda94ab75cc91cd9
+    - rag_list_embedding_profile_scopes 137e1974173d792f10ad83ad17049479
+    - rag_create_embedding_binding 266f1b33c52023119442acf650f7105d
+    - rag_set_embedding_binding_status 1d39648f3ae67320b445fdd81ff6dc13
+    - rag_record_binding_evidence 09cb63723155d7e95df4103d10e7df7c
+    - rag_activate_embedding_binding 9a8aae32ba62ef206db9d2a6a7443459
+    - rag_rollback_embedding_binding aa1fd1de6230bf89db8998fcc91df8e2
+    - rag_deactivate_embedding_binding bc94ec6c7d42244ec57f0043eda3563c
+  - 0802: `hybrid_search_chunks` e28a92efe8922689d228bcbdb65d9e4c (10656 characters), SECURITY INVOKER. Exactly one overload, the new 24-argument signature ending in `text[], boolean, date`; the 0407 and 0602 signatures are gone. ACL is postgres and service_role only.
+  - 0803 (definers: publish, approval keys, approve, reject, list pending, exemption add/remove/list; invokers: hold for review, is_tenant_admin, release_publish_hold, exemptions_for, as the file defines):
+    - rag_publish_document_version 8793ead278eb810ba79ae4664969507a (replaces the 0425 body)
+    - rag_hold_document_for_review 376d8ae4370592614d013b8119605236
+    - rag_upload_approval_keys c40d783e590d4e80181f82dcc5b4fc26
+    - rag_approve_upload ea48f0d6c15075430a969e1de9987c1f
+    - rag_reject_upload 1339a066983b64cf5385e0e86a58b219
+    - rag_list_pending_uploads 7b3c5b54d2c52120b072e2a0bcbce004
+    - rag_is_tenant_admin 64a3ad2386a58678cb362308721a966c
+    - rag_release_publish_hold 57327b7877e37e558a907d86c2ba00d5
+    - rag_upload_exemption_add 6cba08b7708586098da5e33bf4000cca
+    - rag_upload_exemption_remove 03b2c82c0e26550b363756437e39dffd
+    - rag_upload_exemption_list 652212b2d18990523816b23795ae4b24
+    - rag_upload_exemptions_for 5d0a2e9fc27f33913e174788da181788
+- **0803 schema:** `ingestion_batches.hold_publish` boolean NOT NULL DEFAULT false. `rag_upload_approval_exemptions` exists with RLS on, no policies, 0 rows; anon and authenticated have no grant, service_role has SELECT only (no INSERT). `rag_admin_audit_action_check` rebuilt with `approve_upload` and `reject_upload`.
+- **0410 r4 grants:** after the re-run, none of the 21 functions above is executable by anon or authenticated. The only `rag_*` function authenticated can execute is `rag_ingest_realtime_topic_allowed`, by design (Realtime policy helper).
+- **Whole database:**
+  - Public functions: 345 → 364 (8 from 0441, 11 from 0803; 0802 replaced one with one).
+  - Public tables with RLS off: 0.
+  - Only one SECURITY DEFINER function lacks `search_path=""`: `rls_auto_enable()`, Supabase's own function, as before.
+- **Security advisors:**
+  - No ERROR.
+  - No new WARN: the same set and counts as before (function_search_path_mutable 4, extension_in_public 2, GraphQL 0026/0027 24/25, anon definers 5, authenticated definers 13, leaked password protection).
+  - The only new item is INFO rls_enabled_no_policy on `rag_upload_approval_exemptions` (22 → 23 server-only tables), as intended.
+- **Data intact:** documents 1, chunks 1, chunk_embeddings 0, ingestion_jobs 0, ingestion_batches 0, vector_sync_outbox 0 and embedding_profile_bindings 0, the same before and after. All document and chunk statuses are `ready`.
+
+### Re-run notes
+- Re-running 0407, 0413 or 0602 (live as `0501_0603_answers_lang_cache`) restores an older `hybrid_search_chunks` signature next to or instead of 0802's, so re-run 0802 after any of them.
+- Re-running 0425 restores the old publish body without the pending and held branches, so re-run 0803 after it (as well as 0426, 0440 and 0801, as noted above).
+- Re-running 0441 or 0803 alone keeps their own REVOKE/GRANT, so 0410 does not need to follow; re-run 0410 after any future migration that adds a definer function it lists.
+
+## 0442, 0806, 0810 and 0410 r5 (applied after train 16, 2026-11-25)
+
+Applied to `<live-project-ref>` from `origin/main` 9ddad6d0 (train 16, PR #88). None of the four files has a `.single-tenant`/`.multi-tenant` variant. For each file, only the top-level `BEGIN;` and `COMMIT;` and the leading header comment block were left out; every statement and every comment inside a function body is the exact file text. No statement failed and nothing was retried. The first two attempts at 0442 timed out waiting on the MCP server's confirmation prompt and changed nothing (checked after each).
+
+### Preconditions
+- 0442: the file's own read-only dry run returned no rows, so all seven live `rag_reembed_*` bodies were the 0425 ones (for example, start_run 36346f04a9f2012c4905b3ae0d5cb7c8). No live migration after 0425 redefines them. `embedding_profile_bindings` (0440) existed; `rag_reembed_require_binding` did not.
+- 0806: the live `rag_publish_document_version` (8793ead278eb810ba79ae4664969507a) and `rag_approve_upload` (ea48f0d6c15075430a969e1de9987c1f) were the 0803 bodies the file replaces. Neither supersession table existed. The audit check held the seven actions as of 0803.
+- 0810: the live advance, claim, claim-many and enqueue bodies were the 0801 ones (adc43aa3…, 358260ad…, 64de484b…, 089eed58…), and fail was the 0422 body (74da84cb…), exactly what the file says it replaces. The `kind` check already allowed `translate` (0801). Both claim indexes were in the two-kind form. pgvector is in `public`.
+- 0410: the repo file changed since r4 (61cf1bcd) by +24 lines only, adding guarded REVOKE/GRANT for six 0806 definer functions. It only changes grants; the guarded `DROP` of the stale 4-argument `rag_fail_ingestion_job` was a no-op.
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | 0442_reembed_scope | ok |
+| 2 | 0806_supersession | ok |
+| 3 | 0810_chunk_translations | ok |
+| 4 | 0410_security_definer_rpc_grants_r5 | ok |
+
+### Verification
+- **Body md5 matches the repo (36/36)**, one overload each, `search_path=""`, EXECUTE for service_role (anon and authenticated refused):
+  - 0442 (8): the seven replaced functions are SECURITY DEFINER, as before. `rag_reembed_require_binding` (83a04b38081acfc710bd05ab1f82e4f1) is an invoker, as the file defines it. Bodies:
+    - start_run 3e9083bc31a9cac4f3fbd48043f16250
+    - pick 2b671c97c08036ee4ca591023db952d1
+    - count 4f43ebe36caab2bc9c900ef536a59cd8
+    - remaining 301ebeef39cf4efe9d217086fddeb1f2
+    - resume_run 459835b27f04e55612aba6f726172f5c
+    - derive_batch 5d3549f8a8055b540ba75f068f5ff7b3
+    - rollback_run f5aa85662962cf83a4f99c7e80d721b8
+  - 0806 (12):
+    - Definers: `rag_publish_document_version` 720fa4c9c1482d2b2b4a47617d636ffe (replaces the 0803 body), `rag_approve_upload` 08070087b2752404228a63d740cb33a3 (replaces the 0803 body), confirm, dismiss, undo, list, raise and `rag_purge_hook_supersession` 93a4aa0836d5245e1bc2479307980355.
+    - Invokers: document_state, stale, successor and lock_pair.
+  - 0810 (16):
+    - Ledger functions, still SECURITY DEFINER: advance 7b286ba5e67338d33326d6217c77c58a, claim cb6db5e10ac4875726929c7c43b35c45, claim-many dad4de90719eab43f204a52ac69c7d01, enqueue 4ca2e38d414e7bb37eb4a262c4f88be5, fail bb57d170a2daeb109a2f9c7845a5bd4d.
+    - New, all SECURITY INVOKER: the two guards, `rag_write_chunk_translations`, `hybrid_search_translations` (c21fc1fadb6c7eff0d545ba0a6a8dbb1), settings get/set, eligible_chunks, coverage, pending_page, `rag_language_document_counts` and `rag_purge_hook_chunk_translations` (9bf68853b9abca6d48b969fc03266857).
+- **Purge hooks:** `rag_purge_hook_supersession` and `rag_purge_hook_chunk_translations` each have one overload, `search_path=""`, and EXECUTE for service_role only.
+- **New tables** (RLS on, no policies, 0 rows, no anon or authenticated grant):
+  - `rag_supersession_candidates` and `rag_supersession_links`: service_role SELECT only; writes go through the functions.
+  - `chunk_translations`, `chunk_translation_embeddings` and `rag_translation_settings`: service_role full access, as the file grants.
+  - The two translation guard triggers exist.
+- **0810 indexes:** five partial HNSW indexes on `chunk_translation_embeddings` (one per seeded unscoped profile), the translation indexes, and `ingestion_jobs_translate_active_ux`. `ingestion_jobs_claim_queued_idx` and `ingestion_jobs_claim_active_lease_idx` were rebuilt with `translate` in their predicate.
+- **0806 audit check:** `rag_admin_audit_action_check` now has 10 actions (the 7 before, plus confirm, dismiss and undo supersession).
+- **0410 r5 grants:** no `rag_*` or `hybrid_search*` function is executable by anon or authenticated except `rag_ingest_realtime_topic_allowed` (authenticated, by design).
+- **Whole database:**
+  - Public functions: 364 → 386 (+1 from 0442, +10 from 0806, +11 from 0810).
+  - Public tables with RLS off: 0.
+  - Only one SECURITY DEFINER function lacks `search_path=""`: `rls_auto_enable()`, Supabase's own, as before.
+- **Security advisors:**
+  - No ERROR.
+  - No new WARN: the same set and counts as before (function_search_path_mutable 4, extension_in_public 2, GraphQL 0026/0027 24/25, anon definers 5, authenticated definers 13, leaked password protection).
+  - The only new items are INFO rls_enabled_no_policy on the five new server-only tables (23 → 28), as intended.
+- **Data intact:** documents 1, document_chunks 1, chunk_embeddings 0 and ingestion_jobs 0, the same before and after. All document and chunk statuses are `ready`.
+
+### Re-run and ordering notes
+- Re-running 0425 restores the unscoped re-embed bodies, so re-run 0442 after it (as well as 0426, 0440, 0801 and 0803, as noted above).
+- Re-running 0803 restores the 0803 publish and approve bodies, so re-run 0806 after it.
+- Re-running 0801 or 0422 restores the ledger bodies without the `translate` kind, and re-running 0421 restores the two-kind claim indexes, so re-run 0810 after any of them.
+- 0806 and 0810 carry their own REVOKE/GRANT; re-run 0410 after any future migration that adds a definer function it lists.
+- **0804 gap:** 0806 says the newest `rag_release_quarantine` body is in 0804, which accepts publish's new `superseded_lineage` outcome. 0804 is not on trunk and not live. The live `rag_release_quarantine` refuses any outcome other than `published` (it raises `release_failed` and its transaction rolls back), so releasing a quarantined version of a lineage that a confirmed supersession link has retired fails safe instead of succeeding. Nothing can reach this until an admin confirms a supersession. Apply 0804 when it reaches trunk.
+
+## 0531-0533, 0812, 0813 and 0410 r6 (applied after train 17, 2026-11-25)
+
+Applied to `<live-project-ref>` from `origin/main` 17fe2938 (train 17, PR #90). Only 0532 has a `.single-tenant`/`.multi-tenant` variant; the multi-tenant one was applied. For each file, only the top-level `BEGIN;` and `COMMIT;` and the leading header comment block were left out; every statement and every comment inside a function body is the exact file text. No statement failed. The first attempt at 0533 timed out waiting on the MCP server's confirmation prompt and changed nothing (checked: no function, no migration row); the main session then applied the same 0533 text, and this run continued from there.
+
+### Preconditions
+- 0531/0532/0533: none of `rag_retrieval_log`, `rag_feedback_loop_on_chat_delete` or `rag_purge_retrieval_log` existed. `public.organizations` exists (multi-tenant), so 0531 adds the organization foreign key. `public.chats` had only `update_chats_updated_at`.
+- 0812: the live `rag_write_chunks` body md5 was 6a0a895510e2e7dfaf689933b6d654e0 (10824 characters), exactly the 0801 body the file says it replaces. 0810 does not redefine it; the only repo files that define it are 0408, 0424, 0801 and 0812 (0410 only grants). The repo diff 0801 → 0812 is only the per-chunk `language` check and its use in the insert and metadata, so nothing from a later live migration is dropped.
+- 0813: none of its ten functions or two tables existed. Dependencies present: `rag_assert_tenant_key`, the invoice columns and `lineage_id` on `documents`, `chunk_embeddings.embedding_host`/`embedded_at`.
+- 0410: the repo file changed since r5 (9ddad6d0) by +8 lines only, adding guarded REVOKE/GRANT for `rag_purge_retrieval_log` and `rag_feedback_loop_on_chat_delete`. Grants only; the guarded `DROP` of the stale 4-argument `rag_fail_ingestion_job` was a no-op (one overload remains).
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | 0531_rag_retrieval_log | ok |
+| 2 | 0532_rag_retrieval_log_tenant_multi_tenant | ok |
+| 3 | 0533_rag_retrieval_log_functions | first attempt timed out on the confirmation prompt, no change; applied by the main session with the same text, ok |
+| 4 | 0812_chunk_language | ok |
+| 5 | 0813_caption_language_recaption | ok |
+| 6 | 0410_security_definer_rpc_grants_r6 | ok |
+
+### Verification
+- **Body md5 matches the repo (13/13)**, one overload each, `search_path=""`, EXECUTE for service_role only (anon and authenticated refused):
+  - 0531: `rag_feedback_loop_on_chat_delete` 8d66bb3b5fa98d0f223b7dab6a788e16, SECURITY DEFINER.
+  - 0533: `rag_purge_retrieval_log` 8ab457e2199a6621b14118a38190fddf, SECURITY DEFINER.
+  - 0812: `rag_write_chunks` aa65730e587d66d5b30b4432099c1bb5 (11278 characters), SECURITY DEFINER as before (replaces the 0801 body).
+  - 0813 (all SECURITY INVOKER, as the file defines):
+    - rag_set_image_chunk_languages d5ce801c6f7b940d917fc9ffca2071dd
+    - rag_recaption_candidates bdb8555dfe57f730941761d3b3a60166
+    - rag_recaption_get_run 48ed98462ac57991dcfa916458a5988a
+    - rag_recaption_start_run 94fd98c21b41384a85e57bc427a5566e
+    - rag_recaption_resume_run 246d05a4b7fe7f20e0f4e1a48ea7d21b
+    - rag_recaption_write_chunk dd12111f53a0c9e33e3d4c588b97e4c4
+    - rag_recaption_advance e9b894fb539a909845f7cfe2ea6e1f91
+    - rag_recaption_finish_run 9133f4700546dcf851c04094e04e1ca0
+    - rag_recaption_rollback_run 57ba9e60528d229a3efcb0312c50ef28
+    - rag_purge_hook_recaption 2c89399dc56a5b97dede332f2598d7af
+- **Purge hooks:** `rag_purge_hook_supersession`, `rag_purge_hook_chunk_translations`, `rag_purge_hook_recaption` and `rag_purge_retrieval_log` each have one overload, `search_path=""`, and EXECUTE for service_role only.
+- **New tables** (RLS on, no policies, 0 rows, no anon or authenticated grant; service_role full access as the files grant): `rag_retrieval_log`, `rag_recaption_runs`, `rag_recaption_items`.
+- **0531/0532 schema:** foreign keys on `user_id` and `organization_id` (both cascade); indexes on created_at, chat_id, trace_id (unique), `(tenant_key, created_at desc)` and the partial negative-feedback index. `tenant_key` is generated as `o:<organization_id>` or `u:<user_id>`. The statement trigger `rag_feedback_loop_chats_delete` is on `public.chats`.
+- **0410 r6 grants:** no `rag_*` or `hybrid_search*` function is executable by anon or authenticated except `rag_ingest_realtime_topic_allowed` (authenticated, by design).
+- **Whole database:**
+  - Public functions: 386 → 398 (+1 from 0531, +1 from 0533, +10 from 0813; 0812 replaced one with one).
+  - Public tables with RLS off: 0.
+  - Only one SECURITY DEFINER function lacks `search_path=""`: `rls_auto_enable()`, Supabase's own, as before.
+- **Security advisors:**
+  - No ERROR.
+  - No new WARN: the same set and counts as before (function_search_path_mutable 4, extension_in_public 2, GraphQL 0026/0027 24/25, anon definers 5, authenticated definers 13, leaked password protection).
+  - The only new items are INFO rls_enabled_no_policy on the three new server-only tables (28 → 31), as intended.
+- **Data intact:** documents 4, document_chunks 1, chunk_embeddings 0 and ingestion_jobs 0, the same before and after (documents was 1 after train 16; the three new rows came from app use between trains, not from these migrations). All document and chunk statuses are `ready`. `rag_retrieval_log` has 0 rows.
+
+### Re-run and ordering notes
+- Re-running 0801, 0424 or 0408 restores an older `rag_write_chunks` body without per-chunk languages, so re-run 0812 after any of them (as well as the files noted above that follow 0801).
+- 0532 depends on 0531's table; re-run them in order. 0533 only needs the table.
+- 0813 creates new objects only and does not replace any earlier body; it needs `rag_assert_tenant_key` (0403/0425) and the 0801 chunk columns.
+- 0531, 0533, 0812 and 0813 carry their own REVOKE/GRANT; re-run 0410 after any future migration that adds a definer function it lists.
+
+## 0534, 0535, 0804, 0814 and 0410 r7 (applied after train 18, 2026-11-25)
+
+Applied to `<live-project-ref>` from `origin/main` 0ded1157 (train 18, PR #93). None of the five files has a `.single-tenant`/`.multi-tenant` variant. For each file, only the top-level `BEGIN;` and `COMMIT;` (0814 has neither) and the leading header comment block were left out; every statement and every comment inside a function body is the exact file text. No statement failed, no call timed out and nothing was retried.
+
+### Preconditions
+- 0534: none of `rag_tenant_feedback_settings`, `rag_domain_experts` or `rag_review_items` existed. `rag_retrieval_log` (0531) and `public.admin_users` exist; `public.organizations` exists (multi-tenant, so experts need explicit grants). The live `rag_feedback_loop_on_chat_delete` was the 0531 body (8d66bb3b5fa98d0f223b7dab6a788e16), the one 0534 extends; only 0531 and 0534 define it.
+- 0535: `rag_mine_failed_queries` did not exist. Every `rag_retrieval_log` column it reads exists, and `rag_answer_records` has `trace_id`, `tenant_key`, `feedback` and `groundedness`.
+- 0804: of the four functions it defines, only `rag_release_quarantine` existed, with the 0425 body (11edc59c7d53481c0bb8331252baae65). No later live migration redefines it, and 0804 does not redefine anything 0806, 0810, 0812 or 0813 replaced: it calls `rag_publish_document_version` (still the 0806 body, 720fa4c9…) and leaves `rag_approve_upload` (0806 body, 08070087…) and `rag_list_quarantine` (0425 body, 4fc4f7f8…) unchanged. The columns it writes exist (`documents.approved_by`/`approved_at`/`hidden_text_check`/`processing_state`, `document_chunks.approved_by`), and `rag_admin_audit_action_check` already allows `release_quarantine`.
+- 0814: the live `rag_upload_approval_keys` was the 0803 body (c40d783e590d4e80181f82dcc5b4fc26), which the file says it starts from. Only 0803 and 0814 define it; 0806 did not touch it.
+- 0410: the repo file changed since r6 (17fe2938) by +20 lines only: guarded REVOKE/GRANT for the three new 0804 functions and `rag_mine_failed_queries` (section 1, service_role only) and for `rag_is_domain_expert` (section 2, authenticated and service_role, as an RLS helper). Grants only; the guarded `DROP` of the stale 4-argument `rag_fail_ingestion_job` was a no-op (one overload remains, bb57d170…).
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | 0534_rag_feedback_review | ok |
+| 2 | 0535_rag_feedback_mining | ok |
+| 3 | 0804_quarantine_reasons | ok |
+| 4 | 0814_upload_approval_org_admins | ok |
+| 5 | 0410_security_definer_rpc_grants_r7 | ok |
+
+### Verification
+- **Body md5 matches the repo (9/9)**, one overload each, `search_path=""`:
+  - 0534:
+    - `rag_is_domain_expert` 5a28557a001ba21e8d6eb5fce74ca77f, SECURITY DEFINER, EXECUTE for authenticated and service_role, anon refused (an RLS helper, by design).
+    - `rag_review_items_guard` faa4cfad3f1cd0a7df35a7ffd7f66eaa, SECURITY INVOKER trigger function; anon and authenticated refused.
+    - `rag_feedback_loop_on_chat_delete` 067f9d4f1146ff359acf7998c3b0d06b (replaces the 0531 body), SECURITY DEFINER, service_role only.
+  - 0535: `rag_mine_failed_queries` 53691d19da071c2caa47c862be444d94, SECURITY DEFINER, service_role only.
+  - 0804 (all SECURITY DEFINER, service_role only):
+    - rag_list_quarantine_reasons d00f1fb8aac37b5be3a42514118ea038
+    - rag_release_quarantine_reasons 9686686849a017b2e26a8ffccb1a7b04
+    - rag_release_quarantine 57bf57d5e543dbb4ac70342269896189 (now the wrapper; same 0425 signature and return type)
+    - rag_list_not_checked cf2b45fe11be8e1b7dd2ce7e2234b565
+  - 0814: `rag_upload_approval_keys` c3e41c6a705469ec2ced8535f071d28a (replaces the 0803 body), SECURITY DEFINER, service_role only.
+- **Unchanged neighbours:** `rag_publish_document_version` and `rag_approve_upload` still have the 0806 bodies, `rag_list_quarantine` the 0425 body.
+- **Purge hooks:** `rag_purge_hook_supersession`, `rag_purge_hook_chunk_translations`, `rag_purge_hook_recaption` and `rag_purge_retrieval_log` each still have one overload, `search_path=""`, and EXECUTE for service_role only.
+- **New tables** (RLS on, 0 rows):
+  - `rag_tenant_feedback_settings` and `rag_domain_experts`: no policies, no anon or authenticated grant; service_role full access.
+  - `rag_review_items`: no anon grant. authenticated has SELECT and column UPDATE on `status`, `triage`, `label` and `labelled_at` only, gated by the two policies `rag_review_items_expert_select`/`_expert_update` (`TO authenticated`, `rag_is_domain_expert(tenant_key)`), as the file grants. The `rag_review_items_guard` BEFORE UPDATE trigger exists.
+- **0410 r7 grants:** no `rag_*` or `hybrid_search*` function is executable by anon. authenticated can execute only `rag_ingest_realtime_topic_allowed` and `rag_is_domain_expert`, both by design (section 2).
+- **Whole database:**
+  - Public functions: 398 → 404 (+2 from 0534, +1 from 0535, +3 from 0804; 0534, 0804 and 0814 each also replaced one body).
+  - Public tables with RLS off: 0.
+  - Only one SECURITY DEFINER function lacks `search_path=""`: `rls_auto_enable()`, Supabase's own, as before.
+- **Security advisors:**
+  - No ERROR.
+  - Two new WARN findings, both intended: authenticated definers 13 → 14 (`rag_is_domain_expert`, the RLS helper of the review queue) and GraphQL 0027 25 → 26 (`rag_review_items`, which domain experts read through RLS). The rest are unchanged (function_search_path_mutable 4, extension_in_public 2, GraphQL 0026 24, anon definers 5, leaked password protection).
+  - INFO rls_enabled_no_policy 31 → 33 for the two new server-only tables.
+- **Data intact:** documents 1, document_chunks 15, chunk_embeddings 0 and ingestion_jobs 0, the same before and after (the changes since train 17 came from app use between trains, not from these migrations). All document and chunk statuses are `ready`.
+
+### Re-run and ordering notes
+- 0534 needs 0531's `rag_retrieval_log`; re-running 0531 puts back the old `rag_feedback_loop_on_chat_delete` body that does not clear review items, so re-run 0534 after it. 0535 needs 0534's `rag_review_items` and the 0501 `rag_answer_records`.
+- **0804 gap closed:** the live `rag_release_quarantine` now accepts publish's `superseded_lineage` outcome. Re-running 0425 puts back the old `rag_release_quarantine` body; re-run 0804 after it.
+- 0804 calls `rag_publish_document_version`; re-running 0803 restores the 0803 publish body, so re-run 0806 and then 0804 after it.
+- Re-running 0803 also restores the 0803 `rag_upload_approval_keys` body (deployment admins only); re-run 0814 after it.
+- All four files carry their own REVOKE/GRANT; re-run 0410 after any future migration that adds a definer function it lists.
+
+## 0805, 0807, 0808, 0815, 0816 and 0410 r8 (applied after train 19, 2026-11-26)
+
+Applied to `<live-project-ref>` from `origin/main` 78ca69f8 (train 19, PR #97). None of the five files has a `.single-tenant`/`.multi-tenant` variant on `origin/main`. As before, only the top-level `BEGIN;` and `COMMIT;` and the leading header comment block were left out; every statement and every comment inside a function body is the exact file text.
+
+### Run history
+- The five feature files were applied in an earlier run that a container restart interrupted before 0410 r8 and before this log entry. `list_migrations` shows them as `train19_0805_scope_tags`, `train19_0807_effective_dates`, `train19_0808_fingerprint_impact`, `train19_0815_relex_table_candidates` and `train19_0816_translation_settings_org_admins` (2026-11-26 00:05–00:06 UTC). They were not re-applied; the catalog checks below confirm each one's objects.
+- 0410 r8 was applied in the resumed run. No statement failed, no call timed out and nothing was retried.
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | train19_0805_scope_tags | ok (interrupted run; verified) |
+| 2 | train19_0807_effective_dates | ok (interrupted run; verified) |
+| 3 | train19_0808_fingerprint_impact | ok (interrupted run; verified) |
+| 4 | train19_0815_relex_table_candidates | ok (interrupted run; verified) |
+| 5 | train19_0816_translation_settings_org_admins | ok (interrupted run; verified) |
+| 6 | 0410_security_definer_rpc_grants_r8 | ok |
+
+### Verification
+- **Body md5 matches the repo (22/22)**, one overload each, `search_path=""`, EXECUTE for service_role only (anon, authenticated and PUBLIC refused):
+  - 0805 SECURITY DEFINER:
+    - rag_scope_names_taken 4b511ae03108882f556dc312493ca61e
+    - rag_scope_admin c5e1ab71872a353449b784177f040cae
+    - rag_scope_vocabulary_list 0f8ac437f074ce7206c4bdb030dc544a
+    - rag_scope_vocabulary_for 5558db1464009ea400f0fe6e15e817c9
+    - rag_scope_vocabulary_create d29fac171735e97da4ab0348a13a4770
+    - rag_scope_vocabulary_update 7ad77bcfceb57a629fa68b92990a4be4
+    - rag_set_document_scopes 01b11f57dcf80795b931e9f598f94e40
+    - rag_list_documents_with_scopes b240b78a6f0511d321244070a1b5197f
+    - rag_purge_hook_scope_tags 9ec13d90342a6f90bee355c588555385
+  - 0805 SECURITY INVOKER:
+    - rag_scope_slug 244acfb2e5baa06b731fbc25e9122542
+    - rag_scope_name_key eae4b598eb61105bf95d77f03181208f
+    - rag_scope_clean_aliases 0d4038b3fee35c2f09ee6dc5338fb7a7
+    - rag_scope_lock_dimension 3a37e290336d717aadbb36e2a844d781
+  - 0807:
+    - rag_set_document_effective_dates 6efc459c2ca1d293c84ba3837f382590 (SECURITY DEFINER)
+    - rag_dismiss_effective_date_proposal 6fe93e72aa59241310850697a82be3d0 (SECURITY DEFINER)
+    - rag_propose_document_effective_dates 431cfed37be85243c3d204d6317a11c0 (SECURITY INVOKER)
+    - rag_list_effective_date_proposals 616fab7882aaf102b4661f3d860f14fe (SECURITY INVOKER)
+  - 0808 (all SECURITY INVOKER):
+    - rag_fingerprint_groups 94b6ac0d6f4c2b9850e0909e67dd0a3d
+    - rag_fingerprint_backfill_page c6fb1da21d8f371da89c0bf23e3ef43e
+    - rag_fingerprint_backfill_write 45e26d597136b6a6f6076b4079106799
+  - 0815: `rag_relex_table_candidates` b8b71c8474ddd64197b66e1198eb1f5f, SECURITY INVOKER.
+  - 0816: `rag_translation_settings_set` d792922b08c06b4dd2dacfe4a796c188 (replaces the 0810 body, same signature), SECURITY INVOKER.
+- **Audit check:** `rag_admin_audit_action_check` now also allows `set_effective_dates` and `dismiss_effective_dates` (rebuilt by 0807, keeping every earlier action).
+- **New table** `rag_scope_vocabulary` (0805): RLS on, 0 rows, no policies, five CHECK constraints; service_role has SELECT only, no anon or authenticated grant, as the file grants.
+- **Purge hooks:** `rag_purge_hook_supersession`, `rag_purge_hook_chunk_translations`, `rag_purge_hook_recaption` and the new `rag_purge_hook_scope_tags`: one overload each, service_role only.
+- **0410 r8 grants:** the repo file changed since r7 (0ded1157) by +44 lines only: guarded REVOKE/GRANT for the two 0807 definers and the nine 0805 definers (section 1, service_role only). Every one of the 166 section 1 signatures exists and is service_role only; the 13 section 2 signatures present have exactly the roles the file grants (`kb_writes_locked()` does not exist on this multi-tenant project, so its guarded block was a no-op). The guarded `DROP` of the stale 4-argument `rag_fail_ingestion_job` was a no-op (one overload remains). No `rag_*` or `hybrid_search*` function is executable by anon; authenticated can execute only `rag_ingest_realtime_topic_allowed` and `rag_is_domain_expert`, by design.
+- **Whole database:**
+  - Public functions: 404 → 425 (+13 from 0805, +4 from 0807, +3 from 0808, +1 from 0815; 0816 replaced one body). 0410 r8 changed no count.
+  - Public tables with RLS off: 0.
+  - Only one SECURITY DEFINER function lacks `search_path=""`: `rls_auto_enable()`, Supabase's own, as before.
+- **Security advisors:**
+  - No ERROR.
+  - WARN unchanged: function_search_path_mutable 4, extension_in_public 2 (`vector`, `pg_trgm`), GraphQL 0026 24, GraphQL 0027 26, anon definers 5, authenticated definers 14, leaked password protection.
+  - INFO rls_enabled_no_policy 33 → 34 for the new server-only `rag_scope_vocabulary`.
+- **Data intact:** documents 1, document_chunks 15, chunk_embeddings 0 and ingestion_jobs 0, the same as after train 18. All document and chunk statuses are `ready`.
+
+### Re-run and ordering notes
+- 0805 needs the 0801 `scopes` columns and GIN index and the 0814 `rag_upload_approval_keys`; 0807 needs the 0801 effective-date columns, `rag_upload_approval_keys` (0814), `rag_assert_tenant_key` and `rag_cache_invalidate` (0603).
+- 0807 rebuilds `rag_admin_audit_action_check` from the live constraint; any later migration that rebuilds that check must keep `set_effective_dates` and `dismiss_effective_dates`.
+- Re-running 0810 puts back the old `rag_translation_settings_set` body (deployment admins only); re-run 0816 after it.
+- Re-running 0803 restores the 0803 `rag_upload_approval_keys` body; re-run 0814 after it, since 0805 and 0807 depend on its organization-admin rule.
+- All five files carry their own REVOKE/GRANT; re-run 0410 after any future migration that adds a definer function it lists.
+
+## Train 20: 0536, 0537, 0817, 0818 and 0809 (applied after train 20, 2026-11-26)
+
+Applied to `<live-project-ref>` from the orchestrator session through Supabase MCP `apply_migration`, one call per file, at about 02:20 UTC on 2026-11-26, after train 20 (PR #100) reached `origin/main`.
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | train20_0536_rag_retrieval_log_source_opened | ok |
+| 2 | train20_0537_rag_feedback_mining_report | ok |
+| 3 | train20_0817_released_link_targets | ok |
+| 4 | train20_0818_upload_scopes | ok |
+| 5 | train20_0809_rebuild_batches | ok |
+
+### Verification
+- **Functions:** the 15 new functions all have `search_path=""`; none is executable by anon or authenticated.
+- **Tables:** the 3 new tables have RLS on.
+
+## Train 21: 0819 (applied after train 21, 2026-11-26)
+
+Applied to `<live-project-ref>` from the orchestrator session through Supabase MCP `apply_migration` at about 05:30 UTC on 2026-11-26, after train 21 (PR #103) reached `origin/main`.
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | train21_0819_supersession_peers | ok |
+
+### Verification
+- **Functions:** both functions 0819 adds (`rag_supersession_peers`, `rag_supersession_replace_target`) are SECURITY INVOKER with `search_path=""`; EXECUTE is granted to service_role only, with no anon or authenticated grant.
+- **Runtime:** the supersession peer detector runs only with `RAG_SUPERSESSION_DETECT=on`; it is off in production, so applying 0819 changes no live behaviour.
+
+## Train 23: 0707 and 0821 (to apply after train 23 reaches `origin/main`)
+
+Branch `ci/merge-train-23`, built on `origin/main` d2a3dd6e (train 22, the 07-06 plan and PR #105). Nothing below has been applied live yet; the orchestrator applies it after the train merges.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/03.2-50` | 03.2-50 queued translate jobs | none |
+| `exec/03.2-51` | 03.2-51 chunk translations as additive retrieval legs | 0821_translation_query_state |
+| `exec/07-11` (contains 07-09) | 07-09 full vector sync drain engine, 07-11 vector sync reconcile | 0707_vector_sync_reconcile |
+| `exec/03.2-60` | 03.2-60 document tags panel and queue controls (Config UI) | none |
+| `exec/03.2-65` | 03.2-65 migration block apply gate (tests only) | none |
+| `exec/03.2-36` | 03.2-36 Word hidden-text checker (sidecar `hidden-text` extra) | none |
+| `chore/rederive-ingest-floor` | `eval/config/defaults-gate.json` ingest floor re-derived by the tool | none |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0707_vector_sync_reconcile.sql` | Needs 0701-0705 (live). 0706 belongs to 07-10, not in this train; 0707 does not depend on it. |
+| 2 | `0821_translation_query_state.sql` | Needs 0810 and 0820 (live) and `rag_assert_tenant_key`. Not folded into the setup files. |
+
+Neither file has a `.single-tenant`/`.multi-tenant` variant, and no migration number collides (no renumbering in this train). Both define SECURITY INVOKER functions with `search_path=''`, service_role only.
+
+### Operator actions
+- 03.2-50: deploy the sidecar first, then the app. Upgrade every sidecar before turning on `RAG_DOC_TRANSLATION` with `RAG_INGEST_ASYNC`. No database change; 0810 and 0820 must be live.
+- 03.2-51: apply 0821. A live comparison needs real translations (`npm run rag:translate` on a test tenant) and a multilingual embedding profile.
+- 03.2-36: rebuild the sidecar image to ship the Word checker; a local run needs `uv sync --extra hidden-text` (or `docling`).
+- 07-09, 07-11, 03.2-60, 03.2-65: none (vector sync targets stay disabled; real Qdrant and Weaviate drift runs are in the 07-16 canary job). Standing rule from 03.2-65: if any file below 0801 is re-run live, re-run 0801-0820 after it.
+
+### Deviations
+- One merge conflict: `eval/harness/fake-edge.mts` (03.2-51 vs the 07-04/07-09 vector sync RPC table on trunk). Kept trunk's `VECTOR_SYNC_RPC_ARGUMENTS` table and added 03.2-51's `hybrid_search_translations` to `GENERIC_RPC_NAME`.
+- No merge-fix commits, no migration renumbering.
+- `rag-sidecar/tests/test_preflight_hidden_text.py::test_off_makes_no_check_and_sends_and_records_exactly_what_it_did_before` (03.2-36) failed once in the full sidecar run and passed on every rerun: it compares job dumps that include the parse attempt's wall-clock `ms`. Left as is; flagged for a follow-up.
+
+## Train 24: 0822, 0851-0854, 0410 r9 and 0471 (to apply after train 24 reaches `origin/main`)
+
+Branch `ci/merge-train-24`, built on `origin/main` 4b05dade (train 23, PR #106). Nothing below has been applied live yet; the orchestrator applies it after the train merges. Production is multi-tenant.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/04.1-12` (contains 04.1-13) | 04.1-09 flip closed, not flipped; 04.1-10 legacy tiers in CI; 04.1-11 docs; 04.1-12 what an operator who sets nothing gets; 04.1-13 language state and the implicit-default resolver | none |
+| `exec/03.2-58` (contains 03.2-40) | 03.2-40 quarantine reasons, explicit rescan, absolute fixture gate; 03.2-58 quarantine panel (Config UI) | 0822_rescan_candidates |
+| `exec/03.2-62` (contains 03.2-61) | 03.2-61 versions and dates panel; 03.2-62 translation targets panel (Config UI) | none |
+| `exec/04.2-01` | 04.2-01 Phase 4.2 contracts | none |
+| `exec/04.2-02` | 04.2-02 eight tuning switches, four stage names, effective lexical version | none |
+| `exec/04.2-03` | 04.2-03 Phase 4.2 storage schema | 0851_lexical_dict_version, 0852_rag_table_rows, 0853_dup_clusters, 0854_identifier_index; 0410 lockdown entries (r9) |
+| `exec/04.2-04` | 04.2-04 tokenizer options, Snowball Italian stemmer | none |
+| `exec/04.1.1-01` | 04.1.1-01 terminology contracts | none |
+| `exec/04.1.1-02` | 04.1.1-02 terminology switches, stage and budgets | none |
+| `exec/04.1.1-03` | 04.1.1-03 terminology schema | 0471_terminology_schema |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0822_rescan_candidates.sql` | Needs 0801 (`hidden_text_check`), 0804 and 0817 metadata and `rag_assert_tenant_key` (all live). SECURITY INVOKER, read-only, service_role only. |
+| 2 | `0851_lexical_dict_version.sql` | Adds `document_chunks.lexical_dict_version` and a row trigger (SECURITY INVOKER). Existing rows keep null. |
+| 3 | `0852_rag_table_rows.sql` | Needs 0301 and 0401 (`tenant_key` columns, `rag_assert_tenant_key`); stops with 55000 otherwise. New server-only table with two SECURITY DEFINER functions (`rag_table_rows_follow_document`, `rag_purge_hook_table_rows`). |
+| 4 | `0853_dup_clusters.sql` | Needs 0301 and 0401. Adds `dup_cluster_id` and `simhash` to `document_chunks`, a CHECK and a foreign key (one validating scan, no rewrite), a partial index on `document_chunks`, the server-only `rag_dup_clusters` table, `rag_row_tenant_key_guard` and three SECURITY DEFINER functions. |
+| 5 | `0854_identifier_index.sql` | Needs 0853 (`rag_row_tenant_key_guard`; stops with 55000 otherwise). GIN indexes on `document_chunks.identifiers_norm` and `documents.identifiers_norm`, the server-only `rag_identifier_patterns` table, one SECURITY DEFINER purge hook. |
+| 6 | `0410_security_definer_rpc_grants.sql` (r9) | Changed since r8 by +24 lines only (04.2-03, 456ad2f7): guarded REVOKE/GRANT for the six 0852-0854 SECURITY DEFINER functions. 0852-0854 already carry their own REVOKE/GRANT, so r9 keeps 0410 complete for upgrades; run it after 0854. Grants only, so the 0801 re-run rule does not apply. |
+| 7 | `0471_terminology_schema.sql` | Needs `rag_assert_tenant_key` (0403 mode files, live); no dependency on 0820 or 0704/0705. Server-only tables (RLS on, no policies), `rag_term_effective` SECURITY INVOKER, service_role only. 04.1.1-03 assigns the live apply and grant check to plan 04.1.1-15's human checkpoint; it can be applied now (inert while `RAG_TERMINOLOGY=false`) or held for that plan. Its writers come in 0472 (not in this train). |
+
+None of the files has a `.single-tenant`/`.multi-tenant` variant, and no migration number collides (0471 is the first 047x; 0822 follows 0821; 0851-0854 are new). None is folded into the setup files. 0853 and 0854 build indexes on `document_chunks` and `documents` with plain `CREATE INDEX` (write lock for the build); the columns are new and all null, so the builds are cheap, but apply them in a quiet window on large tables.
+
+### Operator actions
+- 03.2-40: apply 0822. After turning on `RAG_HIDDEN_TEXT_CHECK` or `RAG_INGEST_LINK_CHECK` on a deployment with existing documents, run `npm run rag:rebuild -- rescan --check <hidden_text|links> --dry-run`, review the ids, then run it without `--dry-run` (again if it exits 1).
+- 04.2-03: apply 0851, 0852, 0853 and 0854 in that order (after 0820), then 0410 r9. No switch reads the new storage yet; every Phase 4.2 switch defaults off.
+- 04.1.1-03: apply 0471 (see note 7). All three terminology switches stay off (04.1.1-02).
+- 03.2-62: none required; to fill translation coverage after saving targets, run the dry-run command shown in the panel, then the run with a `--budget` in USD.
+- 04.1-09 to 04.1-13, 03.2-58, 03.2-61, 04.2-01, 04.2-02, 04.2-04, 04.1.1-01, 04.1.1-02: none (no env variable, migration or deployment change; retrieval defaults not flipped).
+
+### Deviations
+- Merge conflicts (all additive, both sides kept):
+  - `tests/ui/config-rag-panel-binding.test.ts` (03.2-58 vs 04.1-12 trunk, then 03.2-62): kept the scope-tags, quarantine, versions-dates and translation-targets panel rows.
+  - 04.1.1-01 vs 04.2-01 contracts: `rag-sidecar/src/rag_sidecar/contracts/samples.py` (`build_samples` merges `_phase42_models()` and `_terminology_models()`) and `export_schemas.py` (both export lists); `src/lib/rag-eval/contracts.generated.ts` and `tests/fixtures/contracts/samples.json` regenerated with `npm run gen:schemas` (152 schemas).
+  - 04.1.1-02 vs 04.2-02 switches: `scripts/config-server.js`, `scripts/init-env.js`, `src/lib/env.ts`, `scripts/rag/env-manifest.json`, `src/lib/rag/config.ts` (optional stages, `RagEnvInput`, `applyV2DisabledStages`, `parseTuningSwitches` and `parseTerminologyDense`, memo key), `tests/rag/config.test.ts` and `tests/rag-db/eval-v2-overlay.test.mts` (allow-list keeps the eight Phase 4.2 and the three terminology switches).
+- Fix commits on the train:
+  - 48885d4c: the TS refusal-thresholds loader and calibration status share `parseRefusalThresholds`, which applies the Pydantic rule that `schema_version` is 2 exactly when a cell carries a mode (04.2-01 widened `schema_version` to 1 | 2; the generated Zod has no model validators, so `tests/rag/refusal/gate.test.ts` failed). New test covers both directions.
+  - 80a8befa: `tests/rag/config.test.ts` counts the three terminology fields among the v2 fields that predate Phase 4.2 (only red after 04.2-02 and 04.1.1-02 met).
+  - 7dc80f68: `eval/src/rag_eval/sweep/retrieval.py` `CAP_MIN` 50 → 25 (D-41), so pool-25 sweep cells no longer build cap 50 > pool 25, which the 04.2-01 `RetrievalParams` validator rejects; three grid expectations in `eval/tests/test_sweep_retrieval.py` follow. This is the value plan 04.2-05 Task 3 sets; its nDCG work and the regenerated fixture sweep report stay with 04.2-05 (expect a trivial overlap there).
+- The 04.1.1-01/02 stage-name test failures reported by the executors resolved once both branches merged; no change needed.
+- No migration renumbering.
+
+## Train 25: 0472, 0410 r10 and 0858 (to apply after train 25 reaches `origin/main`)
+
+Branch `ci/merge-train-25`, built on `origin/main` cce43e1c (train 24, PR #107). Nothing below has been applied live yet; the orchestrator applies it after the train merges. Production is multi-tenant.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/04.2-14` (contains 04.2-34) | 04.2-34 identifier normalization, near-miss distance, tenant-pattern tokens; 04.2-14 identifier pattern validation, worker probe, pattern service and per-tenant loader | 0858_identifier_functions |
+| `exec/04.2-28` | 04.2-28 fixture corpus templates, lineage metadata, superseded lineage seeding | none |
+| `exec/04.2-39` | 04.2-39 `RAG_EMBED_VERSION_SCOPE` switch (default off) in every config location and the Config UI | none |
+| `exec/04.1.1-04` | 04.1.1-04 versioned, audited terminology writers and atomic import | 0472_terminology_writers; 0410 lockdown entries (r10) |
+| `exec/04.1.1-05` | 04.1.1-05 terminology stage and `term:0` lexical list under v2 (inert while `RAG_TERMINOLOGY=false`) | none |
+| `exec/04.2-05` | 04.2-05 rerank cap 25..100 clamped to the pool, sweep `CAP_MIN` 25, report-only nDCG@k | none |
+| `exec/04.2-06` | 04.2-06 effective tuning parameters, tuning hash block only while a switch is on, startup reasons | none |
+| `exec/04.2-07` | 04.2-07 per-mode refusal calibration, mode-aware refusal cell lookup, effective lexical staleness | none |
+| `exec/04.2-08` | 04.2-08 request timing on the trace collector, first-text-delta wrapper | none |
+| `exec/03.2-66` | 03.2-66 Phase 3.2 per-switch comparison harness and recorded reports | none |
+| `fix/sidecar-preflight-flaky` | sidecar hidden-text off-path comparison ignores wall-clock durations | none |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0472_terminology_writers.sql` | Needs 0471 (train 24; `rag_term_entries` is a parameter type, so the transaction aborts cleanly without it), `admin_users` and `rag_admin_tenant_keys` (0316/0425 mode file, live). Six SECURITY DEFINER `rag_term_*` writers and reads, service_role only; seven `rag_term__*` helpers SECURITY INVOKER with no grant at all (not even service_role). Multi-tenant is detected from `documents.user_id NOT NULL`, so a tenant layer works on production. Carries its own REVOKE/GRANT. |
+| 2 | `0410_security_definer_rpc_grants.sql` (r10) | Changed since r9 by +24 lines only (04.1.1-04, 6b93b9c4): guarded REVOKE/GRANT (service_role only) for `rag_term_apply_import(uuid, text, jsonb, text, bigint)`, `rag_term_delete_entry(uuid, text, uuid, bigint)`, `rag_term_list_audit(uuid, text, integer, integer)`, `rag_term_list_entries(uuid, text, integer, integer, text)`, `rag_term_set_suppression(uuid, text, uuid, boolean, bigint)` and `rag_term_upsert_entry(uuid, text, jsonb, bigint)`. Grants only; run it after 0472. |
+| 3 | `0858_identifier_functions.sql` | Needs 0854 (train 24; `rag_identifier_patterns`, stops with 55000 otherwise) and `rag_assert_tenant_key`. Six SECURITY INVOKER functions (`rag_identifier_patterns_list`, `_pattern_create`, `_pattern_update`, `_pattern_delete`, `rag_identifier_resolve`, `rag_identifier_candidates`), empty search_path, service_role only (own REVOKE/GRANT; not listed in 0410, which covers definers). Independent of 0472/0410, so it can go before or after them. |
+
+None of the files has a `.single-tenant`/`.multi-tenant` variant, and no migration number collides (0472 follows 0471; 0858 follows 0854, 0855-0857 are unused). None is folded into the setup files. No table, column or index changes, so no lock window is needed. There is no 0473 in this train: the 04.1.1-04 summary's "0471 to 0473" refers to plan 04.1.1-15's checkpoint, and 0473 comes from a later plan.
+
+### Operator actions
+- 04.1.1-04: apply 0472, then 0410 r10. Plan 04.1.1-15's human checkpoint still owns the live anon/authenticated refusal check through PostgREST; all three terminology switches stay off.
+- 04.2-14: apply 0858 after 0854. No admin route reads it yet (04.2-17).
+- 04.2-39: none; `RAG_EMBED_VERSION_SCOPE` defaults to false and needs `RAG_VERSION_SCOPE=true` (with lexical search) to take effect.
+- 03.2-66: none; real per-switch observations come from plan 03.2-53 (human). Fixture numbers must not flip a default.
+- 04.2-07: none live; the committed fixture thresholds and floor are out of date with the tree (hand-off to 04.2-32, which re-records them with `--write-thresholds`).
+- 04.2-28: none; 04.2-37 re-records the corpus hashes when the Phase 4.2 fixture files land.
+- 04.2-34, 04.1.1-05, 04.2-05, 04.2-06, 04.2-08, sidecar flake fix: none (no env variable, migration or deployment change; retrieval defaults not flipped).
+
+### Deviations
+- Merge conflicts (both intents kept):
+  - `tests/rag/config.test.ts` (04.2-39 vs train 24's terminology block): kept both `describe` blocks, terminology switches then `RAG_EMBED_VERSION_SCOPE`.
+  - `eval/harness/pglite-supabase.mts` (04.1.1-05 vs 04.2-28): kept `supersedeFixtureLineages` (04.2-28) and `TerminologySeedRow`/`seedTerminology` (04.1.1-05); `createFixtureDatabase` seeds terminology before relex and supersedes lineages after it, as both branches intended.
+  - `eval/tests/test_sweep_retrieval.py` (04.2-05 vs train 24's 7dc80f68): kept 04.2-05's `assert CAP_MIN == 25`; `CAP_MIN` was already 25 on main, so the overlap was trivial.
+  - `src/lib/rag/refusal/thresholds.ts` and `status.ts` (04.2-07 vs train 24's 48885d4c): one parser. Kept 04.2-07's `parseThresholds`, which applies all three Pydantic `RefusalThresholds`/`RefusalCell` model rules (unique keys, key equals dims plus `|mode`, `schema_version` 2 exactly when a cell carries a mode) and is a superset of train 24's `parseRefusalThresholds` (mode/version rule only). Train 24's test in `tests/rag/refusal/gate.test.ts` now calls `parseThresholds`, and its mode cell's key gets `|strict` so the fixture is valid under the contract (the old fixture had a key Pydantic would reject).
+- Fix commits on the train:
+  - cb5fa5dd: `tests/rag-db/terminology-writers.test.mts` types the anon-refusal `fetch` result as `Response`. `npm run typecheck:new` failed with TS7022 at line 634 (04.1.1-04); the full `tsc` was clean.
+- The config-snapshot and refusal-gate vitest failures that the 04.2-08 and 04.2-05 executors saw on their pre-fix base did not recur: full vitest is green on the train (train 24's fixes plus the merge above).
+- No migration renumbering.
+
+## Train 26: 0855-0857, 0859, 0860, 0473 and 0410 r11 (to apply after train 26 reaches `origin/main`)
+
+Branch `ci/merge-train-26`, built on `origin/ci/merge-train-25` 5bfb58f8 (train 25, PR #108); `origin/main` d26ddb20 (train 25 merge 7bb6b5cb plus PR #110) merged in before the final gates, so the PR diff against main holds only this train. Nothing below has been applied live yet; the orchestrator applies it after train 25's migrations and after this train merges. Production is multi-tenant.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/04.2-11` | 04.2-11 voice agent TTFT, internal route writing `ttft_ms`/`pre_generation_ms` Langfuse scores | none |
+| `exec/04.2-12` | 04.2-12 eval metrics for the Phase 4.2 slices (evidence groups, nDCG at context k, redundancy, intent coverage; report-only) | none |
+| `exec/04.2-13` | 04.2-13 near-duplicate clusters at ingestion, `npm run rag:dup-clusters` backfill | 0857_dup_cluster_functions |
+| `exec/04.2-09` | 04.2-09 single Phase 4.2 redefinition of `hybrid_search_chunks` and `rag_exact_id_documents`, version lookup | 0855_document_versions, 0856_hybrid_search_42 |
+| `exec/04.2-10` | 04.2-10 chat/embed request timing, first-text-delta on every answer path, pre-generation p95 CI gate | none |
+| `exec/04.2-15` (contains 04.2-09, 04.2-10) | 04.2-15 `retrievalFilters.versions` under `RAG_VERSION_SCOPE` | (0855, 0856) |
+| `exec/04.2-16` (contains 04.2-12, 04.2-13) | 04.2-16 calibration and sweep tools for the two Phase 4.2 tuning values | (0857) |
+| `exec/04.2-17` (contains 04.2-13) | 04.2-17 identifier pattern admin routes | (0857) |
+| `exec/04.2-18` (contains 04.2-13) | 04.2-18 write-time table rows and identifiers | 0860_write_indexers |
+| `exec/04.2-19` (contains 04.1.1-06) | 04.2-19 tokenizer options on every lexical writer, stamp-aware relex | 0859_relex_dictionary |
+| `exec/04.2-31` (contains 04.2-12) | 04.2-31 pre-registered Phase 4.2 gates (`eval/config/phase42-gates.json`) | none |
+| `exec/04.2-35` (contains 04.2-13, 04.2-18) | 04.2-35 `npm run rag:table-rows` and `npm run rag:identifiers` backfills | (0857, 0860) |
+| `exec/04.1.1-06` | 04.1.1-06 terminology matcher for Han, Latin-script words, identifiers, mixed script (already contained via 04.2-19) | none |
+| `exec/04.1.1-07` | 04.1.1-07 `RAG_TERMINOLOGY_DENSE` dense-only canonical variant | none |
+| `exec/04.1.1-09` (contains 04.1.1-06, 04.1.1-17) | 04.1.1-09 dictionary admin routes | none |
+| `exec/04.1.1-16` | 04.1.1-16 dictionary version in the retrieval-config hash and the semantic-cache key | none |
+| `exec/04.1.1-17` | 04.1.1-17 `getTerminologyLexicon` and the `rag_term_*` boundary check (already contained via 04.1.1-09) | none |
+| `exec/04.1.1-18` (contains 04.1.1-07) | 04.1.1-18 `term:0` reserve slots in the rerank input | none |
+| `exec/04.1.1-08` (contains 04.1.1-16) | 04.1.1-08 terminology mining storage (miss log, candidates, df, decisions) | 0473_terminology_mining; 0410 lockdown entries (r11) |
+| `exec/03.2-67` | 03.2-67 D-19 decision: `RAG_TABLE_HEADER_REPEAT` default `profile` -> `always` | none |
+| `exec/03.2-68` (contains 03.2-67) | 03.2-68 Phase 3.2 close: ingestion trace per document, AGENTS.md, sidecar CI extras | none |
+| `exec/06-22` | 06-22 LangChain (`@langchain/core` 1.4.0, `@langchain/classic` 1.0.61, `@langchain/openai` 1.8.4) with nested zod 4, sidecar `cache` extra (redisvl 0.32.0, redis 8.1.0), zod isolation CI step | none |
+| `exec/06.1-01` | 06.1-01 Phase 6.1 contracts, `eval/config/finetune.json`, optional `finetune-data`/`finetune` eval extras | none |
+| `exec/06.1-04` | 06.1-04 `RAG_FINETUNE` (default off) and nine slot endpoint settings in every config location | none |
+| `exec/05-26-t1` | 05-26 Task 1 partial results (Anthropic spike, human plan; no SUMMARY yet) | none |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0855_document_versions.sql` | Needs `rag_assert_tenant_key` (live); reads the 0801 effective-date columns through `to_jsonb`, so it works without them. One SECURITY INVOKER read function, service_role only. |
+| 2 | `0856_hybrid_search_42.sql` | Needs 0802 (newest `hybrid_search_chunks`, live), 0425, 0853 (`dup_cluster_id`) and 0854 (`identifiers_norm`), both train 24. Drops every overload of `hybrid_search_chunks` and `rag_exact_id_documents` by catalog lookup and recreates one of each (SECURITY INVOKER, empty search_path, own REVOKE/GRANT); the two helpers `rag_version_period_ok`/`rag_version_history_ok` are new. A call without the two new parameters returns what it did before. Re-run rule: re-running any lower file that defines either function (0314, 0407, 0413, 0425, 0602, 0802) requires re-running 0856; 0425 alone after 0856 stops with 55000 and changes nothing (sequence: 0314, 0425 with its mode file, 0856). |
+| 3 | `0857_dup_cluster_functions.sql` | Needs 0853 (stops with 55000 otherwise). New server-only table `rag_dup_chunk_bands` and six SECURITY INVOKER functions plus purge hook. Builds `idx_document_chunks_tenant_content_hash` on `document_chunks (tenant_key, content_hash)` with plain `CREATE INDEX` (write lock for the build on a populated column): apply in a quiet window. |
+| 4 | `0859_relex_dictionary.sql` | Needs 0851 (`lexical_dict_version`, train 24) and `rag_assert_tenant_key`. Three new SECURITY INVOKER functions; the 0425 relex functions are not redefined. |
+| 5 | `0860_write_indexers.sql` | Needs 0852 and 0854 (train 24; stops with 55000 otherwise) and, per 04.2-18, 0858 (train 25). Four SECURITY INVOKER functions, service_role only. |
+| 6 | `0473_terminology_mining.sql` | Needs 0471 (train 24) and 0472 (train 25: `rag_term_audit`, `rag_term_layers`, `rag_term_entries`), `admin_users`, `rag_admin_tenant_keys`, `rag_lexical_tsquery` and `rag_assert_tenant_key` (live). Two server-only tables (RLS on, no policies) and seven SECURITY DEFINER functions, service_role only (own REVOKE/GRANT). Inert while `RAG_TERMINOLOGY_MINING=false`. Plan 04.1.1-15's human checkpoint owns the live anon/authenticated check for 0471-0473. |
+| 7 | `0410_security_definer_rpc_grants.sql` (r11) | Changed since r10 by +28 lines only (04.1.1-08): guarded REVOKE/GRANT (service_role only) for `rag_term_corpus_df(text, text[])`, `rag_term_decide_candidate(uuid, uuid, text, uuid)`, `rag_term_list_candidates(uuid, text, integer, integer)`, `rag_term_purge_misses(integer)`, `rag_term_read_misses(text, integer)`, `rag_term_record_miss(text, jsonb)` and `rag_term_upsert_candidates(text, jsonb)`. Grants only; run it after 0473. |
+
+0855-0857 are numbered below 0858 (train 25) but do not depend on it, and 0858 does not depend on them, so applying them after 0858 is safe; 0860 must follow 0858. 0855-0860 and 0473 are independent of each other apart from that, so the order above is one valid order. None of the files has a `.single-tenant`/`.multi-tenant` variant, no migration number collides (0473 follows 0472; 0855-0860 fill the 085x range without gaps), and none is folded into the setup files.
+
+### Operator actions
+- Apply train 25 first (0472, 0410 r10, 0858), then the table above.
+- 04.2-11: deploy the app and the voice agent together; app first is safe (an old agent ignores `traceId`).
+- 03.2-67: `RAG_TABLE_HEADER_REPEAT` now defaults to `always` (fixture-evidence decision under D-19). New ingests repeat table headers; stored documents keep their chunks until `npm run rag:rechunk`. Plan 03.2-53 (human) should re-observe `table_split` live; on a live regression set `RAG_TABLE_HEADER_REPEAT=profile`.
+- 04.2-13: after `RAG_DUP_CLUSTERS=true`, run `npm run rag:dup-clusters -- --tenant <key> --dry-run`, then without `--dry-run`, per tenant with documents.
+- 04.2-35 / 04.2-18: before or after `RAG_TABLE_LOOKUP` or `RAG_IDENTIFIER_INDEX`, run `npm run rag:table-rows` and `npm run rag:identifiers` with `--dry-run`, then without, per tenant; again after `rag:rechunk` and pattern changes.
+- 04.2-19: after turning on `RAG_LEXICAL_DICTIONARY`, `RAG_LEXICAL_STEM_IT` or `RAG_IDENTIFIER_INDEX`, run `npm run rag:relex` (or `-- --tenant <key>`); after a dictionary edit `npm run rag:relex -- --tenant <key> --stale-dictionary`.
+- 04.2-16: live calibration belongs to 04.2-33.
+- 04.1.1-08: none; `RAG_TERMINOLOGY_MINING` stays off (privacy decision, PO-3).
+- 06-22: none live; the Vercel build installs the LangChain packages from the lockfile.
+- 04.2-09/-10/-12/-15/-17/-31, 04.1.1-06/-07/-09/-16/-17/-18, 03.2-68, 06.1-01, 06.1-04, 05-26-t1: none (no default flipped, no deployment change).
+
+### Deviations
+- Merge conflicts (both intents kept):
+  - `src/lib/rag/v2/port.ts` and `src/lib/rag/v2/stages/search.ts` (04.1.1-07 vs 04.2-15): `RetrievalPortContext` keeps `versionScope` (D-12) and `terminologyDenseWeight` (D-18); the delegated-search port receives both.
+  - `src/lib/rag/v2/config-hash.ts` (04.1.1-16 vs 04.2-06/04.2-15): both `RetrievalConfigHashTuning` (`tuning`) and `RetrievalConfigHashTerminology` (`terminology`) in the input and the payload; each appears only when its switch/stage is on.
+  - `src/lib/rag/v2/result.ts` (04.1.1-16 vs 04.2-07): the config import keeps `effectiveLexicalVersion` and `terminologyDenseFor`.
+  - `src/lib/rag/v2/stages/query.ts` (04.1.1-16 vs 04.2-19): imports of both sides; the terminology stage records `terminologyStandalone` (04.2-19) and reports `ctx.onTerminology` (04.1.1-16).
+  - `eval/tests/test_metrics.py` (03.2-67 vs 04.2-12): both appended test blocks kept.
+- Fix commits on the train:
+  - 3664c6bb: `eval/uv.lock` records the rag-sidecar `cache` extra (06-22 relocked only `rag-sidecar/uv.lock`; eval depends on the sidecar by path, so `uv sync --directory eval --locked` failed with a stale lock). `uv lock` changed metadata only (two `requires-dist` lines, `provides-extras`); no package resolves differently; `uv lock --check` passes in both projects.
+  - 0cba93f8: `npm run typecheck:new` was red with three test diagnostics: `tests/rag-db/identifier-index.test.mts` and `table-rows.test.mts` (04.2-35, `Set<string>`), `tests/rag-e2e/ttft-gate.test.mts` (04.2-10, the DOM `setTimeout` type has no `unref`). Types only.
+  - e94a3de0: `tests/rag/v2/search-terminology-reserve.test.ts` (04.1.1-18) snapshot predates 04.2-15's `versionScope` on the search-stage output; the test pins `versionScope === 'current'` and compares the rest with the unchanged snapshot.
+  - cf0bf374: `tests/rag-e2e/domain-embeddings-off-parity.test.mts` (03.1.1-14) strips timings before comparing arms but knew only `stage_latency_ms`; the 04.2-10/04.2-12 `ttft_ms` and `pre_generation_ms` made the 18 generating injection items differ by milliseconds. Both are stripped with it.
+  - d7dfe29e: `rag-sidecar/tests/test_phase42_contracts.py` (04.2-01) asserted the committed latency budgets have no `ttft`/`pre_generation`; 04.2-10 committed them. The test keeps the optional-section check on the file without them and round-trips the committed file.
+- Merge of `origin/main` (PR #110, `RAG_OPENAI_EMBEDDINGS_VIA`) conflicted with 06.1-04 (`RAG_FINETUNE`, `RAG_FT_*`) in `scripts/config-server.js`, `scripts/init-env.js`, `src/lib/env.ts` and `scripts/config-ui/index.html`: all variables kept; in the Config UI the embedding-host select stays with the embedding fields above the new Fine-Tuned Slots section. `node scripts/check-config.mjs` passes (225 variables).
+- No migration renumbering.
+
+## Train 27: 0651-0653, 0811, 0861-0865, 1001-1003 and 0410 r12 (to apply after train 27 reaches `origin/main`)
+
+Branch `ci/merge-train-27`, built on `origin/ci/merge-train-26` 4220f0cd (train 26, PR #111), then `origin/main` d21a1a57 (PR #111 merged; same tree) merged in with `--no-ff`. Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `fix/claim-resume-stage-status` | requeued ingestion job claimable again (claim functions resume through `rag_ingest_job_status_for_stage`) | 0865_claim_resume_status_for_stage (renumbered from 0864 on the train) |
+| `fix/advance-callback-read-timeout` | sidecar advance/parse-external callbacks read with 55 s (app slice is 40 s, route maxDuration 60 s) | none |
+| `exec/03.2.1-01` | 03.2.1-01 BGE-M3 hosted profile, catalog language declarations | 0811_bge_m3_profile |
+| `exec/03.2.1-04` (contains 03.2.1-01) | 03.2.1-04 declared languages and BGE-M3 serving in the Embedding profiles panel | (0811) |
+| `exec/03.3-01` | 03.3-01 Phase 3.3 contracts | none |
+| `exec/03.3-02` | 03.3-02 six Phase 3.3 switches (all off), version bit, stage name, Config UI | none |
+| `exec/03.3-03` | 03.3-03 Phase 3.3 schema | 1001_phase33_schema |
+| `exec/03.3-04` | 03.3-04 tenant line pattern module | none |
+| `exec/03.3-05` | 03.3-05 page boilerplate cleaner (pure half) | none |
+| `exec/03.3-06` | 03.3-06 `rule_sections` chunker | none |
+| `exec/03.3-07` (contains 03.3-03) | 03.3-07 tenant rule functions | 1002_tenant_rule_functions |
+| `exec/03.3-08` (contains 03.3-03) | 03.3-08 attribute definition functions | 1003_attribute_definitions |
+| `exec/03.3-09` | 03.3-09 quantity tokens (pure half) | none |
+| `exec/04.1.1-10` | 04.1.1-10 synthetic term fixtures, term golden items, run configs | none |
+| `exec/04.1.1-11` (contains 04.1.1-10) | 04.1.1-11 terminology CSV import/export and expansion preview | none |
+| `exec/04.1.1-12` (contains 04.1.1-10/-11) | 04.1.1-12 terminology candidate mining and review | none |
+| `exec/04.2-20` | 04.2-20 result diversity (collapse / mmr), `topk_redundancy` | 0863_retrieval_log_redundancy |
+| `exec/04.2-21` (contains 04.2-20) | 04.2-21 duplicate-cluster sources (`alsoIn`) | 0862_dup_cluster_sources |
+| `exec/04.2-24` (contains 04.2-21) | 04.2-24 structured table lookup leg | 0861_table_lookup |
+| `exec/04.2-38` (contains 04.2-21) | 04.2-38 Phase 4.2 purge hooks | 0864_purge_hooks; 0410 entry (r12) |
+| `exec/06-30` | 06-30 RedisVL semantic-cache backend in the sidecar | none |
+| `exec/06-35` | 06-35 LangChain adapter part 1 | none |
+| `exec/06-37` (contains 06-35) | 06-37 LangChain adapter part 2, framework switch | none |
+| `exec/06.1-02` | 06.1-02 fine-tune contracts (JSON Schema, Zod) | none |
+| `exec/06.1-03` | 06.1-03 consent and model registry | 0651_finetune_registry; 0410 entries (r12) |
+| `exec/06.1-05` (contains 06.1-03) | 06.1-05 two fine-tune slots | 0652_finetune_slots; 0410 entries (r12) |
+| `exec/06.1-06`..`-09` (contain 06.1-03) | 06.1-06 export, -07 synthetic query generation, -08 filters, -09 mined pair import | none |
+| `exec/06.1-10` (contains 06.1-05) | 06.1-10 vector export | 0653_finetune_export; 0410 entry (r12) |
+| `exec/06.1-14` (contains 06.1-05) | 06.1-14 fine-tune slot provider and probe check | none |
+
+No branch was ejected.
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0651_finetune_registry.sql` | Needs `rag_assert_tenant_key` (live). Two server-only tables (RLS on, no policies) and six SECURITY DEFINER functions, empty search_path, service_role only. |
+| 2 | `0652_finetune_slots.sql` | Needs 0651 and 0440 (prechecks). Seeds slot profiles `ft-a-1024`/`ft-b-1024` (model `unbound`, available) with two partial HNSW indexes on `chunk_embeddings` (empty slots, cheap build), bind/clear/release functions and the slot guard and taint triggers. |
+| 3 | `0653_finetune_export.sql` | Needs 0651 and 0652. One SECURITY DEFINER export function, service_role only. |
+| 4 | `0811_bge_m3_profile.sql` | Needs 0801-0810 (live). Seeds `bge-m3-1024` (available, activates nothing) and its partial HNSW indexes on `chunk_embeddings` and `chunk_translation_embeddings`. No function or grant change. (03.2.1-02 owns the live push; it is included here so the train's live state matches the code.) |
+| 5 | `0861_table_lookup.sql` | Needs 0852 (`rag_table_rows`), 0854 and 0856 (train 26: `rag_version_history_ok`, `rag_version_period_ok`). SECURITY INVOKER, service_role only. |
+| 6 | `0862_dup_cluster_sources.sql` | Needs 0853 and 0857 (train 26). SECURITY INVOKER, service_role only. Apply with the 04.2-21 code (otherwise diversity-on requests degrade to `also_in_sources_unavailable`). |
+| 7 | `0863_retrieval_log_redundancy.sql` | Needs 0531 (live; skipped otherwise). Adds nullable `rag_retrieval_log.topk_redundancy`. Apply with the 04.2-20 code (the loop stats route selects the column). |
+| 8 | `0864_purge_hooks.sql` | Needs 0852, 0853 and 0857 (`rag_dup_clusters_recompute`). Redefines `rag_purge_hook_table_rows` (0852 body) and adds `rag_purge_hook_duplicate_clusters`. Re-run rule: after re-running 0852 or 0853, re-run 0864. |
+| 9 | `0865_claim_resume_status_for_stage.sql` | Needs 0810 (last definition of both claim functions; 0865 sorts after it). The eval database already holds the same body as `eval_0855_claim_resume_status_for_stage`. Re-run rule: re-running 0810 requires re-running 0865. |
+| 10 | `1001_phase33_schema.sql` | Needs 0854 (stops with 55000 otherwise), 0853 (tenant key guard) and 0320 (column guard). Five server-only tenant tables; nullable `attributes`/`attribute_header`/`attribute_header_stamp` columns on `documents` and `document_chunks` (GIN index on `document_chunks.attributes`: plain `CREATE INDEX`, apply in a quiet window). |
+| 11 | `1002_tenant_rule_functions.sql` | Needs 1001 and `rag_upload_approval_keys` (0814, live). SECURITY INVOKER, service_role only (own REVOKE/GRANT). |
+| 12 | `1003_attribute_definitions.sql` | Needs 1001 and `rag_upload_approval_keys`. SECURITY INVOKER, service_role only. 1002 and 1003 are independent of each other. |
+| 13 | `0410_security_definer_rpc_grants.sql` (r12) | Changed since r11 by +52 lines only: guarded REVOKE/GRANT (service_role only) for `rag_purge_hook_duplicate_clusters(text, uuid, uuid[])` (0864) and the twelve 0651-0653 functions (`rag_finetune_set_consent`, `_list_consent`, `_consent_for_export`, `_register_model`, `_list_models`, `_set_model_status`, `_bind_slot`, `_clear_slot`, `_release_rollback`, `_slot_guard`, `_version_taint_guard`, `_export_vectors`). Grants only; run it last. |
+
+Numbers are unique (0864 purge hooks vs. the claim fix: the claim fix was renamed to 0865 on the train, with its test `tests/rag-db/claim-resume-stage.test.mts`). On a fresh setup the files apply in number order; 0651-0653 sort before 0811 and depend on nothing above 0651, 1001-1003 sort after every 08xx file. None has a `.single-tenant`/`.multi-tenant` variant and none is folded into the setup files. Every new file is idempotent (CREATE OR REPLACE, IF NOT EXISTS, ON CONFLICT DO NOTHING).
+
+The combined live SQL (the twelve files verbatim in the order above, then the 0410 r12 delta as a `DO $r12$` block with only the added lines) was written to the orchestrator scratchpad as `train27-live.sql`.
+
+### Operator actions
+- Apply train 26 first (0855-0857, 0859, 0860, 0473, 0410 r11), then the table above.
+- Deploy the sidecar with this train (`fix/advance-callback-read-timeout`: the 55 s callback read timeout; `fix/claim-resume-stage-status` needs 0865 live).
+- 03.2.1-01/-02: 0811 above seeds `bge-m3-1024` only; a live hosted BGE-M3 call (D-54) remains an operator item. 03.2.1-04: `/gsd-ui-review` human check of the profile cards at 360px and 1024px in en, zh and it.
+- 04.1.1-12: schedule `npm run rag:terms:mine` (nightly, `--dry-run` first) where the service-role key is set; `RAG_TERMINOLOGY_MINING` stays off until PO-3.
+- 06-30: set `REDIS_URL` only on the sidecar and build with the `cache` extra when `RAG_SEMANTIC_CACHE=redisvl`; live Redis 8 check is 06-46.
+- 06-37: live LangChain/OpenRouter check and `next build` smoke in langchain mode (06-46).
+- 06.1-07/-08: set `prices.generator` and `prices.judge` in `eval/config/finetune.json` before a real run; live runs are 06.1-19. `RAG_FINETUNE` stays off.
+- Phase 3.3 switches all ship off; 1001-1003 are inert until plan 03.3-26.
+- 04.1.1-10/-11, 04.2-24, 06-35, 06.1-02/-06/-09/-14, 03.3-01/-02/-04/-05/-06/-09: none.
+
+### Deviations
+- Renumbering: `0864_claim_resume_status_for_stage.sql` (fix branch) collided with 04.2-38's `0864_purge_hooks.sql`; renamed to `0865_claim_resume_status_for_stage.sql` (header and `tests/rag-db/claim-resume-stage.test.mts` updated; 1721fd40).
+- Merge conflicts (both intents kept):
+  - `scripts/rag/env-manifest.json`, `tests/eval-env-pin.test.ts`, `tests/rag/config.test.ts` (03.3-02 vs `RAG_OPENAI_EMBEDDINGS_VIA`/`RAG_EMBED_VERSION_SCOPE`): all entries and test blocks kept.
+  - `src/lib/rag/lexical/tokenize.ts` (03.3-09 vs 04.2-19 identifiers): query additive tokens are dictionary, identifiers, quantity, then context additive.
+  - `src/lib/rag-eval/contracts.generated.ts`, `tests/fixtures/contracts/samples.json`, `rag-sidecar/schemas/*` (04.2-20, 06.1-02): regenerated with `npm run gen:schemas` (181 schemas); `samples.py` and `export_schemas.py` keep the Phase 3.3 and fine-tune contracts and `build_samples` registers both.
+  - `0410_security_definer_rpc_grants.sql` (06.1-03 vs 04.2-38): union of the guarded IF blocks.
+  - `tests/rag-db/embedding-profiles.test.mts` (06.1-05 vs 03.2.1-01): expected profiles and counts include `bge-m3-1024` and both fine-tune slots.
+  - `src/lib/rag/embeddings/{catalog,registry,types}.ts`, `tests/rag/embeddings/catalog.test.ts` (06.1-14 vs 03.2.1-01): providers `bge-m3`, `ft_slot_a`, `ft_slot_b`; slot entries take their languages from `config/rag/embedding-model-languages.json` like every catalog model (entries `ft_slot_a`/`ft_slot_b` `unbound`, zh/en/it added), since 03.2.1-01 requires one declaration per catalog model.
+  - `eval/baselines/fixture-ingest-baseline.json` (03.2-67 vs 04.1.1-10/-11): both baselines re-recorded on the merged train (`RAG_PIPELINE=legacy`, three runs); only `run_config_hash` and run metadata changed, no item differs (9e3e95af).
+- Fix commits on the train:
+  - 301eebbf: `npm run typecheck:new` type fixes in three tests (04.2-24 `table-lookup` passed `{ mode: 'all' }` instead of `'all'`; 04.2-21 `embed-version-scope` `unref` on the DOM timer type; 04.1.1-12 `terminology-mining-two-tenant` builder type).
+  - dd041937: `tests/rag-db/ingestion-ledger-claim.test.mts` stored stage `'chunking'` (a status name); with 0865 an unknown stage resumes at preflight. The test stores the real stage `'chunk'` and still checks resume at the stored stage.
+  - 4eccde6a: `tests/rag-db/fixture-phase42-corpus.test.mts` and `eval/tests/test_corpus.py` (04.2-28) pinned the corpus hash and dump digests before 04.1.1-10 added the synthetic-terms fixtures; updated to the merged corpus (hash `4d9bd021...`, the one both baselines record).
+- Merge of `origin/main` d21a1a57 (PR #111) is tree-identical to train 26.
+
+## Train 28: 1004 and 1005 (to apply after train 28 reaches `origin/main`)
+
+Branch `ci/merge-train-28`, built on `origin/main` aeb68f6e (train 27, PR #112). Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/06.1-15` | 06.1-15 `rag:embedding ft-*` commands | none |
+| `exec/06.1-11` | 06.1-11 vector file reader (sha256 and shape checks), encoders | none |
+| `exec/06.1-17` | 06.1-17 fine-tune slot pricing in the re-embed dry run, two-tenant canary, `RAG_FINETUNE=off` parity | none |
+| `exec/06-41` | 06-41 synchronous eval cache store, semantic-cache calibration (`python -m rag_eval.calibrate cache`) | none |
+| `exec/06-42` | 06-42 two-tenant query-layer and semantic-cache cases | none |
+| `exec/06-43` | 06-43 `python -m rag_eval.compare frameworks` | none |
+| `exec/05.1.1-24` | 05.1.1-24 mined feedback failures into the terminology miss log | none |
+| `exec/04.2-27` | 04.2-27 question identifiers filter every leg before ranking | none |
+| `exec/03.3-10` | 03.3-10 ingest preparation review flag | 1004_flag_document_review |
+| `exec/03.3-11` | 03.3-11 attribute value writers | 1005_attribute_writers |
+| `exec/03.3-13` (contains 03.3-11) | 03.3-13 `rag:attributes` import command | (1005) |
+
+No branch was ejected.
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `1004_flag_document_review.sql` | Needs `rag_assert_tenant_key` (live) and `documents.needs_review`/`needs_review_reason` (0351, live). One SECURITY INVOKER function `rag_flag_document_review`, empty search_path, service_role only (own REVOKE/GRANT). |
+| 2 | `1005_attribute_writers.sql` | Needs 1001 (attribute columns, `rag_staged_attributes`, `rag_guard_phase33_columns`), 1003 (`rag_attribute_definitions`), 0603 (`rag_cache_invalidate`), 0701 (`vector_sync_outbox`, read only) and 0351. Eight SECURITY INVOKER functions, service_role only (own REVOKE/GRANT), and two triggers: `rag_chunks_x_document_attributes` (BEFORE INSERT on `document_chunks`, sorts after `rag_chunks_legacy_defaults`) and `rag_documents_x_attribute_insert_guard` (on `documents`). 1004 and 1005 are independent of each other. |
+
+No 0410 change in this train (1004 and 1005 carry their own grants), so there is no 0410 delta. Numbers 1004 and 1005 are unique across every `origin` branch; both sort after 1003, which they follow. Neither has a `.single-tenant`/`.multi-tenant` variant and neither is folded into the setup files. Both are idempotent (CREATE OR REPLACE, DROP TRIGGER IF EXISTS before CREATE TRIGGER).
+
+The combined live SQL (the two files verbatim in the order above, each after a `-- ==== <file>` line) was written to the orchestrator scratchpad as `train28-live.sql`.
+
+## Train 29: 0654, 0940-0943, 0960-0968, 0970, 0971, 1007, 1008 and 0410 r13 (to apply after train 29 reaches `origin/main`)
+
+Branch `ci/merge-train-29`, built on `origin/main` f890cdfc (train 28, PR #113). Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/05.1.1-22` | 05.1.1-22 feedback-loop schema folded into the setup files, guide, closing comparison | none |
+| `exec/05.2-01` | 05.2-01 answer-side and safety contracts | none |
+| `exec/05.2-02` | 05.2-02 fourteen Phase 5.2 switches (all off), reader, Config UI inputs | none |
+| `exec/05.2-03` | 05.2-03 answer checks, version label, security events, alerts and holds | 0940-0943; 0410 entries (r13) |
+| `exec/05.2-21` (contains 05.2-03) | 05.2-21 version label in the dates editor and from the title | (0940-0943) |
+| `exec/05.2-23` | 05.2-23 sidecar claims endpoint | none |
+| `exec/05.3-01` | 05.3-01 gate and golden-set lifecycle contracts | none |
+| `exec/05.3-02` | 05.3-02 Phase 5.3 switches and settings reader | none |
+| `exec/05.3-03` | 05.3-03 monitor, judge-calibration, release-gate and config-change contracts | none |
+| `exec/05.3-05` | 05.3-05 `false_answer_rate`, answer-aware refusal, absolute gate | none |
+| `exec/05.3-06` | 05.3-06 golden-set manifests | none |
+| `exec/05.3-07` | 05.3-07 change records, eval run requests, pilot users | 0960, 0961, 0970 |
+| `exec/05.3-08` | 05.3-08 monitor storage | 0962-0964 |
+| `exec/05.3-09` | 05.3-09 judge labels and review-item strata | 0965, 0967 |
+| `exec/05.3-10` | 05.3-10 query clusters and weekly drift storage | 0966, 0968 |
+| `exec/05.3-11` (contains 05.3-08) | 05.3-11 daily monitor aggregation | 0971 |
+| `exec/04.2-22` | 04.2-22 query-side lexical dictionary, stems, identifier patterns | none |
+| `exec/04.2-30` | 04.2-30 two-tenant v2 matrix for the Phase 4.2 paths | none |
+| `exec/04.2-36` | 04.2-36 identifier not-found in the routes | none |
+| `exec/06.1-12` | 06.1-12 training kit, trainer, image | none |
+| `exec/06.1-13` | 06.1-13 offline evaluation, model card, prune | none |
+| `exec/06.1-16` | 06.1-16 fixture pipeline end to end with leakage invariants | none |
+| `exec/06.1-20` | 06.1-20 fine-tuned slots through 3.1.1 bindings | 0654; 0410 entries (r13) |
+| `exec/03.3-12` | 03.3-12 section rules in ingestion | (1004, already on main, unchanged) |
+| `exec/03.3-14` | 03.3-14 tenant rule-data writers | (1005, already on main, unchanged) |
+| `exec/03.3-16` | 03.3-16 attribute identifiers through the 4.2 indexer | 1007 |
+| `exec/03.3-18` | 03.3-18 attribute resolver | 1008 |
+
+Ejected: `exec/04.2-37` (Phase 4.2 fixture documents, golden items and both fixture baselines re-recorded). It was cut before 04.1.1-10 reached main, and both re-record the same fixture set: `eval/baselines/fixture-baseline.json`, `eval/baselines/fixture-ingest-baseline.json`, `eval/fixtures/golden.jsonl`, `eval/fixtures/split-manifest.json`, the corpus hash and dump digests (`eval/tests/test_corpus.py`, `tests/rag-db/fixture-phase42-corpus.test.mts`), chunk counts (`tests/rag-db/relex.test.mts`, `tests/eval-corpus.test.ts`) and added-item lists (`tests/rag-db/ingest-mode-routing.test.mts`, `eval/tests/test_metrics.py` and four other eval tests) conflict. A text merge cannot produce a valid recorded baseline. The fix is to rebase 04.2-37 on `origin/main`, then re-record both baselines and re-pin the hashes on the combined corpus. No other branch in this train contains 04.2-37. Not merged on purpose: `exec/06-44` (its Phase 6 gate fails; a fix is in progress).
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0654_finetune_binding_guard.sql` | Needs 0440 (scoped profiles), 0441/0442 (bindings, `rag_reembed_require_binding`), 0651 and 0652 (train 27). Replaces the 0652 slot guard and version-taint triggers and `rag_finetune_clear_slot`; adds `rag_finetune_bind_scoped_slot`, `rag_finetune_scope_slot`, `rag_finetune_normalize_doc_types` and the binding and backfill-run guard triggers. SECURITY DEFINER, empty search_path, service_role only. **DROP:** `DROP TRIGGER IF EXISTS` twice before re-creating them. |
+| 2 | `0940_rag_answer_checks.sql` | Needs 0501. Adds `rag_answer_records.checks` (jsonb, default `{}`) and `texts_source`. Access unchanged. |
+| 3 | `0941_documents_version_label.sql` | Needs `rag_assert_tenant_key`. Adds nullable `documents.version_label` and `rag_set_document_version_label` (SECURITY INVOKER, service_role only). |
+| 4 | `0942_rag_security_events.sql` | No dependency inside this train. Server-only table (RLS on, no policy). |
+| 5 | `0943_rag_security_alerts_holds.sql` | Needs 0942 and `rag_assert_tenant_key`. Alerts and uploader-hold tables and nine SECURITY INVOKER functions, service_role only. |
+| 6 | `0960_rag_config_change_records.sql` | None. Deployment-wide server-only table. |
+| 7 | `0961_rag_eval_run_requests.sql` | Needs `rag_assert_tenant_key`. Table and enqueue function, service_role only. |
+| 8 | `0962_rag_monitor_daily.sql` | None. Daily aggregate table and `rag_monitor_purge`. |
+| 9 | `0963_rag_monitor_alerts.sql` | Needs `rag_assert_tenant_key`. Alerts table, upsert and set-status functions. |
+| 10 | `0964_rag_online_judge_scores.sql` | Needs 0962 (replaces `rag_monitor_purge`) and 0531 `rag_retrieval_log` (guarded with to_regclass). |
+| 11 | `0965_rag_judge_labels.sql` | Needs 0534 (`rag_review_items`, `rag_is_domain_expert`; no-op without them). Adds unique `(id, tenant_key)` on `rag_review_items`; authenticated RLS policies gated by domain expert. **DROP:** `DROP POLICY IF EXISTS` three times before re-creating them. |
+| 12 | `0966_rag_query_clusters.sql` | Needs 0531 `rag_retrieval_log` (assignments cascade with it). Cluster sets, clusters and assignments, service_role only. |
+| 13 | `0967_rag_review_item_strata.sql` | Needs 0534 `rag_review_items` and 0531 `rag_retrieval_log` (no-op without the review queue). **DROP:** drops and re-creates the `rag_review_items` reasons CHECK constraint with `representative` and `re_review` added, and drops NOT NULL on `rag_review_items.trace_id` where it is still set. Adds `rag_review_item_strata` and `rag_review_items_enqueue`. Owner present. |
+| 14 | `0968_rag_drift_weekly.sql` | Needs `rag_assert_tenant_key`. Table and upsert, service_role only. |
+| 15 | `0970_rag_pilot_users.sql` | Needs `rag_assert_tenant_key`. Table, add and remove functions, service_role only. |
+| 16 | `0971_rag_monitor_aggregate.sql` | Needs 0962 and 0964; reads `rag_retrieval_log`, `rag_answer_records`, `documents` (guarded with to_regclass). |
+| 17 | `1007_attribute_identifier_feed.sql` | Needs 1001 (attribute columns, train 27). One SECURITY INVOKER listing function, service_role only. |
+| 18 | `1008_attribute_resolver.sql` | Needs 1001 and 1003 (`rag_attribute_definitions`). Creates `idx_documents_attributes` (GIN `jsonb_path_ops` on `documents.attributes`), a plain `CREATE INDEX IF NOT EXISTS`, so apply it in a quiet window. Two SECURITY INVOKER functions, service_role only. |
+| 19 | `0410_security_definer_rpc_grants.sql` (r13) | Changed since r12 by +49 lines only: guarded REVOKE/GRANT (service_role only) for the ten 0941/0943 functions (`rag_set_document_version_label`, `rag_record_security_events`, `rag_hold_uploader`, `rag_release_uploader_hold`, `rag_acknowledge_security_alert`, `rag_uploader_hold_active`, `rag_active_uploader_holds`, `rag_list_security_events`, `rag_list_security_alerts`, `rag_list_security_uploaders`) and the two 0654 functions (`rag_finetune_bind_scoped_slot`, `rag_finetune_scope_slot`). Grants only; run it last. |
+
+Numbers are unique across `supabase/migrations` (the repeated numbers 0301, 0306, 0316, 0353, 0403, 0405, 0425, 0502 and 0532 are the existing common plus `.single-tenant`/`.multi-tenant` variants). Nothing had to be renumbered: the 5.2 block is 0940-0943 and the 5.3 block is 0960-0968, 0970 and 0971 (0969 unused). Every file sorts after what it depends on. None has a mode variant and none is folded into the setup files. Every new file is idempotent (CREATE ... IF NOT EXISTS, CREATE OR REPLACE, DROP ... IF EXISTS before CREATE, to_regclass guards). Sections with DROP statements, which need the owner present: 0654, 0965, 0967.
+
+The combined live SQL (the eighteen files verbatim in the order above, each after a `-- ==== <file>` line, then the 0410 r13 delta as a `DO $r13$` block with only the added lines, then the list of DROP sections) was written to the orchestrator scratchpad as `train29-live.sql`.
+
+### Operator actions
+- Apply train 28 first (1004, 1005), then the table above. Apply 0967 and the other DROP sections (0654, 0965) with the owner present. Apply 1008 in a quiet window (plain GIN index build on `documents`).
+- 05.3-11: the daily runner calls `rag_monitor_days_to_aggregate(7)` and aggregates each day before any retrieval-log purge in a shared schedule. The 09xx live push is tracked as H-4 (plan 05.3-49).
+- 03.3-16: after turning a definition's `in_identifier_index` on or off, run `npm run rag:attributes -- --tenant <key> --reindex-identifiers --apply`.
+- 06.1-20: before clearing a scoped slot, deactivate its bindings (`deactivate-binding`); the clear now refuses otherwise.
+- 06.1-12/-13: GPU training image build and real `evaluate` runs stay with 06.1-19.
+- 05.1.1-22: live verification (D-28 step 11) with the switches on against a real project.
+- 05.2-23: live latency of 40-claim answers on the HHEM sidecar image is unmeasured (live check).
+- 04.2-22: measure `rag_lexical_stale_count` on the largest production tenant.
+- Every Phase 5.2 and 5.3 switch ships off.
+- 04.2-37 (ejected): rebase on `origin/main`, re-record both fixture baselines and re-pin the corpus hashes, then put it on a later train.
+
+### Deviations
+- Merge conflicts (both intents kept):
+  - `rag-sidecar/src/rag_sidecar/contracts/{samples,__init__,golden,report,review}.py`, `export_schemas.py` (05.2-01, 05.3-01, 05.3-03 vs Phase 3.3 and fine-tune contracts): union of models, imports, literals and variants; `build_samples` registers Phase 3.3, fine-tune, 5.2 and 5.3 models. `rag-sidecar/schemas/*`, `src/lib/rag-eval/contracts.generated.ts` and `tests/fixtures/contracts/samples.json` regenerated with `npm run gen:schemas` (223 schemas); 1211 sidecar contract tests pass.
+  - `config/rag/settings-classification.json`, `eval/config/rag-eval-env.json`, `scripts/rag/env-manifest.json` (05.2-02, 05.3-02 vs Phase 3.3): three-way JSON merge, every entry of both sides kept.
+  - `eval/harness/run-config.mts` and `tests/rag-db/eval-v2-overlay.test.mts` (05.2-02 vs 03.3-02): the allow-list spreads both `PHASE33_SWITCH_VALUES` and `PHASE52_SWITCH_VALUES`, both are value-checked, and the test lists both sets.
+  - `0410_security_definer_rpc_grants.sql` and `tests/helpers/security-definer-allow-list.ts` (05.2-03 and 06.1-20 vs fine-tune r12): union of the guarded IF blocks and the comment paragraphs.
+  - `eval/tests/test_metrics.py` (05.3-05 vs 04.1.1-10): both test groups kept.
+  - `tests/rag-db/phase32-migrations-apply.test.mts` (05.3-09 vs 03.3-03): kept the main check (below 0900 only 0811-0899 follow), which already admits every 09xx and 10xx file; the 05.3-09 helper it no longer needs was removed.
+  - `tests/eval-env-pin.test.ts`, `tests/rag/config.test.ts`, `scripts/rag/env-manifest.json` (03.3-12, -16, -18): criss-cross merge bases only; the 03.3 branches add nothing to these files, so the train version was kept (checked: no test name or manifest entry only on the branch side).
+- Fix commit on the train: 17978092, `npm run typecheck:new` type fixes in `tests/rag-db/lexical-dictionary-e2e.test.mts` (04.2-22): the backend spy passes `scope` to `isReady`, and the seed rows type `kind` and `mode` as literals.

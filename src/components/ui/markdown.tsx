@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm"
 import { CodeBlock, CodeBlockCode } from "./code-block"
 import { useTextSize } from "@/components/providers/text-size-provider"
 import { useFont } from "@/components/providers/font-provider"
+import { imageLinkHref, isAllowedImageUrl } from "@/lib/safe-image-hosts"
 
 export type MarkdownProps = {
   children: string
@@ -25,7 +26,38 @@ function extractLanguage(className?: string): string {
   return match ? match[1] : "plaintext"
 }
 
+const IMAGE_ALLOWLIST = process.env.NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST === "true"
+
+const ImageComponent: Components["img"] = function ImageComponent({ src, alt, title }) {
+  if (typeof src === "string" && isAllowedImageUrl(src)) {
+    return (
+      <img
+        src={src}
+        alt={alt ?? ""}
+        title={title}
+        referrerPolicy="no-referrer"
+        loading="lazy"
+      />
+    )
+  }
+  const href = imageLinkHref(src)
+  const label = alt || href || ""
+  if (!href) return <span>{label}</span>
+  return (
+    <a
+      href={href}
+      title={title}
+      target="_blank"
+      rel="noopener noreferrer nofollow"
+      className="underline underline-offset-2 hover:decoration-2 break-all"
+    >
+      {label}
+    </a>
+  )
+}
+
 const INITIAL_COMPONENTS: Partial<Components> = {
+  ...(IMAGE_ALLOWLIST ? { img: ImageComponent } : {}),
   code: function CodeComponent({ className, children, ...props }) {
     const isInline =
       !props.node?.position?.start.line ||

@@ -62,6 +62,12 @@
           "title": "Min Ruling Paths",
           "type": "integer"
         },
+        "scanned_max_chars": {
+          "default": 30,
+          "minimum": 0,
+          "title": "Scanned Max Chars",
+          "type": "integer"
+        },
         "thin_path_pt": {
           "exclusiveMinimum": 0,
           "title": "Thin Path Pt",

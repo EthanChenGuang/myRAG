@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { storeDocument } from './supabase';
 import { env } from './env';
-import { embedText, embedBatch, CloudRefused, assertCloudAllowed } from '@/lib/rag';
+import { embedText, embedBatch, CloudRefused, assertCloudAllowed, assertLegacyWriteAllowed, assertLegacySplitterAllowed, legacyLlamaparseLanguages } from '@/lib/rag';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -204,13 +204,21 @@ async function uploadAndParseDocument(filePath: string): Promise<{ chunks: strin
     include_images: env.LLAMACLOUD_MULTIMODAL_PARSING === 'true',
   };
 
-  const output_config = {
-    result_type: "markdown",
-    language: "en"
-  };
+  // D-16: with configured languages LlamaParse takes the top-level language field (registry codes, primary first).
+  const llamaparseLanguages = legacyLlamaparseLanguages();
+  if (llamaparseLanguages.length === 0) {
+    const output_config = {
+      result_type: "markdown",
+      language: "en"
+    };
 
-  formData.append('parsing_config', JSON.stringify(parsing_config));
-  formData.append('output_config', JSON.stringify(output_config));
+    formData.append('parsing_config', JSON.stringify(parsing_config));
+    formData.append('output_config', JSON.stringify(output_config));
+  } else {
+    formData.append('parsing_config', JSON.stringify(parsing_config));
+    formData.append('output_config', JSON.stringify({ result_type: "markdown" }));
+    formData.append('language', llamaparseLanguages.join(','));
+  }
 
   if (parse_mode === 'parse_page_with_agent') {
     console.log(`Using advanced parsing mode: ${parse_mode} with model: ${model}`);
@@ -401,6 +409,10 @@ async function processDocument(
   metadata: ProcessDocumentMetadata
 ): Promise<string> {
   console.log('Processing document');
+  // D-56: this legacy writer stores ready rows and cannot hold a document for upload approval.
+  assertLegacyWriteAllowed();
+  // D-16: with language-aware ingestion on, callers use the unified pipeline; the legacy splitter never runs.
+  assertLegacySplitterAllowed();
   let tempFilePath: string | null = null;
 
   try {
@@ -469,6 +481,7 @@ async function processImageDocument(
   metadata: ProcessDocumentMetadata
 ): Promise<string> {
   console.log(`Processing image document: ${filename}`);
+  assertLegacyWriteAllowed();
 
   try {
     // Generate description using Vision LLM

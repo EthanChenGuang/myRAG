@@ -1,0 +1,51 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "chunk_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Chunk Id",
+      "type": "string"
+    },
+    "document_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Document Id",
+      "type": "string"
+    },
+    "fused_score": {
+      "title": "Fused Score",
+      "type": "number"
+    },
+    "kept": {
+      "title": "Kept",
+      "type": "boolean"
+    },
+    "language": {
+      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+      "title": "Language",
+      "type": "string"
+    },
+    "rank": {
+      "minimum": 1,
+      "title": "Rank",
+      "type": "integer"
+    },
+    "rerank_score": {
+      "title": "Rerank Score",
+      "type": "number"
+    },
+    "similarity": {
+      "title": "Similarity",
+      "type": "number"
+    }
+  },
+  "required": [
+    "chunk_id",
+    "document_id",
+    "rank",
+    "similarity",
+    "kept"
+  ],
+  "title": "RetrievalLogCandidate",
+  "type": "object"
+}

@@ -1,0 +1,14 @@
+{
+  "name": "v2-default-hosted-fake",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_LEXICAL_SEARCH": "true",
+    "RAG_RERANKER": "auto",
+    "RAG_REFUSAL_THRESHOLD": "true",
+    "RAG_REFUSAL_FLOOR": "legacy_rule",
+    "COHERE_API_KEY": "fixture"
+  },
+  "overrides": {
+    "rerank_model": "fake-quality-v1"
+  }
+}

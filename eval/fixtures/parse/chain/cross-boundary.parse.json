@@ -1,0 +1,33 @@
+{
+  "artifacts": [
+    "docling.json"
+  ],
+  "chunks": [
+    {
+      "contextualized_text": "Continuity workbook\nText on pages one through three.\nMore explanatory text on page two.\nFinal lead-in before the split table.\nThe table below continues on the next page.\n| Metric   |   Q1 |   Q2 |   Q3 |\n|----------|------|------|------|\n| Revenue  |  120 |  130 |  140 |\n| Margin   |   12 |   13 |   14 |\n| Margin   | 13     | 14   | 15   |\n|----------|--------|------|------|\n| Notes    | steady | up   | up   |\nAfter-table summary on page six.",
+      "headings": [
+        "Continuity workbook"
+      ],
+      "is_table": true,
+      "pages": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "table_header": "| Metric   |   Q1 |   Q2 |   Q3 |\n|----------|------|------|------|",
+      "text": "Text on pages one through three.\nMore explanatory text on page two.\nFinal lead-in before the split table.\nThe table below continues on the next page.\n| Metric   |   Q1 |   Q2 |   Q3 |\n|----------|------|------|------|\n| Revenue  |  120 |  130 |  140 |\n| Margin   |   12 |   13 |   14 |\n| Margin   | 13     | 14   | 15   |\n|----------|--------|------|------|\n| Notes    | steady | up   | up   |\nAfter-table summary on page six."
+    }
+  ],
+  "language": "en",
+  "markdown": "## Continuity workbook\n\nText on pages one through three.\n\nMore explanatory text on page two.\n\nFinal lead-in before the split table.\n\nThe table below continues on the next page.\n\n| Metric   |   Q1 |   Q2 |   Q3 |\n|----------|------|------|------|\n| Revenue  |  120 |  130 |  140 |\n| Margin   |   12 |   13 |   14 |\n\n| Margin   | 13     | 14   | 15   |\n|----------|--------|------|------|\n| Notes    | steady | up   | up   |\n\nAfter-table summary on page six.",
+  "page_count": 6,
+  "parser": "docling",
+  "parser_version": "docling-2.107.1",
+  "partial": false,
+  "pictures": [],
+  "text_layer_page_share": 1.0,
+  "warnings": []
+}

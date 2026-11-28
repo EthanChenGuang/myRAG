@@ -1,0 +1,34 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "by_language": {
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "title": "By Language",
+      "type": "object"
+    },
+    "n": {
+      "minimum": 0,
+      "title": "N",
+      "type": "integer"
+    },
+    "passed": {
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "real_n": {
+      "minimum": 0,
+      "title": "Real N",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "n",
+    "real_n",
+    "passed",
+    "by_language"
+  ],
+  "title": "BindingDocTypeSlice",
+  "type": "object"
+}

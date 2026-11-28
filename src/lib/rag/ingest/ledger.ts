@@ -1,5 +1,6 @@
 import type { RpcClient } from '../backend/supabase-rpc';
-import { IngestionJobSchema, type IngestionJob, type JobSettingsSnapshot } from '@/lib/rag-eval/contracts.generated';
+import { IngestionJobSchema, type IngestionJob } from '@/lib/rag-eval/contracts.generated';
+import type { JobSettingsSnapshotWire } from './wire-defaults';
 import { getIngestDeps } from './deps';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 
@@ -76,7 +77,7 @@ const STRIPPED_JOB_COLUMNS = new Set(['error']);
 function normalizeJobRow(row: Row): Row {
   const out: Row = { ...row };
   for (const key of STRIPPED_JOB_COLUMNS) delete out[key];
-  for (const key of ['created_at', 'updated_at', 'deleted_at', 'lease_until', 'run_after', 'provisional_published_at'] as const) {
+  for (const key of ['created_at', 'updated_at', 'deleted_at', 'lease_until', 'run_after', 'provisional_published_at', 'dead_letter_at'] as const) {
     const value = iso(out[key]);
     if (value !== null) out[key] = value;
   }
@@ -150,7 +151,7 @@ export interface EnqueueJobArgs {
   filename?: string | null;
   mimeType?: string | null;
   originalRef?: Record<string, unknown> | null;
-  settings: JobSettingsSnapshot;
+  settings: JobSettingsSnapshotWire;
   priority?: number;
   documentId?: string | null;
   batchId?: string | null;
@@ -185,6 +186,36 @@ export async function enqueueJob(
   return parseJobRow('rag_enqueue_ingestion_job', row);
 }
 
+export interface EnqueueTranslateJobArgs {
+  documentId: string;
+  /** The document's own source (documents.source). */
+  source: string;
+  settings: JobSettingsSnapshotWire;
+  priority: number;
+}
+
+/**
+ * A job of kind translate (D-29). The tenant key is the published document's own (the post-publish event), checked again by the ledger
+ * function against the document row; the function returns the active job for the same document and language instead of a second one.
+ */
+export async function enqueueTranslateLedgerJob(tenantKey: string, args: EnqueueTranslateJobArgs, options: LedgerCallOptions): Promise<IngestionJob> {
+  const row = await callOne(
+    'rag_enqueue_ingestion_job',
+    {
+      p_tenant_key: tenantKey,
+      p_kind: 'translate',
+      p_source: args.source,
+      p_source_key: null,
+      p_settings: args.settings,
+      p_priority: args.priority,
+      p_document_id: args.documentId,
+      p_status: 'queued',
+    },
+    options,
+  );
+  return parseJobRow('rag_enqueue_ingestion_job', row);
+}
+
 export interface AdvanceJobArgs {
   jobId: string;
   worker: string;
@@ -210,6 +241,39 @@ export async function advanceJob(args: AdvanceJobArgs, options: LedgerCallOption
     options,
   );
   return parseJobRow('rag_advance_ingestion_job', row);
+}
+
+/** Progressive mode (D-30): flags the published fast version provisional and puts the job back at parse for the routed run. */
+export async function markProvisional(jobId: string, worker: string, options: LedgerCallOptions): Promise<IngestionJob> {
+  const row = await callOne('rag_mark_provisional', { p_job_id: jobId, p_worker: worker }, options);
+  return parseJobRow('rag_mark_provisional', row);
+}
+
+/** Progressive mode: points the job at the processing version of its lineage that the routed run writes. */
+export async function beginProgressiveFinal(jobId: string, worker: string, documentId: string, options: LedgerCallOptions): Promise<IngestionJob> {
+  const row = await callOne('rag_begin_progressive_final', { p_job_id: jobId, p_worker: worker, p_document_id: documentId }, options);
+  return parseJobRow('rag_begin_progressive_final', row);
+}
+
+/** D-35: parks a batch_api backfill job whose chunks are written without vectors at embed_deferred and releases its lease. */
+export async function deferEmbedding(jobId: string, worker: string, options: LedgerCallOptions): Promise<IngestionJob> {
+  const row = await callOne('rag_defer_ingestion_embed', { p_job_id: jobId, p_worker: worker }, options);
+  return parseJobRow('rag_defer_ingestion_embed', row);
+}
+
+/** D-35: publishes a deferred job once every chunk has its vector of `profileId` (the active profile); vectors_incomplete otherwise. */
+export async function publishDeferredJob(jobId: string, profileId: string, options: LedgerCallOptions): Promise<IngestionJob> {
+  const row = await callOne('rag_publish_deferred_ingestion_job', { p_job_id: jobId, p_profile_id: profileId }, options);
+  return parseJobRow('rag_publish_deferred_ingestion_job', row);
+}
+
+/** Progressive mode (A-9): the routed text equals the provisional text; clears the flags of the current version in place. */
+export async function clearProvisional(jobId: string, options: LedgerCallOptions): Promise<{ documentId: string; version: number }> {
+  const row = await callOne('rag_clear_provisional', { p_job_id: jobId }, options);
+  const documentId = row.document_id;
+  const version = row.version;
+  if (typeof documentId !== 'string' || typeof version !== 'number') throw new IngestLedgerError('rag_clear_provisional', 'bad_response');
+  return { documentId, version };
 }
 
 export async function recordAttempt(
@@ -351,4 +415,54 @@ export async function listJobs(args: ListJobsArgs, options: LedgerCallOptions): 
  */
 export async function listJobsAllTenants(args: ListJobsFilters, options: LedgerCallOptions): Promise<IngestionJob[]> {
   return (await listPage(null, args, options)).jobs;
+}
+
+export interface PurgeStaleJobsResult {
+  archived: number;
+  purged: number;
+  retention_days: number;
+}
+
+function parseCount(data: unknown): number {
+  if (typeof data === 'number') return data;
+  if (typeof data === 'string' && data !== '') return Number(data);
+  if (Array.isArray(data) && data[0] != null) return Number(data[0]);
+  return Number(data ?? 0);
+}
+
+function parsePurgePayload(data: unknown): PurgeStaleJobsResult {
+  if (!data || typeof data !== 'object') throw new IngestLedgerError('rag_purge_stale_ingestion_jobs', 'invalid_row');
+  const row = data as Record<string, unknown>;
+  return {
+    archived: Number(row.archived ?? 0),
+    purged: Number(row.purged ?? 0),
+    retention_days: Number(row.retention_days ?? 0),
+  };
+}
+
+export async function countDeadLetterJobs(
+  tenantKey: string | null,
+  options: LedgerCallOptions,
+): Promise<number> {
+  const rows = await callRpc('rag_count_ingestion_dead_letters', { p_tenant_key: tenantKey }, options);
+  const first = rows[0];
+  if (first && typeof first === 'object') {
+    const scalar = Object.values(first)[0];
+    return parseCount(scalar);
+  }
+  return parseCount(first);
+}
+
+export async function purgeStaleIngestionJobs(
+  retentionDays: number,
+  batchSize: number,
+  options: LedgerCallOptions,
+): Promise<PurgeStaleJobsResult> {
+  const rows = await callRpc(
+    'rag_purge_stale_ingestion_jobs',
+    { p_retention_days: retentionDays, p_batch_size: batchSize },
+    options,
+  );
+  if (!rows[0]) throw new IngestLedgerError('rag_purge_stale_ingestion_jobs', 'no_row');
+  return parsePurgePayload(rows[0]);
 }

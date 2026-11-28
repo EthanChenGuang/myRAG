@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { loadCorpus, type LoadedCorpus } from '../../eval/harness/corpus.mts';
 import { createFixtureDatabase, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
-import { buildIngestFixtureDatabase, ingestModeGoldenPaths, mergeGoldenFiles } from '../../eval/harness/ingest-mode.mts';
+import { buildIngestFixtureDatabase, ingestModeGoldenPaths, isPrechunkedOnlyDocument, mergeGoldenFiles } from '../../eval/harness/ingest-mode.mts';
 import { fixtureEntry } from '../helpers/fake-sidecar.ts';
 
 const CORPUS_DIR = path.join(process.cwd(), 'eval/fixtures/corpus');
@@ -52,7 +52,9 @@ describe('ingest fixture mode: the corpus goes through the real ingest()', () =>
     await fixture?.db.close();
   });
 
-  const corpusFilenames = () => corpus.documents.map((doc) => doc.filename);
+  /** The corpus documents ingest() writes; the sec-attacks documents are written pre-chunked (D-13). */
+  const ingestedDocuments = () => corpus.documents.filter((doc) => !isPrechunkedOnlyDocument(doc.relpath));
+  const corpusFilenames = () => ingestedDocuments().map((doc) => doc.filename);
 
   test('every corpus document is a ready, current config_upload document of the fixture tenant', async () => {
     const { rows } = await fixture.db.query<Row>(
@@ -79,7 +81,7 @@ describe('ingest fixture mode: the corpus goes through the real ingest()', () =>
        WHERE d.filename = ANY($1::text[])`,
       [corpusFilenames()],
     );
-    assert.ok(rows.length >= corpus.documents.length, `expected at least one chunk per document, got ${rows.length}`);
+    assert.ok(rows.length >= ingestedDocuments().length, `expected at least one chunk per document, got ${rows.length}`);
     const prefixed = rows.filter((row) => String(row.content).startsWith('Document: '));
     assert.equal(prefixed.length, 0, 'ingest mode must not store the prechunked Document: prefix');
     for (const row of rows) {
@@ -110,7 +112,7 @@ describe('ingest fixture mode: the corpus goes through the real ingest()', () =>
       'SELECT filename, content, metadata::text AS metadata, content_hash FROM documents WHERE filename = ANY($1::text[])',
       [corpusFilenames()],
     );
-    assert.equal(documents.rows.length, corpus.documents.length, 'every corpus document is there to inspect');
+    assert.equal(documents.rows.length, ingestedDocuments().length, 'every corpus document is there to inspect');
     const { contentHash } = await import('@/lib/rag/ingest/hash');
     for (const row of documents.rows) {
       assert.ok(!String(row.content ?? '').includes(MARKER), `${String(row.filename)} content holds a marker`);
@@ -123,9 +125,65 @@ describe('ingest fixture mode: the corpus goes through the real ingest()', () =>
     assert.ok(stripped.length >= 1, 'the corpus has a document with a fixture-meta line, so the check above is not vacuous');
   });
 
+  test('sec-attacks documents bypass ingest() as ready pre-chunked rows with lexical text; sec-topics go through ingest() (D-13)', async () => {
+    const attacks = corpus.documents.filter((doc) => isPrechunkedOnlyDocument(doc.relpath));
+    assert.deepEqual(
+      attacks.map((doc) => doc.relpath),
+      ['en/sec-attacks.en.md', 'it/sec-attacks.it.md', 'zh/sec-attacks.zh.md'],
+    );
+    assert.equal(isPrechunkedOnlyDocument('en/sec-topics.en.md'), false);
+    assert.equal(isPrechunkedOnlyDocument('en/sec-attacks-notes.en.md'), false);
+    const { LEXICAL_VERSION } = await import('@/lib/rag/lexical/chunk-text');
+    for (const doc of attacks) {
+      const { rows } = await fixture.db.query<Row>(
+        `SELECT c.id, c.content, c.status, c.is_current, c.tenant_key, c.lexical_version, c.lexical_text, c.content_hash, d.status AS document_status
+         FROM document_chunks c JOIN documents d ON d.id = c.document_id WHERE d.filename = $1 ORDER BY c.id`,
+        [doc.filename],
+      );
+      assert.deepEqual(
+        rows.map((row) => row.id),
+        doc.chunks.map((chunk) => chunk.id).sort(),
+        `${doc.filename} is written with the prechunked chunk ids`,
+      );
+      for (const row of rows) {
+        assert.ok(String(row.content).startsWith(`Document: ${doc.filename}. Chunk `), `${doc.filename} keeps the prechunked content`);
+        assert.equal(row.status, 'ready');
+        assert.equal(row.document_status, 'ready');
+        assert.equal(row.is_current, true);
+        assert.equal(row.tenant_key, 's:default');
+        assert.equal(row.content_hash, null, `${doc.filename} did not come through the ingest() writer`);
+        assert.equal(row.lexical_version, LEXICAL_VERSION);
+        assert.ok(String(row.lexical_text ?? '').length > 0, `${doc.filename} has lexical text`);
+      }
+    }
+    const topics = await fixture.db.query<Row>(
+      `SELECT d.filename, c.parser_used, count(c.id)::int AS chunks FROM documents d JOIN document_chunks c ON c.document_id = d.id
+       WHERE d.filename LIKE 'sec-topics.%' GROUP BY 1, 2 ORDER BY 1`,
+    );
+    assert.deepEqual(
+      topics.rows.map((row) => [row.filename, row.parser_used]),
+      [
+        ['sec-topics.en.md', 'text'],
+        ['sec-topics.it.md', 'text'],
+        ['sec-topics.zh.md', 'text'],
+      ],
+    );
+  });
+
+  test('the pre-chunked relex leaves the rows ingest() wrote without the current lexical version as they were', async () => {
+    const { LEXICAL_VERSION } = await import('@/lib/rag/lexical/chunk-text');
+    const { rows } = await fixture.db.query<Row>(
+      `SELECT d.filename FROM document_chunks c JOIN documents d ON d.id = c.document_id
+       WHERE c.lexical_version IS DISTINCT FROM $1 GROUP BY 1 ORDER BY 1`,
+      [LEXICAL_VERSION],
+    );
+    assert.ok(rows.length > 0, 'the build has rows ingest() left without a lexical version, so a full relex would have changed them');
+    assert.ok(rows.every((row) => !String(row.filename).startsWith('sec-attacks.')));
+  });
+
   test('documents.content holds the parsed text of every document, the text the chunker consumed', async () => {
     const { rows } = await fixture.db.query<Row>('SELECT filename, content FROM documents WHERE filename = ANY($1::text[])', [corpusFilenames()]);
-    assert.equal(rows.length, corpus.documents.length, 'every corpus document is there to inspect');
+    assert.equal(rows.length, ingestedDocuments().length, 'every corpus document is there to inspect');
     for (const row of rows) {
       const source = corpus.documents.find((doc) => doc.filename === row.filename);
       assert.ok(source, `${String(row.filename)} is a corpus document`);

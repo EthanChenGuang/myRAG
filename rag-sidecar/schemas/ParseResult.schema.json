@@ -38,6 +38,10 @@
           "default": null,
           "title": "Table Header"
         },
+        "table_header_carried": {
+          "title": "Table Header Carried",
+          "type": "boolean"
+        },
         "text": {
           "title": "Text",
           "type": "string"

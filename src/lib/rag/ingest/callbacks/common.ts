@@ -12,7 +12,7 @@ export function refuse(status: 400 | 404 | 409 | 500, error: string): CallbackRe
   return { status, body: { error } };
 }
 
-export const TERMINAL_JOB_STATUSES: ReadonlySet<IngestionJob['status']> = new Set(['ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate']);
+export const TERMINAL_JOB_STATUSES: ReadonlySet<IngestionJob['status']> = new Set(['ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate', 'pending_review']);
 
 export function isTerminal(job: IngestionJob): boolean {
   return TERMINAL_JOB_STATUSES.has(job.status);

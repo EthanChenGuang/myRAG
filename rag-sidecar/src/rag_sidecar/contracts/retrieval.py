@@ -11,7 +11,12 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validat
 
 from rag_sidecar.contracts.ingest import DocType
 
-FilterLanguage = Literal["zh", "en", "it"]
+from .languages import Language
+from .omit import omit_none_schema
+from .scopes import ScopeFilter
+from .templated import AttributeFilter
+
+FilterLanguage = Language
 
 Pairing = Literal["same", "cross"]
 RefusalCellStatus = Literal["calibrated", "uncalibrated", "insufficient_data", "failed_holdout"]
@@ -21,6 +26,11 @@ ChunkingProfileStatus = Literal["building", "ready", "active", "retired"]
 ParentMode = Literal["none", "structure", "fixed"]
 ChunkingPreset = Literal["128/512", "256/1024", "256/2048", "custom"]
 ChunkingDecisionSource = Literal["fixture", "live"]
+VectorBackend = Literal["pgvector", "weaviate", "qdrant"]
+ExternalVectorBackend = Literal["weaviate", "qdrant"]
+RefusalMode = Literal["strict", "balanced", "flexible"]
+DupClusterSource = Literal["fixture", "live"]
+IdentifierFlags = Literal["u", "iu"]
 
 _CHUNKING_ERROR_CODES = frozenset(
     {
@@ -45,14 +55,47 @@ class ConfigProvenance(_Contract):
     source: ConfigProvenanceSource
 
 
+def _optional_positive_number_schema(schema: dict[str, Any]) -> None:
+    schema.pop("default", None)
+    branches = schema.pop("anyOf", None) or []
+    for branch in branches:
+        if branch.get("type") == "number":
+            schema.update(branch)
+
+
 class RetrievalLegWeights(_Contract):
     dense: float = Field(default=1.0, gt=0)
     lexical: float = Field(default=1.0, gt=0)
     exact_id: float = Field(default=1.0, gt=0)
+    domain: float | None = Field(
+        default=None,
+        gt=0,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_positive_number_schema,
+    )
+    translation: float | None = Field(
+        default=None,
+        gt=0,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_positive_number_schema,
+    )
 
 
 def _stable_json(payload: object) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _omit_none(value: object) -> bool:
+    return value is None
+
+
+def _optional_any_schema(schema: dict[str, Any]) -> None:
+    schema.pop("default", None)
+    branches = [branch for branch in schema.pop("anyOf", None) or [] if branch.get("type") != "null"]
+    if len(branches) == 1:
+        schema.update(branches[0])
+    elif branches:
+        schema["anyOf"] = branches
 
 
 def compute_config_hash(model: BaseModel, *, exclude: frozenset[str] = frozenset({"provenance", "config_hash"})) -> str:
@@ -63,29 +106,148 @@ def compute_config_hash(model: BaseModel, *, exclude: frozenset[str] = frozenset
     return digest
 
 
-class RetrievalParams(_Contract):
-    schema_version: Literal[1] = 1
-    candidate_pool_size: int = Field(default=75, ge=1, le=200)
-    rerank_input_cap: int = Field(default=75, ge=50, le=100)
-    final_top_k: int = Field(default=8, ge=1, le=100)
-    rrf_k: int = Field(default=60, ge=1)
-    leg_weights: RetrievalLegWeights = Field(default_factory=RetrievalLegWeights)
+class TableLookupParams(_Contract):
+    """D-15, D-16: the structured table leg; a row matches when at least min_cells distinct cells match."""
+
+    min_cells: int = Field(default=2, ge=1, le=20)
+    limit: int = Field(default=10, ge=1, le=100)
+    weight: float = Field(default=1.0, gt=0)
+
+
+class DiversityParams(_Contract):
+    """D-21, D-48: MMR over the reranked list; lambda 0.7 until a live sweep sets the shipped value."""
+
+    mmr_lambda: float = Field(default=0.7, ge=0, le=1)
+    mmr_window_factor: int = Field(default=3, ge=1, le=10)
+
+
+class DupClusterProfileEntry(_Contract):
+    """D-49: a duplicate threshold for one embedding profile; a fixture-fitted value applies in eval only."""
+
+    threshold: float = Field(gt=0, le=1)
+    source: DupClusterSource
+
+
+class DupClusterParams(_Contract):
+    threshold: float = Field(default=0.95, gt=0, le=1)
+    by_profile: dict[Annotated[str, Field(min_length=1, max_length=128)], DupClusterProfileEntry] = Field(
+        default_factory=dict
+    )
+
+
+class DupClusterParamsFile(DupClusterParams):
+    """D-49: eval/config/dup-cluster-params.json, written only by `rag_eval.calibrate dup-clusters`."""
+
     provenance: ConfigProvenance = Field(default_factory=lambda: ConfigProvenance(source="defaults"))
     config_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
+class TableRow(_Contract):
+    """D-45: one parsed Markdown table row; cell_tokens holds one token array per cell."""
+
+    table_key: str = Field(min_length=1, max_length=256)
+    row_index: int = Field(ge=0)
+    header: list[str] = Field(default_factory=list)
+    cells: list[str]
+    cell_tokens: list[list[str]]
+    chunk_ids: list[Annotated[str, Field(min_length=1)]] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _one_token_list_per_cell(self) -> "TableRow":
+        if len(self.cell_tokens) != len(self.cells):
+            raise ValueError("cell_tokens must hold one token list per cell")
+        return self
+
+
+class IdentifierPattern(_Contract):
+    """D-29: an admin-defined identifier pattern; the regex safety checks run in the app (D-52)."""
+
+    name: str = Field(min_length=1, max_length=80)
+    pattern: str = Field(min_length=1, max_length=200)
+    flags: IdentifierFlags = "u"
+    enabled: bool = True
+
+
+class IdentifierIndexEntry(_Contract):
+    """D-28: one identifier as written (raw) and after NFKC, case fold and separator removal (normalized)."""
+
+    raw: str = Field(min_length=1, max_length=200)
+    normalized: str = Field(min_length=1, max_length=200)
+
+
+class RetrievalParams(_Contract):
+    schema_version: Literal[1] = 1
+    candidate_pool_size: int = Field(default=75, ge=1, le=200)
+    rerank_input_cap: int = Field(default=75, ge=25, le=100)
+    final_top_k: int = Field(default=8, ge=1, le=100)
+    rrf_k: int = Field(default=60, ge=1)
+    leg_weights: RetrievalLegWeights = Field(default_factory=RetrievalLegWeights)
+    sub_question_coverage: bool = True
+    mmr_lambda: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        exclude_if=_omit_none,
+        json_schema_extra=omit_none_schema,
+    )
+    provenance: ConfigProvenance = Field(default_factory=lambda: ConfigProvenance(source="defaults"))
+    config_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+    @model_validator(mode="after")
+    def _cap_not_above_pool(self) -> "RetrievalParams":
+        if self.rerank_input_cap > self.candidate_pool_size:
+            raise ValueError("rerank_input_cap must not exceed candidate_pool_size")
+        return self
+
+
 class RetrievalOverrides(_Contract):
     candidate_pool_size: int | None = Field(default=None, ge=1, le=200)
-    rerank_input_cap: int | None = Field(default=None, ge=50, le=100)
+    rerank_input_cap: int | None = Field(default=None, ge=25, le=100)
     final_top_k: int | None = Field(default=None, ge=1, le=100)
     rrf_k: int | None = Field(default=None, ge=1)
     leg_weights: RetrievalLegWeights | None = None
     rerank_model: str | None = Field(default=None, min_length=1)
+    chunking_profile_by_doc_type: dict[DocType, Annotated[str, Field(min_length=1, max_length=128)]] = Field(default_factory=dict)
+    backend: VectorBackend | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=omit_none_schema,
+    )
+    table_lookup: TableLookupParams | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    diversity: DiversityParams | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    dup_cluster: DupClusterParams | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+
+
+class VersionRange(_Contract):
+    """D-12: a version period; either bound may be left open, not both."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, serialize_by_alias=True)
+
+    from_: Annotated[
+        date | None, Field(default=None, alias="from", exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    ]
+    to: date | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+
+    @model_validator(mode="after")
+    def _bounded_and_ordered(self) -> "VersionRange":
+        if self.from_ is None and self.to is None:
+            raise ValueError("versions range needs from or to")
+        if self.from_ is not None and self.to is not None and self.from_ > self.to:
+            raise ValueError("versions.from must be on or before versions.to")
+        return self
+
+
+VersionScope = Literal["current", "all"] | VersionRange
 
 
 class DateRangeFilter(_Contract):
     from_: Annotated[date, Field(alias="from")]
     to: date
+    include_undated: bool = False
 
     @model_validator(mode="after")
     def _from_before_to(self) -> "DateRangeFilter":
@@ -107,6 +269,18 @@ class InvoiceFilter(_Contract):
         return self
 
 
+def _optional_object_schema(schema: dict[str, Any]) -> None:
+    schema.pop("default", None)
+    branches = schema.pop("anyOf", None) or []
+    for branch in branches:
+        if branch.get("type") != "null":
+            schema.update(branch)
+
+
+def _optional_boolean_schema(schema: dict[str, Any]) -> None:
+    schema.pop("default", None)
+
+
 def _reject_empty_list(values: list[Any] | None, field: str) -> list[Any] | None:
     if values is None:
         return None
@@ -123,6 +297,32 @@ class RetrievalFilters(_Contract):
     languages: list[FilterLanguage] | None = None
     invoice: InvoiceFilter | None = None
     current_only: Literal[True] = True
+    versions: VersionScope | None = Field(
+        default=None,
+        exclude_if=_omit_none,
+        json_schema_extra=_optional_any_schema,
+    )
+    scopes: ScopeFilter | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_object_schema,
+    )
+    include_untagged: bool = Field(
+        default=False,
+        exclude_if=lambda value: value is False,
+        json_schema_extra=_optional_boolean_schema,
+    )
+    attributes: AttributeFilter | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_object_schema,
+    )
+
+    @model_validator(mode="after")
+    def _untagged_needs_scopes(self) -> "RetrievalFilters":
+        if self.include_untagged and self.scopes is None:
+            raise ValueError("include_untagged requires scopes")
+        return self
 
     @field_validator("sources", mode="after")
     @classmethod
@@ -141,7 +341,7 @@ class RetrievalFilters(_Contract):
 
     @field_validator("languages", mode="after")
     @classmethod
-    def _non_empty_languages(cls, value: list[Language] | None) -> list[Language] | None:
+    def _non_empty_languages(cls, value: list[FilterLanguage] | None) -> list[FilterLanguage] | None:
         return _reject_empty_list(value, "languages")  # type: ignore[return-value]
 
 
@@ -155,6 +355,7 @@ class RefusalMetricBlock(_Contract):
 
 class RefusalCell(_Contract):
     key: str = Field(min_length=1)
+    mode: RefusalMode | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
     provider: str = Field(min_length=1)
     model: str = Field(min_length=1)
     query_language: FilterLanguage
@@ -169,6 +370,9 @@ class RefusalCell(_Contract):
     holdout_evaluations: int = Field(ge=0)
     dev: RefusalMetricBlock
     holdout: RefusalMetricBlock
+    embedding_model: str | None = Field(
+        default=None, min_length=1, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
 
     @model_validator(mode="after")
     def _calibrated_needs_threshold(self) -> "RefusalCell":
@@ -179,13 +383,15 @@ class RefusalCell(_Contract):
     @model_validator(mode="after")
     def _key_matches_dims(self) -> "RefusalCell":
         expected = f"{self.provider}|{self.model}|{self.query_language}|{self.pairing}"
+        if self.mode is not None:
+            expected = f"{expected}|{self.mode}"
         if self.key != expected:
-            raise ValueError("cell.key must equal provider|model|query_language|pairing")
+            raise ValueError("cell.key must equal provider|model|query_language|pairing, plus |mode when mode is set")
         return self
 
 
 class RefusalThresholds(_Contract):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 1
     cells: list[RefusalCell] = Field(default_factory=list)
     provenance: ConfigProvenance = Field(default_factory=lambda: ConfigProvenance(source="defaults"))
     config_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
@@ -197,6 +403,13 @@ class RefusalThresholds(_Contract):
             raise ValueError("duplicate refusal cell keys")
         return self
 
+    @model_validator(mode="after")
+    def _version_follows_mode_cells(self) -> "RefusalThresholds":
+        has_mode = any(cell.mode is not None for cell in self.cells)
+        if has_mode != (self.schema_version == 2):
+            raise ValueError("schema_version is 2 exactly when a cell carries a mode")
+        return self
+
 
 class CountMinimums(_Contract):
     no_answer: int = Field(ge=0)
@@ -206,6 +419,13 @@ class CountMinimums(_Contract):
 class EnvironmentMinimums(_Contract):
     fixture: CountMinimums
     live: CountMinimums
+
+
+class RefusalModeTargets(_Contract):
+    """D-23: per-mode operating point; null means the shared target_false_refusal."""
+
+    max_false_answer: float | None = Field(default=None, ge=0, le=1)
+    target_false_refusal: float | None = Field(default=None, ge=0, le=1)
 
 
 class RefusalCalibrationConfig(_Contract):
@@ -224,6 +444,9 @@ class RefusalCalibrationConfig(_Contract):
         )
     )
     pass_rule: str = "false_refusal_test <= target + max(noise_floor, 1 / n_test_answerable)"
+    targets_by_mode: dict[RefusalMode, RefusalModeTargets] | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
     provenance: ConfigProvenance = Field(default_factory=lambda: ConfigProvenance(source="defaults"))
     config_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
@@ -373,6 +596,7 @@ def write_chunking_cases(path: Path) -> None:
 class ChunkingMetricValue(_Contract):
     value: float | None
     n: int = Field(ge=0)
+    upper_95: float | None = Field(default=None, ge=0, le=1)
 
 
 class ChunkingSliceMetrics(_Contract):
@@ -416,6 +640,7 @@ class ChunkingSweepProfileEntry(_Contract):
 class ChunkingSweepReport(_Contract):
     schema_version: Literal[1] = 1
     profiles: list[ChunkingSweepProfileEntry] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
     provenance: ConfigProvenance
     config_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 

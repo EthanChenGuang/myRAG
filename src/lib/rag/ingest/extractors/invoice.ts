@@ -1,7 +1,7 @@
 import type { InvoiceFields } from '@/lib/rag-eval/contracts.generated';
 import { detectLanguage } from '../../lang/detect';
-import { lexicalText } from '../../lexical/tokenize';
 import { scanText } from '../../security/injection-scan';
+import { ingestLexical, lexicalFieldsFor, type IngestLexical } from '../lexical-options';
 import { extractInvoice, fillInvoiceFields, InvoiceClientError } from '../invoice-client';
 import { IngestStageError, requireDocument, type StageContext } from '../types';
 import { IngestWriterError } from '../writer';
@@ -93,7 +93,7 @@ function promotedColumns(fields: InvoiceFields): Record<string, string | null> {
 }
 
 /** The invoice number and tax ids go in front of every chunk's section_path and into its lexical_text, so an exact identifier is matched in the text. */
-function amendChunks(ctx: StageContext, fields: InvoiceFields): void {
+function amendChunks(ctx: StageContext, fields: InvoiceFields, lexical: IngestLexical): void {
   const taxIds = [fields.supplier?.tax_id, fields.buyer?.tax_id].filter((id): id is string => typeof id === 'string' && id !== '');
   const prefix = [
     ...(fields.invoice_number ? [`Invoice ${fields.invoice_number.slice(0, ID_LIMIT)}`] : []),
@@ -102,7 +102,7 @@ function amendChunks(ctx: StageContext, fields: InvoiceFields): void {
   if (prefix.length === 0) return;
   for (const draft of ctx.work.chunks) {
     draft.section_path = [...prefix, ...draft.section_path];
-    draft.lexical_text = lexicalText(draft.section_path, draft.content);
+    draft.lexical_text = lexicalFieldsFor(lexical, draft.section_path, draft.content).lexical_text;
   }
 }
 
@@ -169,7 +169,7 @@ async function run(ctx: StageContext): Promise<void> {
 
   ctx.work.templateRow = columns;
   ctx.state.invoice = { extractor: 'sidecar', status: 'ok' };
-  amendChunks(ctx, fields);
+  amendChunks(ctx, fields, await ingestLexical(ctx));
 }
 
 export const invoiceExtractor: DocumentExtractor = { level: 'document', run };

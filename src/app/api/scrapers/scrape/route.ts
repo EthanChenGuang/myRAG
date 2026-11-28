@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { repairOwnerMembership, resolveTenantScope } from '@/lib/rag';
+import {
+    UploadApprovalRequiresUnifiedError,
+    legacyApprovalRefusal,
+    legacyWriteRefused,
+    repairOwnerMembership,
+    resolveTenantScope,
+} from '@/lib/rag';
 import type { RagAdminDb, TenantScope } from '@/lib/rag';
 import { requireSessionUser } from '@/lib/session-auth';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
@@ -55,6 +61,11 @@ export async function POST(request: NextRequest) {
             console.error('[Scrape API] Authorization lookup failed');
             return NextResponse.json({ error: 'Authentication unavailable' }, { status: 503 });
         }
+    }
+
+    // D-56: the legacy writer cannot hold a document, so the legacy pipeline refuses while upload approval is on.
+    if (scraperPipeline() === 'legacy' && legacyWriteRefused()) {
+        return legacyApprovalRefusal();
     }
 
     // Check if Firecrawl is enabled
@@ -144,7 +155,7 @@ export async function POST(request: NextRequest) {
         // Scrape and process the URL
         const result = await scrapeAndProcess(
             scope
-                ? { url: normalizedUrl, scope, signal: request.signal, outputFormat: outputFormat || 'html' }
+                ? { url: normalizedUrl, scope, signal: request.signal, uploaderId: userId, outputFormat: outputFormat || 'html' }
                 : { url: normalizedUrl, userId, organizationId, outputFormat: outputFormat || 'html' }
         );
 
@@ -160,6 +171,9 @@ export async function POST(request: NextRequest) {
         });
 
     } catch (error) {
+        if (error instanceof UploadApprovalRequiresUnifiedError) {
+            return legacyApprovalRefusal();
+        }
         console.error('[Scrape API] Error:', error);
 
         // Handle specific error types

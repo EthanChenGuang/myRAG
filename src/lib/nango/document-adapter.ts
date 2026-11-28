@@ -1,9 +1,11 @@
 import { processDocument } from '@/lib/document-processor';
 import { logger } from '@/lib/logger';
 import {
+  assertLegacyWriteAllowed,
   buildSourceKey,
   currentIngestConfig,
   ingest,
+  legacyUploadRoute,
   nangoOwnerScope,
   submitIngest,
   type EnqueueResult,
@@ -56,7 +58,9 @@ export class NangoIngestError extends Error {
  */
 export function nangoPipeline(): NangoPipeline {
   try {
-    return currentIngestConfig().pipeline === 'unified' ? 'unified' : 'legacy';
+    const config = currentIngestConfig();
+    // D-16: language-aware ingestion sends syncs to the unified pipeline even under RAG_INGEST_PIPELINE=legacy.
+    return config.pipeline === 'unified' || legacyUploadRoute(config) === 'unified' ? 'unified' : 'legacy';
   } catch {
     logger.warn('Nango', 'ingest switch unavailable, using the legacy pipeline');
     return 'legacy';
@@ -129,6 +133,9 @@ export async function processDocumentWithMetadata(
     return ingestNangoDocument(filename, buffer, options);
   }
 
+  // D-56: the legacy processor cannot hold a document; with upload approval on the sync item fails with that code.
+  assertLegacyWriteAllowed();
+
   // Use the existing document processor with all metadata including user_id
   // Stored sources include 'nango' although the processor's declared union omits it
   const metadata = {
@@ -158,6 +165,8 @@ async function ingestNangoDocument(filename: string, buffer: Buffer, options: Pr
     scope: owner.scope,
     source: 'nango',
     sourceKey: buildSourceKey('nango', { providerFileId: sourceFileId }),
+    // The connection owner, from the server's connection record: the uploader of a synced item (D-37).
+    uploaderId: options.userId,
     file: buffer,
     filename: ingestFilename(filename, mimeType),
     mimeType,
@@ -187,6 +196,10 @@ async function ingestNangoDocument(filename: string, buffer: Buffer, options: Pr
 
   if (result.status === 'quarantined') {
     logger.warn('Nango', 'A synced file was quarantined by the injection scan and is not searchable');
+  }
+  // A held file is finished: it waits for an admin's approval (D-36) and the sync must not retry it.
+  if (result.status === 'pending_review') {
+    logger.info('Nango', 'A synced file is pending review and is not searchable until an admin approves it');
   }
   logger.debug('Nango', `Ingested ${result.status} document ${documentId}`);
   return documentId;

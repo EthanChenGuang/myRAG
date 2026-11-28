@@ -19,14 +19,14 @@ This phase has two halves.
 - An index-ready state per backend, profile and tenant falls back to pgvector and reports `degraded`.
 - The Phase 4 conformance suite, including the Chinese exact-term case, passes unchanged on both backends.
 
-**2. Release closeout (ADM-01 to ADM-04, EVAL-17):**
+**2. Release closeout (ADM-01 to ADM-04; EVAL-17 moved to Phase 5.1.1 on 2026-11-24):**
 - every provider and switch in the Config UI, with masked secrets, Test-connection and the index-compatibility warning;
 - a full regression that sets the shipped defaults and records the decision with its numbers;
 - docs and `.env` templates;
 - a vendor data-flow inventory;
-- the Config UI review-queue workflow that promotes production failures into the private golden set, plus a periodic failure report.
+- ~~the Config UI review-queue workflow that promotes production failures into the private golden set, plus a periodic failure report~~ — moved to Phase 5.1.1 (2026-11-24).
 
-Requirements in scope: RET-05, RET-06, RET-07, RET-08, RET-09, ADM-01, ADM-02, ADM-03, ADM-04 and EVAL-17. Also verified here: the "every backend" clauses of RET-01 to RET-03, and RET-10 for Qdrant and Weaviate.
+Requirements in scope: RET-05, RET-06, RET-07, RET-08, RET-09, ADM-01, ADM-02, ADM-03 and ADM-04 (EVAL-17 moved to Phase 5.1.1 on 2026-11-24). Also verified here: the "every backend" clauses of RET-01 to RET-03, and RET-10 for Qdrant and Weaviate.
 
 Out of scope:
 - New retrieval algorithms. Fusion, the tokenizer, rerank and refusal are Phase 4, and this phase must not change them per backend.
@@ -193,17 +193,17 @@ Dependencies:
   - A generated `docs/vendor-data-flow.md` is linked from the README.
   - `check-config` fails when a managed variable of type `url` or `secret` belongs to a provider with no inventory entry.
 
-### Review queue in the Config UI (EVAL-17)
-- **D-21:** The panel lives in `config-server.js` (the local operator tool) and reads the private queue under `eval/golden/private/review-queue/` on the operator's machine. The queue is fed by EVAL-15 pulls and Phase 5 EVAL-16 votes and "possibly unreliable" results.
+### Review queue in the Config UI (EVAL-17) — moved to Phase 5.1.1
+- **D-21:** **Moved to Phase 5.1.1** (05.1.1-CONTEXT.md D-02, 2026-11-24); not implemented in Phase 7. The panel lives in `config-server.js` (the local operator tool) and reads the private queue under `eval/golden/private/review-queue/` on the operator's machine. The queue is fed by EVAL-15 pulls and Phase 5 EVAL-16 votes and "possibly unreliable" results.
   - Each item shows the masked question, the answer, the retrieved chunk IDs with their document names and kept status, the refusal and groundedness status, and a Langfuse trace link.
   - Chunk text for selecting evidence spans comes from a new admin route, `GET /api/rag/admin/review/chunks`. It is admin-only and fails closed. It returns text only for the chunk IDs recorded in that queue item's trace, under the trace's `tenant_key`, and each access is logged with the admin ID.
   - The reviewer writes the expected answer, sets category, answerable and language, selects evidence spans (exact quotes validated against the chunk text), and promotes.
-- **D-22:** Promotion has one implementation, in Python. `python -m rag_eval.review_queue promote` is extended to accept the full item (expected answer, category, answerable, spans) as a JSON file. `config-server.js` calls it with `execFile` (no shell), passing a validated temporary file inside the private directory.
+- **D-22:** **Moved to Phase 5.1.1** (05.1.1-CONTEXT.md D-02, 2026-11-24); not implemented in Phase 7. Promotion has one implementation, in Python. `python -m rag_eval.review_queue promote` is extended to accept the full item (expected answer, category, answerable, spans) as a JSON file. `config-server.js` calls it with `execFile` (no shell), passing a validated temporary file inside the private directory.
   - The item is stored only in the gitignored private path, with provenance `production`, and the split comes from the frozen hash rule (`freeze_splits`).
   - Near-duplicates are detected with a deterministic character 3-gram Jaccard similarity of at least 0.85 on the normalized question, which works for zh. A near-duplicate needs an explicit confirm, recorded on the item.
   - Promoted items are never removed. There is no delete command. The eval loader fails when an ID in the split manifest is missing from the golden file, so a deleted item is caught.
   - Existing CLI exit codes stay.
-- **D-23:** The failure report is `python -m rag_eval.failure_report --since <date>`, run in the nightly workflow when private data is present and skipped otherwise. It lists new failures since the last report, grouped by layer and category. The layer is derived from the trace:
+- **D-23:** **Moved to Phase 5.1.1** (05.1.1-CONTEXT.md D-02, 2026-11-24); not implemented in Phase 7. The failure report is `python -m rag_eval.failure_report --since <date>`, run in the nightly workflow when private data is present and skipped otherwise. It lists new failures since the last report, grouped by layer and category. The layer is derived from the trace:
   - gold evidence never retrieved: retrieval;
   - retrieved but cut before context: rerank or assembly;
   - a false refusal: refusal;
@@ -276,9 +276,9 @@ Dependencies:
 - **D-18:** challenger must win beyond noise on the primary metric with no gated slice regressing, budgets held and injection ASR 0; pgvector default unless beaten beyond CI width; security wins ties; DefaultsDecision JSON plus decision record; fixtures provisional; code defaults only from the live record, checked (costly)
 - **D-19:** README_RAG_PIPELINE.md, AGENTS.md section and links, init-env.js group comments
 - **D-20:** config/rag/vendor-data-flow.json (Pydantic) with generated docs and a check-config rule against the providers
-- **D-21:** config-server review-queue panel over the private queue; admin route returns chunk text only for the item's trace chunks, audited
-- **D-22:** promote extended in Python (full item via JSON file, execFile), frozen split, 3-gram Jaccard near-duplicate confirm, never removed (loader fails on a missing manifest id)
-- **D-23:** `rag_eval.failure_report` grouping new failures by layer (from the trace) and category, nightly when private data exists
+- **D-21:** config-server review-queue panel over the private queue; admin route returns chunk text only for the item's trace chunks, audited — moved to Phase 5.1.1
+- **D-22:** promote extended in Python (full item via JSON file, execFile), frozen split, 3-gram Jaccard near-duplicate confirm, never removed (loader fails on a missing manifest id) — moved to Phase 5.1.1
+- **D-23:** `rag_eval.failure_report` grouping new failures by layer (from the trace) and category, nightly when private data exists — moved to Phase 5.1.1
 - **D-24:** new env vars (backend, voice backend, sync secret, max lag, Weaviate and Qdrant URLs and keys); sync targets in a table; five locations; default = Phase 6 behaviour
 - **D-25:** search span backend, fallback and validation fields; [Vector Sync] slice logs; no text
 - **D-26:** rollout order

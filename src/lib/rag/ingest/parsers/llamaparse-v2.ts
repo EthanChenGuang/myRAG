@@ -2,6 +2,8 @@ import { z } from 'zod/v3';
 import { env } from '@/lib/env';
 import { ParseResultSchema, type ParseResult } from '@/lib/rag-eval/contracts.generated';
 import { isTenantScope } from '../../tenant/scope';
+import { PAGE_TEXTS_ARTIFACT } from '../artifacts';
+import { currentIngestConfig } from '../current-config';
 import { CloudRefused, assertCloudAllowed, reservePremium } from '../guard/cloud-budget';
 import {
   MAX_ARTIFACT_BYTES,
@@ -190,7 +192,14 @@ export function createLlamaParseParser(config: LlamaParseConfig): DocumentParser
     const form = new FormData();
     const extension = extensionOf(request.filename);
     form.set('file', new Blob([request.bytes as unknown as BlobPart]), `document.${extension === '' ? 'bin' : extension}`);
-    form.set('configuration', JSON.stringify({ tier: config.tier, version: 'latest' }));
+    const languages = request.settings?.llamaparseLanguages ?? [];
+    // research F-3: OCR languages only when they are configured, primary first; unset, the configuration is today's.
+    const configuration = {
+      tier: config.tier,
+      version: 'latest',
+      ...(languages.length > 0 ? { processing_options: { ocr_parameters: { languages } } } : {}),
+    };
+    form.set('configuration', JSON.stringify(configuration));
     const response = await fetchParser('llamaparse', `${base}${UPLOAD_PATH}`, { method: 'POST', headers: headers(), body: form }, request.signal, timeoutFor(request));
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);
@@ -246,15 +255,18 @@ export function createLlamaParseParser(config: LlamaParseConfig): DocumentParser
     const pages = [...(job.markdown?.pages ?? [])].sort((a, b) => a.page_number - b.page_number);
     const itemPages = new Map((job.items?.pages ?? []).map((page) => [page.page_number, page]));
     const parts: string[] = [];
+    const pageTexts: Array<{ page: number; text: string }> = [];
     let partial = false;
     for (const page of pages) {
       if (!page.success) {
         partial = true;
         if (warnings.length < MAX_PAGE_WARNINGS) warnings.push(`llamaparse_page_failed:${page.page_number}`);
+        pageTexts.push({ page: page.page_number, text: '' });
         continue;
       }
       const items = (itemPages.get(page.page_number)?.items ?? []) as Item[];
       const text = applyTables(applyHeadings(page.markdown ?? '', items), items);
+      pageTexts.push({ page: page.page_number, text: text.trim() });
       if (text.trim() !== '') parts.push(text.trim());
     }
     if (pages.length === 0 || parts.length === 0) throw new ParserError('llamaparse', 'empty_result');
@@ -294,7 +306,12 @@ export function createLlamaParseParser(config: LlamaParseConfig): DocumentParser
     };
     const checked = ParseResultSchema.safeParse(candidate);
     if (!checked.success) throw new ParserError('llamaparse', 'invalid_response');
-    return { kind: 'done', result: checked.data, artifacts, warnings: [] };
+    // D-14: page cleaning by detection needs page structure; only then is the per-page text stored beside parse.md (no request change).
+    const cleaning = currentIngestConfig().pageBoilerplate;
+    const stored = cleaning === 'detect' || cleaning === 'both'
+      ? [...artifacts, { name: PAGE_TEXTS_ARTIFACT, bytes: new TextEncoder().encode(JSON.stringify({ pages: pageTexts })), contentType: 'application/json' }]
+      : artifacts;
+    return { kind: 'done', result: checked.data, artifacts: stored, warnings: [], pages: pageTexts };
   }
 
   return {

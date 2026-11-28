@@ -7,6 +7,8 @@ from collections.abc import Mapping
 
 from pydantic import BaseModel, ConfigDict, SecretStr
 
+from rag_sidecar.ingest.supabase_url import assert_supabase_api_url
+
 _SUPABASE_URL = "NEXT_PUBLIC_SUPABASE_URL"
 _SERVICE_KEY = "SUPABASE_SERVICE_ROLE_KEY"
 _APP_URL = "RAG_APP_INTERNAL_URL"
@@ -29,8 +31,9 @@ class WorkerEnv(BaseModel):
         missing = [name for name in _REQUIRED if not values[name]]
         if missing:
             raise ValueError(f"worker environment is incomplete: {', '.join(missing)}")
+        api_url = assert_supabase_api_url(values[_SUPABASE_URL], label=_SUPABASE_URL)
         return cls(
-            supabase_url=values[_SUPABASE_URL].rstrip("/"),
+            supabase_url=api_url.rstrip("/"),
             service_role_key=SecretStr(values[_SERVICE_KEY]),
             app_internal_url=values[_APP_URL].rstrip("/"),
             sidecar_secret=SecretStr(values[_SECRET]),

@@ -6,6 +6,7 @@ import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
 import { isLangfuseUsable, type LangfuseConfig } from './config';
 import { maskPII } from './mask';
 import type { StageRecord } from '../types';
+import type { TraceTiming } from './collector';
 
 const DEFAULT_FLUSH_TIMEOUT_MS = 4000;
 const EXPORT_REQUEST_TIMEOUT_SECONDS = 3;
@@ -14,7 +15,12 @@ const NOT_APPLICABLE = -1;
 const MAX_REVIEW_CONTEXT_CHARS = 40_000;
 const REVIEW_TAG = 'review_candidate';
 
+/** A stage plus optional scalar span metadata (codes and numbers only, never content). */
+export type TraceStage = StageRecord & { attributes?: Record<string, string | number | boolean> };
+
 export interface CollectedTrace {
+  /** Root observation name; defaults to rag-request. */
+  name?: string;
   traceId: string;
   tenantKey: string;
   profile: string;
@@ -23,8 +29,10 @@ export interface CollectedTrace {
   tags: string[];
   startedAt: number;
   endedAt: number;
-  stages: StageRecord[];
+  stages: TraceStage[];
   review?: { query?: string; answer?: string; context?: string; model?: string };
+  /** D-25: numbers and one fixed word, read from the collector when the export is built. */
+  timing?: TraceTiming;
   content?: { query?: string; chunks?: Array<{ document_name: string; content: string; similarity: number; rank: number }> };
 }
 
@@ -76,8 +84,9 @@ export async function resetLangfuseForTests(): Promise<void> {
   if (current) await current.provider.shutdown().catch(() => undefined);
 }
 
-function stageMetadata(stage: StageRecord): Record<string, unknown> {
+function stageMetadata(stage: TraceStage): Record<string, unknown> {
   return {
+    ...(stage.attributes ?? {}),
     latency_ms: stage.latency_ms,
     candidates_in: stage.candidates_in ?? NOT_APPLICABLE,
     candidates_out: stage.candidates_out ?? NOT_APPLICABLE,
@@ -119,6 +128,7 @@ export async function exportTrace(trace: CollectedTrace, options: ExportTraceOpt
 
   const content = trace.content;
   const review = trace.review;
+  const timing = trace.timing;
   const rootAttributes = {
     metadata: {
       tenantKey: trace.tenantKey,
@@ -127,6 +137,9 @@ export async function exportTrace(trace: CollectedTrace, options: ExportTraceOpt
       reason: trace.reason,
       ...(review?.context !== undefined ? { context: maskPII(review.context).slice(0, MAX_REVIEW_CONTEXT_CHARS) } : {}),
       ...(review?.model !== undefined ? { model: review.model } : {}),
+      ...(timing?.ttft_ms !== undefined ? { ttft_ms: timing.ttft_ms } : {}),
+      ...(timing?.pre_generation_ms !== undefined ? { pre_generation_ms: timing.pre_generation_ms } : {}),
+      ...(timing !== undefined ? { cache: timing.cache } : {}),
     },
     ...(review?.query !== undefined ? { input: maskPII(review.query) } : {}),
     ...(review?.answer !== undefined ? { output: maskPII(review.answer) } : {}),
@@ -134,7 +147,7 @@ export async function exportTrace(trace: CollectedTrace, options: ExportTraceOpt
     ...(content?.chunks !== undefined ? { output: maskPII({ chunks: content.chunks }) } : {}),
   };
 
-  const root = startObservation('rag-request', rootAttributes, {
+  const root = startObservation(trace.name ?? 'rag-request', rootAttributes, {
     startTime: new Date(trace.startedAt),
     parentSpanContext: {
       traceId: trace.traceId,

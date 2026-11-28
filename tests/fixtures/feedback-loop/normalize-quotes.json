@@ -1,0 +1,85 @@
+{
+  "generated_by": "eval/src/rag_eval/matching.py normalize_text (Python one-off)",
+  "cases": [
+    {
+      "input": "The sample component runs every night.",
+      "expected": "thesamplecomponentrunseverynight"
+    },
+    {
+      "input": "  Mixed   whitespace\tand\nnew lines  ",
+      "expected": "mixedwhitespaceandnewlines"
+    },
+    {
+      "input": "UPPER and lower CASE",
+      "expected": "upperandlowercase"
+    },
+    {
+      "input": "Punctuation: commas, dots... and (brackets)!",
+      "expected": "punctuationcommasdotsandbrackets"
+    },
+    {
+      "input": "示例组件每天晚上运行。",
+      "expected": "示例组件每天晚上运行"
+    },
+    {
+      "input": "全角标点：逗号，句号。问号？",
+      "expected": "全角标点逗号句号问号"
+    },
+    {
+      "input": "ＡＢＣ１２３ full-width letters",
+      "expected": "abc123fullwidthletters"
+    },
+    {
+      "input": "中文 与 English 混合，文本。",
+      "expected": "中文与english混合文本"
+    },
+    {
+      "input": "「引号」和『书名号』",
+      "expected": "引号和书名号"
+    },
+    {
+      "input": "Il componente di esempio è attivo ogni giorno.",
+      "expected": "ilcomponentediesempioèattivoognigiorno"
+    },
+    {
+      "input": "Perché, però, così: città!",
+      "expected": "perchéperòcosìcittà"
+    },
+    {
+      "input": "L’unità è già pronta — sì.",
+      "expected": "lunitàègiàprontasì"
+    },
+    {
+      "input": "È ARRIVATO IL MODULO À",
+      "expected": "èarrivatoilmoduloà"
+    },
+    {
+      "input": "Straße and ß fold",
+      "expected": "strasseandssfold"
+    },
+    {
+      "input": "ﬁle ligature and ① circled",
+      "expected": "fileligatureand1circled"
+    },
+    {
+      "input": "non breaking　ideographic space",
+      "expected": "nonbreakingideographicspace"
+    },
+    {
+      "input": "tab\u000bvertical\ffeed\u001cfile separator",
+      "expected": "tabverticalfeedfileseparator"
+    },
+    {
+      "input": "é combining accent",
+      "expected": "écombiningaccent"
+    },
+    {
+      "input": "quote 'single' and \"double\" marks",
+      "expected": "quotesingleanddoublemarks"
+    },
+    {
+      "input": "数字 2026-11-25 和 v1.2.3 版本",
+      "expected": "数字20261125和v123版本"
+    }
+  ]
+}

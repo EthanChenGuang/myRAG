@@ -1,0 +1,12 @@
+{
+  "id": "langchain.multi-query",
+  "version": 1,
+  "source": "@langchain/classic 1.0.61 dist/retrievers/multi_query.js DEFAULT_QUERY_PROMPT",
+  "license": "MIT",
+  "attribution": "Copyright (c) LangChain, Inc. Prompt text reused under the MIT License; placeholders {queryCount} and {question} renamed to the {{query_count}} and {{question}} syntax, text otherwise verbatim.",
+  "template": "You are an AI language model assistant. Your task is\nto generate {{query_count}} different versions of the given user\nquestion to retrieve relevant documents from a vector database.\nBy generating multiple perspectives on the user question,\nyour goal is to help the user overcome some of the limitations\nof distance-based similarity search.\n\nProvide these alternative questions separated by newlines between XML tags. For example:\n\n<questions>\nQuestion 1\nQuestion 2\nQuestion 3\n</questions>\n\nOriginal question: {{question}}",
+  "placeholders": [
+    "query_count",
+    "question"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "key": {
+      "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+      "title": "Key",
+      "type": "string"
+    },
+    "reason": {
+      "pattern": "^[a-z0-9_]+$",
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "key",
+    "reason"
+  ],
+  "title": "ConfigGateNotEvaluated",
+  "type": "object"
+}

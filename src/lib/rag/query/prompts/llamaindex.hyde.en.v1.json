@@ -1,0 +1,11 @@
+{
+  "id": "llamaindex.hyde.en",
+  "version": 1,
+  "source": "llama-index-core==0.14.26 llama_index/core/prompts/default_prompts.py DEFAULT_HYDE_PROMPT (HYDE_TMPL)",
+  "license": "MIT",
+  "attribution": "Copyright (c) Jerry Liu (LlamaIndex). Prompt text reused under the MIT License; placeholder {context_str} renamed to the {{context_str}} syntax, text otherwise verbatim.",
+  "template": "Please write a passage to answer the question\nTry to include as many key details as possible.\n\n\n{{context_str}}\n\n\nPassage:\"\"\"\n",
+  "placeholders": [
+    "context_str"
+  ]
+}

@@ -1,4 +1,5 @@
 import { lexicalTokens, queryLexicalTokens } from '@/lib/rag/lexical/tokenize';
+import { rerankerSupportedLanguages } from './languages';
 import { completeScores } from './scores';
 import type { Reranker, RerankOptions } from './types';
 
@@ -65,6 +66,7 @@ export function createLocalBm25Reranker(): Reranker {
     id: 'local_bm25',
     model: 'bm25-v2',
     scoreSemantics: 'relative',
+    supportedLanguages: rerankerSupportedLanguages('local_bm25'),
     async rerank(query, docs, opts: RerankOptions) {
       if (opts.signal.aborted) {
         throw opts.signal.reason ?? new DOMException('Aborted', 'AbortError');

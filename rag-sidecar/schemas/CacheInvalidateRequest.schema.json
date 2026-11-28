@@ -1,0 +1,32 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "document_ids": {
+      "anyOf": [
+        {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Document Ids"
+    },
+    "tenant_key": {
+      "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+      "title": "Tenant Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_key"
+  ],
+  "title": "CacheInvalidateRequest",
+  "type": "object"
+}

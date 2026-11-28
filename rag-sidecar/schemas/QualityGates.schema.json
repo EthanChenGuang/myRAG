@@ -1,0 +1,309 @@
+{
+  "$defs": {
+    "ConfigProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "defaults",
+            "sweep",
+            "calibration",
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ConfigProvenance",
+      "type": "object"
+    },
+    "QualityGatesCeilings": {
+      "additionalProperties": false,
+      "description": "A null ceiling is report-only (D-04).",
+      "properties": {
+        "false_answer_rate": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "propertyNames": {
+            "enum": [
+              "strict",
+              "balanced",
+              "flexible"
+            ]
+          },
+          "title": "False Answer Rate",
+          "type": "object"
+        },
+        "false_refusal_rate": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "propertyNames": {
+            "enum": [
+              "strict",
+              "balanced",
+              "flexible"
+            ]
+          },
+          "title": "False Refusal Rate",
+          "type": "object"
+        },
+        "min_n": {
+          "minimum": 1,
+          "title": "Min N",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "false_answer_rate",
+        "false_refusal_rate",
+        "min_n"
+      ],
+      "title": "QualityGatesCeilings",
+      "type": "object"
+    },
+    "QualityGatesComposition": {
+      "additionalProperties": false,
+      "properties": {
+        "excluded_categories": {
+          "items": {
+            "enum": [
+              "multi_turn",
+              "compound",
+              "exact_term",
+              "table",
+              "scanned",
+              "no_answer",
+              "general",
+              "colloquial",
+              "ambiguous",
+              "typo",
+              "cross_lingual",
+              "selective_filter",
+              "injection",
+              "injection_evasive",
+              "cache_paraphrase",
+              "cache_near_miss",
+              "small_talk",
+              "table_split",
+              "duplicate_flood",
+              "identifier_near_miss",
+              "templated_collection",
+              "implicit_condition"
+            ],
+            "type": "string"
+          },
+          "title": "Excluded Categories",
+          "type": "array"
+        },
+        "min_items_per_language": {
+          "minimum": 0,
+          "title": "Min Items Per Language",
+          "type": "integer"
+        },
+        "no_answer_share_min": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "No Answer Share Min",
+          "type": "number"
+        },
+        "no_answer_share_target": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "No Answer Share Target",
+          "type": "number"
+        },
+        "required_no_answer_kinds": {
+          "items": {
+            "pattern": "^[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Required No Answer Kinds",
+          "type": "array"
+        }
+      },
+      "required": [
+        "no_answer_share_min",
+        "no_answer_share_target",
+        "min_items_per_language"
+      ],
+      "title": "QualityGatesComposition",
+      "type": "object"
+    },
+    "QualityGatesFloors": {
+      "additionalProperties": false,
+      "description": "Judge metric floors per tier; a holistic or unknown metric is rejected (D-09, D-30).",
+      "properties": {
+        "nightly": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Nightly",
+          "type": "object"
+        },
+        "smoke": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Smoke",
+          "type": "object"
+        }
+      },
+      "title": "QualityGatesFloors",
+      "type": "object"
+    },
+    "QualityGatesJudge": {
+      "additionalProperties": false,
+      "properties": {
+        "accuracy_floor": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Accuracy Floor",
+          "type": "number"
+        },
+        "kappa_floor": {
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Kappa Floor",
+          "type": "number"
+        },
+        "length_bias_max_delta": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Length Bias Max Delta",
+          "type": "number"
+        },
+        "max_age_days": {
+          "minimum": 1,
+          "title": "Max Age Days",
+          "type": "integer"
+        },
+        "min_labels_per_language": {
+          "minimum": 1,
+          "title": "Min Labels Per Language",
+          "type": "integer"
+        },
+        "pass_threshold": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Pass Threshold",
+          "type": "object"
+        },
+        "perturbation_max_delta": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Perturbation Max Delta",
+          "type": "number"
+        },
+        "seed_min_labels_per_language": {
+          "minimum": 1,
+          "title": "Seed Min Labels Per Language",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kappa_floor",
+        "accuracy_floor",
+        "min_labels_per_language",
+        "seed_min_labels_per_language",
+        "length_bias_max_delta",
+        "perturbation_max_delta",
+        "max_age_days"
+      ],
+      "title": "QualityGatesJudge",
+      "type": "object"
+    },
+    "QualityGatesLifecycle": {
+      "additionalProperties": false,
+      "properties": {
+        "max_stale_share": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Stale Share",
+          "type": "number"
+        },
+        "re_review_days": {
+          "minimum": 1,
+          "title": "Re Review Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_stale_share",
+        "re_review_days"
+      ],
+      "title": "QualityGatesLifecycle",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "ceilings": {
+      "$ref": "#/$defs/QualityGatesCeilings"
+    },
+    "composition": {
+      "$ref": "#/$defs/QualityGatesComposition"
+    },
+    "config_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Hash"
+    },
+    "floors": {
+      "$ref": "#/$defs/QualityGatesFloors"
+    },
+    "judge": {
+      "$ref": "#/$defs/QualityGatesJudge"
+    },
+    "lifecycle": {
+      "$ref": "#/$defs/QualityGatesLifecycle"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ConfigProvenance"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "composition",
+    "ceilings",
+    "floors",
+    "judge",
+    "lifecycle",
+    "provenance"
+  ],
+  "title": "QualityGates",
+  "type": "object"
+}

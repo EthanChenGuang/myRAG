@@ -1,14 +1,16 @@
 const fs = require('fs');
 const path = require('path');
 
-// Resolve project root (one level up from scripts directory)
-const REPO_ROOT = path.resolve(__dirname, '..');
+// Resolve project root (one level up from scripts directory); MYRAG_CONFIG_ROOT points it elsewhere, as for config-server.js
+const REPO_ROOT = process.env.MYRAG_CONFIG_ROOT
+  ? path.resolve(process.env.MYRAG_CONFIG_ROOT)
+  : path.resolve(__dirname, '..');
 const ENV_PATH = path.join(REPO_ROOT, '.env.local');
 
 // Default model configurations
 const DEFAULT_OPENAI_MODELS = '[{"id":"gpt-4.1-mini","displayName":"GPT-4.1 Mini"},{"id":"gpt-4.1","displayName":"GPT-4.1"},{"id":"o3","displayName":"o3"},{"id":"o4-mini","displayName":"o4 Mini"}]';
 
-const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-4.1-mini","displayName":"GPT-4.1 Mini"},{"id":"openai/gpt-4.1","displayName":"GPT-4.1"},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite"},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash"},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
+const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-4.1-mini","displayName":"GPT-4.1 Mini"},{"id":"openai/gpt-4.1","displayName":"GPT-4.1"},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"},{"id":"anthropic/claude-opus-5.5","displayName":"Claude Opus 5.5","anthropicId":"claude-opus-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-sonnet-5.5","displayName":"Claude Sonnet 5.5","anthropicId":"claude-sonnet-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-haiku-5.5","displayName":"Claude Haiku 5.5","anthropicId":"claude-haiku-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite"},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash"},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
 
 // Groq free tier has strict rate limits - only Llama 3.3 70B works reliably with RAG contexts
 // Users with paid Groq tiers can add more models: llama-3.1-8b-instant, mixtral-8x7b-32768, gemma2-9b-it
@@ -321,6 +323,11 @@ RAG_SIMILARITY_THRESHOLD=0.45
 # bypass: Ignore knowledge base entirely, pure ChatGPT-like behavior
 RAG_BEHAVIOR_MODE=strict
 
+# Chat answer style
+# classic: headed markdown answer with a closing paragraph of follow-up offers (default)
+# concise: one-line answer, short fact bullets, then --- and up to 3 "↳ " follow-up questions
+RAG_ANSWER_STYLE=classic
+
 # -----------------------------
 # RAG EVALUATION & SIDECAR
 # -----------------------------
@@ -350,7 +357,8 @@ RAG_STAGE_TIMEOUTS=
 # -----------------------------
 # Lexical hybrid search leg
 RAG_LEXICAL_SEARCH=false
-# Reranker: none | cohere | voyage | local_bm25
+# Reranker: none | auto | cohere | voyage | local_bm25
+# auto uses Cohere when COHERE_API_KEY is set and a local fallback otherwise
 RAG_RERANKER=none
 RAG_RERANK_TIER_CHAT=quality
 RAG_RERANK_TIER_VOICE=fast
@@ -360,6 +368,8 @@ COHERE_API_KEY=
 COHERE_BASE_URL=
 # Refusal and context assembly
 RAG_REFUSAL_THRESHOLD=false
+# Fallback refusal floor when no calibrated rerank cell applies: similarity | legacy_rule
+RAG_REFUSAL_FLOOR=similarity
 RAG_CONTEXT_EDGE_ORDER=false
 RAG_CONTEXT_COMPRESSION=false
 RAG_CONTEXT_TOKEN_BUDGET=6000
@@ -369,6 +379,28 @@ RAG_HNSW_ITERATIVE_SCAN=off
 RAG_EXACT_SCAN_CUTOFF=0
 # Query translation before lexical tokenization
 RAG_LEXICAL_TRANSLATION=false
+# Dictionary terms match as single lexical tokens (needs relex)
+RAG_LEXICAL_DICTIONARY=false
+# Italian stemming in lexical text (needs relex)
+RAG_LEXICAL_STEM_IT=false
+# Requests may ask for earlier document versions (needs RAG_LEXICAL_SEARCH=true)
+RAG_VERSION_SCOPE=false
+# Embedded chat may request earlier versions only while this and RAG_VERSION_SCOPE are on
+RAG_EMBED_VERSION_SCOPE=false
+# Structured table row lookup (needs the table-rows backfill)
+RAG_TABLE_LOOKUP=false
+# Group near-duplicate passages across documents (needs the dup-cluster backfill)
+RAG_DUP_CLUSTERS=false
+# Result diversity: off | collapse | mmr
+RAG_RESULT_DIVERSITY=off
+# Store normalized identifiers per passage (needs the identifier backfill)
+RAG_IDENTIFIER_INDEX=false
+# Limit retrieval to passages carrying a named identifier (needs RAG_IDENTIFIER_INDEX=true)
+RAG_IDENTIFIER_FILTER=false
+# Terminology dictionary (v2 only): query expansion, dense variant, missed-query mining
+RAG_TERMINOLOGY=false
+RAG_TERMINOLOGY_DENSE=false
+RAG_TERMINOLOGY_MINING=false
 # Emergency override for pool/cap/topk (operator only)
 RAG_RETRIEVAL_PARAMS_OVERRIDE=
 # Tenant for embedded chat: s:default | o:<uuid> | u:<uuid> (empty means s:default in single-tenant, fails closed in multi-tenant)
@@ -379,6 +411,30 @@ RAG_VOICE_TOKEN_SECRET=
 RAG_VOICE_TOKEN_TTL_SECONDS=3600
 # Concurrent voice rooms the app allows (409 voice_busy beyond it); must equal VOICE_AGENT_MAX_SESSIONS on the voice agent
 VOICE_MAX_ACTIVE_ROOMS=4
+
+# -----------------------------
+# VECTOR BACKENDS (Phase 7)
+# -----------------------------
+# Where chat retrieval runs: pgvector | weaviate | qdrant (external backends apply only with RAG_PIPELINE=v2)
+RAG_RETRIEVAL_BACKEND=pgvector
+# Where voice retrieval runs: pgvector | weaviate | qdrant (set separately from chat)
+RAG_RETRIEVAL_BACKEND_VOICE=pgvector
+# Shared secret for the vector sync drain and reconcile calls (at least 32 characters)
+RAG_VECTOR_SYNC_SECRET=
+# Largest sync lag in seconds before an external index counts as not ready
+RAG_VECTOR_SYNC_MAX_LAG_SECONDS=300
+# Weaviate endpoint URL
+WEAVIATE_URL=
+# Weaviate write API key (sync only, never logged)
+WEAVIATE_API_KEY=
+# Weaviate read-only API key used by retrieval
+WEAVIATE_READ_API_KEY=
+# Qdrant endpoint URL
+QDRANT_URL=
+# Qdrant write API key (sync only, never logged)
+QDRANT_API_KEY=
+# Qdrant read-only API key used by retrieval
+QDRANT_READ_API_KEY=
 
 # -----------------------------
 # LANGFUSE TRACING
@@ -394,6 +450,145 @@ LANGFUSE_SAMPLE_RATE=0.1
 LANGFUSE_CAPTURE_CONTENT=false
 # Share of traces queued for human review, 0 to 1
 LANGFUSE_REVIEW_SAMPLE_RATE=0
+
+# -----------------------------
+# VERIFIED CITATIONS AND GROUNDEDNESS
+# -----------------------------
+# Inline citations on knowledge-base answers
+RAG_CITATIONS=false
+# Route Claude models to the Anthropic API with Claude Citations
+RAG_CLAUDE_CITATIONS=false
+# Anthropic API key for Claude Citations (never logged)
+ANTHROPIC_API_KEY=
+# Anthropic API base URL; empty uses https://api.anthropic.com/v1 (set only for tests and recorded streams)
+ANTHROPIC_BASE_URL=
+# Score answers for groundedness after the stream (sidecar)
+RAG_GROUNDEDNESS=false
+# Allow the Vectara hosted groundedness scorer
+RAG_GROUNDEDNESS_VECTARA_OPT_IN=false
+# Groundedness scoring timeout in milliseconds
+RAG_GROUNDEDNESS_TIMEOUT_MS=20000
+# Premise sent to the scorer, in cl100k tokens
+RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=3000
+# Thumbs up/down feedback on answers
+RAG_ANSWER_FEEDBACK=false
+# Multi-tenant only: set after the Vectara data-retention terms were recorded in live verification
+RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=false
+
+# -----------------------------
+# RETRIEVAL LOG AND FEEDBACK
+# -----------------------------
+# Retrieval log: off | ids | masked_query (masked_query is needed for weekly mining)
+RAG_RETRIEVAL_LOG=off
+# Days a retrieval log row is kept, 1 to 365 (other values are read as 30)
+RAG_RETRIEVAL_LOG_RETENTION_DAYS=30
+# Feedback control under refusals in web chat (needs the retrieval log)
+RAG_REFUSAL_FEEDBACK=false
+# Answer rating in the embed widget and window (needs the secret below and the retrieval log)
+RAG_EMBED_FEEDBACK=false
+# Signing secret for embed feedback tokens, at least 32 characters (never logged)
+RAG_EMBED_FEEDBACK_SECRET=
+# Count opened sources and citations as a weak signal (needs the retrieval log)
+RAG_SOURCE_OPEN_SIGNAL=false
+# Expert review queue and weekly mining (off answers 404)
+RAG_DOMAIN_EXPERT_REVIEW=false
+
+# -----------------------------
+# EVALUATION GATES AND MONITORING
+# -----------------------------
+# Check RAG-affecting settings before a Config UI save: off | warn | enforce (off saves at once, as before)
+RAG_CONFIG_GATE=off
+# Add a live chat-model layer to the setting check (uses model credit; no effect while RAG_CONFIG_GATE=off)
+RAG_CONFIG_GATE_LIVE=false
+# Daily monitor of the retrieval log (needs RAG_RETRIEVAL_LOG at ids or masked_query; off runs nothing and stores nothing)
+RAG_MONITOR=false
+# Optional admin webhook for monitor alerts, https:// only (treated as a secret, never shown or logged)
+RAG_MONITOR_WEBHOOK_URL=
+# Optional HMAC-SHA256 signing secret for webhook deliveries, at least 32 characters (never logged)
+RAG_MONITOR_WEBHOOK_SECRET=
+# Weekly representative sample into the review queue (needs RAG_RETRIEVAL_LOG=masked_query and RAG_DOMAIN_EXPERT_REVIEW=true)
+RAG_REPRESENTATIVE_SAMPLE=false
+
+# -----------------------------
+# PROMPT-INJECTION DEFENSE
+# -----------------------------
+# Wrap retrieved chunks in tagged <doc> blocks with an untrusted-content notice
+RAG_CONTEXT_TAGGING=false
+# Retrieval-time injection check: off | flag | drop | downweight (drop is recommended; downweight is weaker than drop)
+RAG_INJECTION_CHECK=off
+# Prompt Guard 2 detector in the sidecar (optional; en and it only)
+RAG_INJECTION_PROMPT_GUARD=false
+# Lakera Guard hosted detector (sends chunk text to Lakera, a third party)
+RAG_INJECTION_LAKERA=false
+# Lakera Guard API key (never logged)
+LAKERA_GUARD_API_KEY=
+# Lakera Guard base URL; empty uses the default Lakera host (regional hosts such as the EU one are allowed)
+LAKERA_GUARD_BASE_URL=
+# Multi-tenant only: set after the Lakera data-retention terms were recorded in live verification
+RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=false
+# Tool results (web search, MCP) in the model context: off | tag | tag_and_flag
+RAG_TOOL_RESULT_GUARD=off
+# Render markdown images in answers only from allowed hosts (inlined at build time; needs a rebuild)
+NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=false
+
+# -----------------------------
+# ANSWER RULES AND OUTPUT SAFETY
+# -----------------------------
+# Refusal, notice and badge texts from the language registry (needs supported languages)
+RAG_REGISTRY_TEXTS=false
+# Answer the covered part and name what the documents do not cover
+RAG_PARTIAL_ANSWER_RULE=false
+# Do not answer from documents on a neighbouring subject
+RAG_CONTEXT_RELEVANCE_RULE=false
+# One citation per factual sentence and marks on uncited sentences (needs RAG_CITATIONS or RAG_CLAUDE_CITATIONS)
+RAG_CITATION_PER_SENTENCE=false
+# Check each sentence against the documents after the answer (needs RAG_GROUNDEDNESS)
+RAG_CLAIM_CHECK=false
+# Judge model for languages the groundedness scorer does not cover (needs RAG_GROUNDEDNESS_JUDGE_MODEL)
+RAG_GROUNDEDNESS_LLM_JUDGE=false
+# Judge model id; answer sentences and their document passages go to this model's provider
+RAG_GROUNDEDNESS_JUDGE_MODEL=
+# Output-length cap for knowledge-base answers: off | auto | a positive integer of at least 256
+RAG_MAX_OUTPUT_TOKENS=off
+# Links and sign-in requests in answers: off | flag | enforce
+RAG_OUTPUT_GUARD=off
+# Label each document's version and effective date, and answer from the latest
+RAG_VERSION_LABELS=false
+# Record security events with the document's uploader (ids only)
+RAG_SECURITY_EVENTS=false
+# Open an alert above this many events from one uploader; 0 means no alerts
+RAG_UPLOADER_ALERT_THRESHOLD=0
+# Alert window in hours (1 to 720)
+RAG_UPLOADER_ALERT_WINDOW_HOURS=24
+# Hold uploads of an alerted uploader: off | manual | auto
+RAG_UPLOADER_HOLD=off
+
+# -----------------------------
+# QUERY LAYER
+# -----------------------------
+# Query rewriting before retrieval; false keeps today's behaviour and every switch below is inert while it is false
+RAG_QUERY_LAYER=false
+RAG_QUERY_FRAMEWORK=llamaindex
+RAG_QUERY_LLM_MODEL=openai/gpt-4.1-nano
+RAG_QUERY_CONDENSE=true
+RAG_QUERY_EXPAND=true
+RAG_QUERY_DECOMPOSE=true
+RAG_QUERY_TRANSLATE=true
+RAG_QUERY_DATE_NORMALIZE=true
+RAG_QUERY_HYDE=false
+RAG_QUERY_TRANSLATE_DISABLED_PROFILES=
+RAG_QUERY_VOICE_TRANSFORMS=condense_history,normalize_dates
+
+# -----------------------------
+# SEMANTIC CACHE
+# -----------------------------
+# Answer cache backend: off | pgvector | redisvl (REDIS_URL is read by the sidecar for redisvl only)
+RAG_SEMANTIC_CACHE=off
+RAG_SEMANTIC_CACHE_TTL=3600
+RAG_SEMANTIC_CACHE_REFUSAL_TTL=600
+RAG_SEMANTIC_CACHE_MAX_DISTANCE=0.05
+RAG_SEMANTIC_CACHE_EMBED_STORE=false
+REDIS_URL=
 
 # -----------------------------
 # INGESTION AND EMBEDDING PROFILES
@@ -416,8 +611,32 @@ RAG_PDF_IMAGE_CHUNKS=false
 RAG_INJECTION_SCAN=off
 # Embedding profile registry: off | on (off keeps the single configured embedding model)
 RAG_EMBEDDING_PROFILES=off
+# Domain embedding leg for document types with an active binding: off | on (needs RAG_EMBEDDING_PROFILES=on)
+RAG_DOMAIN_EMBEDDINGS=off
+# Maximum domain embedding legs per query (0..5; 0 keeps bindings without extra legs)
+RAG_DOMAIN_EMBEDDING_MAX_LEGS=2
+# Timeout for one domain embedding leg in milliseconds (100..5000)
+RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=800
 # Fallback host when the Qwen embedding provider is unavailable: openrouter | none
 RAG_QWEN_EMBED_FALLBACK=openrouter
+# Primary host for the Qwen embedding provider: deepinfra | openrouter (openrouter needs only OPENROUTER_API_KEY; the fallback then goes to DeepInfra when a key is set)
+RAG_QWEN_EMBED_PRIMARY=deepinfra
+# Fine-tuned embedding slots: off | on (any other value is off). Bind, consent and activation are CLI-only (npm run rag:embedding)
+RAG_FINETUNE=off
+# Shared key for the fine-tuned slot endpoints (may stay empty on a private network)
+RAG_FT_EMBED_API_KEY=
+# Slot A: OpenAI-compatible base URL (POST {base}/embeddings), model version id, query and document prompts
+RAG_FT_SLOT_A_BASE_URL=
+RAG_FT_SLOT_A_MODEL=
+RAG_FT_SLOT_A_QUERY_PROMPT=
+RAG_FT_SLOT_A_DOCUMENT_PROMPT=
+# Slot B: same settings as slot A
+RAG_FT_SLOT_B_BASE_URL=
+RAG_FT_SLOT_B_MODEL=
+RAG_FT_SLOT_B_QUERY_PROMPT=
+RAG_FT_SLOT_B_DOCUMENT_PROMPT=
+# Host for the OpenAI embedding model: openai | openrouter (openrouter sends embedding requests to OpenRouter with OPENROUTER_API_KEY, same model and vectors; the OpenAI Batch API is then unavailable and backfills embed in sync)
+RAG_OPENAI_EMBEDDINGS_VIA=openai
 
 # -----------------------------
 # INGESTION (Phase 3.1 queue)
@@ -440,12 +659,71 @@ RAG_PARSE_VLM_MODEL=
 RAG_INGEST_ASYNC=off
 # Concurrent worker jobs (sidecar)
 RAG_INGEST_WORKER_CONCURRENCY=2
+# Terminal ingestion jobs older than this many days are archived and purged (maintenance task)
+RAG_INGEST_JOB_RETENTION_DAYS=90
+# Sidecar maintenance loop interval (seconds); off via RAG_INGEST_MAINTENANCE=off
+RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS=3600
+RAG_INGEST_MAINTENANCE=on
 # Publish chunks incrementally while parsing: true | false
 RAG_PARSE_PROGRESSIVE=false
 # Embedding batch mode for backfill: sync | batch_api
 RAG_EMBED_BATCH_MODE=sync
 # Browser realtime job updates (Supabase broadcast): true | false
 NEXT_PUBLIC_RAG_INGEST_REALTIME=false
+# Ledger workers and the app must use the Supabase project HTTPS URL (PostgREST), never a direct Postgres DSN.
+
+# -----------------------------
+# LANGUAGES AND INGESTION HARDENING (Phase 3.2)
+# -----------------------------
+# Supported languages, comma-separated registry codes (e.g. zh,en,it). Empty = not configured; set them in the Languages panel
+RAG_SUPPORTED_LANGUAGES=
+# Primary language: one of RAG_SUPPORTED_LANGUAGES (empty = not configured)
+RAG_PRIMARY_LANGUAGE=
+# Language-aware chunking, sentence splitting and OCR: off | on
+RAG_LANGUAGE_AWARE_INGEST=off
+# Repeat table headers in split table chunks: profile | always
+RAG_TABLE_HEADER_REPEAT=always
+# Add "column = value" lines per table row to the search text: true | false
+RAG_TABLE_ROW_SERIALIZATION=false
+# Image caption language: en | document
+RAG_CAPTION_LANGUAGE=en
+# BGE-M3 serving (Phase 3.2.1): hosted | sidecar
+RAG_BGE_M3_SERVING=hosted
+# Search-only translations of document chunks: off | on
+RAG_DOC_TRANSLATION=off
+# Translation model override (empty = RAG_QUERY_LLM_MODEL)
+RAG_DOC_TRANSLATION_MODEL=
+# Hidden text check at ingestion: off | flag | quarantine
+RAG_HIDDEN_TEXT_CHECK=off
+# Link check at ingestion against the allowlist: off | flag | quarantine
+RAG_INGEST_LINK_CHECK=off
+# Allowed link domains, comma-separated (subdomains included)
+RAG_OUTPUT_LINK_ALLOWLIST=
+# Uploads that need admin approval: off | members | all (needs the unified pipeline)
+RAG_UPLOAD_APPROVAL=off
+# Document scope tags at upload and in retrieval filters: true | false
+RAG_SCOPE_TAGS=false
+# Suggest scope tags for new documents: true | false
+RAG_SCOPE_TAG_SUGGEST=false
+# Detect possible older versions of new documents: off | on
+RAG_SUPERSESSION_DETECT=off
+# Exclude documents outside their effective dates from answers: true | false
+RAG_EFFECTIVE_DATES=false
+# Read effective dates with a model when rules find none: true | false
+RAG_EFFECTIVE_DATE_LLM_EXTRACT=false
+# Templated collections (Phase 3.3)
+# Split documents at the headings of the workspace's section rule set (needs the unified ingest pipeline): off | on
+RAG_SECTION_RULES=off
+# Remove repeated page lines before chunking (needs the unified ingest pipeline): off | detect | rules | both
+RAG_PAGE_BOILERPLATE=off
+# Store schema-checked attributes with documents and chunks (needs the unified ingest pipeline): true | false
+RAG_DOC_ATTRIBUTES=false
+# Add the rendered attribute header line to embedding and keyword text (needs RAG_DOC_ATTRIBUTES=true): true | false
+RAG_ATTRIBUTE_HEADER=false
+# Limit or rank retrieval by matched attributes (needs RAG_DOC_ATTRIBUTES=true and RAG_PIPELINE=v2): off | hard | soft
+RAG_ATTRIBUTE_FILTER=off
+# Numbers with unit symbols match as single lexical tokens (needs relex): true | false
+RAG_LEXICAL_QUANTITY=false
 
 # Voyage embeddings
 VOYAGE_API_KEY=
@@ -627,8 +905,233 @@ function checkAndCreateEnvFile() {
   }
 }
 
-// Run the checks
-const wasEnvCreated = checkAndCreateEnvFile();
+// -----------------------------
+// D-08 first-run language picker
+// -----------------------------
+const MAX_LANGUAGE_ATTEMPTS = 3;
+const SUGGESTION_TIMEOUT_MS = 3000;
+const SUGGESTION_ROW_LIMIT = 10000;
+
+function languageContext() {
+  return require('./rag/language-settings-context');
+}
+
+function isSetValue(value) {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+/** D-08: prompt only on an interactive terminal, outside CI, while RAG_SUPPORTED_LANGUAGES has no value. */
+function shouldPromptForLanguages({ input, output, env = {}, envValues = {} } = {}) {
+  if (!input || !output || input.isTTY !== true || output.isTTY !== true) return false;
+  if (isSetValue(env.CI)) return false;
+  return !isSetValue(env.RAG_SUPPORTED_LANGUAGES) && !isSetValue(envValues.RAG_SUPPORTED_LANGUAGES);
+}
+
+/** D-07 for the init-env entry point; the picker and the entry-point parity test call it. */
+function validateLanguageChoice(candidate, { root = REPO_ROOT, env = {}, registry, rerankerOverrides } = {}) {
+  const ctx = languageContext();
+  const context = ctx.buildValidationContext({ root, env, registry, rerankerOverrides });
+  return ctx.validateForScript(candidate, context);
+}
+
+/**
+ * Per-language document counts from one PostgREST request, only when .env.local already holds the Supabase URL and
+ * service-role key. Any failure means no suggestion. The key is sent only to that URL and never printed.
+ */
+async function fetchLanguageSuggestions({ envValues = {}, codes, fetchImpl }) {
+  const url = envValues.NEXT_PUBLIC_SUPABASE_URL;
+  const key = envValues.SUPABASE_SERVICE_ROLE_KEY;
+  if (!isSetValue(url) || !isSetValue(key) || typeof fetchImpl !== 'function' || codes.length === 0) return null;
+  let base;
+  try {
+    base = new URL(url.trim());
+  } catch {
+    return null;
+  }
+  if (base.protocol !== 'https:' && base.protocol !== 'http:') return null;
+  const query = new URLSearchParams({
+    select: 'language',
+    is_current: 'eq.true',
+    status: 'eq.ready',
+    language: `in.(${codes.join(',')})`,
+    limit: String(SUGGESTION_ROW_LIMIT),
+  });
+  const target = `${base.origin}${base.pathname.replace(/\/+$/, '')}/rest/v1/documents?${query.toString()}`;
+  try {
+    const response = await fetchImpl(target, {
+      method: 'GET',
+      headers: { apikey: key.trim(), Authorization: `Bearer ${key.trim()}`, Accept: 'application/json' },
+      signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(SUGGESTION_TIMEOUT_MS) : undefined,
+    });
+    if (!response || !response.ok) return null;
+    const rows = await response.json();
+    if (!Array.isArray(rows)) return null;
+    const counts = {};
+    for (const row of rows) {
+      const code = row && typeof row.language === 'string' ? row.language : null;
+      if (code && codes.includes(code)) counts[code] = (counts[code] || 0) + 1;
+    }
+    return counts;
+  } catch {
+    return null;
+  }
+}
+
+function languageErrorText(error) {
+  switch (error.code) {
+    case 'empty_set':
+      return 'Choose at least one language.';
+    case 'unknown_language':
+      return `"${error.language}" is not a language this deployment can support.`;
+    case 'primary_not_in_set':
+      return error.language
+        ? `The primary language "${error.language}" must be one of the chosen languages.`
+        : 'Choose a primary language from the chosen languages.';
+    case 'incomplete_pack':
+      return `${error.language}: its language pack is not complete.`;
+    case 'embedding_profile_unsupported':
+      return `${error.language}: the embedding profile ${error.id} does not declare this language.`;
+    case 'reranker_unsupported':
+      return `${error.language}: the reranker ${error.id} does not declare this language.`;
+    default:
+      return `${error.code}${error.language ? ` (${error.language})` : ''}`;
+  }
+}
+
+function languageWarningText(warning) {
+  if (warning.code === 'groundedness_not_checked') {
+    return `${warning.language}: answers in this language are not checked for groundedness.`;
+  }
+  return `${warning.code}${warning.language ? ` (${warning.language})` : ''}`;
+}
+
+function packLabel(pack) {
+  const native = pack.native_name || pack.code;
+  const english = pack.name || pack.code;
+  return native === english ? `${native} (${pack.code})` : `${native} · ${english} (${pack.code})`;
+}
+
+/** Numbers pick from the listed options, anything else is taken as a code for the validator to judge. */
+function resolveAnswerTokens(answer, options) {
+  return answer
+    .split(',')
+    .map((token) => token.trim())
+    .filter((token) => token !== '')
+    .map((token) => {
+      if (/^\d+$/.test(token)) {
+        const index = Number(token) - 1;
+        return index >= 0 && index < options.length ? options[index] : token;
+      }
+      return token;
+    });
+}
+
+function lineReader(input) {
+  const readline = require('readline');
+  const rl = readline.createInterface({ input, terminal: false, crlfDelay: Infinity });
+  const iterator = rl[Symbol.asyncIterator]();
+  return {
+    async ask(output, question) {
+      output.write(question);
+      const next = await iterator.next();
+      return next.done ? null : String(next.value);
+    },
+    close() {
+      rl.close();
+    },
+  };
+}
+
+/**
+ * D-08 picker for scripts/init-env.js. Asks for the supported languages and the primary language, validates with the
+ * shared D-07 validator and writes both variables only after a valid explicit answer. An empty answer, closed input or
+ * three invalid answers leave both unset.
+ */
+async function runLanguagePicker({
+  input,
+  output,
+  env = {},
+  root = REPO_ROOT,
+  envPath = ENV_PATH,
+  fetchImpl = typeof fetch === 'function' ? fetch : undefined,
+} = {}) {
+  const ctx = languageContext();
+  const envValues = ctx.readEnvFileValues(envPath);
+  if (!shouldPromptForLanguages({ input, output, env, envValues })) return { prompted: false, saved: false, attempts: 0 };
+
+  const registry = ctx.readRegistry(root);
+  const packs = ctx.completePacks(registry);
+  const codes = packs.map((pack) => pack.code);
+  const validationEnv = { RAG_RERANKER: isSetValue(env.RAG_RERANKER) ? env.RAG_RERANKER : envValues.RAG_RERANKER };
+  const suggestions = await fetchLanguageSuggestions({ envValues, codes, fetchImpl });
+
+  output.write('\n[RAG Languages] Choose the languages this deployment supports (RAG_SUPPORTED_LANGUAGES).\n');
+  packs.forEach((pack, index) => {
+    const count = suggestions && suggestions[pack.code] ? suggestions[pack.code] : 0;
+    const suggested = count > 0 ? ` - suggested: ${count} ${count === 1 ? 'document' : 'documents'}` : '';
+    output.write(`  ${index + 1}) ${packLabel(pack)}${suggested}\n`);
+  });
+  output.write('The embedding check is not verified against the active profile here (no database at this step).\n');
+
+  const reader = lineReader(input);
+  let attempts = 0;
+  try {
+    while (attempts < MAX_LANGUAGE_ATTEMPTS) {
+      const answer = await reader.ask(output, 'Languages (numbers or codes, comma-separated; empty to skip): ');
+      if (answer === null || answer.trim() === '') {
+        output.write('No languages chosen; RAG_SUPPORTED_LANGUAGES and RAG_PRIMARY_LANGUAGE stay unset.\n');
+        return { prompted: true, saved: false, attempts };
+      }
+      const chosen = resolveAnswerTokens(answer, codes);
+      const chosenOrdered = codes.filter((code) => chosen.map((token) => token.toLowerCase()).includes(code));
+      let primary = chosen.length === 1 ? chosen[0] : '';
+      if (chosen.length > 1) {
+        const primaryOptions = chosenOrdered.length > 0 ? chosenOrdered : chosen;
+        primaryOptions.forEach((code, index) => {
+          const pack = packs.find((candidate) => candidate.code === code);
+          output.write(`  ${index + 1}) ${pack ? packLabel(pack) : code}\n`);
+        });
+        const primaryAnswer = await reader.ask(output, 'Primary language (number or code): ');
+        if (primaryAnswer === null) {
+          output.write('No primary language chosen; both variables stay unset.\n');
+          return { prompted: true, saved: false, attempts };
+        }
+        primary = resolveAnswerTokens(primaryAnswer, primaryOptions)[0] || '';
+      }
+
+      const result = validateLanguageChoice({ supported: chosen, primary }, { root, env: validationEnv, registry });
+      attempts += 1;
+      if (result.ok) {
+        ctx.writeLanguageVariables(envPath, result.normalized);
+        output.write(
+          `Saved RAG_SUPPORTED_LANGUAGES=${result.normalized.supported} and RAG_PRIMARY_LANGUAGE=${result.normalized.primary}.\n`,
+        );
+        for (const warning of result.warnings) output.write(`Note: ${languageWarningText(warning)}\n`);
+        return { prompted: true, saved: true, attempts, result };
+      }
+      for (const error of result.errors) output.write(`Not saved: ${languageErrorText(error)}\n`);
+    }
+    output.write('Too many invalid answers; RAG_SUPPORTED_LANGUAGES and RAG_PRIMARY_LANGUAGE stay unset.\n');
+    return { prompted: true, saved: false, attempts };
+  } finally {
+    reader.close();
+  }
+}
+
+if (require.main === module) {
+  checkAndCreateEnvFile();
+  runLanguagePicker({ input: process.stdin, output: process.stdout, env: process.env }).catch((error) => {
+    console.error('[RAG Languages] The language picker failed; both variables stay unset:', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
+}
 
 // Export for use in other scripts
-module.exports = { checkAndCreateEnvFile };
+module.exports = {
+  checkAndCreateEnvFile,
+  fetchLanguageSuggestions,
+  runLanguagePicker,
+  shouldPromptForLanguages,
+  validateLanguageChoice,
+};

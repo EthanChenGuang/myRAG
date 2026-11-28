@@ -1,0 +1,107 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "corpus_df": {
+      "minimum": 0,
+      "title": "Corpus Df",
+      "type": "integer"
+    },
+    "entry_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Entry Id"
+    },
+    "examples": {
+      "items": {
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 3,
+      "title": "Examples",
+      "type": "array"
+    },
+    "first_seen": {
+      "format": "date-time",
+      "title": "First Seen",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "language": {
+      "anyOf": [
+        {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Language"
+    },
+    "last_seen": {
+      "format": "date-time",
+      "title": "Last Seen",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "miss_log",
+        "feedback",
+        "langfuse"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "accepted",
+        "dismissed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "support": {
+      "minimum": 1,
+      "title": "Support",
+      "type": "integer"
+    },
+    "term": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Term",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "term",
+    "language",
+    "support",
+    "examples",
+    "corpus_df",
+    "status",
+    "source",
+    "first_seen",
+    "last_seen"
+  ],
+  "title": "TerminologyCandidate",
+  "type": "object"
+}

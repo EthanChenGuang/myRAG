@@ -1,0 +1,123 @@
+{
+  "$defs": {
+    "SupersessionSignals": {
+      "additionalProperties": false,
+      "properties": {
+        "conflicting_numbers": {
+          "minimum": 0,
+          "title": "Conflicting Numbers",
+          "type": "integer"
+        },
+        "content_overlap_percent": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Content Overlap Percent",
+          "type": "integer"
+        },
+        "title_match": {
+          "title": "Title Match",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "title_match",
+        "content_overlap_percent",
+        "conflicting_numbers"
+      ],
+      "title": "SupersessionSignals",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A possible replacement between two documents of one tenant (D-41); never applied without an admin decision.",
+  "properties": {
+    "candidate_document_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Candidate Document Id",
+      "type": "string"
+    },
+    "decided_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Decided At"
+    },
+    "decided_by": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Decided By"
+    },
+    "direction": {
+      "anyOf": [
+        {
+          "enum": [
+            "document_is_newer",
+            "candidate_is_newer"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Direction"
+    },
+    "document_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Document Id",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "origin": {
+      "enum": [
+        "detected",
+        "uploader",
+        "answer_conflict"
+      ],
+      "title": "Origin",
+      "type": "string"
+    },
+    "signals": {
+      "$ref": "#/$defs/SupersessionSignals"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "confirmed",
+        "dismissed"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "document_id",
+    "candidate_document_id",
+    "signals",
+    "status",
+    "origin"
+  ],
+  "title": "SupersessionCandidate",
+  "type": "object"
+}

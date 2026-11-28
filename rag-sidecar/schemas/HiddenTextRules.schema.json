@@ -1,0 +1,120 @@
+{
+  "$defs": {
+    "DocxHiddenTextRules": {
+      "additionalProperties": false,
+      "properties": {
+        "color_distance_max": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Color Distance Max",
+          "type": "number"
+        },
+        "min_font_size_half_points": {
+          "maximum": 144,
+          "minimum": 1,
+          "title": "Min Font Size Half Points",
+          "type": "integer"
+        },
+        "min_span_chars": {
+          "maximum": 2000,
+          "minimum": 1,
+          "title": "Min Span Chars",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "color_distance_max",
+        "min_font_size_half_points",
+        "min_span_chars"
+      ],
+      "title": "DocxHiddenTextRules",
+      "type": "object"
+    },
+    "PdfHiddenTextRules": {
+      "additionalProperties": false,
+      "properties": {
+        "color_distance_max": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Color Distance Max",
+          "type": "number"
+        },
+        "covered_overlap_min": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Covered Overlap Min",
+          "type": "number"
+        },
+        "min_font_size_pt": {
+          "exclusiveMinimum": 0,
+          "maximum": 72,
+          "title": "Min Font Size Pt",
+          "type": "number"
+        },
+        "min_font_size_ratio": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Min Font Size Ratio",
+          "type": "number"
+        },
+        "min_span_chars": {
+          "maximum": 2000,
+          "minimum": 1,
+          "title": "Min Span Chars",
+          "type": "integer"
+        },
+        "outside_page_margin_pt": {
+          "maximum": 144,
+          "minimum": 0,
+          "title": "Outside Page Margin Pt",
+          "type": "number"
+        }
+      },
+      "required": [
+        "color_distance_max",
+        "min_font_size_pt",
+        "min_font_size_ratio",
+        "outside_page_margin_pt",
+        "covered_overlap_min",
+        "min_span_chars"
+      ],
+      "title": "PdfHiddenTextRules",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "`config/rag/hidden-text-rules.json` (D-33): names and ranges only; values are fitted on fixtures (plans 35, 36).",
+  "properties": {
+    "docx": {
+      "$ref": "#/$defs/DocxHiddenTextRules"
+    },
+    "pdf": {
+      "$ref": "#/$defs/PdfHiddenTextRules"
+    },
+    "rules_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Rules Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "zero_width_threshold": {
+      "minimum": 1,
+      "title": "Zero Width Threshold",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "rules_version",
+    "pdf",
+    "docx",
+    "zero_width_threshold"
+  ],
+  "title": "HiddenTextRules",
+  "type": "object"
+}

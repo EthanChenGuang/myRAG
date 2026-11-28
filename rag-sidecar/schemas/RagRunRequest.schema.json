@@ -32,6 +32,11 @@
           "title": "From",
           "type": "string"
         },
+        "include_undated": {
+          "default": false,
+          "title": "Include Undated",
+          "type": "boolean"
+        },
         "to": {
           "format": "date",
           "title": "To",
@@ -43,6 +48,79 @@
         "to"
       ],
       "title": "DateRangeFilter",
+      "type": "object"
+    },
+    "DiversityParams": {
+      "additionalProperties": false,
+      "description": "D-21, D-48: MMR over the reranked list; lambda 0.7 until a live sweep sets the shipped value.",
+      "properties": {
+        "mmr_lambda": {
+          "default": 0.7,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Mmr Lambda",
+          "type": "number"
+        },
+        "mmr_window_factor": {
+          "default": 3,
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Mmr Window Factor",
+          "type": "integer"
+        }
+      },
+      "title": "DiversityParams",
+      "type": "object"
+    },
+    "DupClusterParams": {
+      "additionalProperties": false,
+      "properties": {
+        "by_profile": {
+          "additionalProperties": {
+            "$ref": "#/$defs/DupClusterProfileEntry"
+          },
+          "propertyNames": {
+            "maxLength": 128,
+            "minLength": 1
+          },
+          "title": "By Profile",
+          "type": "object"
+        },
+        "threshold": {
+          "default": 0.95,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "title": "DupClusterParams",
+      "type": "object"
+    },
+    "DupClusterProfileEntry": {
+      "additionalProperties": false,
+      "description": "D-49: a duplicate threshold for one embedding profile; a fixture-fitted value applies in eval only.",
+      "properties": {
+        "source": {
+          "enum": [
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "threshold": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "threshold",
+        "source"
+      ],
+      "title": "DupClusterProfileEntry",
       "type": "object"
     },
     "InvoiceFilter": {
@@ -79,9 +157,300 @@
       "title": "InvoiceFilter",
       "type": "object"
     },
+    "QueryBudgetMsOverride": {
+      "additionalProperties": false,
+      "properties": {
+        "chat": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chat"
+        },
+        "embed": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embed"
+        },
+        "voice": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Voice"
+        }
+      },
+      "title": "QueryBudgetMsOverride",
+      "type": "object"
+    },
+    "QueryParamsOverride": {
+      "additionalProperties": false,
+      "properties": {
+        "group_deadline_ms": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Group Deadline Ms"
+        },
+        "history_turn_chars": {
+          "anyOf": [
+            {
+              "maximum": 4000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "History Turn Chars"
+        },
+        "history_turns": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "History Turns"
+        },
+        "max_llm_variants": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Llm Variants"
+        },
+        "max_searches": {
+          "anyOf": [
+            {
+              "maximum": 8,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Searches"
+        },
+        "max_sub_questions": {
+          "anyOf": [
+            {
+              "maximum": 4,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Sub Questions"
+        },
+        "max_translations": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Translations"
+        },
+        "query_budget_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QueryBudgetMsOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "variant_max_chars": {
+          "anyOf": [
+            {
+              "maximum": 4000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Variant Max Chars"
+        },
+        "variant_max_ratio": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 20,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Variant Max Ratio"
+        }
+      },
+      "title": "QueryParamsOverride",
+      "type": "object"
+    },
+    "QueryTransformToggles": {
+      "additionalProperties": false,
+      "properties": {
+        "condense": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Condense"
+        },
+        "decompose": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decompose"
+        },
+        "expand": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expand"
+        },
+        "hyde": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hyde"
+        },
+        "normalize_dates": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Normalize Dates"
+        },
+        "translate": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Translate"
+        }
+      },
+      "title": "QueryTransformToggles",
+      "type": "object"
+    },
     "RagRunOptions": {
       "additionalProperties": false,
       "properties": {
+        "cache_seed_answer": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Seed Answer"
+        },
+        "citations": {
+          "default": false,
+          "title": "Citations",
+          "type": "boolean"
+        },
         "degrade": {
           "anyOf": [
             {
@@ -108,11 +477,20 @@
                   "post_filter",
                   "assemble",
                   "voice_keyword_fallback",
-                  "local_rerank"
+                  "local_rerank",
+                  "injection_check",
+                  "query_gate",
+                  "condense",
+                  "normalize_dates",
+                  "expand",
+                  "hyde",
+                  "decompose",
+                  "terminology",
+                  "semantic_cache"
                 ],
                 "type": "string"
               },
-              "maxItems": 9,
+              "maxItems": 18,
               "type": "array"
             },
             {
@@ -121,6 +499,53 @@
           ],
           "default": null,
           "title": "Disabled Stages"
+        },
+        "domain_control_leg": {
+          "anyOf": [
+            {
+              "enum": [
+                "general",
+                "financial_report",
+                "contract_legal",
+                "invoice_receipt",
+                "product_technical",
+                "scanned_image"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Domain Control Leg"
+        },
+        "embedding_bindings": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              "maxProperties": 6,
+              "propertyNames": {
+                "enum": [
+                  "general",
+                  "financial_report",
+                  "contract_legal",
+                  "invoice_receipt",
+                  "product_technical",
+                  "scanned_image"
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embedding Bindings"
         },
         "embedding_profile": {
           "anyOf": [
@@ -145,6 +570,11 @@
           ],
           "default": null,
           "title": "Generator Model"
+        },
+        "groundedness": {
+          "default": false,
+          "title": "Groundedness",
+          "type": "boolean"
         },
         "max_results": {
           "anyOf": [
@@ -172,6 +602,56 @@
           "default": null,
           "title": "Organization Id"
         },
+        "query_framework": {
+          "anyOf": [
+            {
+              "enum": [
+                "llamaindex",
+                "langchain"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Framework"
+        },
+        "query_layer": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Layer"
+        },
+        "query_params": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QueryParamsOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "query_transforms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QueryTransformToggles"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "retrieval_filters": {
           "anyOf": [
             {
@@ -193,6 +673,23 @@
             }
           ],
           "default": null
+        },
+        "semantic_cache": {
+          "anyOf": [
+            {
+              "enum": [
+                "off",
+                "pgvector",
+                "redisvl"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Semantic Cache"
         },
         "stage_timeouts_ms": {
           "anyOf": [
@@ -224,6 +721,24 @@
     "RetrievalFilters": {
       "additionalProperties": false,
       "properties": {
+        "attributes": {
+          "maxProperties": 30,
+          "minProperties": 1,
+          "patternProperties": {
+            "^[a-z][a-z0-9_]{0,39}$": {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "title": "Attributes",
+          "type": "object"
+        },
         "current_only": {
           "const": true,
           "default": true,
@@ -280,6 +795,10 @@
           "default": null,
           "title": "Document Ids"
         },
+        "include_untagged": {
+          "title": "Include Untagged",
+          "type": "boolean"
+        },
         "invoice": {
           "anyOf": [
             {
@@ -311,6 +830,9 @@
           "default": null,
           "title": "Languages"
         },
+        "scopes": {
+          "$ref": "#/$defs/ScopeFilter"
+        },
         "sources": {
           "anyOf": [
             {
@@ -325,6 +847,21 @@
           ],
           "default": null,
           "title": "Sources"
+        },
+        "versions": {
+          "anyOf": [
+            {
+              "enum": [
+                "current",
+                "all"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/VersionRange"
+            }
+          ],
+          "title": "Versions"
         }
       },
       "title": "RetrievalFilters",
@@ -339,6 +876,11 @@
           "title": "Dense",
           "type": "number"
         },
+        "domain": {
+          "exclusiveMinimum": 0,
+          "title": "Domain",
+          "type": "number"
+        },
         "exact_id": {
           "default": 1.0,
           "exclusiveMinimum": 0,
@@ -350,6 +892,11 @@
           "exclusiveMinimum": 0,
           "title": "Lexical",
           "type": "number"
+        },
+        "translation": {
+          "exclusiveMinimum": 0,
+          "title": "Translation",
+          "type": "number"
         }
       },
       "title": "RetrievalLegWeights",
@@ -358,6 +905,15 @@
     "RetrievalOverrides": {
       "additionalProperties": false,
       "properties": {
+        "backend": {
+          "enum": [
+            "pgvector",
+            "weaviate",
+            "qdrant"
+          ],
+          "title": "Backend",
+          "type": "string"
+        },
         "candidate_pool_size": {
           "anyOf": [
             {
@@ -371,6 +927,31 @@
           ],
           "default": null,
           "title": "Candidate Pool Size"
+        },
+        "chunking_profile_by_doc_type": {
+          "additionalProperties": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "general",
+              "financial_report",
+              "contract_legal",
+              "invoice_receipt",
+              "product_technical",
+              "scanned_image"
+            ]
+          },
+          "title": "Chunking Profile By Doc Type",
+          "type": "object"
+        },
+        "diversity": {
+          "$ref": "#/$defs/DiversityParams"
+        },
+        "dup_cluster": {
+          "$ref": "#/$defs/DupClusterParams"
         },
         "final_top_k": {
           "anyOf": [
@@ -401,7 +982,7 @@
           "anyOf": [
             {
               "maximum": 100,
-              "minimum": 50,
+              "minimum": 25,
               "type": "integer"
             },
             {
@@ -436,9 +1017,56 @@
           ],
           "default": null,
           "title": "Rrf K"
+        },
+        "table_lookup": {
+          "$ref": "#/$defs/TableLookupParams"
         }
       },
       "title": "RetrievalOverrides",
+      "type": "object"
+    },
+    "ScopeFilter": {
+      "additionalProperties": false,
+      "description": "DATA-08 scope filter (D-39): OR within a dimension, AND across dimensions; only the three fixed dimensions.",
+      "properties": {
+        "department": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Department",
+          "type": "array"
+        },
+        "legal_entity": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Legal Entity",
+          "type": "array"
+        },
+        "region": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Region",
+          "type": "array"
+        }
+      },
+      "title": "ScopeFilter",
       "type": "object"
     },
     "StageTimeoutsMs": {
@@ -472,6 +1100,34 @@
           "default": null,
           "title": "Assemble"
         },
+        "condense": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Condense"
+        },
+        "decompose": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decompose"
+        },
         "embed": {
           "anyOf": [
             {
@@ -485,6 +1141,48 @@
           ],
           "default": null,
           "title": "Embed"
+        },
+        "expand": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expand"
+        },
+        "hyde": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hyde"
+        },
+        "injection_check": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Injection Check"
         },
         "legacy_rank": {
           "anyOf": [
@@ -514,6 +1212,20 @@
           "default": null,
           "title": "Local Rerank"
         },
+        "normalize_dates": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Normalize Dates"
+        },
         "post_filter": {
           "anyOf": [
             {
@@ -527,6 +1239,20 @@
           ],
           "default": null,
           "title": "Post Filter"
+        },
+        "query_gate": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Gate"
         },
         "refs": {
           "anyOf": [
@@ -556,6 +1282,34 @@
           "default": null,
           "title": "Search"
         },
+        "semantic_cache": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Semantic Cache"
+        },
+        "terminology": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Terminology"
+        },
         "voice_keyword_fallback": {
           "anyOf": [
             {
@@ -572,6 +1326,52 @@
         }
       },
       "title": "StageTimeoutsMs",
+      "type": "object"
+    },
+    "TableLookupParams": {
+      "additionalProperties": false,
+      "description": "D-15, D-16: the structured table leg; a row matches when at least min_cells distinct cells match.",
+      "properties": {
+        "limit": {
+          "default": 10,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "min_cells": {
+          "default": 2,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Min Cells",
+          "type": "integer"
+        },
+        "weight": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "title": "TableLookupParams",
+      "type": "object"
+    },
+    "VersionRange": {
+      "additionalProperties": false,
+      "description": "D-12: a version period; either bound may be left open, not both.",
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "title": "VersionRange",
       "type": "object"
     }
   },

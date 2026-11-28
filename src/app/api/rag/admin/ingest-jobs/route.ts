@@ -8,7 +8,7 @@ import type { JobCursor } from './_lib';
 
 export const runtime = 'nodejs';
 
-const STATUSES = ['queued', 'preflight', 'parsing', 'checking', 'chunking', 'embedding', 'ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate'] as const;
+const STATUSES = ['queued', 'preflight', 'parsing', 'checking', 'chunking', 'embedding', 'ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate', 'pending_review'] as const;
 const PAGE = 100;
 const MAX_SCAN = 10_000;
 

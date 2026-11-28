@@ -1,0 +1,11 @@
+{
+  "id": "llamaindex.hyde.zh",
+  "version": 1,
+  "source": "derived from llama-index-core==0.14.26 llama_index/core/prompts/default_prompts.py DEFAULT_HYDE_PROMPT (HYDE_TMPL), Chinese translation",
+  "license": "MIT",
+  "attribution": "Copyright (c) Jerry Liu (LlamaIndex). Prompt text reused under the MIT License; placeholder {context_str} renamed to the {{context_str}} syntax; translated into Chinese by myRAG, layout kept.",
+  "template": "请写一段文字来回答这个问题\n尽量包含尽可能多的关键细节。\n\n\n{{context_str}}\n\n\n段落：\"\"\"\n",
+  "placeholders": [
+    "context_str"
+  ]
+}

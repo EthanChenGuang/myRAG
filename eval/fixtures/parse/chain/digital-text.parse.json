@@ -1,0 +1,41 @@
+{
+  "artifacts": [
+    "docling.json"
+  ],
+  "chunks": [
+    {
+      "contextualized_text": "Example routing memo\nThis one-page digital fixture checks the fast tier on plain English text with no tables or columns.",
+      "headings": [
+        "Example routing memo"
+      ],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "This one-page digital fixture checks the fast tier on plain English text with no tables or columns."
+    },
+    {
+      "contextualized_text": "Example routing memo\nScope\nThe routing harness scores recorded outputs against ParserExpected structure on every page.",
+      "headings": [
+        "Example routing memo",
+        "Scope"
+      ],
+      "is_table": false,
+      "pages": [
+        2
+      ],
+      "table_header": null,
+      "text": "The routing harness scores recorded outputs against ParserExpected structure on every page."
+    }
+  ],
+  "language": "en",
+  "markdown": "## Example routing memo\n\nThis one-page digital fixture checks the fast tier on plain English text with no tables or columns.\n\n### Scope\n\nThe routing harness scores recorded outputs against ParserExpected structure on every page.",
+  "page_count": 2,
+  "parser": "docling",
+  "parser_version": "docling-2.107.1",
+  "partial": false,
+  "pictures": [],
+  "text_layer_page_share": 1.0,
+  "warnings": []
+}

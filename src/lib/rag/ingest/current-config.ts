@@ -5,3 +5,9 @@ import { getIngestDeps } from './deps';
 export function currentIngestConfig(): IngestConfig {
   return loadIngestConfig(getIngestDeps().ingestEnv());
 }
+
+/** D-02: the 503 body every unified write entry answers while an explicit unified pipeline has no chosen languages. */
+export function unifiedIngestRefusal(): { error: string } | null {
+  const blocked = currentIngestConfig().pipelineBlocked;
+  return blocked ? { error: blocked } : null;
+}

@@ -1,0 +1,14 @@
+{
+  "config_hash": "238e2d370dc4424f32c2b829d272fef309c383ed1af238c767b40deaa53c967b",
+  "provenance": {
+    "source": "defaults"
+  },
+  "required_parts": [
+    "nightly_absolute",
+    "judge_floors",
+    "ship_check",
+    "pr_smoke"
+  ],
+  "schema_version": 1,
+  "status_context": "rag-release-gate"
+}

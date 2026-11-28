@@ -1,0 +1,133 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "enum": [
+        "detected",
+        "quarantined",
+        "dropped",
+        "downweighted",
+        "removed",
+        "blocked",
+        "warned"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "created_at": {
+      "minLength": 1,
+      "title": "Created At",
+      "type": "string"
+    },
+    "detector": {
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "title": "Detector",
+      "type": "string"
+    },
+    "document_id": {
+      "minLength": 1,
+      "title": "Document Id",
+      "type": "string"
+    },
+    "file_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "File Name"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "rule_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Rule Ids",
+      "type": "array"
+    },
+    "source": {
+      "enum": [
+        "ingest_injection",
+        "retrieval_injection",
+        "output_guard",
+        "hidden_text",
+        "untrusted_link"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "tenant_key": {
+      "minLength": 1,
+      "title": "Tenant Key",
+      "type": "string"
+    },
+    "uploader_email": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Uploader Email"
+    },
+    "uploader_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Uploader Id"
+    },
+    "uploader_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Uploader Name"
+    },
+    "workspace_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Name"
+    }
+  },
+  "required": [
+    "id",
+    "created_at",
+    "tenant_key",
+    "source",
+    "action",
+    "detector",
+    "document_id"
+  ],
+  "title": "SecurityEventView",
+  "type": "object"
+}

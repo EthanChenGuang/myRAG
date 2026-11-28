@@ -2,7 +2,8 @@ import { generateText, type LanguageModel } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { env } from '@/lib/env';
 import { SystemPromptManager } from '@/lib/system-prompt-manager';
-import { createEnhancedRAGPrompt } from '@/lib/rag';
+import { createEnhancedRAGPrompt, type AnswerLanguageOptions } from '@/lib/rag';
+import type { GroundednessRequest, GroundednessResult } from '@/lib/rag-eval/contracts.generated';
 
 export const EVAL_DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
 
@@ -46,13 +47,25 @@ export function setEvalLanguageModelFactory(factory: EvalLanguageModelFactory | 
   currentFactory = factory ?? defaultFactory;
 }
 
-export function buildEvalSystemPrompt(input: {
-  context: string;
-  ragMode: EvalRagMode;
-  promptEnv?: EvalPromptEnv;
-}): string {
-  const { context, ragMode } = input;
-  const promptEnv: EvalPromptEnv = input.promptEnv ?? env;
+export type EvalGroundednessRequest = (
+  _request: GroundednessRequest,
+  _options?: { timeoutMs?: number },
+) => Promise<GroundednessResult>;
+
+let currentGroundednessRequest: EvalGroundednessRequest | null = null;
+
+/** Harness seam: the eval route sends groundedness requests through this function instead of RAG_SIDECAR_URL. */
+export function setEvalGroundednessRequest(request: EvalGroundednessRequest | null): void {
+  currentGroundednessRequest = request;
+}
+
+export function evalGroundednessRequest(): EvalGroundednessRequest | null {
+  return currentGroundednessRequest;
+}
+
+/** The chat route's system prompt template, with its {{context}} placeholder, as the eval resolves it. */
+export function resolveEvalPromptTemplate(promptEnvInput?: EvalPromptEnv): string {
+  const promptEnv: EvalPromptEnv = promptEnvInput ?? env;
 
   let ragSystemPrompt = EVAL_DEFAULT_SYSTEM_PROMPT;
   if (promptEnv.RAG_PRE_CONTEXT || promptEnv.RAG_POST_CONTEXT || promptEnv.RAG_SYSTEM_PROMPT) {
@@ -65,10 +78,21 @@ export function buildEvalSystemPrompt(input: {
     }
   }
 
-  ragSystemPrompt = SystemPromptManager.ensureContextPlaceholder(ragSystemPrompt);
+  return SystemPromptManager.ensureContextPlaceholder(ragSystemPrompt);
+}
+
+export function buildEvalSystemPrompt(input: {
+  context: string;
+  ragMode: EvalRagMode;
+  promptEnv?: EvalPromptEnv;
+  /** D-25: the query plan's language and the kept chunks' languages (the trace has a query plan). */
+  answerLanguage?: AnswerLanguageOptions;
+}): string {
+  const { context, ragMode, answerLanguage } = input;
+  const ragSystemPrompt = resolveEvalPromptTemplate(input.promptEnv);
 
   if (context.length > 0) {
-    return createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode);
+    return createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage);
   }
   return SystemPromptManager.injectContext(ragSystemPrompt, context);
 }
@@ -122,9 +146,13 @@ export async function generateEvalAnswer(input: {
   generatorModel: string;
   signal?: AbortSignal;
   promptEnv?: EvalPromptEnv;
+  /** Applied to the finished system prompt, e.g. the citation instruction. */
+  decorateSystemPrompt?: (prompt: string) => string;
+  answerLanguage?: AnswerLanguageOptions;
 }): Promise<string> {
-  const { query, conversation, context, ragMode, generatorModel, signal, promptEnv } = input;
-  const system = buildEvalSystemPrompt({ context, ragMode, promptEnv });
+  const { query, conversation, context, ragMode, generatorModel, signal, promptEnv, decorateSystemPrompt, answerLanguage } = input;
+  const basePrompt = buildEvalSystemPrompt({ context, ragMode, promptEnv, answerLanguage });
+  const system = decorateSystemPrompt ? decorateSystemPrompt(basePrompt) : basePrompt;
   const result = await generateText({
     model: currentFactory(generatorModel),
     system,

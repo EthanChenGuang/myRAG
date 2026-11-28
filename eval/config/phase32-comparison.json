@@ -1,0 +1,68 @@
+{
+  "schema_version": 3,
+  "phase": "03.2",
+  "noise": "eval/config/noise.json",
+  "live_checks": "03.2-53",
+  "item_groups": {
+    "image": "(^|-)image(-|$)"
+  },
+  "arms": [
+    {
+      "name": "language_aware_ingest",
+      "switch": "RAG_LANGUAGE_AWARE_INGEST",
+      "off": "off",
+      "on": "on",
+      "side": "ingestion",
+      "fixture_mode": "ingest",
+      "judged": ["language:"],
+      "description": "Per-chunk language with confidence and sentence splitting by the chunk's language (LANG-05, LANG-06); judged per language."
+    },
+    {
+      "name": "table_header_repeat",
+      "switch": "RAG_TABLE_HEADER_REPEAT",
+      "off": "profile",
+      "on": "always",
+      "side": "ingestion",
+      "fixture_mode": "ingest",
+      "judged": ["category:table", "category:table_split"],
+      "description": "The header row repeated in every table chunk in every processing profile (CHK-06)."
+    },
+    {
+      "name": "table_row_serialization",
+      "switch": "RAG_TABLE_ROW_SERIALIZATION",
+      "off": "false",
+      "on": "true",
+      "side": "ingestion",
+      "fixture_mode": "ingest",
+      "judged": ["category:table", "category:table_split"],
+      "description": "\"column = value\" row serialization for the embedding and lexical text of table chunks (CHK-07)."
+    },
+    {
+      "name": "caption_language",
+      "switch": "RAG_CAPTION_LANGUAGE",
+      "off": "en",
+      "on": "document",
+      "side": "ingestion",
+      "fixture_mode": "ingest",
+      "judged": ["image:"],
+      "description": "Image captions written in the document's language (XLG-06); judged on the image items per language."
+    },
+    {
+      "name": "doc_translation",
+      "switch": "RAG_DOC_TRANSLATION",
+      "off": "off",
+      "on": "on",
+      "side": "ingestion",
+      "fixture_mode": "ingest",
+      "runner": "translation",
+      "optional": true,
+      "judged": ["category:cross_lingual", "pair:"],
+      "description": "Retrieval-only chunk translations over query translation alone (XLG-04); judged on cross_lingual per language pair. Optional: it needs the translation producer run between the build and the eval."
+    }
+  ],
+  "notes": [
+    "No BGE-M3 arm: comparing that profile belongs to Phase 3.2.1 (plan 03.2.1-03), which runs after this phase.",
+    "Ingestion-side arms rebuild the fixture tenant for each run, so the off and on runs differ only in the switch; the retrieval settings are the eval pin.",
+    "The caption arm runs with the recorded fixture captioner, which returns the same caption in every language, so its fixture runs can only prove wiring."
+  ]
+}

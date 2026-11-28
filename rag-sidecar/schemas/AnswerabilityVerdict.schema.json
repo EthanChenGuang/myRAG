@@ -1,0 +1,21 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "answerable": {
+      "title": "Answerable",
+      "type": "boolean"
+    },
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Confidence",
+      "type": "number"
+    }
+  },
+  "required": [
+    "answerable",
+    "confidence"
+  ],
+  "title": "AnswerabilityVerdict",
+  "type": "object"
+}

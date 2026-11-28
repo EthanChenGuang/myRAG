@@ -16,12 +16,19 @@ export interface FakeEdgeCall {
   method: string;
   path: string;
   model?: string;
+  /** The query string of a table read, so tests can assert which ids a request named. */
+  query?: string;
 }
 
 export interface FakeEdge {
   url: string;
   errors: FakeEdgeError[];
   calls: FakeEdgeCall[];
+  /**
+   * Serves REST and RPC requests from another fixture database from now on (storage and embeddings are unchanged). The eval
+   * harness uses it for the isolated table_split tenants: the app modules keep the edge URL they saw at import time.
+   */
+  useDatabase(db: PGlite): void;
   close(): Promise<void>;
 }
 
@@ -36,7 +43,29 @@ const RPC_ARGUMENTS: Record<string, { vector: string; allowed: string[] }> = {
   },
 };
 
-const GENERIC_RPC_NAME = /^(?:rag_[a-z0-9_]+|match_chunks_by_profile|hybrid_search_chunks)$/;
+// Phase 7 vector sync and re-validation RPCs (0703-0705) and reconcile RPCs (0707): served by the generic path, with exactly these argument names.
+const VECTOR_SYNC_RPC_ARGUMENTS: Record<string, readonly string[]> = {
+  rag_vector_sync_claim: ['p_limit', 'p_lease_seconds'],
+  rag_vector_sync_complete: ['p_ids'],
+  rag_vector_sync_fail: ['p_id', 'p_error'],
+  rag_vector_sync_checkpoint: ['p_id', 'p_cursor'],
+  rag_vector_sync_expand: ['p_id', 'p_limit'],
+  rag_vector_sync_requeue_dead: ['p_target'],
+  rag_vector_sync_set_target: ['p_target', 'p_enabled', 'p_actor'],
+  rag_validate_chunks: ['p_tenant_key', 'p_ids', 'p_profile_id'],
+  rag_vector_sync_document_rows: ['p_tenant_key', 'p_document_id', 'p_profile_id', 'p_after', 'p_limit'],
+  rag_vector_sync_chunk_row: ['p_tenant_key', 'p_chunk_id', 'p_profile_id'],
+  rag_vector_sync_profiles: [],
+  rag_backend_readiness: ['p_target', 'p_profile_id', 'p_tenant_key'],
+  rag_vector_sync_reconcile_summary: ['p_tenant_key', 'p_profile_id'],
+  rag_vector_sync_bucket_rows: ['p_tenant_key', 'p_profile_id', 'p_bucket', 'p_after', 'p_limit'],
+  rag_vector_sync_tenants: ['p_target', 'p_profile_id'],
+  rag_vector_sync_enqueue_repair: ['p_target', 'p_entity', 'p_entity_id', 'p_tenant_key', 'p_profile_id'],
+  rag_set_backend_index_state: ['p_target', 'p_profile_id', 'p_tenant_key', 'p_state', 'p_supabase_count', 'p_backend_count', 'p_error'],
+  rag_vector_sync_prune: ['p_days'],
+};
+
+const GENERIC_RPC_NAME = /^(?:rag_[a-z0-9_]+|match_chunks_by_profile|hybrid_search_chunks|hybrid_search_translations)$/;
 const FIXTURE_SERVICE_ROLE_KEY = 'fixture-service-role-key-placeholder';
 const VECTOR_ARGUMENT_TYPES = new Set(['vector', 'halfvec']);
 const JSON_ARGUMENT_TYPES = new Set(['json', 'jsonb']);
@@ -83,10 +112,16 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     'lineage_id',
     'version',
     'doc_type',
+    'version_label',
   ],
   document_chunks: ['id', 'document_id', 'content', 'metadata', 'created_at', 'organization_id', 'chunk_index', 'is_current', 'status', 'tenant_key', 'version', 'doc_type'],
   organization_members: ['id', 'organization_id', 'user_id', 'role', 'created_at'],
   organizations: ['id', 'name', 'slug', 'owner_id', 'is_personal', 'subscription_tier', 'created_at'],
+  // Read by effectiveTierBounds when a job is enqueued (D-13); the ingest mode's --force-tier writes it in the database directly.
+  rag_parse_tier_overrides: ['doc_type', 'min_tier', 'max_tier'],
+  // The admin guard (isAdminUser) and the terminology admin versions read (D-05).
+  admin_users: ['id'],
+  rag_term_layers: ['layer_key', 'version', 'entries_sha256'],
 };
 
 type FilterOperator = 'eq' | 'in' | 'is.null';
@@ -106,6 +141,9 @@ const TABLE_FILTERS: Record<string, Record<string, FilterOperator[]>> = {
   document_chunks: { id: ['eq', 'in'], document_id: ['eq', 'in'], is_current: ['eq'], status: ['eq'], tenant_key: ['eq'], version: ['eq'], doc_type: ['eq'] },
   organization_members: { id: ['eq'], organization_id: ['eq'], user_id: ['eq'] },
   organizations: { id: ['eq'] },
+  rag_parse_tier_overrides: { doc_type: ['eq'] },
+  admin_users: { id: ['eq'] },
+  rag_term_layers: { layer_key: ['eq'] },
 };
 
 /** Value type of a filtered column; a column that is not listed holds a uuid. */
@@ -115,6 +153,7 @@ const FILTER_VALUE_TYPES: Record<string, 'boolean' | 'integer' | 'text'> = {
   status: 'text',
   tenant_key: 'text',
   doc_type: 'text',
+  layer_key: 'text',
 };
 const BOOLEAN_FILTER_RE = /^(true|false)$/;
 const INTEGER_FILTER_RE = /^-?\d{1,9}$/;
@@ -556,7 +595,8 @@ function createHandlers(
     const signature = await signatureOf(fn);
     if (!signature) throw new Rejection(404, `unsupported rpc function: ${fn}`);
     const names = Object.keys(body);
-    const unknown = names.filter((name) => !signature.args.has(name));
+    const registered = VECTOR_SYNC_RPC_ARGUMENTS[fn];
+    const unknown = names.filter((name) => !signature.args.has(name) || (registered !== undefined && !registered.includes(name)));
     if (unknown.length > 0) throw new Rejection(400, `unsupported rpc argument(s) for ${fn}: ${unknown.join(', ')}`);
     const values = names.map((name) => bindArgument(name, signature.args.get(name) as string, body[name]));
     calls.push({ method: 'POST', path: `/rest/v1/rpc/${fn}` });
@@ -657,8 +697,9 @@ function createHandlers(
       limitSql = ` LIMIT ${Number(limitRaw)}`;
     }
 
-    calls.push({ method: 'GET', path: `/rest/v1/${table}` });
-    const sql = `SELECT ${columns.map((column) => `"${column}"`).join(', ')} FROM ${table}${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY id${limitSql}`;
+    calls.push({ method: 'GET', path: `/rest/v1/${table}`, query: params.toString() });
+    const orderColumn = allowedColumns.includes('id') ? 'id' : allowedColumns[0];
+    const sql = `SELECT ${columns.map((column) => `"${column}"`).join(', ')} FROM ${table}${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY "${orderColumn}"${limitSql}`;
     let rows: unknown[];
     try {
       rows = (await db.query(sql, values)).rows as unknown[];
@@ -698,11 +739,12 @@ export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge>
   const calls: FakeEdgeCall[] = [];
   const serviceKeys = options.serviceKeys ?? defaultServiceKeys();
   const anonKey = options.anonKey ?? DEFAULT_ANON_KEY;
-  const handlers = createHandlers(options.db, calls, {
+  const handlerExtras = {
     documentFilenameFilter: options.documentFilenameFilter === true,
     serviceKeys,
     anonKey,
-  });
+  };
+  let handlers = createHandlers(options.db, calls, handlerExtras);
   const storageObjects = new Map<string, Buffer>();
 
   const sendBytes = (res: http.ServerResponse, status: number, body: Buffer, extraHeaders?: Record<string, string>) => {
@@ -793,6 +835,18 @@ export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge>
         } else {
           throw new Rejection(405, `unsupported method ${method} for ${pathname}`);
         }
+      } else if (method === 'DELETE' && /^\/storage\/v1\/object\/[A-Za-z0-9._-]+$/.test(pathname)) {
+        // storage.from(bucket).remove([...]) sends the keys as `prefixes` to the bucket path.
+        const bucket = decodeURIComponent(pathname.slice('/storage/v1/object/'.length));
+        const body = parseJsonObject(await readBody(req));
+        const prefixes = Array.isArray(body.prefixes) ? body.prefixes.filter((key): key is string => typeof key === 'string') : [];
+        const removed: Array<{ name: string }> = [];
+        for (const objectKey of prefixes) {
+          assertStorageObjectKey(objectKey);
+          calls.push({ method, path: `/storage/v1/object/${bucket}/${objectKey}` });
+          if (storageObjects.delete(storageMapKey(bucket, objectKey))) removed.push({ name: objectKey });
+        }
+        send(res, 200, removed);
       } else if (pathname.startsWith('/storage/v1/')) {
         throw new Rejection(404, `unsupported path: ${pathname}`);
       } else if (pathname === '/v2/rerank') {
@@ -851,6 +905,9 @@ export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge>
     url: `http://127.0.0.1:${port}`,
     errors,
     calls,
+    useDatabase: (db: PGlite) => {
+      handlers = createHandlers(db, calls, handlerExtras);
+    },
     close: () =>
       new Promise<void>((resolve) => {
         server.close(() => resolve());
@@ -872,6 +929,9 @@ export function fixtureProcessEnv(edgeUrl: string, options?: { vendorEmbeddingRo
     COHERE_BASE_URL: edgeUrl.replace(/\/+$/, ''),
     COHERE_API_KEY: 'cohere-fixture-placeholder-key-00000000',
     VOYAGE_BASE_URL: `${edgeUrl.replace(/\/+$/, '')}/v1`,
+    // D-02: CI, the eval pin and all fixtures run with zh, en and it, primary en.
+    RAG_SUPPORTED_LANGUAGES: 'zh,en,it',
+    RAG_PRIMARY_LANGUAGE: 'en',
   };
   if (options?.vendorEmbeddingRoutes) {
     env.VOYAGE_BASE_URL = `${edgeUrl}/voyage/v1`;

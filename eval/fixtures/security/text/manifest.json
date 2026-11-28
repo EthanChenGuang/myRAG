@@ -1,0 +1,26 @@
+{
+  "fixtures": {
+    "clean-bom.md": {
+      "expected": "clean",
+      "mime": "text/markdown",
+      "reason": null,
+      "sha256": "675f007d3babcb496394bd2a2d2901c541cb4c43bb1710ef031956f2eb820872",
+      "zero_width": 1
+    },
+    "clean-few.md": {
+      "expected": "clean",
+      "mime": "text/markdown",
+      "reason": null,
+      "sha256": "b890dd79ea741616ee3215e92fce14b1f2f7c6a60e276f86037ec3a7f1a26f3c",
+      "zero_width": 2
+    },
+    "zero-width.md": {
+      "expected": "hidden_found",
+      "mime": "text/markdown",
+      "reason": "zero_width",
+      "sha256": "4f2c3841d29f8c6d510314d504651c31a7ef3e5809be3040fa95f9105930a495",
+      "zero_width": 8
+    }
+  },
+  "generator": "eval/fixtures/security/generate_zero_width_docs.py"
+}

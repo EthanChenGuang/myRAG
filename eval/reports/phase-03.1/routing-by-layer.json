@@ -1,0 +1,3069 @@
+{
+  "fixtures": [
+    {
+      "combos": [
+        {
+          "combo": "L1",
+          "doc_class": "tables",
+          "l2_pages": 0,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 2,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 3,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 4,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 5,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 6,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 7,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 8,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 9,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 10,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 11,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 12,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 13,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 14,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 15,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 16,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 17,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 18,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 19,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 20,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 21,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 22,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 23,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 24,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 25,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 26,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 27,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 28,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 29,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 30,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 31,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 32,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 33,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 34,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 35,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 36,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 37,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 38,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 39,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 40,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 41,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 42,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 43,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 44,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 45,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 46,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 47,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 48,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 49,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 50,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 51,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 52,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 53,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 54,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 55,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 56,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 57,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 58,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 59,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 60,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 61,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 62,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 63,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 64,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 65,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 66,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 67,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 68,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 69,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 70,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 71,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 72,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 73,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 74,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 75,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 76,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 77,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 78,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 79,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 80,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 81,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 82,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 83,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 84,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 85,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 86,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 87,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 88,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 89,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 90,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 91,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 92,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 93,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 94,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 95,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 96,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 97,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 98,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 99,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 100,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2",
+          "doc_class": "tables",
+          "l2_pages": 0,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 2,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 3,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 4,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 5,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 6,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 7,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 8,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 9,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 10,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 11,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 12,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 13,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 14,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 15,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 16,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 17,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 18,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 19,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 20,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 21,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 22,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 23,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 24,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 25,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 26,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 27,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 28,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 29,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 30,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 31,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 32,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 33,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 34,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 35,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 36,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 37,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 38,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 39,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 40,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 41,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 42,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 43,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 44,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 45,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 46,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 47,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 48,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 49,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 50,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 51,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 52,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 53,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 54,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 55,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 56,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 57,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 58,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 59,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 60,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 61,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 62,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 63,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 64,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 65,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 66,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 67,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 68,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 69,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 70,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 71,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 72,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 73,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 74,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 75,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 76,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 77,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 78,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 79,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 80,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 81,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 82,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 83,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 84,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 85,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 86,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 87,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 88,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 89,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 90,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 91,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 92,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 93,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 94,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 95,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 96,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 97,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 98,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 99,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 100,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2+L3",
+          "doc_class": "tables",
+          "l2_pages": 0,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 2,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 3,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 4,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 5,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 6,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 7,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 8,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 9,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 10,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 11,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 12,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 13,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 14,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 15,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 16,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 17,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 18,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 19,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 20,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 21,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 22,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 23,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 24,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 25,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 26,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 27,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 28,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 29,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 30,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 31,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 32,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 33,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 34,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 35,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 36,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 37,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 38,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 39,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 40,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 41,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 42,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 43,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 44,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 45,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 46,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 47,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 48,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 49,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 50,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 51,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 52,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 53,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 54,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 55,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 56,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 57,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 58,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 59,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 60,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 61,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 62,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 63,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 64,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 65,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 66,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 67,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 68,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 69,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 70,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 71,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 72,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 73,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 74,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 75,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 76,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 77,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 78,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 79,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 80,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 81,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 82,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 83,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 84,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 85,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 86,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 87,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 88,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 89,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 90,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 91,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 92,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 93,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 94,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 95,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 96,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 97,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 98,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 99,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 100,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            }
+          ]
+        }
+      ],
+      "doc_type": "general",
+      "fixture_id": "bench-100",
+      "max_tier": "premium",
+      "min_tier": "fast",
+      "sha256": "5eb4e6a776e11143174d088f3bc9f1048cae8bd6792778e08b0b9ec8a4c0ee0c"
+    },
+    {
+      "combos": [
+        {
+          "combo": "L1",
+          "doc_class": "tables",
+          "l2_pages": 0,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 2,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 3,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 4,
+              "preset": "structured_full",
+              "signals": [
+                "tables",
+                "table_continues"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 5,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 6,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2",
+          "doc_class": "tables",
+          "l2_pages": 2,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 2,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 3,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L2",
+              "page": 4,
+              "preset": "structured_full",
+              "signals": [
+                "tables",
+                "table_continues"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L2",
+              "page": 5,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 6,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2+L3",
+          "doc_class": "tables",
+          "l2_pages": 2,
+          "l3_pages": 2,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 2,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 3,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L3",
+              "page": 4,
+              "preset": "structured_full",
+              "signals": [
+                "tables",
+                "table_continues"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L3",
+              "page": 5,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 6,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            }
+          ]
+        }
+      ],
+      "doc_type": "general",
+      "fixture_id": "cross-boundary",
+      "max_tier": "premium",
+      "min_tier": "fast",
+      "sha256": "1da2ad3e22f030bf5ceebcf11e0672380787dda1aad3a0a811f5102a870acc96"
+    },
+    {
+      "combos": [
+        {
+          "combo": "L1",
+          "doc_class": "text_pdf",
+          "l2_pages": 0,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 2,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2",
+          "doc_class": "text_pdf",
+          "l2_pages": 0,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 2,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2+L3",
+          "doc_class": "text_pdf",
+          "l2_pages": 0,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 2,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            }
+          ]
+        }
+      ],
+      "doc_type": "general",
+      "fixture_id": "digital-text",
+      "max_tier": "premium",
+      "min_tier": "fast",
+      "sha256": "3caccd68b549aad06a0413d7d9355d7102feaf2bde6078e2c03ab9f428d32590"
+    },
+    {
+      "combos": [
+        {
+          "combo": "L1",
+          "doc_class": "tables",
+          "l2_pages": 0,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2",
+          "doc_class": "tables",
+          "l2_pages": 1,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L2",
+              "page": 1,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2+L3",
+          "doc_class": "tables",
+          "l2_pages": 1,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L2",
+              "page": 1,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            }
+          ]
+        }
+      ],
+      "doc_type": "invoice_receipt",
+      "fixture_id": "invoice-en",
+      "max_tier": "premium",
+      "min_tier": "structured",
+      "sha256": "b0b0d45d476c16baf2c2257b459f318eda5aa469fb2a755362b6be91d32347de"
+    },
+    {
+      "combos": [
+        {
+          "combo": "L1",
+          "doc_class": "tables",
+          "l2_pages": 0,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 2,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 3,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 4,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 5,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 6,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 7,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 8,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 9,
+              "preset": "structured_ocr",
+              "signals": [
+                "scanned"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 10,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2",
+          "doc_class": "tables",
+          "l2_pages": 1,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 2,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 3,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 4,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 5,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 6,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 7,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 8,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L2",
+              "page": 9,
+              "preset": "structured_ocr",
+              "signals": [
+                "scanned"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 10,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2+L3",
+          "doc_class": "tables",
+          "l2_pages": 1,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 2,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 3,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 4,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 5,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 6,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 7,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 8,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L2",
+              "page": 9,
+              "preset": "structured_ocr",
+              "signals": [
+                "scanned"
+              ],
+              "tier": "structured"
+            },
+            {
+              "layer": "L1",
+              "page": 10,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            }
+          ]
+        }
+      ],
+      "doc_type": "general",
+      "fixture_id": "mixed-routing",
+      "max_tier": "premium",
+      "min_tier": "fast",
+      "sha256": "1ae7eaff14736765335fab82e5e214501c088cf403ad52b1500183128e819605"
+    },
+    {
+      "combos": [
+        {
+          "combo": "L1",
+          "doc_class": "text_pdf",
+          "l2_pages": 0,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 2,
+              "preset": "structured_layout",
+              "signals": [
+                "multi_col"
+              ],
+              "tier": "structured"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2",
+          "doc_class": "text_pdf",
+          "l2_pages": 1,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L2",
+              "page": 2,
+              "preset": "structured_layout",
+              "signals": [
+                "multi_col"
+              ],
+              "tier": "structured"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2+L3",
+          "doc_class": "text_pdf",
+          "l2_pages": 1,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L2",
+              "page": 2,
+              "preset": "structured_layout",
+              "signals": [
+                "multi_col"
+              ],
+              "tier": "structured"
+            }
+          ]
+        }
+      ],
+      "doc_type": "general",
+      "fixture_id": "multi-column-en",
+      "max_tier": "premium",
+      "min_tier": "fast",
+      "sha256": "70ab25776a5d090c9367458ea947e64c846686f3580c138ea0c6808fff211983"
+    },
+    {
+      "combos": [
+        {
+          "combo": "L1",
+          "doc_class": "scanned",
+          "l2_pages": 0,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "structured_ocr",
+              "signals": [
+                "scanned"
+              ],
+              "tier": "structured"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2",
+          "doc_class": "scanned",
+          "l2_pages": 1,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L2",
+              "page": 1,
+              "preset": "structured_ocr",
+              "signals": [
+                "scanned"
+              ],
+              "tier": "structured"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2+L3",
+          "doc_class": "scanned",
+          "l2_pages": 1,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L2",
+              "page": 1,
+              "preset": "structured_ocr",
+              "signals": [
+                "scanned"
+              ],
+              "tier": "structured"
+            }
+          ]
+        }
+      ],
+      "doc_type": "general",
+      "fixture_id": "scan-en",
+      "max_tier": "premium",
+      "min_tier": "fast",
+      "sha256": "01a39e099b820ce5131bd172506de7593714a733ac3a3c9285869a1231b3c178"
+    },
+    {
+      "combos": [
+        {
+          "combo": "L1",
+          "doc_class": "scanned",
+          "l2_pages": 0,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "structured_ocr",
+              "signals": [
+                "scanned"
+              ],
+              "tier": "structured"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2",
+          "doc_class": "scanned",
+          "l2_pages": 1,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L2",
+              "page": 1,
+              "preset": "structured_ocr",
+              "signals": [
+                "scanned"
+              ],
+              "tier": "structured"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2+L3",
+          "doc_class": "scanned",
+          "l2_pages": 1,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L2",
+              "page": 1,
+              "preset": "structured_ocr",
+              "signals": [
+                "scanned"
+              ],
+              "tier": "structured"
+            }
+          ]
+        }
+      ],
+      "doc_type": "general",
+      "fixture_id": "scan-it",
+      "max_tier": "premium",
+      "min_tier": "fast",
+      "sha256": "c855808f1364b6016406e2359c5dc114a5c33eab0c0b2575cc9d7fd0a1994ad8"
+    },
+    {
+      "combos": [
+        {
+          "combo": "L1",
+          "doc_class": "scanned",
+          "l2_pages": 0,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "structured_ocr",
+              "signals": [
+                "scanned"
+              ],
+              "tier": "structured"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2",
+          "doc_class": "scanned",
+          "l2_pages": 1,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L2",
+              "page": 1,
+              "preset": "structured_ocr",
+              "signals": [
+                "scanned"
+              ],
+              "tier": "structured"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2+L3",
+          "doc_class": "scanned",
+          "l2_pages": 1,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L2",
+              "page": 1,
+              "preset": "structured_ocr",
+              "signals": [
+                "scanned"
+              ],
+              "tier": "structured"
+            }
+          ]
+        }
+      ],
+      "doc_type": "general",
+      "fixture_id": "scan-zh",
+      "max_tier": "premium",
+      "min_tier": "fast",
+      "sha256": "34db8c840cb74f72864ea8b2ccdb0aa5a37024d65252c66f2845927358c61724"
+    },
+    {
+      "combos": [
+        {
+          "combo": "L1",
+          "doc_class": "tables",
+          "l2_pages": 0,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L1",
+              "page": 2,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2",
+          "doc_class": "tables",
+          "l2_pages": 1,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L2",
+              "page": 2,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            }
+          ]
+        },
+        {
+          "combo": "L1+L2+L3",
+          "doc_class": "tables",
+          "l2_pages": 1,
+          "l3_pages": 0,
+          "pages": [
+            {
+              "layer": "L1",
+              "page": 1,
+              "preset": "fast",
+              "signals": [],
+              "tier": "fast"
+            },
+            {
+              "layer": "L2",
+              "page": 2,
+              "preset": "structured_full",
+              "signals": [
+                "tables"
+              ],
+              "tier": "structured"
+            }
+          ]
+        }
+      ],
+      "doc_type": "general",
+      "fixture_id": "table-en",
+      "max_tier": "premium",
+      "min_tier": "fast",
+      "sha256": "5bcd8b32b8143c2d5e62f1521f4f32bc89d4088cf9ad628f53da628ac62b2416"
+    }
+  ],
+  "probe_version": "2026.1",
+  "routing_config_version": "1"
+}

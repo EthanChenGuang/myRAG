@@ -161,7 +161,7 @@ Based on the context provided, offer comprehensive and helpful answers. If speci
 // Default model configurations
 const DEFAULT_OPENAI_MODELS = '[{"id":"gpt-4.1-mini","displayName":"GPT-4.1 Mini"},{"id":"gpt-4.1","displayName":"GPT-4.1"},{"id":"o3","displayName":"o3"},{"id":"o4-mini","displayName":"o4 Mini"}]';
 
-const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-5-mini","displayName":"GPT-5 Mini"},{"id":"openai/gpt-5","displayName":"GPT-5"},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite"},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash"},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
+const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-5-mini","displayName":"GPT-5 Mini"},{"id":"openai/gpt-5","displayName":"GPT-5"},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"},{"id":"anthropic/claude-opus-5.5","displayName":"Claude Opus 5.5","anthropicId":"claude-opus-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-sonnet-5.5","displayName":"Claude Sonnet 5.5","anthropicId":"claude-sonnet-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-haiku-5.5","displayName":"Claude Haiku 5.5","anthropicId":"claude-haiku-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite"},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash"},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
 
 // API endpoint to get current .env values. Secret values are never returned; secretsSet lists which ones are set.
 app.get('/api/config', (req, res) => {
@@ -183,6 +183,25 @@ app.get('/api/config', (req, res) => {
     res.status(500).json({ error: 'Failed to load configuration' });
   }
 });
+
+// The variables the app's hidden-text client reads (src/lib/rag/security/hidden-text.ts: env.RAG_SIDECAR_URL, env.RAG_SIDECAR_SECRET).
+const HIDDEN_TEXT_CHECK_VAR = 'RAG_HIDDEN_TEXT_CHECK';
+const HIDDEN_TEXT_SIDECAR_VARS = ['RAG_SIDECAR_URL', 'RAG_SIDECAR_SECRET'];
+
+/**
+ * True when a save would leave RAG_HIDDEN_TEXT_CHECK=quarantine with no sidecar URL or secret, looking at the posted values over the
+ * saved .env.local. Only a request that sets the mode or one of the sidecar variables is checked, so an unrelated save still works.
+ * A save-time guard only: the scan stage still fails closed at run time (plan 03.2-37).
+ */
+function hiddenTextNeedsSidecar(posted) {
+  const touched = [HIDDEN_TEXT_CHECK_VAR, ...HIDDEN_TEXT_SIDECAR_VARS].some((name) => Object.prototype.hasOwnProperty.call(posted, name));
+  if (!touched) return false;
+  const envPath = path.join(REPO_ROOT, '.env.local');
+  const saved = fs.existsSync(envPath) ? dotenv.parse(fs.readFileSync(envPath, 'utf8')) : {};
+  const value = (name) => String(Object.prototype.hasOwnProperty.call(posted, name) ? (posted[name] ?? '') : (saved[name] ?? '')).trim();
+  if (value(HIDDEN_TEXT_CHECK_VAR).toLowerCase() !== 'quarantine') return false;
+  return HIDDEN_TEXT_SIDECAR_VARS.some((name) => value(name) === '');
+}
 
 // API endpoint to update .env.local file
 app.post('/api/config', (req, res) => {
@@ -215,7 +234,12 @@ app.post('/api/config', (req, res) => {
       return res.status(400).json({ error: 'Configuration contains values that cannot be stored', invalid: refused });
     }
 
-    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY']) {
+    // RAG_HIDDEN_TEXT_CHECK=quarantine fails every PDF upload closed without a sidecar to check it (D-34): refuse to save that state.
+    if (hiddenTextNeedsSidecar(fullValues)) {
+      return res.status(400).json({ success: false, error: 'hidden_text_needs_sidecar' });
+    }
+
+    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY', 'RAG_EMBED_FEEDBACK_SECRET', 'RAG_VECTOR_SYNC_SECRET', 'RAG_MONITOR_WEBHOOK_SECRET']) {
       const value = fullValues[name];
       if (typeof value === 'string' && value.length > 0 && value.length < 32) {
         console.warn(`[Config] ${name} is ${value.length} characters; at least 32 are required or the endpoint answers 503`);
@@ -539,6 +563,9 @@ ${fullValues.RAG_SIMILARITY_THRESHOLD !== undefined ? `RAG_SIMILARITY_THRESHOLD=
 # RAG Behavior Mode: strict, balanced, flexible, bypass
 ${fullValues.RAG_BEHAVIOR_MODE !== undefined ? `RAG_BEHAVIOR_MODE=${fullValues.RAG_BEHAVIOR_MODE}` : 'RAG_BEHAVIOR_MODE=strict'}
 
+# Chat answer style: classic, concise
+${fullValues.RAG_ANSWER_STYLE !== undefined ? `RAG_ANSWER_STYLE=${fullValues.RAG_ANSWER_STYLE}` : 'RAG_ANSWER_STYLE=classic'}
+
 # RAG Evaluation & Sidecar
 ${fullValues.RAG_EVAL_ENDPOINT_ENABLED !== undefined ? `RAG_EVAL_ENDPOINT_ENABLED=${fullValues.RAG_EVAL_ENDPOINT_ENABLED}` : 'RAG_EVAL_ENDPOINT_ENABLED=false'}
 ${fullValues.RAG_EVAL_SECRET !== undefined ? `RAG_EVAL_SECRET=${fullValues.RAG_EVAL_SECRET}` : 'RAG_EVAL_SECRET='}
@@ -558,6 +585,7 @@ ${fullValues.RAG_RERANK_VOYAGE_MODEL_BY_LANG !== undefined ? `RAG_RERANK_VOYAGE_
 ${fullValues.COHERE_API_KEY !== undefined ? `COHERE_API_KEY=${fullValues.COHERE_API_KEY}` : 'COHERE_API_KEY='}
 ${fullValues.COHERE_BASE_URL !== undefined ? `COHERE_BASE_URL=${fullValues.COHERE_BASE_URL}` : 'COHERE_BASE_URL='}
 ${fullValues.RAG_REFUSAL_THRESHOLD !== undefined ? `RAG_REFUSAL_THRESHOLD=${fullValues.RAG_REFUSAL_THRESHOLD}` : 'RAG_REFUSAL_THRESHOLD=false'}
+${fullValues.RAG_REFUSAL_FLOOR !== undefined ? `RAG_REFUSAL_FLOOR=${fullValues.RAG_REFUSAL_FLOOR}` : 'RAG_REFUSAL_FLOOR=similarity'}
 ${fullValues.RAG_CONTEXT_EDGE_ORDER !== undefined ? `RAG_CONTEXT_EDGE_ORDER=${fullValues.RAG_CONTEXT_EDGE_ORDER}` : 'RAG_CONTEXT_EDGE_ORDER=false'}
 ${fullValues.RAG_CONTEXT_COMPRESSION !== undefined ? `RAG_CONTEXT_COMPRESSION=${fullValues.RAG_CONTEXT_COMPRESSION}` : 'RAG_CONTEXT_COMPRESSION=false'}
 ${fullValues.RAG_CONTEXT_TOKEN_BUDGET !== undefined ? `RAG_CONTEXT_TOKEN_BUDGET=${fullValues.RAG_CONTEXT_TOKEN_BUDGET}` : 'RAG_CONTEXT_TOKEN_BUDGET=6000'}
@@ -565,11 +593,35 @@ ${fullValues.RAG_PARENT_CHILD !== undefined ? `RAG_PARENT_CHILD=${fullValues.RAG
 ${fullValues.RAG_HNSW_ITERATIVE_SCAN !== undefined ? `RAG_HNSW_ITERATIVE_SCAN=${fullValues.RAG_HNSW_ITERATIVE_SCAN}` : 'RAG_HNSW_ITERATIVE_SCAN=off'}
 ${fullValues.RAG_EXACT_SCAN_CUTOFF !== undefined ? `RAG_EXACT_SCAN_CUTOFF=${fullValues.RAG_EXACT_SCAN_CUTOFF}` : 'RAG_EXACT_SCAN_CUTOFF=0'}
 ${fullValues.RAG_LEXICAL_TRANSLATION !== undefined ? `RAG_LEXICAL_TRANSLATION=${fullValues.RAG_LEXICAL_TRANSLATION}` : 'RAG_LEXICAL_TRANSLATION=false'}
+${fullValues.RAG_LEXICAL_DICTIONARY !== undefined ? `RAG_LEXICAL_DICTIONARY=${fullValues.RAG_LEXICAL_DICTIONARY}` : 'RAG_LEXICAL_DICTIONARY=false'}
+${fullValues.RAG_LEXICAL_STEM_IT !== undefined ? `RAG_LEXICAL_STEM_IT=${fullValues.RAG_LEXICAL_STEM_IT}` : 'RAG_LEXICAL_STEM_IT=false'}
+${fullValues.RAG_VERSION_SCOPE !== undefined ? `RAG_VERSION_SCOPE=${fullValues.RAG_VERSION_SCOPE}` : 'RAG_VERSION_SCOPE=false'}
+${fullValues.RAG_EMBED_VERSION_SCOPE !== undefined ? `RAG_EMBED_VERSION_SCOPE=${fullValues.RAG_EMBED_VERSION_SCOPE}` : 'RAG_EMBED_VERSION_SCOPE=false'}
+${fullValues.RAG_TABLE_LOOKUP !== undefined ? `RAG_TABLE_LOOKUP=${fullValues.RAG_TABLE_LOOKUP}` : 'RAG_TABLE_LOOKUP=false'}
+${fullValues.RAG_DUP_CLUSTERS !== undefined ? `RAG_DUP_CLUSTERS=${fullValues.RAG_DUP_CLUSTERS}` : 'RAG_DUP_CLUSTERS=false'}
+${fullValues.RAG_RESULT_DIVERSITY !== undefined ? `RAG_RESULT_DIVERSITY=${fullValues.RAG_RESULT_DIVERSITY}` : 'RAG_RESULT_DIVERSITY=off'}
+${fullValues.RAG_IDENTIFIER_INDEX !== undefined ? `RAG_IDENTIFIER_INDEX=${fullValues.RAG_IDENTIFIER_INDEX}` : 'RAG_IDENTIFIER_INDEX=false'}
+${fullValues.RAG_IDENTIFIER_FILTER !== undefined ? `RAG_IDENTIFIER_FILTER=${fullValues.RAG_IDENTIFIER_FILTER}` : 'RAG_IDENTIFIER_FILTER=false'}
+${fullValues.RAG_TERMINOLOGY !== undefined ? `RAG_TERMINOLOGY=${fullValues.RAG_TERMINOLOGY}` : 'RAG_TERMINOLOGY=false'}
+${fullValues.RAG_TERMINOLOGY_DENSE !== undefined ? `RAG_TERMINOLOGY_DENSE=${fullValues.RAG_TERMINOLOGY_DENSE}` : 'RAG_TERMINOLOGY_DENSE=false'}
+${fullValues.RAG_TERMINOLOGY_MINING !== undefined ? `RAG_TERMINOLOGY_MINING=${fullValues.RAG_TERMINOLOGY_MINING}` : 'RAG_TERMINOLOGY_MINING=false'}
 ${fullValues.RAG_RETRIEVAL_PARAMS_OVERRIDE !== undefined ? `RAG_RETRIEVAL_PARAMS_OVERRIDE=${fullValues.RAG_RETRIEVAL_PARAMS_OVERRIDE}` : 'RAG_RETRIEVAL_PARAMS_OVERRIDE='}
 ${fullValues.RAG_EMBED_TENANT !== undefined ? `RAG_EMBED_TENANT=${fullValues.RAG_EMBED_TENANT}` : 'RAG_EMBED_TENANT='}
 ${fullValues.RAG_VOICE_TOKEN_SECRET !== undefined ? `RAG_VOICE_TOKEN_SECRET=${fullValues.RAG_VOICE_TOKEN_SECRET}` : 'RAG_VOICE_TOKEN_SECRET='}
 ${fullValues.RAG_VOICE_TOKEN_TTL_SECONDS !== undefined ? `RAG_VOICE_TOKEN_TTL_SECONDS=${fullValues.RAG_VOICE_TOKEN_TTL_SECONDS}` : 'RAG_VOICE_TOKEN_TTL_SECONDS=3600'}
 ${fullValues.VOICE_MAX_ACTIVE_ROOMS !== undefined ? `VOICE_MAX_ACTIVE_ROOMS=${fullValues.VOICE_MAX_ACTIVE_ROOMS}` : 'VOICE_MAX_ACTIVE_ROOMS=4'}
+
+# Vector backends (Phase 7)
+${fullValues.RAG_RETRIEVAL_BACKEND !== undefined ? `RAG_RETRIEVAL_BACKEND=${fullValues.RAG_RETRIEVAL_BACKEND}` : 'RAG_RETRIEVAL_BACKEND=pgvector'}
+${fullValues.RAG_RETRIEVAL_BACKEND_VOICE !== undefined ? `RAG_RETRIEVAL_BACKEND_VOICE=${fullValues.RAG_RETRIEVAL_BACKEND_VOICE}` : 'RAG_RETRIEVAL_BACKEND_VOICE=pgvector'}
+${fullValues.RAG_VECTOR_SYNC_SECRET !== undefined ? `RAG_VECTOR_SYNC_SECRET=${fullValues.RAG_VECTOR_SYNC_SECRET}` : 'RAG_VECTOR_SYNC_SECRET='}
+${fullValues.RAG_VECTOR_SYNC_MAX_LAG_SECONDS !== undefined ? `RAG_VECTOR_SYNC_MAX_LAG_SECONDS=${fullValues.RAG_VECTOR_SYNC_MAX_LAG_SECONDS}` : 'RAG_VECTOR_SYNC_MAX_LAG_SECONDS=300'}
+${fullValues.WEAVIATE_URL !== undefined ? `WEAVIATE_URL=${fullValues.WEAVIATE_URL}` : 'WEAVIATE_URL='}
+${fullValues.WEAVIATE_API_KEY !== undefined ? `WEAVIATE_API_KEY=${fullValues.WEAVIATE_API_KEY}` : 'WEAVIATE_API_KEY='}
+${fullValues.WEAVIATE_READ_API_KEY !== undefined ? `WEAVIATE_READ_API_KEY=${fullValues.WEAVIATE_READ_API_KEY}` : 'WEAVIATE_READ_API_KEY='}
+${fullValues.QDRANT_URL !== undefined ? `QDRANT_URL=${fullValues.QDRANT_URL}` : 'QDRANT_URL='}
+${fullValues.QDRANT_API_KEY !== undefined ? `QDRANT_API_KEY=${fullValues.QDRANT_API_KEY}` : 'QDRANT_API_KEY='}
+${fullValues.QDRANT_READ_API_KEY !== undefined ? `QDRANT_READ_API_KEY=${fullValues.QDRANT_READ_API_KEY}` : 'QDRANT_READ_API_KEY='}
 
 # Langfuse tracing
 ${fullValues.LANGFUSE_ENABLED !== undefined ? `LANGFUSE_ENABLED=${fullValues.LANGFUSE_ENABLED}` : 'LANGFUSE_ENABLED=false'}
@@ -579,6 +631,83 @@ ${fullValues.LANGFUSE_BASE_URL !== undefined ? `LANGFUSE_BASE_URL=${fullValues.L
 ${fullValues.LANGFUSE_SAMPLE_RATE !== undefined ? `LANGFUSE_SAMPLE_RATE=${fullValues.LANGFUSE_SAMPLE_RATE}` : 'LANGFUSE_SAMPLE_RATE=0.1'}
 ${fullValues.LANGFUSE_CAPTURE_CONTENT !== undefined ? `LANGFUSE_CAPTURE_CONTENT=${fullValues.LANGFUSE_CAPTURE_CONTENT}` : 'LANGFUSE_CAPTURE_CONTENT=false'}
 ${fullValues.LANGFUSE_REVIEW_SAMPLE_RATE !== undefined ? `LANGFUSE_REVIEW_SAMPLE_RATE=${fullValues.LANGFUSE_REVIEW_SAMPLE_RATE}` : 'LANGFUSE_REVIEW_SAMPLE_RATE=0'}
+
+# Verified citations and groundedness
+${fullValues.RAG_CITATIONS !== undefined ? `RAG_CITATIONS=${fullValues.RAG_CITATIONS}` : 'RAG_CITATIONS=false'}
+${fullValues.RAG_CLAUDE_CITATIONS !== undefined ? `RAG_CLAUDE_CITATIONS=${fullValues.RAG_CLAUDE_CITATIONS}` : 'RAG_CLAUDE_CITATIONS=false'}
+${fullValues.ANTHROPIC_API_KEY !== undefined ? `ANTHROPIC_API_KEY=${fullValues.ANTHROPIC_API_KEY}` : 'ANTHROPIC_API_KEY='}
+${fullValues.ANTHROPIC_BASE_URL !== undefined ? `ANTHROPIC_BASE_URL=${fullValues.ANTHROPIC_BASE_URL}` : 'ANTHROPIC_BASE_URL='}
+${fullValues.RAG_GROUNDEDNESS !== undefined ? `RAG_GROUNDEDNESS=${fullValues.RAG_GROUNDEDNESS}` : 'RAG_GROUNDEDNESS=false'}
+${fullValues.RAG_GROUNDEDNESS_VECTARA_OPT_IN !== undefined ? `RAG_GROUNDEDNESS_VECTARA_OPT_IN=${fullValues.RAG_GROUNDEDNESS_VECTARA_OPT_IN}` : 'RAG_GROUNDEDNESS_VECTARA_OPT_IN=false'}
+${fullValues.RAG_GROUNDEDNESS_TIMEOUT_MS !== undefined ? `RAG_GROUNDEDNESS_TIMEOUT_MS=${fullValues.RAG_GROUNDEDNESS_TIMEOUT_MS}` : 'RAG_GROUNDEDNESS_TIMEOUT_MS=20000'}
+${fullValues.RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS !== undefined ? `RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=${fullValues.RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS}` : 'RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=3000'}
+${fullValues.RAG_ANSWER_FEEDBACK !== undefined ? `RAG_ANSWER_FEEDBACK=${fullValues.RAG_ANSWER_FEEDBACK}` : 'RAG_ANSWER_FEEDBACK=false'}
+${fullValues.RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK !== undefined ? `RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=${fullValues.RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK}` : 'RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=false'}
+
+# Retrieval log and feedback
+${fullValues.RAG_RETRIEVAL_LOG !== undefined ? `RAG_RETRIEVAL_LOG=${fullValues.RAG_RETRIEVAL_LOG}` : 'RAG_RETRIEVAL_LOG=off'}
+${fullValues.RAG_RETRIEVAL_LOG_RETENTION_DAYS !== undefined ? `RAG_RETRIEVAL_LOG_RETENTION_DAYS=${fullValues.RAG_RETRIEVAL_LOG_RETENTION_DAYS}` : 'RAG_RETRIEVAL_LOG_RETENTION_DAYS=30'}
+${fullValues.RAG_REFUSAL_FEEDBACK !== undefined ? `RAG_REFUSAL_FEEDBACK=${fullValues.RAG_REFUSAL_FEEDBACK}` : 'RAG_REFUSAL_FEEDBACK=false'}
+${fullValues.RAG_EMBED_FEEDBACK !== undefined ? `RAG_EMBED_FEEDBACK=${fullValues.RAG_EMBED_FEEDBACK}` : 'RAG_EMBED_FEEDBACK=false'}
+${fullValues.RAG_EMBED_FEEDBACK_SECRET !== undefined ? `RAG_EMBED_FEEDBACK_SECRET=${fullValues.RAG_EMBED_FEEDBACK_SECRET}` : 'RAG_EMBED_FEEDBACK_SECRET='}
+${fullValues.RAG_SOURCE_OPEN_SIGNAL !== undefined ? `RAG_SOURCE_OPEN_SIGNAL=${fullValues.RAG_SOURCE_OPEN_SIGNAL}` : 'RAG_SOURCE_OPEN_SIGNAL=false'}
+${fullValues.RAG_DOMAIN_EXPERT_REVIEW !== undefined ? `RAG_DOMAIN_EXPERT_REVIEW=${fullValues.RAG_DOMAIN_EXPERT_REVIEW}` : 'RAG_DOMAIN_EXPERT_REVIEW=false'}
+
+# Evaluation gates and monitoring
+${fullValues.RAG_CONFIG_GATE !== undefined ? `RAG_CONFIG_GATE=${fullValues.RAG_CONFIG_GATE}` : 'RAG_CONFIG_GATE=off'}
+${fullValues.RAG_CONFIG_GATE_LIVE !== undefined ? `RAG_CONFIG_GATE_LIVE=${fullValues.RAG_CONFIG_GATE_LIVE}` : 'RAG_CONFIG_GATE_LIVE=false'}
+${fullValues.RAG_MONITOR !== undefined ? `RAG_MONITOR=${fullValues.RAG_MONITOR}` : 'RAG_MONITOR=false'}
+${fullValues.RAG_MONITOR_WEBHOOK_URL !== undefined ? `RAG_MONITOR_WEBHOOK_URL=${fullValues.RAG_MONITOR_WEBHOOK_URL}` : 'RAG_MONITOR_WEBHOOK_URL='}
+${fullValues.RAG_MONITOR_WEBHOOK_SECRET !== undefined ? `RAG_MONITOR_WEBHOOK_SECRET=${fullValues.RAG_MONITOR_WEBHOOK_SECRET}` : 'RAG_MONITOR_WEBHOOK_SECRET='}
+${fullValues.RAG_REPRESENTATIVE_SAMPLE !== undefined ? `RAG_REPRESENTATIVE_SAMPLE=${fullValues.RAG_REPRESENTATIVE_SAMPLE}` : 'RAG_REPRESENTATIVE_SAMPLE=false'}
+
+# Prompt-injection defense
+${fullValues.RAG_CONTEXT_TAGGING !== undefined ? `RAG_CONTEXT_TAGGING=${fullValues.RAG_CONTEXT_TAGGING}` : 'RAG_CONTEXT_TAGGING=false'}
+${fullValues.RAG_INJECTION_CHECK !== undefined ? `RAG_INJECTION_CHECK=${fullValues.RAG_INJECTION_CHECK}` : 'RAG_INJECTION_CHECK=off'}
+${fullValues.RAG_INJECTION_PROMPT_GUARD !== undefined ? `RAG_INJECTION_PROMPT_GUARD=${fullValues.RAG_INJECTION_PROMPT_GUARD}` : 'RAG_INJECTION_PROMPT_GUARD=false'}
+${fullValues.RAG_INJECTION_LAKERA !== undefined ? `RAG_INJECTION_LAKERA=${fullValues.RAG_INJECTION_LAKERA}` : 'RAG_INJECTION_LAKERA=false'}
+${fullValues.LAKERA_GUARD_API_KEY !== undefined ? `LAKERA_GUARD_API_KEY=${fullValues.LAKERA_GUARD_API_KEY}` : 'LAKERA_GUARD_API_KEY='}
+${fullValues.LAKERA_GUARD_BASE_URL !== undefined ? `LAKERA_GUARD_BASE_URL=${fullValues.LAKERA_GUARD_BASE_URL}` : 'LAKERA_GUARD_BASE_URL='}
+${fullValues.RAG_INJECTION_LAKERA_MULTI_TENANT_ACK !== undefined ? `RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=${fullValues.RAG_INJECTION_LAKERA_MULTI_TENANT_ACK}` : 'RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=false'}
+${fullValues.RAG_TOOL_RESULT_GUARD !== undefined ? `RAG_TOOL_RESULT_GUARD=${fullValues.RAG_TOOL_RESULT_GUARD}` : 'RAG_TOOL_RESULT_GUARD=off'}
+${fullValues.NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST !== undefined ? `NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=${fullValues.NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST}` : 'NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=false'}
+
+# Answer rules and output safety
+${fullValues.RAG_REGISTRY_TEXTS !== undefined ? `RAG_REGISTRY_TEXTS=${fullValues.RAG_REGISTRY_TEXTS}` : 'RAG_REGISTRY_TEXTS=false'}
+${fullValues.RAG_PARTIAL_ANSWER_RULE !== undefined ? `RAG_PARTIAL_ANSWER_RULE=${fullValues.RAG_PARTIAL_ANSWER_RULE}` : 'RAG_PARTIAL_ANSWER_RULE=false'}
+${fullValues.RAG_CONTEXT_RELEVANCE_RULE !== undefined ? `RAG_CONTEXT_RELEVANCE_RULE=${fullValues.RAG_CONTEXT_RELEVANCE_RULE}` : 'RAG_CONTEXT_RELEVANCE_RULE=false'}
+${fullValues.RAG_CITATION_PER_SENTENCE !== undefined ? `RAG_CITATION_PER_SENTENCE=${fullValues.RAG_CITATION_PER_SENTENCE}` : 'RAG_CITATION_PER_SENTENCE=false'}
+${fullValues.RAG_CLAIM_CHECK !== undefined ? `RAG_CLAIM_CHECK=${fullValues.RAG_CLAIM_CHECK}` : 'RAG_CLAIM_CHECK=false'}
+${fullValues.RAG_GROUNDEDNESS_LLM_JUDGE !== undefined ? `RAG_GROUNDEDNESS_LLM_JUDGE=${fullValues.RAG_GROUNDEDNESS_LLM_JUDGE}` : 'RAG_GROUNDEDNESS_LLM_JUDGE=false'}
+${fullValues.RAG_GROUNDEDNESS_JUDGE_MODEL !== undefined ? `RAG_GROUNDEDNESS_JUDGE_MODEL=${fullValues.RAG_GROUNDEDNESS_JUDGE_MODEL}` : 'RAG_GROUNDEDNESS_JUDGE_MODEL='}
+${fullValues.RAG_MAX_OUTPUT_TOKENS !== undefined ? `RAG_MAX_OUTPUT_TOKENS=${fullValues.RAG_MAX_OUTPUT_TOKENS}` : 'RAG_MAX_OUTPUT_TOKENS=off'}
+${fullValues.RAG_OUTPUT_GUARD !== undefined ? `RAG_OUTPUT_GUARD=${fullValues.RAG_OUTPUT_GUARD}` : 'RAG_OUTPUT_GUARD=off'}
+${fullValues.RAG_VERSION_LABELS !== undefined ? `RAG_VERSION_LABELS=${fullValues.RAG_VERSION_LABELS}` : 'RAG_VERSION_LABELS=false'}
+${fullValues.RAG_SECURITY_EVENTS !== undefined ? `RAG_SECURITY_EVENTS=${fullValues.RAG_SECURITY_EVENTS}` : 'RAG_SECURITY_EVENTS=false'}
+${fullValues.RAG_UPLOADER_ALERT_THRESHOLD !== undefined ? `RAG_UPLOADER_ALERT_THRESHOLD=${fullValues.RAG_UPLOADER_ALERT_THRESHOLD}` : 'RAG_UPLOADER_ALERT_THRESHOLD=0'}
+${fullValues.RAG_UPLOADER_ALERT_WINDOW_HOURS !== undefined ? `RAG_UPLOADER_ALERT_WINDOW_HOURS=${fullValues.RAG_UPLOADER_ALERT_WINDOW_HOURS}` : 'RAG_UPLOADER_ALERT_WINDOW_HOURS=24'}
+${fullValues.RAG_UPLOADER_HOLD !== undefined ? `RAG_UPLOADER_HOLD=${fullValues.RAG_UPLOADER_HOLD}` : 'RAG_UPLOADER_HOLD=off'}
+
+# Query layer
+${fullValues.RAG_QUERY_LAYER !== undefined ? `RAG_QUERY_LAYER=${fullValues.RAG_QUERY_LAYER}` : 'RAG_QUERY_LAYER=false'}
+${fullValues.RAG_QUERY_FRAMEWORK !== undefined ? `RAG_QUERY_FRAMEWORK=${fullValues.RAG_QUERY_FRAMEWORK}` : 'RAG_QUERY_FRAMEWORK=llamaindex'}
+${fullValues.RAG_QUERY_LLM_MODEL !== undefined ? `RAG_QUERY_LLM_MODEL=${fullValues.RAG_QUERY_LLM_MODEL}` : 'RAG_QUERY_LLM_MODEL=openai/gpt-4.1-nano'}
+${fullValues.RAG_QUERY_CONDENSE !== undefined ? `RAG_QUERY_CONDENSE=${fullValues.RAG_QUERY_CONDENSE}` : 'RAG_QUERY_CONDENSE=true'}
+${fullValues.RAG_QUERY_EXPAND !== undefined ? `RAG_QUERY_EXPAND=${fullValues.RAG_QUERY_EXPAND}` : 'RAG_QUERY_EXPAND=true'}
+${fullValues.RAG_QUERY_DECOMPOSE !== undefined ? `RAG_QUERY_DECOMPOSE=${fullValues.RAG_QUERY_DECOMPOSE}` : 'RAG_QUERY_DECOMPOSE=true'}
+${fullValues.RAG_QUERY_TRANSLATE !== undefined ? `RAG_QUERY_TRANSLATE=${fullValues.RAG_QUERY_TRANSLATE}` : 'RAG_QUERY_TRANSLATE=true'}
+${fullValues.RAG_QUERY_DATE_NORMALIZE !== undefined ? `RAG_QUERY_DATE_NORMALIZE=${fullValues.RAG_QUERY_DATE_NORMALIZE}` : 'RAG_QUERY_DATE_NORMALIZE=true'}
+${fullValues.RAG_QUERY_HYDE !== undefined ? `RAG_QUERY_HYDE=${fullValues.RAG_QUERY_HYDE}` : 'RAG_QUERY_HYDE=false'}
+${fullValues.RAG_QUERY_TRANSLATE_DISABLED_PROFILES !== undefined ? `RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${fullValues.RAG_QUERY_TRANSLATE_DISABLED_PROFILES}` : 'RAG_QUERY_TRANSLATE_DISABLED_PROFILES='}
+${fullValues.RAG_QUERY_VOICE_TRANSFORMS !== undefined ? `RAG_QUERY_VOICE_TRANSFORMS=${fullValues.RAG_QUERY_VOICE_TRANSFORMS}` : 'RAG_QUERY_VOICE_TRANSFORMS=condense_history,normalize_dates'}
+
+# Semantic cache
+${fullValues.RAG_SEMANTIC_CACHE !== undefined ? `RAG_SEMANTIC_CACHE=${fullValues.RAG_SEMANTIC_CACHE}` : 'RAG_SEMANTIC_CACHE=off'}
+${fullValues.RAG_SEMANTIC_CACHE_TTL !== undefined ? `RAG_SEMANTIC_CACHE_TTL=${fullValues.RAG_SEMANTIC_CACHE_TTL}` : 'RAG_SEMANTIC_CACHE_TTL=3600'}
+${fullValues.RAG_SEMANTIC_CACHE_REFUSAL_TTL !== undefined ? `RAG_SEMANTIC_CACHE_REFUSAL_TTL=${fullValues.RAG_SEMANTIC_CACHE_REFUSAL_TTL}` : 'RAG_SEMANTIC_CACHE_REFUSAL_TTL=600'}
+${fullValues.RAG_SEMANTIC_CACHE_MAX_DISTANCE !== undefined ? `RAG_SEMANTIC_CACHE_MAX_DISTANCE=${fullValues.RAG_SEMANTIC_CACHE_MAX_DISTANCE}` : 'RAG_SEMANTIC_CACHE_MAX_DISTANCE=0.05'}
+${fullValues.RAG_SEMANTIC_CACHE_EMBED_STORE !== undefined ? `RAG_SEMANTIC_CACHE_EMBED_STORE=${fullValues.RAG_SEMANTIC_CACHE_EMBED_STORE}` : 'RAG_SEMANTIC_CACHE_EMBED_STORE=false'}
+${fullValues.REDIS_URL !== undefined ? `REDIS_URL=${fullValues.REDIS_URL}` : 'REDIS_URL='}
 
 # Ingestion and embedding profiles
 ${fullValues.RAG_INGEST_PIPELINE !== undefined ? `RAG_INGEST_PIPELINE=${fullValues.RAG_INGEST_PIPELINE}` : 'RAG_INGEST_PIPELINE=legacy'}
@@ -590,7 +719,22 @@ ${fullValues.RAG_EXACT_ID_LOOKUP !== undefined ? `RAG_EXACT_ID_LOOKUP=${fullValu
 ${fullValues.RAG_PDF_IMAGE_CHUNKS !== undefined ? `RAG_PDF_IMAGE_CHUNKS=${fullValues.RAG_PDF_IMAGE_CHUNKS}` : 'RAG_PDF_IMAGE_CHUNKS=false'}
 ${fullValues.RAG_INJECTION_SCAN !== undefined ? `RAG_INJECTION_SCAN=${fullValues.RAG_INJECTION_SCAN}` : 'RAG_INJECTION_SCAN=off'}
 ${fullValues.RAG_EMBEDDING_PROFILES !== undefined ? `RAG_EMBEDDING_PROFILES=${fullValues.RAG_EMBEDDING_PROFILES}` : 'RAG_EMBEDDING_PROFILES=off'}
+${fullValues.RAG_DOMAIN_EMBEDDINGS !== undefined ? `RAG_DOMAIN_EMBEDDINGS=${fullValues.RAG_DOMAIN_EMBEDDINGS}` : 'RAG_DOMAIN_EMBEDDINGS=off'}
+${fullValues.RAG_DOMAIN_EMBEDDING_MAX_LEGS !== undefined ? `RAG_DOMAIN_EMBEDDING_MAX_LEGS=${fullValues.RAG_DOMAIN_EMBEDDING_MAX_LEGS}` : 'RAG_DOMAIN_EMBEDDING_MAX_LEGS=2'}
+${fullValues.RAG_DOMAIN_EMBEDDING_TIMEOUT_MS !== undefined ? `RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=${fullValues.RAG_DOMAIN_EMBEDDING_TIMEOUT_MS}` : 'RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=800'}
 ${fullValues.RAG_QWEN_EMBED_FALLBACK !== undefined ? `RAG_QWEN_EMBED_FALLBACK=${fullValues.RAG_QWEN_EMBED_FALLBACK}` : 'RAG_QWEN_EMBED_FALLBACK=openrouter'}
+${fullValues.RAG_QWEN_EMBED_PRIMARY !== undefined ? `RAG_QWEN_EMBED_PRIMARY=${fullValues.RAG_QWEN_EMBED_PRIMARY}` : 'RAG_QWEN_EMBED_PRIMARY=deepinfra'}
+${fullValues.RAG_FINETUNE !== undefined ? `RAG_FINETUNE=${fullValues.RAG_FINETUNE}` : 'RAG_FINETUNE=off'}
+${fullValues.RAG_FT_EMBED_API_KEY !== undefined ? `RAG_FT_EMBED_API_KEY=${fullValues.RAG_FT_EMBED_API_KEY}` : 'RAG_FT_EMBED_API_KEY='}
+${fullValues.RAG_FT_SLOT_A_BASE_URL !== undefined ? `RAG_FT_SLOT_A_BASE_URL=${fullValues.RAG_FT_SLOT_A_BASE_URL}` : 'RAG_FT_SLOT_A_BASE_URL='}
+${fullValues.RAG_FT_SLOT_A_MODEL !== undefined ? `RAG_FT_SLOT_A_MODEL=${fullValues.RAG_FT_SLOT_A_MODEL}` : 'RAG_FT_SLOT_A_MODEL='}
+${fullValues.RAG_FT_SLOT_A_QUERY_PROMPT !== undefined ? `RAG_FT_SLOT_A_QUERY_PROMPT=${fullValues.RAG_FT_SLOT_A_QUERY_PROMPT}` : 'RAG_FT_SLOT_A_QUERY_PROMPT='}
+${fullValues.RAG_FT_SLOT_A_DOCUMENT_PROMPT !== undefined ? `RAG_FT_SLOT_A_DOCUMENT_PROMPT=${fullValues.RAG_FT_SLOT_A_DOCUMENT_PROMPT}` : 'RAG_FT_SLOT_A_DOCUMENT_PROMPT='}
+${fullValues.RAG_FT_SLOT_B_BASE_URL !== undefined ? `RAG_FT_SLOT_B_BASE_URL=${fullValues.RAG_FT_SLOT_B_BASE_URL}` : 'RAG_FT_SLOT_B_BASE_URL='}
+${fullValues.RAG_FT_SLOT_B_MODEL !== undefined ? `RAG_FT_SLOT_B_MODEL=${fullValues.RAG_FT_SLOT_B_MODEL}` : 'RAG_FT_SLOT_B_MODEL='}
+${fullValues.RAG_FT_SLOT_B_QUERY_PROMPT !== undefined ? `RAG_FT_SLOT_B_QUERY_PROMPT=${fullValues.RAG_FT_SLOT_B_QUERY_PROMPT}` : 'RAG_FT_SLOT_B_QUERY_PROMPT='}
+${fullValues.RAG_FT_SLOT_B_DOCUMENT_PROMPT !== undefined ? `RAG_FT_SLOT_B_DOCUMENT_PROMPT=${fullValues.RAG_FT_SLOT_B_DOCUMENT_PROMPT}` : 'RAG_FT_SLOT_B_DOCUMENT_PROMPT='}
+${fullValues.RAG_OPENAI_EMBEDDINGS_VIA !== undefined ? `RAG_OPENAI_EMBEDDINGS_VIA=${fullValues.RAG_OPENAI_EMBEDDINGS_VIA}` : 'RAG_OPENAI_EMBEDDINGS_VIA=openai'}
 ${fullValues.RAG_PARSE_ROUTING !== undefined ? `RAG_PARSE_ROUTING=${fullValues.RAG_PARSE_ROUTING}` : 'RAG_PARSE_ROUTING=fixed'}
 ${fullValues.RAG_PARSER_ALLOW_CLOUD !== undefined ? `RAG_PARSER_ALLOW_CLOUD=${fullValues.RAG_PARSER_ALLOW_CLOUD}` : 'RAG_PARSER_ALLOW_CLOUD=true'}
 ${fullValues.RAG_PARSE_PREMIUM_PAGE_BUDGET !== undefined ? `RAG_PARSE_PREMIUM_PAGE_BUDGET=${fullValues.RAG_PARSE_PREMIUM_PAGE_BUDGET}` : 'RAG_PARSE_PREMIUM_PAGE_BUDGET=0'}
@@ -600,9 +744,36 @@ ${fullValues.RAG_PARSE_VLM_DETECT !== undefined ? `RAG_PARSE_VLM_DETECT=${fullVa
 ${fullValues.RAG_PARSE_VLM_MODEL !== undefined ? `RAG_PARSE_VLM_MODEL=${fullValues.RAG_PARSE_VLM_MODEL}` : 'RAG_PARSE_VLM_MODEL='}
 ${fullValues.RAG_INGEST_ASYNC !== undefined ? `RAG_INGEST_ASYNC=${fullValues.RAG_INGEST_ASYNC}` : 'RAG_INGEST_ASYNC=off'}
 ${fullValues.RAG_INGEST_WORKER_CONCURRENCY !== undefined ? `RAG_INGEST_WORKER_CONCURRENCY=${fullValues.RAG_INGEST_WORKER_CONCURRENCY}` : 'RAG_INGEST_WORKER_CONCURRENCY=2'}
+${fullValues.RAG_INGEST_JOB_RETENTION_DAYS !== undefined ? `RAG_INGEST_JOB_RETENTION_DAYS=${fullValues.RAG_INGEST_JOB_RETENTION_DAYS}` : 'RAG_INGEST_JOB_RETENTION_DAYS=90'}
+${fullValues.RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS !== undefined ? `RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS=${fullValues.RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS}` : 'RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS=3600'}
+${fullValues.RAG_INGEST_MAINTENANCE !== undefined ? `RAG_INGEST_MAINTENANCE=${fullValues.RAG_INGEST_MAINTENANCE}` : 'RAG_INGEST_MAINTENANCE=on'}
 ${fullValues.RAG_PARSE_PROGRESSIVE !== undefined ? `RAG_PARSE_PROGRESSIVE=${fullValues.RAG_PARSE_PROGRESSIVE}` : 'RAG_PARSE_PROGRESSIVE=false'}
 ${fullValues.RAG_EMBED_BATCH_MODE !== undefined ? `RAG_EMBED_BATCH_MODE=${fullValues.RAG_EMBED_BATCH_MODE}` : 'RAG_EMBED_BATCH_MODE=sync'}
 ${fullValues.NEXT_PUBLIC_RAG_INGEST_REALTIME !== undefined ? `NEXT_PUBLIC_RAG_INGEST_REALTIME=${fullValues.NEXT_PUBLIC_RAG_INGEST_REALTIME}` : 'NEXT_PUBLIC_RAG_INGEST_REALTIME=false'}
+${fullValues.RAG_SUPPORTED_LANGUAGES !== undefined ? `RAG_SUPPORTED_LANGUAGES=${fullValues.RAG_SUPPORTED_LANGUAGES}` : 'RAG_SUPPORTED_LANGUAGES='}
+${fullValues.RAG_PRIMARY_LANGUAGE !== undefined ? `RAG_PRIMARY_LANGUAGE=${fullValues.RAG_PRIMARY_LANGUAGE}` : 'RAG_PRIMARY_LANGUAGE='}
+${fullValues.RAG_LANGUAGE_AWARE_INGEST !== undefined ? `RAG_LANGUAGE_AWARE_INGEST=${fullValues.RAG_LANGUAGE_AWARE_INGEST}` : 'RAG_LANGUAGE_AWARE_INGEST=off'}
+${fullValues.RAG_TABLE_HEADER_REPEAT !== undefined ? `RAG_TABLE_HEADER_REPEAT=${fullValues.RAG_TABLE_HEADER_REPEAT}` : 'RAG_TABLE_HEADER_REPEAT=always'}
+${fullValues.RAG_TABLE_ROW_SERIALIZATION !== undefined ? `RAG_TABLE_ROW_SERIALIZATION=${fullValues.RAG_TABLE_ROW_SERIALIZATION}` : 'RAG_TABLE_ROW_SERIALIZATION=false'}
+${fullValues.RAG_CAPTION_LANGUAGE !== undefined ? `RAG_CAPTION_LANGUAGE=${fullValues.RAG_CAPTION_LANGUAGE}` : 'RAG_CAPTION_LANGUAGE=en'}
+${fullValues.RAG_BGE_M3_SERVING !== undefined ? `RAG_BGE_M3_SERVING=${fullValues.RAG_BGE_M3_SERVING}` : 'RAG_BGE_M3_SERVING=hosted'}
+${fullValues.RAG_DOC_TRANSLATION !== undefined ? `RAG_DOC_TRANSLATION=${fullValues.RAG_DOC_TRANSLATION}` : 'RAG_DOC_TRANSLATION=off'}
+${fullValues.RAG_DOC_TRANSLATION_MODEL !== undefined ? `RAG_DOC_TRANSLATION_MODEL=${fullValues.RAG_DOC_TRANSLATION_MODEL}` : 'RAG_DOC_TRANSLATION_MODEL='}
+${fullValues.RAG_HIDDEN_TEXT_CHECK !== undefined ? `RAG_HIDDEN_TEXT_CHECK=${fullValues.RAG_HIDDEN_TEXT_CHECK}` : 'RAG_HIDDEN_TEXT_CHECK=off'}
+${fullValues.RAG_INGEST_LINK_CHECK !== undefined ? `RAG_INGEST_LINK_CHECK=${fullValues.RAG_INGEST_LINK_CHECK}` : 'RAG_INGEST_LINK_CHECK=off'}
+${fullValues.RAG_OUTPUT_LINK_ALLOWLIST !== undefined ? `RAG_OUTPUT_LINK_ALLOWLIST=${fullValues.RAG_OUTPUT_LINK_ALLOWLIST}` : 'RAG_OUTPUT_LINK_ALLOWLIST='}
+${fullValues.RAG_UPLOAD_APPROVAL !== undefined ? `RAG_UPLOAD_APPROVAL=${fullValues.RAG_UPLOAD_APPROVAL}` : 'RAG_UPLOAD_APPROVAL=off'}
+${fullValues.RAG_SCOPE_TAGS !== undefined ? `RAG_SCOPE_TAGS=${fullValues.RAG_SCOPE_TAGS}` : 'RAG_SCOPE_TAGS=false'}
+${fullValues.RAG_SCOPE_TAG_SUGGEST !== undefined ? `RAG_SCOPE_TAG_SUGGEST=${fullValues.RAG_SCOPE_TAG_SUGGEST}` : 'RAG_SCOPE_TAG_SUGGEST=false'}
+${fullValues.RAG_SUPERSESSION_DETECT !== undefined ? `RAG_SUPERSESSION_DETECT=${fullValues.RAG_SUPERSESSION_DETECT}` : 'RAG_SUPERSESSION_DETECT=off'}
+${fullValues.RAG_EFFECTIVE_DATES !== undefined ? `RAG_EFFECTIVE_DATES=${fullValues.RAG_EFFECTIVE_DATES}` : 'RAG_EFFECTIVE_DATES=false'}
+${fullValues.RAG_EFFECTIVE_DATE_LLM_EXTRACT !== undefined ? `RAG_EFFECTIVE_DATE_LLM_EXTRACT=${fullValues.RAG_EFFECTIVE_DATE_LLM_EXTRACT}` : 'RAG_EFFECTIVE_DATE_LLM_EXTRACT=false'}
+${fullValues.RAG_SECTION_RULES !== undefined ? `RAG_SECTION_RULES=${fullValues.RAG_SECTION_RULES}` : 'RAG_SECTION_RULES=off'}
+${fullValues.RAG_PAGE_BOILERPLATE !== undefined ? `RAG_PAGE_BOILERPLATE=${fullValues.RAG_PAGE_BOILERPLATE}` : 'RAG_PAGE_BOILERPLATE=off'}
+${fullValues.RAG_DOC_ATTRIBUTES !== undefined ? `RAG_DOC_ATTRIBUTES=${fullValues.RAG_DOC_ATTRIBUTES}` : 'RAG_DOC_ATTRIBUTES=false'}
+${fullValues.RAG_ATTRIBUTE_HEADER !== undefined ? `RAG_ATTRIBUTE_HEADER=${fullValues.RAG_ATTRIBUTE_HEADER}` : 'RAG_ATTRIBUTE_HEADER=false'}
+${fullValues.RAG_ATTRIBUTE_FILTER !== undefined ? `RAG_ATTRIBUTE_FILTER=${fullValues.RAG_ATTRIBUTE_FILTER}` : 'RAG_ATTRIBUTE_FILTER=off'}
+${fullValues.RAG_LEXICAL_QUANTITY !== undefined ? `RAG_LEXICAL_QUANTITY=${fullValues.RAG_LEXICAL_QUANTITY}` : 'RAG_LEXICAL_QUANTITY=false'}
 ${fullValues.VOYAGE_API_KEY !== undefined ? `VOYAGE_API_KEY=${fullValues.VOYAGE_API_KEY}` : 'VOYAGE_API_KEY='}
 ${fullValues.VOYAGE_BASE_URL !== undefined ? `VOYAGE_BASE_URL=${fullValues.VOYAGE_BASE_URL}` : 'VOYAGE_BASE_URL=https://api.voyageai.com/v1'}
 ${fullValues.DEEPINFRA_API_KEY !== undefined ? `DEEPINFRA_API_KEY=${fullValues.DEEPINFRA_API_KEY}` : 'DEEPINFRA_API_KEY='}
@@ -1354,6 +1525,8 @@ RAG_INITIAL_MATCH_COUNT=${getEnvValue('RAG_INITIAL_MATCH_COUNT') || '60'}
 RAG_SIMILARITY_THRESHOLD=${getEnvValue('RAG_SIMILARITY_THRESHOLD') || '0.45'}
 # RAG Behavior Mode: strict, balanced, flexible, bypass
 RAG_BEHAVIOR_MODE=${getEnvValue('RAG_BEHAVIOR_MODE') || 'strict'}
+# Chat answer style: classic, concise
+RAG_ANSWER_STYLE=${getEnvValue('RAG_ANSWER_STYLE') || 'classic'}
 # RAG Evaluation & Sidecar
 RAG_EVAL_ENDPOINT_ENABLED=${getEnvValue('RAG_EVAL_ENDPOINT_ENABLED') || 'false'}
 RAG_EVAL_SECRET=${getEnvValue('RAG_EVAL_SECRET') || ''}
@@ -1372,6 +1545,7 @@ RAG_RERANK_VOYAGE_MODEL_BY_LANG=${getEnvValue('RAG_RERANK_VOYAGE_MODEL_BY_LANG')
 COHERE_API_KEY=${getEnvValue('COHERE_API_KEY') || ''}
 COHERE_BASE_URL=${getEnvValue('COHERE_BASE_URL') || ''}
 RAG_REFUSAL_THRESHOLD=${getEnvValue('RAG_REFUSAL_THRESHOLD') || 'false'}
+RAG_REFUSAL_FLOOR=${getEnvValue('RAG_REFUSAL_FLOOR') || 'similarity'}
 RAG_CONTEXT_EDGE_ORDER=${getEnvValue('RAG_CONTEXT_EDGE_ORDER') || 'false'}
 RAG_CONTEXT_COMPRESSION=${getEnvValue('RAG_CONTEXT_COMPRESSION') || 'false'}
 RAG_CONTEXT_TOKEN_BUDGET=${getEnvValue('RAG_CONTEXT_TOKEN_BUDGET') || '6000'}
@@ -1379,11 +1553,34 @@ RAG_PARENT_CHILD=${getEnvValue('RAG_PARENT_CHILD') || 'false'}
 RAG_HNSW_ITERATIVE_SCAN=${getEnvValue('RAG_HNSW_ITERATIVE_SCAN') || 'off'}
 RAG_EXACT_SCAN_CUTOFF=${getEnvValue('RAG_EXACT_SCAN_CUTOFF') || '0'}
 RAG_LEXICAL_TRANSLATION=${getEnvValue('RAG_LEXICAL_TRANSLATION') || 'false'}
+RAG_LEXICAL_DICTIONARY=${getEnvValue('RAG_LEXICAL_DICTIONARY') || 'false'}
+RAG_LEXICAL_STEM_IT=${getEnvValue('RAG_LEXICAL_STEM_IT') || 'false'}
+RAG_VERSION_SCOPE=${getEnvValue('RAG_VERSION_SCOPE') || 'false'}
+RAG_EMBED_VERSION_SCOPE=${getEnvValue('RAG_EMBED_VERSION_SCOPE') || 'false'}
+RAG_TABLE_LOOKUP=${getEnvValue('RAG_TABLE_LOOKUP') || 'false'}
+RAG_DUP_CLUSTERS=${getEnvValue('RAG_DUP_CLUSTERS') || 'false'}
+RAG_RESULT_DIVERSITY=${getEnvValue('RAG_RESULT_DIVERSITY') || 'off'}
+RAG_IDENTIFIER_INDEX=${getEnvValue('RAG_IDENTIFIER_INDEX') || 'false'}
+RAG_IDENTIFIER_FILTER=${getEnvValue('RAG_IDENTIFIER_FILTER') || 'false'}
+RAG_TERMINOLOGY=${getEnvValue('RAG_TERMINOLOGY') || 'false'}
+RAG_TERMINOLOGY_DENSE=${getEnvValue('RAG_TERMINOLOGY_DENSE') || 'false'}
+RAG_TERMINOLOGY_MINING=${getEnvValue('RAG_TERMINOLOGY_MINING') || 'false'}
 RAG_RETRIEVAL_PARAMS_OVERRIDE=${getEnvValue('RAG_RETRIEVAL_PARAMS_OVERRIDE') || ''}
 RAG_EMBED_TENANT=${getEnvValue('RAG_EMBED_TENANT') || ''}
 RAG_VOICE_TOKEN_SECRET=${getEnvValue('RAG_VOICE_TOKEN_SECRET') || ''}
 RAG_VOICE_TOKEN_TTL_SECONDS=${getEnvValue('RAG_VOICE_TOKEN_TTL_SECONDS') || '3600'}
 VOICE_MAX_ACTIVE_ROOMS=${getEnvValue('VOICE_MAX_ACTIVE_ROOMS') || '4'}
+# Vector backends (Phase 7)
+RAG_RETRIEVAL_BACKEND=${getEnvValue('RAG_RETRIEVAL_BACKEND') || 'pgvector'}
+RAG_RETRIEVAL_BACKEND_VOICE=${getEnvValue('RAG_RETRIEVAL_BACKEND_VOICE') || 'pgvector'}
+RAG_VECTOR_SYNC_SECRET=${getEnvValue('RAG_VECTOR_SYNC_SECRET') || ''}
+RAG_VECTOR_SYNC_MAX_LAG_SECONDS=${getEnvValue('RAG_VECTOR_SYNC_MAX_LAG_SECONDS') || '300'}
+WEAVIATE_URL=${getEnvValue('WEAVIATE_URL') || ''}
+WEAVIATE_API_KEY=${getEnvValue('WEAVIATE_API_KEY') || ''}
+WEAVIATE_READ_API_KEY=${getEnvValue('WEAVIATE_READ_API_KEY') || ''}
+QDRANT_URL=${getEnvValue('QDRANT_URL') || ''}
+QDRANT_API_KEY=${getEnvValue('QDRANT_API_KEY') || ''}
+QDRANT_READ_API_KEY=${getEnvValue('QDRANT_READ_API_KEY') || ''}
 # Langfuse tracing
 LANGFUSE_ENABLED=${getEnvValue('LANGFUSE_ENABLED') || 'false'}
 LANGFUSE_PUBLIC_KEY=${getEnvValue('LANGFUSE_PUBLIC_KEY') || ''}
@@ -1392,6 +1589,79 @@ LANGFUSE_BASE_URL=${getEnvValue('LANGFUSE_BASE_URL') || 'https://cloud.langfuse.
 LANGFUSE_SAMPLE_RATE=${getEnvValue('LANGFUSE_SAMPLE_RATE') || '0.1'}
 LANGFUSE_CAPTURE_CONTENT=${getEnvValue('LANGFUSE_CAPTURE_CONTENT') || 'false'}
 LANGFUSE_REVIEW_SAMPLE_RATE=${getEnvValue('LANGFUSE_REVIEW_SAMPLE_RATE') || '0'}
+# Verified citations and groundedness
+RAG_CITATIONS=${getEnvValue('RAG_CITATIONS') || 'false'}
+RAG_CLAUDE_CITATIONS=${getEnvValue('RAG_CLAUDE_CITATIONS') || 'false'}
+ANTHROPIC_API_KEY=${getEnvValue('ANTHROPIC_API_KEY') || ''}
+ANTHROPIC_BASE_URL=${getEnvValue('ANTHROPIC_BASE_URL') || ''}
+RAG_GROUNDEDNESS=${getEnvValue('RAG_GROUNDEDNESS') || 'false'}
+RAG_GROUNDEDNESS_VECTARA_OPT_IN=${getEnvValue('RAG_GROUNDEDNESS_VECTARA_OPT_IN') || 'false'}
+RAG_GROUNDEDNESS_TIMEOUT_MS=${getEnvValue('RAG_GROUNDEDNESS_TIMEOUT_MS') || '20000'}
+RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=${getEnvValue('RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS') || '3000'}
+RAG_ANSWER_FEEDBACK=${getEnvValue('RAG_ANSWER_FEEDBACK') || 'false'}
+RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=${getEnvValue('RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK') || 'false'}
+
+# Retrieval log and feedback
+RAG_RETRIEVAL_LOG=${getEnvValue('RAG_RETRIEVAL_LOG') || 'off'}
+RAG_RETRIEVAL_LOG_RETENTION_DAYS=${getEnvValue('RAG_RETRIEVAL_LOG_RETENTION_DAYS') || '30'}
+RAG_REFUSAL_FEEDBACK=${getEnvValue('RAG_REFUSAL_FEEDBACK') || 'false'}
+RAG_EMBED_FEEDBACK=${getEnvValue('RAG_EMBED_FEEDBACK') || 'false'}
+RAG_EMBED_FEEDBACK_SECRET=${getEnvValue('RAG_EMBED_FEEDBACK_SECRET') || ''}
+RAG_SOURCE_OPEN_SIGNAL=${getEnvValue('RAG_SOURCE_OPEN_SIGNAL') || 'false'}
+RAG_DOMAIN_EXPERT_REVIEW=${getEnvValue('RAG_DOMAIN_EXPERT_REVIEW') || 'false'}
+
+# Evaluation gates and monitoring
+RAG_CONFIG_GATE=${getEnvValue('RAG_CONFIG_GATE') || 'off'}
+RAG_CONFIG_GATE_LIVE=${getEnvValue('RAG_CONFIG_GATE_LIVE') || 'false'}
+RAG_MONITOR=${getEnvValue('RAG_MONITOR') || 'false'}
+RAG_MONITOR_WEBHOOK_URL=${getEnvValue('RAG_MONITOR_WEBHOOK_URL') || ''}
+RAG_MONITOR_WEBHOOK_SECRET=${getEnvValue('RAG_MONITOR_WEBHOOK_SECRET') || ''}
+RAG_REPRESENTATIVE_SAMPLE=${getEnvValue('RAG_REPRESENTATIVE_SAMPLE') || 'false'}
+
+# Prompt-injection defense
+RAG_CONTEXT_TAGGING=${getEnvValue('RAG_CONTEXT_TAGGING') || 'false'}
+RAG_INJECTION_CHECK=${getEnvValue('RAG_INJECTION_CHECK') || 'off'}
+RAG_INJECTION_PROMPT_GUARD=${getEnvValue('RAG_INJECTION_PROMPT_GUARD') || 'false'}
+RAG_INJECTION_LAKERA=${getEnvValue('RAG_INJECTION_LAKERA') || 'false'}
+LAKERA_GUARD_API_KEY=${getEnvValue('LAKERA_GUARD_API_KEY') || ''}
+LAKERA_GUARD_BASE_URL=${getEnvValue('LAKERA_GUARD_BASE_URL') || ''}
+RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=${getEnvValue('RAG_INJECTION_LAKERA_MULTI_TENANT_ACK') || 'false'}
+RAG_TOOL_RESULT_GUARD=${getEnvValue('RAG_TOOL_RESULT_GUARD') || 'off'}
+NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=${getEnvValue('NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST') || 'false'}
+# Answer rules and output safety
+RAG_REGISTRY_TEXTS=${getEnvValue('RAG_REGISTRY_TEXTS') || 'false'}
+RAG_PARTIAL_ANSWER_RULE=${getEnvValue('RAG_PARTIAL_ANSWER_RULE') || 'false'}
+RAG_CONTEXT_RELEVANCE_RULE=${getEnvValue('RAG_CONTEXT_RELEVANCE_RULE') || 'false'}
+RAG_CITATION_PER_SENTENCE=${getEnvValue('RAG_CITATION_PER_SENTENCE') || 'false'}
+RAG_CLAIM_CHECK=${getEnvValue('RAG_CLAIM_CHECK') || 'false'}
+RAG_GROUNDEDNESS_LLM_JUDGE=${getEnvValue('RAG_GROUNDEDNESS_LLM_JUDGE') || 'false'}
+RAG_GROUNDEDNESS_JUDGE_MODEL=${getEnvValue('RAG_GROUNDEDNESS_JUDGE_MODEL') || ''}
+RAG_MAX_OUTPUT_TOKENS=${getEnvValue('RAG_MAX_OUTPUT_TOKENS') || 'off'}
+RAG_OUTPUT_GUARD=${getEnvValue('RAG_OUTPUT_GUARD') || 'off'}
+RAG_VERSION_LABELS=${getEnvValue('RAG_VERSION_LABELS') || 'false'}
+RAG_SECURITY_EVENTS=${getEnvValue('RAG_SECURITY_EVENTS') || 'false'}
+RAG_UPLOADER_ALERT_THRESHOLD=${getEnvValue('RAG_UPLOADER_ALERT_THRESHOLD') || '0'}
+RAG_UPLOADER_ALERT_WINDOW_HOURS=${getEnvValue('RAG_UPLOADER_ALERT_WINDOW_HOURS') || '24'}
+RAG_UPLOADER_HOLD=${getEnvValue('RAG_UPLOADER_HOLD') || 'off'}
+# Query layer
+RAG_QUERY_LAYER=${getEnvValue('RAG_QUERY_LAYER') || 'false'}
+RAG_QUERY_FRAMEWORK=${getEnvValue('RAG_QUERY_FRAMEWORK') || 'llamaindex'}
+RAG_QUERY_LLM_MODEL=${getEnvValue('RAG_QUERY_LLM_MODEL') || 'openai/gpt-4.1-nano'}
+RAG_QUERY_CONDENSE=${getEnvValue('RAG_QUERY_CONDENSE') || 'true'}
+RAG_QUERY_EXPAND=${getEnvValue('RAG_QUERY_EXPAND') || 'true'}
+RAG_QUERY_DECOMPOSE=${getEnvValue('RAG_QUERY_DECOMPOSE') || 'true'}
+RAG_QUERY_TRANSLATE=${getEnvValue('RAG_QUERY_TRANSLATE') || 'true'}
+RAG_QUERY_DATE_NORMALIZE=${getEnvValue('RAG_QUERY_DATE_NORMALIZE') || 'true'}
+RAG_QUERY_HYDE=${getEnvValue('RAG_QUERY_HYDE') || 'false'}
+RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${getEnvValue('RAG_QUERY_TRANSLATE_DISABLED_PROFILES') || ''}
+RAG_QUERY_VOICE_TRANSFORMS=${getEnvValue('RAG_QUERY_VOICE_TRANSFORMS') || 'condense_history,normalize_dates'}
+# Semantic cache
+RAG_SEMANTIC_CACHE=${getEnvValue('RAG_SEMANTIC_CACHE') || 'off'}
+RAG_SEMANTIC_CACHE_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_TTL') || '3600'}
+RAG_SEMANTIC_CACHE_REFUSAL_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_REFUSAL_TTL') || '600'}
+RAG_SEMANTIC_CACHE_MAX_DISTANCE=${getEnvValue('RAG_SEMANTIC_CACHE_MAX_DISTANCE') || '0.05'}
+RAG_SEMANTIC_CACHE_EMBED_STORE=${getEnvValue('RAG_SEMANTIC_CACHE_EMBED_STORE') || 'false'}
+REDIS_URL=${getEnvValue('REDIS_URL') || ''}
 # Ingestion and embedding profiles
 RAG_INGEST_PIPELINE=${getEnvValue('RAG_INGEST_PIPELINE') || 'legacy'}
 RAG_PARSER=${getEnvValue('RAG_PARSER') || 'llamaparse'}
@@ -1402,7 +1672,22 @@ RAG_EXACT_ID_LOOKUP=${getEnvValue('RAG_EXACT_ID_LOOKUP') || 'false'}
 RAG_PDF_IMAGE_CHUNKS=${getEnvValue('RAG_PDF_IMAGE_CHUNKS') || 'false'}
 RAG_INJECTION_SCAN=${getEnvValue('RAG_INJECTION_SCAN') || 'off'}
 RAG_EMBEDDING_PROFILES=${getEnvValue('RAG_EMBEDDING_PROFILES') || 'off'}
+RAG_DOMAIN_EMBEDDINGS=${getEnvValue('RAG_DOMAIN_EMBEDDINGS') || 'off'}
+RAG_DOMAIN_EMBEDDING_MAX_LEGS=${getEnvValue('RAG_DOMAIN_EMBEDDING_MAX_LEGS') || '2'}
+RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=${getEnvValue('RAG_DOMAIN_EMBEDDING_TIMEOUT_MS') || '800'}
 RAG_QWEN_EMBED_FALLBACK=${getEnvValue('RAG_QWEN_EMBED_FALLBACK') || 'openrouter'}
+RAG_QWEN_EMBED_PRIMARY=${getEnvValue('RAG_QWEN_EMBED_PRIMARY') || 'deepinfra'}
+RAG_FINETUNE=${getEnvValue('RAG_FINETUNE') || 'off'}
+RAG_FT_EMBED_API_KEY=${getEnvValue('RAG_FT_EMBED_API_KEY') || ''}
+RAG_FT_SLOT_A_BASE_URL=${getEnvValue('RAG_FT_SLOT_A_BASE_URL') || ''}
+RAG_FT_SLOT_A_MODEL=${getEnvValue('RAG_FT_SLOT_A_MODEL') || ''}
+RAG_FT_SLOT_A_QUERY_PROMPT=${getEnvValue('RAG_FT_SLOT_A_QUERY_PROMPT') || ''}
+RAG_FT_SLOT_A_DOCUMENT_PROMPT=${getEnvValue('RAG_FT_SLOT_A_DOCUMENT_PROMPT') || ''}
+RAG_FT_SLOT_B_BASE_URL=${getEnvValue('RAG_FT_SLOT_B_BASE_URL') || ''}
+RAG_FT_SLOT_B_MODEL=${getEnvValue('RAG_FT_SLOT_B_MODEL') || ''}
+RAG_FT_SLOT_B_QUERY_PROMPT=${getEnvValue('RAG_FT_SLOT_B_QUERY_PROMPT') || ''}
+RAG_FT_SLOT_B_DOCUMENT_PROMPT=${getEnvValue('RAG_FT_SLOT_B_DOCUMENT_PROMPT') || ''}
+RAG_OPENAI_EMBEDDINGS_VIA=${getEnvValue('RAG_OPENAI_EMBEDDINGS_VIA') || 'openai'}
 RAG_PARSE_ROUTING=${getEnvValue('RAG_PARSE_ROUTING') || 'fixed'}
 RAG_PARSER_ALLOW_CLOUD=${getEnvValue('RAG_PARSER_ALLOW_CLOUD') || 'true'}
 RAG_PARSE_PREMIUM_PAGE_BUDGET=${getEnvValue('RAG_PARSE_PREMIUM_PAGE_BUDGET') || '0'}
@@ -1412,9 +1697,36 @@ RAG_PARSE_VLM_DETECT=${getEnvValue('RAG_PARSE_VLM_DETECT') || 'false'}
 RAG_PARSE_VLM_MODEL=${getEnvValue('RAG_PARSE_VLM_MODEL') || ''}
 RAG_INGEST_ASYNC=${getEnvValue('RAG_INGEST_ASYNC') || 'off'}
 RAG_INGEST_WORKER_CONCURRENCY=${getEnvValue('RAG_INGEST_WORKER_CONCURRENCY') || '2'}
+RAG_INGEST_JOB_RETENTION_DAYS=${getEnvValue('RAG_INGEST_JOB_RETENTION_DAYS') || '90'}
+RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS=${getEnvValue('RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS') || '3600'}
+RAG_INGEST_MAINTENANCE=${getEnvValue('RAG_INGEST_MAINTENANCE') || 'on'}
 RAG_PARSE_PROGRESSIVE=${getEnvValue('RAG_PARSE_PROGRESSIVE') || 'false'}
 RAG_EMBED_BATCH_MODE=${getEnvValue('RAG_EMBED_BATCH_MODE') || 'sync'}
 NEXT_PUBLIC_RAG_INGEST_REALTIME=${getEnvValue('NEXT_PUBLIC_RAG_INGEST_REALTIME') || 'false'}
+RAG_SUPPORTED_LANGUAGES=${getEnvValue('RAG_SUPPORTED_LANGUAGES') || ''}
+RAG_PRIMARY_LANGUAGE=${getEnvValue('RAG_PRIMARY_LANGUAGE') || ''}
+RAG_LANGUAGE_AWARE_INGEST=${getEnvValue('RAG_LANGUAGE_AWARE_INGEST') || 'off'}
+RAG_TABLE_HEADER_REPEAT=${getEnvValue('RAG_TABLE_HEADER_REPEAT') || 'always'}
+RAG_TABLE_ROW_SERIALIZATION=${getEnvValue('RAG_TABLE_ROW_SERIALIZATION') || 'false'}
+RAG_CAPTION_LANGUAGE=${getEnvValue('RAG_CAPTION_LANGUAGE') || 'en'}
+RAG_BGE_M3_SERVING=${getEnvValue('RAG_BGE_M3_SERVING') || 'hosted'}
+RAG_DOC_TRANSLATION=${getEnvValue('RAG_DOC_TRANSLATION') || 'off'}
+RAG_DOC_TRANSLATION_MODEL=${getEnvValue('RAG_DOC_TRANSLATION_MODEL') || ''}
+RAG_HIDDEN_TEXT_CHECK=${getEnvValue('RAG_HIDDEN_TEXT_CHECK') || 'off'}
+RAG_INGEST_LINK_CHECK=${getEnvValue('RAG_INGEST_LINK_CHECK') || 'off'}
+RAG_OUTPUT_LINK_ALLOWLIST=${getEnvValue('RAG_OUTPUT_LINK_ALLOWLIST') || ''}
+RAG_UPLOAD_APPROVAL=${getEnvValue('RAG_UPLOAD_APPROVAL') || 'off'}
+RAG_SCOPE_TAGS=${getEnvValue('RAG_SCOPE_TAGS') || 'false'}
+RAG_SCOPE_TAG_SUGGEST=${getEnvValue('RAG_SCOPE_TAG_SUGGEST') || 'false'}
+RAG_SUPERSESSION_DETECT=${getEnvValue('RAG_SUPERSESSION_DETECT') || 'off'}
+RAG_EFFECTIVE_DATES=${getEnvValue('RAG_EFFECTIVE_DATES') || 'false'}
+RAG_EFFECTIVE_DATE_LLM_EXTRACT=${getEnvValue('RAG_EFFECTIVE_DATE_LLM_EXTRACT') || 'false'}
+RAG_SECTION_RULES=${getEnvValue('RAG_SECTION_RULES') || 'off'}
+RAG_PAGE_BOILERPLATE=${getEnvValue('RAG_PAGE_BOILERPLATE') || 'off'}
+RAG_DOC_ATTRIBUTES=${getEnvValue('RAG_DOC_ATTRIBUTES') || 'false'}
+RAG_ATTRIBUTE_HEADER=${getEnvValue('RAG_ATTRIBUTE_HEADER') || 'false'}
+RAG_ATTRIBUTE_FILTER=${getEnvValue('RAG_ATTRIBUTE_FILTER') || 'off'}
+RAG_LEXICAL_QUANTITY=${getEnvValue('RAG_LEXICAL_QUANTITY') || 'false'}
 VOYAGE_API_KEY=${getEnvValue('VOYAGE_API_KEY') || ''}
 VOYAGE_BASE_URL=${getEnvValue('VOYAGE_BASE_URL') || 'https://api.voyageai.com/v1'}
 DEEPINFRA_API_KEY=${getEnvValue('DEEPINFRA_API_KEY') || ''}
@@ -1733,6 +2045,8 @@ RAG_INITIAL_MATCH_COUNT=${getEnvValue('RAG_INITIAL_MATCH_COUNT') || '60'}
 RAG_SIMILARITY_THRESHOLD=${getEnvValue('RAG_SIMILARITY_THRESHOLD') || '0.45'}
 # RAG Behavior Mode: strict, balanced, flexible, bypass
 RAG_BEHAVIOR_MODE=${getEnvValue('RAG_BEHAVIOR_MODE') || 'strict'}
+# Chat answer style: classic, concise
+RAG_ANSWER_STYLE=${getEnvValue('RAG_ANSWER_STYLE') || 'classic'}
 # RAG Evaluation & Sidecar
 RAG_EVAL_ENDPOINT_ENABLED=${getEnvValue('RAG_EVAL_ENDPOINT_ENABLED') || 'false'}
 RAG_EVAL_SECRET=${getEnvValue('RAG_EVAL_SECRET') || ''}
@@ -1751,6 +2065,7 @@ RAG_RERANK_VOYAGE_MODEL_BY_LANG=${getEnvValue('RAG_RERANK_VOYAGE_MODEL_BY_LANG')
 COHERE_API_KEY=${getEnvValue('COHERE_API_KEY') || ''}
 COHERE_BASE_URL=${getEnvValue('COHERE_BASE_URL') || ''}
 RAG_REFUSAL_THRESHOLD=${getEnvValue('RAG_REFUSAL_THRESHOLD') || 'false'}
+RAG_REFUSAL_FLOOR=${getEnvValue('RAG_REFUSAL_FLOOR') || 'similarity'}
 RAG_CONTEXT_EDGE_ORDER=${getEnvValue('RAG_CONTEXT_EDGE_ORDER') || 'false'}
 RAG_CONTEXT_COMPRESSION=${getEnvValue('RAG_CONTEXT_COMPRESSION') || 'false'}
 RAG_CONTEXT_TOKEN_BUDGET=${getEnvValue('RAG_CONTEXT_TOKEN_BUDGET') || '6000'}
@@ -1758,11 +2073,34 @@ RAG_PARENT_CHILD=${getEnvValue('RAG_PARENT_CHILD') || 'false'}
 RAG_HNSW_ITERATIVE_SCAN=${getEnvValue('RAG_HNSW_ITERATIVE_SCAN') || 'off'}
 RAG_EXACT_SCAN_CUTOFF=${getEnvValue('RAG_EXACT_SCAN_CUTOFF') || '0'}
 RAG_LEXICAL_TRANSLATION=${getEnvValue('RAG_LEXICAL_TRANSLATION') || 'false'}
+RAG_LEXICAL_DICTIONARY=${getEnvValue('RAG_LEXICAL_DICTIONARY') || 'false'}
+RAG_LEXICAL_STEM_IT=${getEnvValue('RAG_LEXICAL_STEM_IT') || 'false'}
+RAG_VERSION_SCOPE=${getEnvValue('RAG_VERSION_SCOPE') || 'false'}
+RAG_EMBED_VERSION_SCOPE=${getEnvValue('RAG_EMBED_VERSION_SCOPE') || 'false'}
+RAG_TABLE_LOOKUP=${getEnvValue('RAG_TABLE_LOOKUP') || 'false'}
+RAG_DUP_CLUSTERS=${getEnvValue('RAG_DUP_CLUSTERS') || 'false'}
+RAG_RESULT_DIVERSITY=${getEnvValue('RAG_RESULT_DIVERSITY') || 'off'}
+RAG_IDENTIFIER_INDEX=${getEnvValue('RAG_IDENTIFIER_INDEX') || 'false'}
+RAG_IDENTIFIER_FILTER=${getEnvValue('RAG_IDENTIFIER_FILTER') || 'false'}
+RAG_TERMINOLOGY=${getEnvValue('RAG_TERMINOLOGY') || 'false'}
+RAG_TERMINOLOGY_DENSE=${getEnvValue('RAG_TERMINOLOGY_DENSE') || 'false'}
+RAG_TERMINOLOGY_MINING=${getEnvValue('RAG_TERMINOLOGY_MINING') || 'false'}
 RAG_RETRIEVAL_PARAMS_OVERRIDE=${getEnvValue('RAG_RETRIEVAL_PARAMS_OVERRIDE') || ''}
 RAG_EMBED_TENANT=${getEnvValue('RAG_EMBED_TENANT') || ''}
 RAG_VOICE_TOKEN_SECRET=${getEnvValue('RAG_VOICE_TOKEN_SECRET') || ''}
 RAG_VOICE_TOKEN_TTL_SECONDS=${getEnvValue('RAG_VOICE_TOKEN_TTL_SECONDS') || '3600'}
 VOICE_MAX_ACTIVE_ROOMS=${getEnvValue('VOICE_MAX_ACTIVE_ROOMS') || '4'}
+# Vector backends (Phase 7)
+RAG_RETRIEVAL_BACKEND=${getEnvValue('RAG_RETRIEVAL_BACKEND') || 'pgvector'}
+RAG_RETRIEVAL_BACKEND_VOICE=${getEnvValue('RAG_RETRIEVAL_BACKEND_VOICE') || 'pgvector'}
+RAG_VECTOR_SYNC_SECRET=${getEnvValue('RAG_VECTOR_SYNC_SECRET') || ''}
+RAG_VECTOR_SYNC_MAX_LAG_SECONDS=${getEnvValue('RAG_VECTOR_SYNC_MAX_LAG_SECONDS') || '300'}
+WEAVIATE_URL=${getEnvValue('WEAVIATE_URL') || ''}
+WEAVIATE_API_KEY=${getEnvValue('WEAVIATE_API_KEY') || ''}
+WEAVIATE_READ_API_KEY=${getEnvValue('WEAVIATE_READ_API_KEY') || ''}
+QDRANT_URL=${getEnvValue('QDRANT_URL') || ''}
+QDRANT_API_KEY=${getEnvValue('QDRANT_API_KEY') || ''}
+QDRANT_READ_API_KEY=${getEnvValue('QDRANT_READ_API_KEY') || ''}
 # Langfuse tracing
 LANGFUSE_ENABLED=${getEnvValue('LANGFUSE_ENABLED') || 'false'}
 LANGFUSE_PUBLIC_KEY=${getEnvValue('LANGFUSE_PUBLIC_KEY') || ''}
@@ -1771,6 +2109,79 @@ LANGFUSE_BASE_URL=${getEnvValue('LANGFUSE_BASE_URL') || 'https://cloud.langfuse.
 LANGFUSE_SAMPLE_RATE=${getEnvValue('LANGFUSE_SAMPLE_RATE') || '0.1'}
 LANGFUSE_CAPTURE_CONTENT=${getEnvValue('LANGFUSE_CAPTURE_CONTENT') || 'false'}
 LANGFUSE_REVIEW_SAMPLE_RATE=${getEnvValue('LANGFUSE_REVIEW_SAMPLE_RATE') || '0'}
+# Verified citations and groundedness
+RAG_CITATIONS=${getEnvValue('RAG_CITATIONS') || 'false'}
+RAG_CLAUDE_CITATIONS=${getEnvValue('RAG_CLAUDE_CITATIONS') || 'false'}
+ANTHROPIC_API_KEY=${getEnvValue('ANTHROPIC_API_KEY') || ''}
+ANTHROPIC_BASE_URL=${getEnvValue('ANTHROPIC_BASE_URL') || ''}
+RAG_GROUNDEDNESS=${getEnvValue('RAG_GROUNDEDNESS') || 'false'}
+RAG_GROUNDEDNESS_VECTARA_OPT_IN=${getEnvValue('RAG_GROUNDEDNESS_VECTARA_OPT_IN') || 'false'}
+RAG_GROUNDEDNESS_TIMEOUT_MS=${getEnvValue('RAG_GROUNDEDNESS_TIMEOUT_MS') || '20000'}
+RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=${getEnvValue('RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS') || '3000'}
+RAG_ANSWER_FEEDBACK=${getEnvValue('RAG_ANSWER_FEEDBACK') || 'false'}
+RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=${getEnvValue('RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK') || 'false'}
+
+# Retrieval log and feedback
+RAG_RETRIEVAL_LOG=${getEnvValue('RAG_RETRIEVAL_LOG') || 'off'}
+RAG_RETRIEVAL_LOG_RETENTION_DAYS=${getEnvValue('RAG_RETRIEVAL_LOG_RETENTION_DAYS') || '30'}
+RAG_REFUSAL_FEEDBACK=${getEnvValue('RAG_REFUSAL_FEEDBACK') || 'false'}
+RAG_EMBED_FEEDBACK=${getEnvValue('RAG_EMBED_FEEDBACK') || 'false'}
+RAG_EMBED_FEEDBACK_SECRET=${getEnvValue('RAG_EMBED_FEEDBACK_SECRET') || ''}
+RAG_SOURCE_OPEN_SIGNAL=${getEnvValue('RAG_SOURCE_OPEN_SIGNAL') || 'false'}
+RAG_DOMAIN_EXPERT_REVIEW=${getEnvValue('RAG_DOMAIN_EXPERT_REVIEW') || 'false'}
+
+# Evaluation gates and monitoring
+RAG_CONFIG_GATE=${getEnvValue('RAG_CONFIG_GATE') || 'off'}
+RAG_CONFIG_GATE_LIVE=${getEnvValue('RAG_CONFIG_GATE_LIVE') || 'false'}
+RAG_MONITOR=${getEnvValue('RAG_MONITOR') || 'false'}
+RAG_MONITOR_WEBHOOK_URL=${getEnvValue('RAG_MONITOR_WEBHOOK_URL') || ''}
+RAG_MONITOR_WEBHOOK_SECRET=${getEnvValue('RAG_MONITOR_WEBHOOK_SECRET') || ''}
+RAG_REPRESENTATIVE_SAMPLE=${getEnvValue('RAG_REPRESENTATIVE_SAMPLE') || 'false'}
+
+# Prompt-injection defense
+RAG_CONTEXT_TAGGING=${getEnvValue('RAG_CONTEXT_TAGGING') || 'false'}
+RAG_INJECTION_CHECK=${getEnvValue('RAG_INJECTION_CHECK') || 'off'}
+RAG_INJECTION_PROMPT_GUARD=${getEnvValue('RAG_INJECTION_PROMPT_GUARD') || 'false'}
+RAG_INJECTION_LAKERA=${getEnvValue('RAG_INJECTION_LAKERA') || 'false'}
+LAKERA_GUARD_API_KEY=${getEnvValue('LAKERA_GUARD_API_KEY') || ''}
+LAKERA_GUARD_BASE_URL=${getEnvValue('LAKERA_GUARD_BASE_URL') || ''}
+RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=${getEnvValue('RAG_INJECTION_LAKERA_MULTI_TENANT_ACK') || 'false'}
+RAG_TOOL_RESULT_GUARD=${getEnvValue('RAG_TOOL_RESULT_GUARD') || 'off'}
+NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=${getEnvValue('NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST') || 'false'}
+# Answer rules and output safety
+RAG_REGISTRY_TEXTS=${getEnvValue('RAG_REGISTRY_TEXTS') || 'false'}
+RAG_PARTIAL_ANSWER_RULE=${getEnvValue('RAG_PARTIAL_ANSWER_RULE') || 'false'}
+RAG_CONTEXT_RELEVANCE_RULE=${getEnvValue('RAG_CONTEXT_RELEVANCE_RULE') || 'false'}
+RAG_CITATION_PER_SENTENCE=${getEnvValue('RAG_CITATION_PER_SENTENCE') || 'false'}
+RAG_CLAIM_CHECK=${getEnvValue('RAG_CLAIM_CHECK') || 'false'}
+RAG_GROUNDEDNESS_LLM_JUDGE=${getEnvValue('RAG_GROUNDEDNESS_LLM_JUDGE') || 'false'}
+RAG_GROUNDEDNESS_JUDGE_MODEL=${getEnvValue('RAG_GROUNDEDNESS_JUDGE_MODEL') || ''}
+RAG_MAX_OUTPUT_TOKENS=${getEnvValue('RAG_MAX_OUTPUT_TOKENS') || 'off'}
+RAG_OUTPUT_GUARD=${getEnvValue('RAG_OUTPUT_GUARD') || 'off'}
+RAG_VERSION_LABELS=${getEnvValue('RAG_VERSION_LABELS') || 'false'}
+RAG_SECURITY_EVENTS=${getEnvValue('RAG_SECURITY_EVENTS') || 'false'}
+RAG_UPLOADER_ALERT_THRESHOLD=${getEnvValue('RAG_UPLOADER_ALERT_THRESHOLD') || '0'}
+RAG_UPLOADER_ALERT_WINDOW_HOURS=${getEnvValue('RAG_UPLOADER_ALERT_WINDOW_HOURS') || '24'}
+RAG_UPLOADER_HOLD=${getEnvValue('RAG_UPLOADER_HOLD') || 'off'}
+# Query layer
+RAG_QUERY_LAYER=${getEnvValue('RAG_QUERY_LAYER') || 'false'}
+RAG_QUERY_FRAMEWORK=${getEnvValue('RAG_QUERY_FRAMEWORK') || 'llamaindex'}
+RAG_QUERY_LLM_MODEL=${getEnvValue('RAG_QUERY_LLM_MODEL') || 'openai/gpt-4.1-nano'}
+RAG_QUERY_CONDENSE=${getEnvValue('RAG_QUERY_CONDENSE') || 'true'}
+RAG_QUERY_EXPAND=${getEnvValue('RAG_QUERY_EXPAND') || 'true'}
+RAG_QUERY_DECOMPOSE=${getEnvValue('RAG_QUERY_DECOMPOSE') || 'true'}
+RAG_QUERY_TRANSLATE=${getEnvValue('RAG_QUERY_TRANSLATE') || 'true'}
+RAG_QUERY_DATE_NORMALIZE=${getEnvValue('RAG_QUERY_DATE_NORMALIZE') || 'true'}
+RAG_QUERY_HYDE=${getEnvValue('RAG_QUERY_HYDE') || 'false'}
+RAG_QUERY_TRANSLATE_DISABLED_PROFILES=${getEnvValue('RAG_QUERY_TRANSLATE_DISABLED_PROFILES') || ''}
+RAG_QUERY_VOICE_TRANSFORMS=${getEnvValue('RAG_QUERY_VOICE_TRANSFORMS') || 'condense_history,normalize_dates'}
+# Semantic cache
+RAG_SEMANTIC_CACHE=${getEnvValue('RAG_SEMANTIC_CACHE') || 'off'}
+RAG_SEMANTIC_CACHE_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_TTL') || '3600'}
+RAG_SEMANTIC_CACHE_REFUSAL_TTL=${getEnvValue('RAG_SEMANTIC_CACHE_REFUSAL_TTL') || '600'}
+RAG_SEMANTIC_CACHE_MAX_DISTANCE=${getEnvValue('RAG_SEMANTIC_CACHE_MAX_DISTANCE') || '0.05'}
+RAG_SEMANTIC_CACHE_EMBED_STORE=${getEnvValue('RAG_SEMANTIC_CACHE_EMBED_STORE') || 'false'}
+REDIS_URL=${getEnvValue('REDIS_URL') || ''}
 # Ingestion and embedding profiles
 RAG_INGEST_PIPELINE=${getEnvValue('RAG_INGEST_PIPELINE') || 'legacy'}
 RAG_PARSER=${getEnvValue('RAG_PARSER') || 'llamaparse'}
@@ -1781,7 +2192,22 @@ RAG_EXACT_ID_LOOKUP=${getEnvValue('RAG_EXACT_ID_LOOKUP') || 'false'}
 RAG_PDF_IMAGE_CHUNKS=${getEnvValue('RAG_PDF_IMAGE_CHUNKS') || 'false'}
 RAG_INJECTION_SCAN=${getEnvValue('RAG_INJECTION_SCAN') || 'off'}
 RAG_EMBEDDING_PROFILES=${getEnvValue('RAG_EMBEDDING_PROFILES') || 'off'}
+RAG_DOMAIN_EMBEDDINGS=${getEnvValue('RAG_DOMAIN_EMBEDDINGS') || 'off'}
+RAG_DOMAIN_EMBEDDING_MAX_LEGS=${getEnvValue('RAG_DOMAIN_EMBEDDING_MAX_LEGS') || '2'}
+RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=${getEnvValue('RAG_DOMAIN_EMBEDDING_TIMEOUT_MS') || '800'}
 RAG_QWEN_EMBED_FALLBACK=${getEnvValue('RAG_QWEN_EMBED_FALLBACK') || 'openrouter'}
+RAG_QWEN_EMBED_PRIMARY=${getEnvValue('RAG_QWEN_EMBED_PRIMARY') || 'deepinfra'}
+RAG_FINETUNE=${getEnvValue('RAG_FINETUNE') || 'off'}
+RAG_FT_EMBED_API_KEY=${getEnvValue('RAG_FT_EMBED_API_KEY') || ''}
+RAG_FT_SLOT_A_BASE_URL=${getEnvValue('RAG_FT_SLOT_A_BASE_URL') || ''}
+RAG_FT_SLOT_A_MODEL=${getEnvValue('RAG_FT_SLOT_A_MODEL') || ''}
+RAG_FT_SLOT_A_QUERY_PROMPT=${getEnvValue('RAG_FT_SLOT_A_QUERY_PROMPT') || ''}
+RAG_FT_SLOT_A_DOCUMENT_PROMPT=${getEnvValue('RAG_FT_SLOT_A_DOCUMENT_PROMPT') || ''}
+RAG_FT_SLOT_B_BASE_URL=${getEnvValue('RAG_FT_SLOT_B_BASE_URL') || ''}
+RAG_FT_SLOT_B_MODEL=${getEnvValue('RAG_FT_SLOT_B_MODEL') || ''}
+RAG_FT_SLOT_B_QUERY_PROMPT=${getEnvValue('RAG_FT_SLOT_B_QUERY_PROMPT') || ''}
+RAG_FT_SLOT_B_DOCUMENT_PROMPT=${getEnvValue('RAG_FT_SLOT_B_DOCUMENT_PROMPT') || ''}
+RAG_OPENAI_EMBEDDINGS_VIA=${getEnvValue('RAG_OPENAI_EMBEDDINGS_VIA') || 'openai'}
 RAG_PARSE_ROUTING=${getEnvValue('RAG_PARSE_ROUTING') || 'fixed'}
 RAG_PARSER_ALLOW_CLOUD=${getEnvValue('RAG_PARSER_ALLOW_CLOUD') || 'true'}
 RAG_PARSE_PREMIUM_PAGE_BUDGET=${getEnvValue('RAG_PARSE_PREMIUM_PAGE_BUDGET') || '0'}
@@ -1791,9 +2217,36 @@ RAG_PARSE_VLM_DETECT=${getEnvValue('RAG_PARSE_VLM_DETECT') || 'false'}
 RAG_PARSE_VLM_MODEL=${getEnvValue('RAG_PARSE_VLM_MODEL') || ''}
 RAG_INGEST_ASYNC=${getEnvValue('RAG_INGEST_ASYNC') || 'off'}
 RAG_INGEST_WORKER_CONCURRENCY=${getEnvValue('RAG_INGEST_WORKER_CONCURRENCY') || '2'}
+RAG_INGEST_JOB_RETENTION_DAYS=${getEnvValue('RAG_INGEST_JOB_RETENTION_DAYS') || '90'}
+RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS=${getEnvValue('RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS') || '3600'}
+RAG_INGEST_MAINTENANCE=${getEnvValue('RAG_INGEST_MAINTENANCE') || 'on'}
 RAG_PARSE_PROGRESSIVE=${getEnvValue('RAG_PARSE_PROGRESSIVE') || 'false'}
 RAG_EMBED_BATCH_MODE=${getEnvValue('RAG_EMBED_BATCH_MODE') || 'sync'}
 NEXT_PUBLIC_RAG_INGEST_REALTIME=${getEnvValue('NEXT_PUBLIC_RAG_INGEST_REALTIME') || 'false'}
+RAG_SUPPORTED_LANGUAGES=${getEnvValue('RAG_SUPPORTED_LANGUAGES') || ''}
+RAG_PRIMARY_LANGUAGE=${getEnvValue('RAG_PRIMARY_LANGUAGE') || ''}
+RAG_LANGUAGE_AWARE_INGEST=${getEnvValue('RAG_LANGUAGE_AWARE_INGEST') || 'off'}
+RAG_TABLE_HEADER_REPEAT=${getEnvValue('RAG_TABLE_HEADER_REPEAT') || 'always'}
+RAG_TABLE_ROW_SERIALIZATION=${getEnvValue('RAG_TABLE_ROW_SERIALIZATION') || 'false'}
+RAG_CAPTION_LANGUAGE=${getEnvValue('RAG_CAPTION_LANGUAGE') || 'en'}
+RAG_BGE_M3_SERVING=${getEnvValue('RAG_BGE_M3_SERVING') || 'hosted'}
+RAG_DOC_TRANSLATION=${getEnvValue('RAG_DOC_TRANSLATION') || 'off'}
+RAG_DOC_TRANSLATION_MODEL=${getEnvValue('RAG_DOC_TRANSLATION_MODEL') || ''}
+RAG_HIDDEN_TEXT_CHECK=${getEnvValue('RAG_HIDDEN_TEXT_CHECK') || 'off'}
+RAG_INGEST_LINK_CHECK=${getEnvValue('RAG_INGEST_LINK_CHECK') || 'off'}
+RAG_OUTPUT_LINK_ALLOWLIST=${getEnvValue('RAG_OUTPUT_LINK_ALLOWLIST') || ''}
+RAG_UPLOAD_APPROVAL=${getEnvValue('RAG_UPLOAD_APPROVAL') || 'off'}
+RAG_SCOPE_TAGS=${getEnvValue('RAG_SCOPE_TAGS') || 'false'}
+RAG_SCOPE_TAG_SUGGEST=${getEnvValue('RAG_SCOPE_TAG_SUGGEST') || 'false'}
+RAG_SUPERSESSION_DETECT=${getEnvValue('RAG_SUPERSESSION_DETECT') || 'off'}
+RAG_EFFECTIVE_DATES=${getEnvValue('RAG_EFFECTIVE_DATES') || 'false'}
+RAG_EFFECTIVE_DATE_LLM_EXTRACT=${getEnvValue('RAG_EFFECTIVE_DATE_LLM_EXTRACT') || 'false'}
+RAG_SECTION_RULES=${getEnvValue('RAG_SECTION_RULES') || 'off'}
+RAG_PAGE_BOILERPLATE=${getEnvValue('RAG_PAGE_BOILERPLATE') || 'off'}
+RAG_DOC_ATTRIBUTES=${getEnvValue('RAG_DOC_ATTRIBUTES') || 'false'}
+RAG_ATTRIBUTE_HEADER=${getEnvValue('RAG_ATTRIBUTE_HEADER') || 'false'}
+RAG_ATTRIBUTE_FILTER=${getEnvValue('RAG_ATTRIBUTE_FILTER') || 'off'}
+RAG_LEXICAL_QUANTITY=${getEnvValue('RAG_LEXICAL_QUANTITY') || 'false'}
 VOYAGE_API_KEY=${getEnvValue('VOYAGE_API_KEY') || ''}
 VOYAGE_BASE_URL=${getEnvValue('VOYAGE_BASE_URL') || 'https://api.voyageai.com/v1'}
 DEEPINFRA_API_KEY=${getEnvValue('DEEPINFRA_API_KEY') || ''}
@@ -2590,6 +3043,269 @@ app.get('/api/config/get-env', (req, res) => {
   } catch (error) {
     console.error('API: Error fetching environment variable:', error);
     res.status(500).json({ error: 'Failed to read environment variable' });
+  }
+});
+
+class InjectionSummaryError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+/** D-06: the language codes ship with the code in config/rag/language-packs.json; read once at start. */
+function readShippedLanguageCodes() {
+  const registry = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'config', 'rag', 'language-packs.json'), 'utf8'));
+  const codes = Array.isArray(registry && registry.packs) ? registry.packs.map((pack) => pack && pack.code) : [];
+  if (codes.length === 0 || !codes.every((code) => typeof code === 'string' && code !== '')) {
+    throw new Error('config/rag/language-packs.json lists no language codes');
+  }
+  return codes;
+}
+
+const INJECTION_RULE_LANGUAGES = [...readShippedLanguageCodes(), 'any'];
+const PROMPT_GUARD_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const PROMPT_GUARD_REVISION = /^[0-9a-f]{40}$/;
+const DETECTOR_CONFIG_VERSION = /^\d{4}-\d{2}-\d{2}\.[1-9][0-9]*$/;
+const SAFE_TOKEN = /^[a-z0-9_]{1,64}$/;
+
+function readInjectionConfigFile(fileName, label) {
+  const filePath = path.join(REPO_ROOT, 'config', 'rag', fileName);
+  let bytes;
+  try {
+    bytes = fs.readFileSync(filePath);
+  } catch {
+    throw new InjectionSummaryError(`injection_${label}_missing`, `config/rag/${fileName} could not be read`);
+  }
+  try {
+    return { bytes, data: JSON.parse(bytes.toString('utf8')) };
+  } catch {
+    throw new InjectionSummaryError(`injection_${label}_invalid`, `config/rag/${fileName} is not valid JSON`);
+  }
+}
+
+function isTokenList(value) {
+  return Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === 'string' && SAFE_TOKEN.test(item));
+}
+
+/** Versions, counts and ids of the active injection defense; never a rule pattern, rule id or env value (D-18). Read on every call. */
+function summarizeInjectionDefense() {
+  const rulesFile = readInjectionConfigFile('injection-rules.json', 'rules');
+  const rules = rulesFile.data && Array.isArray(rulesFile.data.rules) ? rulesFile.data.rules : null;
+  if (!rules) throw new InjectionSummaryError('injection_rules_invalid', 'config/rag/injection-rules.json has no rules list');
+  const counts = Object.fromEntries(INJECTION_RULE_LANGUAGES.map((language) => [language, 0]));
+  for (const rule of rules) {
+    if (rule && Object.prototype.hasOwnProperty.call(counts, rule.language)) counts[rule.language] += 1;
+  }
+
+  const { data: detectors } = readInjectionConfigFile('injection-detectors.json', 'detectors');
+  const promptGuard = detectors && detectors.prompt_guard;
+  const lakera = detectors && detectors.lakera;
+  const valid =
+    detectors && typeof detectors.version === 'string' && DETECTOR_CONFIG_VERSION.test(detectors.version) &&
+    promptGuard && typeof promptGuard.model_id === 'string' && PROMPT_GUARD_MODEL_ID.test(promptGuard.model_id) && promptGuard.model_id.length <= 200 &&
+    typeof promptGuard.revision === 'string' && PROMPT_GUARD_REVISION.test(promptGuard.revision) &&
+    typeof promptGuard.threshold === 'number' && promptGuard.threshold >= 0 && promptGuard.threshold <= 1 &&
+    isTokenList(promptGuard.languages) &&
+    lakera && isTokenList(lakera.detector_types) &&
+    (lakera.min_level === null || lakera.min_level === undefined || (typeof lakera.min_level === 'string' && SAFE_TOKEN.test(lakera.min_level)));
+  if (!valid) throw new InjectionSummaryError('injection_detectors_invalid', 'config/rag/injection-detectors.json does not match the detector config contract');
+
+  return {
+    rules: {
+      version: require('crypto').createHash('sha256').update(rulesFile.bytes).digest('hex').slice(0, 12),
+      counts,
+    },
+    detectors: {
+      version: detectors.version,
+      prompt_guard: {
+        model_id: promptGuard.model_id,
+        revision: promptGuard.revision,
+        threshold: promptGuard.threshold,
+        languages: [...promptGuard.languages],
+      },
+      lakera: { detector_types: [...lakera.detector_types], min_level: lakera.min_level ?? null },
+    },
+  };
+}
+
+// Read-only summary for the Prompt-injection defense card; served behind the same loopback and CSRF gate as every config endpoint.
+app.get('/api/config/injection-defense', (req, res) => {
+  try {
+    return res.json(summarizeInjectionDefense());
+  } catch (error) {
+    if (error instanceof InjectionSummaryError) {
+      console.error('[Injection Defense] summary unavailable:', { code: error.code });
+      return res.status(500).json({ error: error.message, code: error.code });
+    }
+    console.error('[Injection Defense] summary failed');
+    return res.status(500).json({ error: 'Injection defense summary failed', code: 'injection_summary_failed' });
+  }
+});
+
+const QUERY_LAYER_PROFILE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const QUERY_LAYER_TRACING_ENV = /^(LANGSMITH_|LANGCHAIN_TRACING)/;
+
+/** eval/config/semantic-cache.json (D-37): the distance per embedding profile; ids, numbers and dates only. */
+function readSemanticCacheCalibration() {
+  const filePath = path.join(REPO_ROOT, 'eval', 'config', 'semantic-cache.json');
+  if (!fs.existsSync(filePath)) return { calibrated: false, state: 'missing', profiles: [] };
+  let data;
+  try {
+    data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return { calibrated: false, state: 'invalid', profiles: [] };
+  }
+  const list = data && data.schema_version === 1 ? (data.profiles === undefined ? [] : data.profiles) : null;
+  if (!Array.isArray(list)) return { calibrated: false, state: 'invalid', profiles: [] };
+  const profiles = [];
+  for (const entry of list) {
+    const valid =
+      entry && typeof entry.embedding_profile_id === 'string' && QUERY_LAYER_PROFILE_ID.test(entry.embedding_profile_id) &&
+      typeof entry.max_distance === 'number' && Number.isFinite(entry.max_distance) && entry.max_distance >= 0 && entry.max_distance <= 0.2 &&
+      (entry.source === 'default' || entry.source === 'calibrated') &&
+      (entry.fitted_at === undefined || entry.fitted_at === null || (typeof entry.fitted_at === 'string' && entry.fitted_at.length <= 64));
+    if (!valid) return { calibrated: false, state: 'invalid', profiles: [] };
+    profiles.push({
+      embedding_profile_id: entry.embedding_profile_id,
+      max_distance: entry.max_distance,
+      source: entry.source,
+      fitted_at: typeof entry.fitted_at === 'string' ? entry.fitted_at : null,
+    });
+  }
+  return { calibrated: true, state: 'ok', profiles };
+}
+
+function langchainInstalled() {
+  try {
+    // require.resolve caches hits, so a removed package is checked on disk again.
+    return fs.existsSync(require.resolve('@langchain/classic', { paths: [REPO_ROOT] }));
+  } catch {
+    return false;
+  }
+}
+
+/** Status for the Query layer panel (D-44, research P-10): choices, booleans, distances and warning codes; never an env value of a secret. */
+function describeQueryLayerStatus() {
+  const envPath = path.join(REPO_ROOT, '.env.local');
+  const fileEnv = fs.existsSync(envPath) ? dotenv.parse(fs.readFileSync(envPath, 'utf8')) : {};
+  const read = (key) => String(fileEnv[key] ?? '').trim().toLowerCase();
+  const framework = read('RAG_QUERY_FRAMEWORK') === 'langchain' ? 'langchain' : 'llamaindex';
+  const backendRaw = read('RAG_SEMANTIC_CACHE');
+  const backend = backendRaw === 'pgvector' || backendRaw === 'redisvl' ? backendRaw : 'off';
+  const pipeline = read('RAG_PIPELINE') === 'v2' ? 'v2' : 'legacy';
+  const installed = langchainInstalled();
+  const tracingSet = Object.keys(fileEnv).some((key) => QUERY_LAYER_TRACING_ENV.test(key) && String(fileEnv[key]).trim() !== '');
+  const warnings = [];
+  if (backend !== 'off' && pipeline === 'legacy') warnings.push('cache_under_legacy');
+  if (framework === 'langchain' && !installed) warnings.push('langchain_missing');
+  if (framework === 'langchain' && tracingSet) warnings.push('langsmith_tracing_set');
+  return { framework, backend, pipeline, langchain_installed: installed, calibration: readSemanticCacheCalibration(), warnings };
+}
+
+// Read-only status for the Query layer panel; served behind the same loopback and CSRF gate as every config endpoint.
+app.get('/api/config/query-layer/status', (req, res) => {
+  try {
+    return res.json(describeQueryLayerStatus());
+  } catch {
+    console.error('[Query Layer] status failed');
+    return res.status(500).json({ error: 'Query layer status failed', code: 'query_layer_status_failed' });
+  }
+});
+
+const languageSettings = require('./rag/language-settings-context');
+
+const MAX_LANGUAGE_ENTRIES = 64;
+
+/** D-07 for the config-server entry point; the POST handler and the entry-point parity test call it. */
+function validateLanguagesRequest(body, { root = REPO_ROOT, env, registry, rerankerOverrides } = {}) {
+  const values = env || languageSettings.readEnvFileValues(path.join(root, '.env.local'));
+  const context = languageSettings.buildValidationContext({ root, env: values, registry, rerankerOverrides });
+  const input = body && typeof body === 'object' ? body : {};
+  return languageSettings.validateForScript({ supported: input.languages, primary: input.primary }, context);
+}
+
+/** UI-SPEC 8.1: what the banner and the Languages panel need, read from .env.local and the registry on every call. */
+function describeLanguageSettings(root = REPO_ROOT) {
+  const values = languageSettings.readEnvFileValues(path.join(root, '.env.local'));
+  const context = languageSettings.buildValidationContext({ root, env: values });
+  const saved = languageSettings.normalizeLanguageSettings(
+    values.RAG_SUPPORTED_LANGUAGES,
+    values.RAG_PRIMARY_LANGUAGE,
+    context.registry,
+  );
+  const pipelines = {};
+  for (const name of languageSettings.PIPELINE_VARIABLES) {
+    const explicit = languageSettings.isSet(values[name]);
+    pipelines[name] = { value: explicit ? values[name].trim() : null, explicit };
+  }
+  const packs = languageSettings.completePacks(context.registry).map((pack) => {
+    const reasons = languageSettings.packBlockingReasons(pack.code, context);
+    return {
+      code: pack.code,
+      nativeName: pack.native_name,
+      englishName: pack.name,
+      groundedness: pack.groundedness,
+      selectable: reasons.length === 0,
+      reasons,
+    };
+  });
+  return {
+    configured: saved.configured,
+    languages: saved.languages,
+    primary: saved.primary,
+    variablesSet: Object.fromEntries(
+      languageSettings.LANGUAGE_VARIABLES.map((name) => [name, languageSettings.isSet(values[name])]),
+    ),
+    pipelines,
+    reranker: context.reranker ? { id: context.reranker.id } : null,
+    embeddingProfile: context.embeddingProfile ? { id: context.embeddingProfile.id } : null,
+    verifiedAgainstActiveProfile: false,
+    packs,
+  };
+}
+
+app.get('/api/config/languages', (req, res) => {
+  try {
+    return res.json(describeLanguageSettings());
+  } catch (error) {
+    console.error('[RAG Languages] settings unavailable:', { message: error instanceof Error ? error.message : String(error) });
+    return res.status(500).json({ success: false, error: 'Language settings unavailable' });
+  }
+});
+
+app.post('/api/config/languages', (req, res) => {
+  const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : null;
+  if (
+    !body ||
+    !Array.isArray(body.languages) ||
+    body.languages.length > MAX_LANGUAGE_ENTRIES ||
+    !body.languages.every((code) => typeof code === 'string') ||
+    (body.primary !== undefined && typeof body.primary !== 'string')
+  ) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid request body',
+      details: [{ path: 'languages', message: 'languages must be a list of language codes and primary a code' }],
+    });
+  }
+  try {
+    const result = validateLanguagesRequest({ languages: body.languages, primary: body.primary });
+    if (!result.ok) {
+      return res.status(400).json({ success: false, error: 'Invalid language settings', details: result.errors });
+    }
+    languageSettings.writeLanguageVariables(path.join(REPO_ROOT, '.env.local'), result.normalized);
+    console.log('[RAG Languages] saved', { languages: result.normalized.languages, primary: result.normalized.primary });
+    return res.json({
+      success: true,
+      languages: result.normalized.languages,
+      primary: result.normalized.primary,
+      warnings: result.warnings,
+      verifiedAgainstActiveProfile: result.verifiedAgainstActiveProfile,
+    });
+  } catch (error) {
+    console.error('[RAG Languages] save failed:', { message: error instanceof Error ? error.message : String(error) });
+    return res.status(500).json({ success: false, error: 'Language settings could not be saved' });
   }
 });
 
@@ -3951,4 +4667,4 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, server, start, HOST, PORT };
+module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings };

@@ -1,0 +1,10 @@
+{
+  "name": "sec-recommended",
+  "env": {
+    "RAG_CONTEXT_TAGGING": "true",
+    "RAG_INJECTION_CHECK": "drop",
+    "RAG_INJECTION_LAKERA": "false",
+    "RAG_INJECTION_PROMPT_GUARD": "false"
+  },
+  "overrides": null
+}

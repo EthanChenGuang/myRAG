@@ -1,5 +1,5 @@
 {
-  "config_hash": "7893893236b3c12e7e1c672977f167acf4df9d8a2f01397eedc99f25fae45244",
+  "config_hash": "34c641d6f8f67bb32f54355de123c65ce216171dc534a29809d69d141935350e",
   "dev_minimums": {
     "fixture": {
       "answerable": 5,
@@ -25,5 +25,19 @@
     "source": "defaults"
   },
   "schema_version": 1,
-  "target_false_refusal": 0.05
+  "target_false_refusal": 0.05,
+  "targets_by_mode": {
+    "balanced": {
+      "max_false_answer": null,
+      "target_false_refusal": null
+    },
+    "flexible": {
+      "max_false_answer": null,
+      "target_false_refusal": null
+    },
+    "strict": {
+      "max_false_answer": 0.05,
+      "target_false_refusal": null
+    }
+  }
 }

@@ -1,9 +1,9 @@
 import { env } from '@/lib/env';
-import { EmbeddingProfileMismatchError, type RpcClient } from '../backend/supabase-rpc';
+import { EmbeddingProfileMismatchError, rpcRows, type RpcClient } from '../backend/supabase-rpc';
 import { getRagDeps } from '../deps';
 import { getIngestDeps } from '../ingest/deps';
 import { loadIngestConfig } from '../ingest/config';
-import { canonicalModelId, getEmbeddingProvider } from './registry';
+import { canonicalModelId, getEmbeddingProviderFor } from './registry';
 import type { EmbeddingProvider, EmbeddingStorage } from './types';
 
 export type EmbeddingProfileState = 'available' | 'backfilling' | 'active' | 'retired';
@@ -170,7 +170,7 @@ async function readProfiles(): Promise<EmbeddingProfile[]> {
 
   const profiles: EmbeddingProfile[] = [];
   let malformedActive = false;
-  for (const raw of response.data ?? []) {
+  for (const raw of rpcRows(response.data)) {
     const profile = parseProfileRow(raw);
     if (profile) profiles.push(profile);
     else if (asRecord(raw)?.status === 'active') malformedActive = true;
@@ -278,6 +278,9 @@ const KEY_BY_PROVIDER: Record<string, () => unknown> = {
   openai: () => env.OPENAI_API_KEY,
   voyage: () => env.VOYAGE_API_KEY,
   qwen3: () => env.DEEPINFRA_API_KEY,
+  // The slot key may be empty on a private network, so the endpoint stands in for it (06.1 D-02).
+  ft_slot_a: () => env.RAG_FT_SLOT_A_BASE_URL,
+  ft_slot_b: () => env.RAG_FT_SLOT_B_BASE_URL,
 };
 
 /** Presence only: the value is never read into a log line. */
@@ -290,7 +293,7 @@ function providerKeyConfigured(providerId: string): boolean {
 function mismatchReason(profile: EmbeddingProfile): StartupMismatchReason | null {
   let provider: EmbeddingProvider;
   try {
-    provider = getEmbeddingProvider(profile.provider);
+    provider = getEmbeddingProviderFor(profile.provider, profile.model);
   } catch {
     return 'provider_unconfigured';
   }

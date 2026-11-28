@@ -1,0 +1,23 @@
+{
+  "cells": [
+    {
+      "language": "en",
+      "scorer": "hhem_2_3_vectara",
+      "source": "default",
+      "threshold": 0.5
+    },
+    {
+      "language": "zh-Hans",
+      "scorer": "hhem_2_3_vectara",
+      "source": "default",
+      "threshold": 0.5
+    },
+    {
+      "language": "en",
+      "scorer": "hhem_2_1_open",
+      "source": "default",
+      "threshold": 0.5
+    }
+  ],
+  "schema_version": 1
+}

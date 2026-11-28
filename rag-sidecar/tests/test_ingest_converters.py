@@ -112,3 +112,49 @@ def test_select_range_converter_by_name():
     assert isinstance(recorded, converters.RecordedRangeConverter)
     docling = converters.select_range_converter("docling")
     assert isinstance(docling, converters.DoclingRangeConverter)
+
+def test_recorded_bench_pages_come_out_with_the_page_numbers_that_were_asked_for():
+    converter = converters.RecordedRangeConverter(RECORDED)
+
+    doc, _meta = converter.convert(Path("ignored.pdf"), BENCH_SHA, "structured_full", 10, 11, priority=100)
+
+    assert sorted(doc.pages) == [10, 11]
+    pages_by_text = {item.text: [prov.page_no for prov in item.prov] for item, _level in doc.iterate_items() if getattr(item, "text", "")}
+    assert pages_by_text["Benchmark page 10"] == [10]
+    assert pages_by_text["Benchmark page 11"] == [11]
+
+
+@pytest.mark.parametrize(
+    "sha",
+    [
+        "01a39e099b820ce5131bd172506de7593714a733ac3a3c9285869a1231b3c178",
+        "34db8c840cb74f72864ea8b2ccdb0aa5a37024d65252c66f2845927358c61724",
+        "c855808f1364b6016406e2359c5dc114a5c33eab0c0b2575cc9d7fd0a1994ad8",
+    ],
+)
+def test_recorded_fast_scan_page_converts_to_an_empty_page(sha):
+    """A forced fast tier (03.1-47) reaches the fast recording of a scanned page: it must load and hold no text."""
+    converter = converters.RecordedRangeConverter(RECORDED)
+    doc, _meta = converter.convert(Path("ignored.pdf"), sha, "fast", 1, 1, priority=100)
+    assert sorted(doc.pages) == [1]
+    assert doc.texts == []
+
+
+def test_recorded_fast_scanned_page_of_the_mixed_fixture_converts():
+    converter = converters.RecordedRangeConverter(RECORDED)
+    doc, _meta = converter.convert(Path("ignored.pdf"), MIXED_SHA, "fast", 9, 9, priority=100)
+    assert sorted(doc.pages) == [9]
+    assert doc.texts == []
+
+
+MULTI_COLUMN_SHA = "70ab25776a5d090c9367458ea947e64c846686f3580c138ea0c6808fff211983"
+
+
+@pytest.mark.parametrize("preset", ["fast", "structured_layout", "structured_full", "structured_ocr"])
+def test_recorded_multi_column_page_holds_both_columns_left_first(preset):
+    converter = converters.RecordedRangeConverter(RECORDED)
+    doc, _meta = converter.convert(Path("ignored.pdf"), MULTI_COLUMN_SHA, preset, 2, 2, priority=100)
+    texts = [item.text for item in doc.texts]
+    left = next(index for index, text in enumerate(texts) if text.startswith("Left column copy"))
+    right = next(index for index, text in enumerate(texts) if text.startswith("Right column copy"))
+    assert left < right

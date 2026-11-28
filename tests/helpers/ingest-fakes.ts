@@ -44,11 +44,17 @@ export interface FakeIngestDbOptions {
   chunkingProfiles?: Row[];
   /** Rows answered by rag_latest_backfill_runs; absent answers no rows. */
   backfillRuns?: Row[];
+  /** Rows answered by rag_tenant_language_shares; absent answers no rows. */
+  languageShares?: Row[];
   /** Runs after a call is recorded and before it is answered. */
   onCall?: (call: RecordedRpc) => void;
+  /** Rows for functions the fake does not answer itself (or to replace its answer), keyed by function name. */
+  answers?: Record<string, (args: Record<string, unknown>) => Row[]>;
 }
 
 function answer(fn: string, args: Record<string, unknown>, options: FakeIngestDbOptions, quarantined: boolean): Row[] {
+  const custom = options.answers?.[fn];
+  if (custom) return custom(args);
   const documentId = options.documentId ?? FAKE_DOCUMENT_ID;
   switch (fn) {
     case 'rag_begin_document_version':
@@ -82,6 +88,10 @@ function answer(fn: string, args: Record<string, unknown>, options: FakeIngestDb
       ];
     case 'rag_publish_document_version':
       return [{ outcome: quarantined ? 'quarantined' : 'published', document_id: args.p_document_id, version: 1, superseded_document_id: null }];
+    case 'rag_tenant_language_shares':
+      return options.languageShares ?? [];
+    case 'rag_set_image_chunk_languages':
+      return [{ chunks_updated: (args.p_items as unknown[]).length }];
     case 'rag_mark_document_failed':
       return [{ document_id: args.p_document_id, status: 'failed' }];
     default:

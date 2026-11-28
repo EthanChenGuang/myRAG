@@ -6,8 +6,16 @@ export const PARSE_ARTIFACT = 'parse.md';
 export const DOCLING_ARTIFACT = 'docling.json';
 /** The parser's own chunks (Docling), kept so a resumed run chunks the same way as an uninterrupted one. */
 export const PARSE_CHUNKS_ARTIFACT = 'chunks.json';
+/** Per-page text of a page-aware parser (the fixed LlamaParse chain), `{ pages: [{ page, text }] }`; stored only while page cleaning reads it. */
+export const PAGE_TEXTS_ARTIFACT = 'page-texts.json';
 /** The pictures the parser found, kept (with RAG_PDF_IMAGE_CHUNKS on) so a resumed run selects and captions the same ones. */
 export const PICTURES_ARTIFACT = 'pictures.json';
+
+/**
+ * documents.metadata key set once a version's hidden spans were removed and its parse.md and chunks.json overwritten (D-34, F-17). A
+ * later rebuild of such a document (a type change, a re-chunk) reads only the sanitized parse output, never docling.json or the original.
+ */
+export const HIDDEN_TEXT_SANITIZED_KEY = 'hidden_text_sanitized';
 
 const TENANT_KEY = /^[a-z]:[a-z0-9-]{1,64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -71,6 +79,21 @@ export async function saveArtifact(ctx: ArtifactContext, name: string, bytes: Ui
   return key;
 }
 
+/**
+ * Overwrites the stored parse output of the run's version with the sanitized text and parser chunks (F-17), so nothing that rebuilds the
+ * version later reads the hidden spans again. chunks.json is rewritten only when the run stored one. Returns the names rewritten.
+ */
+export async function rewriteSanitizedArtifacts(ctx: ArtifactContext, sanitized: { parseText: string; parseChunks: unknown[] | null | undefined }): Promise<string[]> {
+  const rewritten: string[] = [];
+  if (ctx.state.artifacts[PARSE_CHUNKS_ARTIFACT] !== undefined || (sanitized.parseChunks && sanitized.parseChunks.length > 0)) {
+    await saveArtifact(ctx, PARSE_CHUNKS_ARTIFACT, new TextEncoder().encode(JSON.stringify(sanitized.parseChunks ?? [])), 'application/json');
+    rewritten.push(PARSE_CHUNKS_ARTIFACT);
+  }
+  await saveArtifact(ctx, PARSE_ARTIFACT, new TextEncoder().encode(sanitized.parseText), 'text/markdown');
+  rewritten.push(PARSE_ARTIFACT);
+  return rewritten;
+}
+
 /** One artifact of the run's version, or null when it was never stored. */
 export async function loadArtifact(ctx: ArtifactContext, name: string): Promise<StoredObject | null> {
   return getObjectStore().get(artifactKey(ctx, name), { signal: ctx.signal });
@@ -89,4 +112,39 @@ export async function removeArtifacts(ctx: ArtifactContext): Promise<void> {
       console.error('[Ingest] could not remove a stored artifact', { error: error instanceof Error ? error.name : 'unknown' });
     }
   }
+}
+
+/**
+ * Removes stored objects of one version by key. Only keys under the version's own prefix are touched, so a key that names another tenant's
+ * or another version's path is ignored. A failure is counted, never thrown.
+ */
+export async function removeVersionObjects(input: {
+  tenantKey: string;
+  lineageId: string;
+  version: number;
+  keys: string[];
+  signal: AbortSignal;
+}): Promise<{ removed: number; failed: number }> {
+  if (input.keys.length === 0) return { removed: 0, failed: 0 };
+  let prefix: string;
+  try {
+    prefix = versionPrefix(input.tenantKey, input.lineageId, input.version);
+  } catch {
+    return { removed: 0, failed: input.keys.length };
+  }
+  const own = input.keys.filter((key) => key.startsWith(prefix));
+  if (own.length === 0) return { removed: 0, failed: 0 };
+  const artifacts: Record<string, string> = {};
+  own.forEach((key, index) => {
+    artifacts[`object-${index}`] = key;
+  });
+  const context: ArtifactContext = {
+    identity: { tenantKey: input.tenantKey },
+    document: { lineageId: input.lineageId, version: input.version },
+    signal: input.signal,
+    state: { artifacts },
+  };
+  await removeArtifacts(context);
+  const failed = Object.keys(context.state.artifacts).length;
+  return { removed: own.length - failed, failed };
 }

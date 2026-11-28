@@ -226,3 +226,48 @@ def test_calibrate_cells_records_are_sorted_by_key_and_validate():
     rows += [CalibrationRow(**{**r.__dict__, "key": "cohere|fake-quality-v1|en|same", "query_language": "en"}) for r in _all_rows()]
     keys = [r.cell.key for r in _records(rows)]
     assert keys == ["cohere|fake-quality-v1|en|same", "cohere|fake-quality-v1|zh|same"]
+
+
+# Phase 4.2 plan 07: mode cells (D-23, D-24)
+
+from rag_sidecar.contracts.retrieval import RefusalModeTargets
+
+MODE_CONFIG = RefusalCalibrationConfig(
+    targets_by_mode={
+        "strict": RefusalModeTargets(max_false_answer=0.05),
+        "balanced": RefusalModeTargets(),
+        "flexible": RefusalModeTargets(),
+    }
+)
+
+
+def _mode_fit(mode: str):
+    rows = _dev_rows([0.9, 0.8, 0.7, 0.6, 0.55, 0.4], [0.2, 0.3, 0.5])
+    return fit_cells(rows, MODE_CONFIG, environment="fixture")[f"{KEY}|{mode}"]
+
+
+def test_holdout_check_a_mode_cell_reads_the_test_rows_of_its_base_cell():
+    result = holdout_check(_mode_fit("balanced"), _test_rows([0.9, 0.8, 0.7, 0.3], [0.1]), config=MODE_CONFIG, environment="fixture", noise_floor=NOISE)
+    assert result.metrics.answerable_count == 4
+    assert result.metrics.no_answer_count == 1
+
+
+def test_holdout_check_strict_judges_false_answers_against_the_cap():
+    fit = _mode_fit("strict")
+    assert fit.threshold == pytest.approx(0.525)
+    passing = holdout_check(fit, _test_rows([0.9, 0.8, 0.3], [0.1, 0.2, 0.6]), config=MODE_CONFIG, environment="fixture", noise_floor=NOISE)
+    assert passing.basis == "false_answer"
+    assert passing.false_answer_count == 1
+    assert passing.pass_limit == pytest.approx(0.05 + max(NOISE, 1 / 3))
+    assert passing.status == "calibrated"
+    failing = holdout_check(fit, _test_rows([0.9, 0.8], [0.6, 0.7, 0.1]), config=MODE_CONFIG, environment="fixture", noise_floor=NOISE)
+    assert failing.false_answer_count == 2
+    assert failing.status == "failed_holdout"
+    assert failing.false_answer_p_value == pytest.approx(1 - sum(
+        __import__("math").comb(3, k) * 0.05**k * 0.95 ** (3 - k) for k in range(2)
+    ))
+
+
+def test_holdout_check_base_cell_keeps_the_false_refusal_basis():
+    result = _check(_fit(), _test_rows([0.9, 0.8, 0.7, 0.3], [0.1]))
+    assert result.basis == "false_refusal"

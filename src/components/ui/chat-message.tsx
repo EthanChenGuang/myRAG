@@ -15,6 +15,9 @@ interface ChatMessageProps {
   isStreamingMessage?: boolean;
   className?: string;
   sessionId?: string; // Add sessionId for MCP tool persistence
+  onFollowupSelect?: (question: string) => void;
+  followupsDisabled?: boolean;
+  onRefusalFeedback?: (messageId: string, value: RefusalFeedbackValue) => void;
 }
 
 // Then forward declare the ChatMessage component for the export
@@ -67,6 +70,94 @@ import { useModel } from '@/components/providers/model-provider'
 import { ImageModal } from './image-modal'
 import { SourceImagesGrid } from './source-images-grid'
 import type { SourceImageData } from '@/types/chat'
+import { CitationChip } from './citation-chip'
+import { citationSourcesFor } from '@/components/providers/sources-provider'
+import { citeAliasFromHref, isCitationAware, renderCitationMarkers, type CitationMarkerTarget, type CitationRenderPhase } from '@/lib/chat/citation-markers'
+import { pickAnswerMetadata } from '@/lib/chat/answer-metadata'
+import { useAnswerRecordsStore } from '@/lib/stores/answer-records-store'
+import { GroundednessBadge } from './groundedness-badge'
+import { AnswerFeedback } from './answer-feedback'
+import { RefusalFeedback } from './refusal-feedback'
+import { pickRefusalMetadata, type RefusalFeedbackValue } from '@/lib/chat/answer-metadata'
+import { registerMessageTrace, setSourcesMessage, shouldShowRefusalControl } from '@/lib/chat/refusal-feedback-client'
+import { useGhostModeStore } from '@/lib/ghost-mode-store'
+import { imageLinkHref, isAllowedImageUrl } from '@/lib/safe-image-hosts'
+import { splitFollowups } from '@/lib/chat/followups'
+import { answerQualityStrings } from '@/translations/answer-quality'
+import { RelatedQuestions } from './related-questions'
+import { ThinkingIndicator } from './thinking-indicator'
+
+const IMAGE_ALLOWLIST = process.env.NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST === 'true';
+
+function allowlistedImage(linkClassName: string): NonNullable<Components['img']> {
+  return function AllowlistedImage({ src, alt, title }) {
+    if (typeof src === 'string' && isAllowedImageUrl(src)) {
+      return <img src={src} alt={alt ?? ''} title={title} referrerPolicy="no-referrer" loading="lazy" />;
+    }
+    const href = imageLinkHref(src);
+    const label = alt || href || '';
+    if (!href) return <span>{label}</span>;
+    return (
+      <a href={href} title={title} target="_blank" rel="noopener noreferrer nofollow" className={cn(linkClassName, 'break-all')}>
+        {label}
+      </a>
+    );
+  };
+}
+
+const answerImage = allowlistedImage('text-[#FF6417] dark:text-[#FF8A4D] hover:underline font-medium');
+const toolResultImage = allowlistedImage('text-blue-600 dark:text-blue-400 hover:underline');
+
+export const TOOL_RESULT_MARKDOWN_COMPONENTS: Partial<Components> = {
+  ...(IMAGE_ALLOWLIST ? { img: toolResultImage } : {}),
+  // Ensure links open in new tab
+  a: ({ href, children, ...props }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-600 dark:text-blue-400 hover:underline"
+      {...props}
+    >
+      {children}
+    </a>
+  ),
+  // Style code blocks
+  code: ({ className, children, ...props }) => (
+    <code
+      className={cn(
+        "bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </code>
+  ),
+  // Style lists
+  ul: ({ children, ...props }) => (
+    <ul className="list-disc list-inside space-y-1" {...props}>
+      {children}
+    </ul>
+  ),
+  ol: ({ children, ...props }) => (
+    <ol className="list-decimal list-inside space-y-1" {...props}>
+      {children}
+    </ol>
+  ),
+  // Style headings
+  h3: ({ children, ...props }) => (
+    <h3 className="text-lg font-semibold mt-4 mb-2" {...props}>
+      {children}
+    </h3>
+  ),
+  // Style paragraphs
+  p: ({ children, ...props }) => (
+    <p className="mb-2 last:mb-0" {...props}>
+      {children}
+    </p>
+  )
+};
 
 // Define DocumentContent type that was missing
 type DocumentContent = {
@@ -2476,55 +2567,7 @@ const ToolInvocation: React.FC<ToolInvocationProps> = React.memo(function ToolIn
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
                         rehypePlugins={[rehypeKatex]}
-                        components={{
-                          // Ensure links open in new tab
-                          a: ({ href, children, ...props }) => (
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 dark:text-blue-400 hover:underline"
-                              {...props}
-                            >
-                              {children}
-                            </a>
-                          ),
-                          // Style code blocks
-                          code: ({ className, children, ...props }) => (
-                            <code
-                              className={cn(
-                                "bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm",
-                                className
-                              )}
-                              {...props}
-                            >
-                              {children}
-                            </code>
-                          ),
-                          // Style lists
-                          ul: ({ children, ...props }) => (
-                            <ul className="list-disc list-inside space-y-1" {...props}>
-                              {children}
-                            </ul>
-                          ),
-                          ol: ({ children, ...props }) => (
-                            <ol className="list-decimal list-inside space-y-1" {...props}>
-                              {children}
-                            </ol>
-                          ),
-                          // Style headings
-                          h3: ({ children, ...props }) => (
-                            <h3 className="text-lg font-semibold mt-4 mb-2" {...props}>
-                              {children}
-                            </h3>
-                          ),
-                          // Style paragraphs
-                          p: ({ children, ...props }) => (
-                            <p className="mb-2 last:mb-0" {...props}>
-                              {children}
-                            </p>
-                          )
-                        }}
+                        components={TOOL_RESULT_MARKDOWN_COMPONENTS}
                       >
                         {finalMarkdown}
                       </ReactMarkdown>
@@ -2573,7 +2616,9 @@ const TextPartRenderer = React.memo(({
   isLastMessage,
   textSizeClasses,
   fontClasses,
-  cleanToolCallMetadata
+  cleanToolCallMetadata,
+  markerCitations,
+  markerPhase = 'final'
 }: {
   part: ContentPart & { type: 'text' };
   index: number;
@@ -2586,13 +2631,18 @@ const TextPartRenderer = React.memo(({
   textSizeClasses: any;
   fontClasses: any;
   cleanToolCallMetadata: (text: string) => string;
+  markerCitations?: readonly CitationMarkerTarget[];
+  markerPhase?: CitationRenderPhase;
 }) => {
   const rawTrim = part.text.trim();
   // Skip if original text is just JSON braces/brackets or whitespace
   if (/^[\{\}\[\]\s]+$/.test(rawTrim)) {
     return null;
   }
-  const cleanedText = cleanToolCallMetadata(part.text);
+  const toolCleanedText = cleanToolCallMetadata(part.text);
+  const cleanedText = markerCitations
+    ? renderCitationMarkers(toolCleanedText, { citations: markerCitations, phase: markerPhase })
+    : toolCleanedText;
   const trimmed = cleanedText.trim();
 
   // Use useMemo to ensure proper re-rendering when toggle changes
@@ -2668,13 +2718,16 @@ ChatMessage = function ({
   isStreaming = false,
   className,
   sessionId,
+  onFollowupSelect,
+  followupsDisabled = false,
+  onRefusalFeedback,
   ...props
 }: ChatMessageProps) {
   const { theme } = useTheme();
   const { textSize } = useTextSize();
   const { fontFamily } = useFont();
   const { openArtifact } = useArtifact();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   // Correctly destructure the tracked setter and other needed values
   const { trackedSetIsSourcesOpen, setSources, isSourcesOpen } = useSources();
   const audioSettings = useAudioSettings();
@@ -2686,6 +2739,36 @@ ChatMessage = function ({
   const contentRef = useRef<HTMLDivElement>(null);
   const messageContainerRef = useRef<HTMLDivElement>(null);
   const [citationSources, setCitationSources] = useState<Source[]>([]);
+  const messageMetadata = (message as { metadata?: unknown }).metadata;
+  const citationAware = isAI && isCitationAware(messageMetadata);
+  const answerMetadataKey = citationAware ? JSON.stringify(messageMetadata) : '';
+  const answerMetadata = useMemo(
+    () => (answerMetadataKey ? pickAnswerMetadata(JSON.parse(answerMetadataKey)) : null),
+    [answerMetadataKey]
+  );
+  const markerCitations = useMemo<CitationMarkerTarget[] | undefined>(
+    () => (answerMetadata ? (answerMetadata.citations ?? []).map(({ n, alias }) => ({ n, alias })) : undefined),
+    [answerMetadata]
+  );
+  const citationNumbers = useMemo(
+    () => new Map((markerCitations ?? []).map(({ alias, n }) => [alias, n] as const)),
+    [markerCitations]
+  );
+  const answerId = answerMetadata?.answerId;
+  const answerDocuments = useAnswerRecordsStore((s) => (answerId ? s.records[answerId]?.documents : undefined));
+  const citationMessageId = answerMetadata ? message.id : undefined;
+  const isGhostChat = useGhostModeStore((s) => s.isGhostMode);
+  const metadataRecord = messageMetadata && typeof messageMetadata === 'object' ? (messageMetadata as Record<string, unknown>) : undefined;
+  const messageTraceId = isAI && typeof metadataRecord?.ragTraceId === 'string' ? metadataRecord.ragTraceId : undefined;
+  const refusalFeedback = isAI ? pickRefusalMetadata(metadataRecord).refusalFeedback ?? null : null;
+  const actionRowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!messageTraceId || isGhostChat) return;
+    registerMessageTrace(message.id, messageTraceId);
+    if (isLastMessage) setSourcesMessage(message.id);
+    return () => registerMessageTrace(message.id, undefined);
+  }, [message.id, messageTraceId, isGhostChat, isLastMessage]);
   const [isContentChanging, setIsContentChanging] = useState(false);
   const prevContentRef = useRef(message.content);
   // Document sources state removed - no longer needed
@@ -2929,14 +3012,18 @@ ChatMessage = function ({
       }));
       allSources.push(...webSources);
 
+      const withCitations = answerMetadata
+        ? citationSourcesFor(answerMetadata, answerDocuments, allSources, message.id)
+        : allSources;
+
       // Set all sources
-      if (allSources.length > 0) {
-        setSources(allSources);
+      if (withCitations.length > 0) {
+        setSources(withCitations);
       } else {
         setSources([]);
       }
     }
-  }, [message.id, message.role, citationSources, trackedSetIsSourcesOpen, isLastMessage]); // Keep stable dependencies
+  }, [message.id, message.role, citationSources, trackedSetIsSourcesOpen, isLastMessage, answerMetadata, answerDocuments]); // Keep stable dependencies
 
 
   // Detect content changes and manage transitions
@@ -3567,6 +3654,7 @@ ChatMessage = function ({
   const handleCopy = async () => {
     // Use processed parts instead of raw message content to get properly extracted RAG text
     const textParts = processMessageContent.renderableParts
+      .map((part, index) => (index === followupSplit.partIndex && part.type === 'text' ? { ...part, text: followupSplit.body } : part))
       .filter((part): part is { type: 'text'; text: string } => part.type === 'text');
 
     // Concatenate text from all text parts (includes RAG content extracted before approval marker)
@@ -3899,9 +3987,20 @@ ChatMessage = function ({
       }));
 
       console.log('[ChatMessage] Setting web sources in provider:', webSources.length);
-      setSources(webSources);
+      setSources(answerMetadata ? citationSourcesFor(answerMetadata, answerDocuments, webSources, citationMessageId) : webSources);
     }
-  }, [isAI, citationSources, isLastMessage, setSources]); // Simplified dependencies
+  }, [isAI, citationSources, isLastMessage, setSources, answerMetadata, answerDocuments, citationMessageId]); // Simplified dependencies
+
+  const buildCitationSourcesRef = useRef<() => Source[]>(() => []);
+  buildCitationSourcesRef.current = () => {
+    const base: Source[] = [];
+    if (Array.isArray(message.content) && !isToolOnlyMessage(message.content)) {
+      base.push(...extractDocumentSources(message.content), ...extractToolLinks(message.content));
+    }
+    base.push(...citationSources.map(source => ({ ...source, type: 'web' as const })));
+    return citationSourcesFor(answerMetadata, answerDocuments, base, message.id);
+  };
+  const buildCitationSources = useCallback(() => buildCitationSourcesRef.current(), []);
 
   const copyToClipboard = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -3911,6 +4010,7 @@ ChatMessage = function ({
 
   // Define markdown components with access to component state
   const markdownComponents: Partial<Components> = useMemo(() => ({
+    ...(IMAGE_ALLOWLIST ? { img: answerImage } : {}),
     h1: ({ children }) => (
       <h1 className="font-semibold mb-4 mt-8 first:mt-0 text-gray-900 dark:text-gray-100">{children}</h1>
     ),
@@ -3948,16 +4048,25 @@ ChatMessage = function ({
       // Otherwise use normal paragraph rendering
       return <p className="break-words text-gray-700 dark:text-gray-300 mb-4 last:mb-0">{children}</p>;
     },
-    a: ({ href, children }) => (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-[#FF6417] dark:text-[#FF8A4D] hover:underline font-medium"
-      >
-        {children}
-      </a>
-    ),
+    a: ({ href, children }) => {
+      const citeAlias = markerCitations ? citeAliasFromHref(href) : null;
+      if (citeAlias && citationMessageId) {
+        const n = citationNumbers.get(citeAlias);
+        return n === undefined
+          ? <span>{children}</span>
+          : <CitationChip n={n} messageId={citationMessageId} buildSources={buildCitationSources} />;
+      }
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[#FF6417] dark:text-[#FF8A4D] hover:underline font-medium"
+        >
+          {children}
+        </a>
+      );
+    },
     code: ({ node, inline, className, children, ...props }: any) => {
       const match = /language-(\w+)/.exec(className || '');
       const value = String(children).replace(/\n$/, '');
@@ -3972,8 +4081,9 @@ ChatMessage = function ({
         return null;
       }
 
-      // Inline code rendering - clean and minimal
-      if (inline) {
+      // react-markdown 9 no longer passes `inline`; a fenced block spans several source lines.
+      const isInline = inline ?? (node?.position ? node.position.start.line === node.position.end.line && !match : !value.includes('\n'));
+      if (isInline) {
         return (
           <code className={cn(
             // Light mode colors
@@ -4052,7 +4162,7 @@ ChatMessage = function ({
         </div>
       );
     }
-  }), [isCodeCopied]);
+  }), [isCodeCopied, markerCitations, citationNumbers, citationMessageId, buildCitationSources]);
 
   // Set up layout stabilization on initial render
   useEffect(() => {
@@ -4195,6 +4305,21 @@ ChatMessage = function ({
   }, [messageContentParts, message.role, message.id]);
   // --- END MODIFIED ---
 
+  // Split the related-question tail only once the answer is complete, so it does not flicker while streaming.
+  const followupSplit = useMemo(() => {
+    const none = { partIndex: -1, body: '', followups: [] as string[] };
+    const isComplete = !isThinking && !isStreaming && !isStreamingMessage && !(isLastMessage && followupsDisabled);
+    if (!isAI || !isComplete) return none;
+    const parts = processMessageContent.renderableParts;
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      if (part.type !== 'text') continue;
+      const { body, followups } = splitFollowups((part as { text: string }).text);
+      return followups.length > 0 ? { partIndex: i, body, followups } : none;
+    }
+    return none;
+  }, [isAI, isThinking, isStreaming, isStreamingMessage, isLastMessage, followupsDisabled, processMessageContent.renderableParts]);
+
   // Add these handlers for the McpToolBox
   const { toast } = useToast();
 
@@ -4331,15 +4456,15 @@ ChatMessage = function ({
       >
         <style dangerouslySetInnerHTML={{ __html: styles }} />
 
-        <div className={cn(
-          "max-w-5xl mx-auto flex gap-6 px-6 py-4",
+        <div data-role={isAI ? 'assistant' : 'user'} className={cn(
+          "chat-row max-w-5xl mx-auto flex gap-6 px-6 py-4",
           !isAI && "flex-row-reverse",
           isFirstMessage && "pt-20" // Add extra padding to first message
         )}>
           {isAI && (
             <div
               className={cn(
-                "shrink-0 flex items-center justify-center rounded-full text-black dark:text-white",
+                "chat-assistant-avatar shrink-0 flex items-center justify-center rounded-full text-black dark:text-white",
                 // Remove fixed border from className
                 "bg-transparent transition-all duration-300" // Add transition
               )}
@@ -4383,7 +4508,7 @@ ChatMessage = function ({
           {isAI ? (
             (<div
               className={cn(
-                "inline-block max-w-[95%] w-full chat-message",
+                "chat-answer inline-block max-w-[95%] w-full chat-message",
                 textSizeClasses[textSize].base,
                 fontClasses[fontFamily],
                 isLastMessage && "mb-8"
@@ -4414,17 +4539,7 @@ ChatMessage = function ({
                         <span className="text-sm text-gray-600 dark:text-gray-400">Generating image...</span>
                       </>
                     ) : (
-                      <>
-                        <div className="animate-bounce-1">
-                          <div className="h-2 w-2 rounded-full bg-blue-500 dark:bg-blue-400"></div>
-                        </div>
-                        <div className="animate-bounce-2">
-                          <div className="h-2 w-2 rounded-full bg-yellow-500 dark:bg-yellow-400"></div>
-                        </div>
-                        <div className="animate-bounce-3">
-                          <div className="h-2 w-2 rounded-full bg-orange-500 dark:bg-orange-400"></div>
-                        </div>
-                      </>
+                      <ThinkingIndicator />
                     )}
                   </div>
                 ) : (
@@ -4452,7 +4567,7 @@ ChatMessage = function ({
                         return (
                           <TextPartRenderer
                             key={`text-part-${index}`}
-                            part={part as ContentPart & { type: 'text' }}
+                            part={(index === followupSplit.partIndex ? { ...part, text: followupSplit.body } : part) as ContentPart & { type: 'text' }}
                             index={index}
                             inlineSourcesEnabled={env.NEXT_PUBLIC_SHOW_SOURCES_ENABLED === 'true'}
                             markdownComponents={markdownComponents}
@@ -4463,6 +4578,8 @@ ChatMessage = function ({
                             textSizeClasses={textSizeClasses}
                             fontClasses={fontClasses}
                             cleanToolCallMetadata={cleanToolCallMetadata}
+                            markerCitations={markerCitations}
+                            markerPhase={isStreamingMessage || isStreaming ? 'streaming' : 'final'}
                           />
                         );
                       }
@@ -4724,6 +4841,14 @@ ChatMessage = function ({
                       }
                     })}
                     {/* End parts mapping */}
+                    {followupSplit.followups.length > 0 && (
+                      <RelatedQuestions
+                        questions={followupSplit.followups}
+                        heading={answerQualityStrings(language).relatedHeading}
+                        onSelect={onFollowupSelect}
+                        disabled={followupsDisabled}
+                      />
+                    )}
                   </>
                 )}
 
@@ -4765,12 +4890,28 @@ ChatMessage = function ({
                 // Debug: Render check with conditions
 
                 if (isAI && messageContent.text && !isThinking && !isStreamingMessage) {
+                  const showRefusal = messageTraceId !== undefined && shouldShowRefusalControl({
+                    role: message.role,
+                    finished: !isStreaming,
+                    metadata: metadataRecord,
+                    isGhostMode: isGhostChat,
+                    chatId: null,
+                  });
                   return (
                     <>
+                      {showRefusal && messageTraceId && (
+                        <RefusalFeedback
+                          traceId={messageTraceId}
+                          initial={refusalFeedback}
+                          onSaved={onRefusalFeedback ? (value) => onRefusalFeedback(message.id, value) : undefined}
+                          focusFallback={() => actionRowRef.current?.querySelector<HTMLButtonElement>('button')?.focus()}
+                        />
+                      )}
                       {/* Sources Button - Only show when relevant */}
                       <SourcesButtonContainer messageContent={messageContent} isLastMessage={isLastMessage} />
                       {/* Existing Action Buttons */}
                       <div
+                        ref={actionRowRef}
                         className={cn(
                           "flex items-center transition-opacity duration-200",
                           fontSpacingConfig[fontFamily]?.gap || 'gap-1.5',
@@ -4778,11 +4919,13 @@ ChatMessage = function ({
                           isLastMessage ? "opacity-100" : (isHovered ? "opacity-100" : "opacity-0")
                         )}
                       >
+                        {answerId && <GroundednessBadge answerId={answerId} fallback={answerMetadata?.groundedness} className="mr-1" />}
                         <CopyButton
                           onClick={handleCopy}
                           isCopied={isCopied}
                           tooltipText={t('copyTooltip')}
                         />
+                        {answerId && <AnswerFeedback answerId={answerId} />}
 
                         {/* Speak button - only show if TTS is not disabled (allow showing while loading settings to reserve space) */}
                         {(audioSettings.loading || !audioSettings.ttsDisabled) && (
