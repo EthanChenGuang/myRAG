@@ -946,6 +946,18 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_source_sync_set_deletion_mode(uuid, uuid, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_source_sync_set_deletion_mode(uuid, uuid, text) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_source_purge_reserve(text, uuid, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_source_purge_reserve(text, uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_source_purge_reserve(text, uuid, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_source_purge_release(text, uuid, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_source_purge_release(text, uuid, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_source_purge_release(text, uuid, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_source_purge_hold(text, uuid, text[], integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_source_purge_hold(text, uuid, text[], integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_source_purge_hold(text, uuid, text[], integer) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_purge_hook_identifiers(text, uuid, uuid[])') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) TO service_role;
