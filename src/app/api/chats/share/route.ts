@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 import { createClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
+import { shareRefusal } from '@/lib/chat-share-access';
 
 export async function POST(request: Request) {
   try {
@@ -64,6 +64,15 @@ export async function POST(request: Request) {
         { error: 'Chat not found' },
         { status: 404 }
       );
+    }
+
+    // D-27: a chat that cites a restricted document gets no link, and an existing link is not handed out again.
+    const refusal = await shareRefusal(chat);
+    if (refusal === 'restricted') {
+      return NextResponse.json({ error: 'restricted_content' }, { status: 403 });
+    }
+    if (refusal === 'unavailable') {
+      return NextResponse.json({ error: 'access_groups_unavailable' }, { status: 503 });
     }
 
     // Generate a unique share ID if not already shared

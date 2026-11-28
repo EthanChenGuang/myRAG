@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger';
+import { accessRpcArgs, type ScopeAccessFilter } from '../tenant/access-filter';
 import { assertTenantScope, scopeKey, workspaceRpcArgs, type TenantScope } from '../tenant/scope';
 
 export interface RpcError {
@@ -101,10 +102,11 @@ export async function vectorSearch(
   embedding: number[],
   matchCount: number,
   threshold: number,
-  opts: { client: RpcClient; signal: AbortSignal },
+  opts: { client: RpcClient; signal: AbortSignal; access: ScopeAccessFilter },
 ): Promise<RawChunk[]> {
   assertTenantScope(scope);
   const { client, signal } = opts;
+  const access = accessRpcArgs(opts.access);
 
   if (scope.kind === 'single') {
     logger.db(`[Enhanced RAG] Using single-tenant search`);
@@ -114,6 +116,7 @@ export async function vectorSearch(
         query_embedding: embedding,
         match_count: matchCount,
         similarity_threshold: threshold,
+        ...access,
       })
       .abortSignal(signal);
     signal.throwIfAborted();
@@ -134,6 +137,7 @@ export async function vectorSearch(
       p_query_embedding: embedding,
       p_match_count: matchCount,
       p_min_similarity: threshold,
+      ...access,
     })
     .abortSignal(signal);
   signal.throwIfAborted();
@@ -182,7 +186,7 @@ export async function profileVectorSearch(
   profile: ProfileSearchTarget,
   matchCount: number,
   threshold: number,
-  opts: { client: RpcClient; signal: AbortSignal; requireActive?: boolean },
+  opts: { client: RpcClient; signal: AbortSignal; access: ScopeAccessFilter; requireActive?: boolean },
 ): Promise<RawChunk[]> {
   assertTenantScope(scope);
   const { client, signal, requireActive = true } = opts;
@@ -195,6 +199,7 @@ export async function profileVectorSearch(
       p_match_count: matchCount,
       p_min_similarity: threshold,
       ...(requireActive === false ? { p_require_active: false } : {}),
+      ...accessRpcArgs(opts.access),
     })
     .abortSignal(signal);
   signal.throwIfAborted();
@@ -228,7 +233,7 @@ export function searchByEmbedding(
   embedding: SearchableEmbedding,
   matchCount: number,
   threshold: number,
-  opts: { client: RpcClient; signal: AbortSignal; requireActive?: boolean },
+  opts: { client: RpcClient; signal: AbortSignal; access: ScopeAccessFilter; requireActive?: boolean },
 ): Promise<RawChunk[]> {
   if (embedding.profile && embedding.profile.storage === 'halfvec') {
     return profileVectorSearch(scope, embedding.vector, embedding.profile, matchCount, threshold, opts);

@@ -379,3 +379,57 @@ def test_cli_refuses_when_traces_do_not_record_the_generator_or_confident_key_is
     monkeypatch.setenv("CONFIDENT_API_KEY", "placeholder")
     assert main(_cli_inputs(tmp_path)) == 2
     assert "CONFIDENT_API_KEY" in capsys.readouterr().err
+
+
+def test_live_ragas_builder_routes_embeddings_through_openrouter_without_a_connection(
+    socket_spy: list[Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from rag_eval.judge.openai_route import resolve_embedding_route
+    from rag_eval.judge.ragas_judge import build_ragas_live
+
+    monkeypatch.setenv("RAG_EVAL_OPENAI_VIA", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "placeholder-openrouter-key")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    config = load_judge_config()
+    route = resolve_embedding_route(config.embedding_model)
+    _, embeddings = build_ragas_live(config, "placeholder-openrouter-key", route)
+    assert embeddings.model == "openai/text-embedding-3-small"  # type: ignore[attr-defined]
+    assert str(embeddings.client.base_url).rstrip("/") == "https://openrouter.ai/api/v1"  # type: ignore[attr-defined]
+    _, direct = build_ragas_live(config, "placeholder-openrouter-key", "placeholder-openai-key")
+    assert direct.model == "text-embedding-3-small"  # type: ignore[attr-defined]
+    assert "api.openai.com" in str(direct.client.base_url)  # type: ignore[attr-defined]
+    assert socket_spy == []
+
+
+def test_cli_with_openrouter_route_needs_only_the_openrouter_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], socket_spy: list[Any]
+) -> None:
+    from rag_eval.judge import deepeval_judge
+    from rag_eval.judge import ragas_judge
+    import rag_eval.judge.run as run_module
+
+    seen: dict[str, Any] = {}
+
+    def fake_build(config: Any, openrouter_key: str, route: Any) -> tuple[Any, Any]:
+        seen["route"] = route
+        return StubRagasLLM(), StubEmbeddings()
+
+    def fake_run(*_args: Any, **_kwargs: Any) -> Any:
+        raise JudgeFatalError("stopped by the test")
+
+    monkeypatch.setattr(ragas_judge, "build_ragas_live", fake_build)
+    monkeypatch.setattr(deepeval_judge, "OpenRouterDeepEvalLLM", lambda config, key: StubDeepEvalLLM())
+    monkeypatch.setattr(run_module, "run_judge", fake_run)
+    monkeypatch.delenv("CONFIDENT_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("RAG_EVAL_OPENAI_VIA", "openrouter")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    assert main(_cli_inputs(tmp_path)) == 3
+    err = capsys.readouterr().err
+    assert "OPENROUTER_API_KEY" in err and "OPENAI_API_KEY" not in err
+    monkeypatch.setenv("OPENROUTER_API_KEY", "placeholder-openrouter-key")
+    assert main(_cli_inputs(tmp_path)) == 4
+    assert seen["route"].via == "openrouter" and seen["route"].model == "openai/text-embedding-3-small"
+    monkeypatch.setenv("RAG_EVAL_OPENAI_VIA", "bogus")
+    assert main(_cli_inputs(tmp_path)) == 2
+    assert socket_spy == []

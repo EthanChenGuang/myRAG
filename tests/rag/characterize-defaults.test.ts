@@ -323,7 +323,8 @@ describe('defaults characterization (Phase 4.1 D-01 set, explicit)', () => {
     const actual = await collectChat(fixture);
     expect(actual).toHaveLength(readGolden().length * 2);
     expectCharacterization('chat-v2-default', actual);
-  });
+    // Two model kinds over the whole golden set (413 questions after plan 05.2.1-12) outrun the 60 s default.
+  }, 180_000);
 
   it('embed: same system prompt for every fixture question', async () => {
     const errorsBefore = fixture.edge.errors.length;

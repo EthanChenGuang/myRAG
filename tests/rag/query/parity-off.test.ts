@@ -9,7 +9,16 @@ import { resetV2StartupForTests, verifyV2Startup } from '@/lib/rag/v2/startup';
 import { hit } from '../fusion/helpers';
 import { adminWithRpc, fakeAssemblyAdmin, fakeEmbedder, fakeRpcClient, installDeps, uninstallDeps } from '../helpers/pipeline-fakes';
 
-const imported = vi.hoisted(() => ({ count: 0 }));
+const imported = vi.hoisted(() => ({ count: 0, resolver: 0 }));
+
+vi.mock('@/lib/rag/lang/resolve-query-language', () => {
+  imported.resolver += 1;
+  return {
+    resolveQueryLanguage: () => {
+      throw new Error('resolveQueryLanguage must not run while the query layer is off');
+    },
+  };
+});
 
 vi.mock('@/lib/rag/query/run-layer', () => {
   imported.count += 1;
@@ -85,6 +94,7 @@ async function retrieve(env: Record<string, string>): Promise<RetrievalResult> {
 describe('query layer off: parity with Phase 4', () => {
   beforeEach(() => {
     imported.count = 0;
+    imported.resolver = 0;
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -103,6 +113,13 @@ describe('query layer off: parity with Phase 4', () => {
     expect(result.status).not.toBe('error');
     expect('queryPlan' in result).toBe(false);
     expect(result.stages.map((stage) => stage.name)).not.toContain('query_gate');
+  });
+
+  it('the D-17 language resolver is never loaded or called with the layer off', async () => {
+    await retrieve({ RAG_PIPELINE: 'v2' });
+    await retrieve({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'false' });
+    await retrieve({ RAG_PIPELINE: 'legacy', RAG_QUERY_LAYER: 'true' });
+    expect(imported.resolver).toBe(0);
   });
 
   it('RAG_QUERY_LAYER=false under v2 equals the unset result', async () => {

@@ -1,12 +1,19 @@
 import OpenAI from 'openai';
 import { env } from '@/lib/env';
-import type { BgeM3Serving } from '../config';
+import type { BgeM3Serving, BgeM3Via } from '../config';
 import { countTokens } from '@/lib/rag/ingest/text/tokens';
 import { EmbeddingProfileMismatch, truncateAndNormalize } from './mrl';
 import type { EmbedOptions, EmbedOutput, EmbeddingProvider } from './types';
 import { BGE_M3_MODEL_ID, BGE_M3_NATIVE_DIMS, EmbeddingInputError, canonicalModelId, statusOf, toProviderError } from './types';
 
 const HOST = 'deepinfra';
+const OPENROUTER_HOST = 'openrouter';
+export const BGE_M3_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+/**
+ * OpenRouter serves BAAI/bge-m3 from upstream providers; the route pins DeepInfra with no fallback so the vectors come from the same
+ * host as the hosted profile, and an answer naming another upstream is refused as a model mismatch.
+ */
+export const BGE_M3_OPENROUTER_UPSTREAM = 'DeepInfra';
 const MAX_TEXTS_PER_REQUEST = 128;
 const MODEL_INPUT_TOKEN_LIMIT = 8192;
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -70,6 +77,10 @@ export interface BgeM3ProviderOptions {
   serving?: () => BgeM3Serving | Promise<BgeM3Serving>;
   /** Defaults to RAG_SIDECAR_URL and RAG_SIDECAR_SECRET. */
   sidecar?: () => BgeM3SidecarConfig;
+  /** Defaults to the RAG config field bgeM3Via (RAG_BGE_M3_VIA), read on every call; only the hosted mode reads it. */
+  via?: () => BgeM3Via | Promise<BgeM3Via>;
+  /** Defaults to OPENROUTER_API_KEY and the OpenRouter base URL. */
+  openrouter?: () => BgeM3Config;
   /** The sidecar request, and the hosted client's request when given. */
   fetch?: typeof fetch;
 }
@@ -77,6 +88,21 @@ export interface BgeM3ProviderOptions {
 async function defaultServing(): Promise<BgeM3Serving> {
   const [{ loadRagConfig }, { getRagDeps }] = await Promise.all([import('../config'), import('../deps')]);
   return loadRagConfig(getRagDeps().ragEnv()).bgeM3Serving;
+}
+
+async function defaultVia(): Promise<BgeM3Via> {
+  const [{ loadRagConfig }, { getRagDeps }] = await Promise.all([import('../config'), import('../deps')]);
+  return loadRagConfig(getRagDeps().ragEnv()).bgeM3Via;
+}
+
+function defaultOpenRouterConfig(): BgeM3Config {
+  return { apiKey: env.OPENROUTER_API_KEY ?? '', baseUrl: BGE_M3_OPENROUTER_BASE_URL };
+}
+
+/** The upstream OpenRouter reports in its `provider` field; absent means the response did not say. */
+function upstreamOf(response: unknown): string | null {
+  const value = (response as { provider?: unknown } | null)?.provider;
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
 }
 
 function defaultSidecarConfig(): BgeM3SidecarConfig {
@@ -194,18 +220,27 @@ async function embedWithSidecar(
  * BGE-M3 (D-26) under one profile, served either by DeepInfra's OpenAI-compatible endpoint (hosted) or by the sidecar
  * (RAG_BGE_M3_SERVING=sidecar): dense output only, no instruction, no output dimension. Both modes give the same vectors
  * within the D-26 tolerance, so switching needs no re-embedding; sidecar mode never falls back to the hosted API.
+ * RAG_BGE_M3_VIA=openrouter sends the hosted calls through OpenRouter pinned to DeepInfra and records host `openrouter`; that the
+ * vectors match is checked with `npm run rag:embedding -- verify-route bge-m3`, not assumed.
  */
 export function createBgeM3Provider(options: BgeM3ProviderOptions = {}): EmbeddingProvider {
   const getConfig = options.config ?? defaultConfig;
   const getServing = options.serving ?? defaultServing;
   const getSidecarConfig = options.sidecar ?? defaultSidecarConfig;
+  const getVia = options.via ?? defaultVia;
+  const getOpenRouterConfig = options.openrouter ?? defaultOpenRouterConfig;
 
   async function embed(texts: string[], opts: EmbedOptions): Promise<EmbedOutput> {
     if (opts.dims !== BGE_M3_NATIVE_DIMS) throw new EmbeddingProfileMismatch('dims', opts.dims, BGE_M3_NATIVE_DIMS);
     checkInputs(texts);
     if ((await getServing()) === 'sidecar') return embedWithSidecar(texts, opts, getSidecarConfig(), options.fetch ?? fetch);
-    const config = getConfig();
-    if (!config.apiKey) throw new Error('[Embedding Profile] DEEPINFRA_API_KEY not configured');
+    const via = await getVia();
+    const viaOpenRouter = via === 'openrouter';
+    const host = viaOpenRouter ? OPENROUTER_HOST : HOST;
+    const config = viaOpenRouter ? getOpenRouterConfig() : getConfig();
+    if (!config.apiKey) {
+      throw new Error(`[Embedding Profile] ${viaOpenRouter ? 'OPENROUTER_API_KEY' : 'DEEPINFRA_API_KEY'} not configured`);
+    }
     const client = new OpenAI({
       apiKey: config.apiKey,
       baseURL: config.baseUrl,
@@ -220,13 +255,21 @@ export function createBgeM3Provider(options: BgeM3ProviderOptions = {}): Embeddi
       const inputs = texts.slice(start, start + MAX_TEXTS_PER_REQUEST);
       let response;
       try {
-        response = await client.embeddings.create(
-          { model: BGE_M3_MODEL_ID, input: inputs, encoding_format: 'float' },
-          { signal: opts.signal },
-        );
+        const body: OpenAI.EmbeddingCreateParams = { model: BGE_M3_MODEL_ID, input: inputs, encoding_format: 'float' };
+        if (viaOpenRouter) {
+          Object.assign(body, { provider: { order: [BGE_M3_OPENROUTER_UPSTREAM], allow_fallbacks: false } });
+        }
+        response = await client.embeddings.create(body, { signal: opts.signal });
       } catch (error) {
         if (!opts.signal.aborted && isHostTooLong(error)) throw new EmbeddingInputError('embedding_input_too_long');
-        throw toProviderError(error, HOST, opts.signal);
+        throw toProviderError(error, host, opts.signal);
+      }
+
+      if (viaOpenRouter) {
+        const upstream = upstreamOf(response);
+        if (upstream !== null && upstream.toLowerCase() !== BGE_M3_OPENROUTER_UPSTREAM.toLowerCase()) {
+          throw new EmbeddingProfileMismatch('model', `${OPENROUTER_HOST}:${upstream}`, `${OPENROUTER_HOST}:${BGE_M3_OPENROUTER_UPSTREAM}`);
+        }
       }
 
       const returned = canonicalModelId(response.model || '');
@@ -248,7 +291,7 @@ export function createBgeM3Provider(options: BgeM3ProviderOptions = {}): Embeddi
       }
       tokens += response.usage?.total_tokens ?? inputs.reduce((sum, text) => sum + countTokens(text), 0);
     }
-    return { vectors, model: BGE_M3_MODEL_ID, host: HOST, usage: { tokens } };
+    return { vectors, model: BGE_M3_MODEL_ID, host, usage: { tokens } };
   }
 
   return {

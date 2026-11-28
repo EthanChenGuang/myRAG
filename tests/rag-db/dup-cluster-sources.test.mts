@@ -268,12 +268,12 @@ if (MODE === undefined) {
       }
     });
 
-    test('re-applying 0862 keeps one function with the same definition and grants', async () => {
+    test('re-applying 0862, then 0933 (its operator rule, Phase 4.3), keeps one function with the same definition and grants', async () => {
       const definition = async () =>
         (await db.query<{ def: string; acl: string }>(`SELECT pg_get_functiondef(p.oid) AS def, p.proacl::text AS acl FROM pg_proc p WHERE p.proname = '${FN}'`)).rows;
       const before = await definition();
-      const files = migrationFiles(mode).filter((file) => path.basename(file).startsWith('0862_'));
-      assert.equal(files.length, 1);
+      const files = migrationFiles(mode).filter((file) => path.basename(file).startsWith('0862_') || path.basename(file).startsWith('0933_'));
+      assert.equal(files.length, 2);
       await applyMigrationFiles(db, files);
       await applyMigrationFiles(db, files);
       assert.deepEqual(await definition(), before);

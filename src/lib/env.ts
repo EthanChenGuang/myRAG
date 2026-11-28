@@ -356,6 +356,7 @@ class EnvironmentConfig {
       RAG_TABLE_ROW_SERIALIZATION: process.env.RAG_TABLE_ROW_SERIALIZATION || 'false',
       RAG_CAPTION_LANGUAGE: process.env.RAG_CAPTION_LANGUAGE || 'en',
       RAG_BGE_M3_SERVING: process.env.RAG_BGE_M3_SERVING || 'hosted',
+      RAG_BGE_M3_VIA: process.env.RAG_BGE_M3_VIA || 'deepinfra',
       RAG_DOC_TRANSLATION: process.env.RAG_DOC_TRANSLATION || 'off',
       RAG_DOC_TRANSLATION_MODEL: process.env.RAG_DOC_TRANSLATION_MODEL || '',
       RAG_HIDDEN_TEXT_CHECK: process.env.RAG_HIDDEN_TEXT_CHECK || 'off',

@@ -5,14 +5,40 @@ import { isHttpUrl, normalizeScrapedUrl } from '@/lib/scrapers/url-utils';
 import { isSingleTenant } from '@/lib/deployment-mode';
 import { verifyUserOrganizationAccess } from '@/lib/auth/organization-handler';
 import { requireSessionUser } from '@/lib/session-auth';
+import { accessGroupsEnabled, accessTableFilter, resolveAccessScope, resolveTenantScope, scopeAccessFilter } from '@/lib/rag';
+
+/** D-15: the caller's access keys for the status lookup; null for no predicate, or a response when access cannot be resolved. */
+async function statusAccessKeys(
+  request: NextRequest,
+  userId: string | null,
+  organizationId: string | null,
+): Promise<{ ok: true; keys: readonly string[] | null } | { ok: false; response: Response }> {
+  if (!accessGroupsEnabled()) return { ok: true, keys: null };
+  const unavailable = { ok: false as const, response: NextResponse.json({ error: 'access_groups_unavailable' }, { status: 503 }) };
+  const tenant = await resolveTenantScope({
+    requestedOrganizationId: organizationId && organizationId !== 'null' ? organizationId : null,
+    getUser: async () => (userId ? { id: userId } : null),
+    signal: request.signal,
+  });
+  if (!tenant.ok || !tenant.scope) return unavailable;
+  const resolved = await resolveAccessScope({
+    scope: tenant.scope,
+    identity: userId ? { kind: 'user', userId } : { kind: 'anonymous' },
+    signal: request.signal,
+  });
+  if (!resolved.ok) return unavailable;
+  return { ok: true, keys: accessTableFilter(scopeAccessFilter(resolved.scope)) };
+}
 
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
+    let userId: string | null = null;
     if (isSingleTenant()) {
       const session = await requireSessionUser('[Scraper Status API]');
       if ('response' in session) return session.response;
+      userId = session.user.id;
     }
 
     const { searchParams } = new URL(request.url);
@@ -48,6 +74,7 @@ export async function GET(request: NextRequest) {
       if (authError || !user) {
         return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
       }
+      userId = user.id;
 
       if (organizationId && organizationId !== 'null') {
         const access = await verifyUserOrganizationAccess(user.id, organizationId);
@@ -63,6 +90,10 @@ export async function GET(request: NextRequest) {
         query = query.is('organization_id', null).eq('user_id', user.id);
       }
     }
+
+    const access = await statusAccessKeys(request, userId, organizationId);
+    if (!access.ok) return access.response;
+    if (access.keys !== null) query = query.overlaps('access_groups', [...access.keys]);
 
     const { data: documents, error } = await query;
 

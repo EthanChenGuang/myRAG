@@ -14,6 +14,7 @@ import hypotheticalDocumentJson from '../../../../../rag-sidecar/schemas/Hypothe
 import queryTranslationJson from '../../../../../rag-sidecar/schemas/QueryTranslation.schema.json';
 import queryVariantsJson from '../../../../../rag-sidecar/schemas/QueryVariants.schema.json';
 import subQuestionsJson from '../../../../../rag-sidecar/schemas/SubQuestions.schema.json';
+import subQuestionsWithFiltersJson from '../../../../../rag-sidecar/schemas/SubQuestionsWithFilters.schema.json';
 import { LangChainAdapterError, raceAbort, type LangChainTransform } from './errors';
 
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -78,6 +79,7 @@ export function invokeConfig(signal: AbortSignal): { signal: AbortSignal; callba
 /** Generated JSON Schemas for the calls whose output the shared finisher validates (decompose, translate). */
 export const RAW_STRUCTURED_SCHEMAS = Object.freeze({
   SubQuestions: subQuestionsJson as Record<string, unknown>,
+  SubQuestionsWithFilters: subQuestionsWithFiltersJson as Record<string, unknown>,
   QueryTranslation: queryTranslationJson as Record<string, unknown>,
 });
 

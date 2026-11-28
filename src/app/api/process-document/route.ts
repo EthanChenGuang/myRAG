@@ -23,6 +23,7 @@ import {
   resolveAdminWorkspaceScope,
   resolveTenantScope,
   validateUploadReplaces,
+  checkUploadAccess,
   validateUploadScopes,
   attributesFormField,
   uploadAttributesRefusal,
@@ -436,7 +437,8 @@ async function storeDocument(
   content: string,
   chunks: string[],
   userId: string | null,
-  organizationId?: string | null
+  organizationId?: string | null,
+  accessGroups?: string[]
 ) {
   console.log('Storing document in Supabase:', filename);
   console.log('Deployment mode:', isSingleTenant() ? 'single-tenant' : 'multi-tenant');
@@ -454,6 +456,8 @@ async function storeDocument(
       filename: filename,
       content: content,
     };
+    // D-16, RESEARCH Pitfall 7: the checked access label goes in the same INSERT that makes the document visible.
+    if (accessGroups) documentData.access_groups = accessGroups;
 
     // SINGLE-TENANT MODE: shared knowledge base; user_id records the owner who may later modify it
     if (isSingleTenant()) {
@@ -776,6 +780,10 @@ async function uploadThroughIngest(input: {
       : NextResponse.json({ success: false, error: replacesCheck.reason }, { status: 400 });
   }
 
+  // D-16: the optional access label, limited to the uploader's own groups (an admin: any group of the workspace), before anything is stored.
+  const accessCheck = await checkUploadAccess({ scope, raw: input.formData.get('access'), uploaderId: userId, signal: req.signal });
+  if (!accessCheck.ok) return NextResponse.json({ error: accessCheck.error }, { status: accessCheck.status });
+
   const bytes = new Uint8Array(await file.arrayBuffer());
   const deadlineMs = Math.max(MIN_INGEST_BUDGET_MS, UPLOAD_BUDGET_MS - (Date.now() - input.startedAt));
 
@@ -791,6 +799,7 @@ async function uploadThroughIngest(input: {
     ...(scopeCheck.scopes ? { scopes: scopeCheck.scopes } : {}),
     ...(attributeCheck.attributes !== undefined ? { attributes: attributeCheck.attributes } : {}),
     ...(replacesCheck.replacesDocumentId ? { replacesDocumentId: replacesCheck.replacesDocumentId } : {}),
+    ...(accessCheck.keys ? { accessKeys: accessCheck.keys } : {}),
     signal: req.signal,
     deadlineMs,
   };
@@ -1002,6 +1011,17 @@ export async function POST(req: Request) {
       }
     }
 
+    // D-16: the access label of a legacy knowledge-base upload, checked before any parse; it goes in the document insert below.
+    let legacyAccessGroups: string[] | undefined;
+    if (!isTemporary && formData.get('access') !== null && userId) {
+      const uploaderId = userId;
+      const tenant = await resolveTenantScope({ requestedOrganizationId: organizationId, getUser: async () => ({ id: uploaderId }), signal: req.signal });
+      if (!tenant.ok) return scopeRefusal(tenant.status);
+      if (!tenant.scope) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      const accessCheck = await checkUploadAccess({ scope: tenant.scope, raw: formData.get('access'), uploaderId, signal: req.signal });
+      if (!accessCheck.ok) return NextResponse.json({ error: accessCheck.error }, { status: accessCheck.status });
+      legacyAccessGroups = accessCheck.keys ?? undefined;
+    }
     // D-22a: attributes count only where the unified pipeline ingests; elsewhere they are refused, never dropped.
     if (formData.get('attributes') !== null) {
       console.warn('[ProcessDocument] upload attributes refused', { reason: 'attributes_not_enabled' });
@@ -1198,7 +1218,8 @@ export async function POST(req: Request) {
       text,
       validChunks,
       userId,
-      organizationId
+      organizationId,
+      legacyAccessGroups
     );
     console.log('Document stored successfully with ID:', storedDocumentId);
     console.log(`Successfully stored ${successfulChunks}/${totalChunks} chunks with embeddings`);

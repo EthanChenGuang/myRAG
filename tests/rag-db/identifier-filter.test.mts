@@ -268,7 +268,7 @@ describe('identifier filter through runRetrieval (single-tenant, D-31, D-51)', (
   });
 
   test('a resolve failure skips the filter, degrades the stage with a fixed code, and the request completes', async () => {
-    await db.exec('ALTER FUNCTION public.rag_identifier_resolve(text, text[]) RENAME TO rag_identifier_resolve_hidden');
+    await db.exec('ALTER FUNCTION public.rag_identifier_resolve(text, text[], text[], boolean) RENAME TO rag_identifier_resolve_hidden');
     try {
       const failed = await run(`What does entry ${X} say about the quandry settings?`, FILTER_ON);
       const stage = failed.stages.find((entry) => entry.name === 'identifier_resolve');
@@ -276,7 +276,7 @@ describe('identifier filter through runRetrieval (single-tenant, D-31, D-51)', (
       assert.equal(stage?.detail, 'identifier_resolve_failed');
       assert.ok(failed.candidates.some((candidate) => candidate.chunk_id === chunkOf.near), 'unfiltered');
     } finally {
-      await db.exec('ALTER FUNCTION public.rag_identifier_resolve_hidden(text, text[]) RENAME TO rag_identifier_resolve');
+      await db.exec('ALTER FUNCTION public.rag_identifier_resolve_hidden(text, text[], text[], boolean) RENAME TO rag_identifier_resolve');
     }
   });
 

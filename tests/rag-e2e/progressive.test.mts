@@ -544,7 +544,7 @@ describe('progressive mode end to end: the worker, both callbacks and the ledger
     const admin = (await import('@/lib/supabase')).getSupabaseAdmin();
     const assembled = await fetchRows.fetchAssemblyRows(
       [{ chunk_id: String(oldChunks[0]?.id), document_id: queued.documentId }] as unknown as Parameters<typeof fetchRows.fetchAssemblyRows>[0],
-      { adminClient: admin, signal: new AbortController().signal },
+      { access: { mode: 'off' }, adminClient: admin, signal: new AbortController().signal },
     );
     assert.ok(assembled.chunkMetadata.has(String(oldChunks[0]?.id)), 'a citation to version 1 still resolves');
   });

@@ -8,6 +8,7 @@ import {
   QueryTranslationSchema,
   QueryVariantsSchema,
   SubQuestionsSchema,
+  SubQuestionsWithFiltersSchema,
 } from '@/lib/rag-eval/contracts.generated';
 import { QueryLlmError, type QueryLlmTransform } from '@/lib/rag/query/llm';
 import {
@@ -142,7 +143,11 @@ describe('createFakeQueryLlm', () => {
     const codePattern = /\b[A-Z]{2}-\d{2,4}(?:-\d{4})?\b/g;
     for (const raw of table.entries) {
       if (raw.fail) continue;
-      expect(SCHEMAS[raw.transform].safeParse(raw.output).success, `${raw.transform}|${raw.query}`).toBe(true);
+      // 06.2-11: a decompose script may use the filters contract (P-18), requested only with RAG_QUERY_SUBQ_FILTERS on.
+      const ok =
+        SCHEMAS[raw.transform].safeParse(raw.output).success ||
+        (raw.transform === 'decompose' && SubQuestionsWithFiltersSchema.safeParse(raw.output).success);
+      expect(ok, `${raw.transform}|${raw.query}`).toBe(true);
       const codes = raw.query.match(codePattern) ?? [];
       const text = JSON.stringify(raw.output);
       for (const code of codes) expect(text, `${raw.transform}|${raw.query}`).toContain(code);

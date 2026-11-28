@@ -47,7 +47,7 @@ describe('voice keyword fallback honours the D-08 filter', () => {
   ] as const)('%s scope: every documents and document_chunks query filters is_current and status ready', async (_name, scope) => {
     const { admin, calls } = recordingAdmin(respond);
 
-    await voiceKeywordFallback({ query: 'show me the logo', scope, admin, signal, existing: [] });
+    await voiceKeywordFallback({ access: { mode: 'off' }, query: 'show me the logo', scope, admin, signal, existing: [] });
 
     const reads = calls.filter((call) => call.table === 'documents' || call.table === 'document_chunks');
     expect(reads.length).toBeGreaterThanOrEqual(3);
@@ -141,7 +141,7 @@ describe('document references honour the D-08 filter', () => {
   it('every documents and document_chunks query carries the filters', async () => {
     const { admin, calls } = filteringAdmin(seed());
 
-    await resolveDocumentRefs({ scope: personal, mentions: ['ready-handbook'], documentParts: [{ id: DOC_READY, name: 'ready-handbook.md' }], admin, signal });
+    await resolveDocumentRefs({ access: { mode: 'off' }, scope: personal, mentions: ['ready-handbook'], documentParts: [{ id: DOC_READY, name: 'ready-handbook.md' }], admin, signal });
 
     expect(calls.length).toBeGreaterThanOrEqual(4);
     for (const call of calls) expectCurrentFilters(call);
@@ -151,6 +151,7 @@ describe('document references honour the D-08 filter', () => {
     const { admin } = filteringAdmin(seed());
 
     const result = await resolveDocumentRefs({
+      access: { mode: 'off' },
       scope: personal,
       mentions: ['held-handbook'],
       documentParts: [{ id: DOC_QUARANTINED, name: 'held-handbook.md' }],
@@ -167,7 +168,7 @@ describe('document references honour the D-08 filter', () => {
   it('a superseded version referenced by id is not read either', async () => {
     const { admin } = filteringAdmin(seed());
 
-    const result = await resolveDocumentRefs({ scope: personal, mentions: [], documentParts: [{ id: DOC_OLD, name: 'old-handbook.md' }], admin, signal });
+    const result = await resolveDocumentRefs({ access: { mode: 'off' }, scope: personal, mentions: [], documentParts: [{ id: DOC_OLD, name: 'old-handbook.md' }], admin, signal });
 
     expect(result.usedDocuments).toEqual([]);
     expect(result.context).toBe('');
@@ -176,7 +177,7 @@ describe('document references honour the D-08 filter', () => {
   it('a ready document returns only its current ready chunks', async () => {
     const { admin } = filteringAdmin(seed());
 
-    const result = await resolveDocumentRefs({ scope: personal, mentions: [], documentParts: [{ id: DOC_READY, name: 'ready-handbook.md' }], admin, signal });
+    const result = await resolveDocumentRefs({ access: { mode: 'off' }, scope: personal, mentions: [], documentParts: [{ id: DOC_READY, name: 'ready-handbook.md' }], admin, signal });
 
     expect(result.usedDocuments.map((doc) => doc.id)).toEqual([DOC_READY]);
     expect(result.context).toContain('ready chunk');
@@ -188,7 +189,7 @@ describe('document references honour the D-08 filter', () => {
     tables.document_chunks = [{ id: 'chunk-held-only', document_id: DOC_READY, content: 'only a quarantined chunk', is_current: false, status: 'quarantined' }];
     const { admin, calls } = filteringAdmin(tables);
 
-    const result = await resolveDocumentRefs({ scope: personal, mentions: [], documentParts: [{ id: DOC_READY, name: 'ready-handbook.md' }], admin, signal });
+    const result = await resolveDocumentRefs({ access: { mode: 'off' }, scope: personal, mentions: [], documentParts: [{ id: DOC_READY, name: 'ready-handbook.md' }], admin, signal });
 
     expect(result.context).not.toContain('only a quarantined chunk');
     for (const call of calls) expectCurrentFilters(call);
@@ -199,7 +200,7 @@ describe('the overview documents lookup honours the D-08 filter', () => {
   it('filters is_current and status ready next to the id list', async () => {
     const { admin, calls } = recordingAdmin(() => ({ data: [], error: null }));
 
-    await fetchOverviewDocuments([{ chunk_id: 'c1', document_id: DOC_READY, content: 'x', similarity: 0.9 }], { admin, signal });
+    await fetchOverviewDocuments([{ chunk_id: 'c1', document_id: DOC_READY, content: 'x', similarity: 0.9 }], { access: { mode: 'off' }, admin, signal });
 
     expect(calls).toHaveLength(1);
     expect(opsOf(calls[0] as RecordedCall, 'in')).toEqual([['id', [DOC_READY]]]);
@@ -213,7 +214,7 @@ describe('by-id reads for already filtered candidates stay unfiltered', () => {
 
     await fetchAssemblyRows(
       [{ chunk_id: 'c1', document_id: DOC_READY, content: 'x', similarity: 0.9, metadata: null }],
-      { adminClient: admin, signal },
+      { access: { mode: 'off' }, adminClient: admin, signal },
     );
 
     expect(calls.map((call) => call.table).sort()).toEqual(['document_chunks', 'documents']);

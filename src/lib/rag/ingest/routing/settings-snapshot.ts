@@ -28,6 +28,8 @@ export interface BuildJobSettingsInput {
   languageSettings?: EffectiveLanguageInput;
   /** RAG_HIDDEN_TEXT_CHECK at enqueue (D-33): the worker checks the original at preflight when it is not off; absent, off. */
   hiddenTextCheck?: IngestCheckMode;
+  /** D-16: the access label a backfill batch applies to every document; absent leaves each label untouched (written only when set). */
+  accessKeys?: readonly string[] | null;
 }
 
 const DEFAULT_SWITCHES: EffectiveIngestSettingsInput['ingestConfig'] = { languageAwareIngest: 'off', tableHeaderRepeat: 'profile', tableRowSerialization: false };
@@ -46,6 +48,7 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
     ingestConfig = DEFAULT_SWITCHES,
     languageSettings = UNSET_LANGUAGES,
     hiddenTextCheck = 'off',
+    accessKeys = null,
   } = input;
   const effective = effectiveIngestSettings({ ingestConfig, profile, languageSettings });
 
@@ -85,6 +88,7 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
     carry_table_header: effective.carryTableHeader,
     row_serialization: effective.rowSerialization,
     hidden_text_check: hiddenTextCheck,
+    access_keys: accessKeys && accessKeys.length > 0 ? [...accessKeys] : null,
   };
 
   return omitDefaultFields(JobSettingsSnapshotSchema.parse(snapshot), JOB_SETTINGS_PHASE32_DEFAULTS);

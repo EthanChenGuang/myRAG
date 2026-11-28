@@ -1,6 +1,6 @@
 'use client';
 
-import { Link } from 'lucide-react';
+import { Link, Link2Off } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme-provider';
@@ -18,6 +18,28 @@ import { Button } from '@/components/ui/button';
 import { createClient as createBrowserClient } from '@/lib/supabase/client';
 import { useLanguage } from '@/components/providers/language-provider';
 import { PortalTooltip } from './portal-tooltip';
+import { accessGroupText } from './access-group-labels';
+
+export type ShareFailure = 'restricted' | 'generic';
+
+/** D-27: the share route refuses a chat that cites restricted documents with 403 `restricted_content`; chosen by status and code only. */
+export function shareFailureOf(status: number, body: unknown): ShareFailure {
+  if (status !== 403 || !body || typeof body !== 'object' || Array.isArray(body)) return 'generic';
+  return (body as Record<string, unknown>).error === 'restricted_content' ? 'restricted' : 'generic';
+}
+
+/** UI-SPEC 6.13: fixed sentences that name no document, group or number; no link and no retry. */
+export function ShareRefusal({ language }: { language: string }) {
+  return (
+    <div role="alert" className="flex items-start gap-2 text-sm text-gray-900 dark:text-white">
+      <Link2Off className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+      <div className="space-y-1">
+        <p>{accessGroupText('share.refused', language)}</p>
+        <p className="text-muted-foreground">{accessGroupText('share.refusedNext', language)}</p>
+      </div>
+    </div>
+  );
+}
 
 interface ShareChatButtonProps {
   className?: string;
@@ -28,13 +50,14 @@ export function ShareChatButton({ className }: ShareChatButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refused, setRefused] = useState(false);
   const { theme } = useTheme();
   const { currentChatId, chats } = useChatStore(
     useShallow((s) => ({ currentChatId: s.currentChatId, chats: s.chats }))
   );
   const { isGhostMode } = useGhostModeStore();
   const isDarkMode = theme === 'dark';
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   // Add useEffect to reset state when currentChatId changes
   useEffect(() => {
@@ -44,6 +67,7 @@ export function ShareChatButton({ className }: ShareChatButtonProps) {
     setShareUrl(null);
     setIsLoading(false);
     setError(null);
+    setRefused(false);
     // Optionally close the dialog if it was open for the previous chat
     // setIsOpen(false); // Uncomment if you want the dialog to close on chat switch
   }, [currentChatId]);
@@ -94,6 +118,11 @@ export function ShareChatButton({ className }: ShareChatButtonProps) {
       });
 
       if (!response.ok) {
+        const body: unknown = await response.json().catch(() => null);
+        if (shareFailureOf(response.status, body) === 'restricted') {
+          setRefused(true);
+          return;
+        }
         throw new Error('Failed to share chat');
       }
 
@@ -149,7 +178,9 @@ export function ShareChatButton({ className }: ShareChatButtonProps) {
             <div className="text-red-500 text-sm">{error}</div>
           )}
 
-          {!shareUrl ? (
+          {refused ? (
+            <ShareRefusal language={language} />
+          ) : !shareUrl ? (
             <Button
               onClick={handleShare}
               disabled={isLoading}

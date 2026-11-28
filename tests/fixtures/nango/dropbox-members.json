@@ -1,0 +1,46 @@
+{
+  "_note": "Synthetic responses in the shape of Dropbox sharing/list_file_members, list_file_members/continue, list_folder_members and list_folder_members/continue (SharedFileMembers / SharedFolderMembers: users, groups, invitees, cursor). No real account, group or address.",
+  "file_two_pages": [
+    {
+      "users": [
+        { "access_type": { ".tag": "owner" }, "user": { "account_id": "dbid:owner", "email": "owner@example.org", "display_name": "Owner", "same_team": true }, "permissions": [], "is_inherited": false }
+      ],
+      "groups": [
+        { "access_type": { ".tag": "viewer" }, "group": { "group_name": "Source group", "group_id": "g:source-group-1", "group_management_type": { ".tag": "user_managed" }, "group_type": { ".tag": "team" }, "is_member": true, "is_owner": false, "same_team": true }, "permissions": [], "is_inherited": true }
+      ],
+      "invitees": [],
+      "cursor": "cursor-file-2"
+    },
+    {
+      "users": [
+        { "access_type": { ".tag": "editor" }, "user": { "account_id": "dbid:member", "email": " Member-1@Example.org ", "display_name": "Member", "same_team": true }, "permissions": [], "is_inherited": false }
+      ],
+      "groups": [],
+      "invitees": [
+        { "access_type": { ".tag": "viewer" }, "invitee": { ".tag": "email", "email": "invitee-1@example.org" }, "permissions": [], "is_inherited": false }
+      ]
+    }
+  ],
+  "folder_one_page": [
+    {
+      "users": [
+        { "access_type": { ".tag": "viewer" }, "user": { "account_id": "dbid:member", "email": "member-1@example.org", "display_name": "Member", "same_team": true }, "permissions": [], "is_inherited": false }
+      ],
+      "groups": [
+        { "access_type": { ".tag": "viewer" }, "group": { "group_name": "Folder group", "group_id": "g:source-group-2", "group_management_type": { ".tag": "user_managed" }, "group_type": { ".tag": "team" }, "is_member": false, "is_owner": false, "same_team": true }, "permissions": [], "is_inherited": false }
+      ],
+      "invitees": []
+    }
+  ],
+  "invitee_without_address": [
+    {
+      "users": [],
+      "groups": [],
+      "invitees": [ { "access_type": { ".tag": "viewer" }, "invitee": { ".tag": "other" }, "permissions": [], "is_inherited": false } ]
+    }
+  ],
+  "missing_scope_error": {
+    "status": 401,
+    "data": { "error_summary": "missing_scope/..", "error": { ".tag": "missing_scope", "required_scope": "sharing.read" } }
+  }
+}

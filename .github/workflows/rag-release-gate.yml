@@ -37,7 +37,8 @@ jobs:
       checks: read
     env:
       GATE_SHA: ${{ inputs.sha || github.sha }}
-      HAS_JUDGE_KEYS: ${{ secrets.OPENROUTER_API_KEY != '' && secrets.OPENAI_API_KEY != '' }}
+      HAS_JUDGE_KEYS: ${{ secrets.OPENROUTER_API_KEY != '' && (secrets.OPENAI_API_KEY != '' || vars.RAG_EVAL_OPENAI_VIA != 'openai') }}
+      RAG_EVAL_OPENAI_VIA: ${{ vars.RAG_EVAL_OPENAI_VIA || (secrets.OPENAI_API_KEY == '' && 'openrouter' || 'openai') }}
       HAS_APP_RECORD: ${{ secrets.RAG_APP_URL != '' && secrets.RAG_ADMIN_BEARER != '' }}
       RESULT_FILE: eval/out/release/release-gate.json
     steps:

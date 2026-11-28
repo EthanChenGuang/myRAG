@@ -12,7 +12,8 @@ const CORPUS_DIR = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const TRACER_ITEM_ID = 'en-general-001';
 const OTHER_USER_ID = '00000000-0000-4000-8000-0000000000f2';
 const LANGUAGES = ['zh', 'en', 'it'] as const;
-const TIMEOUT_MS = 120_000;
+// Train 38: the multi-tenant tracer build took 122 s on CI with the 05.2.1-12 corpus documents.
+const TIMEOUT_MS = 240_000;
 
 interface GoldenLine {
   id: string;
@@ -81,8 +82,9 @@ describe('fixture corpus loaders', () => {
     expect(dump.status, dump.stderr).toBe(0);
     const python = JSON.parse(dump.stdout) as DumpDocument[];
 
-    // 37 documents plus the 109 Phase 4.2 documents of plan 04.2-37 (90 of them generated from three templates) and the six 05.3-15 documents.
-    expect(loaded.documents).toHaveLength(37 + 109 + 6);
+    // 37 documents plus the 109 Phase 4.2 documents of plan 04.2-37 (90 of them generated from three templates), the six 05.3-15
+    // documents and the six 05.2.1-12 documents.
+    expect(loaded.documents).toHaveLength(37 + 109 + 6 + 6);
     const fromTs = loaded.documents.map((doc) => ({
       relpath: doc.relpath,
       filename: doc.filename,
@@ -154,19 +156,31 @@ describe('multi-tenant retrieval', () => {
     const tracerGolden = path.join(dir, 'tracer.jsonl');
     fs.writeFileSync(tracerGolden, `${tracerLine}\n`);
 
-    const runFresh = async (outName: string, requestOptions?: { user_id: string }) => {
-      vi.resetModules();
-      const { runEval } = await import('../eval/harness/run-eval.mts');
-      return runEval({
+    // One multi-tenant fixture build serves both requests; the session allows the other user's scope so its request is answered.
+    vi.resetModules();
+    const { prepareInProcessEval, runEval } = await import('../eval/harness/run-eval.mts');
+    const session = await prepareInProcessEval({
+      corpusDir: CORPUS_DIR,
+      deploymentMode: 'multi-tenant',
+      allowedScopes: [`user:${OTHER_USER_ID}`],
+    });
+    const runOn = (outName: string, requestOptions?: { user_id: string }) =>
+      runEval({
         goldenPath: tracerGolden,
         corpusDir: CORPUS_DIR,
         outDir: path.join(dir, outName),
         deploymentMode: 'multi-tenant',
+        retainInProcess: session,
         ...(requestOptions ? { requestOptions } : {}),
       });
-    };
-    const own = await runFresh('own');
-    const other = await runFresh('other', { user_id: OTHER_USER_ID });
+    let own: RunEvalResult;
+    let other: RunEvalResult;
+    try {
+      own = await runOn('own');
+      other = await runOn('other', { user_id: OTHER_USER_ID });
+    } finally {
+      await session.close();
+    }
 
     expect(own.edgeErrors).toBe(0);
     expect(other.edgeErrors).toBe(0);

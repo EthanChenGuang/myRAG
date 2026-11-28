@@ -81,6 +81,7 @@
     <script src="rag-panels/languages.js"></script>
     <script src="rag-panels/ingest-impact.js"></script>
     <script src="rag-panels/upload-approvals.js"></script>
+    <script src="rag-panels/access-groups.js"></script>
     <script src="rag-panels/scope-tags.js"></script>
     <script src="rag-panels/versions-dates.js"></script>
     <script src="rag-panels/translation-targets.js"></script>
@@ -9128,7 +9129,7 @@
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
                                 <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG Administration</h2>
-                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, tags, versions and translation, the embedding and chunking profiles, identifier patterns, check settings before they apply, and follow monitoring alerts, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
+                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, access groups, tags, versions and translation, the embedding and chunking profiles, identifier patterns, check settings before they apply, and follow monitoring alerts, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
 
                                 <div class="grid gap-6">
                                     <section id="rag-administration-languages" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-languages-title">
@@ -9650,6 +9651,19 @@
                                                             <code class="font-mono text-xs break-all" translate="no">RAG_BGE_M3_SERVING</code>
                                                         </div>
                                                     </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_BGE_M3_VIA">
+                                                            <span class="label-text" data-rag-i18n="via.title">Hosted API route</span>
+                                                        </label>
+                                                        <select id="RAG_BGE_M3_VIA" name="RAG_BGE_M3_VIA" autocomplete="off" aria-describedby="rag-bge-m3-via-help" class="select select-bordered select-sm w-full">
+                                                            <option value="deepinfra" data-rag-i18n="RAG_BGE_M3_VIA.opt.deepinfra">DeepInfra, as today</option>
+                                                            <option value="openrouter" data-rag-i18n="RAG_BGE_M3_VIA.opt.openrouter">OpenRouter, pinned to DeepInfra</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-bge-m3-via-help"><span data-rag-i18n="via.help">OpenRouter sends the hosted calls with the OpenRouter key and records host openrouter on new vectors. Run npm run rag:embedding -- verify-route bge-m3 before using it with stored vectors.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_BGE_M3_VIA</code>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <!-- rag-phase032-settings:end -->
@@ -9809,6 +9823,17 @@
                                     </section>
                                     <!-- rag-upload-approvals:end -->
 
+                                    <!-- rag-access-groups:start -->
+                                    <section id="rag-administration-access" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-access-groups-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-access-groups-title" class="text-lg font-semibold mb-2 text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-access-groups-title>Access groups</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-access-groups-description>Limit documents to groups of members. A restricted document is found, quoted and cited only for members of its groups and for admins. Groups, Documents and Connector mapping follow the workspace chosen under Document Processing.</p>
+                                            <div data-access-groups-alert class="flex flex-col gap-2 mb-4 empty:mb-0"></div>
+                                            <div data-access-groups-content></div>
+                                            <div data-access-groups-status class="text-sm mt-4" role="status" aria-live="polite" tabindex="-1"></div>
+                                        </div>
+                                    </section>
+                                    <!-- rag-access-groups:end -->
                                     <!-- rag-security-events:start -->
                                     <section id="rag-administration-security-events" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-security-events-title">
                                         <div class="card-body">
@@ -11255,6 +11280,7 @@
                     this.hasChanges = false;
                     this.savedConfig = { ...this.config };
                     if (typeof window.gatesUiMountBanner === 'function') window.gatesUiMountBanner(this.savedConfig);
+                    document.dispatchEvent(new CustomEvent('rag:config-saved', { detail: { config: { ...this.savedConfig } } }));
 
                     // Update indicators to show success
                     if (desktopIndicator) {
@@ -14659,12 +14685,17 @@
             async refreshUploadPickerDefaults() {
                 if (typeof window.fetchUploadPickerDefault !== 'function') return;
                 const orgId = this.workspaces.isMultiTenant ? this.workspaces.currentSelection : null;
+                const accessOptions = window.AccessGroupsQueueControls
+                    ? window.AccessGroupsQueueControls.load(orgId).catch(() => null)
+                    : Promise.resolve(null);
                 const defaults = await window.fetchUploadPickerDefault(orgId);
+                this.uploadPicker.access = await accessOptions;
                 if (defaults.error) {
                     this.uploadPicker.enabled = false;
                     this.uploadPicker.tags = null;
                     this.uploadPicker.replaces = null;
                     this.uploadPicker.loaded = true;
+                    if (this.uploadPicker.access && this.uploadPicker.access.shown) this.updateQueueDisplay();
                     return;
                 }
                 this.uploadPicker.enabled = Boolean(defaults.enabled);
@@ -14917,9 +14948,9 @@
                 try {
                     let formData;
                     if (this.uploadPicker.enabled && typeof window.buildUploadForm === 'function') {
-                        formData = window.buildUploadForm(fileItem.file, fileItem.docType || this.uploadPicker.defaultType, true);
+                        formData = window.buildUploadForm(fileItem.file, fileItem.docType || this.uploadPicker.defaultType, true, fileItem, this.uploadPicker);
                     } else if (typeof window.buildUploadForm === 'function') {
-                        formData = window.buildUploadForm(fileItem.file, fileItem.docType, false);
+                        formData = window.buildUploadForm(fileItem.file, fileItem.docType, false, fileItem, this.uploadPicker);
                     } else {
                         formData = new FormData();
                         formData.append('file', fileItem.file);
@@ -15023,6 +15054,13 @@
                         if (queueControlError) {
                             if (errorMessage === 'unknown_scope_value') this.refreshUploadPickerDefaults();
                             errorMessage = queueControlError;
+                        }
+                        const accessControlError = window.AccessGroupsQueueControls
+                            ? window.AccessGroupsQueueControls.uploadErrorText(errorMessage, this.monitorUiLocale())
+                            : null;
+                        if (accessControlError) {
+                            this.refreshUploadPickerDefaults();
+                            errorMessage = accessControlError;
                         }
 
                         if (response.status === 401 && this.workspaces.isMultiTenant) {
@@ -15133,6 +15171,9 @@
                             organizationId: this.workspaces.isMultiTenant ? this.workspaces.currentSelection : null,
                         });
                     }
+                    if (window.AccessGroupsQueueControls) {
+                        window.AccessGroupsQueueControls.mount(queueItems, this.queue, this.uploadPicker);
+                    }
                 }
             }
 
@@ -15162,7 +15203,7 @@
                        </select>`
                     : '';
                 const picker = this.uploadPicker || {};
-                const extrasWanted = Boolean((picker.tags && picker.tags.enabled === true) || (picker.replaces && picker.replaces.enabled === true));
+                const extrasWanted = Boolean((picker.tags && picker.tags.enabled === true) || (picker.replaces && picker.replaces.enabled === true) || (picker.access && picker.access.shown === true));
                 const queueExtras = extrasWanted
                     ? `<div data-queue-extras="${this.escapeHtml(String(item.id))}" class="flex flex-wrap items-center gap-2 mt-2"></div>`
                     : '';

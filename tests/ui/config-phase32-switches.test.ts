@@ -11,7 +11,7 @@ const GROUPS: Record<string, string[]> = {
   scopes: ['RAG_SCOPE_TAGS', 'RAG_SCOPE_TAG_SUGGEST'],
   versions: ['RAG_SUPERSESSION_DETECT', 'RAG_EFFECTIVE_DATES', 'RAG_EFFECTIVE_DATE_LLM_EXTRACT'],
   translation: ['RAG_DOC_TRANSLATION', 'RAG_DOC_TRANSLATION_MODEL'],
-  bge: ['RAG_BGE_M3_SERVING'],
+  bge: ['RAG_BGE_M3_SERVING', 'RAG_BGE_M3_VIA'],
 };
 
 const SELECT_OPTIONS: Record<string, [string, string][]> = {
@@ -29,6 +29,7 @@ const SELECT_OPTIONS: Record<string, [string, string][]> = {
   RAG_EFFECTIVE_DATE_LLM_EXTRACT: [['false', 'Off'], ['true', 'On']],
   RAG_DOC_TRANSLATION: [['off', 'Off'], ['on', 'On']],
   RAG_BGE_M3_SERVING: [['hosted', 'Hosted API'], ['sidecar', 'Sidecar, in-house']],
+  RAG_BGE_M3_VIA: [['deepinfra', 'DeepInfra, as today'], ['openrouter', 'OpenRouter, pinned to DeepInfra']],
 };
 
 const LABELS: Record<string, string> = {
@@ -48,6 +49,7 @@ const LABELS: Record<string, string> = {
   RAG_DOC_TRANSLATION: 'Document translation',
   RAG_DOC_TRANSLATION_MODEL: 'Translation model',
   RAG_BGE_M3_SERVING: 'BGE-M3 serving',
+  RAG_BGE_M3_VIA: 'Hosted API route',
 };
 
 const AFFECTS_STORED = [
@@ -107,9 +109,9 @@ describe('Phase 3.2 settings block in the Config UI (UI-SPEC 6.3, 12.9)', () => 
     expect(order).toEqual(Object.keys(GROUPS));
   });
 
-  it('every one of the eighteen ids exists once, inside its group, with name equal to id', () => {
+  it('every one of the nineteen ids exists once, inside its group, with name equal to id', () => {
     const all = Object.values(GROUPS).flat();
-    expect(all).toHaveLength(18);
+    expect(all).toHaveLength(19);
     for (const [name, ids] of Object.entries(GROUPS)) {
       const markup = group(name);
       for (const id of ids) {

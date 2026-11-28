@@ -12,12 +12,18 @@ import {
   CORE_STAGES,
   countTokens,
   createCitationSession,
+  createCitationRecheck,
+  scheduleSecurityEvent,
+  scopeAccessFilter,
   createTraceCollector,
   awaitPreGenerationDelay,
   traceCacheState,
   type TraceCollector,
+  type TenantScope,
   detectLanguage,
   evalScope,
+  bodyNamesAccessGroups,
+  resolveAccessScope,
   cacheSourcesFromResult,
   finishTrace,
   groundednessEligibility,
@@ -420,6 +426,27 @@ function citationTraceFields(session: CitationSession | null): CitationTraceFiel
   return { citations: records.citations, citation_strategy: session.strategy, invalid_citations: records.invalidCitations };
 }
 
+/** D-26: the citation access recheck of the run's scope; a scope the check cannot read fails closed, so every citation is dropped. */
+function evalCitationRecheck(scope: TenantScope) {
+  try {
+    return createCitationRecheck(scope);
+  } catch {
+    return async (): Promise<ReadonlySet<string>> => {
+      throw new Error('[RAG Access] citation recheck unavailable');
+    };
+  }
+}
+
+/** D-09: the access mode the run retrieved under; null while access is off, so off traces carry no access block. */
+function evalAccessMode(scope: TenantScope): 'admin_all' | 'keys' | null {
+  try {
+    const mode = scopeAccessFilter(scope).mode;
+    return mode === 'off' ? null : mode;
+  } catch {
+    return null;
+  }
+}
+
 function errorDetail(error: unknown): string {
   const name = error instanceof Error ? error.name : 'Error';
   const status = (error as { statusCode?: unknown } | null)?.statusCode;
@@ -559,6 +586,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
+  // D-06: groups never come from the body; a claim is logged once here and then rejected by the strict run contract
+  const rawBody: unknown = await req.clone().json().catch(() => undefined);
+  if (bodyNamesAccessGroups(rawBody)) console.warn('[RAG Access] body_group_claim_ignored', { route: 'eval_run' });
+
   const parsed = await validateRequest(req, RagRunRequestSchema);
   if (!parsed.success) {
     return parsed.response;
@@ -577,7 +608,10 @@ export async function POST(req: NextRequest) {
     console.warn('[RAG Eval] scope refused:', { deploymentMode, hasOrganization: !!organizationId, hasUser: !!userId });
     return NextResponse.json({ error: scoped.error }, { status: scoped.status });
   }
-  const { scope } = scoped;
+  // A-15: the access identity is the user id the eval scope check admitted. A refusal keeps the scope unresolved, so retrieval fails
+  // closed with status error and the run answers its existing retrieval failure (D-10).
+  const resolvedAccess = await resolveAccessScope({ scope: scoped.scope, identity: { kind: 'eval', userId }, signal: req.signal });
+  const scope = resolvedAccess.ok ? resolvedAccess.scope : scoped.scope;
 
   let retrievalFilters: RetrievalFilterInput | undefined;
   if (options?.retrieval_filters) {
@@ -612,6 +646,7 @@ export async function POST(req: NextRequest) {
     const isGPTModel = generatorModel !== null && isGPTGeneratorModel(generatorModel);
     // D-05: an eval run has the citations capability only when it asks for it, and only when an answer is generated.
     const generationConfig = readGenerationConfig();
+    const citationRecheck = evalCitationRecheck(scope);
     const citationSession =
       generatorModel !== null && options?.citations === true
         ? createCitationSession({
@@ -621,6 +656,7 @@ export async function POST(req: NextRequest) {
             language: detectLanguage(query) ?? 'en',
             config: { ...generationConfig, citations: true },
             facts: EVAL_CLAUDE_FACTS,
+            ...(citationRecheck ? { recheck: citationRecheck } : {}),
           })
         : null;
     // Phase 5.2 D-07, D-64: the eval turn; with every 5.2 switch off it changes neither the prompt, the limit nor the answer
@@ -761,8 +797,9 @@ export async function POST(req: NextRequest) {
             });
             answer = generated.text;
             finishReason = generated.finishReason;
-            citationSession?.ingestFullText(answer);
+            await citationSession?.ingestFullText(answer);
           }
+          await citationSession?.settleAccessCheck();
         } catch (error: unknown) {
           const detail = errorDetail(error);
           console.error('[RAG Eval] generation failed:', detail);
@@ -788,6 +825,17 @@ export async function POST(req: NextRequest) {
       const refusedByModel = answerChain?.refused === true;
       const refused = serverRefused || refusedByModel;
       const citationFields = citationTraceFields(citationSession);
+      const accessCheck = citationSession?.accessCheck() ?? null;
+      if (accessCheck) collector.addAccessViolations(accessCheck.violations);
+      if (accessCheck && !accessCheck.failed && accessCheck.violations > 0) {
+        scheduleSecurityEvent(scope, {
+          event: 'citation_access_violation',
+          chunkIds: accessCheck.chunkIds,
+          documentIds: accessCheck.documentIds,
+          requestId: collector.traceId,
+        });
+      }
+      const accessMode = evalAccessMode(scope);
 
       let groundedness: AnswerGroundedness | null = null;
       if (generatorModel !== null && options?.groundedness === true) {
@@ -878,6 +926,7 @@ export async function POST(req: NextRequest) {
         query,
         query_transforms: queryTransformsOf(result),
         query_plan: result.queryPlan ?? null,
+        ...(result.searchesCounted !== undefined ? { searches_counted: result.searchesCounted } : {}),
         query_context: {
           is_financial_query: queryContext.isFinancialQuery,
           is_temporal_query: queryContext.isTemporalQuery,
@@ -935,6 +984,7 @@ export async function POST(req: NextRequest) {
         ...(answer !== null ? timingTraceFields(collector) : {}),
         ...(cacheState ? { cache: cacheState } : {}),
         ...answerRulesFields,
+        ...(accessMode ? { access: { mode: accessMode, violations: accessCheck?.violations ?? 0 } } : {}),
         stage_latency_ms: collector.toStageLatency(),
         stage_status: collector.toStageStatus(),
         effective_config: effectiveConfig,

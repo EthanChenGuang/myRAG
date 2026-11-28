@@ -13,6 +13,11 @@ export interface EnqueueReviewItemInput {
   documentIds?: readonly string[];
   detector?: string | null;
   traceId?: string | null;
+  /**
+   * Phase 4.3 (D-25, A-06): one access-key array per source document while access groups are on. Sent as p_access_sets (0984) only
+   * when given; the SQL merges it with the source documents' labels, so an access-off call is today's call.
+   */
+  accessSets?: readonly (readonly string[])[] | null;
 }
 
 type RpcResult = { data: unknown; error: unknown };
@@ -29,6 +34,24 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const DETECTOR_RE = /^[a-z][a-z0-9_]{0,31}$/;
 const TRACE_RE = /^[A-Za-z0-9._:-]{1,128}$/;
 const ERROR_CODE_RE = /^[A-Za-z0-9_]{1,32}$/;
+const ACCESS_KEY_RE = /^(all|[gu]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+const MAX_ACCESS_SETS = 200;
+const MAX_ACCESS_KEYS = 64;
+/** A group key nobody holds (same value as 04.3-14's UNKNOWN_ACCESS_SET): a set that cannot be sent as given is sent as this (fail closed). */
+const UNKNOWN_ACCESS_SET: readonly string[] = ['g:00000000-0000-0000-0000-000000000000'];
+
+function accessSetsArg(sets: EnqueueReviewItemInput['accessSets']): string[][] | null {
+  if (!Array.isArray(sets)) return null;
+  const out = new Map<string, string[]>();
+  for (const set of sets.slice(0, MAX_ACCESS_SETS)) {
+    const valid =
+      Array.isArray(set) && set.length > 0 && set.every((key: unknown) => typeof key === 'string' && ACCESS_KEY_RE.test(key));
+    const keys = valid ? [...new Set(set)].sort() : [];
+    const clean = keys.length > 0 && keys.length <= MAX_ACCESS_KEYS ? keys : [...UNKNOWN_ACCESS_SET];
+    out.set(JSON.stringify(clean), clean);
+  }
+  return [...out.values()];
+}
 
 function sortedIds(ids: readonly string[] | undefined): string[] {
   const out = new Set<string>();
@@ -80,11 +103,13 @@ export async function enqueueReviewItem(input: EnqueueReviewItemInput, deps: Enq
     if (typeof input.detector === 'string' && DETECTOR_RE.test(input.detector)) snapshot.detector = input.detector;
     if (typeof input.traceId === 'string' && TRACE_RE.test(input.traceId)) snapshot.trace_id = input.traceId;
 
+    const accessSets = accessSetsArg(input.accessSets);
     const { data, error } = await rpc(ENQUEUE_REVIEW_RPC, {
       p_tenant_key: input.tenantKey,
       p_reason: input.reason,
       p_source: { chunk_ids: chunkIds, document_ids: documentIds },
       p_snapshot: snapshot,
+      ...(accessSets ? { p_access_sets: accessSets } : {}),
     });
     if (error) return fail(errorCode(error));
     if (data === null || data === undefined) return null;
