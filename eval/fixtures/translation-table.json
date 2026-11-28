@@ -306,6 +306,60 @@
           "text": "合同 GV-MS-2024-0057 中延误巡检的赔偿总额上限是多少？"
         }
       ]
+    },
+    {
+      "question": "How often is the anemometer at Vessmar station calibrated?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "维斯玛站的风速仪多久校准一次？"
+        }
+      ]
+    },
+    {
+      "question": "How often is the rain gauge funnel at Vessmar station cleaned?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "维斯玛站的雨量计漏斗多久清洁一次？"
+        }
+      ]
+    },
+    {
+      "question": "Below what output voltage is a solar panel at Vessmar station replaced?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "太阳能板的输出电压低于多少伏时更换整块太阳能板？"
+        }
+      ]
+    },
+    {
+      "question": "Ogni quanti giorni si sostituisce il filtro del sensore di umidità della stazione Vessmar?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "维斯玛站的湿度传感器滤罩多久更换一次？"
+        }
+      ]
+    },
+    {
+      "question": "A che ora la stazione Vessmar carica i dati ogni giorno?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "维斯玛站每天几点上传数据？"
+        }
+      ]
+    },
+    {
+      "question": "Qual è la capacità della batteria di riserva della stazione Vessmar?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "维斯玛站的备用电池容量是多少？"
+        }
+      ]
     }
   ]
 }
