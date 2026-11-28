@@ -268,6 +268,14 @@ def _check_separation_report(path: Path | None) -> None:
         raise ScopeCalibrationError(f"the separation report {path} has no D-34 verdict")
 
 
+def _existing(path: Path) -> ScopeGateCalibration | None:
+    """The file already written, so a rerun with the same cells keeps its recorded_at and the drift check stays byte-stable."""
+    try:
+        return ScopeGateCalibration.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
 def run_scope_calibration(
     report_dir: Path,
     *,
@@ -313,6 +321,9 @@ def run_scope_calibration(
         rows, scored_profile, mode_targets(config), config=config, environment=resolved, noise_floor=noise.floor
     )
     recorded_at = datetime.fromisoformat(manifest.created_at.replace("Z", "+00:00"))
+    previous = _existing(Path(out_path))
+    if previous is not None and previous.source == resolved and previous.cells == cells:
+        recorded_at = previous.recorded_at
     calibration = ScopeGateCalibration(recorded_at=recorded_at, source=resolved, cells=cells)
     write_config_atomically(Path(out_path), calibration)
     return ScopeCalibrationResult(

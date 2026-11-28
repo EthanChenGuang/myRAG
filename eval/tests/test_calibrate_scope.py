@@ -232,6 +232,24 @@ def test_two_runs_over_one_report_write_identical_bytes_that_validate(tmp_path):
     assert result.profile_id == PROFILE
 
 
+def test_a_fresh_run_with_unchanged_cells_keeps_the_file_byte_identical(tmp_path):
+    run, golden = _world(tmp_path)
+    out = tmp_path / "out.json"
+    run_scope_calibration(run, out_path=out, golden_path=golden)
+    before = out.read_bytes()
+    manifest = json.loads((run / "run.json").read_text(encoding="utf-8"))
+    manifest["created_at"] = "2026-12-01T09:30:00Z"
+    (run / "run.json").write_text(json.dumps(manifest), encoding="utf-8")
+    run_scope_calibration(run, out_path=out, golden_path=golden)
+    assert out.read_bytes() == before
+    traces = [json.loads(line) for line in (run / "traces.jsonl").read_text(encoding="utf-8").splitlines() if line]
+    traces[0]["scope_gate"]["score"] = 0.44
+    (run / "traces.jsonl").write_text("".join(json.dumps(t) + "\n" for t in traces), encoding="utf-8")
+    run_scope_calibration(run, out_path=out, golden_path=golden)
+    changed = ScopeGateCalibration.model_validate_json(out.read_text(encoding="utf-8"))
+    assert changed.recorded_at.isoformat().startswith("2026-12-01T09:30:00")
+
+
 def test_items_without_a_scope_score_are_excluded_and_counted(tmp_path):
     run, golden = _world(tmp_path, skipped=3)
     result = run_scope_calibration(run, out_path=tmp_path / "out.json", golden_path=golden)
