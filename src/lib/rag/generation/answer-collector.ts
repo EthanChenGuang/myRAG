@@ -142,6 +142,7 @@ export function createAnswerCollector(input: AnswerCollectorInput): AnswerCollec
       language,
       aliases: input.aliases?.() ?? new Set<string>(),
       truncated: state.truncated(),
+      claimCheck: turn.config.claimCheck,
     });
     const factual = result.filter((record) => record.factual);
     const cited = factual.filter((record) => record.cited).length;
