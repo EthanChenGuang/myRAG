@@ -206,7 +206,7 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
   },
   {
     reason:
-      'Scope gate (0983, 06.2-15): a service-role rebuild of derived tenant-level centroids; its output is used only as an in/out scope score, never returned as content.',
+      'Scope gate (0983, 0987): returns per-kind group and chunk counts only. While access is enforced it averages only chunks whose chunk and document access_groups are {all}, so no restricted document reaches a centroid, group key or count (q62-scope-centroids-access).',
     functions: ['rag_scope_centroids_rebuild'],
   },
   {
