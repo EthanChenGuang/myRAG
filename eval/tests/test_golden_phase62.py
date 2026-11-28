@@ -51,6 +51,17 @@ def _is_q62(item) -> bool:
     return item.category in Q62_CATEGORIES or OFF_DOMAIN_TAG in item.tags
 
 
+# Plan 06.2-41 (XLG-07): items served from the isolated dominant-language tenant (zh at least 80% of its documents).
+DOMINANT_TAG = "dominant_language"
+DOMINANT_CORPUS_DIR = REPO_ROOT / "eval/fixtures/q62-dominant-corpus"
+DOMINANT_PAIRS = (("en", "zh"), ("it", "zh"))
+DOMINANT_LANGUAGE = "zh"
+
+
+def _is_dominant(item) -> bool:
+    return DOMINANT_TAG in item.tags
+
+
 @pytest.fixture(scope="module")
 def items():
     return load_golden(GOLDEN_PATH)
@@ -98,7 +109,7 @@ def test_no_version_compare_item_yet(q62):
 
 def test_every_item_carries_the_plan_tag_and_only_q62_items_do(items):
     for item in items:
-        assert (PLAN_TAG in item.tags) == _is_q62(item), item.id
+        assert (PLAN_TAG in item.tags) == (_is_q62(item) or _is_dominant(item)), item.id
 
 
 def test_ids_follow_language_category_number(q62):
@@ -235,3 +246,95 @@ def test_no_domain_example_words(q62):
                 assert not re.search(rf"\b{re.escape(word)}\b", text), (item.id, word)
             else:
                 assert word not in text, (item.id, word)
+
+
+# --- Plan 06.2-41: the dominant-language tenant items ---
+
+
+@pytest.fixture(scope="module")
+def dominant(items):
+    return [item for item in items if _is_dominant(item)]
+
+
+@pytest.fixture(scope="module")
+def dominant_documents():
+    return {doc.filename: doc for doc in load_corpus(DOMINANT_CORPUS_DIR)}
+
+
+def test_dominant_items_reach_their_minimums(dominant):
+    pairs = collections.Counter(
+        (item.language, item.evidence_language) for item in dominant if item.category == "cross_lingual"
+    )
+    for pair in DOMINANT_PAIRS:
+        assert pairs[pair] >= 3, pair
+    controls = [item for item in dominant if item.language == DOMINANT_LANGUAGE and item.evidence_language is None]
+    assert len(controls) >= 2
+    assert len(dominant) == sum(pairs.values()) + len(controls)
+
+
+def test_dominant_items_are_tagged_approved_and_not_q62(dominant):
+    for item in dominant:
+        assert PLAN_TAG in item.tags and not _is_q62(item), item.id
+        assert item.provenance == "synthetic_fixture" and item.review_status == "approved" and item.answerable, item.id
+
+
+def test_dominant_drafted_items_wait_for_native_review(dominant):
+    for item in dominant:
+        if item.language in DRAFTED_LANGUAGES:
+            assert item.native_review is not None, item.id
+            assert (item.native_review.origin, item.native_review.status) == ("llm_drafted", "pending"), item.id
+        else:
+            assert item.native_review is None, item.id
+
+
+def test_dominant_split_entries_follow_the_hash_rule_and_no_document_spans_two_splits(dominant):
+    assignments = load_manifest(SPLIT_MANIFEST_PATH)
+    splits_by_document = collections.defaultdict(set)
+    for item in dominant:
+        assert assignments.get(item.id) == item.split == assign_split(item.id), item.id
+        for span in item.gold_evidence:
+            splits_by_document[span.document].add(item.split)
+    for document, splits in splits_by_document.items():
+        assert len(splits) == 1, document
+
+
+def test_dominant_gold_spans_lie_in_a_zh_chunk_of_the_dominant_corpus(dominant, dominant_documents):
+    for item in dominant:
+        assert item.gold_evidence, item.id
+        for span in item.gold_evidence:
+            assert span.document in dominant_documents, (item.id, span.document)
+            doc = dominant_documents[span.document]
+            assert doc.language == DOMINANT_LANGUAGE, (item.id, span.document)
+            assert any(chunk_matches_span(span.document, chunk.text, span) for chunk in doc.chunks), (item.id, span.quote)
+
+
+def test_dominant_cross_language_items_have_a_zh_translation_script_and_controls_none(dominant, entries):
+    for item in dominant:
+        scripted = entries[("translate", _normalize_query(item.question))]
+        if item.language == DOMINANT_LANGUAGE:
+            assert not scripted, item.id
+            continue
+        targets = [entry for entry in scripted if entry["output"]["target_language"] == DOMINANT_LANGUAGE]
+        assert len(targets) == 1, item.id
+        assert targets[0]["output"]["text"].strip(), item.id
+
+
+def test_dominant_corpus_is_dominated_by_zh(dominant_documents):
+    counts = collections.Counter(doc.language for doc in dominant_documents.values())
+    total = sum(counts.values())
+    assert total >= 10
+    assert counts["zh"] / total >= 0.8
+    for language in ("en", "it"):
+        assert 0 < counts[language] / total <= 0.2, language
+
+
+def test_dominant_items_and_documents_have_no_domain_example_words(dominant, dominant_documents):
+    texts = [(item.id, json.dumps(item.model_dump(mode="json"), ensure_ascii=False)) for item in dominant]
+    texts += [(name, doc.content) for name, doc in dominant_documents.items()]
+    for label, raw in texts:
+        text = raw.casefold()
+        for word in DOMAIN_WORDS:
+            if word.isascii():
+                assert not re.search(rf"\b{re.escape(word)}\b", text), (label, word)
+            else:
+                assert word not in text, (label, word)

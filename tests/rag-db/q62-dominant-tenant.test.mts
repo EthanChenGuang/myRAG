@@ -352,3 +352,52 @@ describe('R8 fires on the dominant-language tenant (v2, query layer on)', () => 
     }
   });
 });
+
+describe('R8 smoke over the committed dominant_language items (Task 3)', () => {
+  let tmp: string;
+  let committed: string[];
+
+  before(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'q62-dominant-committed-'));
+    committed = lines(PRECHUNKED_GOLDEN).filter(isDominantLine);
+  });
+
+  after(() => {
+    if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  /** Per pair, the committed items on which R8 fired and translate produced a zh variant; zero for a pair fails. */
+  function assertTranslatedPerPair(traces: Map<string, TraceLine & { query_plan: { variants?: Array<{ kind: string; language: string }> } | null }>, label: string) {
+    const fired = new Map<string, number>();
+    for (const line of committed) {
+      const item = JSON.parse(line) as { id: string; language: string; evidence_language: string | null };
+      const trace = traces.get(item.id);
+      assertFromDominantTenant(trace, item.id);
+      const r8 = trace?.query_plan?.gate.reasons.includes('R8_LANGUAGE_MISMATCH') ?? false;
+      if (item.evidence_language === null) {
+        assert.equal(r8, false, `${label} ${item.id}: a zh control raises no R8`);
+        continue;
+      }
+      const translated = (trace?.query_plan?.variants ?? []).some((variant) => variant.kind === 'translated' && variant.language === 'zh');
+      if (r8 && translated) fired.set(`${item.language}->zh`, (fired.get(`${item.language}->zh`) ?? 0) + 1);
+    }
+    for (const pair of ['en->zh', 'it->zh']) assert.ok((fired.get(pair) ?? 0) > 0, `${label}: R8 and a zh translation on at least one ${pair} item`);
+  }
+
+  test('at least 3 items per pair and 2 zh controls are committed', () => {
+    const parsed = committed.map((line) => JSON.parse(line) as { language: string; evidence_language: string | null });
+    assert.ok(parsed.filter((item) => item.language === 'en' && item.evidence_language === 'zh').length >= 3);
+    assert.ok(parsed.filter((item) => item.language === 'it' && item.evidence_language === 'zh').length >= 3);
+    assert.ok(parsed.filter((item) => item.language === 'zh' && item.evidence_language === null).length >= 2);
+  });
+
+  test('text entry with the query layer on: R8 fires and translate yields a zh variant for each pair', () => {
+    const run = runSmoke(writeGolden(tmp, 'text.jsonl', committed), path.join(tmp, 'text'), ['--run-config', LAYER_ON]);
+    assertTranslatedPerPair(run.traces as never, 'text');
+  });
+
+  test('voice-translate arm: R8 fires and translate yields a zh variant for each pair', () => {
+    const run = runSmoke(writeGolden(tmp, 'voice.jsonl', committed), path.join(tmp, 'voice'), ['--run-config', VOICE_TRANSLATE]);
+    assertTranslatedPerPair(run.traces as never, 'voice');
+  });
+});
