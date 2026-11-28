@@ -1,0 +1,296 @@
+{
+  "schema_version": 1,
+  "phase": "04.4",
+  "variant": "local_rerank_stats",
+  "noise": "eval/config/noise.json",
+  "no_slice_drop_rule": {
+    "version": 2,
+    "min_gate_n": 10
+  },
+  "budgets": "eval/config/latency-budgets.json",
+  "baselines": {
+    "prechunked": "eval/baselines/fixture-baseline.json",
+    "ingest": "eval/baselines/fixture-ingest-baseline.json",
+    "voice": "eval/baselines/fixture-voice-baseline.json"
+  },
+  "off_env": {
+    "RAG_RERANK_LOCAL_STATS": "pool"
+  },
+  "tenant_env": {
+    "RAG_RERANK_LOCAL_STATS": "tenant"
+  },
+  "runs": [
+    {
+      "name": "off-prechunked",
+      "base": null,
+      "fixture_mode": "prechunked",
+      "arm": "off"
+    },
+    {
+      "name": "off-ingest",
+      "base": null,
+      "fixture_mode": "ingest",
+      "arm": "off"
+    },
+    {
+      "name": "off-voice",
+      "base": "eval/config/runs/q62-voice-no-translate.json",
+      "fixture_mode": "prechunked",
+      "arm": "off"
+    },
+    {
+      "name": "v2-default-pool-prechunked",
+      "base": "eval/config/runs/v2-default.json",
+      "fixture_mode": "prechunked",
+      "arm": "pool"
+    },
+    {
+      "name": "v2-default-tenant-prechunked",
+      "base": "eval/config/runs/v2-default.json",
+      "fixture_mode": "prechunked",
+      "arm": "tenant"
+    },
+    {
+      "name": "v2-default-pool-ingest",
+      "base": "eval/config/runs/v2-default.json",
+      "fixture_mode": "ingest",
+      "arm": "pool"
+    },
+    {
+      "name": "v2-default-tenant-ingest",
+      "base": "eval/config/runs/v2-default.json",
+      "fixture_mode": "ingest",
+      "arm": "tenant"
+    },
+    {
+      "name": "v2-bm25-pool-prechunked",
+      "base": "eval/config/runs/v2-lexical-bm25-on.json",
+      "fixture_mode": "prechunked",
+      "arm": "pool"
+    },
+    {
+      "name": "v2-bm25-tenant-prechunked",
+      "base": "eval/config/runs/v2-lexical-bm25-on.json",
+      "fixture_mode": "prechunked",
+      "arm": "tenant"
+    },
+    {
+      "name": "v2-bm25-pool-ingest",
+      "base": "eval/config/runs/v2-lexical-bm25-on.json",
+      "fixture_mode": "ingest",
+      "arm": "pool"
+    },
+    {
+      "name": "v2-bm25-tenant-ingest",
+      "base": "eval/config/runs/v2-lexical-bm25-on.json",
+      "fixture_mode": "ingest",
+      "arm": "tenant"
+    },
+    {
+      "name": "voice-pool-prechunked",
+      "base": "eval/config/runs/q62-voice-no-translate.json",
+      "fixture_mode": "prechunked",
+      "arm": "pool",
+      "env": {
+        "RAG_RERANKER": "auto",
+        "COHERE_API_KEY": ""
+      }
+    },
+    {
+      "name": "voice-tenant-prechunked",
+      "base": "eval/config/runs/q62-voice-no-translate.json",
+      "fixture_mode": "prechunked",
+      "arm": "tenant",
+      "env": {
+        "RAG_RERANKER": "auto",
+        "COHERE_API_KEY": ""
+      }
+    }
+  ],
+  "gates": {
+    "off_identity": {
+      "decision": "D-57 (a)",
+      "description": "RAG_RERANK_LOCAL_STATS=pool, in both fixture modes and for the voice entry run: zero paired differences (retrieval and refusal) against the committed text, ingest and voice baselines, and the characterization command passes.",
+      "runs": [
+        {
+          "run": "off-prechunked",
+          "baseline": "prechunked"
+        },
+        {
+          "run": "off-ingest",
+          "baseline": "ingest"
+        },
+        {
+          "run": "off-voice",
+          "baseline": "voice"
+        }
+      ],
+      "commands": [
+        "characterization"
+      ]
+    },
+    "no_slice_drop": {
+      "decision": "D-57 (b)",
+      "description": "Each tenant arm against the same run configuration with pool, in both fixture modes and for voice: no overall, language or category slice with n at least min_gate_n beyond the noise band on Recall@5, Recall@10, MRR and the noise config's refusal metrics.",
+      "pairs": [
+        {
+          "run": "v2-default-tenant-prechunked",
+          "reference": "v2-default-pool-prechunked"
+        },
+        {
+          "run": "v2-default-tenant-ingest",
+          "reference": "v2-default-pool-ingest"
+        },
+        {
+          "run": "v2-bm25-tenant-prechunked",
+          "reference": "v2-bm25-pool-prechunked"
+        },
+        {
+          "run": "v2-bm25-tenant-ingest",
+          "reference": "v2-bm25-pool-ingest"
+        },
+        {
+          "run": "voice-tenant-prechunked",
+          "reference": "voice-pool-prechunked"
+        }
+      ]
+    },
+    "pool_independence": {
+      "decision": "D-57 (c)",
+      "description": "For the same golden items, the rerank order of the candidates common to the ts_rank_cd and the bm25 lexical arm, both under tenant statistics, read from each run's traces (rerank_score per candidate): zero strict order inversions among common candidates (pairs tied in either run are not orderings); at least one candidate pair must be compared, else the order was not measured.",
+      "pairs": [
+        {
+          "run": "v2-default-tenant-prechunked",
+          "reference": "v2-bm25-tenant-prechunked"
+        },
+        {
+          "run": "v2-default-tenant-ingest",
+          "reference": "v2-bm25-tenant-ingest"
+        }
+      ],
+      "max_inversions": 0,
+      "min_compared_pairs": 1,
+      "report_only_pairs": [
+        {
+          "run": "v2-default-pool-prechunked",
+          "reference": "v2-bm25-pool-prechunked"
+        },
+        {
+          "run": "v2-default-pool-ingest",
+          "reference": "v2-bm25-pool-ingest"
+        }
+      ]
+    },
+    "latency": {
+      "decision": "D-57 (d)",
+      "description": "Rerank stage p50 and p95 of every tenant arm within the stage budget of eval/config/latency-budgets.json (the stage budgets are p95 values): chat and embed for the eval-profile arms, voice for the voice arm.",
+      "stage": "rerank",
+      "runs": [
+        {
+          "run": "v2-default-tenant-prechunked",
+          "profiles": [
+            "chat",
+            "embed"
+          ]
+        },
+        {
+          "run": "v2-default-tenant-ingest",
+          "profiles": [
+            "chat",
+            "embed"
+          ]
+        },
+        {
+          "run": "v2-bm25-tenant-prechunked",
+          "profiles": [
+            "chat",
+            "embed"
+          ]
+        },
+        {
+          "run": "v2-bm25-tenant-ingest",
+          "profiles": [
+            "chat",
+            "embed"
+          ]
+        },
+        {
+          "run": "voice-tenant-prechunked",
+          "profiles": [
+            "voice"
+          ]
+        }
+      ]
+    },
+    "refusal": {
+      "decision": "D-57 (e)",
+      "description": "Overall correct refusal, false refusal and false answer rates of each tenant arm against its pool arm, per fixture mode and for voice: no worsening beyond the noise floor (a single reference run has spread 0).",
+      "pairs": [
+        {
+          "run": "v2-default-tenant-prechunked",
+          "reference": "v2-default-pool-prechunked"
+        },
+        {
+          "run": "v2-default-tenant-ingest",
+          "reference": "v2-default-pool-ingest"
+        },
+        {
+          "run": "v2-bm25-tenant-prechunked",
+          "reference": "v2-bm25-pool-prechunked"
+        },
+        {
+          "run": "v2-bm25-tenant-ingest",
+          "reference": "v2-bm25-pool-ingest"
+        },
+        {
+          "run": "voice-tenant-prechunked",
+          "reference": "voice-pool-prechunked"
+        }
+      ],
+      "metrics": {
+        "correct_refusal_rate": "higher",
+        "false_refusal_rate": "lower",
+        "false_answer_rate": "lower"
+      }
+    }
+  },
+  "report_only_items": [
+    {
+      "run": "v2-bm25-tenant-ingest",
+      "reference": "v2-default-tenant-ingest",
+      "item_id": "en-scanned-001",
+      "note": "The Phase 4.4 scanned offender (decision 3A) under tenant statistics: first hit rank in the bm25 arm and the default arm, ingest. Reported, not a gate."
+    },
+    {
+      "run": "v2-bm25-pool-ingest",
+      "reference": "v2-default-pool-ingest",
+      "item_id": "en-scanned-001",
+      "note": "The same item under pool statistics, for comparison. Reported, not a gate."
+    }
+  ],
+  "commands": {
+    "characterization": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/rag/characterize-chat.test.ts",
+      "tests/rag/characterize-chat-overview.test.ts",
+      "tests/rag/characterize-embed.test.ts",
+      "tests/rag/characterize-voice.test.ts",
+      "tests/chat-strict.test.ts",
+      "tests/chat-websearch.test.ts",
+      "tests/chat-source-images.test.ts",
+      "tests/rag/v2/search-lexical-scoring.test.ts",
+      "tests/rag/lexical-stats-hooks.test.ts",
+      "tests/rag/rerank/local-bm25-stats.test.ts",
+      "tests/rag/v2/rank-local-stats.test.ts"
+    ]
+  },
+  "notes": [
+    "Pre-registered by plan 04.4-22 before any tenant-mode eval run was made or looked at (D-37 of Phase 4.2, D-57); the gate run checks that the commit adding this file is an ancestor of HEAD and that the file is unchanged since.",
+    "Outcome rule, fixed in advance (D-57): every gate passes: the decision record says 'gates PASS, owner decision pending' and work stops; any gate fails: the record lists the failing cells as measured and work stops. No retry with other bands, parameters, items or runs. The default RAG_RERANK_LOCAL_STATS=pool is not changed in either case; a change needs the owner's signature, its own plan through the config sync, recalibrated refusal cells for bm25-v3-tenant and the ship check once the gate population is real.",
+    "Noise bands, slice rule, budgets and the text and ingest baselines are those of eval/config/phase44-comparison.json (sha256 2a613e1eaa344bd5304e7fad0573f70832915fb2ddb33512691e2f18e4624f88), which is not edited; the voice baseline is the committed one of Phase 6.2 (D-16).",
+    "The runs may be produced one harness run at a time into <out>/harness/<run> and then gated with --reuse; every run is the same run the gate would start, made once.",
+    "No tool of this plan writes eval/config/retrieval-params.json, eval/config/refusal-thresholds.json or a refusal threshold."
+  ]
+}
