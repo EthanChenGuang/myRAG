@@ -21,9 +21,13 @@ import { defaultQueryContext, type TemporalQueryContext } from '../../query/temp
 import { emptyLegacyPool, evalFloorCalibration, floorsFromCalibration, legacyRuleFloor, similarityFloor } from '../../refusal/floor';
 import { loadThresholds } from '../../refusal/thresholds';
 import type { RefusalRecord } from '../../refusal/types';
+import { LOCAL_BM25_TENANT_MODEL } from '../../rerank/local-bm25';
+import { createTenantLocalStatsProvider } from '../../rerank/local-stats';
 import { describeReranker, resolveReranker } from '../../rerank/select';
+import type { RpcClient } from '../../backend/supabase-rpc';
+import { scopeKey } from '../../tenant/scope';
 import { rerankText } from '../../rerank/text';
-import { RERANK_TEXT_VERSION, type RerankScore, type RerankSpan } from '../../rerank/types';
+import { RERANK_TEXT_VERSION, type LocalStatsProvider, type LocalStatsSource, type RerankScore, type RerankSpan } from '../../rerank/types';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
 import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
@@ -64,6 +68,8 @@ export interface RankStagesInput {
    * D-31, D-51: the question's normalized identifiers (with the stored forms they resolved to) and the tenant's patterns; present only
    * while the identifier filter is on. filteredBy is set when every search leg was filtered to chunks carrying one of norms.
    */
+  /** 04.4-21: the request's chunking override, passed only under RAG_RERANK_LOCAL_STATS=tenant (the statistics read resolves profiles). */
+  chunkingOverride?: Record<string, string>;
   identifiers?: {
     askedNorms: readonly string[];
     patterns: readonly RegExp[];
@@ -305,6 +311,22 @@ function notRun(
   };
 }
 
+/** 04.4-21 D-55: the stage detail codes of RAG_RERANK_LOCAL_STATS=tenant; nothing is recorded in pool mode. */
+export const RERANK_STATS_TENANT = 'rerank_stats_tenant';
+export const RERANK_STATS_UNAVAILABLE = 'rerank_stats_unavailable';
+
+/** The tenant statistics provider of a local_bm25 call, only while tenant mode is effective; null when no client or scope is at hand. */
+function localStatsFor(ctx: RankStagesInput, hits: FusedHit[]): LocalStatsProvider | null {
+  const client = getRagDeps().adminClient() as RpcClient | null;
+  if (!client || !ctx.input.scope) return null;
+  return createTenantLocalStatsProvider({
+    client,
+    tenantKey: scopeKey(ctx.input.scope),
+    candidates: hits.map((row) => ({ docType: row.hit.docType, language: row.hit.language })),
+    ...(ctx.chunkingOverride ? { chunkingOverride: ctx.chunkingOverride } : {}),
+  });
+}
+
 function recordSkipped(collector: TraceCollector, hits: FusedHit[], reason: 'failed' | 'timeout', detail: string): void {
   const at = collector.now();
   collector.record({ name: 'rerank', status: 'skipped', reason, startedAt: at, endedAt: at, candidatesIn: hits.length, detail });
@@ -342,6 +364,9 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
     return notRun(hits, 'skipped', resolved.provider, resolved.model);
   }
 
+  const servedModel = (source: LocalStatsSource | undefined, model: string | undefined): string =>
+    source === 'tenant' && model === LOCAL_BM25_TENANT_MODEL ? model : reranker.model;
+
   const settings = v2ProfileSettings(profile, config);
   let timeoutMs = baseSpec.timeoutMs;
   if (settings.deadlineMs !== null) {
@@ -365,6 +390,10 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
     ? hits.map(() => rerankQuery)
     : queryByDocument(hits, ctx.variants ?? [{ text: input.query, language: queryLanguage, kind: 'original' as const }], input.query).map(forPool);
   const capturedFrom = ctx.dedupeCounts?.capped_from ?? hits.length;
+  const tenantStats = config.v2.rerankLocalStats === 'tenant' && reranker.id === 'local_bm25';
+  const localStats = tenantStats ? localStatsFor(ctx, hits) : null;
+  const statsCode = (source: LocalStatsSource | undefined): string | undefined =>
+    tenantStats ? (source === 'tenant' ? RERANK_STATS_TENANT : RERANK_STATS_UNAVAILABLE) : undefined;
 
   const outcome = await runStage(
     { ...baseSpec, timeoutMs },
@@ -379,6 +408,7 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
           timeoutMs,
           wantSpans,
           ...(reranker.id === 'local_bm25' ? { queryByDoc } : {}),
+          ...(localStats ? { localStats } : {}),
         },
       );
       if (response.scores.length !== hits.length) {
@@ -397,12 +427,18 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
         }
         return counts;
       },
-      detail: () => (resolved.auto ? `auto:${resolved.provider}` : `${reranker.id}:${reranker.model}`),
+      detail: (value) => {
+        const base = resolved.auto ? `auto:${resolved.provider}` : `${reranker.id}:${servedModel(value.localStats, value.model)}`;
+        const code = statsCode(value.localStats);
+        return code ? `${base};${code}` : base;
+      },
     },
   );
 
   if (outcome.skipped) return notRun(hits, 'skipped', resolved.provider, reranker.model);
 
+  // D-56: the served model names the statistics that scored the request; bm25-v3-tenant only when tenant statistics served.
+  const model = servedModel(outcome.value.localStats, outcome.value.model);
   const ordered = sortedByScore(hits, outcome.value.scores);
   const scoreByChunk = new Map<string, number>();
   const spansByChunk = new Map<string, RerankSpan[]>();
@@ -424,12 +460,12 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
       ran: true,
       status: 'ok',
       provider: resolved.provider,
-      model: reranker.model,
+      model,
       scoreByChunk,
       ...(spansByChunk.size > 0 ? { spansByChunk, prefixLengthByChunk } : {}),
     },
     gate: {
-      reranker: { id: reranker.id, model: reranker.model, scoreSemantics: reranker.scoreSemantics },
+      reranker: { id: reranker.id, model, scoreSemantics: reranker.scoreSemantics },
       status: 'ok',
       reranked: ordered.map((entry) => ({ score: entry.score, language: gateLanguage(entry.row.hit.language) })),
     },
