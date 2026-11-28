@@ -553,7 +553,9 @@ function createHandlers(
         ? null
         : String(model).includes('Qwen') || String(model).includes('qwen')
           ? 4096
-          : 1536;
+          : String(model).toLowerCase().includes('bge-m3')
+            ? 1024
+            : 1536;
     const size = voyageDims ?? qwenDims ?? 1536;
     calls.push({
       method: 'POST',
