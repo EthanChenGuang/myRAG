@@ -1043,3 +1043,6 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 - 01:11Z verify 6.1 DONE (verify/06.1 e0f8da1b) and archived. Result gaps_found: G-1 BLOCKER (FT-09/SC6), the probe prompt roles differ between train.py and finetune-slot.ts. Security SECURED 67/67.
   - Dispatched quick-batch session_01X342sia6BZLfkkQGQc5hDa on exec/quick-61-gaps (base main a0c5ca17): G-1, W1, W2, W3, W5, IW-1 (09xx migration), IW-3, IW-4. IW-2 deferred.
   - MORNING (owner): sign or accept 6.1 AR-1..AR-8. Live checkpoints 1-4 (06.1-LIVE-VERIFICATION.md) run after G-1.
+- 01:13Z 06.3-21 DONE (exec/06.3-21 64660a8a: purge mode, tombstones, reconcile retry/rescrub; no migration) and archived; queued for train 42. 06.2-41 SUMMARY is on exec/06.2-41 45f3c097, but its report hasn't arrived; check the session.
+- Dispatched 06.2-26 session_01X342smo3PfbabhK3S3tmfN and 06.2-29 session_01X342smFXZX1oiyaXdLTMBZ (base t41 + t39 + 06.2-41), and 06.3-28 session_01X342sk7cnF9bUULYXXxMEB (base 06.3-21).
+- Told t41 to take fix/empty-reply-dup-collapse (debug doc status resolved).
