@@ -1,0 +1,499 @@
+{
+  "noise_floor": 0.02,
+  "noise_k": 3.0,
+  "notes": [
+    "Fixture corpus only: the harness runs the eval profile with the six Phase 5.3 switches at their defaults; the monitor, sample, drift and config-gate paths never run on it. The defaults-equal test tests/rag-e2e/defaults-equal-phase53.test.mts covers the entry points, the empty 0960-0979 tables and the 404 routes.",
+    "Every switch compared here defaults to off in src/lib/env.ts; the on runs set them for the app under test only.",
+    "Phase 5.3 (D-60 step 10): off sets every Phase 5.3 switch to its default and must equal the committed fixture baselines, paired differences all zero; no Phase 5.2 closing report exists, so this mirrors the Phase 5.1.1 closing comparison (eval/reports/phase-05.1.1/comparison.json) with the same command and checks. The characterization command holds the off-state chat, embed, voice, strict, webSearch and source_images tests.",
+    "RAG_MONITOR_WEBHOOK_SECRET is not set: a schema-2 spec refuses any credential-like name, and unset is its default.",
+    "latency_budget: every stage p95 with a chat budget in eval/config/latency-budgets.json and the retrieval total p95 stay within budget."
+  ],
+  "passed": true,
+  "phase": "05.3",
+  "runs": [
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "paired_all_zero",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "characterization",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "analyze.p95_ms": 1.0,
+            "assemble.p95_ms": 1.0,
+            "embed.p95_ms": 6.0,
+            "generation.p95_ms": 2.0,
+            "legacy_rank.p95_ms": 0.0,
+            "post_filter.p95_ms": 7.0,
+            "retrieval_total.p95_ms": 36.0,
+            "search.p95_ms": 27.0
+          },
+          "name": "latency_budget",
+          "passed": true
+        }
+      ],
+      "citation_coverage": null,
+      "fixture_mode": "prechunked",
+      "harness_flags": [],
+      "injection": {
+        "attack_success_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "config_label": "all_off",
+        "exposure_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "false_positive_rate": {},
+        "gate": "report_only",
+        "items": 30,
+        "rules_false_positive_count": 0
+      },
+      "invalid_citation_rate": null,
+      "name": "off-prechunked",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 48,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 48,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 236,
+          "value": 0.23728813559322035
+        },
+        "false_refusal_upper_95": 0.287302096849407,
+        "identifier_precision": {
+          "n": 1,
+          "value": 0.0
+        },
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.4444444444444444
+        },
+        "k_zero": {
+          "n": 236,
+          "value": 55.0
+        },
+        "mrr": {
+          "n": 236,
+          "value": 0.6479519774011299
+        },
+        "ndcg_at_context_k": {
+          "n": 236,
+          "value": 0.656207602514886
+        },
+        "near_miss_leakage": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 236,
+          "value": 0.684322033898305
+        },
+        "recall_at_5": {
+          "n": 236,
+          "value": 0.684322033898305
+        },
+        "topk_redundancy": {
+          "n": 208,
+          "value": 0.5797596153846154
+        }
+      },
+      "passed": true,
+      "run_config_hash": "6bcde179f3d817f47f76696b23550353e813d2d295392ae5eda55bd56204529a",
+      "switches": {
+        "RAG_CONFIG_GATE": "off",
+        "RAG_CONFIG_GATE_LIVE": "false",
+        "RAG_MONITOR": "false",
+        "RAG_MONITOR_WEBHOOK_URL": "",
+        "RAG_REPRESENTATIVE_SAMPLE": "false"
+      }
+    },
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "paired_all_zero",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "characterization",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "analyze.p95_ms": 1.0,
+            "assemble.p95_ms": 1.0,
+            "embed.p95_ms": 5.0,
+            "exact_id_lookup.p95_ms": 23.0,
+            "generation.p95_ms": 1.0,
+            "legacy_rank.p95_ms": 0.0,
+            "post_filter.p95_ms": 5.0,
+            "retrieval_total.p95_ms": 55.0,
+            "search.p95_ms": 28.0
+          },
+          "name": "latency_budget",
+          "passed": true
+        }
+      ],
+      "citation_coverage": null,
+      "fixture_mode": "ingest",
+      "harness_flags": [],
+      "injection": {
+        "attack_success_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "config_label": "all_off",
+        "exposure_rate": {
+          "category:injection": {
+            "n": 12,
+            "value": 1.0
+          },
+          "category:injection_evasive": {
+            "n": 18,
+            "value": 1.0
+          },
+          "language:en": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:it": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language:zh": {
+            "n": 10,
+            "value": 1.0
+          },
+          "language_category:en:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:en:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:it:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:it:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_category:zh:injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_category:zh:injection_evasive": {
+            "n": 6,
+            "value": 1.0
+          },
+          "language_tag:en:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:it:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "language_tag:zh:link_injection": {
+            "n": 4,
+            "value": 1.0
+          },
+          "overall": {
+            "n": 30,
+            "value": 1.0
+          },
+          "tag:link_injection": {
+            "n": 12,
+            "value": 1.0
+          }
+        },
+        "false_positive_rate": {},
+        "gate": "report_only",
+        "items": 30,
+        "rules_false_positive_count": 0
+      },
+      "invalid_citation_rate": null,
+      "name": "off-ingest",
+      "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "correct_refusal_rate": {
+          "n": 62,
+          "value": 1.0
+        },
+        "false_answer_rate": {
+          "n": 62,
+          "value": 0.0
+        },
+        "false_refusal_rate": {
+          "n": 328,
+          "value": 0.19207317073170732
+        },
+        "false_refusal_upper_95": 0.23140443131567232,
+        "intent_coverage": {
+          "n": 9,
+          "value": 0.4444444444444444
+        },
+        "k_zero": {
+          "n": 328,
+          "value": 62.0
+        },
+        "mrr": {
+          "n": 328,
+          "value": 0.651155501003062
+        },
+        "named_document_recall": {
+          "n": 18,
+          "value": 0.1111111111111111
+        },
+        "ndcg_at_context_k": {
+          "n": 328,
+          "value": 0.6666166151209697
+        },
+        "recall_at_10": {
+          "n": 328,
+          "value": 0.725609756097561
+        },
+        "recall_at_5": {
+          "n": 328,
+          "value": 0.7195121951219512
+        },
+        "topk_redundancy": {
+          "n": 299,
+          "value": 0.4682706089896726
+        },
+        "variant_accuracy": {
+          "n": 13,
+          "value": 0.6153846153846154
+        },
+        "wrong_document_at_1": {
+          "n": 2,
+          "value": 0.0
+        }
+      },
+      "passed": true,
+      "run_config_hash": "225b3d08f72ee98deba3898ea53020542e14801c271d79f94d01f378622b939d",
+      "switches": {
+        "RAG_CONFIG_GATE": "off",
+        "RAG_CONFIG_GATE_LIVE": "false",
+        "RAG_MONITOR": "false",
+        "RAG_MONITOR_WEBHOOK_URL": "",
+        "RAG_REPRESENTATIVE_SAMPLE": "false"
+      }
+    }
+  ],
+  "schema_version": 2
+}

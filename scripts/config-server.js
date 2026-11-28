@@ -810,6 +810,13 @@ ${fullValues.RAG_PARSE_POLL_BUDGET_MS !== undefined ? `RAG_PARSE_POLL_BUDGET_MS=
 ${fullValues.RAG_DOC_TYPE_LLM_DETECT !== undefined ? `RAG_DOC_TYPE_LLM_DETECT=${fullValues.RAG_DOC_TYPE_LLM_DETECT}` : 'RAG_DOC_TYPE_LLM_DETECT=false'}
 ${fullValues.RAG_INVOICE_LLM_EXTRACT !== undefined ? `RAG_INVOICE_LLM_EXTRACT=${fullValues.RAG_INVOICE_LLM_EXTRACT}` : 'RAG_INVOICE_LLM_EXTRACT=false'}
 ${fullValues.RAG_EXACT_ID_LOOKUP !== undefined ? `RAG_EXACT_ID_LOOKUP=${fullValues.RAG_EXACT_ID_LOOKUP}` : 'RAG_EXACT_ID_LOOKUP=false'}
+${fullValues.RAG_SOURCE_RECHECK !== undefined ? `RAG_SOURCE_RECHECK=${fullValues.RAG_SOURCE_RECHECK}` : 'RAG_SOURCE_RECHECK=false'}
+${fullValues.RAG_SOURCE_RECONCILE_INTERVAL_DAYS !== undefined ? `RAG_SOURCE_RECONCILE_INTERVAL_DAYS=${fullValues.RAG_SOURCE_RECONCILE_INTERVAL_DAYS}` : 'RAG_SOURCE_RECONCILE_INTERVAL_DAYS=7'}
+${fullValues.RAG_SOURCE_RECONCILE_MAX_AGE_DAYS !== undefined ? `RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=${fullValues.RAG_SOURCE_RECONCILE_MAX_AGE_DAYS}` : 'RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=7'}
+${fullValues.RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE !== undefined ? `RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=${fullValues.RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE}` : 'RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=0.3'}
+${fullValues.NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED !== undefined ? `NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED=${fullValues.NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED}` : 'NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED=false'}
+${fullValues.NANGO_SHAREPOINT_INTEGRATION_KEY !== undefined ? `NANGO_SHAREPOINT_INTEGRATION_KEY=${fullValues.NANGO_SHAREPOINT_INTEGRATION_KEY}` : 'NANGO_SHAREPOINT_INTEGRATION_KEY='}
+${fullValues.NANGO_ONEDRIVE_INTEGRATION_KEY !== undefined ? `NANGO_ONEDRIVE_INTEGRATION_KEY=${fullValues.NANGO_ONEDRIVE_INTEGRATION_KEY}` : 'NANGO_ONEDRIVE_INTEGRATION_KEY='}
 ${fullValues.RAG_PDF_IMAGE_CHUNKS !== undefined ? `RAG_PDF_IMAGE_CHUNKS=${fullValues.RAG_PDF_IMAGE_CHUNKS}` : 'RAG_PDF_IMAGE_CHUNKS=false'}
 ${fullValues.RAG_INJECTION_SCAN !== undefined ? `RAG_INJECTION_SCAN=${fullValues.RAG_INJECTION_SCAN}` : 'RAG_INJECTION_SCAN=off'}
 ${fullValues.RAG_EMBEDDING_PROFILES !== undefined ? `RAG_EMBEDDING_PROFILES=${fullValues.RAG_EMBEDDING_PROFILES}` : 'RAG_EMBEDDING_PROFILES=off'}
@@ -1850,6 +1857,13 @@ RAG_PARSE_POLL_BUDGET_MS=${getEnvValue('RAG_PARSE_POLL_BUDGET_MS') || '45000'}
 RAG_DOC_TYPE_LLM_DETECT=${getEnvValue('RAG_DOC_TYPE_LLM_DETECT') || 'false'}
 RAG_INVOICE_LLM_EXTRACT=${getEnvValue('RAG_INVOICE_LLM_EXTRACT') || 'false'}
 RAG_EXACT_ID_LOOKUP=${getEnvValue('RAG_EXACT_ID_LOOKUP') || 'false'}
+RAG_SOURCE_RECHECK=${getEnvValue('RAG_SOURCE_RECHECK') || 'false'}
+RAG_SOURCE_RECONCILE_INTERVAL_DAYS=${getEnvValue('RAG_SOURCE_RECONCILE_INTERVAL_DAYS') || '7'}
+RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=${getEnvValue('RAG_SOURCE_RECONCILE_MAX_AGE_DAYS') || '7'}
+RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=${getEnvValue('RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE') || '0.3'}
+NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED=${getEnvValue('NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED') || 'false'}
+NANGO_SHAREPOINT_INTEGRATION_KEY=${getEnvValue('NANGO_SHAREPOINT_INTEGRATION_KEY') || ''}
+NANGO_ONEDRIVE_INTEGRATION_KEY=${getEnvValue('NANGO_ONEDRIVE_INTEGRATION_KEY') || ''}
 RAG_PDF_IMAGE_CHUNKS=${getEnvValue('RAG_PDF_IMAGE_CHUNKS') || 'false'}
 RAG_INJECTION_SCAN=${getEnvValue('RAG_INJECTION_SCAN') || 'off'}
 RAG_EMBEDDING_PROFILES=${getEnvValue('RAG_EMBEDDING_PROFILES') || 'off'}
@@ -2394,6 +2408,13 @@ RAG_PARSE_POLL_BUDGET_MS=${getEnvValue('RAG_PARSE_POLL_BUDGET_MS') || '45000'}
 RAG_DOC_TYPE_LLM_DETECT=${getEnvValue('RAG_DOC_TYPE_LLM_DETECT') || 'false'}
 RAG_INVOICE_LLM_EXTRACT=${getEnvValue('RAG_INVOICE_LLM_EXTRACT') || 'false'}
 RAG_EXACT_ID_LOOKUP=${getEnvValue('RAG_EXACT_ID_LOOKUP') || 'false'}
+RAG_SOURCE_RECHECK=${getEnvValue('RAG_SOURCE_RECHECK') || 'false'}
+RAG_SOURCE_RECONCILE_INTERVAL_DAYS=${getEnvValue('RAG_SOURCE_RECONCILE_INTERVAL_DAYS') || '7'}
+RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=${getEnvValue('RAG_SOURCE_RECONCILE_MAX_AGE_DAYS') || '7'}
+RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=${getEnvValue('RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE') || '0.3'}
+NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED=${getEnvValue('NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED') || 'false'}
+NANGO_SHAREPOINT_INTEGRATION_KEY=${getEnvValue('NANGO_SHAREPOINT_INTEGRATION_KEY') || ''}
+NANGO_ONEDRIVE_INTEGRATION_KEY=${getEnvValue('NANGO_ONEDRIVE_INTEGRATION_KEY') || ''}
 RAG_PDF_IMAGE_CHUNKS=${getEnvValue('RAG_PDF_IMAGE_CHUNKS') || 'false'}
 RAG_INJECTION_SCAN=${getEnvValue('RAG_INJECTION_SCAN') || 'off'}
 RAG_EMBEDDING_PROFILES=${getEnvValue('RAG_EMBEDDING_PROFILES') || 'off'}
@@ -3441,16 +3462,7 @@ function answerRulesModelFamily(modelId, families = readAnswerRulesFamilies()) {
 
 /** The default chat model of the configured provider: the entry marked isDefault, else the first. */
 function answerRulesDefaultModel(values) {
-  const provider = String(values.NEXT_PUBLIC_AI_PROVIDER || 'openrouter').trim().toLowerCase();
-  const raw = values[`NEXT_PUBLIC_${provider.toUpperCase()}_MODELS`] || ANSWER_RULES_DEFAULT_MODELS[provider] || '';
-  let list;
-  try {
-    list = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (!Array.isArray(list)) return null;
-  const models = list.filter((entry) => entry && typeof entry.id === 'string' && entry.id.trim() !== '');
+  const models = answerRulesListedModels(values);
   const chosen = models.find((entry) => entry.isDefault === true) || models[0];
   return chosen ? chosen.id : null;
 }
@@ -3526,6 +3538,70 @@ function answerRulesGuard(codes) {
   return { version: data.version, counts };
 }
 
+/** UI-SPEC 14.3: the calculation limits of config/rag/calc-limits.json (D-70), as counts only. */
+function answerRulesCalc() {
+  const data = readAnswerRulesFile(path.join('config', 'rag', 'calc-limits.json'), 'calc');
+  const positive = (value) => Number.isInteger(value) && value > 0;
+  if (!data || !positive(data.max_operands) || !positive(data.max_steps) || !positive(data.max_list_items)) {
+    throw new AnswerRulesSummaryError('answer_rules_calc_invalid', 'config/rag/calc-limits.json does not match the calculation limits contract');
+  }
+  return { limits: { operands: data.max_operands, steps: data.max_steps, items: data.max_list_items } };
+}
+
+/** The configured provider's model list: the .env.local value, else the default list; entries with an id only. */
+function answerRulesListedModels(values) {
+  const provider = String(values.NEXT_PUBLIC_AI_PROVIDER || 'openrouter').trim().toLowerCase();
+  const raw = values[`NEXT_PUBLIC_${provider.toUpperCase()}_MODELS`] || ANSWER_RULES_DEFAULT_MODELS[provider] || '';
+  let list;
+  try {
+    list = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  return Array.isArray(list) ? list.filter((entry) => entry && typeof entry.id === 'string' && entry.id.trim() !== '') : [];
+}
+
+const ANSWER_RULES_TOKENIZER_FAMILY = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+
+/** Mirrors modelFamily of src/lib/rag/context/model-window.ts: the provider prefix before the first slash, the calibration family. */
+function answerRulesTokenizerFamily(modelId) {
+  const id = String(modelId || '');
+  const slash = id.indexOf('/');
+  if (slash <= 0) return null;
+  const prefix = id.slice(0, slash);
+  return ANSWER_RULES_TOKENIZER_FAMILY.test(prefix) ? prefix : null;
+}
+
+/**
+ * UI-SPEC 14.3 (D-80, D-81): the count of listed models without a known context window, the default window, and the model
+ * families whose token estimate is measured or uses the default factor. Family names and counts only, never a factor value.
+ */
+function answerRulesBudget(values) {
+  const config = readAnswerRulesFile(path.join('config', 'rag', 'prompt-budget.json'), 'budget');
+  if (!config || !Number.isInteger(config.default_window) || config.default_window < 1) {
+    throw new AnswerRulesSummaryError('answer_rules_budget_invalid', 'config/rag/prompt-budget.json does not match the prompt budget contract');
+  }
+  const calibration = readAnswerRulesFile(path.join('eval', 'config', 'tokenizer-calibration.json'), 'calibration');
+  const cells = calibration && (calibration.families === undefined ? [] : calibration.families);
+  if (!Array.isArray(cells) || !cells.every((cell) => cell && typeof cell.family === 'string' && (cell.source === 'measured' || cell.source === 'default'))) {
+    throw new AnswerRulesSummaryError('answer_rules_calibration_invalid', 'eval/config/tokenizer-calibration.json does not match the calibration contract');
+  }
+  const models = answerRulesListedModels(values);
+  const unknownModels = models.filter((entry) => !(Number.isInteger(entry.contextLength) && entry.contextLength > 0)).length;
+  const measured = new Set(cells.filter((cell) => cell.source === 'measured').map((cell) => cell.family));
+  const defaulted = new Set(cells.filter((cell) => cell.source === 'default').map((cell) => cell.family));
+  for (const entry of models) {
+    const family = answerRulesTokenizerFamily(entry.id);
+    if (family !== null && !measured.has(family)) defaulted.add(family);
+  }
+  for (const family of measured) defaulted.delete(family);
+  return {
+    unknownModels,
+    defaultWindow: config.default_window,
+    families: { measured: [...measured].sort(), defaulted: [...defaulted].sort() },
+  };
+}
+
 /** UI-SPEC 8.1: the read-only blocks of the Answer rules card; named fields only, no threshold, metric, env value or rule id. */
 function summarizeAnswerRules() {
   const registry = readAnswerRulesFile(path.join('config', 'rag', 'language-packs.json'), 'languages');
@@ -3549,6 +3625,8 @@ function summarizeAnswerRules() {
     allowlist: answerRulesAllowlist(values.RAG_OUTPUT_LINK_ALLOWLIST),
     rulesVersion: guard.version,
     ruleCounts: guard.counts,
+    calc: answerRulesCalc(),
+    budget: answerRulesBudget(values),
   };
 }
 
@@ -5112,4 +5190,4 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings, answerRulesModelFamily, buildRagPipelineManifest };
+module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings, answerRulesModelFamily, answerRulesTokenizerFamily, buildRagPipelineManifest };

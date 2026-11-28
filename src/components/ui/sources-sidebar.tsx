@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import { X, ExternalLink, FileText, Compass, Info, Clock, History, ChevronRight } from 'lucide-react';
+import { X, ExternalLink, FileText, FileX, Compass, Info, Clock, History, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme-provider';
@@ -190,6 +190,22 @@ export function SourceAlsoIn({ view, language, className }: { view: SourceAlsoIn
   );
 }
 
+/** The dashed empty frame that stands where a withdrawn source's text was (UI-SPEC 6.9). */
+function WithdrawnFrame({ label }: { label: string }) {
+  return (
+    <p className="mt-2 flex items-start gap-2 rounded-lg border border-dashed border-gray-300 px-4 py-2 text-sm text-gray-700 dark:border-white/15 dark:text-gray-300">
+      <FileX aria-hidden="true" className="h-5 w-4 flex-shrink-0" />
+      <span className="min-w-0 break-words">{label}</span>
+    </p>
+  );
+}
+
+function withdrawnDate(value: string | null | undefined, language: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString(language);
+}
+
 export interface CitationSourceEntryProps {
   source: Source;
   language: string;
@@ -258,6 +274,9 @@ export function CitationSourceEntry({ source, language, focused = false, listHas
     citation.page !== null ? strings.pageLabel(citation.page) : null,
     citation.sectionPath && citation.sectionPath.length > 0 ? citation.sectionPath.join(' › ') : null,
   ].filter((part): part is string => Boolean(part));
+  const withdrawn = citation.withdrawn === true;
+  const title = withdrawn && !(source.title ?? '').trim() ? strings.sourceWithdrawn : source.title;
+  const date = withdrawn ? withdrawnDate(citation.withdrawnAt, language) : null;
 
   return (
     <div
@@ -265,6 +284,7 @@ export function CitationSourceEntry({ source, language, focused = false, listHas
       data-message-id={citation.messageId}
       data-document-id={source.documentId}
       data-focused={focused ? 'true' : undefined}
+      data-citation-withdrawn={withdrawn ? 'true' : undefined}
       className={cn(
         'scroll-mt-4 rounded-2xl bg-white/25 dark:bg-black/20 backdrop-blur-sm border p-5 transition-[box-shadow,border-color] duration-300 motion-reduce:transition-none',
         focused
@@ -275,21 +295,35 @@ export function CitationSourceEntry({ source, language, focused = false, listHas
       <div className="flex items-start gap-3">
         <span
           aria-hidden="true"
-          className="mt-0.5 flex h-5 min-w-5 flex-shrink-0 items-center justify-center rounded-full bg-[#FF6417]/15 px-1.5 text-xs font-semibold tabular-nums text-[#C24A0C] dark:bg-[#FF8A4D]/20 dark:text-[#FFB48A]"
+          className={cn(
+            'mt-0.5 flex h-5 min-w-5 flex-shrink-0 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums',
+            withdrawn
+              ? 'bg-gray-500/15 text-gray-700 dark:bg-white/10 dark:text-gray-300'
+              : 'bg-[#FF6417]/15 text-[#C24A0C] dark:bg-[#FF8A4D]/20 dark:text-[#FFB48A]',
+          )}
         >
           {citation.n}
         </span>
         <div className="min-w-0 flex-1">
-          <h4 className="break-words text-sm font-medium text-gray-900 dark:text-gray-100">{source.title}</h4>
+          <h4 className="break-words text-sm font-medium text-gray-900 dark:text-gray-100">{title}</h4>
           <CitationVersionLine citation={citation} uiLanguage={language} hideDate={versionView !== null} />
           {location.length > 0 && (
             <p className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">{location.join(' · ')}</p>
           )}
           {versionView && <SourceVersionTag view={versionView} language={language} />}
-          <blockquote className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-[#FF6417]/5 px-3 py-2 text-sm leading-relaxed text-gray-700 dark:bg-[#FF8A4D]/10 dark:text-gray-300">
-            {citation.quote}
-          </blockquote>
-          {citation.unavailable && versionView?.marker !== 'superseded' && (
+          {withdrawn ? (
+            <>
+              <WithdrawnFrame label={strings.sourceWithdrawn} />
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                {date ? `${strings.sourceWithdrawnDetail} ${strings.sourceWithdrawnOn(date)}` : strings.sourceWithdrawnDetail}
+              </p>
+            </>
+          ) : (
+            <blockquote className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-[#FF6417]/5 px-3 py-2 text-sm leading-relaxed text-gray-700 dark:bg-[#FF8A4D]/10 dark:text-gray-300">
+              {citation.quote}
+            </blockquote>
+          )}
+          {citation.unavailable && !withdrawn && versionView?.marker !== 'superseded' && (
             <p className="mt-3 flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300">
               <Info aria-hidden="true" className="mt-px h-3.5 w-3.5 flex-shrink-0" />
               <span>{strings.documentUpdatedOrRemoved}</span>
@@ -596,7 +630,8 @@ export function SourcesSidebar({
                     // Debug: Rendering source item
                     
                     // Determine if this source has a clickable URL
-                    const hasUrl = Boolean(source.url);
+                    const withdrawnSource = source.type === 'document' && source.withdrawn === true;
+                    const hasUrl = Boolean(source.url) && !withdrawnSource;
                     const versionView = sourceVersionView(source, listHasSuperseded);
                     const alsoInView = sourceAlsoInView(source);
                     
@@ -615,7 +650,9 @@ export function SourcesSidebar({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2">
                             <h3 className="font-medium text-sm line-clamp-2">
-                              {source.title || (source.documentId ? `Document ${source.documentId.substring(0, 8)}...` : 'Unknown Source')}
+                              {withdrawnSource && !(source.title ?? '').trim()
+                                ? qualityStrings.sourceWithdrawn
+                                : source.title || (source.documentId ? `Document ${source.documentId.substring(0, 8)}...` : 'Unknown Source')}
                               {source.explicitly_referenced && (
                                 <span className="ml-1 px-1 py-0.5 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-sm">
                                   Referenced
@@ -653,7 +690,9 @@ export function SourcesSidebar({
                               Uploaded: {new Date(source.uploadedAt).toLocaleDateString()}
                             </p>
                           )}
-                          {(source.snippet || source.content) && (
+                          {withdrawnSource ? (
+                            <WithdrawnFrame label={qualityStrings.sourceWithdrawn} />
+                          ) : (source.snippet || source.content) && (
                             <p className="text-sm text-gray-600 dark:text-gray-300 mt-2 line-clamp-3">
                               {source.snippet || source.content || "No content preview available"}
                             </p>
@@ -668,7 +707,7 @@ export function SourcesSidebar({
                     
                     // Wrap in a clickable element if it has a URL
                     return (
-                      <div key={`source-${index}-${source.documentId || source.url || index}-${source.favicon || 'noicon'}`} data-source-item data-source-type={source.type} data-source-id={source.documentId || source.url}>
+                      <div key={`source-${index}-${source.documentId || source.url || index}-${source.favicon || 'noicon'}`} data-source-item data-source-type={source.type} data-source-id={source.documentId || source.url} data-source-withdrawn={withdrawnSource ? 'true' : undefined}>
                         {hasUrl ? (
                           <a
                             href={source.url}

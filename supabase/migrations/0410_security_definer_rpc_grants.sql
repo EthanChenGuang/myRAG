@@ -810,6 +810,82 @@ BEGIN
     REVOKE ALL ON FUNCTION public.unshare_chat(uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.unshare_chat(uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_withdrawn_citation(jsonb, timestamptz)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_withdrawn_citation(jsonb, timestamptz) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_withdrawn_citation(jsonb, timestamptz) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_withdrawn_citations(jsonb, text[], timestamptz)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_withdrawn_citations(jsonb, text[], timestamptz) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_withdrawn_citations(jsonb, text[], timestamptz) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_withdrawn_document_refs(jsonb, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_withdrawn_document_refs(jsonb, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_withdrawn_document_refs(jsonb, text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_image_pattern(text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_image_pattern(text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_image_pattern(text, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_withdrawn_chat_messages(jsonb, text[], text, timestamptz)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_withdrawn_chat_messages(jsonb, text[], text, timestamptz) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_withdrawn_chat_messages(jsonb, text[], text, timestamptz) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_citation_leftover_count(jsonb, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_citation_leftover_count(jsonb, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_citation_leftover_count(jsonb, text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_chat_messages_leftover_count(jsonb, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_chat_messages_leftover_count(jsonb, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_chat_messages_leftover_count(jsonb, text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_chat_messages_reference(jsonb, text[], text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_chat_messages_reference(jsonb, text[], text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_chat_messages_reference(jsonb, text[], text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_scrub_answer_records(text, uuid, uuid[], timestamptz)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_scrub_answer_records(text, uuid, uuid[], timestamptz) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_scrub_answer_records(text, uuid, uuid[], timestamptz) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_scrub_chats(text, uuid, uuid[], timestamptz)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_scrub_chats(text, uuid, uuid[], timestamptz) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_scrub_chats(text, uuid, uuid[], timestamptz) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_citation_leftovers(text, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_citation_leftovers(text, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_citation_leftovers(text, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_audit_finish(uuid, jsonb, text[], jsonb, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_audit_finish(uuid, jsonb, text[], jsonb, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_audit_finish(uuid, jsonb, text[], jsonb, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_admin_target(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_admin_target(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_admin_target(uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_audit_list(uuid, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_audit_list(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_audit_list(uuid, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_audit_get(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_audit_get(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_audit_get(uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_audit_pending(integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_audit_pending(integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_audit_pending(integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_tombstone_exists(text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_tombstone_exists(text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_tombstone_exists(text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_lineage(text, uuid, jsonb, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_lineage(text, uuid, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_lineage(text, uuid, jsonb, jsonb) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_verify(text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_verify(text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_verify(text, uuid) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_table_rows_follow_document()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_table_rows_follow_document() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_table_rows_follow_document() TO service_role;
@@ -1014,6 +1090,24 @@ BEGIN
   IF to_regprocedure('public.rag_attribute_documents(text, jsonb, integer, text[], boolean)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_attribute_documents(text, jsonb, integer, text[], boolean) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_attribute_documents(text, jsonb, integer, text[], boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_source_recheck(text, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_source_recheck(text, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_source_recheck(text, uuid[]) TO service_role;
+  END IF;
+  -- Migration 0986: the tenant doc types with the access filter (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_tenant_doc_types(text, text[], boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_tenant_doc_types(text, text[], boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_tenant_doc_types(text, text[], boolean) TO service_role;
+  END IF;
+  -- 0988 (quick task, renumbered from 0986 in train 40): Phase 5.3 review-queue writers with access sets (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_review_items_enqueue(text, text, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_review_items_enqueue(text, text, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_review_items_enqueue(text, text, jsonb) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_review_items_enqueue_re_review(text, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_review_items_enqueue_re_review(text, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_review_items_enqueue_re_review(text, jsonb) TO service_role;
   END IF;
 END
 $service_role_only$;

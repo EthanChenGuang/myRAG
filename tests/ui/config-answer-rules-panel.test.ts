@@ -13,7 +13,11 @@ const ENDPOINT = '/api/config/answer-rules';
 let root: string;
 let server: http.Server;
 let port: number;
-let serverModule: { server: http.Server; answerRulesModelFamily: (id: string) => string | null };
+let serverModule: {
+  server: http.Server;
+  answerRulesModelFamily: (id: string) => string | null;
+  answerRulesTokenizerFamily: (id: string) => string | null;
+};
 
 interface Reply {
   status: number;
@@ -39,6 +43,9 @@ const DATA_FILES = [
   'config/rag/output-guard-rules.json',
   'config/rag/model-families.json',
   'config/rag/language-packs.json',
+  'config/rag/calc-limits.json',
+  'config/rag/prompt-budget.json',
+  'eval/config/tokenizer-calibration.json',
 ];
 const dataPath = (file: string) => path.join(root, file);
 const envPath = () => path.join(root, '.env.local');
@@ -85,7 +92,7 @@ beforeEach(() => {
 describe('GET /api/config/answer-rules endpoint (D-57, UI-SPEC 8.1)', () => {
   it('returns the named fields only', async () => {
     const body = await getSummary();
-    expect(Object.keys(body).sort()).toEqual(['allowlist', 'caps', 'floor', 'judgeLanguages', 'ruleCounts', 'rulesVersion', 'sameFamily']);
+    expect(Object.keys(body).sort()).toEqual(['allowlist', 'budget', 'calc', 'caps', 'floor', 'judgeLanguages', 'ruleCounts', 'rulesVersion', 'sameFamily']);
     expect(body.caps).toEqual([
       { mode: 'strict', limit: null, source: 'default' },
       { mode: 'balanced', limit: null, source: 'default' },
@@ -225,6 +232,68 @@ describe('GET /api/config/answer-rules endpoint (D-57, UI-SPEC 8.1)', () => {
     }
   });
 
+  it('reports the calculation limits from config/rag/calc-limits.json (UI-SPEC 14.3)', async () => {
+    const limits = JSON.parse(fs.readFileSync(dataPath('config/rag/calc-limits.json'), 'utf8'));
+    const body = await getSummary();
+    expect(body.calc).toEqual({ limits: { operands: limits.max_operands, steps: limits.max_steps, items: limits.max_list_items } });
+  });
+
+  it('counts the listed models without a context window and reports the default window (UI-SPEC 14.3)', async () => {
+    const budget = JSON.parse(fs.readFileSync(dataPath('config/rag/prompt-budget.json'), 'utf8'));
+    writeEnv([
+      `NEXT_PUBLIC_OPENROUTER_MODELS=${JSON.stringify([
+        { id: 'openai/gpt-5', contextLength: 400000 },
+        { id: 'qwen/qwen3-32b' },
+        { id: 'vendor/model-x', contextLength: 0 },
+        { id: 'anthropic/claude-sonnet-4.5', contextLength: 1000000, isDefault: true },
+      ])}`,
+    ]);
+    const body = (await getSummary()).budget as Record<string, unknown>;
+    expect(body.unknownModels).toBe(2);
+    expect(body.defaultWindow).toBe(budget.default_window);
+  });
+
+  it('counts the default model list of the provider when the env holds none', async () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'scripts/config-server.js'), 'utf8');
+    const listed = JSON.parse(/const DEFAULT_OPENROUTER_MODELS = '(.*)';/.exec(source)![1]!) as Array<{ contextLength?: number }>;
+    const expected = listed.filter((m) => !(Number.isInteger(m.contextLength) && m.contextLength! > 0)).length;
+    expect(((await getSummary()).budget as { unknownModels: number }).unknownModels).toBe(expected);
+  });
+
+  it('derives tokenizer families like modelFamily() of model-window.ts', async () => {
+    const { modelFamily } = await import('@/lib/rag/context/model-window');
+    for (const id of ['anthropic/claude-sonnet-4.5', 'openai/gpt-5', 'meta-llama/llama-4-maverick', 'no-slash', '/leading', 'UPPER/x', 'a.b_c-d/m', '']) {
+      expect(serverModule.answerRulesTokenizerFamily(id), id).toBe(modelFamily(id));
+    }
+  });
+
+  it('lists the families with a measured and a default factor by name only, never a factor value', async () => {
+    fs.writeFileSync(
+      dataPath('eval/config/tokenizer-calibration.json'),
+      JSON.stringify({
+        version: 1,
+        encoding: 'cl100k_base',
+        default_factor: 1.37,
+        families: [{ family: 'anthropic', factor: 1.19, source: 'measured', samples: 40, run_ids: ['run-a'] }],
+        written_by: 'calibration',
+      }),
+    );
+    writeEnv([
+      `NEXT_PUBLIC_OPENROUTER_MODELS=${JSON.stringify([
+        { id: 'anthropic/claude-sonnet-4.5', contextLength: 1000000 },
+        { id: 'openai/gpt-5', contextLength: 400000 },
+        { id: 'google/gemini-2.5-flash', contextLength: 1048576 },
+        { id: 'openai/gpt-5-mini', contextLength: 400000 },
+        { id: 'vendor-z/model-q' },
+        { id: 'no-provider-prefix' },
+      ])}`,
+    ]);
+    const summaryBody = await getSummary();
+    expect((summaryBody.budget as Record<string, unknown>).families).toEqual({ measured: ['anthropic'], defaulted: ['google', 'openai', 'vendor-z'] });
+    const raw = JSON.stringify(summaryBody);
+    for (const hidden of ['1.19', '1.37', 'run-a', 'factor', 'samples']) expect(raw).not.toContain(hidden);
+  });
+
   it.each([
     ['missing caps file', () => fs.rmSync(dataPath('eval/config/output-caps.json')), 'answer_rules_caps_missing'],
     ['caps file that is not JSON', () => fs.writeFileSync(dataPath('eval/config/output-caps.json'), '{not json'), 'answer_rules_caps_invalid'],
@@ -242,6 +311,14 @@ describe('GET /api/config/answer-rules endpoint (D-57, UI-SPEC 8.1)', () => {
     ],
     ['missing family table', () => fs.rmSync(dataPath('config/rag/model-families.json')), 'answer_rules_families_missing'],
     ['missing language registry', () => fs.rmSync(dataPath('config/rag/language-packs.json')), 'answer_rules_languages_missing'],
+    ['missing calculation limits', () => fs.rmSync(dataPath('config/rag/calc-limits.json')), 'answer_rules_calc_missing'],
+    [
+      'calculation limits without a number',
+      () => fs.writeFileSync(dataPath('config/rag/calc-limits.json'), JSON.stringify({ version: 1, max_operands: 'many' })),
+      'answer_rules_calc_invalid',
+    ],
+    ['missing prompt budget file', () => fs.rmSync(dataPath('config/rag/prompt-budget.json')), 'answer_rules_budget_missing'],
+    ['missing tokenizer calibration', () => fs.rmSync(dataPath('eval/config/tokenizer-calibration.json')), 'answer_rules_calibration_missing'],
   ])('a %s answers 500 with a code and no stack', async (_name, mutate, code) => {
     mutate();
     const reply = await call('GET', ENDPOINT);
@@ -296,6 +373,8 @@ function summary(overrides: Record<string, unknown> = {}) {
     allowlist: ['docs.example.com', 'cdn.example.org'],
     rulesVersion: '2026-01-02.3',
     ruleCounts: { zh: 2, en: 3, it: 4 },
+    calc: { limits: { operands: 50, steps: 30, items: 200 } },
+    budget: { unknownModels: 0, defaultWindow: 16384, families: { measured: [], defaulted: ['google', 'openai'] } },
     ...overrides,
   };
 }
@@ -341,6 +420,7 @@ function mountPanel(options: MountOptions = {}) {
   const hidden = doc.getElementById('RAG_MAX_OUTPUT_TOKENS') as FakeElement;
   hidden.value = 'off';
   for (const select of ['RAG_OUTPUT_GUARD', 'RAG_UPLOADER_HOLD']) (doc.getElementById(select) as FakeElement).value = 'off';
+  (doc.getElementById('RAG_CONTEXT_OVERFLOW') as FakeElement).value = 'truncate';
   (doc.querySelector('[data-answer-cap="mode"]') as FakeElement).value = 'off';
 
   const reply = options.reply ?? { ok: true, status: 200, body: summary() };
@@ -638,6 +718,133 @@ describe('answer-rules.js: combination warnings (UI-SPEC 6.12, D-58)', () => {
     await ui.settle();
     ui.setValue('RAG_MAX_OUTPUT_TOKENS', 'auto');
     expect(ui.warnings()).not.toContain('warn.capAutoEmpty');
+  });
+});
+
+describe('answer-rules.js: calculations and prompt size (UI-SPEC 14.3, 14.5)', () => {
+  const lines = (ui: ReturnType<typeof mountPanel>) => ({
+    limits: text(ui.byId('rag-answer-rules-calc-limits')),
+    unknown: text(ui.byId('rag-answer-rules-budget-unknown')),
+    estimate: text(ui.byId('rag-answer-rules-budget-estimate')),
+  });
+
+  it('fills the limits line and the two window lines from the summary', async () => {
+    const ui = mountPanel();
+    await ui.init();
+    await ui.settle();
+    expect(lines(ui)).toEqual({
+      limits: 'Limits: 50 values, 30 steps, 200 list items',
+      unknown: 'Models without a known context window: 0. They use the default window of 16,384 tokens.',
+      estimate: 'Token estimate measured for: —. Default factor for: google, openai.',
+    });
+    const codes = ui.byId('rag-answer-rules-budget-estimate').querySelectorAll('code').map((c) => text(c));
+    expect(codes).toEqual(['google', 'openai']);
+    for (const code of ui.byId('rag-answer-rules-budget-estimate').querySelectorAll('code')) expect(code.className).toContain('font-mono');
+  });
+
+  it('names measured families in the estimate line', async () => {
+    const ui = mountPanel({
+      reply: { ok: true, status: 200, body: summary({ budget: { unknownModels: 1, defaultWindow: 8192, families: { measured: ['anthropic'], defaulted: [] } } }) },
+    });
+    await ui.init();
+    await ui.settle();
+    expect(lines(ui).estimate).toBe('Token estimate measured for: anthropic. Default factor for: —.');
+    expect(lines(ui).unknown).toBe('Models without a known context window: 1. They use the default window of 8,192 tokens.');
+  });
+
+  it('shows an em dash in each line and data.unavailable when the call fails, with the switches usable', async () => {
+    const ui = mountPanel({ reply: 'throw' });
+    await ui.init();
+    await ui.settle();
+    expect(lines(ui)).toEqual({ limits: '—', unknown: '—', estimate: '—' });
+    expect(text(ui.byId('rag-answer-rules-alerts'))).toContain('Current values could not be read from the config server.');
+    for (const id of ['RAG_CALC_TOOL', 'RAG_CALC_CHECK', 'RAG_PROMPT_BUDGET', 'RAG_CONTEXT_OVERFLOW']) expect(ui.byId(id).disabled).toBe(false);
+  });
+
+  it('treats a summary without the calc or budget block as unavailable', async () => {
+    const bad = summary();
+    delete (bad as Record<string, unknown>).budget;
+    const ui = mountPanel({ reply: { ok: true, status: 200, body: bad } });
+    await ui.init();
+    await ui.settle();
+    expect(lines(ui).limits).toBe('—');
+  });
+
+  it('shows warn.overflowNeedsBudget while refine is selected with the budget off', async () => {
+    const ui = mountPanel();
+    await ui.init();
+    await ui.settle();
+    expect(ui.warnings()).toEqual([]);
+    ui.setValue('RAG_CONTEXT_OVERFLOW', 'refine');
+    expect(ui.warnings()).toEqual(['warn.overflowNeedsBudget']);
+    expect(text(ui.byId('rag-answer-rules-alerts'))).toContain('“If the documents do not fit” is read only while the prompt budget is on.');
+    ui.toggle('RAG_PROMPT_BUDGET', true);
+    expect(ui.warnings()).toEqual([]);
+    ui.toggle('RAG_PROMPT_BUDGET', false);
+    ui.setValue('RAG_CONTEXT_OVERFLOW', 'truncate');
+    expect(ui.warnings()).toEqual([]);
+  });
+
+  it('shows warn.budgetUnknownModels as information when the budget is on and models have no window', async () => {
+    const ui = mountPanel({
+      reply: { ok: true, status: 200, body: summary({ budget: { unknownModels: 3, defaultWindow: 16384, families: { measured: [], defaulted: [] } } }) },
+    });
+    await ui.init();
+    await ui.settle();
+    expect(ui.warnings()).toEqual([]);
+    ui.toggle('RAG_PROMPT_BUDGET', true);
+    expect(ui.warnings()).toEqual(['warn.budgetUnknownModels']);
+    const alert = ui.byId('rag-answer-rules-alerts').querySelector('[data-answer-rules-warning="warn.budgetUnknownModels"]')!;
+    expect(alert.className).toContain('alert-info');
+    expect(text(alert)).toContain('3 models have no known context window, so their requests are sized for the default window.');
+    ui.toggle('RAG_PROMPT_BUDGET', false);
+    expect(ui.warnings()).toEqual([]);
+  });
+
+  it('shows no unknown-models warning when every model has a window', async () => {
+    const ui = mountPanel();
+    await ui.init();
+    await ui.settle();
+    ui.toggle('RAG_PROMPT_BUDGET', true);
+    expect(ui.warnings()).toEqual([]);
+  });
+
+  it.each([
+    ['zh-CN', '限制：50 个数值，30 个步骤，200 个列表项', '上下文窗口未知的模型：0 个。它们使用 16,384 token 的默认窗口。', '“文档放不下时”仅在提示词预算开启时生效。'],
+    [
+      'it-IT',
+      'Limiti: 50 valori, 30 passaggi, 200 elementi di elenco',
+      'Modelli senza finestra di contesto nota: 0. Usano la finestra predefinita di 16.384 token.',
+      '“Se i documenti non rientrano” è letto solo con il budget del prompt attivo.',
+    ],
+  ])('renders the lines and the warning in %s', async (locale, limits, unknown, warning) => {
+    const ui = mountPanel({ locale });
+    await ui.init();
+    await ui.settle();
+    expect(lines(ui).limits).toBe(limits);
+    expect(lines(ui).unknown).toBe(unknown);
+    expect(lines(ui).estimate).toContain(locale === 'zh-CN' ? 'google、openai' : 'google, openai');
+    ui.setValue('RAG_CONTEXT_OVERFLOW', 'refine');
+    expect(text(ui.byId('rag-answer-rules-alerts'))).toContain(warning);
+    expect(text(ui.doc.querySelector('[data-rag-i18n="group.budget"]'))).toBe(locale === 'zh-CN' ? '提示词大小' : 'Dimensione del prompt');
+    expect(text(ui.doc.querySelector('[data-rag-i18n="overflow.refine"]'))).toBe(locale === 'zh-CN' ? '分多次调用作答' : 'Rispondi con più chiamate');
+  });
+
+  it('renders a family name with markup as text', async () => {
+    const ui = mountPanel({
+      reply: {
+        ok: true,
+        status: 200,
+        body: summary({ budget: { unknownModels: 0, defaultWindow: 16384, families: { measured: ['<img src=x onerror=alert(1)>'], defaulted: ['<a href="javascript:alert(1)">x</a>'] } } }),
+      },
+    });
+    await ui.init();
+    await ui.settle();
+    const line = ui.byId('rag-answer-rules-budget-estimate');
+    expect(line.querySelectorAll('img')).toHaveLength(0);
+    expect(line.querySelectorAll('a')).toHaveLength(0);
+    expect(text(line)).toContain('<img src=x onerror=alert(1)>');
+    expect(ui.doc.innerHtmlWrites).toBe(0);
   });
 });
 

@@ -394,6 +394,84 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
     assert.deepEqual([...new Set(called)], []);
   });
 
+  test('with RAG_DOC_ACCESS_GROUPS unset, no RPC payload, trace, log line or cache key carries an access part apart from the off key (Phase 4.3 D-09)', async () => {
+    const ragConfig = await import('@/lib/rag/config');
+    const deps = await import('@/lib/rag/deps');
+    const { cacheAccessKeyPart } = await import('@/lib/rag/cache/access-key');
+    const names = ['RAG_PIPELINE', 'RAG_SUPPORTED_LANGUAGES', 'RAG_PRIMARY_LANGUAGE', 'RAG_DOC_ACCESS_GROUPS', 'RAG_EMBED_ACCESS_GROUP'];
+    const before = new Map(names.map((name) => [name, process.env[name]]));
+    delete process.env.RAG_DOC_ACCESS_GROUPS;
+    delete process.env.RAG_EMBED_ACCESS_GROUP;
+    process.env.RAG_SUPPORTED_LANGUAGES = 'en';
+    process.env.RAG_PRIMARY_LANGUAGE = 'en';
+    const baseAdmin = deps.getRagDeps().adminClient;
+    const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
+    deps.setRagDepsForTests({
+      adminClient: () => {
+        const client = baseAdmin();
+        if (!client) return client;
+        return new Proxy(client, {
+          get(target, prop, receiver) {
+            if (prop === 'rpc') {
+              return (fn: string, args?: Record<string, unknown>, opts?: unknown) => {
+                rpcCalls.push({ fn, args: args ?? {} });
+                return (target.rpc as (...a: unknown[]) => unknown)(fn, args, opts);
+              };
+            }
+            const value = Reflect.get(target, prop, receiver);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        });
+      },
+    });
+    const lines: string[] = [];
+    const methods = ['log', 'warn', 'error', 'info', 'debug'] as const;
+    const originals = methods.map((method) => console[method]);
+    for (const method of methods) {
+      console[method] = (...args: unknown[]) => {
+        lines.push(args.map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg))).join(' '));
+      };
+    }
+    try {
+      assert.equal(rag.loadRagConfig({}).accessGroups, 'off');
+      assert.equal(cacheAccessKeyPart(scope), 'off');
+      for (const pipeline of ['legacy', 'v2']) {
+        process.env.RAG_PIPELINE = pipeline;
+        ragConfig.resetRagConfigForTests();
+        const retrieved = await rag.runRetrieval({
+          scope,
+          query: 'placeholder question for the access-groups defaults check',
+          profile: 'eval',
+          options: { maxResults: 5, fallbackToLowerThreshold: true },
+          signal: new AbortController().signal,
+        });
+        assert.notEqual(retrieved.reason, 'access_scope_missing', pipeline);
+        assert.ok(!(retrieved.stages ?? []).some((stage) => stage.name === 'access_scope'), `${pipeline}: an access_scope stage was recorded`);
+        const serialised = JSON.stringify(retrieved);
+        for (const fragment of ['"access_scope"', 'setHash', 'access_mode', 'access_set']) {
+          assert.ok(!serialised.includes(fragment), `${pipeline}: the result carries ${fragment}`);
+        }
+      }
+      assert.ok(rpcCalls.length > 0, 'no retrieval RPC was recorded');
+      const withAccess = rpcCalls.filter((call) => Object.keys(call.args).some((key) => key.startsWith('p_access')));
+      assert.deepEqual(withAccess.map((call) => call.fn), []);
+      assert.ok(!rpcCalls.some((call) => call.fn === 'rag_resolve_access_scope' || call.fn === 'rag_access_group_by_key'), 'an access resolver ran');
+      assert.ok(lines.filter((line) => line.startsWith('[RAG Trace]')).length >= 2, 'the trace log lines were not captured');
+      const accessLines = lines.filter((line) => /\[RAG Access\]|access_mode|access_set|access_violations/.test(line));
+      assert.deepEqual(accessLines, []);
+    } finally {
+      methods.forEach((method, index) => {
+        console[method] = originals[index]!;
+      });
+      deps.setRagDepsForTests({ adminClient: baseAdmin });
+      for (const [name, value] of before) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+      ragConfig.resetRagConfigForTests();
+    }
+  });
+
   test('at the end of the run, with default settings, the four lexical statistics tables hold no row (D-02)', async () => {
     assert.equal(process.env.RAG_LEXICAL_SCORING, undefined, 'the run leaves RAG_LEXICAL_SCORING unset');
     assert.deepEqual(await queueRowCounts(LEXICAL_STATS_TABLES), Object.fromEntries(LEXICAL_STATS_TABLES.map((table) => [table, 0])));

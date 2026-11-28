@@ -21,6 +21,8 @@ export const MAX_QUOTE_CHARS = 4000;
 export const MAX_DOCUMENT_NAME_CHARS = 500;
 export const MAX_REGISTER_ROWS = 20000;
 export const MAX_RE_REVIEW_ITEMS = 100;
+/** 0988 accepts at most 50 golden item ids per re-review row. */
+const MAX_ITEM_IDS_PER_ROW = 50;
 const MAX_MASKED_QUERY = 2000;
 const PAGE_SIZE = 1000;
 
@@ -233,21 +235,38 @@ export function weekStart(now: Date): string {
   return day.toISOString();
 }
 
-/** Queue golden questions for expert re-review (reason re_review). Masked and fingerprinted as the 5.1.1 log does; idempotent per week. */
+/** A golden question to re-review; itemId names its golden item so 0988 can read the item's evidence documents' access groups. */
+export type ReReviewQuestion = string | { question: string; itemId?: string | null };
+
+/**
+ * Queue golden questions for expert re-review (reason re_review). Masked and fingerprinted as the 5.1.1 log does; idempotent per
+ * week. Golden item ids are sent as item_ids; with access groups enforced the SQL gives the item its evidence documents' label sets.
+ */
 export async function enqueueReReview(
   admin: Client,
-  input: { tenantKey: string; questions: readonly string[]; now?: Date },
+  input: { tenantKey: string; questions: readonly ReReviewQuestion[]; now?: Date },
 ): Promise<{ inserted: number }> {
   const window = weekStart(input.now ?? new Date());
-  const seen = new Set<string>();
-  const rows: Row[] = [];
-  for (const question of input.questions) {
+  const byFingerprint = new Map<string, Row & { item_ids?: string[] }>();
+  const rows: Array<Row & { item_ids?: string[] }> = [];
+  for (const entry of input.questions) {
+    const question = typeof entry === 'string' ? entry : entry.question;
+    const itemId = typeof entry === 'string' ? null : (entry.itemId ?? null);
     const masked = maskPII(question).slice(0, MAX_MASKED_QUERY);
     if (masked.trim().length === 0) continue;
     const fingerprint = queryFingerprint(masked);
-    if (seen.has(fingerprint)) continue;
-    seen.add(fingerprint);
-    rows.push({ query_masked: masked, query_fingerprint: fingerprint, mining_window: window });
+    const existing = byFingerprint.get(fingerprint);
+    if (existing) {
+      if (itemId) {
+        const ids = (existing.item_ids ??= []);
+        if (!ids.includes(itemId) && ids.length < MAX_ITEM_IDS_PER_ROW) ids.push(itemId);
+      }
+      continue;
+    }
+    const row: Row & { item_ids?: string[] } = { query_masked: masked, query_fingerprint: fingerprint, mining_window: window };
+    if (itemId) row.item_ids = [itemId];
+    byFingerprint.set(fingerprint, row);
+    rows.push(row);
   }
   if (rows.length === 0) return { inserted: 0 };
   const { data, error } = await admin.rpc('rag_review_items_enqueue_re_review', { p_tenant_key: input.tenantKey, p_rows: rows });

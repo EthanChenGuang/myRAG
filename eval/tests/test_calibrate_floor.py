@@ -164,3 +164,29 @@ def test_rerun_with_unchanged_inputs_leaves_the_floor_file_byte_identical(tmp_pa
     _run(tmp_path, golden, sims, write=True, floor_path=floor)
     assert floor.read_bytes() == first
     assert str(tmp_path) not in json.dumps(json.loads(first))
+
+
+def test_an_ingest_mode_write_keeps_the_prechunked_floor_and_writes_the_ingest_file(tmp_path, monkeypatch):
+    import rag_eval.calibrate.refusal as refusal_module
+
+    golden, _, sims = _world(tmp_path)
+    prechunked = tmp_path / "fixture-score-calibration.json"
+    prechunked.write_text('{"fixture_mode": "prechunked"}\n', encoding="utf-8")
+    ingest = tmp_path / "fixture-score-calibration.ingest.json"
+    monkeypatch.setattr(refusal_module, "FLOOR_PATH", prechunked)
+    monkeypatch.setattr(refusal_module, "FLOOR_PATHS", {"prechunked": prechunked, "ingest": ingest}, raising=False)
+    result = run_refusal_calibration(
+        V2_RECOMMENDED,
+        tmp_path / "out",
+        golden=golden,
+        runner=_FloorRunner(sims),
+        now=DAY,
+        write=True,
+        fixture_mode="ingest",
+        thresholds_path=_empty_thresholds(tmp_path),
+    )
+    assert prechunked.read_text(encoding="utf-8") == '{"fixture_mode": "prechunked"}\n'
+    written = FixtureScoreCalibration.model_validate_json(ingest.read_text(encoding="utf-8"))
+    assert written.fixture_mode == "ingest"
+    assert written.status == "calibrated"
+    assert result.floor_written is True

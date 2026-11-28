@@ -336,3 +336,50 @@ describe('AGENTS.md reflects Phase 5.2 (grounded answers and output safety)', ()
     expect(section14).toContain('never cut');
   });
 });
+
+describe('AGENTS.md reflects the Phase 4.3 document access groups', () => {
+  const section6 = AGENTS.slice(AGENTS.indexOf('## 6. RAG & Data Pipeline'), AGENTS.indexOf('## 7. AI Model Management'));
+  const subsection = section6.slice(section6.indexOf('### Document access groups (Phase 4.3)'), section6.indexOf('### Verified citations and groundedness (Phase 5)'));
+  const ENV = fs.readFileSync(path.resolve(__dirname, '../../src/lib/env.ts'), 'utf8');
+
+  test('section 6 has the Phase 4.3 subsection before Phase 5', () => {
+    expect(section6.indexOf('### Document access groups (Phase 4.3)')).toBeGreaterThan(-1);
+    expect(subsection.length).toBeGreaterThan(0);
+  });
+
+  test.each([
+    '`RAG_DOC_ACCESS_GROUPS=off`',
+    '`RAG_EMBED_ACCESS_GROUP=`',
+    'Migrations 0920 to 0939',
+    'are not folded into the setup files',
+    're-run the block in order, then 0410',
+    '`verifyAccessGroupsStartup`',
+    '`rag_access_set_enforced`',
+    '`rag_access_readiness`',
+    '`/api/rag/access-groups`',
+    '`scopeAccessFilter(scope)`',
+    '`document_chunks.access_groups`',
+    '`[RAG Access] body_group_claim_ignored`',
+    '`[RAG Access] embed_group_not_found`',
+    'public `chat-images` bucket',
+    'changes visibility only in single-tenant mode',
+    '`eval/config/runs/access-groups-on.json`',
+    '`tests/rag/access/routes-access-canary.test.ts`',
+    'never "information not available"',
+  ])('mentions %s', (fragment) => {
+    expect(subsection).toContain(fragment);
+  });
+
+  test('the documented defaults match src/lib/env.ts', () => {
+    expect(ENV).toContain("RAG_DOC_ACCESS_GROUPS: process.env.RAG_DOC_ACCESS_GROUPS || 'off'");
+    expect(ENV).toContain("RAG_EMBED_ACCESS_GROUP: process.env.RAG_EMBED_ACCESS_GROUP || ''");
+  });
+
+  test('the documented names exist in the code', () => {
+    const read = (file: string) => fs.readFileSync(path.resolve(__dirname, '../..', file), 'utf8');
+    expect(read('src/instrumentation.ts')).toContain('verifyAccessGroupsStartup');
+    expect(read('src/lib/rag/index.ts')).toContain('scopeAccessFilter');
+    expect(fs.existsSync(path.resolve(__dirname, '../../src/app/api/rag/access-groups/route.ts'))).toBe(true);
+    expect(fs.existsSync(path.resolve(__dirname, '../../supabase/migrations/0920_access_groups_tables.sql'))).toBe(true);
+  });
+});

@@ -1,0 +1,7 @@
+{
+  "name": "access-groups-on",
+  "env": {
+    "RAG_DOC_ACCESS_GROUPS": "on"
+  },
+  "overrides": null
+}

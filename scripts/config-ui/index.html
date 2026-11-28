@@ -9131,7 +9131,7 @@
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
                                 <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG Administration</h2>
-                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, access groups, tags, versions and translation, the embedding and chunking profiles, identifier patterns, check settings before they apply, and follow monitoring alerts, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
+                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, access groups, tags, versions and translation, source sync and purge records, the embedding and chunking profiles, identifier patterns, check settings before they apply, and follow monitoring alerts, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
 
                                 <div class="grid gap-6">
                                     <section id="rag-administration-languages" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-languages-title">
@@ -9887,6 +9887,54 @@
                                     </section>
                                     <!-- rag-translation-targets:end -->
 
+                                    <!-- rag-source-sync:start -->
+                                    <section id="rag-administration-source-sync" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-source-sync-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-source-sync-title" class="text-lg font-semibold mb-2 text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-source-sync-title>Source sync</h3>
+                                            <p class="text-sm text-base-content/70 max-w-prose mb-4" data-source-sync-description>Keeps the knowledge base in step with connected sources. A full reconcile lists every file at a source and removes documents whose file is gone. For each connection, choose what a deletion at the source does here.</p>
+                                            <div data-source-sync-alert class="flex flex-col gap-2 mb-4 empty:mb-0"></div>
+                                            <div data-source-sync-content></div>
+                                            <!-- rag-source-sync-settings:start -->
+                                            <div id="rag-source-sync-settings" data-source-sync-settings>
+                                                <div class="form-control mb-4 max-w-md">
+                                                    <label class="label" for="RAG_SOURCE_RECONCILE_INTERVAL_DAYS">
+                                                        <span class="label-text">Full reconcile interval (days)</span>
+                                                    </label>
+                                                    <input type="number" id="RAG_SOURCE_RECONCILE_INTERVAL_DAYS" name="RAG_SOURCE_RECONCILE_INTERVAL_DAYS" min="1" step="1" placeholder="7" inputmode="numeric" autocomplete="off" translate="no" aria-describedby="RAG_SOURCE_RECONCILE_INTERVAL_DAYS-help" class="input input-bordered w-full">
+                                                    <label class="label">
+                                                        <span id="RAG_SOURCE_RECONCILE_INTERVAL_DAYS-help" class="label-text-alt text-base-content/70">How often the scheduled job reconciles each connection. The job runs only when a scheduler or <code translate="no">npm run rag:source-reconcile</code> starts it.</span>
+                                                    </label>
+                                                </div>
+                                                <div class="form-control mb-4 max-w-md">
+                                                    <label class="label" for="RAG_SOURCE_RECONCILE_MAX_AGE_DAYS">
+                                                        <span class="label-text">Reconcile age limit (days)</span>
+                                                    </label>
+                                                    <input type="number" id="RAG_SOURCE_RECONCILE_MAX_AGE_DAYS" name="RAG_SOURCE_RECONCILE_MAX_AGE_DAYS" min="1" step="1" placeholder="7" inputmode="numeric" autocomplete="off" translate="no" aria-describedby="RAG_SOURCE_RECONCILE_MAX_AGE_DAYS-help" class="input input-bordered w-full">
+                                                    <label class="label">
+                                                        <span id="RAG_SOURCE_RECONCILE_MAX_AGE_DAYS-help" class="label-text-alt text-base-content/70">A connection without a completed full reconcile for longer than this is marked Overdue.</span>
+                                                    </label>
+                                                </div>
+                                                <div class="form-control mb-4 max-w-md">
+                                                    <label class="label" for="RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE">
+                                                        <span class="label-text">Pause above this share of documents</span>
+                                                    </label>
+                                                    <input type="number" id="RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE" name="RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE" min="0.05" max="1" step="0.05" placeholder="0.3" inputmode="decimal" autocomplete="off" translate="no" aria-describedby="RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE-help" class="input input-bordered w-full">
+                                                    <label class="label">
+                                                        <span id="RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE-help" class="label-text-alt text-base-content/70">0.3 means 30%. A full listing that would remove more than this share of a connection's documents pauses for confirmation. At 1 the pause never applies. Deletions the source reports file by file are not paused.</span>
+                                                    </label>
+                                                </div>
+                                                <p class="text-xs text-base-content/70">Saved with Save All Changes at the top of the page.</p>
+                                                <div class="flex flex-wrap items-center gap-x-2">
+                                                    <span class="text-xs text-base-content/70">The source recheck at retrieval (<code translate="no">RAG_SOURCE_RECHECK</code>) is under RAG Modes.</span>
+                                                    <button type="button" class="btn btn-link btn-xs px-0" data-source-sync-open-rag-modes>Open RAG Modes</button>
+                                                </div>
+                                            </div>
+                                            <!-- rag-source-sync-settings:end -->
+                                            <div data-source-sync-status class="text-sm mt-4" role="status" aria-live="polite" tabindex="-1"></div>
+                                        </div>
+                                    </section>
+                                    <!-- rag-source-sync:end -->
+
                                     <!-- rag-terminology:start -->
                                     <section id="rag-administration-terminology" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-terminology-title">
                                         <div class="card-body">
@@ -10352,6 +10400,44 @@
                                                             deployments</span>
                                                     </label>
                                                 </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- SharePoint and OneDrive -->
+                                    <div class="card bg-base-200 shadow-md">
+                                        <div class="card-body">
+                                            <h3 class="card-title text-lg mb-4">SharePoint and OneDrive</h3>
+                                            <div class="space-y-4">
+                                                <div class="flex items-center justify-between gap-4">
+                                                    <div class="min-w-0">
+                                                        <label for="NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED" class="font-semibold cursor-pointer">Enable SharePoint and OneDrive</label>
+                                                        <p id="NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED-help" class="text-sm text-base-content/70">Lets admins connect SharePoint Online sites and OneDrive for Business libraries. Off leaves every connector as it is.</p>
+                                                    </div>
+                                                    <input type="checkbox" id="NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED" name="NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED" aria-describedby="NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED-help" class="toggle toggle-primary">
+                                                </div>
+
+                                                <div class="form-control w-full">
+                                                    <label class="label" for="NANGO_SHAREPOINT_INTEGRATION_KEY">
+                                                        <span class="label-text font-semibold">SharePoint integration key</span>
+                                                    </label>
+                                                    <input type="text" id="NANGO_SHAREPOINT_INTEGRATION_KEY" name="NANGO_SHAREPOINT_INTEGRATION_KEY" placeholder="sharepoint-online" autocomplete="off" spellcheck="false" translate="no" aria-describedby="NANGO_SHAREPOINT_INTEGRATION_KEY-help" class="input input-bordered w-full">
+                                                    <label class="label">
+                                                        <span id="NANGO_SHAREPOINT_INTEGRATION_KEY-help" class="label-text-alt">The integration id set for this provider in the Nango dashboard. Leave empty to use the default.</span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="form-control w-full">
+                                                    <label class="label" for="NANGO_ONEDRIVE_INTEGRATION_KEY">
+                                                        <span class="label-text font-semibold">OneDrive integration key</span>
+                                                    </label>
+                                                    <input type="text" id="NANGO_ONEDRIVE_INTEGRATION_KEY" name="NANGO_ONEDRIVE_INTEGRATION_KEY" placeholder="one-drive" autocomplete="off" spellcheck="false" translate="no" aria-describedby="NANGO_ONEDRIVE_INTEGRATION_KEY-help" class="input input-bordered w-full">
+                                                    <label class="label">
+                                                        <span id="NANGO_ONEDRIVE_INTEGRATION_KEY-help" class="label-text-alt">The integration id set for this provider in the Nango dashboard. Leave empty to use the default.</span>
+                                                    </label>
+                                                </div>
+
+                                                <p class="text-xs text-base-content/70">Saved with Save All Changes at the top of the page, not with Save Changes below.</p>
                                             </div>
                                         </div>
                                     </div>

@@ -447,6 +447,12 @@ export const RULES = [
     find: (text) => regexMatches(/\.rpc\s*\(\s*(['"`])rag_finetune_export_vectors\1/g, text),
   },
   {
+    id: 'source-recheck-rpc',
+    description: 'source recheck RPC (rag_source_recheck) called outside the pipeline',
+    appliesTo: outsideRag,
+    find: (text) => regexMatches(/\.rpc\s*\(\s*(['"`])rag_source_recheck\1/g, text),
+  },
+  {
     id: 'voice-agent-rpc',
     description: 'the voice agent must not call database RPCs; it goes through the app API',
     appliesTo: inVoiceAgent,

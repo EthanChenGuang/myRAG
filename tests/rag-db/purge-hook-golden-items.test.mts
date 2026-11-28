@@ -311,18 +311,30 @@ for (const mode of MODES) {
     }
 
     test('the Phase 6.3 purge of the lineage removes its evidence and labels and counts them under golden_items', async (t) => {
+      // 0727 runs the purge hooks (this one included) only through the foreign-store seam rag_purge_foreign_stores (0728, plan
+      // 06.3-19), so the case needs both functions.
       const present = await db.query<{ ok: boolean }>(
-        "SELECT to_regprocedure('public.rag_purge_lineage(text,uuid,jsonb,jsonb)') IS NOT NULL AS ok",
+        `SELECT to_regprocedure('public.rag_purge_lineage(text,uuid,jsonb,jsonb)') IS NOT NULL
+            AND EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                         WHERE n.nspname = 'public' AND p.proname = 'rag_purge_foreign_stores') AS ok`,
       );
       if (!present.rows[0]!.ok) {
-        console.log('[Purge Hook Test] Phase 6.3 purge not on this checkout; skipped');
-        t.skip('Phase 6.3 purge not on this checkout');
+        console.log('[Purge Hook Test] Phase 6.3 purge with the foreign-store seam not on this checkout; skipped');
+        t.skip('Phase 6.3 purge with the foreign-store seam (0728) not on this checkout');
         return;
       }
-      const r = await db.query<{ counts: unknown }>(
-        'SELECT counts FROM public.rag_purge_lineage($1, $2, $3::jsonb, $4::jsonb)',
-        [TENANT_A, lineage, JSON.stringify({ kind: 'admin', id: LABELLER }), JSON.stringify({ code: 'added_in_error', note: 'synthetic test purge' })],
-      );
+      // 0727 accepts an admin actor only for a tenant rag_admin_tenant_keys gives it: s:default, or in multi-tenant mode the
+      // admin's own u: key. USER_A is made an admin for this one call.
+      await db.query('INSERT INTO admin_users (id) VALUES ($1) ON CONFLICT DO NOTHING', [USER_A]);
+      let r: { rows: Array<{ counts: unknown }> };
+      try {
+        r = await db.query<{ counts: unknown }>(
+          'SELECT counts FROM public.rag_purge_lineage($1, $2, $3::jsonb, $4::jsonb)',
+          [TENANT_A, lineage, JSON.stringify({ kind: 'admin', id: USER_A }), JSON.stringify({ code: 'added_in_error', note: 'synthetic test purge' })],
+        );
+      } finally {
+        await db.query('DELETE FROM admin_users WHERE id = $1', [USER_A]);
+      }
       assert.ok(findCount(r.rows[0]!.counts, 'golden_items') >= 3, JSON.stringify(r.rows[0]!.counts));
       const rows = await evidence(db);
       assert.deepEqual(rows.filter((row) => row.tenant_key === TENANT_A && (row.document_id === v1 || row.document_id === v2)), []);

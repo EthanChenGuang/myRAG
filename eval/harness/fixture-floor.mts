@@ -9,6 +9,12 @@ export const FIXTURE_SCORE_CALIBRATION_PATH = path.resolve(
   '../config/fixture-score-calibration.json',
 );
 
+/** Each fixture mode has its own committed fit; the two embed different chunk texts, so one floor never fits both. */
+export const FIXTURE_SCORE_CALIBRATION_PATHS: Readonly<Record<FixtureMode, string>> = Object.freeze({
+  prechunked: FIXTURE_SCORE_CALIBRATION_PATH,
+  ingest: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../config/fixture-score-calibration.ingest.json'),
+});
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -28,7 +34,7 @@ export function fixtureScoreCalibrationFor(raw: unknown, mode: FixtureMode): Rec
 }
 
 /** Reads the committed file; a missing or unreadable file means the legacy floor stays. */
-export function loadFixtureScoreCalibration(mode: FixtureMode, file = FIXTURE_SCORE_CALIBRATION_PATH): Record<string, number> | null {
+export function loadFixtureScoreCalibration(mode: FixtureMode, file = FIXTURE_SCORE_CALIBRATION_PATHS[mode]): Record<string, number> | null {
   let raw: unknown;
   try {
     raw = JSON.parse(fs.readFileSync(file, 'utf8'));

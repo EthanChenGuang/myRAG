@@ -370,6 +370,9 @@ function answerRulesDoc(allowlistField: string | null) {
     'rag-answer-rules-allowlist',
     'rag-answer-rules-guard-rules',
     'rag-answer-rules-events-actions',
+    'rag-answer-rules-calc-limits',
+    'rag-answer-rules-budget-unknown',
+    'rag-answer-rules-budget-estimate',
   ]) {
     const el = doc.createElement('div');
     el.id = id;
@@ -410,6 +413,8 @@ function answerRulesSummary() {
     allowlist: [XSS_PAYLOAD, ANSWER_RULES_JS_LINK, ANSWER_RULES_SCRIPT],
     rulesVersion: `${XSS_PAYLOAD}${ANSWER_RULES_JS_LINK}`,
     ruleCounts: { zh: 1, en: 2, it: 3 },
+    calc: { limits: { operands: 50, steps: 30, items: 200 } },
+    budget: { unknownModels: 2, defaultWindow: 16384, families: { measured: [XSS_PAYLOAD, ANSWER_RULES_SCRIPT], defaulted: [ANSWER_RULES_JS_LINK] } },
   };
 }
 
@@ -453,6 +458,8 @@ describe('rag-panels/answer-rules.js renders server data and page values as text
     expect(list.querySelectorAll('li code').map((c) => c.textContent)).toEqual([XSS_PAYLOAD, ANSWER_RULES_JS_LINK, ANSWER_RULES_SCRIPT]);
     expect(doc.getElementById('rag-answer-rules-judge-calibration')!.textContent).toContain(ANSWER_RULES_JS_LINK);
     expect(doc.getElementById('rag-answer-rules-guard-rules')!.textContent).toContain(XSS_PAYLOAD);
+    const estimate = doc.getElementById('rag-answer-rules-budget-estimate')!;
+    expect(estimate.querySelectorAll('code').map((c) => c.textContent)).toEqual([XSS_PAYLOAD, ANSWER_RULES_SCRIPT, ANSWER_RULES_JS_LINK]);
   });
 
   it('allowlist lines of the page field and the judge model id create no element and no link', async () => {

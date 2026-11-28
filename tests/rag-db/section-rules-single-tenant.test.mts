@@ -98,7 +98,7 @@ describe('section rules through the pipeline (single-tenant)', () => {
     useEnv({ RAG_SECTION_RULES: 'on' });
     const ruled = await upload('single-on');
     assert.equal(ruled.status, 'ready');
-    assert.ok((await paths(ruled.documentId!)).some((p) => JSON.stringify(p) === JSON.stringify(['Part', 'Alpha'])));
+    assert.ok((await paths(ruled.documentId!)).some((p) => JSON.stringify(p) === JSON.stringify(['Part 1', '1. Alpha'])));
     const [doc] = (await fixture.db.query<Row>("SELECT metadata -> 'section_rules' AS section_rules, needs_review FROM documents WHERE id = $1", [ruled.documentId])).rows;
     assert.equal((doc?.section_rules as Row).satisfied, true);
     assert.equal(doc?.needs_review, false);
@@ -106,7 +106,7 @@ describe('section rules through the pipeline (single-tenant)', () => {
     useEnv({ RAG_SECTION_RULES: 'off' });
     const plain = await upload('single-off');
     assert.equal(plain.status, 'ready');
-    assert.ok((await paths(plain.documentId!)).every((p) => !p.includes('Alpha') || p[0] === 'Collection single'));
+    assert.ok((await paths(plain.documentId!)).every((p) => !p.includes('1. Alpha') || p[0] === 'Collection single'));
     const [plainDoc] = (await fixture.db.query<Row>("SELECT metadata ? 'section_rules' AS has FROM documents WHERE id = $1", [plain.documentId])).rows;
     assert.equal(plainDoc?.has, false);
   });

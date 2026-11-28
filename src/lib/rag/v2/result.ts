@@ -104,6 +104,8 @@ export interface BuildV2ResultInput {
   attributeFilter?: AttributeFilterHashStage;
   /** D-14: the glossary state; absent reads as switch off. */
   glossary?: GlossaryHashStage;
+  /** D-46: the source_recheck marker from the search stages; absent when the stage did not run or did not complete. */
+  sourceRecheck?: { checked: number; dropped: number };
 }
 
 export interface RequestConfigHashInput {
@@ -168,6 +170,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
       rerankTierChat: config.v2.rerankTier.chat,
       rerankTierVoice: config.v2.rerankTier.voice,
       ...(config.monolingual ? { monolingual: true as const } : {}),
+      ...(config.sourceRecheck ? { sourceRecheck: true as const } : {}),
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
     answerRules: answerRulesHashComponent(answerConfig),
@@ -402,6 +405,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(ctx.searchesCounted !== undefined ? { searchesCounted: ctx.searchesCounted } : {}),
     ...(ctx.cacheTicket && profile !== 'voice' ? { cacheTicket: ctx.cacheTicket } : {}),
     ...(ctx.packing ? { packing: ctx.packing } : {}),
+    ...(ctx.sourceRecheck ? { sourceRecheck: ctx.sourceRecheck } : {}),
   };
 
   let result: RetrievalResult;

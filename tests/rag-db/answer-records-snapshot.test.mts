@@ -56,9 +56,9 @@ describe('citationDisplayEntries', () => {
       { ...base, n: 3, alias: 'S3', documentId: 'doc-c', documentName: 'c.md', page: null, sectionPath: null, quote: 'quote c' },
     ];
     assert.deepEqual(citationDisplayEntries(citations, { 'doc-a': 'current', 'doc-b': 'unavailable' }), [
-      { n: 1, documentName: 'a.md', page: 4, sectionPath: ['A', 'B'], quote: 'quote a', linkDocumentId: 'doc-a', unavailable: false },
-      { n: 2, documentName: 'b.md', page: null, sectionPath: null, quote: 'quote b', linkDocumentId: null, unavailable: true },
-      { n: 3, documentName: 'c.md', page: null, sectionPath: null, quote: 'quote c', linkDocumentId: null, unavailable: true },
+      { n: 1, documentName: 'a.md', page: 4, sectionPath: ['A', 'B'], quote: 'quote a', linkDocumentId: 'doc-a', unavailable: false, withdrawn: false, withdrawnAt: null },
+      { n: 2, documentName: 'b.md', page: null, sectionPath: null, quote: 'quote b', linkDocumentId: null, unavailable: true, withdrawn: false, withdrawnAt: null },
+      { n: 3, documentName: 'c.md', page: null, sectionPath: null, quote: 'quote c', linkDocumentId: null, unavailable: true, withdrawn: false, withdrawnAt: null },
     ]);
     assert.equal(citations[0]?.n, 2, 'the input is not reordered in place');
   });
@@ -129,6 +129,8 @@ describe('answer-record citation snapshots survive document changes (multi-tenan
         quote: citation.quote,
         linkDocumentId: availability === 'current' ? documentId : null,
         unavailable: availability === 'unavailable',
+        withdrawn: false,
+        withdrawnAt: null,
       })),
       `${step}: quote, name and number still render`,
     );

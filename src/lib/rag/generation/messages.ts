@@ -1,3 +1,5 @@
+import { previousTurnLanguage, resolveAnswerLanguage, type TurnMessage } from '../lang/answer-language';
+import { getLanguageSettings, languageVariablesUnset } from '../lang/settings';
 import { fixedText } from '../lang/texts';
 import type { TextsSource } from './answer-turn';
 
@@ -53,6 +55,33 @@ export interface FixedTextTurn {
 
 function registryLanguage(turn: FixedTextTurn | null | undefined): string | null {
   return turn?.textsSource === 'registry' && turn.answerLanguage ? turn.answerLanguage : null;
+}
+
+export interface RefusalLanguageInput {
+  question: string;
+  /** The request's messages, the current question last. */
+  history: readonly TurnMessage[];
+  uiLanguage: string | null | undefined;
+}
+
+/**
+ * The text turn of a strict refusal or the unavailable message. A turn already on registry texts is kept. Otherwise, while the
+ * languages are configured, the refusal speaks the question's language among the enabled ones, by the D-09 chain (previous turn, UI
+ * language, primary), with registry texts. With the languages unset (D-02) the turn is returned unchanged and no detector runs.
+ */
+export function refusalTextTurn(turn: FixedTextTurn, input: RefusalLanguageInput): FixedTextTurn {
+  if (registryLanguage(turn) || languageVariablesUnset()) return turn;
+  const settings = getLanguageSettings();
+  if (!settings.configured || !settings.primary) return turn;
+  const enabled = settings.languages;
+  const resolved = resolveAnswerLanguage({
+    question: input.question,
+    previousTurnLanguage: previousTurnLanguage(input.history, enabled),
+    uiLanguage: input.uiLanguage,
+    enabled,
+    primary: settings.primary,
+  });
+  return { textsSource: 'registry', answerLanguage: resolved.language };
 }
 
 /** D-10: the strict refusal; legacy source keeps today's UI-language and Spanish-heuristic choice, registry reads the answer language. */

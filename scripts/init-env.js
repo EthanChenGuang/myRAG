@@ -642,6 +642,12 @@ RAG_DOC_TYPE_LLM_DETECT=false
 RAG_INVOICE_LLM_EXTRACT=false
 # Look up exact identifiers (invoice numbers, contract ids) before vector search: true | false
 RAG_EXACT_ID_LOOKUP=false
+# Recheck before rerank that each candidate's document still exists and is current: true | false
+RAG_SOURCE_RECHECK=false
+# Source sync: full reconcile interval and age limit (days), and the share of a connection's documents above which a full listing pauses for confirmation (0.05 to 1)
+RAG_SOURCE_RECONCILE_INTERVAL_DAYS=7
+RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=7
+RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=0.3
 # Create image chunks from PDF pages: true | false
 RAG_PDF_IMAGE_CHUNKS=false
 # Prompt injection scan on ingested text: off | quarantine
@@ -897,6 +903,11 @@ NANGO_HOST=https://api.nango.dev
 NANGO_SUPPORTED_FILE_TYPES=pdf,doc,docx,txt,md,html,pptx,xlsx
 NANGO_MAX_FILES_PER_SYNC=100
 NANGO_SYNC_INTERVAL_HOURS=1
+
+# SharePoint Online and OneDrive for Business connectors (empty keys use the Nango ids sharepoint-online and one-drive)
+NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED=false
+NANGO_SHAREPOINT_INTEGRATION_KEY=
+NANGO_ONEDRIVE_INTEGRATION_KEY=
 
 # -----------------------------
 # CONNECTORS MANAGEMENT

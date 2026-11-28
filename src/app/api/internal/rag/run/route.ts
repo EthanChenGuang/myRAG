@@ -1141,6 +1141,7 @@ export async function POST(req: NextRequest) {
         ...(result.scopeGate ? { scope_gate: result.scopeGate } : {}),
         ...(result.searchesCounted !== undefined ? { searches_counted: result.searchesCounted } : {}),
         ...(result.speculative ? { speculative: result.speculative } : {}),
+        ...(result.sourceRecheck ? { stale_index_drop: result.sourceRecheck.dropped } : {}),
         ...(injection ? { injection } : {}),
         ...(result.versionConflict ? { version_conflict: versionConflictTrace(result.versionConflict, mixedVersions) } : {}),
         answer,

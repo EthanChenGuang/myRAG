@@ -299,7 +299,7 @@ describe('index.html skeleton (UI-SPEC 6.1)', () => {
 
   it('uses the new intro sentence of the tab', () => {
     expect(html).toContain(
-      'Choose languages, manage document-type defaults, ingestion and its changes, held uploads, access groups, tags, versions and translation, the embedding and chunking profiles, identifier patterns, check settings before they apply, and follow monitoring alerts, using your existing admin session.',
+      'Choose languages, manage document-type defaults, ingestion and its changes, held uploads, access groups, tags, versions and translation, source sync and purge records, the embedding and chunking profiles, identifier patterns, check settings before they apply, and follow monitoring alerts, using your existing admin session.',
     );
   });
 });

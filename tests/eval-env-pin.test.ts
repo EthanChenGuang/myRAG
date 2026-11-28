@@ -197,6 +197,18 @@ describe('pinned eval env', () => {
     expect(() => parseRunConfig({ name: 'bad-calc', env: { RAG_CALC_TOOL: 'yes' } }, 'inline')).toThrow(RunConfigError);
   });
 
+  test('a run config may set RAG_DOC_ACCESS_GROUPS to on or off and nothing else of Phase 4.3 (04.3-52, D-09)', () => {
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    expect(pinned.RAG_DOC_ACCESS_GROUPS).toBe('off');
+    expect(parseRunConfig({ name: 'access-on', env: { RAG_DOC_ACCESS_GROUPS: 'on' } }, 'inline').env).toEqual({ RAG_DOC_ACCESS_GROUPS: 'on' });
+    expect(parseRunConfig({ name: 'access-off', env: { RAG_DOC_ACCESS_GROUPS: 'off' } }, 'inline').env).toEqual({ RAG_DOC_ACCESS_GROUPS: 'off' });
+    expect(() => parseRunConfig({ name: 'bad-access', env: { RAG_DOC_ACCESS_GROUPS: 'true' } }, 'inline')).toThrow(RunConfigError);
+    expect(() => parseRunConfig({ name: 'embed-group', env: { RAG_EMBED_ACCESS_GROUP: 'group-a' } }, 'inline')).toThrow(RunConfigError);
+    expect(RUN_CONFIG_ENV_ALLOWLIST).not.toContain('RAG_EMBED_ACCESS_GROUP');
+    const onConfig = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/runs/access-groups-on.json'), 'utf8'));
+    expect(parseRunConfig(onConfig, 'access-groups-on.json').env).toEqual({ RAG_DOC_ACCESS_GROUPS: 'on' });
+  });
+
   test('a run config cannot set the embed version-scope switch (D-58)', () => {
     expect(RUN_CONFIG_ENV_ALLOWLIST).toContain('RAG_VERSION_SCOPE');
     expect(RUN_CONFIG_ENV_ALLOWLIST).not.toContain('RAG_EMBED_VERSION_SCOPE');

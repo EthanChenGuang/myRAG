@@ -47,7 +47,7 @@ for (const mode of MODES) {
 
     // Optional functions that once did not filter: rag_cache_check (0931 now filters) and 1008's attribute resolver (1010 redefines it with
     // the access parameters). None is expected any more; a name that reappears here without the access parameters fails the first case.
-    const PENDING = ['rag_attribute_documents', 'rag_attribute_filter_values', 'rag_cache_check'];
+    const PENDING = ['rag_attribute_documents', 'rag_attribute_filter_values', 'rag_cache_check', 'rag_tenant_doc_types'];
 
     async function unfilteredPending(): Promise<string[]> {
       const result = await db.query<{ name: string }>(
@@ -90,6 +90,17 @@ for (const mode of MODES) {
         'function_missing_guard:rag_attribute_filter_values',
         'function_overloaded:rag_attribute_documents',
         'function_overloaded:rag_attribute_filter_values',
+      ]);
+    });
+
+    test('the 0981 doc-type signature without the access parameters is named by readiness (re-run of 0981 without 0986)', async () => {
+      const migration = fs.readFileSync(path.join(process.cwd(), 'supabase/migrations/0981_tenant_doc_types.sql'), 'utf8');
+      const answer = await inRollback(migration.replace(/^\s*(BEGIN|COMMIT);\s*$/gm, ''), readiness);
+      assert.equal(answer.ready, false);
+      assert.deepEqual(pairs(answer).sort(), [
+        'function_missing_access_parameters:rag_tenant_doc_types',
+        'function_missing_guard:rag_tenant_doc_types',
+        'function_overloaded:rag_tenant_doc_types',
       ]);
     });
 

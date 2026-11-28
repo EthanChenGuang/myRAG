@@ -136,6 +136,11 @@ const PHASE521_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
   RAG_CONTEXT_OVERFLOW: ['truncate', 'refine'],
 };
 
+/** The Phase 4.3 access switch (D-09): the smoke tier runs with it on to show it changes no slice. RAG_EMBED_ACCESS_GROUP stays out. */
+const PHASE43_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
+  RAG_DOC_ACCESS_GROUPS: ['off', 'on'],
+};
+
 /** The Phase 5 switch a Phase 5.2 run config sets: RAG_CITATIONS=true asks the eval run for citations (D-54). */
 const PHASE5_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
   RAG_CITATIONS: BOOLEAN_VALUES,
@@ -195,6 +200,7 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   ...Object.keys(PHASE521_SWITCH_VALUES),
   ...Object.keys(PHASE5_SWITCH_VALUES),
   ...Object.keys(PHASE44_SWITCH_VALUES),
+  ...Object.keys(PHASE43_SWITCH_VALUES),
 ];
 
 export const RUN_CONFIG_REJECT_MESSAGE =
@@ -264,6 +270,7 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
     ...PHASE521_SWITCH_VALUES,
     ...PHASE5_SWITCH_VALUES,
     ...PHASE44_SWITCH_VALUES,
+    ...PHASE43_SWITCH_VALUES,
   })) {
     if (!allowed) continue;
     // A malformed SEC, Phase 6, Phase 3.3, Phase 5.2 or Phase 5.2.1 value would silently fall back to off in the app; the run config fails instead (the value is never echoed).

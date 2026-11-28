@@ -149,6 +149,8 @@ const TABLE_COLUMNS: Record<string, string[]> = {
   rag_term_layers: ['layer_key', 'version', 'entries_sha256'],
   // Phase 5.2 D-52: the batched supersession read of fetchVersionPairs (RAG_VERSION_LABELS on, tenant key known).
   rag_supersession_candidates: ['document_id', 'candidate_document_id', 'status'],
+  // Phase 4.3 D-27: the share refusal reads the chat's answer-record citations (loadCitedDocuments).
+  rag_answer_records: ['citations'],
 };
 
 type FilterOperator = 'eq' | 'in' | 'is.null' | 'ov';
@@ -161,7 +163,7 @@ const TABLE_FILTERS: Record<string, Record<string, FilterOperator[]>> = {
     is_current: ['eq'],
     status: ['eq'],
     tenant_key: ['eq'],
-    lineage_id: ['eq'],
+    lineage_id: ['eq', 'in'],
     version: ['eq'],
     doc_type: ['eq'],
     access_groups: ['ov'],
@@ -182,6 +184,7 @@ const TABLE_FILTERS: Record<string, Record<string, FilterOperator[]>> = {
   admin_users: { id: ['eq'] },
   rag_term_layers: { layer_key: ['eq'] },
   rag_supersession_candidates: { tenant_key: ['eq'], document_id: ['in'], candidate_document_id: ['in'], status: ['in'] },
+  rag_answer_records: { chat_id: ['eq'] },
 };
 
 /** Value type of a filtered column; a column that is not listed holds a uuid. */
