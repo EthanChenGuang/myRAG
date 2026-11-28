@@ -1,9 +1,9 @@
 # <img src="./public/myRAG-logo.png" alt="myRAG" width="30" style="vertical-align: middle;"> myRAG - Production-Ready AI Chatbot Platform
 
 <div align="center">
-  <h3>Build Unlimited RAG-Powered AI Chatbots in Minutes</h3>
+  <h3>Build Unlimited RAG-Powered AI Chatbots</h3>
 
-  [![Next.js](https://img.shields.io/badge/Next.js-16.0.10-black?style=flat-square&logo=next.js)](https://nextjs.org)
+  [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js)](https://nextjs.org)
   [![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react)](https://react.dev)
   [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178c6?style=flat-square&logo=typescript)](https://typescriptlang.org)
   [![Supabase](https://img.shields.io/badge/Supabase-Backend-3ecf8e?style=flat-square&logo=supabase)](https://supabase.com)
@@ -12,12 +12,11 @@
 
   <p align="center">
     <strong>Visual Config UI</strong> •
-    <strong>15-28x Faster Search</strong> •
     <strong>100+ AI Models</strong> •
     <strong>WhatsApp Ready</strong>
   </p>
 
-  [📚 Docs](#-documentation) • [🚀 Deploy](#-quick-start) • [💬 Discord](https://discord.gg/8ZCwZjqcAY)
+  [📚 Docs](#-documentation) • [🚀 Deploy](#-quick-start)
 </div>
 
 ---
@@ -63,7 +62,7 @@
 **Features:**
 - ✅ Shared knowledge base
 - ✅ User-isolated chats
-- ✅ Simple setup (~10 minutes)
+- ✅ Simple setup
 - ✅ Lower complexity
 
 [→ Setup Single-Tenant](#single-tenant-setup)
@@ -135,7 +134,6 @@ Are you building a SaaS product with multiple customers?
 | **Storage Quotas** | ❌ No | ✅ Per-organization |
 | **Subscriptions** | User-level | Organization-level |
 | **Team Invitations** | ❌ No | ✅ Email-based |
-| **Setup Time** | ~10 minutes | ~20 minutes |
 | **Database Tables** | 14 tables | 18 tables |
 | **Best For** | Single product/service | SaaS platforms |
 
@@ -145,11 +143,12 @@ Are you building a SaaS product with multiple customers?
 
 ## 🎉 What's New
 
+- **🔬 Optional RAG pipeline** - Hybrid/BM25 retrieval, query layer and semantic cache, verified citations and groundedness, prompt-injection defense, feedback loop, multilingual ingestion, access groups, and Qdrant/Weaviate backends. Every part is an opt-in switch that ships **off**; see [Optional RAG pipeline](#optional-rag-pipeline-opt-in-switches-all-off-by-default)
 - **🎤 Real-Time Voice Mode** - Full-duplex voice conversations with [LiveKit](https://docs.livekit.io/), [AssemblyAI](https://assemblyai.com/docs) STT, [Resemble.ai](https://docs.app.resemble.ai/) TTS, and word-level text sync
 - **🖼️ Image RAG** - Upload images to your knowledge base with AI-generated captions for semantic retrieval
 - **🎯 RAG Behavior Modes** - Control how strictly the AI follows your knowledge base: Strict (KB only), Balanced (KB + supplements), Flexible (natural blend), or Bypass (disable RAG entirely)
 - **🔗 Nango Document Sync** - Connect Google Drive, Dropbox, and Notion via [Nango](https://nango.dev/docs) with automatic syncing, admin controls, and visual configuration
-- **🕷️ Web Scraping (Firecrawl)** - Scrape websites and automatically index content into RAG with intelligent document titling and instant tooltips
+- **🕷️ Web Scraping (Firecrawl)** - Scrape websites and automatically index content into RAG with intelligent document titling and tooltips
 - **📋 Configurable Source Citations** - Toggle source citation display in AI responses through the config UI
 
 ## <img src="./public/myRAG-logo.png" alt="myRAG" width="30" style="vertical-align: middle; margin-right: 8px;">Why myRAG?
@@ -158,9 +157,9 @@ Are you building a SaaS product with multiple customers?
 <tr>
 <td width="33%" align="center">
 
-**🚀 Ship in Minutes**
+**🚀 Ship with a Visual Config UI**
 
-Visual config UI lets you launch a production-ready chatbot in under 10 minutes
+Deploy with a few commands
 
 </td>
 <td width="33%" align="center">
@@ -213,16 +212,38 @@ Build unlimited chatbots for yourself or clients with full white-label support
 
 ### 📚 RAG System
 
-**HNSW-Optimized Vector Search** - Lightning-fast semantic search
+**HNSW-Optimized Vector Search** - Semantic search
 
 | Feature | Description |
 |:--------|:------------|
-| **Vector Search** | HNSW indexes with **15-28x speed improvement** |
-| **Query Time** | **<50ms** for semantic search |
+| **Vector Search** | HNSW indexes |
 | **Document Support** | PDF, DOCX, TXT, HTML, RTF, EPUB |
 | **Smart Processing** | Auto-chunking with configurable overlap |
 | **Embeddings** | 1536-dimensional vectors (OpenAI) |
-| **Pure Semantic** | Simplified for better accuracy |
+| **Default Retrieval** | Dense vector search (`RAG_PIPELINE=legacy`); the options below are opt-in |
+
+#### Optional RAG pipeline (opt-in switches, all off by default)
+
+Everything in this list is behind a switch that ships **off**. With every switch off, chat, strict-mode "information not available", web search, `source_images`, voice and embed chat behave as before. Turn a feature on only after you have read its section in [AGENTS.md](AGENTS.md) §6; each one lists its prerequisites and fallback.
+
+| Area | What it adds | Main switches (default) |
+|:-----|:-------------|:------------------------|
+| **Hybrid retrieval** | v2 stage graph with lexical search, rank fusion and reranking (Cohere, Voyage or local BM25) | `RAG_PIPELINE=legacy`, `RAG_LEXICAL_SEARCH=false`, `RAG_RERANKER=none` |
+| **True BM25 scoring** | Per-tenant BM25 statistics instead of `ts_rank_cd` | `RAG_LEXICAL_SCORING=ts_rank_cd` |
+| **Query layer** | Condense, expand, decompose, translate and date-normalize queries; semantic answer cache | `RAG_QUERY_LAYER=false`, `RAG_SEMANTIC_CACHE=off` |
+| **Citations & groundedness** | Verified citation markers, post-answer groundedness labels | `RAG_CITATIONS=false`, `RAG_GROUNDEDNESS=false` |
+| **Prompt-injection defense** | Context tagging, injection checks on retrieved text, tool-result guard | `RAG_CONTEXT_TAGGING=false`, `RAG_INJECTION_CHECK=off` |
+| **Output safety** | Link and credential-request filter on answers | `RAG_OUTPUT_GUARD=off` |
+| **Feedback loop** | Retrieval log, answer feedback, failed-query mining into an expert review queue | `RAG_RETRIEVAL_LOG=off`, `RAG_DOMAIN_EXPERT_REVIEW=false` |
+| **Multilingual** | Supported-language registry, language-aware ingestion, optional document translation | `RAG_SUPPORTED_LANGUAGES=` (empty), `RAG_DOC_TRANSLATION=off` |
+| **Unified ingestion** | 13-stage ingest pipeline, async ingestion queue, parse routing, quarantine and upload approval | `RAG_INGEST_PIPELINE=legacy`, `RAG_INGEST_ASYNC=off` |
+| **Document access groups** | Per-document labels enforced in retrieval | `RAG_DOC_ACCESS_GROUPS=off` |
+| **External vector backends** | Qdrant or Weaviate as the retrieval backend, with `pgvector` as the fallback | `RAG_RETRIEVAL_BACKEND=pgvector` |
+| **Source deletion sync & purge** | Re-check cloud-connector sources, purge deleted documents from the vector stores | `RAG_SOURCE_RECHECK=false` |
+| **Rollouts** | Admin-managed rollouts of an embedding profile, chunking profiles or a rebuild run to chosen tenants or a share of traffic | Config UI / admin API |
+| **Evaluation & gates** | Golden sets, smoke tiers, release gate, red-team replay, online monitor | `RAG_MONITOR=false`, `RAG_CONFIG_GATE=off` |
+
+Multi-tenant isolation is not optional: tenant checks have no off switch, and all knowledge-base retrieval goes through `@/lib/rag`. Retrieval needs `SUPABASE_SERVICE_ROLE_KEY`.
 
 ### 💬 Communication Channels
 
@@ -261,6 +282,10 @@ Build unlimited chatbots for yourself or clients with full white-label support
 ```
 
 Vercel picks the Node.js major from `engines.node` in `package.json`; a `>=` range would deploy a newer major, so keep it at `^22.12.0`.
+
+Optional extras (none are needed for the default setup): Python with `uv` for `rag-sidecar/` and `eval/`, a Qdrant or Weaviate instance for an external vector backend, and `COHERE_API_KEY` for hosted reranking. Pipeline features stay off until you set their switches; see [Optional RAG pipeline](#optional-rag-pipeline-opt-in-switches-all-off-by-default).
+
+Before handing off changes, run `npx next typegen && npx tsc --noEmit -p tsconfig.json`, `npm run lint` and `npm test`.
 
 ### Single-Tenant Setup
 
@@ -447,14 +472,14 @@ Intelligent chunking with configurable overlap for optimal context
 
 **HNSW Search**
 
-15-28x faster with production-optimized indexes (m=64, ef=200)
+Production-tuned HNSW indexes (m=64, ef=200)
 
 </td>
 <td align="center">
 
 **Semantic Matching**
 
-Pure vector similarity for accurate, relevant results
+Dense vector similarity by default; hybrid lexical search and reranking are opt-in
 
 </td>
 </tr>
@@ -538,25 +563,18 @@ OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 WHATSAPP_PROVIDER=flyio
 ```
 
-## 📊 Performance Benchmarks
-
-| Metric | Traditional RAG | myRAG (HNSW) | Improvement |
-|:-------|:---------------:|:---------------:|:-----------:|
-| **Single Query** | 100-500ms | **<50ms** | 🚀 15-28x |
-| **10 Concurrent Users** | 800-2000ms | **<100ms** | 🚀 20x |
-| **100k Documents** | 1-3 seconds | **<200ms** | 🚀 15x |
-| **Accuracy** | 95% | **98%** | ✨ +3% |
-
 ## 🏗 Architecture
 
 <details>
 <summary><b>📋 Tech Stack & Structure</b></summary>
 
 ### Technologies
-- **Frontend**: Next.js 16.0.10, React 19.2.1, TypeScript, Tailwind CSS
+- **Frontend**: Next.js 16 (lockfile resolves 16.4.6; `package.json` range `^16.1.6`), React 19.2.1, TypeScript 5, Tailwind CSS 3.4, Zustand 5
 - **Backend**: Next.js API Routes, Supabase
 - **AI**: Vercel AI SDK 6.0.3, 100+ models via providers
-- **Database**: PostgreSQL + pgvector (HNSW indexes)
+- **Runtime**: Node.js 22 (`^22.12.0`)
+- **Database**: PostgreSQL + pgvector (HNSW indexes); optional Qdrant or Weaviate as an external retrieval backend
+- **Python services (optional)**: `rag-sidecar/` (document parsing, groundedness scoring) and `eval/` (evaluation harness)
 - **Auth**: Supabase Auth
 - **Payments**: Stripe & Polar
 
@@ -571,11 +589,15 @@ myrag/
 │       └── whatsapp/  # WhatsApp providers
 ├── voice-agent/       # Real-time voice service (LiveKit)
 ├── baileys-whatsapp/  # WhatsApp integration service
+├── rag-sidecar/       # Optional Python sidecar for the RAG pipeline
+├── eval/              # Evaluation harness, golden sets, gate configs
+├── config/rag/        # RAG registries and rule files
 ├── scripts/
 │   └── config-ui/     # Visual config UI
 ├── supabase/
 │   ├── single-tenant-setup.sql
-│   └── multi-tenant-setup.sql
+│   ├── multi-tenant-setup.sql
+│   └── migrations/    # Ordered upgrade migrations
 └── AGENTS.md          # Canonical AI assistant guide
 ```
 
@@ -610,6 +632,11 @@ myrag/
 - 🔗 **[README_NANGO_INTEGRATION.md](README_NANGO_INTEGRATION.md)** - Cloud connectors for Google Drive, Notion, Dropbox
 - 📱 **[README_WHATSAPP_INTEGRATION.md](README_WHATSAPP_INTEGRATION.md)** - WhatsApp integration via [Baileys](https://baileys.wiki/) (Fly.io/Railway/Render)
 - 🗣️ **[voice-agent/](voice-agent/)** - Voice agent service (included in monorepo)
+
+### RAG Pipeline
+- 🧠 **[AGENTS.md](AGENTS.md)** §6 - Switches, defaults, migrations and commands for each RAG phase (ingestion, hybrid retrieval, citations, injection defense, feedback loop, query layer, monitoring)
+- 🔁 **[docs/finetune-retention.md](docs/finetune-retention.md)** - Retention of fine-tuning data bundles
+- 🌐 **[docs/vendor-data-flow.md](docs/vendor-data-flow.md)** - Which optional features send data to third-party services
 
 ### AI Agent Development
 - **[AGENTS.md](AGENTS.md)** - Canonical guide for AI assistants (OpenAI GPT Codex, Gemini, etc.)
@@ -746,7 +773,6 @@ The license covers the code, not the myRAG name or logo. If you publish or sell 
 - 📖 [Developer Guide](AGENTS.md)
 - 📘 [Deployment Modes](README_DEPLOYMENT_MODES.md)
 - 🐛 [GitHub Issues](https://github.com/EthanChenGuang/myRAG/issues)
-- 💬 [Discord Community](https://discord.gg/8ZCwZjqcAY)
 - 📧 [Contact](mailto:hello@myrag.laoxiang.app)
 
 ## 🙏 Acknowledgments
@@ -766,11 +792,11 @@ Built with amazing technologies:
 
 <div align="center">
   <h3><img src="./public/myRAG-logo.png" alt="myRAG" width="25" style="vertical-align: middle;"> Ready to Build Your AI Chatbot?</h3>
-  <p><strong>Get started in minutes with our visual configuration UI</strong></p>
+  <p><strong>Get started with our visual configuration UI</strong></p>
 
-  [📖 Read Docs](#-documentation) • [💬 Join Discord](https://discord.gg/8ZCwZjqcAY)
+  [📖 Read Docs](#-documentation) • [🚀 Quick Start](#-quick-start)
 
   <br>
 
-  **Built with 🧡 for developers who ship fast**
+  **Built with 🧡 for developers who ship**
 </div>
