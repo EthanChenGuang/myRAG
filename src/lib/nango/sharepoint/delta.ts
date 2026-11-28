@@ -143,12 +143,14 @@ export class GraphDeltaFeed implements SourceChangeFeed {
     ): Promise<GraphChangePage> {
         const now = this.options.now ?? Date.now;
         const seen = new Map<string, GraphSourceChange>();
+        const rootIds = new Set<string>();
         const result = (nextCursor: string | null, complete: boolean): GraphChangePage => ({
             changes: [...seen.values()],
             nextCursor,
             complete,
             fullListing: complete && fullListing,
             resynced,
+            rootIds: [...rootIds],
         });
 
         let endpoint = firstEndpoint;
@@ -170,6 +172,8 @@ export class GraphDeltaFeed implements SourceChangeFeed {
             const body = (response.data ?? {}) as DeltaBody;
             const items = Array.isArray(body.value) ? (body.value as DriveItem[]) : [];
             for (const item of items) {
+                const rootId = isFacet(item.root) ? asString(item.id) : undefined;
+                if (rootId) rootIds.add(rootId);
                 const change = toChange(item, this.options.driveId);
                 if (!change) continue;
                 seen.delete(change.fileId);

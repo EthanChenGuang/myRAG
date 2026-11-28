@@ -119,4 +119,10 @@ describe('scopeRemovals (Pitfall 15)', () => {
         const library: DriveSelection = { sites: [], drives: [{ id: 'drive-a', name: 'Library 1' }], folders: [] };
         expect(scopeRemovals([{ fileId: 'old', driveId: 'drive-b' }], [], library, new Map())).toEqual(['old']);
     });
+
+    it('with a site selected, a synced file without its site id is not provably out', () => {
+        const site: DriveSelection = { sites: [{ id: 'site-a', name: 'Site A' }], drives: [], folders: [] };
+        expect(scopeRemovals([{ fileId: 'old', driveId: 'drive-b' }], [], site, new Map())).toEqual([]);
+        expect(scopeRemovals([{ fileId: 'old', driveId: 'drive-b', siteId: 'site-b' }], [], site, new Map())).toEqual(['old']);
+    });
 });
