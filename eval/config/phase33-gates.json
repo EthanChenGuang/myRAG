@@ -4,6 +4,10 @@
   "description": "Phase 3.3 eval gates (D-36, TPL-09), registered in plan 03.3-22 before any tpl-recommended run existed. This file is committed once and never edited: a later failing gate is a result, never a reason to change a number here. Evaluated by python -m rag_eval.phase33_gate evaluate over the run directories of eval/config/phase33-comparison.json.",
   "comparison_spec": "eval/config/phase33-comparison.json",
   "noise": "eval/config/noise.json",
+  "no_slice_drop_rule": {
+    "version": 2,
+    "min_gate_n": 10
+  },
   "gate_split": "dev",
   "min_dev_items": 10,
   "gates": [

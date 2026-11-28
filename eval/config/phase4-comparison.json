@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "noise": "eval/config/noise.json",
+  "no_slice_drop_rule": {
+    "version": 2,
+    "min_gate_n": 10
+  },
   "baselines": {
     "prechunked": "eval/baselines/fixture-baseline.json",
     "ingest": "eval/baselines/fixture-ingest-baseline.json"
