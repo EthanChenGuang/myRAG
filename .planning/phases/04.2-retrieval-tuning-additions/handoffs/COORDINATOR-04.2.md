@@ -58,3 +58,14 @@ Source: `.planning/debug/phase42-scanned-slice-regression.md` (branch `exec/debu
 | 0936 | 04.2-40 | `0936_identifier_document_filter.sql`. It sits in Phase 4.3's block (0935 to 0939) because it redefines `hybrid_search_chunks`, `rag_bm25_search_chunks`, `rag_exact_id_documents` and `rag_table_lookup`, whose newest bodies are in 0930, 0932 and 0933. 0935 is already held by exec/04.4-16 for plan 04.4-17. Tell the Phase 4.3 owner. |
 
 **Ordering requirement for 04.4-17 (required, not a suggestion).** 04.4-17 plans to redefine `rag_bm25_search_chunks` with `p_df_mode` in 0935. 0936 rebuilds that function from the 0932 body, and its precheck stops with 55000 when the function has an argument outside the 0932 signature. If 0935 ships with that body, a fresh apply in file order stops at 0936. 04.4-17 must give up 0935, take a number above 0936, rebuild from the 0936 body and keep the `identifier-document-filter` marker fragment. Details: `04.2-40-bm25-ordering.md`.
+
+## Plan 04.2-40 result (2026-11-28)
+
+- Gate on the current corpus, spec unchanged: off_identity, identifier, table, versions and dictionary PASS.
+- Diversity FAILs on `category:scanned`: one item (`en-scanned-001`) drops out of the top 10 under MMR in a 4-item slice. Hand-off: `04.2-40-gate-diversity.md`.
+- Identifier precision is 1.0 and leakage 0.0. `en-scanned-001` is retrieved at rank 2 under `v2-identifier-on`.
+- Diversity sweep: no eligible lambda; `mmr_lambda` stays 0.9 (`04.2-40-diversity-sweep.md`).
+- Ordering hand-off for 04.4-17: `04.2-40-bm25-ordering.md`.
+- Pending owner decisions:
+  1. D-59 itself.
+  2. The gate rules of debug report section 4 item 3: `min_gate_n` or paired flips, whether plans that add fixtures must re-run the gates, and `identifier_precise` for a carrying document.
