@@ -34,6 +34,7 @@ vi.mock('@/lib/rag', async () => {
     softDeleteLineage,
     purgeLineage,
     removeDocumentObjects,
+    recomputeDirtyDupClusters: async () => ({ ok: true }),
     queueConfigFromProcessEnv: () => ({ ingestAsync: state.ingestAsync }),
   };
 });
