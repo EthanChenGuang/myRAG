@@ -6927,17 +6927,17 @@
     "source_images": []
   },
   {
-    "query": "How many rounds does phase 6 of the Varnel sequence hold, and which marker opens it?",
+    "query": "How many rounds does phase 6 of the Varnel sequence, opened by the marker Galmor, hold?",
     "results": [],
     "source_images": []
   },
   {
-    "query": "Which markers open phases 3 and 9 of the Varnel sequence, and how many rounds does each of those phases hold?",
+    "query": "How many rounds does phase 3 of the Varnel sequence, opened by the marker Teluma, hold, and how many slots does each of its rounds have?",
     "results": [],
     "source_images": []
   },
   {
-    "query": "And how many slots does each round of phase 10 of the Varnel sequence have?",
+    "query": "And phase 10 of the Varnel sequence, opened by the marker Kemmis: how many slots does each of its rounds have?",
     "results": [],
     "source_images": []
   },
@@ -6947,17 +6947,17 @@
     "source_images": []
   },
   {
-    "query": "璇尔序列第 4 阶段共有几圈？由哪个标记开启？",
+    "query": "璇尔序列第 4 阶段由标记翊岚开启，共有几圈？",
     "results": [],
     "source_images": []
   },
   {
-    "query": "璇尔序列第 7 阶段和第 10 阶段分别由哪个标记开启？各有几圈？",
+    "query": "璇尔序列第 7 阶段由标记岫棠开启，岫棠在第 7 阶段共有几圈？每圈几格？",
     "results": [],
     "source_images": []
   },
   {
-    "query": "那么璇尔序列第 9 阶段每圈有几格？",
+    "query": "那么由标记璟渊开启的璇尔序列第 9 阶段，璟渊每圈有几格？",
     "results": [],
     "source_images": []
   },
@@ -6967,17 +6967,17 @@
     "source_images": []
   },
   {
-    "query": "Quanti giri comprende la fase 5 della sequenza Varnetta, e quale segnalino la apre?",
+    "query": "Quanti giri comprende la fase 5 della sequenza Varnetta, aperta dal segnalino Feschino?",
     "results": [],
     "source_images": []
   },
   {
-    "query": "Quali segnalini aprono le fasi 2 e 11 della sequenza Varnetta, e quanti giri comprende ognuna?",
+    "query": "Quanti giri comprende la fase 2 della sequenza Varnetta, aperta dal segnalino Brivena, e quante caselle ha ogni giro?",
     "results": [],
     "source_images": []
   },
   {
-    "query": "E quante caselle ha ogni giro della fase 8 della sequenza Varnetta?",
+    "query": "E quante caselle ha ogni giro della fase 8 della sequenza Varnetta, aperta dal segnalino Ivestra?",
     "results": [],
     "source_images": []
   },
