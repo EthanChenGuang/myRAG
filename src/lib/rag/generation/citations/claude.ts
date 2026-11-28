@@ -11,6 +11,7 @@ import {
 } from 'ai';
 import { z } from 'zod/v3';
 import { CitationRecordSchema, type CitationRecord } from '@/lib/rag-eval/contracts.generated';
+import { isMatchableQuote } from '@/lib/citations/quote';
 import { DEFAULT_ANTHROPIC_BASE_URL } from '../config';
 import type { AliasMap } from './blocks';
 import { buildDecomposedAnswerBlock, type DecomposedAnswerInput } from '../decomposed-answer';
@@ -130,7 +131,7 @@ const CitationListSchema = z.array(CitationRecordSchema);
 function withCitedQuotes(records: CitationRecord[], quotes: ReadonlyMap<string, string>): CitationRecord[] {
   return records.map((record) => {
     const quote = quotes.get(record.alias);
-    if (!quote) return record;
+    if (!isMatchableQuote(quote)) return record;
     return { ...record, quote, quoteHash: createHash('sha256').update(quote).digest('hex') };
   });
 }

@@ -1,3 +1,5 @@
+import { isMatchableQuote } from '@/lib/citations/quote';
+
 export interface AnswerExchange {
   query: string;
   answer: string;
@@ -60,7 +62,7 @@ export function citedQuotesOf(citations: unknown): string[] {
   const quotes: string[] = [];
   for (const citation of citations) {
     const quote = objectOr(citation)?.quote;
-    if (typeof quote === 'string' && quote.length > 0) quotes.push(quote);
+    if (isMatchableQuote(quote)) quotes.push(quote);
   }
   return quotes;
 }
