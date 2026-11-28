@@ -13033,6 +13033,8 @@ COMMIT;
 --    ORDER BY 1;
 -- Re-running any migration below 0425 after 0425 puts back that migration's search_path and body, so re-run 0425 (this file, then the mode
 -- file) after it.
+-- Phase 3.1.1: re-running 0425 after 0440 and 0442 puts back the unscoped rag_chunk_embeddings_guard and rag_reembed_* bodies without
+-- notice, so re-run 0440 and then 0442 after it. (quick-311, I-3)
 
 BEGIN;
 
@@ -17022,6 +17024,8 @@ COMMIT;
 -- Live upgrade. The first block proves only that the functions exist: 0425 overwrites every live body with the repository's version. Run
 -- the read-only dry run in the header of 0425_search_path_empty.sql first; it covers this file's functions too. Re-running any migration
 -- below 0425 after 0425 puts back that migration's search_path and body, so re-run 0425 (the common file, then this file) after it.
+-- Phase 3.1.1: re-running 0425 after 0440 and 0442 puts back the unscoped rag_chunk_embeddings_guard and rag_reembed_* bodies without
+-- notice, so re-run 0440 and then 0442 after it. (quick-311, I-3)
 
 BEGIN;
 
@@ -17712,6 +17716,11 @@ COMMIT;
 --   SELECT 'f7aa72d3c0bcc173f7dd103cced69c03' AS expected, pg_catalog.md5(p.prosrc) AS live
 --     FROM pg_catalog.pg_proc p WHERE p.oid = pg_catalog.to_regprocedure('public.rag_chunk_embeddings_guard()');
 -- Re-running 0425 after this file puts back the 0425 guard without the scope check, so re-run 0440 after it.
+-- Large chunk_embeddings tables: the three partial HNSW indexes below are built inside this file's transaction, which blocks writes to
+-- chunk_embeddings for the whole build. On a table that already holds many rows, create them first, outside a transaction, with
+-- CREATE INDEX CONCURRENTLY IF NOT EXISTS and the same name, expression, opclass, WITH options and WHERE clause, one statement at a time
+-- (CONCURRENTLY cannot run inside BEGIN/COMMIT). The IF NOT EXISTS statements here then skip them. Check that none is left INVALID
+-- (pg_catalog.pg_index.indisvalid) before applying this file; drop and rebuild an invalid one. (quick-311, T-3.1.1-15b)
 -- Idempotent: ADD COLUMN IF NOT EXISTS, constraints added only when absent, ON CONFLICT DO NOTHING, IF NOT EXISTS, CREATE OR REPLACE.
 
 BEGIN;

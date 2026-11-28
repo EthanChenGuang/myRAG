@@ -14,6 +14,8 @@ import type { PostCheckLimits, PostCheckSkip, PostCheckSkipReason } from './post
 import { getKbLanguageShares, translationTargets, type KbLanguageShares } from './kb-languages';
 import type { GlossaryHashStage } from '../v2/config-hash';
 import { glossarySourceSurfaces, loadTenantGlossary, type TenantGlossary } from './glossary';
+import { HISTORY_MAX_TURNS, terminologyGlossaryEntries, type TerminologyGlossaryEntry } from './prompts/render';
+import { terminologyGlossary } from '../terminology/glossary';
 import type { TranslateSkip } from './llamaindex/translate';
 import { buildHistoryFallbackVariant, previousUserTurn } from './history-fallback';
 import { buildQueryPlan, planToVariants, type SkippedTransform } from './plan';
@@ -47,13 +49,19 @@ import { checkBypassReason, type CacheRetrievalOptions, type TurnFacts } from '.
 import { resolveHitSources } from '../cache/sources';
 import { cacheAccessKeyPart } from '../cache/access-key';
 import { effectiveCacheThreshold } from '../cache/threshold';
+import { systemPromptHashWithBlocks } from '../cache/keys';
+import { decomposedAnswerTemplate } from '../generation/decomposed-answer';
 import type { CacheHit, CacheKeyParts, CacheTicket, EntryProfile } from '../cache/types';
 import { resolveFinalResultCount } from '../config';
 import { effectiveVersionScope } from './filters';
+import { isVersionQuestion, subQuestionVersionScope, type VersionRules } from './subq-filters';
+import type { VersionScope } from '../backend/types';
 import { collectRequiredTerms, type RequiredTerm } from './completeness';
 import { loadTenantDocTypes, loadTenantVocabulary } from './tenant-vocabulary';
 import type { SubqFilterContext } from './llamaindex/decompose';
 import { terminologyMatcherFor } from '../terminology/load';
+import type { RetrievalFilters } from '../backend/types';
+import { startSpeculativeRetrieval, type SpeculativeHandle, type SpeculativeSeam } from './speculative';
 import { terminologyParams } from '../terminology/expand';
 import type { RpcClient } from '../backend/supabase-rpc';
 
@@ -77,6 +85,8 @@ export interface QueryLayerOutcome {
   precomputed?: { text: string; embedding: QueryEmbedding };
   /** LangChain (D-17): fuses the variant lists through EnsembleRetriever over the scope-bound port; absent keeps native RRF. */
   searchDelegate?: SearchDelegate;
+  /** Phase 6.2 D-21: the original query's speculative embed and search, started after the gate; absent while the switch is off. */
+  speculative?: SpeculativeHandle;
 }
 
 /** What the pipeline lends the semantic_cache stage, so its key and vector equal what the retrieval stages use. */
@@ -104,6 +114,10 @@ export interface QueryLayerInput {
   afterTransforms?: (standalone: string) => Promise<void>;
   /** D-14: told the glossary state for the config hash, before semantic_cache builds its key; never called with the switch off. */
   onGlossary?: (stage: GlossaryHashStage) => void;
+  /** Phase 6.2 D-21: lent by the pipeline only while RAG_SPECULATIVE_RETRIEVAL can apply; filtersFor builds the request filters. */
+  speculative?: SpeculativeSeam & { filtersFor(range: RelativeDateRange | null): RetrievalFilters };
+  /** QRY-01, QRY-03: told when a condense or HyDE prompt carries the terminology glossary, before semantic_cache builds its key. */
+  onTerminologyPrompt?: () => void;
 }
 
 const NO_LAYER_OUTCOME: Readonly<QueryLayerOutcome> = Object.freeze({
@@ -189,6 +203,7 @@ export async function subqFilterContextFor(args: {
   base: SubqFilterContext['base'];
   vocabCap: number;
   signal: AbortSignal;
+  versionRules?: VersionRules;
 }): Promise<SubqFilterContext> {
   const { scope } = args;
   const [vocabulary, docTypes] = await Promise.all([
@@ -203,6 +218,7 @@ export async function subqFilterContextFor(args: {
       languages: [...getLanguageSettings().languages],
     },
     vocabCap: args.vocabCap,
+    ...(args.versionRules ? { versionRules: args.versionRules } : {}),
   };
 }
 
@@ -363,8 +379,14 @@ interface CacheStageInput {
   historyLength: number;
   condenseOk: boolean;
   framework: CacheKeyParts['queryFramework'];
+  /** The final plan's sub-question count (06.2 G2: the decomposed-answer block applies from two). */
+  subQuestionCount: number;
   spec: StageSpec;
   embedSpec: StageSpec;
+  /** D-21: when the standalone is the original, the cache key reuses the speculative embedding instead of embedding it again. */
+  speculative?: SpeculativeHandle | null;
+  /** P-35: the first non-current version scope of the plan's applied sub-question specs. */
+  subQuestionVersionScope?: VersionScope;
 }
 
 interface CacheStageResult {
@@ -384,6 +406,17 @@ function lookupDetail(lookup: CacheLookup): string {
   if (lookup.kind === 'hit') return `hit distance=${lookup.hit.distance.toFixed(4)}`;
   return lookup.kind === 'unresolved' ? 'miss citations_unresolved' : 'miss';
 }
+
+/**
+ * 06.2 G2: the caller's systemPromptHash, with the decomposed-answer block template folded in only when the entry point passes
+ * the block, RAG_DECOMPOSED_ANSWER is effective and the plan has the sub-questions that make the block non-empty.
+ */
+function promptHashForKey(context: RetrievalCacheContextLike, switchOn: boolean, subQuestionCount: number, lang: Lang): string {
+  const decomposed = context.decomposedAnswer === true && switchOn ? decomposedAnswerTemplate(subQuestionCount, lang) : null;
+  return systemPromptHashWithBlocks(context.systemPromptHash, { decomposedAnswer: decomposed });
+}
+
+type RetrievalCacheContextLike = Pick<NonNullable<QueryLayerInput['input']['cacheContext']>, 'systemPromptHash' | 'decomposedAnswer'>;
 
 /**
  * D-05/D-32/D-33/D-36: the cache lookup after the parallel group. Bypass rules run before anything is embedded or checked;
@@ -430,7 +463,12 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
     defaultMaxResults: resolveFinalResultCount(undefined, env.RAG_FINAL_RESULT_COUNT),
   };
   const versionScope = effectiveVersionScope(ctx.config, profile, input.retrievalFilters?.versionScope, input.channel).scope;
+  // RET-11, P-35: a sub-question that reads superseded versions makes the whole turn a version_scope bypass.
+  const subQuestionScope = args.subQuestionVersionScope
+    ? effectiveVersionScope(ctx.config, profile, args.subQuestionVersionScope, input.channel).scope
+    : 'current';
   if (versionScope !== 'current') facts.versionScope = versionScope;
+  else if (subQuestionScope !== 'current') facts.versionScope = subQuestionScope;
   const bypass = checkBypassReason(facts);
   if (bypass !== null) {
     // D-42 e: the eval report reads bypass_<reason> from the stage counts.
@@ -455,7 +493,9 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
   let accessGroupSetHash: string;
   try {
     accessGroupSetHash = cacheAccessKeyPart(scope);
-    embedding = await ctx.cache.embed(args.standalone, transformSignal(signal, null, args.embedSpec.timeoutMs));
+    const embedFresh = () => ctx.cache!.embed(args.standalone, transformSignal(signal, null, args.embedSpec.timeoutMs));
+    const speculative = args.speculative && args.speculative.text === args.standalone ? await args.speculative.embedding : null;
+    embedding = speculative ?? (await embedFresh());
     retrievalConfigHash = await ctx.cache.retrievalConfigHash(embedding);
   } catch (error) {
     if (signal.aborted) throw new StageError('semantic_cache', 'aborted', error);
@@ -473,7 +513,7 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
     retrievalConfigHash,
     queryFramework: args.framework,
     entryProfile,
-    systemPromptHash: context.systemPromptHash,
+    systemPromptHash: promptHashForKey(context, ctx.config.queryAdditions.effective.decomposedAnswer, args.subQuestionCount, gate.lang),
   };
   const embeddingProfileId = embedding.profile?.id ?? LEGACY_PROFILE.id;
   const ticket: CacheTicket = { key, embeddingProfileId, standalone: args.standalone, vector: embedding.vector, turn: facts };
@@ -662,6 +702,27 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   }
   const routed = new Set(route.transforms);
 
+  // D-21: the original's embed and search start right after the gate and the deterministic R2 range, beside condense and the
+  // parallel group; the search stage adopts them only when its request equals the speculative one. Voice never speculates here.
+  let speculative: SpeculativeHandle | null = null;
+  const speculativeProfile = profile === 'chat' || profile === 'embed' || profile === 'eval';
+  if (ctx.speculative && ctx.scope && speculativeProfile && config.queryAdditions.effective.speculativeRetrieval) {
+    const earlyRange =
+      routed.has('normalize_dates') && transformSpec('normalize_dates').enabled
+        ? normalizeRelativeDates(input.query, { now: new Date(deps.now()), timeZone: input.timeZone }).range
+        : null;
+    speculative = startSpeculativeRetrieval({
+      text: input.query,
+      filters: ctx.speculative.filtersFor(earlyRange),
+      scope: ctx.scope,
+      signal,
+      deps: ctx.speculative.deps,
+      embedTimeoutMs: ctx.speculative.embedTimeoutMs,
+      searchTimeoutMs: ctx.speculative.searchTimeoutMs,
+    });
+    ctx.speculative.onStart(speculative);
+  }
+
   // D-14: one glossary read per request (4.1.1 per-tenant loader, whatever RAG_TERMINOLOGY says), shared by the rewrites that keep
   // glossary terms verbatim and by translate; started only when one of them runs. Its terms never enter gate.protectedTokens.
   const glossaryOn = config.queryAdditions.effective.translationGlossary;
@@ -680,6 +741,23 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     return glossaryProtected.length > 0 ? { glossaryProtected } : {};
   };
   if (glossaryOn) ctx.onGlossary?.({ enabled: true, version: null });
+
+  // QRY-01, QRY-03 (04.1.1 D-20): the dictionary entries matched in the text a condense or HyDE prompt is about to send, only while
+  // the terminology stage is enabled for the request. Chat and embed load through the per-tenant loader cache the terminology stage
+  // reads later in the same request; voice matches only an already cached dictionary, so it adds no round trip.
+  const terminologyOn = spec('terminology', 'skip').enabled;
+  const terminologyFor = async (text: string, stageSignal: AbortSignal): Promise<{ terminology?: TerminologyGlossaryEntry[] }> => {
+    if (!terminologyOn || !ctx.scope) return {};
+    const found = await terminologyGlossary(ctx.scope, text, { config, profile, signal: stageSignal, cachedOnly: profile === 'voice' });
+    const terminology = terminologyGlossaryEntries(
+      (found?.matches ?? []).map((match) => ({ surface: match.surface, canonical: match.canonical, kind: match.kind })),
+    );
+    if (terminology.length === 0) return {};
+    ctx.onTerminologyPrompt?.();
+    return { terminology };
+  };
+  const condenseText = (): string =>
+    [input.query, ...history.slice(-HISTORY_MAX_TURNS).filter((turn) => turn.role === 'user').map((turn) => turn.content)].join('\n');
 
   let condensed: string | null = null;
   let condenseOk = false;
@@ -700,6 +778,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
           language: gate.lang,
           protectedTokens: gate.protectedTokens,
           ...(await glossaryProtectedFor(input.query)),
+          ...(await terminologyFor(condenseText(), stageSignal)),
           limits,
           signal: stageSignal,
         }),
@@ -787,8 +866,8 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
         )
       : null,
     runHyde
-      ? runTransform(transformRun<HydeResult>('hyde', { failed: (value) => callFailed(value.skipped) }), (stageSignal) =>
-          transformer.hyde({ ...base, signal: stageSignal }),
+      ? runTransform(transformRun<HydeResult>('hyde', { failed: (value) => callFailed(value.skipped) }), async (stageSignal) =>
+          transformer.hyde({ ...base, ...(await terminologyFor(standalone, stageSignal)), signal: stageSignal }),
         )
       : null,
     routed.has('decompose')
@@ -817,6 +896,12 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
                     base: input.retrievalFilters,
                     vocabCap: params.subq_filter_vocab_cap,
                     signal: stageSignal,
+                    // P-35: versions may widen past current only where the request's own scope would, on a comparison or period turn.
+                    versionRules: {
+                      versionScopeEffective: !effectiveVersionScope(config, profile, 'all', input.channel).ignored,
+                      versionQuestion: isVersionQuestion(standalone, gate.reasons) || isVersionQuestion(input.query, []),
+                      ...(input.callerVersionsCurrent === true ? { callerCurrent: true } : {}),
+                    },
                   })
                 : Promise.resolve(null),
               glossaryProtectedFor(standalone),
@@ -862,6 +947,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
       : null,
   ];
   const settled = await Promise.allSettled(tasks.map((task) => task ?? Promise.resolve(null)));
+  speculative?.markTransformsEnded();
   const rejected = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
   if (rejected) throw rejected.reason;
   const [dates, expand, hyde, decompose, translation] = settled.map((result) => (result as PromiseFulfilledResult<unknown>).value) as [
@@ -924,6 +1010,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   };
 
   if (ctx.afterTransforms) await ctx.afterTransforms(standalone);
+  const subQuestionScope = subQuestionVersionScope(plan.sub_question_specs);
 
   const cached = await runSemanticCacheStage({
     ctx,
@@ -933,9 +1020,14 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     historyLength: history.length,
     condenseOk,
     framework: transformer.framework,
+    subQuestionCount: plan.sub_questions?.length ?? 0,
     spec: cacheSpec,
     embedSpec: spec('embed', 'throw'),
+    speculative,
+    ...(subQuestionScope ? { subQuestionVersionScope: subQuestionScope } : {}),
   });
+  // D-21: a hit makes the speculative work pointless; the shared signal stops its embed and search.
+  if (cached.hit) speculative?.abort('cache_hit');
   return {
     plan,
     variants: planToVariants(plan),
@@ -946,5 +1038,6 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     ...(cached.ticket ? { cacheTicket: cached.ticket } : {}),
     ...(cached.precomputed ? { precomputed: cached.precomputed } : {}),
     ...(runtime.searchDelegate ? { searchDelegate: runtime.searchDelegate } : {}),
+    ...(speculative ? { speculative } : {}),
   };
 }

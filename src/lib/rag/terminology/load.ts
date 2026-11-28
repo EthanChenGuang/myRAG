@@ -150,6 +150,24 @@ export async function terminologyMatcherFor(
   return { dictionary: entry.dictionary, matcher };
 }
 
+/**
+ * The cached dictionary and matcher of the scope's tenant, or null when none is loaded or the entry has expired. It never reads
+ * the database: the voice glossary uses only what an earlier request loaded (no extra round trip on the voice path).
+ */
+export function peekTerminologyMatcher(
+  scope: TenantScope,
+  options: { minHanChars: number; now?: () => number },
+): { dictionary: EffectiveDictionary; matcher: TerminologyMatcher } | null {
+  const entry = cached(scopeKey(scope), (options.now ?? getRagDeps().now)());
+  if (!entry) return null;
+  let matcher = entry.matchers.get(options.minHanChars);
+  if (!matcher) {
+    matcher = buildMatcher(entry.dictionary.entries, { minHanChars: options.minHanChars });
+    entry.matchers.set(options.minHanChars, matcher);
+  }
+  return { dictionary: entry.dictionary, matcher };
+}
+
 /** Drops one tenant key's cache entry, or every entry; the admin writers call it after a write (plan 09). */
 export function invalidateTerminologyCache(tenantKey: string | 'all'): void {
   if (tenantKey === 'all') cache.clear();

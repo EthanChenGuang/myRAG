@@ -322,6 +322,15 @@ export function parseRetrievalFilters(
   return { ok: true, filters };
 }
 
+/**
+ * Phase 6.2 P-35: whether the caller's own retrievalFilters body asks for current versions explicitly. The parsed filters cannot
+ * say so (current is the default and leaves no field), so the routes read it here, after a successful parse; a sub-question
+ * version proposal never overrides it.
+ */
+export function requestsCurrentVersions(body: unknown): boolean {
+  return typeof body === 'object' && body !== null && !Array.isArray(body) && (body as { versions?: unknown }).versions === 'current';
+}
+
 /** An id no document has: an empty intersection of two document lists must match nothing, and an empty list reads as no filter downstream. */
 const NO_DOCUMENT_ID = '00000000-0000-0000-0000-000000000000';
 

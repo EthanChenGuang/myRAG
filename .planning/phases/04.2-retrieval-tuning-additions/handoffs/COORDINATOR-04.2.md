@@ -6,7 +6,7 @@ Written by plan 04.2-32 on 2026-11-27, at the phase close. One list of every ups
 
 | Item | Topic | Hand-off file | Status |
 | --- | --- | --- | --- |
-| (a) | ROADMAP 4.2 success criterion 5 wording breaks domain neutrality; proposed "a question naming two cell values of one table row" | `04.2-24-coordinator.md` | open: ROADMAP edit for the coordinator (executors do not edit ROADMAP.md) |
+| (a) | ROADMAP 4.2 success criterion 5 wording breaks domain neutrality; proposed "a question naming two cell values of one table row" | `04.2-24-coordinator.md` | done: ROADMAP 4.2 success criterion 5 reads "a question naming two cell values of one table row" (verified 2026-11-27, `04.2-VERIFICATION.md` W-4) |
 | (b) | EVAL-20 weekly-report row depends on FBK-10 (Phase 5.1.1) | none needed: `04.2-20-SUMMARY.md` | done: `rag_eval.weekly_report` existed, plan 04.2-20 added the per-tenant mean top-k redundancy table |
 | (c) | RET-11 "set by QRY-10" | `04.2-15-version-scope-notes.md` | open, wording only: Phase 6.2 sets `retrievalFilters.versions` through the same field; no second path |
 | (d) | LANG-07 picks up XLG-05 glossary pairs once Phase 6.2 stores them as `translation` entries | `04.2-19-xlg05.md` | open for Phase 6.2: no code needed here; a `--stale-dictionary` relex brings them in |
@@ -15,7 +15,7 @@ Written by plan 04.2-32 on 2026-11-27, at the phase close. One list of every ups
 | (g) | Order of the `hybrid_search_chunks` redefinitions between 3.2 and 4.2 | `04.2-09-hybrid-order.md` | done in code (0856 rebuilt on 0802); the coordinator confirms that any later 3.2 redefinition rebases on 0856 |
 | (h) | Order of `diversify` relative to 06-25's `reserveSubQuestionCoverage` | none (pinned by `tests/rag/v2/rank-order.test.ts`) | done: rerank, refusal, diversify, then the sub-question reservation; Phase 6 plan 06-25 keeps the order |
 | (i) | Voice TTFT measured in the voice agent, not the app | `04.2-11-voice-ttft-point.md` | done (D-39): agent posts to `/api/internal/voice-timing`; LAT-04 "server-side" wording for the coordinator |
-| (j) | Domain-specific names in `src/lib/rag/retrieval/exact-id.ts` and `src/lib/rag/ids/shapes.ts` | `04.2-24-coordinator.md` | open: the cleanup needs an owner |
+| (j) | Domain-specific names in `src/lib/rag/retrieval/exact-id.ts` and `src/lib/rag/ids/shapes.ts` | `04.2-24-coordinator.md` | open, owner: quick task `261127-idn-identifier-neutral-names` (reserved by quick `261127-q42-phase42-verify-fixes`, left for later) |
 
 ## Other hand-offs of the phase
 
@@ -24,13 +24,13 @@ Written by plan 04.2-32 on 2026-11-27, at the phase close. One list of every ups
 | `04.2-01-sweep-cap-min.md` | done by 04.2-05 (cap minimum 25) |
 | `04.2-01-upstream.md` | record of the 04.2-01 upstream gate |
 | `04.2-02-config-ui-i18n.md` | done by 04.2-25 (zh and it strings) |
-| `04.2-02-settings-classification.md` | open: the three backfill-dependent switches use mechanism `reparse` until dedicated rebuild mechanisms exist |
+| `04.2-02-settings-classification.md` | open, owner: quick task `261127-rbm-rebuild-mechanisms-42`. Checked by quick `261127-q42-phase42-verify-fixes`: of the registered mechanisms only `reparse` re-runs the writers of these stores (`indexDocumentForLookup` in the embed-write stage, `clusterPublishedDocument` at publish); `rechunk` and `relex` do not, so no classification-only change is correct and the three entries stay `reparse`. Dedicated `table_rows`, `dup_clusters`, `identifiers` mechanisms need the `RebuildMechanism` contract, the generated Zod, the checker set and the rebuild plan |
 | `04.2-04-registry-stemmer.md` | open: registry fields the tokenizer does not drive yet |
-| `04.2-06-eval-tuning-overrides.md` | open: eval tuning overrides do not reach the request hash yet |
+| `04.2-06-eval-tuning-overrides.md` | open, owner: Phase 7 regression plan 07-25 (eval harness regression runner; statistics in 07-24): eval tuning overrides do not reach the request hash yet |
 | `04.2-07-fixture-drift.md` | addressed by 04.2-32 Task 3 (fixture calibration re-run) |
-| `04.2-12-golden-rule.md` | open: GoldenItem category rule for no-answer near-miss items |
+| `04.2-12-golden-rule.md` | done by 04.2-37: absent-identifier items are `no_answer` items with `asked_identifier` tags, GoldenItem validation unchanged (`04.2-37-SUMMARY.md`, golden-rule section) |
 | `04.2-16-eval-run-clustering.md` | open: where a fixture duplicate threshold applies; live threshold is 04.2-33 |
-| `04.2-21-embed-sources.md` | open: the embed route has no sources payload |
+| `04.2-21-embed-sources.md` | open, owner: product decision, pending the owner (whether anonymous embed visitors should ever see filenames): the embed route has no sources payload |
 | `04.2-23-finding-copy.md`, `04.2-23-hidden-utility.md` | open UI follow-ups |
 | `04.2-23-proxy-wildcard.md` | done: RAG proxy path bug fixed |
 | `04.2-23-ui-review.md`, `04.2-25-ui-review.md` | UI review records |
@@ -39,3 +39,12 @@ Written by plan 04.2-32 on 2026-11-27, at the phase close. One list of every ups
 | `04.2-38-purge-inventory.md` | open for Phase 6.3 (plan 06.3-19) |
 | `04.2-32-gate-identifier.md`, `04.2-32-gate-versions.md` | resolved (PRs #125, #128) |
 | `04.2-32-gate-diversity.md` | resolved: option 1 chosen by the orchestrator under owner delegation and fixed in `src/lib/rag/v2/diversify.ts` |
+
+## Update 2026-11-27 (quick `261127-q42-phase42-verify-fixes`, `04.2-VERIFICATION.md` W-2 to W-6)
+
+- W-2 fixed: the images route and the Nango orphan hard delete now recompute the tenant's dirty duplicate clusters after the delete.
+- W-3 fixed: `eval/config/phase42-gates.json` labels `versions` as `ROADMAP-4.2-SC3` and `table` as `ROADMAP-4.2-SC5`; the same two labels were swapped by hand in `eval/reports/phase-04.2/README.md` and `gates.json`, numbers unchanged. A `--reuse` re-render was not committed: harness runs are not in git, and a fresh fixture run on `ci/merge-train-39` gives different numbers (diversity and identifier FAIL on the later `category:scanned` slice), so re-rendering would have changed values.
+- W-4: items (a) and `04.2-12-golden-rule.md` marked done.
+- W-5: owners assigned to (j), `04.2-06-eval-tuning-overrides.md`, `04.2-02-settings-classification.md` and `04.2-21-embed-sources.md`.
+- W-6: REQUIREMENTS.md LANG-07 notes the `loadEffectiveDictionary` and layer-version implementation.
+- Not done here: W-1 (the redundancy measure change needs the owner) and the live items G-1 to G-4.

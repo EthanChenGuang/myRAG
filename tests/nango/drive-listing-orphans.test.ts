@@ -92,6 +92,7 @@ async function loadSyncManager(memory: ReturnType<typeof createMemoryDb>) {
     currentIngestConfig: () => ({ pipeline: 'unified' }),
     scopeKey: scopeModule.scopeKey,
     softDeleteLineage: vi.fn(),
+    recomputeDirtyDupClusters: async () => ({ ok: true, skipped: true }),
     removeDocumentObjects: objects.removeDocumentObjects,
     queueConfigFromProcessEnv: () => ({ ingestAsync: false }),
   }));

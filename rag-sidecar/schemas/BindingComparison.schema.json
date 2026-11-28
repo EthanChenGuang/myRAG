@@ -437,6 +437,15 @@
       "title": "Notes",
       "type": "array"
     },
+    "population": {
+      "default": "fixture",
+      "enum": [
+        "fixture",
+        "real"
+      ],
+      "title": "Population",
+      "type": "string"
+    },
     "provenance_counts": {
       "additionalProperties": {
         "minimum": 0,

@@ -48,8 +48,13 @@ export interface QdrantSparseVector {
   indices: number[];
   values: number[];
 }
+/** LEX-05: BM25 text query with per-query k and b (Qdrant 1.20 TextQueryInput); only the bm25 scorer and its two numbers. */
+export interface QdrantTextQueryInput {
+  query: string;
+  scoring?: { bm25: { k?: number; b?: number } };
+}
 export interface QdrantDocument {
-  text: string;
+  text: string | QdrantTextQueryInput;
   model?: string;
   options?: Record<string, string | number | boolean>;
 }
@@ -189,10 +194,25 @@ function isNumberArray(value: unknown): value is number[] {
   return Array.isArray(value) && value.length > 0 && value.every((n) => typeof n === 'number' && Number.isFinite(n));
 }
 
+function isFiniteNumber(value: unknown): boolean {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** { query, scoring?: { bm25: { k?, b? } } } and nothing else: no other scorer, no other key at any level. */
+function isTextQueryInput(value: unknown): boolean {
+  if (!isPlainObject(value) || typeof value.query !== 'string') return false;
+  if (!Object.keys(value).every((k) => k === 'query' || k === 'scoring')) return false;
+  if (value.scoring === undefined) return true;
+  const scoring = value.scoring;
+  if (!isPlainObject(scoring) || Object.keys(scoring).length !== 1 || !isPlainObject(scoring.bm25)) return false;
+  const bm25 = scoring.bm25;
+  return Object.keys(bm25).every((k) => (k === 'k' || k === 'b') && isFiniteNumber(bm25[k]));
+}
+
 function isDocument(value: unknown): value is QdrantDocument {
   return (
     isPlainObject(value) &&
-    typeof value.text === 'string' &&
+    (typeof value.text === 'string' || isTextQueryInput(value.text)) &&
     Object.keys(value).every((k) => k === 'text' || k === 'model' || k === 'options')
   );
 }

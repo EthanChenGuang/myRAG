@@ -18,6 +18,15 @@
       ],
       "title": "Querylanguage"
     },
+    "scopeGate": {
+      "enum": [
+        "in_scope",
+        "out_of_scope",
+        "unsure"
+      ],
+      "title": "Scopegate",
+      "type": "string"
+    },
     "standaloneQuery": {
       "maxLength": 1000,
       "minLength": 1,

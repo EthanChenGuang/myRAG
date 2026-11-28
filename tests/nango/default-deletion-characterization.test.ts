@@ -117,7 +117,9 @@ function createMemoryDb(seed: Record<string, Row[]>, failDelete: { table: string
     };
     return builder;
   }
-  return { tables, calls, admin: { from } };
+  // Bookkeeping rpc calls (06.3-05 run records) are answered but kept outside the compared call list.
+  const rpc = async () => ({ data: [{ run_id: 'run-char', expires_at: null }], error: null });
+  return { tables, calls, admin: { from, rpc } };
 }
 
 const listing = { files: [] as Row[] };
@@ -197,6 +199,7 @@ async function replay(c: Case): Promise<Recording> {
     scopeKey: scopeModule.scopeKey,
     softDeleteLineage,
     removeDocumentObjects,
+    recomputeDirtyDupClusters: async () => ({ ok: true, skipped: true }),
     queueConfigFromProcessEnv: () => ({ ingestAsync: c.ingestAsync }),
   }));
   const { syncDocumentsForConnection } = await import('@/lib/nango/sync-manager');

@@ -7,6 +7,11 @@
  * Fake mode (default) installs fixture embedders for every catalog model and never reads a vendor key. --live requires VOYAGE_API_KEY
  * (presence only, never printed), prints each candidate's re-embed dry-run cost and stops with exit 4 unless --confirm-cost is given.
  *
+ * --base-url <app> (quick-311) runs against a real deployment instead: no fixture database and no fake for any profile, the scoped re-embed
+ * through npm run rag:reembed on the real project, the arms through run-eval --base-url, see binding-compare-live.mts. It needs --golden,
+ * --candidates and RAG_EVAL_SECRET (32+ characters, never generated here) and writes a population=real comparison only when the doc-type
+ * slice holds production or human items alone.
+ *
  * Exit codes: 0 comparison written, 2 bad arguments, 3 failure, 4 cost not confirmed.
  */
 import { spawnSync } from 'node:child_process';
@@ -61,6 +66,12 @@ export interface BindingCompareArgs {
   /** Record the domain-pack baseline (D-24): this many --baseline-only runs in separate processes, then rag_eval.baseline record-reports. */
   recordBaseline: string | null;
   runs: number;
+  /** Real-deployment mode (quick-311): the app the arms run against. */
+  baseUrl: string | null;
+  /** Fixture sweep only (quick-311 gap 6): leg_weights.domain sent to every arm as a retrieval override; null keeps the default 1.0. */
+  legWeightDomain: number | null;
+  organizationId: string | null;
+  userId: string | null;
 }
 
 export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
@@ -78,6 +89,10 @@ export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
         'baseline-only': { type: 'boolean', default: false },
         'record-baseline': { type: 'string' },
         runs: { type: 'string' },
+        'base-url': { type: 'string' },
+        'leg-weight-domain': { type: 'string' },
+        org: { type: 'string' },
+        user: { type: 'string' },
       },
       strict: true,
     });
@@ -103,6 +118,23 @@ export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
         .filter(Boolean)
     : null;
   if (candidates !== null && candidates.length === 0) throw new UsageError('--candidates names no profile');
+  const baseUrl = values['base-url']?.trim() || null;
+  const rawWeight = values['leg-weight-domain'];
+  const legWeightDomain = rawWeight === undefined ? null : Number(rawWeight);
+  if (legWeightDomain !== null && !(Number.isFinite(legWeightDomain) && legWeightDomain > 0 && legWeightDomain <= 4)) {
+    throw new UsageError('--leg-weight-domain must be a number above 0 and at most 4');
+  }
+  if (legWeightDomain !== null && (baseUrl !== null || values.live || baselineMode)) {
+    throw new UsageError('--leg-weight-domain is a fixture sweep; it takes neither --base-url, --live nor the baseline modes');
+  }
+  if (baseUrl === null && (values.org || values.user)) throw new UsageError('--org and --user scope a --base-url run only');
+  if (baseUrl !== null) {
+    if (baselineMode) throw new UsageError('the baseline modes record the fixture baseline; they take no --base-url');
+    if (values.live) throw new UsageError('--base-url is always live; drop --live');
+    if (!values.golden) throw new UsageError('--base-url needs --golden <real golden file>: the fixture golden points at fixture documents');
+    if (candidates === null) throw new UsageError('--base-url needs --candidates <profileId,...>');
+    if (values.org && values.user) throw new UsageError('--org and --user are exclusive');
+  }
   return {
     docType: docType === '' ? null : (docType as BindingCompareArgs['docType'] & string),
     candidates,
@@ -113,7 +145,17 @@ export function parseBindingCompareArgs(argv: string[]): BindingCompareArgs {
     baselineOnly,
     recordBaseline,
     runs,
+    baseUrl,
+    legWeightDomain,
+    organizationId: values.org?.trim() || null,
+    userId: values.user?.trim() || null,
   };
+}
+
+/** The committed dense, lexical and exact-id weights, so a domain-weight override changes the domain leg only. */
+function fixtureLegWeights(): Record<string, number> {
+  const params = JSON.parse(fs.readFileSync(RETRIEVAL_PARAMS_PATH, 'utf8')) as { leg_weights?: Record<string, number> };
+  return { dense: 1, lexical: 1, exact_id: 1, ...(params.leg_weights ?? {}) };
 }
 
 function runPython(module: string, args: string[]): number {
@@ -203,15 +245,21 @@ function defaultGolden(
   merge: (paths: string[], outPath: string) => string,
   ingestPaths: () => string[],
   partition: <T extends { category: string }>(items: T[]) => { main: T[]; tableSplit: T[] },
+  isQ62: (item: { category: string; tags?: readonly string[] | null }) => boolean,
 ): string {
   const merged = merge(
     [...ingestPaths(), 'eval/fixtures/domain/golden.jsonl'].map((file) => path.join(REPO_ROOT, file)),
     path.join(outDir, 'golden.all.jsonl'),
   );
   const lines = fs.readFileSync(merged, 'utf8').split('\n').filter((line) => line.trim() !== '');
-  const items = lines.map((line) => ({ line, category: (JSON.parse(line) as { category: string }).category }));
+  const items = lines.map((line) => {
+    const parsed = JSON.parse(line) as { category: string; tags?: string[] | null };
+    return { line, category: parsed.category, tags: parsed.tags ?? null };
+  });
   const out = path.join(outDir, 'golden.merged.jsonl');
-  fs.writeFileSync(out, `${partition(items).main.map((item) => item.line).join('\n')}\n`);
+  // The q62 items (Phase 6.2) need their own isolated tenant, which this comparison does not load; like table_split, they stay out.
+  const kept = partition(items).main.filter((item) => !isQ62(item));
+  fs.writeFileSync(out, `${kept.map((item) => item.line).join('\n')}\n`);
   return out;
 }
 
@@ -270,10 +318,45 @@ function recordDomainBaseline(args: BindingCompareArgs, out: string): number {
   return runPython('rag_eval.baseline', ['record-reports', ...reports.flatMap((report) => ['--report', report]), '--out', out]);
 }
 
+/** --base-url: nothing below this point of main() runs, so no fixture database, fixture env or fixture embedder is ever installed. */
+async function liveDeploymentMain(args: BindingCompareArgs): Promise<number> {
+  const { config: loadDotenv } = await import('dotenv');
+  loadDotenv({ path: path.join(REPO_ROOT, '.env.local'), quiet: true });
+  if ((process.env.RAG_EVAL_SECRET ?? '').length < 32) {
+    console.error('[Binding Compare] --base-url needs RAG_EVAL_SECRET (32+ characters, the deployment\'s value; presence is checked, the value is never printed)');
+    return EXIT_USAGE;
+  }
+  const live = await import('./binding-compare-live.mts');
+  const { assertSafeBaseUrl } = await import('./run-eval.mts');
+  assertSafeBaseUrl(args.baseUrl as string);
+  try {
+    return await live.runLiveDeploymentCompare(
+      {
+        docType: args.docType as string,
+        candidates: args.candidates ?? [],
+        golden: args.golden as string,
+        outDir: args.outDir,
+        baseUrl: args.baseUrl as string,
+        confirmCost: args.confirmCost,
+        organizationId: args.organizationId,
+        userId: args.userId,
+      },
+      await live.defaultLiveDeps(runPython),
+    );
+  } catch (error) {
+    if (error instanceof live.LiveCompareError) {
+      console.error(`[Binding Compare] ${error.message}`);
+      return error.exitCode;
+    }
+    throw error;
+  }
+}
+
 async function main(argv: string[]): Promise<number> {
   const args = parseBindingCompareArgs(argv);
   fs.mkdirSync(args.outDir, { recursive: true });
   if (args.recordBaseline !== null) return recordDomainBaseline(args, args.recordBaseline);
+  if (args.baseUrl !== null) return liveDeploymentMain(args);
 
   // Live mode only: the key must be present. Its value is kept in memory and never printed; fake mode never reads it.
   let liveVoyageKey: string | null = null;
@@ -300,6 +383,7 @@ async function main(argv: string[]): Promise<number> {
   const domain = await loadDomainPack();
   const ingestMode = await import('./ingest-mode.mts');
   const { mergeGoldenFiles, ingestModeGoldenPaths, partitionIngestModeItems, buildIngestFixtureDatabase } = ingestMode;
+  const { isQ62Item } = await import('./q62-fixtures.mts');
 
   const full = await buildIngestFixtureDatabase({
     deploymentMode: 'single-tenant',
@@ -408,7 +492,7 @@ async function main(argv: string[]): Promise<number> {
       args.golden ??
       (args.baselineOnly
         ? path.join(REPO_ROOT, DOMAIN_GOLDEN)
-        : defaultGolden(args.outDir, mergeGoldenFiles, ingestModeGoldenPaths, partitionIngestModeItems));
+        : defaultGolden(args.outDir, mergeGoldenFiles, ingestModeGoldenPaths, partitionIngestModeItems, isQ62Item));
 
     const runEvalModule = await import('./run-eval.mts');
     inProcess = await runEvalModule.prepareInProcessEval({
@@ -425,6 +509,10 @@ async function main(argv: string[]): Promise<number> {
       floor.setEvalScoreCalibration({ context_threshold: FIXTURE_CONTEXT_THRESHOLD });
     }
 
+    const weightOverride: EvalRequestOptions =
+      args.legWeightDomain === null
+        ? {}
+        : { retrieval_overrides: { leg_weights: { ...fixtureLegWeights(), domain: args.legWeightDomain } } as EvalRequestOptions['retrieval_overrides'] };
     const scoreArm = async (name: string, requestOptions: EvalRequestOptions): Promise<string> => {
       const armDir = path.join(args.outDir, name);
       const result = await runEvalModule.runEval({
@@ -433,7 +521,7 @@ async function main(argv: string[]): Promise<number> {
         outDir: armDir,
         deploymentMode: 'single-tenant',
         fixtureMode: 'ingest',
-        requestOptions,
+        requestOptions: { ...weightOverride, ...requestOptions },
         tier: 'smoke',
         ingestFixture: full,
         retainInProcess: inProcess,
@@ -507,6 +595,7 @@ async function main(argv: string[]): Promise<number> {
       '--catalog-json',
       catalogPath,
       ...(args.live ? [] : ['--fixture-embedder', '--note', FIXTURE_FLOOR_NOTE]),
+      ...(args.legWeightDomain === null ? [] : ['--note', `Fixture leg weight sweep: leg_weights.domain=${args.legWeightDomain} on every arm.`]),
       '--out',
       path.join(args.outDir, 'comparison.json'),
     ]);

@@ -7,6 +7,7 @@ interface DownloadConfig {
   endpoint: string;
   headers?: Record<string, string>;
   data?: Record<string, unknown>;
+  responseType?: 'arraybuffer';
 }
 
 /**
@@ -54,6 +55,17 @@ function getProviderDownloadConfig(
         method: 'GET',
         endpoint: `/wiki/rest/api/content/${file.id}?expand=body.storage`,
       };
+
+    case 'sharepoint-online':
+    case 'one-drive': {
+      // Microsoft Graph drive item content (binary); item ids are looked up within their drive (A5).
+      if (!file.drive_id) throw new Error('Graph download needs the drive id');
+      return {
+        method: 'GET',
+        endpoint: `/v1.0/drives/${encodeURIComponent(file.drive_id)}/items/${encodeURIComponent(file.id)}/content`,
+        responseType: 'arraybuffer',
+      };
+    }
 
     default:
       throw new Error(`Unsupported provider: ${provider}`);
@@ -306,6 +318,7 @@ export async function fetchFileContent(
       headers: config.headers,
       data: config.data,
       retries: 3,
+      ...(config.responseType ? { responseType: config.responseType } : {}),
     });
 
     // Handle different response types based on provider

@@ -203,6 +203,23 @@
       "providers": []
     },
     {
+      "vendor": "openrouter_embeddings",
+      "name": "OpenRouter-routed BGE-M3 embeddings pinned to DeepInfra (bge-m3-1024, RAG_BGE_M3_VIA=openrouter)",
+      "hosts": [
+        "openrouter.ai"
+      ],
+      "content": [
+        "query",
+        "chunk_text"
+      ],
+      "switch": "RAG_BGE_M3_VIA",
+      "opt_in": true,
+      "multi_tenant": "allowed",
+      "retention": "to_verify",
+      "training": "to_verify",
+      "providers": []
+    },
+    {
       "vendor": "prompt_guard",
       "name": "Hugging Face Hub (Prompt Guard weights at image build; nothing uploaded, scoring runs in the sidecar)",
       "hosts": [

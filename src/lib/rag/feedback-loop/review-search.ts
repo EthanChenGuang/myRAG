@@ -71,6 +71,7 @@ export async function searchForReviewItem(ssr: Client, admin: Client, id: string
     admin,
     tenantKey,
     ranked.map((entry) => entry.chunkId),
+    { viewer: { kind: 'expert', userId: expertId } },
   );
   const hits: ReviewSearchHit[] = [];
   for (const entry of ranked) {

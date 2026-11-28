@@ -56,6 +56,13 @@ export interface SentenceRecordInput {
   sourceRanges?: readonly SourceRange[];
   /** The answer was cut at the output limit (D-33): the last unit is `truncated`. */
   truncated?: boolean;
+  /** RAG_CLAIM_CHECK is on for this turn: records wait for the check (`claim_check_not_run`), else `claim_check_off`. */
+  claimCheck?: boolean;
+}
+
+/** The reason a not_checked record carries before any claim check labels it (the Pydantic AnswerSentence rule). */
+export function notCheckedReason(claimCheck: boolean): 'claim_check_not_run' | 'claim_check_off' {
+  return claimCheck ? 'claim_check_not_run' : 'claim_check_off';
 }
 
 /** D-23: SHA-256 of the persisted part text, lowercase hex; the client recomputes it before it shows marks. */
@@ -160,7 +167,8 @@ export function isExemptSentence(unit: ExemptionUnit, context: ExemptionContext)
  * (markers after the end punctuation belong to it, see splitAnswerSentences) or, on the Claude path, when a source range overlaps it.
  */
 export function buildSentenceRecords(input: SentenceRecordInput): AnswerSentence[] {
-  const { text, part, language, aliases, sourceRanges = [], truncated = false } = input;
+  const { text, part, language, aliases, sourceRanges = [], truncated = false, claimCheck = false } = input;
+  const reason = notCheckedReason(claimCheck);
   const units = splitAnswerSentences(text, language);
   if (units.length === 0) return [];
   const texts = exemptionTexts(language);
@@ -192,7 +200,7 @@ export function buildSentenceRecords(input: SentenceRecordInput): AnswerSentence
       cited: markerInside || sourceOverlap,
       support: 'not_checked',
       scorer: null,
-      reason: null,
+      reason,
     };
   });
 }

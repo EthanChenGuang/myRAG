@@ -278,8 +278,11 @@ describe('chat route prompt budget (05.2.1-21)', () => {
       expect(plan.input.window).toBe(1000000);
       expect(plan.input.documentTarget).toBe(3000);
       expect(plan.output.status).toBe('ok');
-      expect(retrievalOptions()?.documentTokenBudget).toBe(plan.output.documentBudget);
-      expect(retrievalOptions()?.documentTokenBudget).toBe(3000);
+      expect(plan.output.documentBudget).toBe(3000);
+      // packing counts raw counter tokens: the factor-scaled document budget is passed as its raw packing budget
+      expect(retrievalOptions()?.documentTokenBudget).toBe(plan.output.packingBudget);
+      expect(retrievalOptions()?.documentTokenBudget).toBe(Math.floor(3000 / plan.output.trace.estimator.factor));
+      expect(retrievalOptions()?.documentTokenBudget).toBeLessThan(3000);
     });
 
     it('plan: a small window lowers the document budget below the target', async () => {
@@ -292,7 +295,8 @@ describe('chat route prompt budget (05.2.1-21)', () => {
       expect(plan.input.window).toBe(12000);
       expect(plan.output.documentBudget).toBeLessThan(6000);
       expect(plan.output.documentBudget).toBeGreaterThan(0);
-      expect(retrievalOptions()?.documentTokenBudget).toBe(plan.output.documentBudget);
+      expect(retrievalOptions()?.documentTokenBudget).toBe(plan.output.packingBudget);
+      expect(retrievalOptions()?.documentTokenBudget).toBeLessThan(plan.output.documentBudget);
     });
 
     it('plan: an unlisted model id uses the default window', async () => {

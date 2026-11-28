@@ -5,7 +5,8 @@ import type { SecurityLogSink } from '../revalidate';
 import { RetrievalBackendError, type RpcClient } from '../supabase-rpc';
 import { canonicalTenantKey, isCanonicalTenantKey, weaviateCollectionName, weaviateTenantName } from '../tenant-key';
 import type { BackendSearchRequest, RetrievalBackend, RetrievalFilters } from '../types';
-import { WEAVIATE_LEXICAL_PROPERTY } from './collection';
+import { createLexicalParamsCheck, type LexicalParamsSource } from '../lexical-params';
+import { WEAVIATE_LEXICAL_PROPERTY, describeWeaviateCollection } from './collection';
 import { mapWeaviateError } from './errors';
 import type { WeaviateClientLike, WeaviateFilterValue, WeaviateQueryResult, WeaviateTenantCollection } from './types';
 
@@ -193,10 +194,30 @@ export async function searchWeaviateLegs(source: WeaviateClientSource, req: Stor
   }
 }
 
-export function createWeaviateReader(source: WeaviateClientSource): ExternalStoreReader {
+export interface WeaviateReaderOptions {
+  /** LEX-05: the configured BM25 pair; default externalLexicalParams of the loaded configuration. */
+  lexicalParams?: LexicalParamsSource;
+  log?: (line: string) => void;
+}
+
+/**
+ * The read path. k1 and b are bound to the collection's inverted index, so a collection whose recorded pair differs from the
+ * configured one is refused (LexicalParamsMismatchError, backend_not_ready) before any query until rebuild-lexical rebuilds it.
+ */
+export function createWeaviateReader(source: WeaviateClientSource, options: WeaviateReaderOptions = {}): ExternalStoreReader {
+  const checkLexicalParams = createLexicalParamsCheck({
+    target: 'weaviate',
+    describe: async (profileId) => (await describeWeaviateCollection(await resolveClient(source), profileId)).lexicalParams,
+    configured: options.lexicalParams,
+    log: options.log,
+  });
   return {
     target: 'weaviate',
-    searchLegs: (req) => searchWeaviateLegs(source, req),
+    async searchLegs(req) {
+      req.signal.throwIfAborted();
+      await checkLexicalParams(req.profileId);
+      return searchWeaviateLegs(source, req);
+    },
     async health() {
       try {
         const ready = await (await resolveClient(source)).isReady();
@@ -214,12 +235,14 @@ export interface WeaviateBackendDeps {
   revalidate: () => RpcClient | null;
   readiness?: (scope: TenantScope) => Promise<boolean>;
   securityLog?: SecurityLogSink;
+  lexicalParams?: LexicalParamsSource;
+  log?: (line: string) => void;
 }
 
 /** The Weaviate RetrievalBackend: tenant-only legs, then re-validation and hydration from Supabase (createExternalBackend). */
 export function createWeaviateBackend(deps: WeaviateBackendDeps): RetrievalBackend {
   const inner = createExternalBackend({
-    reader: createWeaviateReader(deps.readClient),
+    reader: createWeaviateReader(deps.readClient, { lexicalParams: deps.lexicalParams, log: deps.log }),
     adminClient: deps.revalidate,
     isReady: deps.readiness,
     securityLog: deps.securityLog,

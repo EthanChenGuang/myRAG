@@ -206,7 +206,7 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
   },
   {
     reason:
-      'Scope gate (0983, 06.2-15): a service-role rebuild of derived tenant-level centroids; its output is used only as an in/out scope score, never returned as content.',
+      'Scope gate (0983, 0987): returns per-kind group and chunk counts only. While access is enforced it averages only chunks whose chunk and document access_groups are {all}, so no restricted document reaches a centroid, group key or count (q62-scope-centroids-access).',
     functions: ['rag_scope_centroids_rebuild'],
   },
   {
@@ -253,6 +253,16 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
     reason:
       'Purge (0726, 0727, 06.3-15): tenant-checked, service_role only, for the admin purge path and source sync (no retrieval leg calls them); returns ids, counts and storage keys, never row content.',
     functions: ['rag_purge_admin_target', 'rag_purge_lineage', 'rag_purge_verify'],
+  },
+  {
+    reason:
+      'Purge foreign stores (0728, 06.3-19): tenant-checked with rag_ingest_assert_tenant_key, service_role only, called from the purge path only; the steps delete rows of other phases by tenant and version id and return per-store counts (jsonb, or store and remaining), never row content; the inventory is a fixed list that reads no table.',
+    functions: ['rag_purge_foreign_stores', 'rag_purge_foreign_leftovers', 'rag_purge_store_inventory'],
+  },
+  {
+    reason:
+      'Source sync admin listing (0721, 06.3-04): service_role only for the admin connections route; limited to the tenants rag_admin_tenant_keys gives the actor; returns connection metadata, statuses and counts (document_count, candidate counts), never document or chunk text.',
+    functions: ['rag_source_sync_admin_connections'],
   },
   {
     reason:

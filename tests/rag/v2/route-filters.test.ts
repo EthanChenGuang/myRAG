@@ -288,6 +288,50 @@ describe('retrievalFilters on the chat and embed bodies', () => {
     }
   });
 
+  describe('attributes filter (03.3 G4)', () => {
+    const NAMES = ['RAG_DOC_ATTRIBUTES', 'RAG_ATTRIBUTE_FILTER'] as const;
+    let saved: Record<string, string | undefined>;
+    beforeEach(() => {
+      saved = Object.fromEntries(NAMES.map((name) => [name, env[name]]));
+    });
+    afterEach(() => {
+      for (const name of NAMES) {
+        if (saved[name] === undefined) delete env[name];
+        else env[name] = saved[name];
+      }
+    });
+
+    for (const routePath of ['chat', 'embed/chat'] as const) {
+      const body = (extra: Record<string, unknown>) => (routePath === 'chat' ? chatBody(extra) : embedBody(extra));
+
+      it(`${routePath}: an unknown explicit attribute key answers 400 unknown_attribute before any stream`, async () => {
+        env.RAG_DOC_ATTRIBUTES = 'true';
+        env.RAG_ATTRIBUTE_FILTER = 'hard';
+        const { POST } = await loadRoute(routePath, 'v2');
+        const response = await POST(body({ retrievalFilters: { attributes: { zz_unknown_key: ['q1'] } } }));
+
+        expect(response.status).toBe(400);
+        const json = (await response.json()) as { success: boolean; error: string; details: Array<{ path: string }> };
+        expect(json).toMatchObject({ success: false, error: 'unknown_attribute' });
+        expect(json.details.length).toBeGreaterThan(0);
+        expect(h.runSpy).not.toHaveBeenCalled();
+        expect(h.capture.calls).toHaveLength(0);
+      });
+
+      it(`${routePath}: with RAG_ATTRIBUTE_FILTER off an attributes key keeps today's unrecognized-key 400`, async () => {
+        delete env.RAG_DOC_ATTRIBUTES;
+        delete env.RAG_ATTRIBUTE_FILTER;
+        const { POST } = await loadRoute(routePath, 'v2');
+        const response = await POST(body({ retrievalFilters: { attributes: { zz_unknown_key: ['q1'] } } }));
+
+        expect(response.status).toBe(400);
+        const json = (await response.json()) as { success: boolean; error: string };
+        expect(json).toMatchObject({ success: false, error: 'Invalid request data' });
+        expect(h.runSpy).not.toHaveBeenCalled();
+      });
+    }
+  });
+
   describe('embed', () => {
     it('passes a valid retrievalFilters to runRetrieval under v2', async () => {
       const { POST } = await loadRoute('embed/chat', 'v2');

@@ -886,6 +886,18 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_purge_verify(text, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_verify(text, uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_purge_store_inventory()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_store_inventory() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_store_inventory() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_foreign_stores(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_foreign_stores(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_foreign_stores(text, uuid, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_foreign_leftovers(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_foreign_leftovers(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_foreign_leftovers(text, uuid, uuid[]) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_table_rows_follow_document()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_table_rows_follow_document() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_table_rows_follow_document() TO service_role;
@@ -909,6 +921,30 @@ BEGIN
   IF to_regprocedure('public.rag_purge_hook_dup_clusters(text, uuid, uuid[])') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_purge_hook_dup_clusters(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_hook_dup_clusters(text, uuid, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_nango_owner_tenant_key(uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_nango_owner_tenant_key(uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_nango_owner_tenant_key(uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_source_reconcile_run_record(text, uuid, text, text, jsonb, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_source_reconcile_run_record(text, uuid, text, text, jsonb, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_source_reconcile_run_record(text, uuid, text, text, jsonb, text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_source_reconcile_run_decide(uuid, uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_source_reconcile_run_decide(uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_source_reconcile_run_decide(uuid, uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_source_reconcile_run_finish(uuid, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_source_reconcile_run_finish(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_source_reconcile_run_finish(uuid, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_source_sync_admin_connections(uuid, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_source_sync_admin_connections(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_source_sync_admin_connections(uuid, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_source_sync_set_deletion_mode(uuid, uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_source_sync_set_deletion_mode(uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_source_sync_set_deletion_mode(uuid, uuid, text) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_purge_hook_identifiers(text, uuid, uuid[])') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
@@ -1082,6 +1118,11 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_chunk_embeddings_change() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_chunk_embeddings_change() TO service_role;
   END IF;
+  -- Migration 0987: scope centroids are cleared when the access enforcement flag changes (SECURITY DEFINER trigger, service_role only).
+  IF to_regprocedure('public.rag_scope_centroids_on_access_settings_change()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_access_settings_change() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_access_settings_change() TO service_role;
+  END IF;
   -- Migration 1010: the attribute resolver with the access filter (SECURITY INVOKER, service_role only).
   IF to_regprocedure('public.rag_attribute_filter_values(text, integer, text[], boolean)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_attribute_filter_values(text, integer, text[], boolean) FROM PUBLIC, anon, authenticated;
@@ -1108,6 +1149,16 @@ BEGIN
   IF to_regprocedure('public.rag_review_items_enqueue_re_review(text, jsonb)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_review_items_enqueue_re_review(text, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_review_items_enqueue_re_review(text, jsonb) TO service_role;
+  END IF;
+  -- 0990 (quick task): review items owner trigger function (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_review_items_fill_owner()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_review_items_fill_owner() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_review_items_fill_owner() TO service_role;
+  END IF;
+  -- Migration 1011: the chunk attribute header stamp insert guard trigger function (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_chunk_attribute_header_stamp_insert_guard()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_chunk_attribute_header_stamp_insert_guard() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_chunk_attribute_header_stamp_insert_guard() TO service_role;
   END IF;
 END
 $service_role_only$;

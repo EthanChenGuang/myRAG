@@ -162,6 +162,8 @@ jobs:
           node --test scripts/tests/check-rag-boundary.node-test.mjs
           node scripts/ci/check-language-literals.mjs
           node --test scripts/tests/check-language-literals.node-test.mjs
+          node scripts/ci/check-identifier-domain-words.mjs
+          node --test scripts/tests/check-identifier-domain-words.node-test.mjs
           node scripts/ci/check-settings-classification.mjs
           node --test scripts/tests/check-settings-classification.node-test.mjs
           node scripts/ci/check-migration-numbers.mjs
@@ -313,19 +315,44 @@ jobs:
       - name: Fill the tiktoken encoding cache (tests never download it)
         run: python3 scripts/ci/fill-tiktoken-cache.py
       - name: Smoke tier against the committed baseline
-        run: npm run test-rag -- --out eval/out/smoke --gates-mode report
+        run: npm run test-rag -- --out eval/out/smoke --gates-report-only false_refusal_rate
       - name: Ingest-mode smoke tier against the ingest baseline
         run: npm run test-rag -- --fixture-mode ingest --out eval/out/smoke-ingest
       - name: Legacy smoke tier, explicit RAG_PIPELINE=legacy, paired differences all zero
         run: |
-          npm run test-rag -- --run-config eval/config/runs/legacy.json --baseline eval/baselines/fixture-baseline.json --out eval/out/smoke-legacy --gates-mode report
+          npm run test-rag -- --run-config eval/config/runs/legacy.json --baseline eval/baselines/fixture-baseline.json --out eval/out/smoke-legacy --gates-report-only false_refusal_rate
           jq -e '.paired.all_zero == true' eval/out/smoke-legacy/gate.json
       - name: Legacy ingest-mode smoke tier, explicit RAG_PIPELINE=legacy, paired differences all zero
         run: |
           npm run test-rag -- --run-config eval/config/runs/legacy.json --fixture-mode ingest --baseline eval/baselines/fixture-ingest-baseline.json --out eval/out/smoke-legacy-ingest
           jq -e '.paired.all_zero == true' eval/out/smoke-legacy-ingest/gate.json
+      - name: v2-default smoke tier, report-only (v2 is opt-in; the step records the gate exit and never fails the job)
+        run: |
+          set +e
+          npm run test-rag -- --run-config eval/config/runs/v2-default.json --out eval/out/smoke-v2 --gates-mode enforce
+          code=$?
+          echo "::notice title=v2-default smoke (report-only)::test-rag exit ${code}; see eval/out/smoke-v2/gate.json"
+          exit 0
+      - name: v2 negative control, report-only (drop_top_candidate must be rejected by the gate)
+        run: |
+          set +e
+          npm run test-rag -- --run-config eval/config/runs/v2-default.json --degrade drop_top_candidate --out eval/out/smoke-v2-negative --gates-mode enforce
+          code=$?
+          if [ "${code}" -eq 0 ]; then
+            echo "::warning title=v2 negative control (report-only)::the degraded v2 run was not rejected (exit 0)"
+          else
+            echo "::notice title=v2 negative control (report-only)::rejected as designed (exit ${code})"
+          fi
+          exit 0
+      - name: Phase 4.1 decision record drift, report-only (historical records stay stale by design)
+        run: |
+          set +e
+          uv run --directory eval python -m rag_eval.defaults_decision check-current --decision eval/decisions/04.1-retrieval-defaults.json
+          code=$?
+          echo "::notice title=04.1 decision check-current (report-only)::exit ${code} (0 current, 1 stale)"
+          exit 0
       - name: Injection absolute-zero gate under the recommended SEC configuration
-        run: npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec --gates-mode report
+        run: npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec --gates-report-only false_refusal_rate
       - name: Framework comparison on fixtures, LlamaIndex against LangChain with paired differences
         run: uv run --directory eval python -m rag_eval.compare frameworks --fixtures --out eval/out/frameworks
       - name: Semantic cache near-miss gate on a fresh pair run (any wrong hit fails)
@@ -342,6 +369,8 @@ jobs:
             eval/out/smoke-ingest
             eval/out/smoke-legacy
             eval/out/smoke-legacy-ingest
+            eval/out/smoke-v2
+            eval/out/smoke-v2-negative
             eval/out/smoke-sec
             eval/out/frameworks
             eval/out/cache-pairs

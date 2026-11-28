@@ -5,10 +5,10 @@
     "tenant": 3
   },
   "counts": {
-    "answerable": 310,
+    "answerable": 331,
     "cross_lingual": 34,
-    "dev_answerable": 194,
-    "near_miss": 46,
+    "dev_answerable": 204,
+    "near_miss": 58,
     "out_of_domain": 6
   },
   "embedder": "fixture-ngram",
@@ -17,9 +17,9 @@
     "d34_all": {
       "answerable_below": {
         "by_pair": {
-          "en->en": 2,
+          "en->en": 3,
           "it->it": 1,
-          "zh->zh": 9
+          "zh->zh": 8
         },
         "total": 12
       },
@@ -39,25 +39,24 @@
         "ids": [],
         "total": 0
       },
-      "threshold": 0.047
+      "threshold": 0.042
     },
     "doc_type": {
       "answerable_below": {
         "by_pair": {
-          "en->en": 2,
-          "zh->zh": 10
+          "en->en": 3,
+          "zh->zh": 11
         },
-        "total": 12
+        "total": 14
       },
       "centroids": 5,
       "cross_lingual_below": {
         "max_over_variants": 0,
-        "original_only": 3
+        "original_only": 2
       },
       "near_miss_below": {
         "by_language": {
-          "it": 1,
-          "zh": 2
+          "zh": 3
         },
         "total": 3
       },
@@ -66,16 +65,16 @@
         "ids": [],
         "total": 0
       },
-      "threshold": 0.035
+      "threshold": 0.033
     },
     "doc_type_language": {
       "answerable_below": {
         "by_pair": {
           "en->en": 3,
           "it->it": 1,
-          "zh->zh": 9
+          "zh->zh": 10
         },
-        "total": 13
+        "total": 14
       },
       "centroids": 10,
       "cross_lingual_below": {
@@ -93,15 +92,15 @@
         "ids": [],
         "total": 0
       },
-      "threshold": 0.047
+      "threshold": 0.042
     },
     "tenant": {
       "answerable_below": {
         "by_pair": {
-          "en->en": 1,
-          "zh->zh": 11
+          "en->en": 2,
+          "zh->zh": 12
         },
-        "total": 12
+        "total": 14
       },
       "centroids": 1,
       "cross_lingual_below": {
@@ -111,29 +110,25 @@
       "near_miss_below": {
         "by_language": {
           "it": 1,
-          "zh": 1
+          "zh": 3
         },
-        "total": 2
+        "total": 4
       },
       "out_of_domain_below": {
-        "by_language": {
-          "zh": 1
-        },
-        "ids": [
-          "zh-no-answer-003"
-        ],
-        "total": 1
+        "by_language": {},
+        "ids": [],
+        "total": 0
       },
-      "threshold": -0.002
+      "threshold": -0.004
     },
     "tenant_language": {
       "answerable_below": {
         "by_pair": {
           "en->en": 3,
           "it->it": 1,
-          "zh->zh": 8
+          "zh->zh": 12
         },
-        "total": 12
+        "total": 16
       },
       "centroids": 3,
       "cross_lingual_below": {
@@ -141,8 +136,10 @@
         "original_only": 4
       },
       "near_miss_below": {
-        "by_language": {},
-        "total": 0
+        "by_language": {
+          "zh": 3
+        },
+        "total": 3
       },
       "out_of_domain_below": {
         "by_language": {
@@ -650,6 +647,45 @@
         "tenant_language": 0.029
       },
       "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-glossary-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.052,
+        "doc_type": 0.031,
+        "doc_type_language": 0.05,
+        "tenant": 0.004,
+        "tenant_language": 0.052
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-glossary-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.038,
+        "doc_type": 0.033,
+        "doc_type_language": 0.038,
+        "tenant": -0.149,
+        "tenant_language": 0.036
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-glossary-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.079,
+        "doc_type": 0.066,
+        "doc_type_language": 0.078,
+        "tenant": 0.054,
+        "tenant_language": 0.079
+      },
+      "split": "test"
     },
     {
       "class": "answerable",
@@ -1303,6 +1339,58 @@
     },
     {
       "class": "near_miss",
+      "id": "en-no-answer-018",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.082,
+        "doc_type": 0.082,
+        "doc_type_language": 0.082,
+        "tenant": 0.026,
+        "tenant_language": 0.034
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-019",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.065,
+        "doc_type": 0.063,
+        "doc_type_language": 0.065,
+        "tenant": 0.059,
+        "tenant_language": 0.064
+      },
+      "split": "test"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-020",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.105,
+        "doc_type": 0.07,
+        "doc_type_language": 0.101,
+        "tenant": 0.072,
+        "tenant_language": 0.105
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-021",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.086,
+        "doc_type": 0.086,
+        "doc_type_language": 0.086,
+        "tenant": 0.042,
+        "tenant_language": 0.052
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
       "id": "en-no_answer-term-001",
       "pair": "en",
       "scores": {
@@ -1391,6 +1479,45 @@
         "tenant_language": 0.035
       },
       "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-scoped-compound-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.205,
+        "doc_type": 0.205,
+        "doc_type_language": 0.205,
+        "tenant": 0.063,
+        "tenant_language": 0.063
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-scoped-compound-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.175,
+        "doc_type": 0.175,
+        "doc_type_language": 0.175,
+        "tenant": 0.056,
+        "tenant_language": 0.065
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-scoped-compound-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.201,
+        "doc_type": 0.201,
+        "doc_type_language": 0.201,
+        "tenant": 0.063,
+        "tenant_language": 0.065
+      },
+      "split": "test"
     },
     {
       "class": "answerable",
@@ -2109,6 +2236,45 @@
     },
     {
       "class": "answerable",
+      "id": "it-glossary-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.14,
+        "doc_type": 0.121,
+        "doc_type_language": 0.14,
+        "tenant": 0.12,
+        "tenant_language": 0.139
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-glossary-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.127,
+        "doc_type": 0.106,
+        "doc_type_language": 0.127,
+        "tenant": 0.091,
+        "tenant_language": 0.125
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-glossary-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.127,
+        "doc_type": 0.105,
+        "doc_type_language": 0.121,
+        "tenant": 0.103,
+        "tenant_language": 0.127
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
       "id": "it-identifier-near-miss-001",
       "pair": "it->it",
       "scores": {
@@ -2746,6 +2912,58 @@
     },
     {
       "class": "near_miss",
+      "id": "it-no-answer-019",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.131,
+        "doc_type": 0.118,
+        "doc_type_language": 0.129,
+        "tenant": 0.08,
+        "tenant_language": 0.131
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-020",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.16,
+        "doc_type": 0.081,
+        "doc_type_language": 0.16,
+        "tenant": 0.05,
+        "tenant_language": 0.07
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-021",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.103,
+        "doc_type": 0.07,
+        "doc_type_language": 0.103,
+        "tenant": 0.051,
+        "tenant_language": 0.072
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-022",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.146,
+        "doc_type": 0.083,
+        "doc_type_language": 0.146,
+        "tenant": 0.06,
+        "tenant_language": 0.063
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
       "id": "it-no_answer-term-001",
       "pair": "it",
       "scores": {
@@ -2834,6 +3052,84 @@
         "tenant_language": 0.125
       },
       "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-scoped-compound-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.145,
+        "doc_type": 0.141,
+        "doc_type_language": 0.145,
+        "tenant": 0.057,
+        "tenant_language": 0.078
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-scoped-compound-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.17,
+        "doc_type": 0.153,
+        "doc_type_language": 0.17,
+        "tenant": 0.079,
+        "tenant_language": 0.12
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-scoped-compound-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.113,
+        "doc_type": 0.119,
+        "doc_type_language": 0.113,
+        "tenant": 0.088,
+        "tenant_language": 0.11
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-scoped-compound-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.113,
+        "doc_type": 0.117,
+        "doc_type_language": 0.113,
+        "tenant": 0.046,
+        "tenant_language": 0.057
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-scoped-compound-005",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.135,
+        "doc_type": 0.144,
+        "doc_type_language": 0.135,
+        "tenant": 0.076,
+        "tenant_language": 0.111
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-scoped-compound-006",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.199,
+        "doc_type": 0.152,
+        "doc_type_language": 0.199,
+        "tenant": 0.105,
+        "tenant_language": 0.161
+      },
+      "split": "dev"
     },
     {
       "class": "answerable",
@@ -3955,6 +4251,45 @@
     },
     {
       "class": "answerable",
+      "id": "zh-glossary-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.028,
+        "doc_type": -0.001,
+        "doc_type_language": 0.028,
+        "tenant": -0.024,
+        "tenant_language": -0.008
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-glossary-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.042,
+        "doc_type": 0.042,
+        "doc_type_language": 0.042,
+        "tenant": 0.005,
+        "tenant_language": 0.016
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-glossary-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.029,
+        "doc_type": 0.009,
+        "doc_type_language": 0.029,
+        "tenant": -0.004,
+        "tenant_language": 0.001
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
       "id": "zh-identifier-near-miss-001",
       "pair": "zh->zh",
       "scores": {
@@ -4592,6 +4927,58 @@
     },
     {
       "class": "near_miss",
+      "id": "zh-no-answer-018",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.003,
+        "doc_type": -0.004,
+        "doc_type_language": 0.003,
+        "tenant": -0.01,
+        "tenant_language": 0.001
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-019",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.027,
+        "doc_type": 0.027,
+        "doc_type_language": 0.027,
+        "tenant": -0.028,
+        "tenant_language": 0
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-020",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.05,
+        "doc_type": 0.05,
+        "doc_type_language": 0.05,
+        "tenant": 0.021,
+        "tenant_language": 0.016
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-021",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.056,
+        "doc_type": 0.035,
+        "doc_type_language": 0.056,
+        "tenant": 0.031,
+        "tenant_language": 0.045
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
       "id": "zh-no_answer-term-001",
       "pair": "zh",
       "scores": {
@@ -4678,6 +5065,45 @@
         "doc_type_language": 0.376,
         "tenant": 0.045,
         "tenant_language": 0.092
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-scoped-compound-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.076,
+        "doc_type": 0.057,
+        "doc_type_language": 0.076,
+        "tenant": -0.018,
+        "tenant_language": 0.032
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-scoped-compound-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.063,
+        "doc_type": 0.047,
+        "doc_type_language": 0.063,
+        "tenant": 0.016,
+        "tenant_language": 0.016
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-scoped-compound-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.046,
+        "doc_type": 0.033,
+        "doc_type_language": 0.046,
+        "tenant": -0.003,
+        "tenant_language": 0.019
       },
       "split": "dev"
     },
@@ -4869,14 +5295,14 @@
   "threshold_rule": "5th percentile (nearest rank, lower) of dev-split answerable, non-cross-lingual scores, per grouping",
   "verdict": {
     "answerable_below": {
-      "doc_type": 12,
-      "doc_type_language": 13
+      "doc_type": 14,
+      "doc_type_language": 14
     },
     "compared": [
       "doc_type_language",
       "doc_type"
     ],
-    "d34_separates_at_least_as_well": false,
+    "d34_separates_at_least_as_well": true,
     "note": "Measurement on synthetic fixtures with a lexical hash embedder; it calibrates nothing and never changes the D-34 grouping.",
     "out_of_domain_below": {
       "doc_type": 0,

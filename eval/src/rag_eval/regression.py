@@ -276,18 +276,23 @@ class Incumbent:
 
 
 def load_incumbent(path: Path = INCUMBENT_PATH) -> Incumbent:
-    """The Phase 4.1 decision's defaults for the five DFLT variables, today's shipped value for every other name."""
+    """Today's shipped values, with the Phase 4.1 decision's five DFLT values only when that decision flipped
+    (status == "flip", as scripts/check-config.mjs reads it); a not_flipped record is a failed proposal, not the incumbent."""
     try:
         raw = path.read_bytes()
         record = json.loads(raw)
+        status = record["status"]
         defaults = record["defaults"]
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
         raise RegressionError(f"the incumbent decision {path} is missing or malformed: {exc}") from exc
+    if status not in ("flip", "not_flipped"):
+        raise RegressionError(f"the incumbent decision {path} has status {status!r}, expected flip or not_flipped")
     missing = [name for name in DFLT_VARIABLES if not isinstance(defaults.get(name), str)]
     if missing:
         raise RegressionError(f"the incumbent decision {path} lacks {', '.join(missing)}")
     env = dict(SHIPPED_DEFAULTS)
-    env.update({name: defaults[name] for name in DFLT_VARIABLES})
+    if status == "flip":
+        env.update({name: defaults[name] for name in DFLT_VARIABLES})
     source = IncumbentSource(path="eval/decisions/04.1-retrieval-defaults.json", sha256=hashlib.sha256(raw).hexdigest())
     return Incumbent(env=env, source=source)
 

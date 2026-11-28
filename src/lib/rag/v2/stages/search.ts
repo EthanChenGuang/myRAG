@@ -35,6 +35,8 @@ import type { LexicalStamp } from '../../lexical/resolve-options';
 import { scopeAccessFilter, type ScopeAccessFilter } from '../../tenant/access';
 import { scopeKey, type TenantScope } from '../../tenant/scope';
 import { runSourceRecheckStage, type SourceRecheckMarker } from '../../retrieval/source-recheck';
+import { isExternalBackendId, sourceRecheckDecision } from '../../backend/source-recheck';
+import { scheduleStaleRepair } from '../../backend/stale-repair';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RetrievalBackendSelection, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
@@ -65,6 +67,7 @@ import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 import type { SearchDelegate } from '../../query/port-types';
 import { effectiveVersionScope } from '../../query/filters';
 import type { AttributeSearchInput } from './query';
+import type { SpeculativeHandle, SpeculativeSearchOutcome } from '../../query/speculative';
 
 export interface SearchStagesInput {
   input: RunRetrievalInput;
@@ -100,6 +103,53 @@ export interface SearchStagesInput {
   access?: ScopeAccessFilter;
   /** Phase 6.2 D-08, P-10: the query layer's max_searches; set only while the layer runs, and then searchesCounted is reported. */
   maxSearches?: number;
+  /** Phase 6.2 D-21: the original's speculative search; adopted for the original variant only when the request is equal. */
+  speculative?: SpeculativeHandle;
+}
+
+/**
+ * Phase 6.2 D-21, P-29: speculation applies only where the original's request can be rebuilt before the search stage: pgvector,
+ * the current versions, no identifier filter and the default lexical scoring. Elsewhere no speculation starts.
+ */
+export function speculativeSearchApplies(config: RagConfig, input: RunRetrievalInput): boolean {
+  const profile = input.profile;
+  if (profile !== 'chat' && profile !== 'embed' && profile !== 'eval') return false;
+  if (!config.queryAdditions.effective.speculativeRetrieval || config.v2.identifierFilter) return false;
+  if (lexicalScoringArg(config).lexicalScoring) return false;
+  if (effectiveVersionScope(config, profile, input.retrievalFilters?.versionScope, input.channel).scope !== 'current') return false;
+  return resolveRetrievalBackend(profile, config, input.stageOverrides?.retrievalOverrides).choice === 'pgvector';
+}
+
+/** D-21: the original variant's search request exactly as runRound builds it for the first round, sent before the stage runs. */
+export async function runSpeculativeSearch(args: {
+  input: RunRetrievalInput;
+  scope: TenantScope;
+  config: RagConfig;
+  params: RetrievalParams;
+  access: ScopeAccessFilter;
+  lexical?: QueryLexicalOptions;
+  variant: QueryVariant;
+  embedding: QueryEmbedding;
+  filters: RetrievalFilters;
+  signal: AbortSignal;
+}): Promise<SpeculativeSearchOutcome> {
+  const { input, config } = args;
+  const profile = input.profile;
+  const resolved = resolveRetrievalBackend(profile, config, input.stageOverrides?.retrievalOverrides);
+  const chunkingOverride = evalChunkingOverride(profile, input.stageOverrides?.retrievalOverrides);
+  const request = variantSearchRequest({
+    scope: args.scope,
+    variant: args.variant,
+    embedding: args.embedding,
+    filters: args.filters,
+    pool: args.params.candidate_pool_size,
+    lexicalEnabled: config.v2.lexicalSearch && getV2StartupVerdict().icuAvailable,
+    signal: args.signal,
+    chunkingProfileOverride: chunkingOverride,
+    ...(args.lexical?.options ? { lexicalOptions: args.lexical.options } : {}),
+    access: args.access,
+  });
+  return { legs: await resolved.backend.search(request), request };
 }
 
 /** The request's query-side lexical options and what they were built from. */
@@ -293,6 +343,7 @@ export function backendAttributes(selection: RetrievalBackendSelection): Record<
   return {
     backend: selection.backend,
     tenant_validation_dropped: selection.tenantValidationDropped,
+    ...(selection.sourceRecheck ? { stale_index_drop: selection.sourceRecheck.dropped } : {}),
     ...(selection.fallbackReason ? { fallback_reason: selection.fallbackReason } : {}),
   };
 }
@@ -547,7 +598,12 @@ function sliceCap(fused: FusedHit[], cap: number): DedupeResult {
 
 export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchStagesOutput> {
   const { input, scope, config, profile, params, embedding, signal, collector, stageOverrides } = ctx;
-  const variants = ctx.variants ?? [{ text: input.query, language: null, kind: 'original' as const }];
+  // P-35: a sub-question's version scope counts only where the request's own would (RAG_VERSION_SCOPE, never voice; embed needs its switch).
+  const variants = (ctx.variants ?? [{ text: input.query, language: null, kind: 'original' as const }]).map((variant: QueryVariant): QueryVariant => {
+    if (variant.versionScope === undefined || !effectiveVersionScope(config, profile, variant.versionScope, input.channel).ignored) return variant;
+    const { versionScope: _ignored, ...rest } = variant;
+    return rest;
+  });
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
   const pool = params.candidate_pool_size;
   const filters = ctx.filters ?? buildFilters(input);
@@ -555,6 +611,15 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const versions = effectiveVersionScope(config, profile, input.retrievalFilters?.versionScope, input.channel);
   const historyScope = versions.scope === 'current' ? undefined : versions.scope;
   const versionScopeArg = historyScope ? { versionScope: historyScope } : {};
+  const variantHistoryScope = variants
+    .map((variant) => variant.versionScope)
+    .find((scope): scope is Exclude<VersionScope, 'current'> => scope !== undefined && scope !== 'current');
+  // Any leg reading superseded versions: the request's own scope, else the first sub-question's (route, trace code, context labels).
+  const anyHistoryScope = historyScope ?? variantHistoryScope;
+  const scopeForVariant = (variant: QueryVariant): { versionScope?: VersionScope } => {
+    const scope = variant.versionScope ?? historyScope;
+    return scope !== undefined && scope !== 'current' ? { versionScope: scope } : {};
+  };
   const access = ctx.access ?? scopeAccessFilter(scope);
   // D-18, D-34: the terminology variant's dense list weighs dense_weight × the dense leg weight in force, read at run time.
   const terminologyDenseWeight = ctx.terminologyDenseWeight ?? terminologyParams().dense_weight;
@@ -584,8 +649,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const runLegs = async (identifiersNorm: string[] | undefined, legCodes: readonly string[]) => {
     const identifierArg = identifiersNorm ? { identifiersNorm } : {};
     const route =
-      historyScope || identifiersNorm
-        ? backendForRequest({ ...(historyScope ? { versionScope: historyScope } : {}), ...identifierArg }, resolved.backend)
+      anyHistoryScope || identifiersNorm
+        ? backendForRequest({ ...(anyHistoryScope ? { versionScope: anyHistoryScope } : {}), ...identifierArg }, resolved.backend)
         : { backend: resolved.backend };
     const backend = scoring ? withLexicalScoring(route.backend, scoring, scoringOutcomes) : route.backend;
     const selection = (): RetrievalBackendSelection =>
@@ -595,7 +660,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     const externalChoice = resolved.choice !== 'pgvector';
     const versionCodes = [
       versions.ignored ? VERSIONS_IGNORED : undefined,
-      historyScope ? SUPERSEDED_DENSE_UNAVAILABLE : undefined,
+      anyHistoryScope ? SUPERSEDED_DENSE_UNAVAILABLE : undefined,
       route.reason === 'backend_field_unsupported' ? BACKEND_FIELD_UNSUPPORTED : undefined,
       ...legCodes,
     ];
@@ -774,23 +839,32 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       const translationPending = runTranslations(stageSignal, roundFilters);
       const softPending = runSoftLeg(stageSignal, roundFilters);
       softPending.catch(() => undefined);
-      const searchVariant = (variant: QueryVariant, index: number, variantFilters: RetrievalFilters) =>
-        backend.search(
-          variantSearchRequest({
-            scope,
-            variant,
-            embedding: ctx.variantEmbeddings?.[index] ?? embedding,
-            filters: variantFilters,
-            pool,
-            lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
-            signal: stageSignal,
-            chunkingProfileOverride: chunkingOverride,
-            ...versionScopeArg,
-            ...identifierArg,
-            ...lexicalOptionsArg,
-            access,
-          }),
-        );
+      // D-21, P-29: only the first round's unfiltered original may take the speculative legs, and only on an equal request.
+      const speculativeIndex =
+        ctx.speculative && roundFilters === filters && !identifiersNorm && !anyHistoryScope && !scoring && route.backend === resolved.backend && !externalChoice
+          ? variants.findIndex((variant) => variant.kind === 'original')
+          : -1;
+      const searchVariant = (variant: QueryVariant, index: number, variantFilters: RetrievalFilters, own = true) => {
+        const request = variantSearchRequest({
+          scope,
+          variant,
+          embedding: ctx.variantEmbeddings?.[index] ?? embedding,
+          filters: variantFilters,
+          pool,
+          lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
+          signal: stageSignal,
+          chunkingProfileOverride: chunkingOverride,
+          // P-35: the variant's own version scope; a retry searches the shared filters and the shared scope, never wider.
+          ...(own ? scopeForVariant(variant) : versionScopeArg),
+          ...identifierArg,
+          ...lexicalOptionsArg,
+          access,
+        });
+        if (ctx.speculative && own && index === speculativeIndex && variantFilters === roundFilters) {
+          return ctx.speculative.take(request).then((legs) => legs ?? backend.search(request));
+        }
+        return backend.search(request);
+      };
       // D-08: a filtered sub-question searches its narrowed filter; every other variant the round's shared filters, unchanged.
       const variantFilters = variants.map((variant) => applyVariantFilters(roundFilters, variant));
       const [term, ...legsByVariant] = (await Promise.all([
@@ -815,7 +889,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         budget -= 1;
         entry.retried = true;
         retries.push(
-          searchVariant(variant, index, roundFilters).then((legs) => {
+          searchVariant(variant, index, roundFilters, false).then((legs) => {
             legsByVariant[index] = legs;
           }),
         );
@@ -1071,7 +1145,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       (exactList?.hits.length ?? 0) +
       (tableList?.hits.length ?? 0) +
       (softLegs ? softLegs.dense.length + softLegs.lexical.length : 0);
-    return { searchValue, domainLists, translationLists, delegated, termHits, exactList, tableList, tableRows, softLegs, found, filterRetries };
+    return { searchValue, domainLists, translationLists, delegated, termHits, exactList, tableList, tableRows, softLegs, found, filterRetries, selection };
   };
 
   let legs = await runLegs(filterIdentifiers, []);
@@ -1081,6 +1155,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     legs = await runLegs(undefined, [IDENTIFIER_FILTER_FALLBACK]);
   }
   const { searchValue, domainLists, translationLists, delegated, termHits, exactList, tableList, tableRows, softLegs, filterRetries } = legs;
+  const served = legs.selection();
 
   // D-16: weight = expansion_weight × the lexical leg weight in force, so the list stays a fraction of the lexical leg.
   const termList: RankedList | null =
@@ -1158,8 +1233,17 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
 
   const capped = deduped.skipped ? reserve(sliceCap(fused, params.rerank_input_cap)) : deduped.value;
 
+  // RET-05: on Weaviate and Qdrant the backend's re-validation was the recheck (forced, one query); its drops start a bounded repair
+  // after the response. A pgvector-served request follows RAG_SOURCE_RECHECK.
+  const decision = sourceRecheckDecision(served.backend, config.sourceRecheck);
+  const externalRecheck = decision.run && decision.forced ? served.sourceRecheck : undefined;
+  if (isExternalBackendId(resolved.choice)) {
+    const stale = resolved.staleChunkIds();
+    if (stale.length > 0) scheduleStaleRepair({ target: resolved.choice, scope, chunkIds: stale });
+  }
+
   // D-19, D-38: an index row that missed a delete never reaches rerank; a failed recheck keeps the candidates and degrades the result.
-  const recheck = config.sourceRecheck
+  const recheck = decision.run && !externalRecheck
     ? await runSourceRecheckStage({
         spec: spec('source_recheck', 'skip'),
         signal,
@@ -1174,8 +1258,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   return {
     fusedHits: recheck ? recheck.items : capped.hits,
     dedupeCounts: capped.counts,
-    ...(recheck?.marker ? { sourceRecheck: recheck.marker } : {}),
-    versionScope: versions.scope,
+    ...(externalRecheck ? { sourceRecheck: externalRecheck } : recheck?.marker ? { sourceRecheck: recheck.marker } : {}),
+    versionScope: anyHistoryScope ?? versions.scope,
     ...(tableRows ? { tableRows } : {}),
     ...(identifiers ? { identifiers: { ...identifiers, filtered: filterIdentifiers !== undefined && !fallback, fallback } } : {}),
     // P-10: plan variants (history fallback included) and filter retries; term:0 and translation legs keep their own caps.

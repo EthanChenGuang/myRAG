@@ -85,3 +85,10 @@ test('the repository tree passes', () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /\[check-settings-classification\] ok/);
 });
+
+test('the lookup index and duplicate cluster mechanisms are accepted', () => {
+  for (const mechanism of ['reindex_tables', 'reindex_identifiers', 'recluster']) {
+    const result = run(makeRoot({ vars: BASE_VARS, entries: [{ name: 'RAG_ALPHA', side: 'ingestion', mechanism }, BASE_ENTRIES[1]] }));
+    assert.equal(result.status, 0, `${mechanism}: ${result.stderr}`);
+  }
+});

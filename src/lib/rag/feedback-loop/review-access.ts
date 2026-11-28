@@ -4,6 +4,10 @@ import { z } from 'zod/v3';
 import { ReviewItemSchema, type ReviewItem } from '@/lib/rag-eval/contracts.generated';
 import { maskPII } from '@/lib/rag/trace/mask';
 import { parseTenantKey } from '@/lib/rag/tenant/embed';
+import { accessGroupsEnabled, resolveAccessScope } from '@/lib/rag/tenant/access';
+import { storeScopeForTenantKey } from '@/lib/rag/tenant/store-scope';
+import { visibleChunkIds } from '@/lib/rag/access/visibility';
+import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
 import type { DeploymentMode } from '@/lib/deployment-mode';
 
 /**
@@ -460,14 +464,85 @@ export interface ServableChunk {
 }
 
 /**
+ * T-04.3-131: who the chunk text is for. An expert gets a live rag_chunks_visible check with the access scope resolved from their
+ * identity; a tenant admin (calibration and golden exports, behind the tenant-admin guard) reads every group of the tenant.
+ */
+export type ServableViewer = { kind: 'expert'; userId: string } | { kind: 'tenant_admin' };
+
+export interface FetchServableOptions {
+  viewer?: ServableViewer;
+  signal?: AbortSignal;
+  /** Injected for tests; defaults to RAG_DOC_ACCESS_GROUPS. A failed read counts as on. */
+  accessOn?: () => boolean;
+}
+
+function accessOnFor(options: FetchServableOptions): boolean {
+  try {
+    return (options.accessOn ?? accessGroupsEnabled)();
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * T-04.3-131 (G6): while access groups are on, the chunk ids the viewer may read now, checked live with rag_chunks_visible (labels,
+ * tenant, current and ready), never from the item's stored access_sets. Null on any failure, a missing viewer or a malformed tenant
+ * key, so the caller serves no text (fail closed).
+ */
+async function liveVisibleChunkIds(admin: Client, tenantKey: string, chunkIds: string[], options: FetchServableOptions): Promise<Set<string> | null> {
+  const viewer = options.viewer;
+  if (viewer?.kind === 'tenant_admin') return new Set(chunkIds);
+  if (viewer?.kind !== 'expert' || !UUID_RE.test(viewer.userId)) {
+    console.warn('[Review] chunk text refused', { reason: 'no_viewer' });
+    return null;
+  }
+  const rpc = admin as unknown as RpcClient;
+  try {
+    const scope = storeScopeForTenantKey(tenantKey);
+    const resolved = await resolveAccessScope({
+      scope,
+      identity: { kind: 'user', userId: viewer.userId.toLowerCase() },
+      signal: options.signal ?? new AbortController().signal,
+      admin: rpc,
+      config: { accessGroups: 'on' },
+    });
+    if (!resolved.ok) {
+      console.warn('[Review] chunk text refused', { reason: resolved.reason });
+      return null;
+    }
+    const visible = await visibleChunkIds(resolved.scope, chunkIds, { admin: rpc, ...(options.signal ? { signal: options.signal } : {}) });
+    if (!visible.ok) {
+      console.warn('[Review] chunk text refused', { reason: visible.reason });
+      return null;
+    }
+    return new Set([...visible.ids].map((id) => id.toLowerCase()));
+  } catch {
+    console.warn('[Review] chunk text refused', { reason: 'visibility_lookup_failed' });
+    return null;
+  }
+}
+
+/**
  * Admin-client read of chunk ids restricted to one tenant_key and to current, ready rows of current, ready documents (D-08), so a
  * quarantined, superseded or other-tenant chunk is simply absent from the map. The filters run in SQL and again in code. Keys are
- * lower-case chunk ids; ids that are not UUIDs are never queried.
+ * lower-case chunk ids; ids that are not UUIDs are never queried. While access groups are on, only ids the viewer may read now
+ * (live rag_chunks_visible check) are read; any failure reads none.
  */
-export async function fetchServableChunks(admin: Client, tenantKey: string, ids: readonly string[]): Promise<Map<string, ServableChunk>> {
+export async function fetchServableChunks(
+  admin: Client,
+  tenantKey: string,
+  ids: readonly string[],
+  options: FetchServableOptions = {},
+): Promise<Map<string, ServableChunk>> {
   const servable = new Map<string, ServableChunk>();
-  const chunkIds = [...new Set(ids.map((chunkId) => chunkId.toLowerCase()).filter((chunkId) => UUID_RE.test(chunkId)))];
+  let chunkIds = [...new Set(ids.map((chunkId) => chunkId.toLowerCase()).filter((chunkId) => UUID_RE.test(chunkId)))];
   if (chunkIds.length === 0 || !parseTenantKey(tenantKey)) return servable;
+  if (accessOnFor(options)) {
+    const visible = await liveVisibleChunkIds(admin, tenantKey, chunkIds, options);
+    if (visible === null) return servable;
+    chunkIds = chunkIds.filter((chunkId) => visible.has(chunkId));
+    if (chunkIds.length === 0) return servable;
+  }
   const { data, error } = await admin
     .from('document_chunks')
     .select('id,document_id,content,section_path,tenant_key,is_current,status')
@@ -533,6 +608,7 @@ export async function getReviewItemChunks(
     admin,
     tenantKey,
     refs.map((ref) => ref.chunkId),
+    { viewer: { kind: 'expert', userId: expertId } },
   );
 
   const result: ReviewChunk[] = refs.map((ref) => {

@@ -13,12 +13,22 @@ import { z } from 'zod/v3';
 import { CitationRecordSchema, type CitationRecord } from '@/lib/rag-eval/contracts.generated';
 import { DEFAULT_ANTHROPIC_BASE_URL } from '../config';
 import type { AliasMap } from './blocks';
+import { buildDecomposedAnswerBlock, type DecomposedAnswerInput } from '../decomposed-answer';
 import { claudeMarkerTransform, type ClaudeCitation } from './claude-transform';
 import { createMarkerParser } from './marker-parser';
 import { buildCitationRecords } from './record';
 import { aliasParserTransform } from './transforms';
 
 export const CLAUDE_MAX_OUTPUT_TOKENS = 16384;
+
+/**
+ * Phase 6.2 D-12: the GEN-13 block for the direct Claude call. The documents are attached in AliasMap order, so each
+ * part names its documents by that order instead of by alias; null when the builder gives no block.
+ */
+export function claudeDecomposedAnswerBlock(decomposedAnswer: DecomposedAnswerInput, aliasMap: AliasMap | null): string | null {
+  const documentOrder = (aliasMap?.ordered ?? []).map((block) => block.alias);
+  return buildDecomposedAnswerBlock({ ...decomposedAnswer, citationsActive: true, documentOrder });
+}
 
 /** Model id prefixes that run adaptive thinking (4.6 and later); budget thinking is never sent on this path (D-10). */
 const ADAPTIVE_THINKING_PREFIXES = [

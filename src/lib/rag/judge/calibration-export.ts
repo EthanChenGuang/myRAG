@@ -142,6 +142,7 @@ export async function exportCalibrationCases(
       admin,
       tenantKey,
       page.flatMap((item) => keptRefs(item.candidates).map((ref) => ref.chunkId)),
+      { viewer: { kind: 'tenant_admin' } },
     );
     for (const item of page) {
       const question = typeof item.query_masked === 'string' && item.query_masked !== '' ? maskPII(item.query_masked) : null;

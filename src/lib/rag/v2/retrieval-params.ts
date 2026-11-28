@@ -79,6 +79,7 @@ function applyEvalOverrides(
         dense: overrides.leg_weights.dense,
         lexical: overrides.leg_weights.lexical,
         exact_id: overrides.leg_weights.exact_id,
+        ...(overrides.leg_weights.domain != null ? { domain: overrides.leg_weights.domain } : {}),
       },
     };
   }

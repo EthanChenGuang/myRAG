@@ -25,6 +25,7 @@ const state = {
   removed: [] as string[][],
   admins: [] as string[],
   readOnly: false,
+  recomputed: [] as unknown[],
 };
 
 // Rows written before the Phase 3 columns existed read as current and ready, as the migration defaults make them.
@@ -137,6 +138,13 @@ async function loadRoute() {
   }));
   vi.doMock('@/lib/auth/organization-handler', () => ({ verifyUserOrganizationAccess: async () => ({ hasAccess: false }) }));
   vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => dataAdmin(), supabaseAdmin: dataAdmin() }));
+  vi.doMock('@/lib/rag', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/lib/rag')>()),
+    recomputeDirtyDupClusters: async (scope: unknown) => {
+      state.recomputed.push({ scope, chunksLeft: state.chunks.map((row) => row.id), documentsLeft: ids(state.documents) });
+      return { ok: true, skipped: false };
+    },
+  }));
   const { setRagDepsForTests } = await import('@/lib/rag/deps');
   setRagDepsForTests({ adminClient: () => membershipAdmin() as never });
   return import('@/app/api/images/route');
@@ -171,6 +179,7 @@ describe('images route', () => {
     ];
     state.deletes = [];
     state.removed = [];
+    state.recomputed = [];
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -180,6 +189,7 @@ describe('images route', () => {
     vi.restoreAllMocks();
     vi.resetModules();
     vi.doUnmock('@/lib/supabase');
+    vi.doUnmock('@/lib/rag');
     vi.doUnmock('@/lib/supabase/server');
     vi.doUnmock('@/lib/deployment-mode');
     vi.doUnmock('@/lib/auth/organization-handler');
@@ -243,6 +253,29 @@ describe('images route', () => {
         ['eq', 'user_id', USER_A],
       ]),
     );
+  });
+
+  it('recomputes the tenant duplicate clusters after the hard delete (DATA-21)', async () => {
+    state.session = { id: USER_A };
+    const { DELETE } = await loadRoute();
+    const response = await DELETE(req('DELETE', `?id=${IMG_A}`));
+    expect(response.status).toBe(200);
+    expect(state.recomputed).toHaveLength(1);
+    const [call] = state.recomputed as Array<{ scope: Record<string, unknown>; chunksLeft: unknown[]; documentsLeft: unknown[] }>;
+    expect(call.scope).toMatchObject({ kind: 'personal', userId: USER_A });
+    expect(call.chunksLeft).not.toContain('chunk-a');
+    expect(call.documentsLeft).not.toContain(IMG_A);
+  });
+
+  it('recomputes inside the verified organization for an org image delete, and not at all when nothing is deleted', async () => {
+    state.session = { id: USER_A };
+    state.members = [{ organization_id: ORG_X, user_id: USER_A }];
+    const { DELETE } = await loadRoute();
+    expect((await DELETE(req('DELETE', `?id=${IMG_B}`))).status).toBe(404);
+    expect(state.recomputed).toEqual([]);
+    expect((await DELETE(req('DELETE', `?id=${IMG_ORG_X}&organization_id=${ORG_X}`))).status).toBe(200);
+    expect(state.recomputed).toHaveLength(1);
+    expect((state.recomputed[0] as { scope: Record<string, unknown> }).scope).toMatchObject({ kind: 'org', organizationId: ORG_X });
   });
 
   it('removes the stored original and parse files of the image from the private bucket (W2)', async () => {
@@ -356,6 +389,8 @@ describe('images route', () => {
     const { DELETE } = await loadRoute();
     expect((await DELETE(req('DELETE', `?id=${IMG_SINGLE}`))).status).toBe(200);
     expect(state.documents).toEqual([]);
+    expect(state.recomputed).toHaveLength(1);
+    expect((state.recomputed[0] as { scope: Record<string, unknown> }).scope).toMatchObject({ kind: 'single' });
   });
 
   it('single-tenant read_only_doc_dashboard: a non-admin owner gets 403 on DELETE, listing still works', async () => {

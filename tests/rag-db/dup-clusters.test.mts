@@ -587,6 +587,23 @@ describe('duplicate clusters through ingestion, supersession and deletes (D-19, 
     assert.equal((only?.source_document_ids as string[]).includes(id), false);
   });
 
+  test('an image delete as the images route does it leaves the cluster stale until the tenant recompute runs (DATA-21)', async () => {
+    switchValue = 'true';
+    const id = sources.get('dup/0/3') as string;
+    const [before] = await clustersOf(KEY_A);
+    const count = Number(before?.member_count);
+    // The images route's two statements: the chunks of the one document id, then that document.
+    await db.query('DELETE FROM document_chunks WHERE document_id = $1', [id]);
+    await db.query('DELETE FROM documents WHERE id = $1 AND tenant_key = $2', [id, KEY_A]);
+    const [stale] = await clustersOf(KEY_A);
+    assert.equal(Number(stale?.member_count), count, 'the delete trigger only marks the cluster dirty');
+    const outcome = await rag.recomputeDirtyDupClusters(scopeA(), { signal: new AbortController().signal });
+    assert.equal(outcome.ok, true);
+    const [only] = await clustersOf(KEY_A);
+    assert.equal(Number(only?.member_count), count - 1);
+    assert.equal((only?.source_document_ids as string[]).includes(id), false);
+  });
+
   test('a two-member cluster dissolves when one source is deleted', async () => {
     switchValue = 'true';
     const passage = SECOND_PASSAGE_WORDS.join(' ');

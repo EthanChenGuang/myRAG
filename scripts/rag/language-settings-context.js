@@ -93,7 +93,7 @@ function findModelLanguages(file, provider, model) {
  * The default profile's declaration from config/rag/embedding-model-languages.json (Phase 3.2.1, plan 03.2.1-01),
  * or null while the file is absent. A profile whose model the file does not list declares no language.
  */
-function defaultEmbeddingDeclaration(root) {
+function readDefaultProfile(root) {
   const file = embeddingDeclarationsPath(root);
   if (!fs.existsSync(file)) return null;
   const data = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -104,17 +104,40 @@ function defaultEmbeddingDeclaration(root) {
     model: typeof named.model === 'string' && named.model !== '' ? named.model : DEFAULT_EMBEDDING_PROFILE.model,
   };
   const languages = entryLanguages(named) || findModelLanguages(data, profile.provider, profile.model) || [];
-  return { id: profile.id, supportedLanguages: parseLanguageList(languages) };
+  return { ...profile, supportedLanguages: parseLanguageList(languages) };
+}
+
+function defaultEmbeddingDeclaration(root) {
+  const profile = readDefaultProfile(root);
+  return profile ? { id: profile.id, supportedLanguages: profile.supportedLanguages } : null;
+}
+
+/** RAG_EMBEDDING_PROFILES as loadIngestConfig reads it: on only for "on", any case, trimmed. */
+function embeddingProfilesOn(raw) {
+  return String(raw == null ? '' : raw).trim().toLowerCase() === 'on';
+}
+
+/**
+ * Why the embedding check was not against the active profile, or null when it was. With profiles off the app uses the
+ * legacy profile without reading the database (getActiveProfile), so a default declaration of that model is the active one.
+ */
+function activeProfileCheck(context) {
+  if (!context || !context.embeddingProfile) return 'no_declarations';
+  if (context.embeddingProfilesOn === true) return 'profiles_on';
+  return context.defaultProfileIsLegacy === true ? null : 'default_not_active';
 }
 
 /** Registry, active reranker and (when declared) the default embedding profile for one validation. */
 function buildValidationContext({ root, env, rerankerOverrides, registry } = {}) {
   const values = env || {};
   const packs = registry || readRegistry(root);
+  const profile = readDefaultProfile(root);
   return {
     registry: packs,
     reranker: rerankerDeclaration(values.RAG_RERANKER, packs, rerankerOverrides),
-    embeddingProfile: defaultEmbeddingDeclaration(root),
+    embeddingProfile: profile ? { id: profile.id, supportedLanguages: profile.supportedLanguages } : null,
+    embeddingProfilesOn: embeddingProfilesOn(values.RAG_EMBEDDING_PROFILES),
+    defaultProfileIsLegacy: Boolean(profile) && profile.provider === DEFAULT_EMBEDDING_PROFILE.provider && profile.model === DEFAULT_EMBEDDING_PROFILE.model,
   };
 }
 
@@ -140,12 +163,13 @@ function packBlockingReasons(code, context) {
 
 /**
  * D-07 for a script entry point. Neither script reads the active profile pointer (init-env has no database, the config
- * server does not query it), so the embedding check, when it runs, is against the default profile and is never
- * reported as verified against the active profile.
+ * server does not query it), so the embedding check runs against the default profile. It is reported as verified only
+ * when that profile is the active one, which holds while RAG_EMBEDDING_PROFILES is off; otherwise notVerifiedReason says why.
  */
 function validateForScript(candidate, context) {
   const result = validateLanguageSettings(candidate, context);
-  return { ...result, verifiedAgainstActiveProfile: false };
+  const notVerifiedReason = activeProfileCheck(context);
+  return { ...result, verifiedAgainstActiveProfile: notVerifiedReason === null, notVerifiedReason };
 }
 
 function isSet(value) {
@@ -209,6 +233,7 @@ function writeLanguageVariables(envPath, normalized) {
 
 module.exports = {
   DEFAULT_EMBEDDING_PROFILE,
+  activeProfileCheck,
   LANGUAGE_VARIABLES,
   PIPELINE_VARIABLES,
   RERANKER_DECLARATION_RULES,

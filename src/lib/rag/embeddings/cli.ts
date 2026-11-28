@@ -500,7 +500,7 @@ async function runVerifyRoute(
   }
   if (report.comparison) {
     const values = report.comparison.cosines.map((value) => value.toFixed(6)).join(', ');
-    io.out(`[Embedding] verify-route openrouter vs ${report.comparison.against}: cosines ${values}; min ${report.comparison.minCosine.toFixed(6)} (required ${report.minCosineRequired})`);
+    io.out(`[Embedding] verify-route openrouter vs ${report.comparison.against}: cosines ${values}; min ${report.comparison.minCosine.toFixed(6)} (required ${report.minCosineRequired}); max component delta ${report.comparison.maxComponentDelta.toExponential(2)} (allowed ${report.maxComponentDeltaRequired})`);
   }
   const verdictLine: Record<typeof report.verdict, string> = {
     match: 'match: OpenRouter serves the same BGE-M3 vectors; bge-m3-1024 may be served with RAG_BGE_M3_VIA=openrouter',

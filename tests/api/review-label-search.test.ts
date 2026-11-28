@@ -152,13 +152,13 @@ describe('label and search routes with two tenants (multi-tenant)', () => {
     expect(stored[0].status).toBe('open');
   });
 
-  it('answers 400 chunk_not_in_tenant for an A label citing a B chunk, without B text', async () => {
+  it('answers 400 chunk_not_servable for an A label citing a B chunk, without B text', async () => {
     const { label } = await loadRoutes();
     const evidence = { chunk_id: CHUNK_B, document_id: DOC_B, document_name: 'bravo-private.md', section: '', quote: 'private sentence' };
     const res = await label.POST(post(`/api/rag/review/items/${itemA}/label`, labelBody(evidence)), params(itemA));
     expect(res.status).toBe(400);
     const text = await res.text();
-    expect(JSON.parse(text)).toEqual({ error: 'invalid_evidence', span: 0, reason: 'chunk_not_in_tenant' });
+    expect(JSON.parse(text)).toEqual({ error: 'invalid_evidence', span: 0, reason: 'chunk_not_servable' });
     expect(text).not.toContain(TEXT_B);
   });
 

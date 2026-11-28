@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { factorFor } from '@/lib/rag/context/prompt-budget-config';
 import { fixedText } from '@/lib/rag/lang/texts';
 import { installChatPipeline, retrievalWith } from '../../helpers/chat-route-fakes';
 
@@ -7,6 +8,8 @@ const QUESTION = 'Which panel shows the export option?';
 const CHUNK_TEXT = 'The export option is shown in the settings panel.';
 const SMALL_MODEL = 'test/small-window';
 const SMALL_WINDOW = 8000;
+const DEFAULT_FACTOR = factorFor(null).factor;
+const plans: Array<{ documentBudget: number; packingBudget: number }> = [];
 
 const h = await vi.hoisted(async () => {
   const fakes = await import('../../helpers/chat-route-fakes');
@@ -131,6 +134,17 @@ async function post(messages: Message[] = [{ role: 'user', content: QUESTION }],
       },
     };
   });
+  vi.doMock('@/lib/rag/context/prompt-budget', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@/lib/rag/context/prompt-budget')>();
+    return {
+      ...actual,
+      planPromptBudget: (input: Parameters<typeof actual.planPromptBudget>[0]) => {
+        const output = actual.planPromptBudget(input);
+        plans.push({ documentBudget: output.documentBudget, packingBudget: output.packingBudget });
+        return output;
+      },
+    };
+  });
   await installChatPipeline(h);
   const { POST } = await import('@/app/api/embed/chat/route');
   const response = await POST(
@@ -170,6 +184,7 @@ describe('embed route prompt budget (05.2.1-22)', () => {
   const saved: Record<string, string | undefined> = {};
 
   beforeEach(() => {
+    plans.length = 0;
     for (const [name, value] of Object.entries(PROCESS_ENV)) {
       saved[name] = env[name];
       env[name] = value;
@@ -209,6 +224,21 @@ describe('embed route prompt budget (05.2.1-22)', () => {
     expect(budgetSpan()).toBeUndefined();
   });
 
+  it('switch off parity: unset and an explicit false send the same retrieval options and the same model request', async () => {
+    const conversation = longConversation();
+    const unsetBody = await post(conversation, SMALL_MODEL);
+    const unset = { options: JSON.stringify(h.retrievalInputs[0].options), call: JSON.stringify(h.calls[0]) };
+    h.calls.length = 0;
+    h.retrievalInputs.length = 0;
+    env.RAG_PROMPT_BUDGET = 'false';
+    const offBody = await post(conversation, SMALL_MODEL);
+
+    expect(JSON.stringify(h.retrievalInputs[0].options)).toBe(unset.options);
+    expect(JSON.stringify(h.calls[0])).toBe(unset.call);
+    expect(errorTextOf(offBody)).toBe(errorTextOf(unsetBody));
+    expect(h.retrievalInputs[0].options).not.toHaveProperty('documentTokenBudget');
+  });
+
   it('switch on: the document budget goes to retrieval, compression is off on OpenRouter, the question is last and the span is recorded', async () => {
     env.RAG_PROMPT_BUDGET = 'true';
     await post([{ role: 'user', content: QUESTION }], SMALL_MODEL);
@@ -217,6 +247,11 @@ describe('embed route prompt budget (05.2.1-22)', () => {
     expect(typeof budget).toBe('number');
     expect(budget).toBeGreaterThan(0);
     expect(budget).toBeLessThanOrEqual(6000);
+    // the planned (factor-scaled) document part reaches packing as raw counter tokens
+    const planned = plans[0]!;
+    expect(budget).toBe(planned.packingBudget);
+    expect(budget).toBe(Math.floor(planned.documentBudget / DEFAULT_FACTOR));
+    expect(budget).toBeLessThan(planned.documentBudget);
     expect(h.calls[0].providerOptions?.openrouter?.plugins).toEqual([{ id: 'context-compression', enabled: false }]);
     const messages = sentMessages();
     expect(messages.at(-1)).toEqual({ role: 'user', content: QUESTION });
@@ -231,7 +266,8 @@ describe('embed route prompt budget (05.2.1-22)', () => {
     env.RAG_CONTEXT_TOKEN_BUDGET = '500';
     await post();
 
-    expect(h.retrievalInputs[0].options?.documentTokenBudget).toBe(500);
+    // the raw packing budget of a 500-token (factor-scaled) document budget
+    expect(h.retrievalInputs[0].options?.documentTokenBudget).toBe(Math.floor(500 / DEFAULT_FACTOR));
   });
 
   it('switch on: the answer reserve is the smaller of the fixed limit and the Phase 5.2 cap when it applies', async () => {

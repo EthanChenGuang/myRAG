@@ -509,6 +509,7 @@ async function flagClaimForReview(input: AnswerFinishInput, admin: SupabaseClien
         answer: input.answerText,
         citedQuotes: input.citations.map((citation) => citation.quote),
         model: input.modelId,
+        ...(input.accessSets ? { accessSets: input.accessSets } : {}),
       },
       { config: deps.langfuse(), timeoutMs: deps.langfuseTimeoutMs },
     )

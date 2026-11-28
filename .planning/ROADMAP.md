@@ -27,7 +27,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3.2.1: BGE-M3 Open-Source Fallback Embedding** (INSERTED) - BGE-M3 profile hosted and in the sidecar, catalog entry, activation gate and comparison (split from 3.2, needs 3.1.1)
 - [ ] **Phase 3.3: Templated-Collection Ingestion** (INSERTED) - Tenant section rule sets with variant splitting, page boilerplate cleaning on the stored parse output, tenant-defined document attributes (import, header template, identifier feed, hard filter or soft boost) and quantity tokens, each behind a switch that is off by default
 - [ ] **Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal** - Filtered hybrid search on pgvector, switchable rerankers, edge-ordered context and refusal from calibrated rerank scores
-- [ ] **Phase 04.1: Hybrid retrieval and rerank on by default, proven by eval** (INSERTED) - v2 with hybrid search, `RAG_RERANKER=auto` and threshold refusal become the defaults after a pre-registered eval gate passes; `RAG_PIPELINE=legacy` restores today exactly
+- [ ] **Phase 04.1: Hybrid retrieval and rerank on by default, proven by eval** (INSERTED) - Closed: not flipped (owner decision 2026-11-26, 04.1 D-29). v2 with hybrid search, `RAG_RERANKER=auto` and threshold refusal were tested as the defaults against a pre-registered eval gate, which failed twice; `RAG_PIPELINE=legacy` stays the shipped default and v2 stays opt-in. Open: follow-up plan 04.1-18 and the owner's live checks (corrected by plan-41-fixes)
 - [ ] **Phase 04.1.1: Domain terminology dictionary: expert-maintained synonyms, query expansion, index-time synonyms, log mining** (INSERTED) - Versioned, audited shared and per-tenant dictionary, down-weighted query-time expansion, CSV import/export, mined candidates for expert review; index-time synonyms recorded as not built
 - [ ] **Phase 4.2: Retrieval Tuning Additions** (INSERTED) - Rerank pool floor 25 and nDCG, tenant tokenizer dictionary and eval-gated Italian stemming, version-aware retrieval, structured table lookup, near-duplicate clusters and result diversity, TTFT tracing and CI gate
 - [ ] **Phase 4.3: Document Access Groups** (INSERTED) - Access groups inside a tenant enforced before ranking on every leg and backend, in the cache, logs and citations, synced from connectors, with same-tenant canaries
@@ -402,6 +402,8 @@ Plans:
 
 ### Phase 4.1: Hybrid retrieval and rerank on by default, proven by eval (INSERTED)
 
+**Status (2026-11-27, corrected by plan-41-fixes)**: closed, not flipped. The gate failed in 04.1-07 and in the 04.1-17 re-run; the owner closed 04.1-09 as not flipped on 2026-11-26 (04.1-CONTEXT D-29). The shipped default is `RAG_PIPELINE=legacy`; the goal and success criteria below describe the tested candidate, and criteria 1, 4 and 5 are not met (`04.1-VERIFICATION.md`, verdict `human_needed`; override signature pending with the owner). A later flip first re-runs 04.1-17 on the baselines in force with the gate unchanged. Follow-up: 04.1-18 (ingest-mode over-refusal, ingest similarity calibration, gate re-run). Owner's live checks: `04.1-LIVE-CHECKLIST.md`.
+
 **Goal**: An install that has chosen its supported languages and sets nothing else gets hybrid retrieval and reranking, refuses no-answer questions at least as reliably as today without refusing more answerable ones, and can return to today's behaviour exactly with `RAG_PIPELINE=legacy`, with all of this shown on the eval before the defaults change; until the languages are chosen, or while the database lacks the Phase 4 functions, the install keeps serving the legacy pipeline
 **Depends on:** Phase 4 (automated close, plan 04-42; 04-43 live checks not required); Phase 3.2 (LANG-01): complete before plan 04.1-09 flips the defaults, and its LANG-01 implementation on trunk before plan 04.1-13 (plans 04.1-01 to 04.1-08 do not wait for it). Runs before Phase 4.2.
 **Requirements**: DFLT-01, DFLT-02, DFLT-03, DFLT-04, DFLT-05, DFLT-06, DFLT-07
@@ -415,7 +417,7 @@ Plans:
   7. With `RAG_PIPELINE=legacy`, both legacy smoke tiers show zero paired differences against the legacy baselines in CI, and the legacy characterization snapshots are byte-identical to before the phase.
   8. The new switch and value are in every config location and the eval pin, the templates leave `RAG_PIPELINE` empty so the default stays implicit, `check-config` passes, and AGENTS.md and the deployment guide state the defaults, the vendor data flow under `auto`, the upgrade steps and the switch back.
 **Live verification**: When the real golden dev split reaches the live calibration minimums (20 answerable, 10 no-answer), re-run the gate's slice and refusal criteria on it and record the result next to the 04.1 decision; on a staging Supabase project without migration 0407, deploy with `RAG_PIPELINE` unset and confirm the legacy fallback, then apply the migrations and confirm v2; measure voice p95 end to end with a Cohere key; on a fresh install skip the language picker and confirm legacy answers with the startup log and the banner, then choose the languages and confirm v2.
-**Plans**: 17 plans in 10 waves (gap closure 2026-11-25: 04.1-14 to 04.1-17) — see `phases/04.1-hybrid-retrieval-and-rerank-on-by-default-proven-by-eval/04.1-PLAN-INDEX.md`
+**Plans**: 18 plans in 11 waves (gap closure 2026-11-25: 04.1-14 to 04.1-17; follow-up 2026-11-27: 04.1-18) — see `phases/04.1-hybrid-retrieval-and-rerank-on-by-default-proven-by-eval/04.1-PLAN-INDEX.md`
 
 Plans:
 - [x] 04.1-01-PLAN.md — Legacy-rule refusal floor behind RAG_REFUSAL_FLOOR, shared keep predicate, legacy byte-identical (wave 1)
@@ -431,15 +433,17 @@ Plans:
 - [x] 04.1-16-PLAN.md — Gap closure: deterministic ingest mode, selective-filter ids mapped to ingested documents (wave 5)
 - [x] 04.1-15-PLAN.md — Gap closure: degrade and max_results on the v2 eval path, CI negative controls effective under v2 (wave 6)
 - [x] 04.1-17-PLAN.md — Gap closure: re-run the unchanged pre-registered gate and rebuild the decision record (wave 7)
-- [x] 04.1-09-PLAN.md — Flip the defaults in every location once the decision says flip and is current; templates keep the pipeline implicit (wave 8; needs 04.1-17 status flip and Phase 3.2 complete)
+- [x] 04.1-09-PLAN.md — Flip the defaults in every location once the decision says flip and is current; templates keep the pipeline implicit (wave 8; needs 04.1-17 status flip and Phase 3.2 complete) — closed: not flipped, nothing edited (corrected by plan-41-fixes)
 - [x] 04.1-10-PLAN.md — Legacy baselines, re-recorded default baselines, legacy all-zero CI tiers (wave 9)
 - [x] 04.1-11-PLAN.md — AGENTS.md and deployment guide: defaults, auto data flow, upgrade steps, switch back (wave 9)
 - [x] 04.1-12-PLAN.md — Implicit defaults on every entry point, two tenants, un-migrated database, unchosen languages, CI-equivalent run (wave 10)
+- [ ] 04.1-18-PLAN.md — Follow-up to verification gap G-02: `legacy_rule` evidence text in ingest mode, ingest calibration of the `similarity` fixture floor, unchanged gate re-run and decision rebuilt (wave 11; drafted 2026-11-27, not plan-checked)
 
 **Cross-phase notes for the roadmap**:
 - Phase 4 D-28's last sentence ("the shipped defaults stay off until the Phase 7 regression") is superseded for `RAG_PIPELINE`, `RAG_LEXICAL_SEARCH`, `RAG_RERANKER`, `RAG_REFUSAL_THRESHOLD` and `RAG_REFUSAL_FLOOR` by the product owner's decision of 2026-11-24; Phase 4 itself still closes with the defaults off (04-42 unchanged).
 - Phase 7 keeps external backends, the embedding-profile and reranker-model decision on the real locked test split, and the release-defaults check; its incumbent is the 04.1 decision record (see REQUIREMENTS-ADDITIONS.md).
 - Phases 5, 5.1, 5.1.1, 6, 6.1 and 7 run after the flip: their route-fixture tests that assert legacy output must pass `env: { RAG_PIPELINE: 'legacy' }`, and their "against Phase 4" comparisons use the post-flip baselines.
+- 2026-11-27 (corrected by plan-41-fixes): there was no flip, so the three notes around this one that speak of "after the flip", "post-flip baselines" and "its incumbent is the 04.1 decision record" apply only if a later flip happens (04.1 D-29). Until then the incumbent for Phase 7 is the shipped legacy default, and plan 07-30 adopts the 04.1 decision's `defaults` map only when its `status` is `flip`.
 - Phase 3.2 (LANG-01) owns the supported-languages reader, its startup log, the Config UI banner and the `languages_not_configured` error. Phase 4.1 consumes them through one resolver; the flip (04.1-09) stops and reports unless Phase 3.2 is complete on trunk.
 - Phase 4.2 (RNK-07) adds refusal thresholds per RAG mode. Phase 4.1 keeps the single-threshold behaviour, adds no mode key and records `refusal_basis: "single_threshold"`, so with the per-mode targets unset the Phase 4.2 result equals the 4.1 result.
 - Phase 7 plan 07-30 must accept the empty template value of `RAG_PIPELINE` (the 4.1 decision lists it in `implicit_in_templates`).
@@ -805,7 +809,7 @@ Plans:
   5. With `condense` forced to time out, a synthetic elliptical follow-up in zh/en/it is still retrieved through the previous-standalone-query variant and answered from the right passage; with `RAG_WHATSAPP_HISTORY` on, the same two-turn conversation over WhatsApp is condensed and answered correctly, history never crosses senders, and the reset command clears it.
   6. With `RAG_SCOPE_GATE` on, the off-domain fixture questions in zh/en/it skip retrieval as `out_of_scope` within 5 ms (strict refuses, balanced answers without knowledge-base context and says so), `unsure` queries always retrieve, correct refusals rise and false refusals stay within the noise band; with it off nothing changes.
 **Live verification**: Run the multi-part fixtures and real comparison questions with real LLM keys; measure the speculative-retrieval and routing latency gains.
-**Plans**: 40 plans in 14 waves (see `phases/06.2-query-layer-additions/06.2-PLAN-INDEX.md`); migrations 0980–0983; human steps in 06.2-13 (approve `fasttext-predict` and the lid.176 model), 06.2-19 (live push of 0980–0983) and 06.2-33 (live verification and native-speaker review); 06.2-25 and 06.2-31 wait for Phase 4.2, and 06.2-09 (with 23, 29, 30, 35) for Phase 5.2's GEN-08
+**Plans**: 42 plans in 14 waves (see `phases/06.2-query-layer-additions/06.2-PLAN-INDEX.md`; 06.2-41 and 06.2-42 added on 2026-11-27 after the mid-phase verification); migrations 0980–0983; human steps in 06.2-13 (approve `fasttext-predict` and the lid.176 model), 06.2-19 (live push of 0980–0983), 06.2-42 (one live embedding run for the scope-gate separation, before 06.2-26) and 06.2-33 (live verification and native-speaker review); 06.2-25 and 06.2-31 wait for Phase 4.2, and 06.2-09 (with 23, 29, 30, 35) for Phase 5.2's GEN-08
 
 ### Phase 6.3: Source Deletion Sync & Purge (INSERTED)
 **Goal**: A document deleted or withdrawn at its source stops being retrieved, cited or served from cache within one sync, withdrawn content can be purged from every store, and SharePoint and OneDrive libraries can be connected
@@ -834,7 +838,7 @@ Plans:
   6. *(Removed 2026-11-24: moved to Phase 5.1.1 with EVAL-17.)*
   7. Traces carry chunk languages; online judge scores, votes and the "information not available" rate are split per language, and a fixture where one language drops while the average holds raises an alert; a new embedding profile can be activated for chosen tenants or a traffic share first and rolled back per tenant; adding a fixture language records its baseline and reprocesses only `und`, scanned and out-of-date documents; a red-team run started from the Config UI replays the growing attack corpus and opens a review case per success; the defaults record includes cost per 1,000 documents and queries.
 **Live verification**: Provision Weaviate and Qdrant (cloud or self-hosted), host the drain worker within the 60 s function limit, and run the canary suite against them; run Test-connection for each real provider; run the full regression on the real locked test split with all real keys (the ADM-02 defaults decision is final only from this live run, not from fixtures); check voice latency end to end; run the 07-50 live checks (purge, source recheck and access groups on the hosted backends, a gradual rollout and the LANG-10 alert channel end to end, a red-team run started from the Config UI).
-**Plans**: 52 plans in 18 waves (48 active; 07-22, 07-23, 07-26 and 07-29 retired 2026-11-24, superseded by Phase 5.1.1; 07-35..07-52 added 2026-11-25 for the purge outbox, forced source recheck, access-group filter, LANG-10/11, SEC-11 red team and ADM-02 cost blocks; 07-37/07-44 wait for Phase 6.3, 07-38/07-39 for Phase 4.3, 07-46 for Phase 5.3; `/gsd-ui-phase 07` must produce `07-UI-SPEC.md` before 07-48, 07-49 and 07-52) — see `phases/07-external-backends-release-defaults/07-PLAN-INDEX.md`
+**Plans**: 53 plans in 18 waves (49 active; 07-22, 07-23, 07-26 and 07-29 retired 2026-11-24, superseded by Phase 5.1.1; 07-53 added 2026-11-27 for the LEX-05 adapter clause, gap G3 of the Phase 4.4 verification: BM25 k1 and b from the configuration on Weaviate and Qdrant; 07-35..07-52 added 2026-11-25 for the purge outbox, forced source recheck, access-group filter, LANG-10/11, SEC-11 red team and ADM-02 cost blocks; 07-37/07-44 wait for Phase 6.3, 07-38/07-39 for Phase 4.3, 07-46 for Phase 5.3; `/gsd-ui-phase 07` must produce `07-UI-SPEC.md` before 07-48, 07-49 and 07-52) — see `phases/07-external-backends-release-defaults/07-PLAN-INDEX.md`
 **Incumbent defaults (2026-11-24, Phase 4.1)**: the regression and the release-defaults check (07-17, 07-25, 07-30) start from the Phase 4.1 decision `eval/decisions/04.1-retrieval-defaults.json` as the incumbent; route-fixture tests that assert legacy output pin `RAG_PIPELINE=legacy`.
 
 Plans:
@@ -872,6 +876,7 @@ Plans:
 - [ ] 07-32-PLAN.md — Collect the three human decisions and actions Phase 7 needs before the live checks: the Vercel plan… (wave 12, autonomous: false)
 - [ ] 07-33-PLAN.md — Run the Phase 7 live verification items as explicit checkpoints, then apply the shipped defaults from… (wave 13, autonomous: false)
 - [x] 07-34-PLAN.md — Extend the cross-tenant canary suite to the voice and embed entry points on pgvector, Weaviate and Qdrant,… (wave 6) — done, pending merge (exec/07-28)
+- [x] 07-53-PLAN.md — Make the Weaviate and Qdrant adapters score with the BM25 k1 and b of the configuration (LEX-05), record the pair on each collection, refuse a mismatched index until it is rebuilt,… (wave 7) — done, pending merge (train 41)
 **UI hint**: yes
 
 ## Progress
@@ -892,7 +897,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 3.2.1. BGE-M3 Open-Source Fallback Embedding (INSERTED) | 5/5 | Executed on main | - |
 | 3.3. Templated-Collection Ingestion (INSERTED) | 24/26 | In Progress — 1 done pending merge (exec/verify only); 1 without SUMMARY | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 47/47 | Executed on main (04-43 live calibration open (human)) | - |
-| 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 17/17 | Executed on main (04.1-09 closed-not-flipped: defaults not flipped) | - |
+| 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 17/18 | Closed: not flipped (owner 2026-11-26, D-29); legacy stays the default; follow-up 04.1-18 drafted; live checks open (corrected by plan-41-fixes) | - |
 | 4.1.1. Domain Terminology Dictionary (INSERTED) | 18/18 | Executed on main | - |
 | 4.2. Retrieval Tuning Additions (INSERTED) | 38/39 | In Progress — 1 done pending merge (train only) | - |
 | 4.3. Document Access Groups (INSERTED) | 17/38 | In Progress — 19 done pending merge (train only); 2 without SUMMARY | - |
@@ -907,4 +912,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 6.1. Embedding Fine-tuning Pipeline (INSERTED) | 20/20 | Executed on main | - |
 | 6.2. Query Layer Additions (INSERTED) | 11/40 | In Progress — 12 done pending merge (train only); 3 done pending merge (exec/verify only); 14 without SUMMARY | - |
 | 6.3. Source Deletion Sync & Purge (INSERTED) | 0/29 | In Progress — 3 done pending merge (train only); 4 done pending merge (exec/verify only); 22 without SUMMARY | - |
-| 7. External Backends & Release Defaults | 26/52 | In Progress — 1 done pending merge (train only); 2 done pending merge (exec/verify only); 23 without SUMMARY (UI-SPEC pending for 07-48, 07-49, 07-52 (as of last ROADMAP revision)) | - |
+| 7. External Backends & Release Defaults | 26/53 | In Progress — 2 done pending merge (train only); 2 done pending merge (exec/verify only); 23 without SUMMARY (07-53 added 2026-11-27 for LEX-05; UI-SPEC pending for 07-48, 07-49, 07-52 (as of last ROADMAP revision)) | - |

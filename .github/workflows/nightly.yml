@@ -312,8 +312,13 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RAG_MONITOR: ${{ vars.RAG_MONITOR }}
+          RAG_RETRIEVAL_LOG: ${{ vars.RAG_RETRIEVAL_LOG }}
           RAG_MONITOR_WEBHOOK_URL: ${{ secrets.RAG_MONITOR_WEBHOOK_URL }}
           RAG_MONITOR_WEBHOOK_SECRET: ${{ secrets.RAG_MONITOR_WEBHOOK_SECRET }}
+          LANGFUSE_ENABLED: ${{ vars.LANGFUSE_ENABLED }}
+          LANGFUSE_BASE_URL: ${{ vars.LANGFUSE_BASE_URL }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
         run: npm run rag:monitor
   real-docling:
     if: github.event.schedule != '23 4 * * 1'
@@ -380,8 +385,96 @@ jobs:
           name: real-docling-report
           path: ${{ runner.temp }}/real-docling-report.json
           if-no-files-found: warn
-  weekly-report:
+  bge-m3-identity:
+    if: github.event.schedule != '23 4 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      HAS_DEEPINFRA_KEY: ${{ secrets.DEEPINFRA_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Build the bge-m3 image (weights baked at the pinned revision)
+        id: bge_m3
+        run: |
+          if docker build --target bge-m3 -t rag-sidecar:bge-m3 rag-sidecar; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::bge-m3 image not buildable, skipping"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Record the real sidecar vectors on the fixture texts
+        if: steps.bge_m3.outputs.ready == 'true'
+        continue-on-error: true
+        run: |
+          mkdir -p "$RUNNER_TEMP/bge-m3" && chmod 777 "$RUNNER_TEMP/bge-m3"
+          docker run --rm --network none -v "$PWD:/work:ro" -v "$RUNNER_TEMP/bge-m3:/out" rag-sidecar:bge-m3 \
+            python /work/eval/fixtures/embeddings/record_bge_m3.py --mode sidecar --out /out/bge-m3-sidecar-nightly.json
+      - name: Compare the real sidecar vectors with the recorded hosted vectors (report only)
+        if: steps.bge_m3.outputs.ready == 'true'
+        run: |
+          status=0
+          python3 eval/fixtures/embeddings/record_bge_m3.py --compare eval/fixtures/embeddings/bge-m3-hosted.json "$RUNNER_TEMP/bge-m3/bge-m3-sidecar-nightly.json" > "$RUNNER_TEMP/bge-m3/compare-sidecar.txt" || status=$?
+          cat "$RUNNER_TEMP/bge-m3/compare-sidecar.txt" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -ne 0 ]; then echo "::warning::BGE-M3 sidecar vectors differ from the recorded hosted vectors beyond the D-26 tolerance (exit $status)"; fi
+      - name: Hosted check skipped
+        if: env.HAS_DEEPINFRA_KEY != 'true'
+        run: echo "::notice::DEEPINFRA_API_KEY secret not configured, skipping the live hosted BGE-M3 check"
+      - name: Record live hosted vectors and compare with the recordings (report only)
+        if: env.HAS_DEEPINFRA_KEY == 'true'
+        env:
+          DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/bge-m3"
+          status=0
+          python3 eval/fixtures/embeddings/record_bge_m3.py --mode hosted --out "$RUNNER_TEMP/bge-m3/bge-m3-hosted-nightly.json" || status=$?
+          if [ "$status" -ne 0 ]; then echo "::warning::live hosted BGE-M3 recording failed (exit $status)"; exit 0; fi
+          python3 eval/fixtures/embeddings/record_bge_m3.py --compare eval/fixtures/embeddings/bge-m3-hosted.json "$RUNNER_TEMP/bge-m3/bge-m3-hosted-nightly.json" > "$RUNNER_TEMP/bge-m3/compare-hosted.txt" || status=$?
+          cat "$RUNNER_TEMP/bge-m3/compare-hosted.txt" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -ne 0 ]; then echo "::warning::live hosted BGE-M3 vectors differ from the recorded hosted vectors beyond the D-26 tolerance (exit $status)"; fi
+      - name: Upload the BGE-M3 identity report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bge-m3-identity-report
+          path: ${{ runner.temp }}/bge-m3/compare-*.txt
+          if-no-files-found: warn
+  weekly-sample:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '23 4 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HAS_MONITOR_SECRETS: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
+    steps:
+      - name: Skip notice when the Supabase service-role secrets are absent
+        if: env.HAS_MONITOR_SECRETS != 'true'
+        run: echo "::notice::supabase service-role secrets not configured, skipping the weekly sample"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: env.HAS_MONITOR_SECRETS == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: env.HAS_MONITOR_SECRETS == 'true'
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install Node dependencies
+        if: env.HAS_MONITOR_SECRETS == 'true'
+        run: npm ci --ignore-scripts
+      - name: Weekly representative sample and cluster refit (report-only, never fails the run)
+        if: env.HAS_MONITOR_SECRETS == 'true'
+        continue-on-error: true
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RAG_REPRESENTATIVE_SAMPLE: ${{ vars.RAG_REPRESENTATIVE_SAMPLE }}
+          RAG_RETRIEVAL_LOG: ${{ vars.RAG_RETRIEVAL_LOG }}
+          RAG_DOMAIN_EXPERT_REVIEW: ${{ vars.RAG_DOMAIN_EXPERT_REVIEW }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: npm run rag:monitor -- sample
+  weekly-report:
+    needs: [weekly-sample]
+    if: always() && (github.event_name == 'workflow_dispatch' || github.event.schedule == '23 4 * * 1')
     runs-on: ${{ vars.PRIVATE_EVAL_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 60
     permissions:

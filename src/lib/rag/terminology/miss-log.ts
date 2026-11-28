@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { RpcClient } from '../backend/supabase-rpc';
 import { getRagDeps } from '../deps';
 import type { RefusalRecord } from '../refusal/types';
@@ -9,6 +10,8 @@ import type { TerminologyHashStage } from '../v2/config-hash';
 /** D-25: the write never holds the request longer than this, and the response path never awaits it. */
 export const MISS_LOG_TIMEOUT_MS = 500;
 export const MISS_LOG_QUERY_MAX_CHARS = 500;
+/** The service-role miss recorder (0473): rag_term_record_miss(p_tenant_key text, p_row jsonb). */
+export const MISS_RECORDER_RPC = 'rag_term_record_miss';
 
 const MISS_LOG_PROFILES: ReadonlySet<Profile> = new Set<Profile>(['chat', 'embed', 'voice']);
 const FAILED = '[RAG Terminology] miss log write failed';
@@ -93,7 +96,7 @@ export async function recordMiss(input: MissLogInput, options: MissLogOptions = 
     }
     const query = input.query.trim();
     if (!query) return;
-    const request = client.rpc('rag_term_record_miss', { p_tenant_key: scopeKey(input.scope), p_row: missRow({ ...input, query }) });
+    const request = client.rpc(MISS_RECORDER_RPC, { p_tenant_key: scopeKey(input.scope), p_row: missRow({ ...input, query }) });
     const timeout = new Promise<'timeout'>((resolve) => {
       timer = setTimeout(() => {
         controller.abort();
@@ -108,4 +111,13 @@ export async function recordMiss(input: MissLogInput, options: MissLogOptions = 
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+/**
+ * W-3: one prepared miss row written for a tenant through the recorder, for the Phase 5.1.1 feedback bridge, so no rag_term_* call is
+ * made outside this module. Resolves to the PostgREST error (null on success); the caller decides about missing-function codes.
+ */
+export async function recordMissRow(client: SupabaseClient, tenantKey: string, row: Record<string, unknown>): Promise<{ error: unknown }> {
+  const { error } = (await client.rpc(MISS_RECORDER_RPC, { p_tenant_key: tenantKey, p_row: row })) as unknown as { error: unknown };
+  return { error: error ?? null };
 }
