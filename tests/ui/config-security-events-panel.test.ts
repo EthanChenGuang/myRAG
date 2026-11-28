@@ -638,6 +638,33 @@ describe('Security events panel: Uploaders, Events and Link previews', () => {
     expect(links(page.root)).toEqual([]);
   });
 
+  it('Events below 768px (UI-SPEC 10): Result stacks under Check and Time uses a compact date', async () => {
+    const page = loadPage({ replies: { events: { status: 200, body: eventsAnswer([eventItem(1)]) } } });
+    await page.init();
+    await selectTab(page, 'events');
+    const view = page.view('events');
+    const headers = view.querySelectorAll('th');
+    const resultHeader = headers.find((th) => th.textContent === 'Result')!;
+    expect(resultHeader.className).toContain('max-md:hidden');
+    const row = view.querySelector('tr[data-security-event-row]')!;
+    const cells = row.querySelectorAll('td');
+    const checkCell = cells[1]!;
+    const stacked = checkCell.querySelector('[data-security-event-result-narrow]')!;
+    expect(stacked.className).toContain('md:hidden');
+    expect(stacked.textContent).toContain('Link removed');
+    const resultCell = cells.find((td) => td.querySelector('[data-security-event-result-narrow]') === null && td.textContent.includes('Link removed'))!;
+    expect(resultCell.className).toContain('max-md:hidden');
+    const time = cells[0]!.querySelector('time')!;
+    const full = time.querySelector('[data-time-full]')!;
+    const compact = time.querySelector('[data-time-compact]')!;
+    expect(full.className).toContain('max-md:hidden');
+    expect(compact.className).toContain('md:hidden');
+    expect(compact.textContent.length).toBeGreaterThan(0);
+    expect(compact.textContent.length).toBeLessThan(full.textContent.length);
+    expect(time.getAttribute('title')).toBe(full.textContent);
+    expect(cells[0]!.className).toContain('whitespace-nowrap');
+  });
+
   it('Events filters by check and period and pages with Load more', async () => {
     const page = loadPage({
       replies: {
