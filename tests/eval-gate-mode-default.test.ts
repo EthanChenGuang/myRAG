@@ -154,7 +154,7 @@ describe('local test-rag gate mode follows the measured tier (O-1, H-10)', () =>
 });
 
 describe('a voice entry run does not take a text tier mode (06.2 voice gate decision, 2026-11-28)', () => {
-  test('a voice prechunked in-process run resolves to report with no measured tier', () => {
+  test('a voice in-process run (prechunked or ingest) resolves to report with no measured tier', () => {
     expect(resolveGatesMode(undefined, { fixtureMode: 'prechunked', live: false, entryProfile: 'voice' })).toEqual({
       mode: 'report',
       source: 'voice_entry',
@@ -162,7 +162,16 @@ describe('a voice entry run does not take a text tier mode (06.2 voice gate deci
       reportOnly: [],
     });
     expect(resolveGatesMode(undefined, { fixtureMode: 'ingest', live: false, entryProfile: 'voice' }).mode).toBe('report');
-    expect(resolveGatesMode(undefined, { fixtureMode: 'prechunked', live: true, entryProfile: 'voice' }).mode).toBe('report');
+  });
+
+  test('a live or overridden voice run keeps the gate default (enforce), as before', () => {
+    expect(resolveGatesMode(undefined, { fixtureMode: 'prechunked', live: true, entryProfile: 'voice' })).toEqual({
+      mode: undefined,
+      source: 'gate_default',
+      tier: null,
+      reportOnly: [],
+    });
+    expect(resolveGatesMode(undefined, { fixtureMode: 'prechunked', live: false, customInputs: true, entryProfile: 'voice' }).mode).toBeUndefined();
   });
 
   test('the text smoke tier still enforces with false_refusal_rate report-only', () => {
