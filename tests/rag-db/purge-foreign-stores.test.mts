@@ -149,6 +149,98 @@ for (const mode of MODES) {
     });
   });
 
+  describe(`rag_purge_foreign_stores calls the Phase 3.3 and Phase 6.1 hooks (${mode})`, () => {
+    let world: PurgeWorld;
+
+    before(async () => {
+      world = await createWorld(mode);
+    });
+
+    after(async () => {
+      await world?.db.close();
+    });
+
+    async function stage(tenantKey: string, seeded: SeededLineage): Promise<void> {
+      await world.db.query(
+        `INSERT INTO public.rag_staged_attributes (tenant_key, source, source_key, attributes)
+         VALUES ($1, 'config_upload', $2, '{"alpha_code": "K-1"}'::jsonb)`,
+        [tenantKey, seeded.sourceKey],
+      );
+    }
+
+    async function insertVersion(id: string, tenantKeys: string[]): Promise<void> {
+      await world.db.query(
+        `INSERT INTO public.embedding_model_versions
+           (id, base_model, base_revision, scope, tenant_keys, dataset_manifest_sha256, training_config_sha256, offline_metrics, probe,
+            query_prompt, document_prompt, dims, artifact_uri, created_by)
+         VALUES ($1, 'example-org/example-embedding', $2, 'deployment', $3::text[], $4, $5, '{}'::jsonb, '{}'::jsonb, 'query: ', 'passage: ',
+                 1024, $6, 'admin:test')`,
+        [id, 'a'.repeat(40), [...tenantKeys].sort(), 'b'.repeat(64), 'c'.repeat(64), `s3://models-bucket/${id}`],
+      );
+    }
+
+    const versionStatus = async (id: string): Promise<string> =>
+      String((await rows(world.db, 'SELECT status FROM public.embedding_model_versions WHERE id = $1', [id]))[0]?.status);
+
+    test('a purge deletes the lineage\'s staged attributes, counts and verifies doc_attributes; another lineage keeps its row', async () => {
+      const tenantKey = world.tenantA.key;
+      const target = await seedLineage(world, world.tenantA);
+      const other = await seedLineage(world, world.tenantA);
+      await stage(tenantKey, target);
+      await stage(tenantKey, other);
+      const before = new Map(
+        (await rows(world.db, 'SELECT store, remaining FROM public.rag_purge_foreign_leftovers($1, $2, $3::uuid[])', [tenantKey, target.lineageId, target.versionIds])).map(
+          (row) => [String(row.store), Number(row.remaining)],
+        ),
+      );
+      assert.equal(before.get('doc_attributes'), 1, 'leftovers see the staged row before the purge');
+
+      const result = await purge(world.db, tenantKey, target.lineageId, adminActor(world.adminA));
+      assert.ok(Number(result.counts.doc_attributes) >= 1, 'counts.doc_attributes');
+      assert.equal(await count(world.db, 'SELECT count(*) AS n FROM public.rag_staged_attributes WHERE tenant_key = $1 AND source_key = $2', [tenantKey, target.sourceKey]), 0);
+      assert.equal(await count(world.db, 'SELECT count(*) AS n FROM public.rag_staged_attributes WHERE tenant_key = $1 AND source_key = $2', [tenantKey, other.sourceKey]), 1);
+      const remaining = new Map((await verify(world.db, tenantKey, target.lineageId)).map((row) => [row.store, row.remaining]));
+      assert.equal(remaining.get('doc_attributes'), 0, 'verify doc_attributes');
+    });
+
+    test('a purge taints the fine-tune versions trained on the tenant, counts and verifies finetune', async () => {
+      const tenantKey = world.tenantA.key;
+      const trained = `ft-${crypto.randomUUID().slice(0, 8)}`;
+      await insertVersion(trained, [tenantKey]);
+      const untouched = `ft-${crypto.randomUUID().slice(0, 8)}`;
+      if (world.tenantB) await insertVersion(untouched, [world.tenantB.key]);
+      const seeded = await seedLineage(world, world.tenantA);
+
+      const result = await purge(world.db, tenantKey, seeded.lineageId, adminActor(world.adminA));
+      assert.ok(Number(result.counts.finetune) >= 1, 'counts.finetune');
+      assert.equal(await versionStatus(trained), 'tainted');
+      if (world.tenantB) assert.notEqual(await versionStatus(untouched), 'tainted', "another tenant's version is not tainted");
+      const remaining = new Map((await verify(world.db, tenantKey, seeded.lineageId)).map((row) => [row.store, row.remaining]));
+      assert.equal(remaining.get('finetune'), 0, 'verify finetune');
+    });
+
+    test('verify reports a fine-tune version trained on the tenant that the purge left untainted', async () => {
+      const tenantKey = world.tenantA.key;
+      const seeded = await seedLineage(world, world.tenantA);
+      await purge(world.db, tenantKey, seeded.lineageId, adminActor(world.adminA));
+      const late = `ft-${crypto.randomUUID().slice(0, 8)}`;
+      await insertVersion(late, [tenantKey]);
+      await world.db.query("UPDATE public.embedding_model_versions SET created_at = now() - interval '1 day' WHERE id = $1", [late]);
+      const remaining = new Map((await verify(world.db, tenantKey, seeded.lineageId)).map((row) => [row.store, row.remaining]));
+      assert.equal(remaining.get('finetune'), 1, 'an untainted version that existed before the purge is a leftover');
+    });
+
+    test('the inventory lists the staged attributes, the fine-tune stores and the Phase 3.3 rule tables with their handling', async () => {
+      const inventory = new Map((await rows(world.db, 'SELECT relation, store_id, handling FROM public.rag_purge_store_inventory()')).map((row) => [String(row.relation), row]));
+      assert.deepEqual([inventory.get('rag_staged_attributes')?.handling, inventory.get('rag_staged_attributes')?.store_id], ['purge_step', 'doc_attributes']);
+      assert.deepEqual([inventory.get('embedding_model_versions')?.handling, inventory.get('embedding_model_versions')?.store_id], ['purge_step', 'finetune']);
+      assert.deepEqual([inventory.get('rag_finetune_consent')?.handling, inventory.get('rag_finetune_consent')?.store_id], ['purge_step', 'finetune']);
+      for (const relation of ['rag_section_rule_sets', 'rag_boilerplate_rules', 'rag_attribute_definitions', 'rag_attribute_header_templates']) {
+        assert.equal(inventory.get(relation)?.handling, 'exempt', relation);
+      }
+    });
+  });
+
   describe(`rag_purge_foreign_stores on a trunk without the other phases' stores (${mode})`, () => {
     let world: PurgeWorld;
 
