@@ -212,6 +212,11 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
     functions: ['rag_scope_centroids_rebuild'],
   },
   {
+    reason:
+      'Language-add planning (0745, 07-52): service_role-only admin and CLI read that lists current, ready document ids with doc type, ingest fingerprint, stored fingerprint parts (settings) and the und / scanned flags; it returns no chunk, title or document text, and its ids only drive a reprocess the operator starts.',
+    functions: ['rag_language_add_candidates'],
+  },
+  {
     reason: 'Statistics: counts, shares or coverage per tenant, language or profile; no row content and no document id.',
     functions: [
       'get_index_statistics',
