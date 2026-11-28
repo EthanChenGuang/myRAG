@@ -1268,6 +1268,15 @@ function parseTerminologyDense(env: RagEnvInput, terminology: boolean, warnings:
   return dense;
 }
 
+/** I-1: the term:0 list is lexical-only (D-16), so RAG_TERMINOLOGY=true without lexical search builds nothing; warn once per process. */
+function warnTerminologyWithoutLexical(terminology: boolean, lexicalSearch: boolean, warnings: string[]): void {
+  if (!terminology || lexicalSearch) return;
+  problem(warnings, 'terminology:needs-lexical-search', 'RAG_TERMINOLOGY=true builds no term:0 lexical list while RAG_LEXICAL_SEARCH=false', {
+    RAG_TERMINOLOGY: 'true',
+    RAG_LEXICAL_SEARCH: 'false',
+  });
+}
+
 function memoKey(env: RagEnvInput): string {
   return JSON.stringify([
     env.RAG_PIPELINE ?? '',
@@ -1413,6 +1422,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
   const terminology = parseBooleanSwitch(env.RAG_TERMINOLOGY, false, 'terminology', warnings);
 
   const lexicalSearch = parseBooleanSwitch(env.RAG_LEXICAL_SEARCH, false, 'lexical-search', warnings);
+  warnTerminologyWithoutLexical(terminology, lexicalSearch, warnings);
   const docAttributes = parseNamedFlag('RAG_DOC_ATTRIBUTES', env.RAG_DOC_ATTRIBUTES, warnings);
   const v2: V2Config = {
     lexicalSearch,

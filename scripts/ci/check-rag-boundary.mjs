@@ -161,6 +161,8 @@ const BACKFILL_RPC_RE = new RegExp(
 const TERMINOLOGY_DIR = 'src/lib/rag/terminology/';
 const TERMINOLOGY_RPC_RE = /\.rpc\s*\(\s*(['"`])rag_term_/g;
 const TERMINOLOGY_TABLE_RE = new RegExp(String.raw`\.from\s*(?:<[^>()]*>)?\s*\(\s*(['"\`])rag_term_`, 'g');
+// W-3: a rag_term_* name held in a string constant (const X = 'rag_term_...', an object value) and passed to .rpc(X) or .from(X) later.
+const TERMINOLOGY_NAME_RE = /(['"`])rag_term_[A-Za-z0-9_]*\1/g;
 
 const inSrc = (rel) => rel.startsWith('src/');
 // D-16: the deterministic lookup RPCs run only inside the pipeline, and the lookup module never builds SQL or reaches a model.
@@ -630,9 +632,14 @@ export const RULES = [
   },
   {
     id: 'terminology-rpc',
-    description: 'rag_term_* RPC call or table access under src/ outside src/lib/rag/terminology/ (read through getTerminologyLexicon)',
+    description:
+      'rag_term_* RPC call, table access or rag_term_* name in a string constant under src/ outside src/lib/rag/terminology/ (read through getTerminologyLexicon)',
     appliesTo: outsideTerminologyDir,
-    find: (text) => [...regexMatches(TERMINOLOGY_RPC_RE, text), ...regexMatches(TERMINOLOGY_TABLE_RE, text)],
+    find: (text) => [
+      ...regexMatches(TERMINOLOGY_RPC_RE, text),
+      ...regexMatches(TERMINOLOGY_TABLE_RE, text),
+      ...regexMatches(TERMINOLOGY_NAME_RE, text),
+    ],
   },
   {
     id: 'table-lookup-rpc',
