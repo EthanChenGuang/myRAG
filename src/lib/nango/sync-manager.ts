@@ -13,6 +13,8 @@ import {
     type SyncRecordRow,
 } from './source-deletions';
 import { PROVIDER_CONFIG, type NangoFileRecord, type SupportedProvider, type SyncStats } from './types';
+import { isSharePointEnabled, isSharePointProvider } from './sharepoint/config';
+import { listSharePointFiles, syncSharePointConnection, type SharePointSyncHooks } from './sharepoint/sync';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import {
@@ -286,6 +288,17 @@ async function markSourceSeen(supabaseAdmin: SupabaseAdmin, input: SourceSeenInp
     } catch (error) {
         logger.debug('Nango', 'Source seen time not stored', { error: error instanceof Error ? error.name : 'unknown' });
     }
+}
+
+/** The shared helpers the SharePoint / OneDrive sync uses (sharepoint/sync.ts). */
+function sharePointHooks(): SharePointSyncHooks {
+    return {
+        markSourceSeen,
+        isSupportedFile,
+        ownerOnlyLabel,
+        processDocument: processDocumentWithMetadata,
+        fetchContent: (provider, connectionId, file) => fetchFileContent(provider, connectionId, file),
+    };
 }
 
 /**
@@ -1269,6 +1282,17 @@ export async function syncDocumentsForConnection(
     connectionId: string,
     provider: string
 ): Promise<SyncStats> {
+    if (isSharePointProvider(provider)) {
+        // D-24: with the switch off a SharePoint or OneDrive connection is not synced; no Graph or database call.
+        if (!isSharePointEnabled()) {
+            logger.debug('Nango', 'SharePoint and OneDrive sync is off');
+            return { processed: 0, failed: 0, skipped: 0, deleted: 0, failClosed: 0 };
+        }
+        const admin = getSupabaseAdmin();
+        if (!admin) throw new Error('Supabase admin client not available');
+        const { processed, failed, skipped, deleted, failClosed } = await syncSharePointConnection(connectionId, admin, sharePointHooks());
+        return { processed, failed, skipped, deleted, failClosed };
+    }
     const nango = getNango();
     const supabaseAdmin = getSupabaseAdmin();
 
@@ -1720,6 +1744,8 @@ export async function syncAllUserConnections(userId: string): Promise<SyncStats[
 export interface ListableConnectionRow extends SourceConnectionRow {
     sync_folder_id?: string | null;
     sync_file_ids?: string[] | null;
+    /** SharePoint / OneDrive: the stored selection (metadata.source_scope); read from the row when absent. */
+    metadata?: unknown;
 }
 
 /**
@@ -1732,6 +1758,10 @@ export async function listConnectionFiles(connection: ListableConnectionRow): Pr
     const selected = connection.sync_file_ids ?? null;
     const fileIds: string[] = [];
     let complete = true;
+    if (isSharePointProvider(connection.provider)) {
+        if (!isSharePointEnabled()) return { fileIds: [], complete: false };
+        return listSharePointFiles(connection, getSupabaseAdmin());
+    }
     try {
         if (connection.provider === 'google-drive') {
             const folders = folderId === 'multi-folder-mode' && selected && selected.length > 0
