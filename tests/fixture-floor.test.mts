@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -91,5 +92,29 @@ describe('fixture score calibration for the eval harness', () => {
     assert.deepEqual(loadFixtureScoreCalibration('ingest', { goldenSha256: RUN_GOLDEN, file }), { context_threshold: 0.22 });
     assert.throws(() => loadFixtureScoreCalibration('ingest', { goldenSha256: OTHER_GOLDEN, file }), MISMATCH);
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe('golden set in force (04.1-18 rule: a subset run checks the floor against the set in force for its mode)', () => {
+  const sha = (bytes: Buffer | string): string => crypto.createHash('sha256').update(bytes).digest('hex');
+
+  test('prechunked hashes golden.jsonl as it is; ingest hashes the merged ingest golden files', async () => {
+    const ingestMode: Record<string, unknown> = await import('../eval/harness/ingest-mode.mts');
+    assert.equal(typeof ingestMode.goldenInForceSha256, 'function');
+    const inForce = ingestMode.goldenInForceSha256 as (mode: 'prechunked' | 'ingest', root?: string) => string;
+    const root = path.resolve(import.meta.dirname, '..');
+    assert.equal(inForce('prechunked', root), sha(fs.readFileSync(path.join(root, 'eval/fixtures/golden.jsonl'))));
+    const merged = ['eval/fixtures/golden.jsonl', 'eval/fixtures/ingest/golden-ingest.jsonl']
+      .flatMap((file) => fs.readFileSync(path.join(root, file), 'utf8').split('\n').filter((line) => line.trim() !== ''));
+    assert.equal(inForce('ingest', root), sha(`${merged.join('\n')}\n`));
+  });
+
+  test('the committed floor of each mode was fitted on its set in force, and another hash still stops the run', async () => {
+    const { goldenInForceSha256 } = (await import('../eval/harness/ingest-mode.mts')) as unknown as { goldenInForceSha256?: (mode: 'prechunked' | 'ingest') => string };
+    assert.equal(typeof goldenInForceSha256, 'function');
+    for (const mode of ['prechunked', 'ingest'] as const) {
+      assert.ok(loadFixtureScoreCalibration(mode, { goldenSha256: goldenInForceSha256!(mode) }));
+      assert.throws(() => loadFixtureScoreCalibration(mode, { goldenSha256: 'd'.repeat(64) }), MISMATCH);
+    }
   });
 });
