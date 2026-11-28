@@ -52,6 +52,8 @@ export interface CitationSessionInput {
    * the check cannot run (every citation is then dropped). Absent means no access recheck transform, and the stream is unchanged.
    */
   recheck?: (chunkIds: readonly string[]) => Promise<ReadonlySet<string>>;
+  /** Phase 6.2 P-30: on an Auto turn, the two routing ids; the labeler is on when either would turn it on. */
+  routingCandidates?: readonly string[];
 }
 
 /** D-26: the outcome of the access recheck, ids only. */
@@ -98,6 +100,10 @@ export interface CitationSession {
   readonly strategy: CitationStrategyId | null;
   /** Why the direct Claude call was given up for chunk-alias; null when it was not. */
   readonly fallbackReason: FallbackReason | null;
+  /** Phase 6.2 P-30: the model decided after retrieval; only before attach, never `auto`. */
+  setFinalModel(modelId: string): void;
+  /** The model the strategy and the direct Claude call use. */
+  finalModel(): string;
   /** Binds the final context blocks that were sent to the model; null when no context was sent. */
   attach(result: { blocks?: ContextBlock[]; links?: ExtractedURL[]; usedDocuments?: readonly UsedDocument[] } | null): void;
   /** On a Claude turn the OpenRouter prompt is the fallback prompt, so it carries the alias instruction too. */
@@ -273,6 +279,10 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     },
     get fallbackReason() {
       return fallbackReason;
+    },
+    setFinalModel(_modelId) {},
+    finalModel() {
+      return input.modelId;
     },
     attach(result) {
       if (!labeler) return;

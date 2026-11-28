@@ -105,6 +105,8 @@ export function preRetrievalCitations(input: {
   ragMode?: CitationRagMode;
   facts?: ClaudeTurnFacts;
   modelSource?: Record<string, string | undefined>;
+  /** Phase 6.2 P-30: the routing ids of an Auto turn; true when any of them would turn the labeler on. */
+  candidateModelIds?: readonly string[];
 }): boolean {
   if (input.capabilities?.citations !== true || input.ragMode === 'bypass') return false;
   if (input.config.citations) return true;
