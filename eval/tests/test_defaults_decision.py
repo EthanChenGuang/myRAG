@@ -451,9 +451,11 @@ def test_check_current_names_a_historical_record_and_still_reports_drift(tmp_pat
     assert "historical" in err and "c" * 40 in err
 
 
-def test_the_committed_decision_is_marked_historical_with_its_run_sha():
-    committed = Path(__file__).resolve().parents[1] / "decisions" / "04.1-retrieval-defaults.json"
-    record = DecisionRecord.model_validate_json(committed.read_text(encoding="utf-8"))
+def test_the_committed_decision_carries_the_run_sha_of_its_gate_result():
+    """Plan 04.1-18 rebuilt the record from a fresh gate run, so it is current, not a historical record of an earlier run."""
+    root = Path(__file__).resolve().parents[1]
+    record = DecisionRecord.model_validate_json((root / "decisions" / "04.1-retrieval-defaults.json").read_text(encoding="utf-8"))
+    gate = json.loads((root / "reports" / "phase-04.1" / "fixture" / "defaults-gate.json").read_text(encoding="utf-8"))
     assert record.status == "not_flipped"
-    assert record.historical is not None and record.historical.as_of_git_sha.startswith("12598da4")
-    assert record.git_sha == record.historical.as_of_git_sha
+    assert record.historical is None
+    assert record.git_sha is not None and record.git_sha == gate["git_sha"]
