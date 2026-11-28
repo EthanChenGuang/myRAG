@@ -154,11 +154,59 @@ test('GET with the embedding declarations file blocks a language the default pro
   const res = await call('GET', '/api/config/languages');
   assert.equal(res.status, 200);
   assert.deepEqual(res.json.embeddingProfile, { id: 'openai-3-small-1536' });
-  assert.equal(res.json.verifiedAgainstActiveProfile, false);
+  assert.equal(res.json.verifiedAgainstActiveProfile, true);
+  assert.equal(res.json.notVerifiedReason, null);
   const it = res.json.packs.find((pack) => pack.code === 'it');
   assert.equal(it.selectable, false);
   assert.deepEqual(it.reasons, [{ code: 'embedding_profile_unsupported', id: 'openai-3-small-1536' }]);
   assert.equal(res.json.packs.find((pack) => pack.code === 'zh').selectable, true);
+});
+
+const DECLARATIONS_ALL = JSON.stringify({
+  schema_version: 1,
+  models: [{ provider: 'openai', model: 'text-embedding-3-small', supported_languages: ['zh', 'en', 'it'] }],
+});
+
+test('profiles off: the legacy profile is the active profile, so the check against it is verified', async () => {
+  fs.writeFileSync(declarationsPath(), DECLARATIONS_ALL);
+  const get = await call('GET', '/api/config/languages');
+  assert.equal(get.json.verifiedAgainstActiveProfile, true);
+  assert.equal(get.json.notVerifiedReason, null);
+  const post = await call('POST', '/api/config/languages', { body: { languages: ['en'], primary: 'en' } });
+  assert.equal(post.status, 200);
+  assert.equal(post.json.verifiedAgainstActiveProfile, true);
+  assert.equal(post.json.notVerifiedReason, null);
+});
+
+test('profiles on: the active profile lives in the database, which the Config UI does not read; reported as profiles_on', async () => {
+  fs.writeFileSync(declarationsPath(), DECLARATIONS_ALL);
+  fs.writeFileSync(envPath(), BASE_ENV + 'RAG_EMBEDDING_PROFILES=on\n');
+  const get = await call('GET', '/api/config/languages');
+  assert.equal(get.json.verifiedAgainstActiveProfile, false);
+  assert.equal(get.json.notVerifiedReason, 'profiles_on');
+  const post = await call('POST', '/api/config/languages', { body: { languages: ['en'], primary: 'en' } });
+  assert.equal(post.json.verifiedAgainstActiveProfile, false);
+  assert.equal(post.json.notVerifiedReason, 'profiles_on');
+});
+
+test('a default profile other than the legacy model is not the active profile while profiles are off', async () => {
+  fs.writeFileSync(
+    declarationsPath(),
+    JSON.stringify({
+      schema_version: 1,
+      default_profile: { id: 'other-profile', provider: 'voyage', model: 'voyage-4-large' },
+      models: [{ provider: 'voyage', model: 'voyage-4-large', supported_languages: ['zh', 'en', 'it'] }],
+    }),
+  );
+  const get = await call('GET', '/api/config/languages');
+  assert.equal(get.json.verifiedAgainstActiveProfile, false);
+  assert.equal(get.json.notVerifiedReason, 'default_not_active');
+});
+
+test('no embedding declarations file: nothing was checked, reported as no_declarations', async () => {
+  const get = await call('GET', '/api/config/languages');
+  assert.equal(get.json.verifiedAgainstActiveProfile, false);
+  assert.equal(get.json.notVerifiedReason, 'no_declarations');
 });
 
 test('POST refuses primary_not_in_set with 400 and writes nothing', async () => {
@@ -213,6 +261,7 @@ test('POST saves a valid set in registry order with its warnings', async () => {
     primary: 'zh',
     warnings: [{ code: 'groundedness_not_checked', language: 'it' }],
     verifiedAgainstActiveProfile: false,
+    notVerifiedReason: 'no_declarations',
   });
   const content = fs.readFileSync(envPath(), 'utf8');
   assert.deepEqual(linesFor(content, 'RAG_SUPPORTED_LANGUAGES'), ['RAG_SUPPORTED_LANGUAGES=zh,it']);
