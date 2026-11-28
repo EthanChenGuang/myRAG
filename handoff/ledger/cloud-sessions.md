@@ -1061,3 +1061,9 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 - 01:20Z 04.4-16 DONE (exec/04.4-16 f8c57a9c, migration 0905; 0935 is an empty placeholder) and archived; queued for train 42.
   - Dispatched 04.4-17: session_01X342siro2bxbQKWoMmoV4K, base 04.4-16 + 04.2-40 + min-gate-n. It takes a new number above 0936 and rebuilds on the 0936 body.
   - Lesson: the READY detector reads plans from the t41 worktree, so plans that live only on exec branches (04.4-17..19) are invisible to it. Check their deps by hand.
+- 01:21Z 06.2-41 DONE (exec/06.2-41 0df877f5: zh-dominant fixture tenant; R8 fires; baselines re-recorded) and archived; queued for train 42.
+  - Finding 4: the strict similarity floor uses the original query's score, so 5 of 6 cross-language items are refused. Routed to 06.2-30.
+  - Told 06.2-26 and 06.2-29 to merge the newer head.
+  - MORNING (owner):
+    - native review of 5 more zh/it items;
+    - decide whether the main and q62 prechunked tenants should also record documents.language.
