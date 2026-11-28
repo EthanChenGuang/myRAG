@@ -1205,3 +1205,4 @@ Signatures were NOT covered by this; they are asked for separately.
 - 07:21Z Planner DONE (exec/plan-d20-and-44c 9d1e7e7d): new 06.2-43 (D-20 gap) and 04.4-20/21/22 (plan C). 06.2-30 now depends on 06.2-43. Accepted the 3 interpretations. Asked it to confirm the 2nd decision batch and mark the 07 retired plans. Next: plan-check, then execute 06.2-43 and 04.4-20.
 - 07:23Z quick-511-sec DONE (e9b4a2cf) -> t43. Planner archived (7c15d84e; the second decision batch is recorded). Dispatched plan-check + exec 06.2-43 and plan-check (20-22) + exec 04.4-20. Removed the 06.2-30 hold (it now depends on 06.2-43). Retired-plan marking sent to t43.
 - 07:31Z MERGED #142 (t42, all green) -> main cbc51d53. Archived the t42 builder. t43 opens its PR without waiting for quick-63-gaps, which goes to train 44.
+- 07:35Z 06.2-43 DONE (exec/06.2-43 e8ddc297; D-20 rev 1, kept-based hit at 3 call sites; paired all_zero) and archived; queued for t44. Dispatched 06.2-30 on 06.2-43.
