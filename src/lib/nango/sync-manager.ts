@@ -7,9 +7,9 @@ import { notionWorkspaceId, syncSourcePermissions, type PermissionSyncSummary } 
 import {
     applySourceDeletions,
     connectionTenantKey,
-    deletionModeOf,
     guardListingRemoval,
     loadSourceConnection,
+    recordReconcileRun,
     type SourceConnectionRow,
     type SyncRecordRow,
 } from './source-deletions';
@@ -306,23 +306,23 @@ function sharePointHooks(): SharePointSyncHooks {
  * Delete documents that no longer exist in the source (Google Drive)
  * This handles the case where files are deleted from Google Drive
  * and we need to clean up our database to stay in sync.
- * The listing diff goes through the mass-delete pause (D-09) and then the one deletion entry point (D-03). A connection
- * with an explicit deletion mode removes nothing from an incomplete listing (D-31); the unset mode keeps today's paths.
+ * The listing diff goes through the mass-delete pause (D-09) and then the one deletion entry point (D-03). A listing
+ * that did not complete removes nothing in every deletion mode and records one incomplete run (D-48).
  */
 async function deleteOrphanedDocuments(
     connectionId: string,
     userId: string,
     currentFileIds: Set<string>,
     supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
-    connection?: SourceConnectionRow | null,
-    listing: { complete?: boolean; origin?: 'sync' | 'scheduled'; outcome?: { paused: boolean } } = {}
+    connection: SourceConnectionRow | null | undefined,
+    listingComplete: boolean,
+    listing: { origin?: 'sync' | 'scheduled'; outcome?: { paused: boolean } } = {}
 ): Promise<number> {
     if (!supabaseAdmin) {
         throw new Error('Supabase admin client not available');
     }
 
     let deletedCount = 0;
-    const complete = listing.complete ?? true;
 
     // Unified: lineages are removed inside the tenant of the connection owner only. An owner that cannot be a tenant
     // deletes nothing.
@@ -332,6 +332,24 @@ async function deleteOrphanedDocuments(
             logger.error('Nango', `Orphan deletion skipped: owner scope refused (${owner.reason})`);
             return 0;
         }
+    }
+
+    if (listingComplete !== true) {
+        logger.error('Nango', 'Orphan deletion skipped: listing incomplete', {
+            connectionId,
+            provider: connection?.provider ?? null,
+        });
+        try {
+            const source = connection ?? (await loadSourceConnection(supabaseAdmin, connectionId, userId));
+            if (source && source.user_id === userId) {
+                await recordReconcileRun(supabaseAdmin, source, connectionTenantKey(source), listing.origin ?? 'sync', 'incomplete', {
+                    listed: currentFileIds.size,
+                });
+            }
+        } catch (error) {
+            logger.warn('Nango', 'Incomplete listing run not recorded', { connectionId, code: (error as { code?: string } | null)?.code ?? null });
+        }
+        return 0;
     }
 
     try {
@@ -364,7 +382,7 @@ async function deleteOrphanedDocuments(
             totalRecords: records.length,
             listedCount: currentFileIds.size,
             origin: listing.origin ?? 'sync',
-            complete,
+            complete: listingComplete,
             admin: supabaseAdmin,
         });
         if (listing.outcome) listing.outcome.paused = guard.paused;
@@ -380,10 +398,6 @@ async function deleteOrphanedDocuments(
         }
 
         if (guard.paused) {
-            return 0;
-        }
-        if (!complete && (deletionModeOf(source) !== null || listing.origin === 'scheduled')) {
-            logger.error('Nango', 'Orphan deletion skipped: the listing is incomplete');
             return 0;
         }
 
@@ -452,7 +466,7 @@ async function syncGoogleDriveDocuments(
                     currentFileIds,
                     supabaseAdmin,
                     sourceConnection,
-                    { complete: true }
+                    listing.complete
                 );
             } else {
                 logger.error('Nango', `Orphan deletion skipped: the listing of folder ${folderId} is incomplete`);
@@ -1391,7 +1405,7 @@ export async function syncDocumentsForConnection(
                 // the files of a folder that failed or was cut short are not in the set and would be deleted as orphans.
                 if (listingsComplete) {
                     const allFileIdsSet = new Set(allFileIds);
-                    combinedStats.deleted = await deleteOrphanedDocuments(connectionId, userId, allFileIdsSet, supabaseAdmin, sourceConnection, { complete: true });
+                    combinedStats.deleted = await deleteOrphanedDocuments(connectionId, userId, allFileIdsSet, supabaseAdmin, sourceConnection, listingsComplete);
                 } else {
                     logger.error('Nango', 'Orphan deletion skipped: a Google Drive folder listing was incomplete');
                 }
@@ -1487,7 +1501,7 @@ export async function syncDocumentsForConnection(
 
             // Build set of current file IDs for deletion detection
             const currentFileIds = new Set(allFiles.map(f => f.id));
-            combinedStats.deleted = await deleteOrphanedDocuments(connectionId, userId, currentFileIds, supabaseAdmin, sourceConnection, { complete: listingsComplete });
+            combinedStats.deleted = await deleteOrphanedDocuments(connectionId, userId, currentFileIds, supabaseAdmin, sourceConnection, listingsComplete);
 
             // Filter to supported file types
             const supportedFiles = allFiles.filter(file => provider === 'notion' || isSupportedFile(file.name));
@@ -1601,7 +1615,7 @@ export async function syncDocumentsForConnection(
             currentFileIds,
             supabaseAdmin,
             sourceConnection,
-            { complete: listing.complete }
+            listing.complete
         );
 
         // Filter to supported file types
@@ -1839,8 +1853,8 @@ export async function removeOrphans(
     options: { complete?: boolean; admin?: SupabaseAdmin; outcome?: { paused: boolean } } = {}
 ): Promise<number> {
     const supabaseAdmin = options.admin ?? getSupabaseAdmin();
-    return deleteOrphanedDocuments(connection.connection_id, connection.user_id, new Set(currentFileIds), supabaseAdmin, connection, {
-        complete: options.complete ?? true,
+    const listingComplete = options.complete ?? true;
+    return deleteOrphanedDocuments(connection.connection_id, connection.user_id, new Set(currentFileIds), supabaseAdmin, connection, listingComplete, {
         origin,
         ...(options.outcome ? { outcome: options.outcome } : {}),
     });
