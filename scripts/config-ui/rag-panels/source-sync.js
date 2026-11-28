@@ -76,7 +76,8 @@ const SOURCE_SYNC_LABELS = {
     "dismiss.done": "Run dismissed. No document was removed.",
     "expired.body": "This paused run is older than 24 hours and can no longer be confirmed. Nothing was removed. Start a sync under Connectors, or wait for the next scheduled reconcile, to get a fresh count.",
     "error.runGone": "This run was already confirmed or dismissed. The list was reloaded.",
-    "error.connectionGone": "This connection no longer exists or is not in a workspace you administer. The list was reloaded."
+    "error.connectionGone": "This connection no longer exists or is not in a workspace you administer. The list was reloaded.",
+    "error.off": "Source sync is not available in this deployment: the feature is switched off, or the main app is a version without it. There is nothing to manage here."
   },
   zh: {
     "panel.title": "来源同步",
@@ -151,7 +152,8 @@ const SOURCE_SYNC_LABELS = {
     "dismiss.done": "已忽略此次运行。没有移除任何文档。",
     "expired.body": "此次已暂停的运行已超过 24 小时，无法再确认。没有移除任何内容。请在 Connectors 中启动一次同步，或等待下一次计划内的核对，以获得新的统计。",
     "error.runGone": "此次运行已被确认或忽略。列表已重新加载。",
-    "error.connectionGone": "该连接已不存在，或不在你管理的工作区中。列表已重新加载。"
+    "error.connectionGone": "该连接已不存在，或不在你管理的工作区中。列表已重新加载。",
+    "error.off": "此部署中没有来源同步：该功能已关闭，或主应用的版本不包含此功能。此处没有可管理的内容。"
   },
   it: {
     "panel.title": "Sincronizzazione delle fonti",
@@ -226,7 +228,8 @@ const SOURCE_SYNC_LABELS = {
     "dismiss.done": "Esecuzione ignorata. Nessun documento è stato rimosso.",
     "expired.body": "Questa esecuzione in pausa ha più di 24 ore e non può più essere confermata. Non è stato rimosso nulla. Avvia una sincronizzazione in Connectors, oppure attendi la prossima riconciliazione pianificata, per ottenere un conteggio aggiornato.",
     "error.runGone": "Questa esecuzione è già stata confermata o ignorata. L'elenco è stato ricaricato.",
-    "error.connectionGone": "Questa connessione non esiste più o non è in uno spazio di lavoro che amministri. L'elenco è stato ricaricato."
+    "error.connectionGone": "Questa connessione non esiste più o non è in uno spazio di lavoro che amministri. L'elenco è stato ricaricato.",
+    "error.off": "La sincronizzazione delle fonti non è disponibile in questa distribuzione: la funzione è disattivata oppure l'app principale è una versione che non la include. Qui non c'è nulla da gestire."
   },
 };
 
@@ -234,6 +237,18 @@ const SOURCE_SYNC_PAGE_SIZE = 50;
 const SOURCE_SYNC_MAX_NAMES = 20;
 const SOURCE_SYNC_COMMAND = 'npm run rag:source-reconcile';
 const SOURCE_SYNC_MODES = ['', 'soft', 'purge'];
+/** Below 1024px each connection stacks into one block, so no column of the table sits in sideways scroll. */
+const SOURCE_SYNC_STACK = {
+  table: 'max-lg:block max-lg:w-full',
+  head: 'max-lg:hidden',
+  body: 'max-lg:block',
+  row: 'max-lg:flex max-lg:flex-col max-lg:gap-3 max-lg:py-3',
+  cell: 'max-lg:block max-lg:w-full max-lg:max-w-none max-lg:p-0',
+  label: 'lg:hidden text-xs font-semibold mb-1',
+};
+const SOURCE_SYNC_SOLID_BUTTON = 'btn bg-base-100 text-base-content border-base-300 hover:bg-base-200';
+const SOURCE_SYNC_SELECT_FOCUS = 'focus:[outline-color:var(--fallback-p,oklch(var(--p)/1))] focus-visible:[outline-color:var(--fallback-p,oklch(var(--p)/1))]';
+const SOURCE_SYNC_TOUCH = 'max-md:min-h-12';
 
 const SOURCE_SYNC_STATES = {
   in_step: { key: 'status.inStep', className: 'badge badge-success badge-outline badge-sm', icon: 'bi-check-circle' },
@@ -472,6 +487,7 @@ function mapSourceSyncError(result, locale, context, appUrl) {
     return { ...msg('error.signIn', { appUrl: sourceSyncAppUrl(appUrl) }), kind: 'auth' };
   }
   if (context === 'list') {
+    if (status === 404) return { ...msg('error.off'), kind: 'off' };
     if (status === 503 || (status >= 500 && status < 600)) return { ...msg('list.unavailable'), kind: 'unavailable' };
   }
   if (context === 'mode') {
@@ -698,6 +714,18 @@ class SourceSyncPanel {
         this.view.replaceChildren(this.reloadAlert('alert alert-warning text-sm', mapped));
         return;
       }
+      if (mapped.kind === 'off') {
+        this.renderAlert('');
+        this.loaded = false;
+        this.rows = [];
+        this.view.classList.remove('opacity-60');
+        const off = sourceSyncEl('div', 'alert items-start text-left text-sm');
+        off.setAttribute('data-source-sync-off', '');
+        off.append(sourceSyncIcon('bi-info-circle'), sourceSyncEl('p', 'max-w-prose', mapped.message));
+        this.view.replaceChildren(off);
+        this.announce(mapped.message);
+        return;
+      }
       this.renderAlert(mapped);
       if (this.loaded) this.view.classList.add('opacity-60');
       else this.view.replaceChildren();
@@ -729,7 +757,7 @@ class SourceSyncPanel {
       code.setAttribute('lang', 'en');
       p.appendChild(code);
     }
-    const reload = sourceSyncEl('button', 'btn btn-outline btn-sm', this.t('action.reload'));
+    const reload = sourceSyncEl('button', SOURCE_SYNC_SOLID_BUTTON + ' btn-sm ' + SOURCE_SYNC_TOUCH, this.t('action.reload'));
     reload.type = 'button';
     reload.addEventListener('click', () => this.refresh());
     alert.append(p, reload);
@@ -800,13 +828,13 @@ class SourceSyncPanel {
     region.setAttribute('tabindex', '0');
     region.setAttribute('role', 'region');
     region.setAttribute('aria-label', this.t('table.caption'));
-    const table = sourceSyncEl('table', 'table table-sm');
+    const table = sourceSyncEl('table', 'table table-sm ' + SOURCE_SYNC_STACK.table);
     table.appendChild(sourceSyncEl('caption', 'sr-only', this.t('table.caption')));
-    const thead = document.createElement('thead');
+    const thead = sourceSyncEl('thead', SOURCE_SYNC_STACK.head);
     const headRow = document.createElement('tr');
     const cols = [
       ['col.connection', 'text-xs font-semibold'],
-      ['col.documents', 'hidden md:table-cell text-xs font-semibold text-right'],
+      ['col.documents', 'hidden lg:table-cell text-xs font-semibold text-right'],
       ['col.lastReconcile', 'text-xs font-semibold'],
       ['col.status', 'text-xs font-semibold'],
       ['col.mode', 'text-xs font-semibold'],
@@ -818,7 +846,7 @@ class SourceSyncPanel {
     }
     thead.appendChild(headRow);
     table.appendChild(thead);
-    const tbody = document.createElement('tbody');
+    const tbody = sourceSyncEl('tbody', SOURCE_SYNC_STACK.body);
     for (const row of this.rows) this.renderRow(tbody, row);
     table.appendChild(tbody);
     region.appendChild(table);
@@ -836,8 +864,8 @@ class SourceSyncPanel {
 
   renderRow(tbody, row) {
     const view = buildSourceSyncRowView(row, this.locale, this.limits, Date.now());
-    const tr = document.createElement('tr');
-    const th = sourceSyncEl('th', 'font-normal align-top min-w-0 max-w-xs');
+    const tr = sourceSyncEl('tr', SOURCE_SYNC_STACK.row);
+    const th = sourceSyncEl('th', 'font-normal align-top min-w-0 max-w-xs ' + SOURCE_SYNC_STACK.cell);
     th.setAttribute('scope', 'row');
     const name = sourceSyncEl('div', 'text-sm break-words', view.connection);
     name.setAttribute('translate', 'no');
@@ -848,12 +876,13 @@ class SourceSyncPanel {
       key.setAttribute('translate', 'no');
       th.appendChild(key);
     }
-    th.appendChild(sourceSyncEl('div', 'md:hidden text-xs tabular-nums', this.t('col.documents') + ': ' + view.documents));
+    th.appendChild(sourceSyncEl('div', 'lg:hidden text-xs tabular-nums', this.t('col.documents') + ': ' + view.documents));
     tr.appendChild(th);
 
-    tr.appendChild(sourceSyncEl('td', 'hidden md:table-cell align-top text-right tabular-nums', view.documents));
+    tr.appendChild(sourceSyncEl('td', 'hidden lg:table-cell align-top text-right tabular-nums', view.documents));
 
-    const last = sourceSyncEl('td', 'align-top text-sm');
+    const last = sourceSyncEl('td', 'align-top text-sm ' + SOURCE_SYNC_STACK.cell);
+    last.appendChild(sourceSyncEl('div', SOURCE_SYNC_STACK.label, this.t('col.lastReconcile')));
     if (view.lastReconcile) last.appendChild(sourceSyncTimeEl(view.lastReconcile));
     else {
       last.appendChild(sourceSyncEl('div', '', view.neverLabel));
@@ -865,7 +894,8 @@ class SourceSyncPanel {
     }
     tr.appendChild(last);
 
-    const statusTd = sourceSyncEl('td', 'align-top');
+    const statusTd = sourceSyncEl('td', 'align-top ' + SOURCE_SYNC_STACK.cell);
+    statusTd.appendChild(sourceSyncEl('div', SOURCE_SYNC_STACK.label, this.t('col.status')));
     const badges = sourceSyncEl('div', 'flex flex-wrap gap-1');
     for (const badge of view.badges) {
       const el = sourceSyncEl('span', badge.className + ' gap-1 h-auto whitespace-normal');
@@ -883,8 +913,8 @@ class SourceSyncPanel {
     tbody.appendChild(tr);
 
     for (const pausedRun of view.pausedRuns) {
-      const runTr = document.createElement('tr');
-      const td = document.createElement('td');
+      const runTr = sourceSyncEl('tr', SOURCE_SYNC_STACK.row);
+      const td = sourceSyncEl('td', SOURCE_SYNC_STACK.cell);
       td.setAttribute('colspan', '5');
       td.appendChild(this.renderPausedBlock(row, { ...view, pausedRun }));
       runTr.appendChild(td);
@@ -893,8 +923,14 @@ class SourceSyncPanel {
   }
 
   renderModeCell(row, view) {
-    const td = sourceSyncEl('td', 'align-top');
-    const select = sourceSyncEl('select', 'select select-bordered select-sm min-w-40 max-w-full');
+    const td = sourceSyncEl('td', 'align-top ' + SOURCE_SYNC_STACK.cell);
+    const modeLabel = sourceSyncEl('div', SOURCE_SYNC_STACK.label, this.t('col.mode'));
+    modeLabel.setAttribute('aria-hidden', 'true');
+    td.appendChild(modeLabel);
+    const select = sourceSyncEl(
+      'select',
+      'select select-bordered select-sm min-w-40 max-w-full max-lg:w-full max-md:h-12 ' + SOURCE_SYNC_SELECT_FOCUS,
+    );
     const helpId = 'rag-source-sync-mode-help-' + view.id;
     select.setAttribute('aria-label', this.t('mode.aria', { connection: view.connection }));
     select.setAttribute('aria-describedby', helpId);
@@ -1062,7 +1098,7 @@ class SourceSyncPanel {
       }
       if (run.count > 0) {
         const details = document.createElement('details');
-        details.appendChild(sourceSyncEl('summary', 'cursor-pointer', run.filesSummary));
+        details.appendChild(sourceSyncEl('summary', 'cursor-pointer rounded py-1 max-md:py-3 ' + SOURCE_SYNC_TOUCH, run.filesSummary));
         const list = sourceSyncEl('ul', 'max-h-40 overflow-y-auto mt-2 text-sm');
         for (const name of run.names) list.appendChild(sourceSyncEl('li', 'break-words', name));
         for (const id of run.ids) {
@@ -1078,11 +1114,11 @@ class SourceSyncPanel {
     const buttons = sourceSyncEl('div', 'flex flex-wrap items-center gap-2');
     let remove = null;
     if (!expired) {
-      remove = sourceSyncEl('button', 'btn btn-error btn-outline md:btn-sm', this.t('action.remove'));
+      remove = sourceSyncEl('button', 'btn btn-error md:btn-sm', this.t('action.remove'));
       remove.type = 'button';
       buttons.appendChild(remove);
     }
-    const dismiss = sourceSyncEl('button', 'btn btn-outline md:btn-sm', this.t('action.dismiss'));
+    const dismiss = sourceSyncEl('button', SOURCE_SYNC_SOLID_BUTTON + ' md:btn-sm', this.t('action.dismiss'));
     dismiss.type = 'button';
     buttons.appendChild(dismiss);
     buttons.appendChild(sourceSyncEl('span', 'text-xs', this.t('paused.dismissHelp')));

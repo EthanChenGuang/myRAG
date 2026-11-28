@@ -573,7 +573,7 @@ class SharePointScopePickerModal extends (typeof Modal !== 'undefined' ? Modal :
 
     renderRow(item, covering, kindText) {
         const li = sharePointScopeEl('li', 'flex items-center gap-2 p-2 rounded-md hover:bg-base-200');
-        const label = sharePointScopeEl('label', `flex items-center gap-2 min-w-0 flex-1 ${covering ? 'cursor-default' : 'cursor-pointer'}`);
+        const label = sharePointScopeEl('label', `flex items-center gap-2 min-w-0 flex-1 max-md:min-h-12 ${covering ? 'cursor-default' : 'cursor-pointer'}`);
         const box = sharePointScopeEl('input', 'checkbox checkbox-sm');
         box.type = 'checkbox';
         const key = this.itemKey(item);
@@ -585,18 +585,18 @@ class SharePointScopePickerModal extends (typeof Modal !== 'undefined' ? Modal :
             box.addEventListener('change', () => this.toggleItem(item, !!box.checked));
         }
         const text = sharePointScopeEl('span', 'min-w-0 flex flex-col');
-        const name = sharePointScopeEl('span', 'truncate', item.name);
+        const name = sharePointScopeEl('span', 'line-clamp-2 break-words', item.name);
         name.title = item.name;
         name.setAttribute('translate', 'no');
         text.appendChild(name);
-        if (covering) text.appendChild(sharePointScopeEl('span', 'text-xs text-base-content/60 truncate', `Included by ${covering.name}`));
+        if (covering) text.appendChild(sharePointScopeEl('span', 'text-xs text-base-content/60 break-words', `Included by ${covering.name}`));
         label.append(box, sharePointScopeIcon(kindText.icon), text);
         li.appendChild(label);
         if (item.hasChildren) {
-            const open = sharePointScopeEl('button', 'btn btn-ghost btn-sm shrink-0');
+            const open = sharePointScopeEl('button', 'btn btn-ghost btn-sm shrink-0 max-md:min-h-12 max-md:min-w-12');
             open.type = 'button';
             open.setAttribute('aria-label', `${kindText.open} ${item.name}`);
-            open.append(sharePointScopeEl('span', '', kindText.open), sharePointScopeIcon('bi-chevron-right'));
+            open.append(sharePointScopeEl('span', 'max-sm:sr-only', kindText.open), sharePointScopeIcon('bi-chevron-right'));
             open.addEventListener('click', () => this.openItem(item));
             li.appendChild(open);
         }

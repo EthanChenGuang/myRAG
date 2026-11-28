@@ -825,3 +825,66 @@ describe('panel states', () => {
     expect(names.filter((n) => !allowed.test(n))).toEqual([]);
   });
 });
+
+describe('UI review 06.3 fixes', () => {
+  it('a list 404 shows the feature-off sentence in a neutral alert, in en, zh and it', async () => {
+    for (const [language, loc] of [['en-US', 'en'], ['zh-CN', 'zh'], ['it-IT', 'it']] as const) {
+      const env = await mounted(() => ({ ok: false, status: 404, body: { error: 'Not found' } }), { language });
+      const { SOURCE_SYNC_LABELS } = loadModule();
+      const off = env.root.querySelector('[data-source-sync-off]');
+      expect(off).toBeTruthy();
+      expect(off!.className).not.toContain('alert-error');
+      expect(off!.textContent).toContain(SOURCE_SYNC_LABELS[loc]['error.off']);
+      expect(env.root.textContent).not.toContain('404');
+      expect(env.alertHost.children).toHaveLength(0);
+    }
+  });
+
+  it('the paused-run buttons are solid on the amber alert, never white outline', async () => {
+    const env = await mounted(() => ok(listBody([rowB()])));
+    const group = env.root.querySelector('[role="group"]')!;
+    const remove = byText(group, 'button', 'Remove documents…')!;
+    const dismiss = byText(group, 'button', 'Dismiss run')!;
+    expect(remove.className).toContain('btn-error');
+    expect(remove.className).not.toContain('btn-outline');
+    expect(dismiss.className).not.toContain('btn-outline');
+    expect(dismiss.className).toContain('bg-base-100');
+    expect(dismiss.className).toContain('text-base-content');
+  });
+
+  it('Reload panel on the error alert is a solid base-100 button', async () => {
+    const env = await mounted(() => ({ ok: false, status: 500, body: {} }));
+    const reload = byText(env.alertHost, 'button', 'Reload panel')!;
+    expect(reload.className).not.toContain('btn-outline');
+    expect(reload.className).toContain('bg-base-100');
+    expect(reload.className).toContain('text-base-content');
+  });
+
+  it('below 1024px the table stacks: rows, cells and the paused row become blocks and the header is hidden', async () => {
+    const env = await mounted(() => ok(listBody([rowA(), rowB()])));
+    const table = env.root.querySelector('table')!;
+    expect(table.className).toContain('max-lg:block');
+    expect(table.querySelector('thead')!.className).toContain('max-lg:hidden');
+    expect(table.querySelector('tbody')!.className).toContain('max-lg:block');
+    for (const tr of table.querySelector('tbody')!.children) {
+      expect(tr.className).toContain('max-lg:flex');
+      for (const cell of tr.children.filter((c) => !c.className.includes('hidden lg:table-cell'))) expect(cell.className).toContain('max-lg:block');
+    }
+    const statusCell = table.querySelector('tbody')!.children[0]!.children[3]!;
+    expect(statusCell.children[0]!.textContent).toBe('Status');
+    expect(statusCell.children[0]!.className).toContain('lg:hidden');
+  });
+
+  it('the deletion-mode select has a visible primary focus ring and a 48px target below 768px', async () => {
+    const env = await mounted(() => ok(listBody([rowA()])));
+    const select = env.root.querySelector(`[data-source-sync-mode="${CONN_A}"]`)!;
+    expect(select.className).toMatch(/focus:\[outline-color:[^\]]*--p/);
+    expect(select.className).toContain('max-md:h-12');
+  });
+
+  it('the Show files summary is a 48px touch target below 768px', async () => {
+    const env = await mounted(() => ok(listBody([rowB()])));
+    const summary = env.root.querySelector('summary')!;
+    expect(summary.className).toContain('max-md:min-h-12');
+  });
+});
