@@ -120,6 +120,7 @@ function queryLayerHashFor(input: RunRetrievalInput, config: ReturnType<typeof l
   const overrides = queryLayerOverrides(profile, input.stageOverrides);
   return queryLayerHashComponent(effectiveQueryLayerConfig(config.queryLayer, overrides), effectiveQueryParams(profile, overrides?.queryParams), {
     subqFilters: config.queryAdditions.effective.subqFilters,
+    additions: config.queryAdditions.effective,
   });
 }
 

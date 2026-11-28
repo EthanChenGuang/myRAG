@@ -140,7 +140,8 @@ async function run(envOver: Record<string, string> = {}, opts: { profile?: Profi
 }
 
 function comparable(result: RetrievalResult) {
-  const { traceId: _traceId, stages: _stages, scopeGate: _scopeGate, logOutcome: _logOutcome, ...rest } = result;
+  // retrievalConfigHash differs by design: RAG_SCOPE_GATE enters the hash while on (06.2 G5), so a flip never serves a stale cache entry.
+  const { traceId: _traceId, stages: _stages, scopeGate: _scopeGate, logOutcome: _logOutcome, retrievalConfigHash: _hash, ...rest } = result;
   return rest;
 }
 
@@ -176,6 +177,7 @@ describe('scope_gate stage in the v2 pipeline (D-26)', () => {
     const on = await run(LAYER_ON);
     expect(on.result.scopeGate?.label).toBe('in_scope');
     expect(comparable(on.result)).toEqual(comparable(off.result));
+    expect(on.result.retrievalConfigHash).not.toBe(off.result.retrievalConfigHash);
     expect(on.seen.searches).toBe(off.seen.searches);
   });
 
