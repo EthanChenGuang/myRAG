@@ -11396,6 +11396,15 @@
           "min_sample": 50
         },
         {
+          "alert": 0.05,
+          "enabled": true,
+          "id": "stale_index_drop_rate",
+          "kind": "stale_index_drop",
+          "metric": "stale_index_drop",
+          "min_sample": 1,
+          "warn": 0.0
+        },
+        {
           "alert": 0.2,
           "enabled": true,
           "id": "test_set_not_representative",

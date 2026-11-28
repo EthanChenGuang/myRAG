@@ -9,6 +9,7 @@ import { injectionGoldenLines, planSecNightly, secZeroFailures, type InjectionRe
 import type { DeploymentMode } from './pglite-supabase.mts';
 import { loadRunConfig } from './run-config.mts';
 import { PHASE52_NIGHTLY_RUN_CONFIG, phase52GoldenLines } from './phase52-tier.mts';
+import { calcGoldenLines, calcLiveConfigProblem } from './calc-nightly.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -154,6 +155,35 @@ async function runPhase52Nightly(options: { generator: EvalGenerator; golden: st
   return runPython('rag_eval.runner', ['score', '--traces', result.tracesPath, '--golden', goldenPath, '--manifest', result.runPath, '--out', options.out]);
 }
 
+/**
+ * 05.2.1-23 (D-78): the multi_step_calc items answered by the live generator under one calc-live run config, then scored;
+ * numeric correctness per language is reported, not gated.
+ */
+async function runCalcLiveNightly(options: { generator: EvalGenerator; golden: string; corpus: string; out: string; deploymentMode: DeploymentMode; generatorModel?: string; runConfigFile: string }): Promise<number> {
+  const runConfig = loadRunConfig(options.runConfigFile);
+  const problem = calcLiveConfigProblem(options.runConfigFile, runConfig);
+  if (problem !== null) {
+    console.error(`[Eval Harness] ${problem}`);
+    return 2;
+  }
+  fs.mkdirSync(options.out, { recursive: true });
+  const goldenPath = path.join(options.out, 'golden.jsonl');
+  fs.writeFileSync(goldenPath, `${calcGoldenLines(fs.readFileSync(options.golden, 'utf8')).join('\n')}\n`);
+  const result = await runEval({
+    goldenPath,
+    corpusDir: options.corpus,
+    outDir: options.out,
+    deploymentMode: options.deploymentMode,
+    requestOptions: options.generatorModel ? { generator_model: options.generatorModel } : {},
+    tier: 'nightly',
+    includeAnswer: true,
+    generator: options.generator,
+    runConfig,
+  });
+  console.log(`[Eval Harness] calculation nightly ${runConfig.name}: wrote ${result.itemCount} trace(s) to ${result.tracesPath}`);
+  return runPython('rag_eval.runner', ['score', '--traces', result.tracesPath, '--golden', goldenPath, '--manifest', result.runPath, '--out', options.out]);
+}
+
 async function main(): Promise<number> {
   const { values } = parseArgs({
     options: {
@@ -170,6 +200,7 @@ async function main(): Promise<number> {
       'sec-leg': { type: 'string' },
       'env-overlay': { type: 'string' },
       phase52: { type: 'boolean', default: false },
+      'calc-live': { type: 'string' },
     },
     strict: true,
   });
@@ -208,6 +239,33 @@ async function main(): Promise<number> {
   if (values['sec-matrix'] || values['sec-leg'] !== undefined) {
     if (values.citations || values.groundedness || values['include-drafts']) {
       throw new Error('--sec-matrix runs the injection items only and takes no --citations, --groundedness or --include-drafts');
+    }
+  }
+  const calcLive = values['calc-live']?.trim();
+  if (calcLive !== undefined) {
+    if (calcLive === '') {
+      console.error('[Eval Harness] --calc-live must not be empty');
+      return 2;
+    }
+    if (values.phase52 || values['sec-matrix'] || values['sec-leg'] !== undefined || values.citations || values.groundedness || values['include-drafts'] || envOverlayFlag !== undefined) {
+      throw new Error('--calc-live runs the multi_step_calc items under its run config and takes no other run flag');
+    }
+    try {
+      return await runCalcLiveNightly({
+        generator: generator as EvalGenerator,
+        golden: path.resolve(values.golden as string),
+        corpus: path.resolve(values.corpus as string),
+        out: path.resolve(values.out as string),
+        deploymentMode: deploymentMode as DeploymentMode,
+        runConfigFile: path.resolve(calcLive),
+        ...(values['generator-model'] ? { generatorModel: values['generator-model'] } : {}),
+      });
+    } catch (error) {
+      if (error instanceof LiveGenerationKeyMissingError) {
+        console.error(error.message);
+        return 4;
+      }
+      throw error;
     }
   }
   if (values.phase52) {

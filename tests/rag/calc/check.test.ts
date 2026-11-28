@@ -178,6 +178,50 @@ describe('checkCalculation', () => {
     expect(check).toMatchObject({ status: 'not_verified', reason: 'stated_not_found', recomputed: '100' });
   });
 
+  describe('a sentence naming the result step label (05.2.1-23)', () => {
+    const SHARE = trace(
+      req(
+        [chunk('a', '60', 'S1', { unit: 'EUR' }), chunk('b', '70', 'S1', { unit: 'EUR' }), q('share', '10')],
+        [
+          step('base', 'add', ['a', 'b'], { label: 'sum of the items' }),
+          step('added', 'percentage', ['base', 'share'], { label: 'added share' }),
+          step('size', 'add', ['base', 'added'], { label: 'counted size' }),
+        ],
+      ),
+    );
+    const shareAsk = { question: 'What is the counted size with a 10 percent share?' };
+
+    test('a total equal to an operand (the cap applied to the sum) is corrected, not verified', () => {
+      const { check, noticeValue } = checkCalculation(input(PER_ITEM, 'capped items: 140.\ntotal: 50 EUR. [S1]'));
+      valid(check);
+      expect(check).toMatchObject({ status: 'corrected', stated: '50', recomputed: '140' });
+      expect(noticeValue).toBe('140 EUR');
+    });
+
+    test('a total equal to an intermediate (the share left out) is corrected, not stated_not_found', () => {
+      const { check } = checkCalculation(input(SHARE, 'sum of the items: 130.\nadded share: 13.\ncounted size: 130 EUR [S1].', shareAsk));
+      valid(check);
+      expect(check).toMatchObject({ status: 'corrected', stated: '130', recomputed: '143' });
+    });
+
+    test('the right total after the label stays verified', () => {
+      expect(checkCalculation(input(PER_ITEM, 'capped items: 140.\ntotal: 140 EUR. [S1]')).check).toMatchObject({ status: 'verified', stated: '140' });
+      expect(
+        checkCalculation(input(SHARE, 'sum of the items: 130.\nadded share: 13.\ncounted size: 143 EUR [S1].', shareAsk)).check,
+      ).toMatchObject({ status: 'verified', stated: '143' });
+    });
+
+    test('a citing sentence with a candidate still wins over the label', () => {
+      const raw = 'The total depends on the cap of 50 EUR. The items come to 140 EUR [S1].';
+      expect(checkCalculation(input(PER_ITEM, raw)).check).toMatchObject({ status: 'verified', stated: '140' });
+    });
+
+    test('an operand-only citing sentence without the label is still skipped', () => {
+      const raw = 'Each item counts at most 50 EUR [S1]. So the items come to 140 EUR.';
+      expect(checkCalculation(input(PER_ITEM, raw)).check).toMatchObject({ status: 'verified', stated: '140' });
+    });
+  });
+
   test('a stated number with a magnitude word compares at its own scale', () => {
     const t = trace(req([chunk('amount', '100', 'S2'), q('k', '20000')], [step('m', 'multiply', ['amount', 'k'])]));
     const ask = { question: 'What is it times 20000?' };

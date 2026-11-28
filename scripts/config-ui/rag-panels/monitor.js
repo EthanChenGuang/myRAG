@@ -98,6 +98,8 @@ const MONITOR_RULE_KEYS = {
   latency_p95: 'rule.latency_p95',
   online_judge_mean: 'rule.online_judge_mean',
   test_set_not_representative: 'rule.test_set_not_representative',
+  stale_index_drop_rate: 'rule.stale_index_drop_rate',
+  ...Object.fromEntries(['paused', 'overdue', 'failed', 'incomplete'].map((kind) => ['source_reconcile_' + kind, 'rule.source_reconcile_' + kind])),
 };
 const MONITOR_BREAKDOWN_DIMENSIONS = [
   { field: 'by_mode', key: 'breakdown.mode' },
@@ -157,6 +159,11 @@ const MONITOR_LABELS = {
     "rule.latency_p95": "Latency (p95)",
     "rule.online_judge_mean": "Online judge score",
     "rule.test_set_not_representative": "Test set no longer representative",
+    "rule.stale_index_drop_rate": "Results dropped as deleted at the source",
+    "rule.source_reconcile_paused": "Source sync paused for confirmation",
+    "rule.source_reconcile_overdue": "Source sync overdue",
+    "rule.source_reconcile_failed": "Source sync failed",
+    "rule.source_reconcile_incomplete": "Source listing incomplete",
     "alert.meta.language": "Language: {language}",
     "alert.meta.allLanguages": "Language: all",
     "alert.meta.day": "Day: {day}",
@@ -348,6 +355,11 @@ const MONITOR_LABELS = {
     "rule.latency_p95": "延迟（p95）",
     "rule.online_judge_mean": "在线评判分数",
     "rule.test_set_not_representative": "测试集已不具代表性",
+    "rule.stale_index_drop_rate": "因来源已删除而丢弃的结果",
+    "rule.source_reconcile_paused": "来源同步已暂停，等待确认",
+    "rule.source_reconcile_overdue": "来源同步已逾期",
+    "rule.source_reconcile_failed": "来源同步失败",
+    "rule.source_reconcile_incomplete": "来源列表不完整",
     "alert.meta.language": "语言：{language}",
     "alert.meta.allLanguages": "语言：全部",
     "alert.meta.day": "日期：{day}",
@@ -539,6 +551,11 @@ const MONITOR_LABELS = {
     "rule.latency_p95": "Latenza (p95)",
     "rule.online_judge_mean": "Punteggio del giudice online",
     "rule.test_set_not_representative": "Set di test non più rappresentativo",
+    "rule.stale_index_drop_rate": "Risultati scartati perché eliminati all’origine",
+    "rule.source_reconcile_paused": "Sincronizzazione della fonte in pausa per conferma",
+    "rule.source_reconcile_overdue": "Sincronizzazione della fonte in ritardo",
+    "rule.source_reconcile_failed": "Sincronizzazione della fonte non riuscita",
+    "rule.source_reconcile_incomplete": "Elenco della fonte incompleto",
     "alert.meta.language": "Lingua: {language}",
     "alert.meta.allLanguages": "Lingua: tutte",
     "alert.meta.day": "Giorno: {day}",
@@ -2361,6 +2378,7 @@ if (typeof window !== 'undefined') {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    monitorRuleLabel,
     MONITOR_LABELS,
     monitorLabel,
     monitorMessage,

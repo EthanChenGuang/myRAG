@@ -621,6 +621,9 @@ RAG_LEXICAL_BM25_B=0.75
 # BM25 document frequency: raw, or cluster to count a duplicate cluster once (needs bm25 and RAG_DUP_CLUSTERS=true)
 # BM25 document frequency
 RAG_LEXICAL_DF_MODE=raw
+# Local reranker statistics: pool (df and length over the rerank candidates), or tenant to use the tenant's lexical statistics (needs RAG_PIPELINE=v2)
+# Local reranker statistics
+RAG_RERANK_LOCAL_STATS=pool
 # Requests may ask for earlier document versions (needs RAG_LEXICAL_SEARCH=true)
 # Version scope filter
 RAG_VERSION_SCOPE=false

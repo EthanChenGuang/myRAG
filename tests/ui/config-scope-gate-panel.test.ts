@@ -865,3 +865,48 @@ describe('Scope gate panel: workspace, locale and pointer', () => {
     for (const loc of Object.values(labels)) for (const text of Object.values(loc)) expect(text).not.toMatch(/\(s\)|\{count, plural/);
   });
 });
+
+describe('UI review 06.2 fixes', () => {
+  it('a first-load 404 shows its own not-available copy in a neutral alert, never error.changed, in en, zh and it', async () => {
+    const expected: Record<string, string> = {
+      'en-US': 'The scope gate is not available on this deployment. Update the app, then reload.',
+      'zh-CN': '此部署中没有范围闸门。请更新应用，然后重新加载。',
+      'it-IT': "Il filtro di ambito non è disponibile in questa distribuzione. Aggiorna l’app, poi ricarica.",
+    };
+    for (const locale of Object.keys(expected)) {
+      const page = loadPage({ locale, replies: { status: { status: 404, body: { error: 'Not found' } } } });
+      await page.open();
+      const alert = page.root.querySelector('[data-scope-gate-not-available]')!;
+      expect(alert).toBeTruthy();
+      expect(alert.className).not.toContain('alert-error');
+      expect(alert.textContent).toContain(expected[locale]!);
+      expect(page.alert().textContent).not.toContain('changed by someone else');
+    }
+  });
+
+  it('a load failure is shown once: the alert holds the sentence, the status line says Status not loaded.', async () => {
+    const page = loadPage({ replies: { status: { status: 500, body: {} } } });
+    await page.open();
+    const alertText = page.alert().textContent.trim();
+    expect(alertText.length).toBeGreaterThan(0);
+    expect(page.status().textContent.trim()).toBe('Status not loaded.');
+    expect(alertText).not.toContain('Status not loaded.');
+  });
+
+  it('the thresholds table fits at 1024: Recorded moves under the profile until xl and ids wrap at md and up', async () => {
+    const page = loadPage();
+    await page.open();
+    const block = page.block('thresholds');
+    const recordedHead = block.querySelectorAll('th').find((th) => th.textContent === 'Recorded')!;
+    expect(recordedHead.className).toContain('max-xl:hidden');
+    expect(recordedHead.className.split(' ')).not.toContain('hidden');
+    const stacked = block.querySelector('[data-scope-gate-recorded-stacked]')!;
+    expect(stacked).toBeTruthy();
+    expect(stacked.className).toContain('max-lg:hidden');
+    expect(stacked.className.split(' ')).not.toContain('hidden');
+    expect(stacked.className).toContain('xl:hidden');
+    expect(stacked.textContent).toContain('Recorded: ');
+    const id = block.querySelector('tbody th span')!;
+    expect(id.className).toContain('md:break-words');
+  });
+});

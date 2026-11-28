@@ -1794,6 +1794,24 @@
       "help": "Counts a duplicate cluster once in BM25 document frequency. Needs BM25 scoring and duplicate clusters."
     },
     {
+      "name": "RAG_RERANK_LOCAL_STATS",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "Local reranker statistics",
+      "type": "enum",
+      "options": [
+        "pool",
+        "tenant"
+      ],
+      "requires": [
+        "RAG_PIPELINE=v2"
+      ],
+      "default": "pool",
+      "help": "Where the local BM25 reranker takes document frequency and length from: the rerank candidates (pool) or the tenant's lexical statistics (tenant)."
+    },
+    {
       "name": "RAG_MAX_OUTPUT_TOKENS",
       "status": "managed",
       "knownGaps": [],

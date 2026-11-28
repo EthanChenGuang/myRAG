@@ -892,6 +892,98 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     }
   });
 
+  test('two-tenant matrix under the D-01 values: multi-tenant, an identifier only tenant B holds gives tenant A no exact_id pool member', async () => {
+    const env = { ...D01_ENV, COHERE_API_KEY: '', RAG_EXACT_ID_LOOKUP: 'true' };
+    const question = `Which entry is ${tenant('b').markers.identifier}?`;
+    try {
+      depsModule.setRagDepsForTests({ ragEnv: () => env });
+      configModule.resetRagConfigForTests();
+      for (const profile of ['chat', 'embed', 'eval'] as Profile[]) {
+        const asker = await retrieve(await scopeFor(profile, 'a'), profile, question);
+        const where = `D-01 exact_id ${profile}/a`;
+        await assertOwnRows('a', asker.result, where);
+        assertNoForeignText('a', { result: asker.result, stages: asker.result.stages }, where);
+        const askerRefusal = stage(asker.result, 'refusal');
+        assert.equal(askerRefusal?.counts?.refused, 1, `${where}: refused (${askerRefusal?.detail})`);
+        assert.doesNotMatch(askerRefusal?.detail ?? '', /exact=/u, `${where}: no exact_id pool member`);
+
+        const owner = await retrieve(await scopeFor(profile, 'b'), profile, question);
+        const ownerWhere = `D-01 exact_id ${profile}/b`;
+        await assertOwnRows('b', owner.result, ownerWhere);
+        const ownerRefusal = stage(owner.result, 'refusal');
+        assert.equal(ownerRefusal?.counts?.answered, 1, `${ownerWhere}: answered (${ownerRefusal?.detail})`);
+        assert.match(ownerRefusal?.detail ?? '', /floor=legacy_rule pool=\d+ exact=\d+$/u, `${ownerWhere}: answered through its own exact_id row`);
+        assert.ok(chunkIdsOf(owner.result).includes(tenant('b').lookup.identifierChunkId), `${ownerWhere}: its identifier chunk comes back`);
+      }
+    } finally {
+      depsModule.setRagDepsForTests({ ragEnv: () => allOnEnv });
+      configModule.resetRagConfigForTests();
+    }
+  });
+
+  test('two-tenant matrix under the D-01 values: multi-tenant, a query term beyond the preview of a tenant B document gives tenant A nothing', async () => {
+    const term = 'zorvexquill';
+    const question = `the elk and owl met by the old fen ${term}`;
+    const chunkText = 'Elk met owl. Later a fox and a hen sat in the hay by the pond and the old mill.';
+    const filler = 'Plain sample prose that names no subject at all and repeats itself. '.repeat(4);
+    assert.ok(filler.length > 200, 'the term sits beyond the 200-character preview');
+    const inserted: Record<'a' | 'b', { documentId: string; chunkId: string }> = {
+      a: { documentId: crypto.randomUUID(), chunkId: crypto.randomUUID() },
+      b: { documentId: crypto.randomUUID(), chunkId: crypto.randomUUID() },
+    };
+    for (const label of ['a', 'b'] as const) {
+      const owner = tenant(label);
+      const { documentId, chunkId } = inserted[label];
+      const filename = `v2-evidence-${label}.md`;
+      const content = label === 'b' ? `${filler}${term} closes the note.` : `${filler}It closes the note.`;
+      await db().query(
+        'INSERT INTO documents (id, filename, content, metadata, user_id, organization_id, created_at, doc_type) VALUES ($1, $2, $3, $4::jsonb, $5, $6, now(), $7)',
+        [documentId, filename, content, JSON.stringify({ relpath: `two-tenant-v2/${filename}` }), owner.userId, owner.organizationId, 'general'],
+      );
+      await db().query(
+        `INSERT INTO document_chunks (id, document_id, content, embedding, lexical_text, chunk_index, metadata, organization_id, created_at, chunk_kind, content_hash)
+         VALUES ($1, $2, $3, $4::vector, $5, 0, $6::jsonb, $7, now(), 'text', $8)`,
+        [
+          chunkId,
+          documentId,
+          chunkText,
+          `[${embedText(chunkText).join(',')}]`,
+          chunkText.toLowerCase(),
+          JSON.stringify({ name: filename }),
+          owner.organizationId,
+          crypto.createHash('sha256').update(chunkText, 'utf8').digest('hex'),
+        ],
+      );
+    }
+    const env = { ...D01_ENV, COHERE_API_KEY: '' };
+    try {
+      depsModule.setRagDepsForTests({ ragEnv: () => env, adminClient: () => adminClient });
+      configModule.resetRagConfigForTests();
+      for (const profile of ['chat', 'embed', 'eval'] as Profile[]) {
+        const asker = await retrieve(await scopeFor(profile, 'a'), profile, question);
+        const where = `D-01 evidence ${profile}/a`;
+        await assertOwnRows('a', asker.result, where);
+        assertNoForeignText('a', { result: asker.result, stages: asker.result.stages }, where);
+        const askerRefusal = stage(asker.result, 'refusal');
+        assert.ok(chunkIdsOf(asker.result).length === 0 || !chunkIdsOf(asker.result).includes(inserted.b.chunkId), `${where}: no tenant B chunk`);
+        assert.equal(askerRefusal?.counts?.refused, 1, `${where}: refused (${askerRefusal?.detail})`);
+        assert.ok((askerRefusal?.counts?.evidence_documents ?? 0) <= 1, `${where}: the read returned the caller document only`);
+
+        const owner = await retrieve(await scopeFor(profile, 'b'), profile, question);
+        const ownerWhere = `D-01 evidence ${profile}/b`;
+        await assertOwnRows('b', owner.result, ownerWhere);
+        const ownerRefusal = stage(owner.result, 'refusal');
+        assert.equal(ownerRefusal?.counts?.answered, 1, `${ownerWhere}: answered (${ownerRefusal?.detail})`);
+        assert.ok((ownerRefusal?.counts?.evidence_documents ?? 0) >= 1, `${ownerWhere}: answered through the evidence read`);
+      }
+    } finally {
+      await db().query('DELETE FROM document_chunks WHERE id = ANY($1::uuid[])', [[inserted.a.chunkId, inserted.b.chunkId]]);
+      await db().query('DELETE FROM documents WHERE id = ANY($1::uuid[])', [[inserted.a.documentId, inserted.b.documentId]]);
+      depsModule.setRagDepsForTests({ ragEnv: () => allOnEnv, adminClient: () => adminClient });
+      configModule.resetRagConfigForTests();
+    }
+  });
+
   test('two-tenant matrix under the implicit defaults: multi-tenant, nothing set, with and without the CI languages, every profile serves legacy inside the caller tenant', async () => {
     const hybrid = () => rpcCalls().filter((call) => call.path.endsWith('/rpc/hybrid_search_chunks')).length;
     let ownCandidates = 0;
@@ -1395,6 +1487,83 @@ describe('the BM25 leg reads only the caller statistics: direct calls, score sta
     assert.deepEqual(await snapshot(), baseline, 'after b deletes');
     await assertClean(b.scopeKey, 'after b deletes');
     await assertClean(a.scopeKey, 'tenant a untouched');
+  });
+
+  test("RAG_RERANK_LOCAL_STATS=tenant (04.4-21): tenant a's local rerank scores read a's statistics only and do not move while tenant b writes", async () => {
+    const { createLocalBm25Reranker, LOCAL_BM25_TENANT_MODEL } = await import('../../src/lib/rag/rerank/local-bm25.ts');
+    const { createTenantLocalStatsProvider } = await import('../../src/lib/rag/rerank/local-stats.ts');
+    const { resetLexstatsCacheForTests } = await import('../../src/lib/rag/lexical/stats.ts');
+    type Rpc = import('../../src/lib/rag/backend/supabase-rpc.ts').RpcClient;
+    const rpcCalls: Array<{ fn: string; tenant: unknown }> = [];
+    const client: Rpc = {
+      rpc(fn, args) {
+        rpcCalls.push({ fn, tenant: args.p_tenant_key });
+        const run = async () => {
+          try {
+            if (fn === 'rag_lexstats_status') {
+              return { data: await asServiceRole(db(), 'SELECT public.rag_lexstats_status($1) AS rag_lexstats_status', [args.p_tenant_key]), error: null };
+            }
+            const rows = await asServiceRole<Record<string, unknown>>(
+              db(),
+              'SELECT chunk_id::text AS chunk_id, chunk_count, total_len, terms, dfs FROM public.rag_lexical_rerank_stats($1, $2::text[], $3::uuid[])',
+              [args.p_tenant_key, args.p_terms, args.p_chunk_ids],
+            );
+            return { data: rows, error: null };
+          } catch (error) {
+            return { data: null, error: { message: error instanceof Error ? error.message : String(error) } };
+          }
+        };
+        const request = { abortSignal: () => request, then: (ok: never, ko: never) => run().then(ok, ko) } as unknown as ReturnType<Rpc['rpc']>;
+        return request;
+      },
+    };
+    const a = tenant('a');
+    const b = tenant('b');
+    const candidates = (
+      await db().query<{ id: string; lexical_text: string }>(
+        `SELECT id::text AS id, lexical_text FROM document_chunks
+          WHERE tenant_key = $1 AND is_current AND lexical_text IS NOT NULL AND lexical_text <> '' ORDER BY id LIMIT 12`,
+        [a.scopeKey],
+      )
+    ).rows;
+    assert.ok(candidates.length > 1, 'tenant a has rerank candidates');
+    const query = [...new Set(candidates.flatMap((row) => row.lexical_text.split(' ').slice(0, 2)))].slice(0, 4).join(' ');
+    const rerankA = async () => {
+      resetLexstatsCacheForTests();
+      const localStats = createTenantLocalStatsProvider({ client, tenantKey: a.scopeKey, chunkIds: candidates.map((row) => row.id) });
+      return createLocalBm25Reranker().rerank(query, candidates.map((row) => row.lexical_text), { signal: AbortSignal.timeout(30_000), localStats });
+    };
+    const terms = [...new Set(query.split(' '))];
+    const readA = async () => {
+      resetLexstatsCacheForTests();
+      const provider = createTenantLocalStatsProvider({ client, tenantKey: a.scopeKey, chunkIds: candidates.map((row) => row.id) });
+      const map = await provider.read(terms, candidates.map((row) => row.id), AbortSignal.timeout(30_000));
+      return map === null ? null : [...map.entries()].map(([id, g]) => [id, g.chunkCount, g.totalLength, [...g.df.entries()].sort()]);
+    };
+    const statsBefore = await readA();
+    assert.ok(statsBefore !== null && statsBefore.length === candidates.length, 'every candidate of a has statistics');
+    const baseline = await rerankA();
+    assert.equal(baseline.localStats, 'tenant', 'tenant statistics served a');
+    assert.equal(baseline.model, LOCAL_BM25_TENANT_MODEL);
+    assert.ok(baseline.scores.every((row) => Number.isFinite(row.score)), 'finite scores');
+    assert.ok(rpcCalls.every((call) => call.tenant === a.scopeKey), 'every read names tenant a only');
+
+    const { chunkIds } = await ingest(b, Array.from({ length: 40 }, (_, i) => `${query} ${query} w${i}`));
+    await compact(b.scopeKey);
+    assert.deepEqual(await rerankA(), baseline, 'after b ingests');
+    assert.deepEqual(await readA(), statsBefore, "a's statistics after b ingests a's terms");
+    // A chunk id of b among a's candidates gets no statistics under a's key, so the pool serves that request (never b's statistics).
+    resetLexstatsCacheForTests();
+    const mixed = await createLocalBm25Reranker().rerank(query, [...candidates.map((row) => row.lexical_text), 'x'], {
+      signal: AbortSignal.timeout(30_000),
+      localStats: createTenantLocalStatsProvider({ client, tenantKey: a.scopeKey, chunkIds: [...candidates.map((row) => row.id), chunkIds[0] as string] }),
+    });
+    assert.equal(mixed.localStats, 'pool');
+    await db().query('DELETE FROM document_chunks WHERE id = ANY($1::uuid[])', [chunkIds.slice(0, 20)]);
+    await compact(b.scopeKey);
+    assert.deepEqual(await rerankA(), baseline, 'after b deletes');
+    assert.deepEqual(await readA(), statsBefore, "a's statistics after b deletes");
+    assert.ok(rpcCalls.every((call) => call.tenant === a.scopeKey), 'no read named another tenant');
   });
 
   test("after delete and version replace within tenant a, the removed and superseded chunks are gone and b's result does not move", async () => {

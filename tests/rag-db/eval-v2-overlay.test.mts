@@ -112,7 +112,7 @@ describe('Phase 4.1 defaults-gate run configs', () => {
 });
 
 describe('run-config validation', () => {
-  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the eight Phase 4.2 tuning switches, the value-constrained vendor settings, the five Phase 5.1 SEC switches, the 16 Phase 6 names, the three terminology switches, the six Phase 3.3 switches, the fourteen Phase 5.2 answer-rule switches, the four Phase 5.2.1 switches, the twelve Phase 6.2 query-addition switches, the fixture link allowlist, the Phase 5 citations switch, the four Phase 4.4 lexical scoring variables, the Phase 4.3 access switch and the three Phase 7 D-17 names', () => {
+  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the eight Phase 4.2 tuning switches, the value-constrained vendor settings, the five Phase 5.1 SEC switches, the 16 Phase 6 names, the three terminology switches, the six Phase 3.3 switches, the fourteen Phase 5.2 answer-rule switches, the four Phase 5.2.1 switches, the twelve Phase 6.2 query-addition switches, the fixture link allowlist, the Phase 5 citations switch, the four Phase 4.4 lexical scoring variables, the Phase 4.4 local reranker statistics switch, the Phase 4.3 access switch and the three Phase 7 D-17 names', () => {
     assert.deepEqual([...RUN_CONFIG_ENV_ALLOWLIST].sort(), [
       'COHERE_API_KEY',
       'COHERE_BASE_URL',
@@ -182,6 +182,7 @@ describe('run-config validation', () => {
       'RAG_REFUSAL_THRESHOLD',
       'RAG_REGISTRY_TEXTS',
       'RAG_RERANKER',
+      'RAG_RERANK_LOCAL_STATS',
       'RAG_RERANK_TIER_CHAT',
       'RAG_RERANK_TIER_VOICE',
       'RAG_RERANK_VOYAGE_MODEL_BY_LANG',

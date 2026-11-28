@@ -926,3 +926,192 @@ def test_gates_report_only_needs_gates_enforce_mode_and_ceiling_names(tmp_path, 
     assert "--gates-report-only applies in enforce mode" in capsys.readouterr().err
     assert _gate_run(tmp_path, _clean_report(), None, *gates, "--gates-report-only", "recall_at_5") == 2
     assert _gate_run(tmp_path, _clean_report(), None, *gates, "--gates-report-only", "") == 2
+
+
+# Plan 05.2.1-23: the Phase 5.2.1 calculation and prompt-budget gates, selected by run-config name (D-78, D-88).
+
+from rag_eval.gate import EXIT_PASS, phase521_offenders  # noqa: E402
+
+CALC_RATES = (
+    "numeric_correctness",
+    "numeric_correctness_effective",
+    "paraphrase_consistency",
+    "steps_listed_rate",
+    "calc_used_rate",
+    "calc_not_verified_rate",
+    "calc_review_rate",
+)
+FOLLOW_ONES = ("numeric_correctness_effective", "paraphrase_consistency", "steps_listed_rate", "calc_used_rate")
+
+
+def _calc_rates(n: int = 12, **values: float | dict) -> dict:
+    rates: dict = {"items": n * len(P52_LANGUAGES)}
+    for name in CALC_RATES:
+        spec = values.get(name, 0.0 if name in ("calc_not_verified_rate", "calc_review_rate") else 1.0)
+        value, overrides = (spec, None) if not isinstance(spec, dict) else (spec["value"], spec["overrides"])
+        rates[name] = _rule_metric(value, n=n, category="multi_step_calc", overrides=overrides)
+    return rates
+
+
+def _calc_block(n: int = 12, **values: float | dict) -> dict:
+    return {
+        "evidence_in_context_rate": _rule_metric(1.0, n=15, category="multi_step_calc"),
+        "all_items": _calc_rates(15, **values),
+        "evidence_in_context": _calc_rates(n, **values),
+    }
+
+
+def _overflow_block(pipeline: str = "v2", n: int = 4, **values: float | dict) -> dict:
+    block: dict = {"pipeline": pipeline, "items": n * len(P52_LANGUAGES)}
+    for name in ("overflow_error_rate", "history_before_documents_rate", "must_keep_rate", "budget_trace_rate"):
+        spec = values.get(name, 0.0 if name == "overflow_error_rate" else 1.0)
+        value, overrides = (spec, None) if not isinstance(spec, dict) else (spec["value"], spec["overrides"])
+        block[name] = _rule_metric(value, n=n, category="context_overflow", overrides=overrides)
+    return block
+
+
+def _one_language(value: float, language: str = "it", *, base: float = 1.0, n: int = 12) -> dict:
+    return {"value": base, "overrides": {language: {"value": value, "n": n}}}
+
+
+P521_RUNS = {
+    "calc-tool-follow": "fake/calc-follow-v1",
+    "calc-block-follow": "fake/calc-follow-block-v1",
+    "calc-skip-rule-check-off": "fake/calc-skip-rule-v1",
+    "calc-skip-rule-check-on": "fake/calc-skip-rule-v1",
+    "calc-missing-operand": "fake/calc-missing-operand-v1",
+    "budget-overflow-legacy": "fixture/small-window-4k",
+    "budget-overflow-v2": "fixture/small-window-4k",
+}
+
+
+def _p521_report(name: str | None, *, calc: dict | None = None, overflow: dict | None = None, model: str | None = None) -> EvalReport:
+    fields: dict = {"request_options": {"generator_model": model or P521_RUNS.get(name or "", "fake/citation-alias-v1")}}
+    if name is not None:
+        fields["run_config_name"] = name
+    if calc is not None:
+        fields["calc"] = calc
+    if overflow is not None:
+        fields["overflow"] = overflow
+    return _report(**fields)
+
+
+def _reasons(report: EvalReport) -> list[tuple[str, str, str]]:
+    return [(o.slice, o.metric, o.reason) for o in phase521_offenders(report)]
+
+
+def test_p521_follow_runs_pass_with_the_four_rates_at_one():
+    for name in ("calc-tool-follow", "calc-block-follow"):
+        report = _p521_report(name, calc=_calc_block())
+        assert phase521_offenders(report) == [], name
+        assert evaluate_gate(report, _baseline(), _noise()).passed, name
+
+
+def test_p521_follow_runs_fail_when_one_rate_is_below_one_in_one_language():
+    for name in ("calc-tool-follow", "calc-block-follow"):
+        for metric in FOLLOW_ONES:
+            report = _p521_report(name, calc=_calc_block(**{metric: _one_language(0.75)}))
+            assert _reasons(report) == [("language:it", metric, "calc_rate_below_one")], (name, metric)
+            assert not evaluate_gate(report, _baseline(), _noise()).passed
+
+
+def test_p521_follow_runs_read_the_evidence_in_context_population():
+    block = _calc_block()
+    block["all_items"] = _calc_rates(15, numeric_correctness_effective=0.8)
+    assert phase521_offenders(_p521_report("calc-tool-follow", calc=block)) == []
+
+
+def test_p521_negative_control_fails_its_numeric_gate_and_cannot_pass():
+    failing = _p521_report("calc-skip-rule-check-off", calc=_calc_block(numeric_correctness=0.4, numeric_correctness_effective=0.4))
+    offenders = phase521_offenders(failing)
+    assert {(o.metric, o.reason) for o in offenders} == {("numeric_correctness_effective", "negative_control_failed")}
+    assert {o.slice for o in offenders} == {"language:zh", "language:en", "language:it"}
+    result = evaluate_gate(failing, _baseline(), _noise())
+    assert not result.passed
+    passing = _p521_report("calc-skip-rule-check-off", calc=_calc_block())
+    assert _reasons(passing) == [("overall", "numeric_correctness_effective", "negative_control_passed")]
+    assert not evaluate_gate(passing, _baseline(), _noise()).passed
+
+
+def test_p521_check_on_run_needs_the_corrections_and_a_review_reason_for_every_item():
+    clean = _p521_report("calc-skip-rule-check-on", calc=_calc_block(numeric_correctness=0.4, calc_review_rate=1.0))
+    assert phase521_offenders(clean) == []
+    unreviewed = _p521_report("calc-skip-rule-check-on", calc=_calc_block(calc_review_rate=_one_language(0.5)))
+    assert _reasons(unreviewed) == [("language:it", "calc_review_rate", "calc_rate_below_one")]
+    uncorrected = _p521_report(
+        "calc-skip-rule-check-on", calc=_calc_block(calc_review_rate=1.0, numeric_correctness_effective=_one_language(0.75, "zh"))
+    )
+    assert _reasons(uncorrected) == [("language:zh", "numeric_correctness_effective", "calc_rate_below_one")]
+
+
+def test_p521_missing_operand_run_needs_every_item_not_verified():
+    assert phase521_offenders(_p521_report("calc-missing-operand", calc=_calc_block(calc_not_verified_rate=1.0, calc_review_rate=1.0))) == []
+    partly = _p521_report("calc-missing-operand", calc=_calc_block(calc_not_verified_rate=_one_language(0.9, "en", base=1.0)))
+    assert _reasons(partly) == [("language:en", "calc_not_verified_rate", "calc_rate_below_one")]
+
+
+def test_p521_calc_gates_refuse_a_run_without_the_block_or_short_of_items():
+    assert _reasons(_p521_report("calc-tool-follow")) == [("overall", "calc", "calc_metrics_missing")]
+    short = _p521_report("calc-tool-follow", calc=_calc_block(n=8))
+    assert {o.reason for o in phase521_offenders(short)} == {"too_few_calc_items"}
+
+
+def test_p521_overflow_runs_pass_with_no_error_and_the_three_rates_at_one():
+    for name, pipeline in (("budget-overflow-legacy", "legacy"), ("budget-overflow-v2", "v2")):
+        report = _p521_report(name, overflow=_overflow_block(pipeline))
+        assert phase521_offenders(report) == [], name
+        assert evaluate_gate(report, _baseline(), _noise()).passed, name
+
+
+def test_p521_overflow_runs_fail_on_an_error_or_a_rate_below_one():
+    errored = _p521_report("budget-overflow-v2", overflow=_overflow_block(overflow_error_rate=_one_language(0.25, "zh", base=0.0, n=4)))
+    assert _reasons(errored) == [("language:zh", "overflow_error_rate", "overflow_error_above_zero")]
+    for metric in ("history_before_documents_rate", "must_keep_rate", "budget_trace_rate"):
+        report = _p521_report("budget-overflow-legacy", overflow=_overflow_block("legacy", **{metric: _one_language(0.75, "en", n=4)}))
+        assert _reasons(report) == [("language:en", metric, "overflow_rate_below_one")], metric
+
+
+def test_p521_overflow_gates_check_the_pipeline_and_the_block():
+    wrong = _p521_report("budget-overflow-legacy", overflow=_overflow_block("v2"))
+    assert _reasons(wrong) == [("overall", "pipeline", "pipeline_mismatch")]
+    assert _reasons(_p521_report("budget-overflow-v2")) == [("overall", "overflow", "overflow_metrics_missing")]
+    short = _p521_report("budget-overflow-v2", overflow=_overflow_block(n=3))
+    assert {o.reason for o in phase521_offenders(short)} == {"too_few_overflow_items"}
+
+
+def test_p521_a_run_name_with_another_generator_is_refused():
+    report = _p521_report("calc-tool-follow", calc=_calc_block(), model="fake/calc-skip-rule-v1")
+    assert _reasons(report) == [("overall", "generator_model", "p521_generator_mismatch")]
+
+
+def test_p521_gates_do_not_apply_to_other_runs():
+    failing = _calc_block(numeric_correctness_effective=0.0)
+    for name in (None, "p52-rules-on", "sec-recommended"):
+        report = _p521_report(name, calc=failing, overflow=_overflow_block(must_keep_rate=0.0))
+        assert phase521_offenders(report) == [], name
+        assert evaluate_gate(report, _baseline(), _noise()).passed, name
+
+
+def test_p521_gate_markdown_lists_every_check_and_the_negative_control_exits_10(tmp_path):
+    report_path = tmp_path / "report.json"
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(_baseline().model_dump_json(), encoding="utf-8")
+    report_path.write_text(_p521_report("calc-tool-follow", calc=_calc_block()).model_dump_json(), encoding="utf-8")
+    args = ["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "pass")]
+    assert main(args) == EXIT_PASS
+    markdown = (tmp_path / "pass" / "gate.md").read_text(encoding="utf-8")
+    assert "## Phase 5.2.1 calculation and prompt-budget gates" in markdown
+    section = markdown.split("## Phase 5.2.1 calculation and prompt-budget gates", 1)[1].split("\n## ", 1)[0]
+    assert "Run config: calc-tool-follow" in section
+    assert "| language:en | numeric_correctness_effective | 1.0000 | 1.0000 | passed |" in section
+    control = _p521_report("calc-skip-rule-check-off", calc=_calc_block(numeric_correctness_effective=0.4))
+    report_path.write_text(control.model_dump_json(), encoding="utf-8")
+    args[-1] = str(tmp_path / "control")
+    assert main(args) == EXIT_REGRESSION
+    gate = json.loads((tmp_path / "control" / "gate.json").read_text(encoding="utf-8"))
+    assert gate["passed"] is False
+    assert {o["reason"] for o in gate["offenders"]} == {"negative_control_failed"}
+    control_md = (tmp_path / "control" / "gate.md").read_text(encoding="utf-8")
+    assert "negative control: the numeric gate is expected to fail" in control_md
+    injection = control_md.split("## Absolute-zero injection gate", 1)[1].split("\n## ", 1)[0]
+    assert "negative_control_failed" not in injection

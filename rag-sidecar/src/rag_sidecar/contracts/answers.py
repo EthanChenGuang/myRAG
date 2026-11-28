@@ -44,6 +44,9 @@ class CitationAlsoIn(_Contract):
     chunkId: str = Field(min_length=1)
 
 
+MIN_CITATION_QUOTE_CODE_POINTS = 2
+
+
 class CitationRecord(_Contract):
     n: int = Field(ge=1)
     alias: str = Field(pattern=r"^S[1-9][0-9]*$")
@@ -72,8 +75,9 @@ class CitationRecord(_Contract):
 
     @model_validator(mode="after")
     def _quote_unless_withdrawn(self) -> "CitationRecord":
-        if not self.quote and self.withdrawn is not True:
-            raise ValueError("quote must be non-empty unless the citation is withdrawn")
+        # 06.3-SECURITY W8: two code points, as the evidence-quote contracts (min_length=2); '' is the withdrawn marker.
+        if self.withdrawn is not True and len(self.quote.strip()) < MIN_CITATION_QUOTE_CODE_POINTS:
+            raise ValueError("quote must have at least two characters unless the citation is withdrawn")
         return self
 
 

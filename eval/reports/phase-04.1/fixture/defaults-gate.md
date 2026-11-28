@@ -4,8 +4,8 @@ Result: FAIL
 Refusal basis: single_threshold
 Floor: none chosen; no-key fallback: none chosen
 Noise band: max(3.0 x spread, 0.02)
-G2 absolute ingest Recall@10 floor (derived): 0.685479
-Git sha: 12598da41b7a6eaaead8fcf93309240e65fedf2e; evaluated at: not recorded
+G2 absolute ingest Recall@10 floor (derived): 0.705610
+Git sha: 405ee9172f010ee92f7e8a5dcf17074c94fd5c98; evaluated at: 2026-11-28T01:16:07.860032+00:00
 
 ## Failures
 
@@ -20,1163 +20,1358 @@ Git sha: 12598da41b7a6eaaead8fcf93309240e65fedf2e; evaluated at: not recorded
 
 | Role | Path | sha256 |
 | --- | --- | --- |
-| baseline:prechunked | eval/baselines/fixture-baseline.json | 08882ce5a26a4a7297b5c1eb1794f27b1161830a459fdbf6468495e4aa682d48 |
-| baseline:ingest | eval/baselines/fixture-ingest-baseline.json | b8d2064ef98d2846451f97ce98e947d0f5170e38c37d1bddfaca04d22d6580fa |
-| noise | eval/config/noise.json | 959adc75a6d7f06ad6319d5bc179daa692cf067b6a1bc731af1224d3f2d42333 |
-| latency_budgets | eval/config/latency-budgets.json | a1db13ff1f595dc988d07a1ac3cbbfd3b34e21e3a659074b0fbd724cea369212 |
-| g8 | eval/reports/phase-04.1/fixture/g8-input.json | 2626f2133c580d50b5a7812e7e458e556125559bb87db3305afed9026e791064 |
-| report:v2-default:prechunked | eval/out/p41r/v2-default-prechunked/report.json | 1c18d61085e7f7cbebaaf0812ac2c7d89dfbb3a90e2f6637f66e44e17124f172 |
-| report:v2-default:ingest | eval/out/p41r/v2-default-ingest/report.json | 1b9f749c0f1e97d7a2da8f59ce47643e5544f72a921ebc7612e8a612381dca17 |
-| report:v2-default-no-cells:prechunked | eval/out/p41r/v2-default-no-cells-prechunked/report.json | 85f05ccf97647097cb42eead4d8e5c3cb2d105db8b36007656b5f91933bcfc00 |
-| report:v2-default-no-cells:ingest | eval/out/p41r/v2-default-no-cells-ingest/report.json | e8c74b0b5bcdfb4dd9f4f61be1a20c883fbae3451dc95f95f6195f8cbad822fe |
-| report:v2-default-hosted-fake:prechunked | eval/out/p41r/v2-default-hosted-fake-prechunked/report.json | 529c47cfc17b67142600b5f13b535c75af7f2aefd45e388e66d3d249f67c2892 |
-| report:v2-default-hosted-fake:ingest | eval/out/p41r/v2-default-hosted-fake-ingest/report.json | 187892e49d2fd0a47cfb2b757cfadcf76638dc59ab357708912d32a39c91f436 |
-| report:v2-default-hosted-fake-no-cells:prechunked | eval/out/p41r/v2-default-hosted-fake-no-cells-prechunked/report.json | bb9b276b889a4fc0d0181de6b8def372e8491a775c79e202f421e66807ed7d39 |
-| report:v2-default-hosted-fake-no-cells:ingest | eval/out/p41r/v2-default-hosted-fake-no-cells-ingest/report.json | eb165ca641b9042c4058ce03aaad63c1bbe4c340ad41b9e7ee29a63cdab68f28 |
-| report:v2-default-similarity-floor:prechunked | eval/out/p41r/v2-default-similarity-floor-prechunked/report.json | 36ac9082a2ec42ea8c5112a45aa38dac413c7a88346e4edf13112dde4cac71e6 |
-| report:v2-default-similarity-floor:ingest | eval/out/p41r/v2-default-similarity-floor-ingest/report.json | d081af74c445c7b88bd83df55e376c7628f0952d95a13345277f393eaee03d6e |
-| report:v2-default-similarity-floor-no-cells:prechunked | eval/out/p41r/v2-default-similarity-floor-no-cells-prechunked/report.json | 2709a9de5d7e8557ef5e13396a74905a7f48411626eb36d1c9a31a77e849b013 |
-| report:v2-default-similarity-floor-no-cells:ingest | eval/out/p41r/v2-default-similarity-floor-no-cells-ingest/report.json | 34618dc7a6daf4d262ec72fa89a573472fda70f140e067479f911ff173dba475 |
-| report:v2-default-similarity-floor-hosted-fake:prechunked | eval/out/p41r/v2-default-similarity-floor-hosted-fake-prechunked/report.json | 8cf79f39d43210dfe7f178f9c9f43202a8545ad855dae0a36e2c475a9d0a8017 |
-| report:v2-default-similarity-floor-hosted-fake:ingest | eval/out/p41r/v2-default-similarity-floor-hosted-fake-ingest/report.json | f8a1db2b9937fcc90721b68ec486f5a4e3e40dfd900261ef461b89a87ab11287 |
-| report:v2-default-similarity-floor-hosted-fake-no-cells:prechunked | eval/out/p41r/v2-default-similarity-floor-hosted-fake-no-cells-prechunked/report.json | a7412245daeac7bfc6e9557007576ea7bcf795ae3be0d1de8fd66b17cc101166 |
-| report:v2-default-similarity-floor-hosted-fake-no-cells:ingest | eval/out/p41r/v2-default-similarity-floor-hosted-fake-no-cells-ingest/report.json | ead9364f656d3221f12882ee5ccf8294f37b1b4319fdf021d64160e4428c6991 |
-| report:v2-default-fallback-none:prechunked | eval/out/p41r/v2-default-fallback-none-prechunked/report.json | d93d4190262cb6164aac82d6bf53ac72bb507da1c19d305e0aa8e1d1a19b1864 |
-| report:v2-default-fallback-none:ingest | eval/out/p41r/v2-default-fallback-none-ingest/report.json | c340b0f5995d3d7670987886aa0b9cadfd313fc55c247dda00d4a05de152effe |
-| report:v2-default-fallback-none-no-cells:prechunked | eval/out/p41r/v2-default-fallback-none-no-cells-prechunked/report.json | 123307b502bfd27aec1cf51afaae9f1022e7726c67138390bd9b09cb90cc33fd |
-| report:v2-default-fallback-none-no-cells:ingest | eval/out/p41r/v2-default-fallback-none-no-cells-ingest/report.json | 588855fcfa691b905a28909cfefb62fd4eb86bb4988f6b89f84e461c1a2f92aa |
-| report:legacy:prechunked | eval/out/p41r/legacy-prechunked/report.json | cc56f5eb1f6ebc01f06267dfc2a599d6ec01c8878cd3d5212845df3aa0ac7a24 |
-| report:legacy:ingest | eval/out/p41r/legacy-ingest/report.json | f8c86c2f3ac6ac39cf35bc80064512bca2b77b54b0419c8c2c2e8283e4cb9343 |
-| criteria | eval/config/defaults-gate.json | b72983d45f1898058d62b54d38832aa3f48c8b8a4232db8d291465506d1bbfe4 |
+| baseline:prechunked | eval/baselines/fixture-baseline.json | 1a93843f3de7fdb663d724356500a8c0fe7f8f73a7fac95a2f402011ca22f645 |
+| baseline:ingest | eval/baselines/fixture-ingest-baseline.json | 0008a83d70d97ba2ad7cf7fdc5f535583c7642dc98252ef7ab54faddbd68408a |
+| noise | eval/config/noise.json | d3d6534ac383888f369829ff0a88c3d115f334fc90310e9dc07feb2cd1bc57b7 |
+| latency_budgets | eval/config/latency-budgets.json | 7eaadf5328479d25393d95cbfd43c0f32d13d2710354d14475d57dde3182d375 |
+| g8 | eval/reports/phase-04.1/fixture/g8-input.json | aa317208e70deb3c8ac456a2ab308d6e4627346a5f205d6bebcd70177692496e |
+| report:v2-default:prechunked | eval/out/p41g/v2-default-prechunked/report.json | b2a76b83e6eef8de3320f2e1bac10344586b0a3b57687abc26a958ce39b84200 |
+| report:v2-default:ingest | eval/out/p41g/v2-default-ingest/report.json | 1302e60addf843714709c1189b4c563de15126eff3f4ff1a38e313d1c6e5df9b |
+| report:v2-default-no-cells:prechunked | eval/out/p41g/v2-default-no-cells-prechunked/report.json | 774c746df1e6fc779f2091cc8c455d413f57516a5be7f30dd375f6ecc3fbd8c1 |
+| report:v2-default-no-cells:ingest | eval/out/p41g/v2-default-no-cells-ingest/report.json | 9f02eb6bf128b963548d2ba55385307b7ed606797c74c6bab56f1d3a8c820828 |
+| report:v2-default-hosted-fake:prechunked | eval/out/p41g/v2-default-hosted-fake-prechunked/report.json | 9235b2967715b65973e535db5fe108b7efced44cdf4da1e32ff4f55848c33690 |
+| report:v2-default-hosted-fake:ingest | eval/out/p41g/v2-default-hosted-fake-ingest/report.json | 2049df23b22340d6bf7b04993ff08816aa98b7c91a7afaa5879b1bc9b06aa584 |
+| report:v2-default-hosted-fake-no-cells:prechunked | eval/out/p41g/v2-default-hosted-fake-no-cells-prechunked/report.json | 2bb5062dc95eab2ab605b6ef68a078240f6a0e44ea52d6ab1e58755265b02a3c |
+| report:v2-default-hosted-fake-no-cells:ingest | eval/out/p41g/v2-default-hosted-fake-no-cells-ingest/report.json | 6865237bc73b43b09b0df873528d59f9ad27be5e8c3ab4b15fe3954d00cb0c35 |
+| report:v2-default-similarity-floor:prechunked | eval/out/p41g/v2-default-similarity-floor-prechunked/report.json | 365843ab783827dfda22799c9484dadf5e238135a7f91b69114aa4111c541007 |
+| report:v2-default-similarity-floor:ingest | eval/out/p41g/v2-default-similarity-floor-ingest/report.json | 092b41c252b94f508856811b80db4d87dfe55005de885b68b54f5a8af77af566 |
+| report:v2-default-similarity-floor-no-cells:prechunked | eval/out/p41g/v2-default-similarity-floor-no-cells-prechunked/report.json | 84dd4c1b15fb3e18b1cf827f62e0d08e3ca5eadfce9e8d9b6f4201b545cbedb4 |
+| report:v2-default-similarity-floor-no-cells:ingest | eval/out/p41g/v2-default-similarity-floor-no-cells-ingest/report.json | 37e65833efb6423c983f42728023c7f2451f6b8da6bc8454019db1a3e2a1493b |
+| report:v2-default-similarity-floor-hosted-fake:prechunked | eval/out/p41g/v2-default-similarity-floor-hosted-fake-prechunked/report.json | a582bcbb3af4cb78ba655a618a26722bbaa5423480a46d068222e2921412fbab |
+| report:v2-default-similarity-floor-hosted-fake:ingest | eval/out/p41g/v2-default-similarity-floor-hosted-fake-ingest/report.json | 07f86aa58b7d549830ea57d7aa4a1bde9bbb509412d9331c1ed33d33b4517b83 |
+| report:v2-default-similarity-floor-hosted-fake-no-cells:prechunked | eval/out/p41g/v2-default-similarity-floor-hosted-fake-no-cells-prechunked/report.json | 2782596f75be4cb6d79f578c1862dd4a4af1a27a27ac2f5bb48b3442f7fffa2f |
+| report:v2-default-similarity-floor-hosted-fake-no-cells:ingest | eval/out/p41g/v2-default-similarity-floor-hosted-fake-no-cells-ingest/report.json | ebd67805e13dec227b6a5172e3beb7eb1ca07c61e3186b5a7c3cb04614e2546b |
+| report:v2-default-fallback-none:prechunked | eval/out/p41g/v2-default-fallback-none-prechunked/report.json | 26171fe7b0909848d391db87b03dbe2e0c893c8028527f7ed6b1923f81f2941f |
+| report:v2-default-fallback-none:ingest | eval/out/p41g/v2-default-fallback-none-ingest/report.json | 4cc34a86ee90b4f838c63df2b55ab0628354bc9a754fd59804a574475d898bce |
+| report:v2-default-fallback-none-no-cells:prechunked | eval/out/p41g/v2-default-fallback-none-no-cells-prechunked/report.json | 1a4cee7ac848048d14f21939bb1f5e2e4de501621da4ef9a3d47dc58547afb89 |
+| report:v2-default-fallback-none-no-cells:ingest | eval/out/p41g/v2-default-fallback-none-no-cells-ingest/report.json | 1f3c9b5cdc4e9f9450cbbcb746d80d4cb7ad7a7cfde6d4277d2c1fb1c90ad4c7 |
+| report:legacy:prechunked | eval/out/p41g/legacy-prechunked/report.json | a2d7482e563183bdf4f13e3aaebcf82dcc77a780ba242b2fdab7bf4df1915f2a |
+| report:legacy:ingest | eval/out/p41g/legacy-ingest/report.json | c90c73cb665fcdfd5f15e71a15d01c314f64f680b00929fd833852f16da934f8 |
+| criteria | eval/config/defaults-gate.json | 82db8a3c02657f579cccfb067a4f8c8fce13f63a881d98edb2262d28fc22b0f5 |
 
 ## v2-default (required): fail
 
-### prechunked: run 0f912168-c2b7-4321-9840-cdb49b38742d, run_config_hash 20ea7611730b950bb79c589c1025c360cbc6854ea189f56930a1e561c8dca4b6, report sha256 1c18d61085e7f7cbebaaf0812ac2c7d89dfbb3a90e2f6637f66e44e17124f172
+### prechunked: run 56e77967-3b8e-4022-ba4c-ffaff156447f, run_config_hash 8746ef079468c9f2c03c5122c65a6fda3db28b1c172264a7a11c156aa67d1212, report sha256 b2a76b83e6eef8de3320f2e1bac10344586b0a3b57687abc26a958ce39b84200
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
-| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.5893 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
-| G3 (pass) | refusal | overall | false_refusal_rate | 0.3750 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.4566 | pass |
-| G3 (pass) | refusal | overall | correct_refusal_rate | 0.7083 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | pass |
-| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 0.6667 | 21 | 0.6467 | 0.6667 | 0.0200 | n/a | pass |
+| G1 (fail) | noise_gate | language:en | mrr | 0.5533 | 83 | 0.5684 | 0.5884 | 0.0200 | n/a | fail (noise_band) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.7267 | 236 | 0.6643 | 0.6843 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.2373 | 236 | 0.2573 | 0.2373 | 0.0200 | 0.2873 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 48 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 38 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:ambiguous | recall_at_10 | 0.6667 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:ambiguous | mrr | 0.5278 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | recall_at_10 | 0.2000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | mrr | 0.0500 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.6364 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.5076 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.7778 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7222 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.7500 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.3552 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:compound | recall_at_10 | 0.4444 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:compound | mrr | 0.4444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 0.0000 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:context_overflow | mrr | 0.0000 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.4286 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:cross_lingual | mrr | 0.4286 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 1.0000 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:exact_term | recall_at_10 | 0.8750 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:exact_term | mrr | 0.8750 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | recall_at_10 | 0.8571 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | mrr | 0.8214 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:general | recall_at_10 | 0.8158 | 19 | 0.7958 | 0.8158 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.8596 | 19 | 0.8747 | 0.8947 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 0.8889 | 9 | 0.8689 | 0.8889 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 0.8889 | 9 | 0.7207 | 0.7407 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 1.0000 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 0.9643 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.8929 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:multi_turn | recall_at_10 | 0.5000 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:multi_turn | mrr | 0.4188 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.4062 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:scanned | recall_at_10 | 1.0000 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:scanned | mrr | 0.8125 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | mrr | 0.7857 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:selective_filter | recall_at_10 | 0.5000 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:selective_filter | mrr | 0.5000 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:table | recall_at_10 | 0.2500 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:table | mrr | 0.1875 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.5500 | 10 | 0.6800 | 0.7000 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:table | recall_at_10 | 0.4545 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.4091 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:typo | recall_at_10 | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:typo | mrr | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 42.0000 | 202 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 19.0000 | 202 | 600.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | total_p95 | retrieval_total |  | 31.0000 | 413 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 2.0000 | 413 | 600.0000 | n/a | n/a | n/a | pass |
 
-### ingest: run 1156b2d3-d027-4699-8e02-98c06fca6769, run_config_hash 132f9c986a577a2afa31512abbb6fe5e79c4f885843dc32cdbe6980da11f6c27, report sha256 1b9f749c0f1e97d7a2da8f59ce47643e5544f72a921ebc7612e8a612381dca17
+### ingest: run 5d590d00-21c3-4459-b3be-e3bdfb650b4d, run_config_hash 4689bf71cbe9bb507a8b0f80e58da37a1913b522f2606d4fea48264c5ccc71ac, report sha256 1302e60addf843714709c1189b4c563de15126eff3f4ff1a38e313d1c6e5df9b
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6575 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | mrr | 0.1667 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.3014 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.3699 | fail |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 0.6897 | 29 | 0.5317 | 0.5517 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 0.6538 | 26 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G1 (fail) | noise_gate | pair:en->it | mrr | 0.1667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | fail (noise_band) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.7515 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G2 (pass) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.7515 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.1951 | 328 | 0.2121 | 0.1921 | 0.0200 | 0.2346 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 62 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 52 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:ambiguous | recall_at_10 | 0.6667 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:ambiguous | mrr | 0.5278 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | recall_at_10 | 0.2000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | mrr | 0.0500 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:compound | recall_at_10 | 0.4444 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:compound | mrr | 0.4444 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.9091 | 11 | 0.7073 | 0.7273 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.7803 | 11 | 0.5709 | 0.5909 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7500 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.7500 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.3865 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:compound | recall_at_10 | 0.6667 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | mrr | 0.6111 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 0.1111 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:context_overflow | mrr | 0.1111 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.3913 | 23 | 0.3713 | 0.3913 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:cross_lingual | mrr | 0.3696 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:exact_term | recall_at_10 | 0.9231 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:exact_term | mrr | 0.8077 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:general | recall_at_10 | 0.8696 | 23 | 0.8496 | 0.8696 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | mrr | 0.8696 | 23 | 0.8061 | 0.8261 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 0.8333 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:exact_term | recall_at_10 | 1.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:exact_term | mrr | 0.8846 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.8393 | 28 | 0.8193 | 0.8393 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.8571 | 28 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 1.0000 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.4200 | 0.4400 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.1867 | 0.2067 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.5000 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:multi_turn | mrr | 0.4083 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.6967 | 0.7167 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 0.9643 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.8929 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.6250 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.5260 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:scanned | recall_at_10 | 1.0000 | 14 | 0.9086 | 0.9286 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:scanned | mrr | 0.9464 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:scanned | mrr | 0.9375 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:selective_filter | recall_at_10 | 0.5000 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:selective_filter | mrr | 0.5000 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:table | recall_at_10 | 0.5385 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:table | mrr | 0.5000 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.9000 | 10 | 0.6300 | 0.6500 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | recall_at_10 | 1.0000 | 16 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.8958 | 16 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:table_split | recall_at_10 | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:table_split | mrr | 0.6667 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:table_split | mrr | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:templated_collection | recall_at_10 | 0.4828 | 58 | 0.4110 | 0.4310 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:templated_collection | mrr | 0.3934 | 58 | 0.3707 | 0.3907 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:typo | recall_at_10 | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:typo | mrr | 0.1667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 48.0000 | 263 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 18.0000 | 263 | 600.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | total_p95 | retrieval_total |  | 46.0000 | 561 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 2.0000 | 561 | 600.0000 | n/a | n/a | n/a | pass |
 
 ## v2-default-no-cells (required): fail
 
-### prechunked: run 91c6f79e-7b1f-4bc5-9745-104e9277960f, run_config_hash 7a17df86cb32dfa3b6979c40c57b5bfafa998b69a22e7197418ef8c5d078524a, report sha256 85f05ccf97647097cb42eead4d8e5c3cb2d105db8b36007656b5f91933bcfc00
+### prechunked: run 724690f1-7224-4268-b2b3-a145fcc3ee53, run_config_hash cb4fdc35fb2e7dbbd7bdd97e6132c6821d9659b7ac511d1381f4fcd39e905a4a, report sha256 774c746df1e6fc779f2091cc8c455d413f57516a5be7f30dd375f6ecc3fbd8c1
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
-| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.5893 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
-| G3 (pass) | refusal | overall | false_refusal_rate | 0.3750 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.4566 | pass |
-| G3 (pass) | refusal | overall | correct_refusal_rate | 0.7083 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | pass |
-| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 0.6667 | 21 | 0.6467 | 0.6667 | 0.0200 | n/a | pass |
+| G1 (fail) | noise_gate | language:en | mrr | 0.5533 | 83 | 0.5684 | 0.5884 | 0.0200 | n/a | fail (noise_band) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.7267 | 236 | 0.6643 | 0.6843 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.2373 | 236 | 0.2573 | 0.2373 | 0.0200 | 0.2873 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 48 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 38 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:ambiguous | recall_at_10 | 0.6667 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:ambiguous | mrr | 0.5278 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | recall_at_10 | 0.2000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | mrr | 0.0500 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.6364 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.5076 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.7778 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7222 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.7500 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.3552 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:compound | recall_at_10 | 0.4444 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:compound | mrr | 0.4444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 0.0000 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:context_overflow | mrr | 0.0000 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.4286 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:cross_lingual | mrr | 0.4286 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 1.0000 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:exact_term | recall_at_10 | 0.8750 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:exact_term | mrr | 0.8750 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | recall_at_10 | 0.8571 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | mrr | 0.8214 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:general | recall_at_10 | 0.8158 | 19 | 0.7958 | 0.8158 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.8596 | 19 | 0.8747 | 0.8947 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 0.8889 | 9 | 0.8689 | 0.8889 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 0.8889 | 9 | 0.7207 | 0.7407 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 1.0000 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 0.9643 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.8929 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:multi_turn | recall_at_10 | 0.5000 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:multi_turn | mrr | 0.4188 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.4062 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:scanned | recall_at_10 | 1.0000 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:scanned | mrr | 0.8125 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | mrr | 0.7857 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:selective_filter | recall_at_10 | 0.5000 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:selective_filter | mrr | 0.5000 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:table | recall_at_10 | 0.2500 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:table | mrr | 0.1875 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.5500 | 10 | 0.6800 | 0.7000 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:table | recall_at_10 | 0.4545 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.4091 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:typo | recall_at_10 | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:typo | mrr | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 55.0000 | 202 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 25.0000 | 202 | 600.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | total_p95 | retrieval_total |  | 32.0000 | 413 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 2.0000 | 413 | 600.0000 | n/a | n/a | n/a | pass |
 
-### ingest: run 6bf95da3-e56e-48ec-af86-f8cb5c5e4a6c, run_config_hash a34a3fb2a24584a525b003a307ef0b4f3b8f8bbc181cb0423ebd1bf6ac10c6a6, report sha256 e8c74b0b5bcdfb4dd9f4f61be1a20c883fbae3451dc95f95f6195f8cbad822fe
+### ingest: run 1880ff8c-8ad3-49ef-b636-3b1132dbb973, run_config_hash b466df27e270cdfa9ed8fdf7736ac7ac7985e29430df041bf1381466026a519c, report sha256 9f02eb6bf128b963548d2ba55385307b7ed606797c74c6bab56f1d3a8c820828
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6575 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | mrr | 0.1667 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.3014 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.3699 | fail |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 0.6897 | 29 | 0.5317 | 0.5517 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 0.6538 | 26 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G1 (fail) | noise_gate | pair:en->it | mrr | 0.1667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | fail (noise_band) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.7515 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G2 (pass) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.7515 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.1951 | 328 | 0.2121 | 0.1921 | 0.0200 | 0.2346 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 62 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 52 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:ambiguous | recall_at_10 | 0.6667 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:ambiguous | mrr | 0.5278 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | recall_at_10 | 0.2000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | mrr | 0.0500 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:compound | recall_at_10 | 0.4444 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:compound | mrr | 0.4444 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.9091 | 11 | 0.7073 | 0.7273 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.7803 | 11 | 0.5709 | 0.5909 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7500 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.7500 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.3865 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:compound | recall_at_10 | 0.6667 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | mrr | 0.6111 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 0.1111 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:context_overflow | mrr | 0.1111 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.3913 | 23 | 0.3713 | 0.3913 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:cross_lingual | mrr | 0.3696 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:exact_term | recall_at_10 | 0.9231 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:exact_term | mrr | 0.8077 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:general | recall_at_10 | 0.8696 | 23 | 0.8496 | 0.8696 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | mrr | 0.8696 | 23 | 0.8061 | 0.8261 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 0.8333 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:exact_term | recall_at_10 | 1.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:exact_term | mrr | 0.8846 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.8393 | 28 | 0.8193 | 0.8393 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.8571 | 28 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 1.0000 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.4200 | 0.4400 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.1867 | 0.2067 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.5000 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:multi_turn | mrr | 0.4083 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.6967 | 0.7167 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 0.9643 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.8929 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.6250 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.5260 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:scanned | recall_at_10 | 1.0000 | 14 | 0.9086 | 0.9286 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:scanned | mrr | 0.9464 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:scanned | mrr | 0.9375 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:selective_filter | recall_at_10 | 0.5000 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:selective_filter | mrr | 0.5000 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:table | recall_at_10 | 0.5385 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:table | mrr | 0.5000 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.9000 | 10 | 0.6300 | 0.6500 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | recall_at_10 | 1.0000 | 16 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.8958 | 16 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:table_split | recall_at_10 | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:table_split | mrr | 0.6667 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:table_split | mrr | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:templated_collection | recall_at_10 | 0.4828 | 58 | 0.4110 | 0.4310 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:templated_collection | mrr | 0.3934 | 58 | 0.3707 | 0.3907 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:typo | recall_at_10 | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:typo | mrr | 0.1667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 52.0000 | 263 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 21.0000 | 263 | 600.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | total_p95 | retrieval_total |  | 47.0000 | 561 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 2.0000 | 561 | 600.0000 | n/a | n/a | n/a | pass |
 
 ## v2-default-hosted-fake (required): fail
 
-### prechunked: run 9cb184e7-240e-46f1-a2cf-477586539618, run_config_hash 4e9d2a67db083baa84cbc1f170c4d0bfb995ac0bfaeb50c764b734a60230b1c0, report sha256 529c47cfc17b67142600b5f13b535c75af7f2aefd45e388e66d3d249f67c2892
+### prechunked: run 6144812c-64c2-42f7-9777-29685b5837a9, run_config_hash 362f175a3ee577c1dc92eb64d87ffb1d47c2744a538b4df41e50b6835547ac7e, report sha256 9235b2967715b65973e535db5fe108b7efced44cdf4da1e32ff4f55848c33690
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.5556 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.4286 | n/a | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.5000 | n/a | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.5000 | n/a | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
-| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8333 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.0536 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.1030 | pass |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 0.5000 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 0.4286 | 21 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
-| G4 (pass) | category | category:ambiguous | recall_at_10 | 0.8333 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:ambiguous | mrr | 0.7083 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:colloquial | recall_at_10 | 0.8000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:colloquial | mrr | 0.3786 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:compound | recall_at_10 | 0.9259 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:compound | mrr | 0.9444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:cross_lingual | recall_at_10 | 0.4286 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:cross_lingual | mrr | 0.4286 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:exact_term | recall_at_10 | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:exact_term | mrr | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:general | recall_at_10 | 1.0000 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:general | mrr | 0.9643 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:multi_turn | recall_at_10 | 0.9375 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:multi_turn | mrr | 0.7958 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:scanned | recall_at_10 | 1.0000 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:scanned | mrr | 0.8125 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:selective_filter | recall_at_10 | 0.7500 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:selective_filter | mrr | 0.7500 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:table | recall_at_10 | 1.0000 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:table | mrr | 0.7708 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:typo | recall_at_10 | 0.6667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:typo | mrr | 0.5000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 80.0000 | 202 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 58.0000 | 202 | 600.0000 | n/a | n/a | n/a | pass |
+| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.9047 | 236 | 0.6643 | 0.6843 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.0339 | 236 | 0.2573 | 0.2373 | 0.0200 | 0.0603 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 48 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 38 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:ambiguous | recall_at_10 | 0.8333 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:ambiguous | mrr | 0.7083 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 1.0000 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.8636 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7778 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.9375 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.6725 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | recall_at_10 | 0.8889 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | mrr | 0.9444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 1.0000 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | mrr | 0.8889 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.4286 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cross_lingual | mrr | 0.4286 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 1.0000 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:exact_term | recall_at_10 | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:exact_term | mrr | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.9211 | 19 | 0.7958 | 0.8158 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.9474 | 19 | 0.8747 | 0.8947 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.8689 | 0.8889 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.7207 | 0.7407 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 1.0000 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 1.0000 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.8810 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.9375 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.7865 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | recall_at_10 | 0.7500 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | mrr | 0.7500 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:selective_filter | recall_at_10 | 0.7500 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:selective_filter | mrr | 0.7500 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.6500 | 10 | 0.6800 | 0.7000 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:table | recall_at_10 | 1.0000 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.8333 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:typo | recall_at_10 | 0.6667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:typo | mrr | 0.5000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G5 (pass) | total_p95 | retrieval_total |  | 150.0000 | 413 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 127.0000 | 413 | 600.0000 | n/a | n/a | n/a | pass |
 
-### ingest: run f764cb0b-2264-470d-9a3f-34881abe557e, run_config_hash 3c0911137cce6db7a0224259a626fd5c96648c97f9f751ee3f5149dab1447904, report sha256 187892e49d2fd0a47cfb2b757cfadcf76638dc59ab357708912d32a39c91f436
+### ingest: run 39eca42d-17ee-41dc-8ac4-669cf1e12fa5, run_config_hash b12856ebeb271162fc413d943beaae24145d904ed2878f21fb70351a793ef7a5, report sha256 2049df23b22340d6bf7b04993ff08816aa98b7c91a7afaa5879b1bc9b06aa584
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3636 | n/a | 0.4345 | 0.4545 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.5000 | n/a | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.3000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3793 | n/a | 0.5317 | 0.5517 | n/a | n/a | fail (noise_band) |
-| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8721 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | pass |
-| G2 (pass) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.8721 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.0274 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.0616 | pass |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 0.3793 | 29 | 0.5317 | 0.5517 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 0.3077 | 26 | 0.4800 | 0.5000 | 0.0200 | n/a | fail |
+| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.9565 | 23 | 0.9800 | 1.0000 | 0.0200 | n/a | fail (noise_band) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8796 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G2 (pass) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.8796 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.0396 | 328 | 0.2121 | 0.1921 | 0.0200 | 0.0623 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 0.9839 | 62 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 0.9808 | 52 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
 | G4 (pass) | category | category:ambiguous | recall_at_10 | 0.8333 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (pass) | category | category:ambiguous | mrr | 0.7083 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:colloquial | recall_at_10 | 0.8000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:colloquial | mrr | 0.3786 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:compound | recall_at_10 | 0.9259 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:cache_near_miss | recall_at_10 | 1.0000 | 11 | 0.7073 | 0.7273 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:cache_near_miss | mrr | 0.8636 | 11 | 0.5709 | 0.5909 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:cache_paraphrase | mrr | 0.7500 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:colloquial | recall_at_10 | 0.9375 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:colloquial | mrr | 0.6740 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:compound | recall_at_10 | 0.8889 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | pass |
 | G4 (pass) | category | category:compound | mrr | 0.9444 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:context_overflow | recall_at_10 | 1.0000 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:context_overflow | mrr | 1.0000 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
 | G4 (pass) | category | category:cross_lingual | recall_at_10 | 0.3913 | 23 | 0.3713 | 0.3913 | 0.0200 | n/a | pass |
 | G4 (pass) | category | category:cross_lingual | mrr | 0.3913 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:duplicate_flood | recall_at_10 | 1.0000 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (pass) | category | category:exact_term | recall_at_10 | 1.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
 | G4 (pass) | category | category:exact_term | mrr | 0.9615 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:general | recall_at_10 | 1.0000 | 23 | 0.8496 | 0.8696 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:general | mrr | 0.9565 | 23 | 0.8061 | 0.8261 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:general | recall_at_10 | 0.9464 | 28 | 0.8193 | 0.8393 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:general | mrr | 0.9464 | 28 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:implicit_condition | mrr | 0.9286 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (pass) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (pass) | category | category:injection | mrr | 0.6000 | 5 | 0.4200 | 0.4400 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.1867 | 0.2067 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.6967 | 0.7167 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:multi_step_calc | recall_at_10 | 1.0000 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:multi_step_calc | mrr | 0.8810 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
 | G4 (pass) | category | category:multi_turn | recall_at_10 | 0.9375 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:multi_turn | mrr | 0.7958 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:multi_turn | mrr | 0.7865 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
 | G4 (pass) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (pass) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (pass) | category | category:scanned | recall_at_10 | 1.0000 | 14 | 0.9086 | 0.9286 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:scanned | mrr | 0.9429 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:selective_filter | recall_at_10 | 1.0000 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:selective_filter | mrr | 1.0000 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:scanned | mrr | 0.9388 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:selective_filter | recall_at_10 | 0.8750 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:selective_filter | mrr | 0.8750 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
 | G4 (pass) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (pass) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:table | recall_at_10 | 1.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:table | mrr | 0.8590 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:stale_version | mrr | 0.7500 | 10 | 0.6300 | 0.6500 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:table | recall_at_10 | 1.0000 | 16 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:table | mrr | 0.8854 | 16 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
 | G4 (pass) | category | category:table_split | recall_at_10 | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (pass) | category | category:table_split | mrr | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:templated_collection | recall_at_10 | 0.7069 | 58 | 0.4110 | 0.4310 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:templated_collection | mrr | 0.6059 | 58 | 0.3707 | 0.3907 | 0.0200 | n/a | pass |
 | G4 (pass) | category | category:typo | recall_at_10 | 0.6667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (pass) | category | category:typo | mrr | 0.5000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 91.0000 | 263 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 59.0000 | 263 | 600.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | total_p95 | retrieval_total |  | 115.0000 | 561 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 76.0000 | 561 | 600.0000 | n/a | n/a | n/a | pass |
 
 ## v2-default-hosted-fake-no-cells (required): fail
 
-### prechunked: run 2017f9e8-196e-4a23-a8c0-97cf6ff1b272, run_config_hash f9b32533547a799a2915e3f8ee3e7ee4112dd98c112b1fa8374e18628eb4bb9b, report sha256 bb9b276b889a4fc0d0181de6b8def372e8491a775c79e202f421e66807ed7d39
+### prechunked: run 97af1a22-1994-4882-9143-0ece04fb6ff0, run_config_hash d73e69f0f85938042a0a76c1331573ef252488a8a4d095cfd9008cf13948f8dc, report sha256 2bb5062dc95eab2ab605b6ef68a078240f6a0e44ea52d6ab1e58755265b02a3c
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
-| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.5893 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
-| G3 (pass) | refusal | overall | false_refusal_rate | 0.3750 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.4566 | pass |
-| G3 (pass) | refusal | overall | correct_refusal_rate | 0.7083 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | pass |
-| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 0.6667 | 21 | 0.6467 | 0.6667 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:ambiguous | recall_at_10 | 0.6667 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:ambiguous | mrr | 0.5417 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:colloquial | recall_at_10 | 0.2000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:colloquial | mrr | 0.0286 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:compound | recall_at_10 | 0.4444 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:compound | mrr | 0.4444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:cross_lingual | recall_at_10 | 0.4286 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:cross_lingual | mrr | 0.4286 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:exact_term | recall_at_10 | 0.8750 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:exact_term | mrr | 0.8750 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:general | recall_at_10 | 0.8571 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:general | mrr | 0.8571 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:multi_turn | recall_at_10 | 0.5000 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:multi_turn | mrr | 0.4000 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:scanned | recall_at_10 | 1.0000 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:scanned | mrr | 0.8125 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:selective_filter | recall_at_10 | 0.5000 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:selective_filter | mrr | 0.5000 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:table | recall_at_10 | 0.2500 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:table | mrr | 0.1875 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:typo | recall_at_10 | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:typo | mrr | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 85.0000 | 202 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 59.0000 | 202 | 600.0000 | n/a | n/a | n/a | pass |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.7352 | 236 | 0.6643 | 0.6843 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.2373 | 236 | 0.2573 | 0.2373 | 0.0200 | 0.2873 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 48 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 38 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:ambiguous | recall_at_10 | 0.6667 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:ambiguous | mrr | 0.5417 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.6364 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.5000 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.7778 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7222 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.7500 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.5631 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | recall_at_10 | 0.4444 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | mrr | 0.4444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 0.3333 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | mrr | 0.3333 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.4286 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cross_lingual | mrr | 0.4286 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 1.0000 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:exact_term | recall_at_10 | 0.8750 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:exact_term | mrr | 0.8750 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.8158 | 19 | 0.7958 | 0.8158 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.8684 | 19 | 0.8747 | 0.8947 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 0.8889 | 9 | 0.8689 | 0.8889 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 0.8889 | 9 | 0.7207 | 0.7407 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 1.0000 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 0.9643 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.8631 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.5000 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.3958 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | recall_at_10 | 0.7500 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | mrr | 0.7500 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:selective_filter | recall_at_10 | 0.5000 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:selective_filter | mrr | 0.5000 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.6500 | 10 | 0.6800 | 0.7000 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:table | recall_at_10 | 0.4545 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.4091 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:typo | recall_at_10 | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:typo | mrr | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G5 (pass) | total_p95 | retrieval_total |  | 155.0000 | 413 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 132.0000 | 413 | 600.0000 | n/a | n/a | n/a | pass |
 
-### ingest: run f6adcb11-173f-44c7-823a-68e8683ae8cd, run_config_hash 291a5ddd38c4e6f913feea26ee16773b175cd7940b8b54dfe582de9da6de2ff8, report sha256 eb165ca641b9042c4058ce03aaad63c1bbe4c340ad41b9e7ee29a63cdab68f28
+### ingest: run 84079729-a8e9-4180-9bb5-989433459509, run_config_hash 863ef204e82d3f6a9e939811803587101f0f17d1b781eaea5c7df137684f1620, report sha256 6865237bc73b43b09b0df873528d59f9ad27be5e8c3ab4b15fe3954d00cb0c35
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6575 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
-| G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.3014 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.3699 | fail |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 0.6897 | 29 | 0.5317 | 0.5517 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 0.6538 | 26 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 8 skipped) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.7759 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G2 (pass) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.7759 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.1951 | 328 | 0.2121 | 0.1921 | 0.0200 | 0.2346 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 62 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 52 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:ambiguous | recall_at_10 | 0.6667 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:ambiguous | mrr | 0.5417 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | recall_at_10 | 0.2000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | mrr | 0.0286 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:compound | recall_at_10 | 0.4444 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:compound | mrr | 0.4444 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.9091 | 11 | 0.7073 | 0.7273 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.7727 | 11 | 0.5709 | 0.5909 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7500 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.7500 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.5646 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | recall_at_10 | 0.6667 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | mrr | 0.6111 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 0.7778 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | mrr | 0.7778 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.3913 | 23 | 0.3713 | 0.3913 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:cross_lingual | mrr | 0.3913 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:exact_term | recall_at_10 | 0.9231 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:exact_term | mrr | 0.8846 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | recall_at_10 | 0.8696 | 23 | 0.8496 | 0.8696 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | mrr | 0.8696 | 23 | 0.8061 | 0.8261 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 1.0000 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:exact_term | recall_at_10 | 1.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:exact_term | mrr | 0.9615 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.8393 | 28 | 0.8193 | 0.8393 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.8750 | 28 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 0.9286 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.4200 | 0.4400 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.1867 | 0.2067 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.5000 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:multi_turn | mrr | 0.4000 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.6967 | 0.7167 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 0.9643 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.8631 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.6250 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.5208 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:scanned | recall_at_10 | 1.0000 | 14 | 0.9086 | 0.9286 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:scanned | mrr | 0.9429 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:scanned | mrr | 0.9388 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:selective_filter | recall_at_10 | 0.5000 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:selective_filter | mrr | 0.5000 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:table | recall_at_10 | 0.5385 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:table | mrr | 0.5000 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.7500 | 10 | 0.6300 | 0.6500 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | recall_at_10 | 1.0000 | 16 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.8854 | 16 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:table_split | recall_at_10 | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:table_split | mrr | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:templated_collection | recall_at_10 | 0.5000 | 58 | 0.4110 | 0.4310 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:templated_collection | mrr | 0.4526 | 58 | 0.3707 | 0.3907 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:typo | recall_at_10 | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:typo | mrr | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 85.0000 | 263 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 55.0000 | 263 | 600.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | total_p95 | retrieval_total |  | 119.0000 | 561 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 77.0000 | 561 | 600.0000 | n/a | n/a | n/a | pass |
 
 ## v2-default-similarity-floor (candidate): fail
 
-### prechunked: run 5b827bb0-0556-458c-82c2-d2efd37c8119, run_config_hash 10061e1c920495496ce01bf77c6c579aeab0354c43c00a5a19b63031e4f2c3bb, report sha256 36ac9082a2ec42ea8c5112a45aa38dac413c7a88346e4edf13112dde4cac71e6
+### prechunked: run 367a7f47-caf4-4733-88dd-7c431b0c28a4, run_config_hash 31ecefdf29cb13903734c081755bdef32c5599cc5259ac039088ddef1645632f, report sha256 365843ab783827dfda22799c9484dadf5e238135a7f91b69114aa4111c541007
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3333 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.2857 | n/a | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.5000 | n/a | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3750 | n/a | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
-| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8810 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.0268 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.0678 | pass |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 0.3750 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 0.2857 | 21 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
-| G4 (pass) | category | category:ambiguous | recall_at_10 | 1.0000 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:ambiguous | mrr | 0.7778 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:colloquial | recall_at_10 | 0.8000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:colloquial | mrr | 0.4900 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:compound | recall_at_10 | 0.9630 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:compound | mrr | 0.9444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:cross_lingual | recall_at_10 | 0.5238 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:cross_lingual | mrr | 0.4425 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:exact_term | recall_at_10 | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:exact_term | mrr | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:general | recall_at_10 | 1.0000 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:general | mrr | 0.9643 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:multi_turn | recall_at_10 | 0.9375 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:multi_turn | mrr | 0.7833 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:scanned | recall_at_10 | 1.0000 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:scanned | mrr | 0.8125 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:selective_filter | recall_at_10 | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:selective_filter | mrr | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:table | recall_at_10 | 1.0000 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:table | mrr | 0.7917 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:typo | recall_at_10 | 1.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:typo | mrr | 0.6667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 42.0000 | 202 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 18.0000 | 202 | 600.0000 | n/a | n/a | n/a | pass |
-
-### ingest: run ad5f41bd-de9d-4e50-9a32-58d82856c9fc, run_config_hash f748851d4904090c141ad365b48875e51fa8715a5815308764aa88bbf2ab0aba, report sha256 d081af74c445c7b88bd83df55e376c7628f0952d95a13345277f393eaee03d6e
-
-| Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | category:cross_lingual | false_refusal_rate | 1.0000 | n/a | 0.4113 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | mrr | 0.0000 | n/a | 0.3496 | 0.3696 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_10 | 0.0000 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_5 | 0.0000 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.8095 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | mrr | 0.1746 | n/a | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.1905 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.1905 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.9231 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | mrr | 0.0641 | n/a | 0.4911 | 0.5111 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.0769 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.0769 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.9318 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | mrr | 0.0568 | n/a | 0.6323 | 0.6523 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.0682 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.0682 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.8767 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | mrr | 0.1096 | n/a | 0.5805 | 0.6005 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.1233 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.1233 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | mrr | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_10 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_5 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | false_refusal_rate | 1.0000 | n/a | 0.4200 | 0.4000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | mrr | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_10 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_5 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | false_refusal_rate | 1.0000 | n/a | 0.4486 | 0.4286 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | mrr | 0.0000 | n/a | 0.1943 | 0.2143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | recall_at_10 | 0.0000 | n/a | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | recall_at_5 | 0.0000 | n/a | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | false_refusal_rate | 1.0000 | n/a | 0.5200 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | mrr | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_10 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_5 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.1233 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.1233 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.8767 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.9188 | fail |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 1.0000 | 29 | 0.5317 | 0.5517 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 26 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:ambiguous | recall_at_10 | 0.0000 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:ambiguous | mrr | 0.0000 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | recall_at_10 | 0.0000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | mrr | 0.0000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:compound | recall_at_10 | 0.1111 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:compound | mrr | 0.1111 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.0000 | 23 | 0.3713 | 0.3913 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:cross_lingual | mrr | 0.0000 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:exact_term | recall_at_10 | 0.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:exact_term | mrr | 0.0000 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:general | recall_at_10 | 0.1304 | 23 | 0.8496 | 0.8696 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:general | mrr | 0.1304 | 23 | 0.8061 | 0.8261 | 0.0200 | n/a | fail |
+| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8665 | 236 | 0.6643 | 0.6843 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.0508 | 236 | 0.2573 | 0.2373 | 0.0200 | 0.0811 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 48 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 38 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:ambiguous | recall_at_10 | 0.8333 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:ambiguous | mrr | 0.6944 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.9091 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.7803 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7778 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.8125 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.4177 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:compound | recall_at_10 | 0.8889 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | mrr | 0.9444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 0.1111 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:context_overflow | mrr | 0.0278 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.4286 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cross_lingual | mrr | 0.4286 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 1.0000 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:exact_term | recall_at_10 | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:exact_term | mrr | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.9211 | 19 | 0.7958 | 0.8158 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.9649 | 19 | 0.8747 | 0.8947 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.8689 | 0.8889 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.7207 | 0.7407 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 1.0000 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.4200 | 0.4400 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | recall_at_10 | 0.6000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | mrr | 0.6000 | 5 | 0.1867 | 0.2067 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.0000 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:multi_turn | mrr | 0.0000 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 1.0000 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.9107 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.8750 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.6927 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:scanned | recall_at_10 | 0.2857 | 14 | 0.9086 | 0.9286 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:scanned | mrr | 0.2857 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:selective_filter | recall_at_10 | 0.1250 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:selective_filter | mrr | 0.1250 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | recall_at_10 | 1.0000 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | mrr | 0.7857 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:selective_filter | recall_at_10 | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:selective_filter | mrr | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:table | recall_at_10 | 0.0769 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:table | mrr | 0.0769 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:table_split | recall_at_10 | 0.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:table_split | mrr | 0.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:typo | recall_at_10 | 0.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:typo | mrr | 0.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 46.0000 | 263 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 19.0000 | 263 | 600.0000 | n/a | n/a | n/a | pass |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.5500 | 10 | 0.6800 | 0.7000 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:table | recall_at_10 | 1.0000 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.8485 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:typo | recall_at_10 | 1.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:typo | mrr | 0.6111 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G5 (pass) | total_p95 | retrieval_total |  | 32.0000 | 413 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 2.0000 | 413 | 600.0000 | n/a | n/a | n/a | pass |
+
+### ingest: run b805ed62-1b1b-43e8-873e-cdaf1e4f9db2, run_config_hash 4af115a287fa5eed90ebe9628c3131b56b3021522cd6262ba917dba9c4664beb, report sha256 092b41c252b94f508856811b80db4d87dfe55005de885b68b54f5a8af77af566
+
+| Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.9565 | 23 | 0.9800 | 1.0000 | 0.0200 | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | mrr | 0.1667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | fail (noise_band) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8171 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G2 (pass) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.8171 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.0488 | 328 | 0.2121 | 0.1921 | 0.0200 | 0.0731 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 0.9839 | 62 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 0.9808 | 52 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:ambiguous | recall_at_10 | 0.8333 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:ambiguous | mrr | 0.6944 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.9091 | 11 | 0.7073 | 0.7273 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.7803 | 11 | 0.5709 | 0.5909 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7500 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.8125 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.4490 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:compound | recall_at_10 | 0.8889 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | mrr | 0.9444 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 0.1667 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:context_overflow | mrr | 0.1270 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.3913 | 23 | 0.3713 | 0.3913 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cross_lingual | mrr | 0.3696 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 0.8333 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:exact_term | recall_at_10 | 1.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:exact_term | mrr | 0.8846 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.9464 | 28 | 0.8193 | 0.8393 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.9375 | 28 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 1.0000 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.4200 | 0.4400 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.6967 | 0.7167 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 1.0000 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.9107 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.8125 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.6719 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | recall_at_10 | 1.0000 | 14 | 0.9086 | 0.9286 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:scanned | mrr | 0.9375 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:selective_filter | recall_at_10 | 0.7500 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:selective_filter | mrr | 0.7500 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.9000 | 10 | 0.6300 | 0.6500 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | recall_at_10 | 1.0000 | 16 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.8958 | 16 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table_split | recall_at_10 | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:table_split | mrr | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:templated_collection | recall_at_10 | 0.5862 | 58 | 0.4110 | 0.4310 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:templated_collection | mrr | 0.4131 | 58 | 0.3707 | 0.3907 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:typo | recall_at_10 | 1.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:typo | mrr | 0.4444 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G5 (pass) | total_p95 | retrieval_total |  | 42.0000 | 561 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 2.0000 | 561 | 600.0000 | n/a | n/a | n/a | pass |
 
 ## v2-default-similarity-floor-no-cells (candidate): fail
 
-### prechunked: run 8c41efbc-cdd1-4a4e-a7cb-1196943e97f8, run_config_hash 58b5193622f3b8432e268db7adeca59b32d4274bfe643a42443b4ca3baa1c8b8, report sha256 2709a9de5d7e8557ef5e13396a74905a7f48411626eb36d1c9a31a77e849b013
+### prechunked: run 0dd13327-d3b4-4376-8383-8ed9abc2db09, run_config_hash b496f3cc354fd4e5ce7399941a2b6f8072ef66c24fd66e3889a3b462d06d7258, report sha256 84dd4c1b15fb3e18b1cf827f62e0d08e3ca5eadfce9e8d9b6f4201b545cbedb4
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3333 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.2857 | n/a | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.5000 | n/a | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3750 | n/a | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
-| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8810 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.0268 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.0678 | pass |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 0.3750 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 0.2857 | 21 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
-| G4 (pass) | category | category:ambiguous | recall_at_10 | 1.0000 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:ambiguous | mrr | 0.7778 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:colloquial | recall_at_10 | 0.8000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:colloquial | mrr | 0.4900 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:compound | recall_at_10 | 0.9630 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:compound | mrr | 0.9444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:cross_lingual | recall_at_10 | 0.5238 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:cross_lingual | mrr | 0.4425 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:exact_term | recall_at_10 | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:exact_term | mrr | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:general | recall_at_10 | 1.0000 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:general | mrr | 0.9643 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:multi_turn | recall_at_10 | 0.9375 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:multi_turn | mrr | 0.7833 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:scanned | recall_at_10 | 1.0000 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:scanned | mrr | 0.8125 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:selective_filter | recall_at_10 | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:selective_filter | mrr | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:table | recall_at_10 | 1.0000 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:table | mrr | 0.7917 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:typo | recall_at_10 | 1.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:typo | mrr | 0.6667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 44.0000 | 202 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 19.0000 | 202 | 600.0000 | n/a | n/a | n/a | pass |
-
-### ingest: run ca58bf6f-e5fd-413d-87a8-cd2cf3b46abe, run_config_hash 96de6d78819bbc852ffa9398caf0e7171400b2a05070daa47e67f45c6eb020a4, report sha256 34618dc7a6daf4d262ec72fa89a573472fda70f140e067479f911ff173dba475
-
-| Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | category:cross_lingual | false_refusal_rate | 1.0000 | n/a | 0.4113 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | mrr | 0.0000 | n/a | 0.3496 | 0.3696 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_10 | 0.0000 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_5 | 0.0000 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.8095 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | mrr | 0.1746 | n/a | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.1905 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.1905 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.9231 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | mrr | 0.0641 | n/a | 0.4911 | 0.5111 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.0769 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.0769 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.9318 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | mrr | 0.0568 | n/a | 0.6323 | 0.6523 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.0682 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.0682 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.8767 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | mrr | 0.1096 | n/a | 0.5805 | 0.6005 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.1233 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.1233 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | mrr | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_10 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_5 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | false_refusal_rate | 1.0000 | n/a | 0.4200 | 0.4000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | mrr | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_10 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_5 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | false_refusal_rate | 1.0000 | n/a | 0.4486 | 0.4286 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | mrr | 0.0000 | n/a | 0.1943 | 0.2143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | recall_at_10 | 0.0000 | n/a | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | recall_at_5 | 0.0000 | n/a | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | false_refusal_rate | 1.0000 | n/a | 0.5200 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | mrr | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_10 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_5 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.1233 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.1233 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.8767 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.9188 | fail |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 1.0000 | 29 | 0.5317 | 0.5517 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 26 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:ambiguous | recall_at_10 | 0.0000 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:ambiguous | mrr | 0.0000 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | recall_at_10 | 0.0000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | mrr | 0.0000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:compound | recall_at_10 | 0.1111 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:compound | mrr | 0.1111 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.0000 | 23 | 0.3713 | 0.3913 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:cross_lingual | mrr | 0.0000 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:exact_term | recall_at_10 | 0.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:exact_term | mrr | 0.0000 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:general | recall_at_10 | 0.1304 | 23 | 0.8496 | 0.8696 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:general | mrr | 0.1304 | 23 | 0.8061 | 0.8261 | 0.0200 | n/a | fail |
+| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8665 | 236 | 0.6643 | 0.6843 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.0508 | 236 | 0.2573 | 0.2373 | 0.0200 | 0.0811 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 48 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 38 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:ambiguous | recall_at_10 | 0.8333 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:ambiguous | mrr | 0.6944 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.9091 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.7803 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7778 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.8125 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.4177 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:compound | recall_at_10 | 0.8889 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | mrr | 0.9444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 0.1111 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:context_overflow | mrr | 0.0278 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.4286 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cross_lingual | mrr | 0.4286 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 1.0000 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:exact_term | recall_at_10 | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:exact_term | mrr | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.9211 | 19 | 0.7958 | 0.8158 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.9649 | 19 | 0.8747 | 0.8947 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.8689 | 0.8889 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.7207 | 0.7407 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 1.0000 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.4200 | 0.4400 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | recall_at_10 | 0.6000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | mrr | 0.6000 | 5 | 0.1867 | 0.2067 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.0000 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:multi_turn | mrr | 0.0000 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 1.0000 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.9107 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.8750 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.6927 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:scanned | recall_at_10 | 0.2857 | 14 | 0.9086 | 0.9286 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:scanned | mrr | 0.2857 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:selective_filter | recall_at_10 | 0.1250 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:selective_filter | mrr | 0.1250 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | recall_at_10 | 1.0000 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | mrr | 0.7857 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:selective_filter | recall_at_10 | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:selective_filter | mrr | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:table | recall_at_10 | 0.0769 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:table | mrr | 0.0769 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:table_split | recall_at_10 | 0.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:table_split | mrr | 0.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:typo | recall_at_10 | 0.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:typo | mrr | 0.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 50.0000 | 263 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 21.0000 | 263 | 600.0000 | n/a | n/a | n/a | pass |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.5500 | 10 | 0.6800 | 0.7000 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:table | recall_at_10 | 1.0000 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.8485 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:typo | recall_at_10 | 1.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:typo | mrr | 0.6111 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G5 (pass) | total_p95 | retrieval_total |  | 26.0000 | 413 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 2.0000 | 413 | 600.0000 | n/a | n/a | n/a | pass |
+
+### ingest: run eb8e54fb-604c-48c9-8a9c-5662d51a9f8c, run_config_hash 397827af39939f0f0ff4becdfb842e5f5c70a1c1770d90b0e7621e96b8344c04, report sha256 37e65833efb6423c983f42728023c7f2451f6b8da6bc8454019db1a3e2a1493b
+
+| Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.9565 | 23 | 0.9800 | 1.0000 | 0.0200 | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | mrr | 0.1667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | fail (noise_band) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8171 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G2 (pass) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.8171 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.0488 | 328 | 0.2121 | 0.1921 | 0.0200 | 0.0731 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 0.9839 | 62 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 0.9808 | 52 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:ambiguous | recall_at_10 | 0.8333 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:ambiguous | mrr | 0.6944 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.9091 | 11 | 0.7073 | 0.7273 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.7803 | 11 | 0.5709 | 0.5909 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7500 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.8125 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.4490 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:compound | recall_at_10 | 0.8889 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | mrr | 0.9444 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 0.1667 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:context_overflow | mrr | 0.1270 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.3913 | 23 | 0.3713 | 0.3913 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cross_lingual | mrr | 0.3696 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 0.8333 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:exact_term | recall_at_10 | 1.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:exact_term | mrr | 0.8846 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.9464 | 28 | 0.8193 | 0.8393 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.9375 | 28 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 1.0000 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.4200 | 0.4400 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.6967 | 0.7167 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 1.0000 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.9107 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.8125 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.6719 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | recall_at_10 | 1.0000 | 14 | 0.9086 | 0.9286 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:scanned | mrr | 0.9375 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:selective_filter | recall_at_10 | 0.7500 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:selective_filter | mrr | 0.7500 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.9000 | 10 | 0.6300 | 0.6500 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | recall_at_10 | 1.0000 | 16 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.8958 | 16 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table_split | recall_at_10 | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:table_split | mrr | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:templated_collection | recall_at_10 | 0.5862 | 58 | 0.4110 | 0.4310 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:templated_collection | mrr | 0.4131 | 58 | 0.3707 | 0.3907 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:typo | recall_at_10 | 1.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:typo | mrr | 0.4444 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G5 (pass) | total_p95 | retrieval_total |  | 44.0000 | 561 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 2.0000 | 561 | 600.0000 | n/a | n/a | n/a | pass |
 
 ## v2-default-similarity-floor-hosted-fake (candidate): fail
 
-### prechunked: run 40898575-241e-4b38-ba0a-d009656dd4a9, run_config_hash 4ca16428c0e6897f3b17c1bbe1b98fb1234d720883640f9d1d0b881ce774c2e5, report sha256 8cf79f39d43210dfe7f178f9c9f43202a8545ad855dae0a36e2c475a9d0a8017
+### prechunked: run c983fab5-fcad-4bbe-97e2-7d9ca8c0377a, run_config_hash 01f47170680ed1ad8a3630a3a282c51c72dfe3eb789000a69f52fc708d44adf7, report sha256 a582bcbb3af4cb78ba655a618a26722bbaa5423480a46d068222e2921412fbab
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.4444 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.2857 | n/a | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.3750 | n/a | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3750 | n/a | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
-| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8601 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.0089 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.0417 | pass |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 0.3750 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 0.2857 | 21 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
-| G4 (pass) | category | category:ambiguous | recall_at_10 | 1.0000 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:ambiguous | mrr | 0.8750 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:colloquial | recall_at_10 | 0.8000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:colloquial | mrr | 0.3786 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:compound | recall_at_10 | 0.9259 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:compound | mrr | 0.9444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:cross_lingual | recall_at_10 | 0.4286 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:cross_lingual | mrr | 0.4286 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:exact_term | recall_at_10 | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:exact_term | mrr | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:general | recall_at_10 | 1.0000 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:general | mrr | 0.9643 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:multi_turn | recall_at_10 | 0.9375 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:multi_turn | mrr | 0.7958 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:scanned | recall_at_10 | 1.0000 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:scanned | mrr | 0.8125 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:selective_filter | recall_at_10 | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:selective_filter | mrr | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:table | recall_at_10 | 1.0000 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:table | mrr | 0.7708 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:typo | recall_at_10 | 1.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:typo | mrr | 0.8333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 86.0000 | 202 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 62.0000 | 202 | 600.0000 | n/a | n/a | n/a | pass |
-
-### ingest: run 98923df2-3b9c-42c0-abb3-22dd4096b543, run_config_hash d74410a11dbb5e07b4448d97562e40b57f2cfd074b682587f6c69c85312af46b, report sha256 f8a1db2b9937fcc90721b68ec486f5a4e3e40dfd900261ef461b89a87ab11287
-
-| Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | category:cross_lingual | mrr | 0.0870 | n/a | 0.3496 | 0.3696 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_10 | 0.0870 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_5 | 0.0870 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3636 | n/a | 0.4345 | 0.4545 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.5000 | n/a | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.3000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3793 | n/a | 0.5317 | 0.5517 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | mrr | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_10 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_5 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | mrr | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_10 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_5 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | false_refusal_rate | 0.6667 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | mrr | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_10 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_5 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8037 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | pass |
-| G2 (pass) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.8037 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.0959 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.1458 | pass |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 0.3793 | 29 | 0.5317 | 0.5517 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 0.3077 | 26 | 0.4800 | 0.5000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:ambiguous | recall_at_10 | 0.6667 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:ambiguous | mrr | 0.5417 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | recall_at_10 | 0.8000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | mrr | 0.3786 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:compound | recall_at_10 | 0.9259 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:compound | mrr | 0.9444 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.0870 | 23 | 0.3713 | 0.3913 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:cross_lingual | mrr | 0.0870 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:exact_term | recall_at_10 | 0.9231 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:exact_term | mrr | 0.8846 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | recall_at_10 | 1.0000 | 23 | 0.8496 | 0.8696 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | mrr | 0.9565 | 23 | 0.8061 | 0.8261 | 0.0200 | n/a | pass |
+| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.9131 | 236 | 0.6643 | 0.6843 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.0254 | 236 | 0.2573 | 0.2373 | 0.0200 | 0.0496 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 48 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 38 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:ambiguous | recall_at_10 | 0.8333 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:ambiguous | mrr | 0.7083 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 1.0000 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.8636 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7778 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.9375 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.6725 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | recall_at_10 | 0.8889 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | mrr | 0.9444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 1.0000 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | mrr | 0.8889 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.4286 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cross_lingual | mrr | 0.4286 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 1.0000 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:exact_term | recall_at_10 | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:exact_term | mrr | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.9211 | 19 | 0.7958 | 0.8158 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.9474 | 19 | 0.8747 | 0.8947 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.8689 | 0.8889 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.7207 | 0.7407 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 1.0000 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.4200 | 0.4400 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.1867 | 0.2067 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.8750 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:multi_turn | mrr | 0.7333 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 1.0000 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.8810 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.9375 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.7865 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:scanned | recall_at_10 | 1.0000 | 14 | 0.9086 | 0.9286 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:scanned | mrr | 0.9429 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:selective_filter | recall_at_10 | 1.0000 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:selective_filter | mrr | 1.0000 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | recall_at_10 | 0.7500 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | mrr | 0.7500 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:selective_filter | recall_at_10 | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:selective_filter | mrr | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:table | recall_at_10 | 1.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:table | mrr | 0.8590 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:table_split | recall_at_10 | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:table_split | mrr | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:typo | recall_at_10 | 0.6667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:typo | mrr | 0.5000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 88.0000 | 263 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 58.0000 | 263 | 600.0000 | n/a | n/a | n/a | pass |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.6500 | 10 | 0.6800 | 0.7000 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:table | recall_at_10 | 1.0000 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.8333 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:typo | recall_at_10 | 1.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:typo | mrr | 0.8333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G5 (pass) | total_p95 | retrieval_total |  | 151.0000 | 413 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 129.0000 | 413 | 600.0000 | n/a | n/a | n/a | pass |
+
+### ingest: run d5d94fcd-ba51-41bf-899d-766f3dd55806, run_config_hash 7d54557d1b987d0b78d63f1cfdad61c03b30797109c1dd901893601bbe4286fa, report sha256 07f86aa58b7d549830ea57d7aa4a1bde9bbb509412d9331c1ed33d33b4517b83
+
+| Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.9565 | 23 | 0.9800 | 1.0000 | 0.0200 | n/a | fail (noise_band) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8887 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G2 (pass) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.8887 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.0213 | 328 | 0.2121 | 0.1921 | 0.0200 | 0.0397 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 0.9839 | 62 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 0.9808 | 52 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:ambiguous | recall_at_10 | 0.8333 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:ambiguous | mrr | 0.7083 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:cache_near_miss | recall_at_10 | 1.0000 | 11 | 0.7073 | 0.7273 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:cache_near_miss | mrr | 0.8636 | 11 | 0.5709 | 0.5909 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:cache_paraphrase | mrr | 0.7500 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:colloquial | recall_at_10 | 0.9375 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:colloquial | mrr | 0.6740 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:compound | recall_at_10 | 0.8889 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:compound | mrr | 0.9444 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:context_overflow | recall_at_10 | 1.0000 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:context_overflow | mrr | 1.0000 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:cross_lingual | recall_at_10 | 0.3913 | 23 | 0.3713 | 0.3913 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:cross_lingual | mrr | 0.3913 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:duplicate_flood | recall_at_10 | 1.0000 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:exact_term | recall_at_10 | 1.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:exact_term | mrr | 0.9615 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:general | recall_at_10 | 0.9464 | 28 | 0.8193 | 0.8393 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:general | mrr | 0.9464 | 28 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:implicit_condition | mrr | 0.9286 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:injection | mrr | 0.6000 | 5 | 0.4200 | 0.4400 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.6967 | 0.7167 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:multi_step_calc | recall_at_10 | 1.0000 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:multi_step_calc | mrr | 0.8810 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:multi_turn | recall_at_10 | 0.9375 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:multi_turn | mrr | 0.7865 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:scanned | recall_at_10 | 1.0000 | 14 | 0.9086 | 0.9286 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:scanned | mrr | 0.9388 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:selective_filter | recall_at_10 | 0.8750 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:selective_filter | mrr | 0.8750 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:stale_version | mrr | 0.7500 | 10 | 0.6300 | 0.6500 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:table | recall_at_10 | 1.0000 | 16 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:table | mrr | 0.8854 | 16 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:table_split | recall_at_10 | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:table_split | mrr | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:templated_collection | recall_at_10 | 0.7414 | 58 | 0.4110 | 0.4310 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:templated_collection | mrr | 0.6131 | 58 | 0.3707 | 0.3907 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:typo | recall_at_10 | 1.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:typo | mrr | 0.8333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G5 (pass) | total_p95 | retrieval_total |  | 117.0000 | 561 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 75.0000 | 561 | 600.0000 | n/a | n/a | n/a | pass |
 
 ## v2-default-similarity-floor-hosted-fake-no-cells (candidate): fail
 
-### prechunked: run 8ecb5e7e-6b0b-4f3a-ac3a-2db9c2e4d1e9, run_config_hash ecaf1d09d8485b4444ed03778f7a13553971e8579913cd86ca5e5e6a6ce4a23f, report sha256 a7412245daeac7bfc6e9557007576ea7bcf795ae3be0d1de8fd66b17cc101166
+### prechunked: run 7c8f14b5-8654-4cf5-b0a6-8cbdd4b704d1, run_config_hash 105efe2c35a76ba1072c6643f58f07b2e2ae68fe2d34809df8fd6fa692160a01, report sha256 2782596f75be4cb6d79f578c1862dd4a4af1a27a27ac2f5bb48b3442f7fffa2f
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3333 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.2857 | n/a | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.5000 | n/a | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3750 | n/a | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
-| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8601 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.0268 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.0678 | pass |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 0.3750 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 0.2857 | 21 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
-| G4 (pass) | category | category:ambiguous | recall_at_10 | 1.0000 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:ambiguous | mrr | 0.8750 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:colloquial | recall_at_10 | 0.8000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:colloquial | mrr | 0.3786 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:compound | recall_at_10 | 0.9259 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:compound | mrr | 0.9444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:cross_lingual | recall_at_10 | 0.4286 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:cross_lingual | mrr | 0.4286 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:exact_term | recall_at_10 | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:exact_term | mrr | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:general | recall_at_10 | 1.0000 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:general | mrr | 0.9643 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:multi_turn | recall_at_10 | 0.9375 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:multi_turn | mrr | 0.7958 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:scanned | recall_at_10 | 1.0000 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:scanned | mrr | 0.8125 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:selective_filter | recall_at_10 | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:selective_filter | mrr | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (pass) | category | category:table | recall_at_10 | 1.0000 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:table | mrr | 0.7708 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (pass) | category | category:typo | recall_at_10 | 1.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (pass) | category | category:typo | mrr | 0.8333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 86.0000 | 202 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 60.0000 | 202 | 600.0000 | n/a | n/a | n/a | pass |
-
-### ingest: run 193d18a3-638c-4ff9-a676-d7836402c565, run_config_hash 827cfece2aff71ff67a7e4cd5f5e7e677ebd4dc5829edb35a0c5b6d7aee30aa3, report sha256 ead9364f656d3221f12882ee5ccf8294f37b1b4319fdf021d64160e4428c6991
-
-| Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | category:cross_lingual | false_refusal_rate | 1.0000 | n/a | 0.4113 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | mrr | 0.0000 | n/a | 0.3496 | 0.3696 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_10 | 0.0000 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_5 | 0.0000 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.8095 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | mrr | 0.1746 | n/a | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.1905 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.1905 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.9231 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | mrr | 0.0641 | n/a | 0.4911 | 0.5111 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.0769 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.0769 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.9318 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | mrr | 0.0568 | n/a | 0.6323 | 0.6523 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.0682 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.0682 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.8767 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | mrr | 0.1096 | n/a | 0.5805 | 0.6005 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.1233 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.1233 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | mrr | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_10 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_5 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | false_refusal_rate | 1.0000 | n/a | 0.4200 | 0.4000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | mrr | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_10 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_5 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | false_refusal_rate | 1.0000 | n/a | 0.4486 | 0.4286 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | mrr | 0.0000 | n/a | 0.1943 | 0.2143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | recall_at_10 | 0.0000 | n/a | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | recall_at_5 | 0.0000 | n/a | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | false_refusal_rate | 1.0000 | n/a | 0.5200 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | mrr | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_10 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_5 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.1233 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.1233 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.8767 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.9188 | fail |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 1.0000 | 29 | 0.5317 | 0.5517 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 26 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:ambiguous | recall_at_10 | 0.0000 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:ambiguous | mrr | 0.0000 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | recall_at_10 | 0.0000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | mrr | 0.0000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:compound | recall_at_10 | 0.1111 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:compound | mrr | 0.1111 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.0000 | 23 | 0.3713 | 0.3913 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:cross_lingual | mrr | 0.0000 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:exact_term | recall_at_10 | 0.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:exact_term | mrr | 0.0000 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:general | recall_at_10 | 0.1304 | 23 | 0.8496 | 0.8696 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:general | mrr | 0.1304 | 23 | 0.8061 | 0.8261 | 0.0200 | n/a | fail |
+| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8962 | 236 | 0.6643 | 0.6843 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.0508 | 236 | 0.2573 | 0.2373 | 0.0200 | 0.0811 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 48 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 38 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:ambiguous | recall_at_10 | 0.8333 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:ambiguous | mrr | 0.7083 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.9091 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.7727 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7778 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.8125 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.6256 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | recall_at_10 | 0.8889 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | mrr | 0.9444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 1.0000 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | mrr | 0.8889 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.4286 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cross_lingual | mrr | 0.4286 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 1.0000 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:exact_term | recall_at_10 | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:exact_term | mrr | 1.0000 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.9211 | 19 | 0.7958 | 0.8158 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.9474 | 19 | 0.8747 | 0.8947 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.8689 | 0.8889 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.7207 | 0.7407 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 1.0000 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.4200 | 0.4400 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | recall_at_10 | 0.6000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | mrr | 0.6000 | 5 | 0.1867 | 0.2067 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.0000 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:multi_turn | mrr | 0.0000 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 1.0000 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.8810 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.8750 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.7240 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:scanned | recall_at_10 | 0.2857 | 14 | 0.9086 | 0.9286 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:scanned | mrr | 0.2857 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:selective_filter | recall_at_10 | 0.1250 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:selective_filter | mrr | 0.1250 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | recall_at_10 | 0.7500 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | mrr | 0.7500 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:selective_filter | recall_at_10 | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:selective_filter | mrr | 0.8750 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:table | recall_at_10 | 0.0769 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:table | mrr | 0.0769 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:table_split | recall_at_10 | 0.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:table_split | mrr | 0.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:typo | recall_at_10 | 0.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:typo | mrr | 0.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 78.0000 | 263 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 52.0000 | 263 | 600.0000 | n/a | n/a | n/a | pass |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.6500 | 10 | 0.6800 | 0.7000 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:table | recall_at_10 | 1.0000 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.8333 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:typo | recall_at_10 | 1.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:typo | mrr | 0.8333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G5 (pass) | total_p95 | retrieval_total |  | 158.0000 | 413 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 134.0000 | 413 | 600.0000 | n/a | n/a | n/a | pass |
+
+### ingest: run b1b7b8e5-327e-4127-baae-7df285009111, run_config_hash 43f229e2086cfaa1d952f69e8ae90a190aad0d12e9c3fea2dccbfd8a31c7cfe5, report sha256 ebd67805e13dec227b6a5172e3beb7eb1ca07c61e3186b5a7c3cb04614e2546b
+
+| Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.9565 | 23 | 0.9800 | 1.0000 | 0.0200 | n/a | fail (noise_band) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8674 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G2 (pass) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.8674 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.0488 | 328 | 0.2121 | 0.1921 | 0.0200 | 0.0731 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 0.9839 | 62 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 0.9808 | 52 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:ambiguous | recall_at_10 | 0.8333 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:ambiguous | mrr | 0.7083 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:cache_near_miss | recall_at_10 | 0.9091 | 11 | 0.7073 | 0.7273 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:cache_near_miss | mrr | 0.7727 | 11 | 0.5709 | 0.5909 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:cache_paraphrase | mrr | 0.7500 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:colloquial | recall_at_10 | 0.8125 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:colloquial | mrr | 0.6271 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:compound | recall_at_10 | 0.8889 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:compound | mrr | 0.9444 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:context_overflow | recall_at_10 | 1.0000 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:context_overflow | mrr | 1.0000 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:cross_lingual | recall_at_10 | 0.3913 | 23 | 0.3713 | 0.3913 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:cross_lingual | mrr | 0.3913 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:duplicate_flood | recall_at_10 | 1.0000 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:exact_term | recall_at_10 | 1.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:exact_term | mrr | 0.9615 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:general | recall_at_10 | 0.9464 | 28 | 0.8193 | 0.8393 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:general | mrr | 0.9464 | 28 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:implicit_condition | mrr | 0.9286 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:injection | mrr | 0.6000 | 5 | 0.4200 | 0.4400 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.6967 | 0.7167 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:multi_step_calc | recall_at_10 | 1.0000 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:multi_step_calc | mrr | 0.8810 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:multi_turn | recall_at_10 | 0.8125 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:multi_turn | mrr | 0.7083 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:scanned | recall_at_10 | 1.0000 | 14 | 0.9086 | 0.9286 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:scanned | mrr | 0.9388 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:selective_filter | recall_at_10 | 0.7500 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:selective_filter | mrr | 0.7500 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (pass) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:stale_version | mrr | 0.7500 | 10 | 0.6300 | 0.6500 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:table | recall_at_10 | 1.0000 | 16 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:table | mrr | 0.8854 | 16 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:table_split | recall_at_10 | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:table_split | mrr | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:templated_collection | recall_at_10 | 0.7241 | 58 | 0.4110 | 0.4310 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:templated_collection | mrr | 0.5959 | 58 | 0.3707 | 0.3907 | 0.0200 | n/a | pass |
+| G4 (pass) | category | category:typo | recall_at_10 | 1.0000 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (pass) | category | category:typo | mrr | 0.8333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G5 (pass) | total_p95 | retrieval_total |  | 111.0000 | 561 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 73.0000 | 561 | 600.0000 | n/a | n/a | n/a | pass |
 
 ## v2-default-fallback-none (candidate): fail
 
-### prechunked: run 9e5fd27e-6550-453c-bf03-f9f392fc86c0, run_config_hash f8d0eccfaa72b98d42532823c96df7c2086c75ec859c916a2ad1934146f7499c, report sha256 d93d4190262cb6164aac82d6bf53ac72bb507da1c19d305e0aa8e1d1a19b1864
+### prechunked: run 9c401a73-c78c-4a4f-a02a-866f3327a05d, run_config_hash 6a225921c847d8fd1d55e010dfeec0a15a0c4385500b135d857df5a2dc4c4e60, report sha256 26171fe7b0909848d391db87b03dbe2e0c893c8028527f7ed6b1923f81f2941f
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
-| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.5893 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
-| G3 (pass) | refusal | overall | false_refusal_rate | 0.3750 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.4566 | pass |
-| G3 (pass) | refusal | overall | correct_refusal_rate | 0.7083 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | pass |
-| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 0.6667 | 21 | 0.6467 | 0.6667 | 0.0200 | n/a | pass |
+| G1 (fail) | noise_gate | language:en | mrr | 0.5622 | 83 | 0.5684 | 0.5884 | 0.0200 | n/a | fail (noise_band) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.7331 | 236 | 0.6643 | 0.6843 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.2373 | 236 | 0.2573 | 0.2373 | 0.0200 | 0.2873 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 48 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 38 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:ambiguous | recall_at_10 | 0.6667 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:ambiguous | mrr | 0.5417 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | recall_at_10 | 0.2000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | mrr | 0.0286 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.6364 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.5030 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.7778 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7778 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.7500 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.3745 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:compound | recall_at_10 | 0.4444 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:compound | mrr | 0.4444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 0.3333 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | mrr | 0.3333 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.4286 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:cross_lingual | mrr | 0.4286 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 0.7500 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:exact_term | recall_at_10 | 0.8750 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:exact_term | mrr | 0.8750 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | recall_at_10 | 0.8571 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | mrr | 0.8571 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.8158 | 19 | 0.7958 | 0.8158 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.8947 | 19 | 0.8747 | 0.8947 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 0.8889 | 9 | 0.8689 | 0.8889 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 0.7778 | 9 | 0.7207 | 0.7407 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 0.9286 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 0.9643 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.8155 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:multi_turn | recall_at_10 | 0.5000 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:multi_turn | mrr | 0.3854 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.3750 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:scanned | recall_at_10 | 1.0000 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:scanned | mrr | 0.8333 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | mrr | 0.7917 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:selective_filter | recall_at_10 | 0.5000 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:selective_filter | mrr | 0.5000 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:table | recall_at_10 | 0.2500 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:table | mrr | 0.0938 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.4750 | 10 | 0.6800 | 0.7000 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:table | recall_at_10 | 0.4545 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.3409 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:typo | recall_at_10 | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:typo | mrr | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 24.0000 | 202 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 0.0000 | 202 | 600.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | total_p95 | retrieval_total |  | 25.0000 | 413 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 0.0000 | 413 | 600.0000 | n/a | n/a | n/a | pass |
 
-### ingest: run d39fd37c-5dbe-4541-b3d0-fee5d3ba8eff, run_config_hash 9d30dcf03e8639d1e44bb1808211db7b9a307fc3e322784410edd34e95a92930, report sha256 c340b0f5995d3d7670987886aa0b9cadfd313fc55c247dda00d4a05de152effe
+### ingest: run 13184963-70ab-4030-abe5-6288327d95e1, run_config_hash c7f7fd5330c75ea0c638c11c72cc4f44839f2247afa6b19d841872208382f0ae, report sha256 4cc34a86ee90b4f838c63df2b55ab0628354bc9a754fd59804a574475d898bce
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | mrr | 0.5926 | n/a | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6667 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6507 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
-| G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.3014 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.3699 | fail |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 0.6897 | 29 | 0.5317 | 0.5517 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 0.6538 | 26 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G1 (fail) | noise_gate | category:cross_lingual | mrr | 0.3478 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | mrr | 0.1667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | fail (noise_band) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.7683 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G2 (pass) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.7683 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.1951 | 328 | 0.2121 | 0.1921 | 0.0200 | 0.2346 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 62 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 52 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:ambiguous | recall_at_10 | 0.6667 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:ambiguous | mrr | 0.5417 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | recall_at_10 | 0.2000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | mrr | 0.0286 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:compound | recall_at_10 | 0.4444 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:compound | mrr | 0.4444 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.9091 | 11 | 0.7073 | 0.7273 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.7758 | 11 | 0.5709 | 0.5909 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7500 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.7500 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.4161 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:compound | recall_at_10 | 0.6667 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | mrr | 0.6111 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 0.7778 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | mrr | 0.7778 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.3913 | 23 | 0.3713 | 0.3913 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:cross_lingual | mrr | 0.3696 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:exact_term | recall_at_10 | 0.9231 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:exact_term | mrr | 0.9231 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | recall_at_10 | 0.8696 | 23 | 0.8496 | 0.8696 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | mrr | 0.8261 | 23 | 0.8061 | 0.8261 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cross_lingual | mrr | 0.3478 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 0.7500 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:exact_term | recall_at_10 | 1.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:exact_term | mrr | 1.0000 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.8393 | 28 | 0.8193 | 0.8393 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.8333 | 28 | 0.8371 | 0.8571 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 1.0000 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | mrr | 0.5667 | 5 | 0.4200 | 0.4400 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | mrr | 0.7000 | 5 | 0.1867 | 0.2067 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.5000 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:multi_turn | mrr | 0.3490 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 0.8929 | 14 | 0.6967 | 0.7167 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 0.9643 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.8036 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.6250 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.4656 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:scanned | recall_at_10 | 1.0000 | 14 | 0.9086 | 0.9286 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:scanned | mrr | 0.9048 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:scanned | mrr | 0.9018 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:selective_filter | recall_at_10 | 0.5000 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:selective_filter | mrr | 0.5000 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:table | recall_at_10 | 0.5385 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:table | mrr | 0.5000 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.9000 | 10 | 0.6300 | 0.6500 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | recall_at_10 | 1.0000 | 16 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.8854 | 16 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:table_split | recall_at_10 | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:table_split | mrr | 0.8333 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:table_split | mrr | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:templated_collection | recall_at_10 | 0.4828 | 58 | 0.4110 | 0.4310 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:templated_collection | mrr | 0.3545 | 58 | 0.3707 | 0.3907 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:typo | recall_at_10 | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:typo | mrr | 0.1667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 30.0000 | 263 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 0.0000 | 263 | 600.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | total_p95 | retrieval_total |  | 45.0000 | 561 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 0.0000 | 561 | 600.0000 | n/a | n/a | n/a | pass |
 
 ## v2-default-fallback-none-no-cells (candidate): fail
 
-### prechunked: run d5403cb3-d2b4-4577-819b-7647c327bd02, run_config_hash 764819dbdb61fa33f5b74f0d6435934cb6a9447cbc91d05b2de53b7effc718e5, report sha256 123307b502bfd27aec1cf51afaae9f1022e7726c67138390bd9b09cb90cc33fd
+### prechunked: run 89bac984-1ee4-4481-b250-54f02a26f27b, run_config_hash 28044bad2e7b35d9e6359c238f7e3aef251b31166e62db73c6acc551b2e931f7, report sha256 1a4cee7ac848048d14f21939bb1f5e2e4de501621da4ef9a3d47dc58547afb89
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
-| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.5893 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
-| G3 (pass) | refusal | overall | false_refusal_rate | 0.3750 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.4566 | pass |
-| G3 (pass) | refusal | overall | correct_refusal_rate | 0.7083 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | pass |
-| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 0.6667 | 21 | 0.6467 | 0.6667 | 0.0200 | n/a | pass |
+| G1 (fail) | noise_gate | language:en | mrr | 0.5622 | 83 | 0.5684 | 0.5884 | 0.0200 | n/a | fail (noise_band) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.7331 | 236 | 0.6643 | 0.6843 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.2373 | 236 | 0.2573 | 0.2373 | 0.0200 | 0.2873 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 48 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 38 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:ambiguous | recall_at_10 | 0.6667 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:ambiguous | mrr | 0.5417 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | recall_at_10 | 0.2000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | mrr | 0.0286 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.6364 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.5030 | 11 | 0.4345 | 0.4545 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.7778 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7778 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.7500 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.3745 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:compound | recall_at_10 | 0.4444 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:compound | mrr | 0.4444 | 9 | 0.4244 | 0.4444 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 0.3333 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | mrr | 0.3333 | 9 | 0.3133 | 0.3333 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.4286 | 21 | 0.4086 | 0.4286 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:cross_lingual | mrr | 0.4286 | 21 | 0.3848 | 0.4048 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 0.7500 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:exact_term | recall_at_10 | 0.8750 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:exact_term | mrr | 0.8750 | 8 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | recall_at_10 | 0.8571 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | mrr | 0.8571 | 14 | 0.8371 | 0.8571 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.8158 | 19 | 0.7958 | 0.8158 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.8947 | 19 | 0.8747 | 0.8947 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 0.8889 | 9 | 0.8689 | 0.8889 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 0.7778 | 9 | 0.7207 | 0.7407 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 0.9286 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | mrr | 0.6000 | 5 | 0.5800 | 0.6000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 0.9643 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.8155 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:multi_turn | recall_at_10 | 0.5000 | 16 | 0.3550 | 0.3750 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:multi_turn | mrr | 0.3854 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.3750 | 16 | 0.3237 | 0.3438 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:scanned | recall_at_10 | 1.0000 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:scanned | mrr | 0.8333 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:scanned | mrr | 0.7917 | 4 | 0.7300 | 0.7500 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:selective_filter | recall_at_10 | 0.5000 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:selective_filter | mrr | 0.5000 | 8 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:table | recall_at_10 | 0.2500 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:table | mrr | 0.0938 | 8 | 0.1050 | 0.1250 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.4750 | 10 | 0.6800 | 0.7000 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:table | recall_at_10 | 0.4545 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.3409 | 11 | 0.3436 | 0.3636 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:typo | recall_at_10 | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:typo | mrr | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 22.0000 | 202 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 0.0000 | 202 | 600.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | total_p95 | retrieval_total |  | 27.0000 | 413 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 0.0000 | 413 | 600.0000 | n/a | n/a | n/a | pass |
 
-### ingest: run 3e888924-8611-4b0f-b226-bc62e8cf72d8, run_config_hash 637a94208cf45ed17e3c6e3b5874b1dff85e05fc4c56c93adfe630c20509d90c, report sha256 588855fcfa691b905a28909cfefb62fd4eb86bb4988f6b89f84e461c1a2f92aa
+### ingest: run d1776710-e30f-4e82-9c3f-365faf950767, run_config_hash 967e25126cb2dd448ec848dd886f9d952e4d8fea2591fb9a161df776f1c844b1, report sha256 1f3c9b5cdc4e9f9450cbbcb746d80d4cb7ad7a7cfde6d4277d2c1fb1c90ad4c7
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | mrr | 0.5926 | n/a | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6667 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6507 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
-| G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
-| G3 (fail) | refusal | overall | false_refusal_rate | 0.3014 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.3699 | fail |
-| G3 (fail) | refusal | overall | correct_refusal_rate | 0.6897 | 29 | 0.5317 | 0.5517 | 0.0200 | n/a | pass |
-| G3 (fail) | refusal | category:no_answer | correct_refusal_rate | 0.6538 | 26 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G1 (fail) | noise_gate | category:cross_lingual | mrr | 0.3478 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | mrr | 0.1667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | fail (noise_band) |
+| G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.7683 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G2 (pass) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.7683 | 328 | 0.7056 | 0.7256 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | overall | false_refusal_rate | 0.1951 | 328 | 0.2121 | 0.1921 | 0.0200 | 0.2346 | pass |
+| G3 (pass) | refusal | overall | correct_refusal_rate | 1.0000 | 62 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G3 (pass) | refusal | category:no_answer | correct_refusal_rate | 1.0000 | 52 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:ambiguous | recall_at_10 | 0.6667 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:ambiguous | mrr | 0.5417 | 6 | 0.4800 | 0.5000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | recall_at_10 | 0.2000 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:colloquial | mrr | 0.0286 | 5 | -0.0200 | 0.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:compound | recall_at_10 | 0.4444 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:compound | mrr | 0.4444 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:cache_near_miss | recall_at_10 | 0.9091 | 11 | 0.7073 | 0.7273 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_near_miss | mrr | 0.7758 | 11 | 0.5709 | 0.5909 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | recall_at_10 | 0.8889 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cache_paraphrase | mrr | 0.7500 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | recall_at_10 | 0.7500 | 16 | 0.6050 | 0.6250 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:colloquial | mrr | 0.4161 | 16 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:compound | recall_at_10 | 0.6667 | 9 | 0.5356 | 0.5556 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:compound | mrr | 0.6111 | 9 | 0.6467 | 0.6667 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:context_overflow | recall_at_10 | 0.7778 | 9 | 0.7022 | 0.7222 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:context_overflow | mrr | 0.7778 | 9 | 0.7578 | 0.7778 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:cross_lingual | recall_at_10 | 0.3913 | 23 | 0.3713 | 0.3913 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:cross_lingual | mrr | 0.3696 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:exact_term | recall_at_10 | 0.9231 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:exact_term | mrr | 0.9231 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | recall_at_10 | 0.8696 | 23 | 0.8496 | 0.8696 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:general | mrr | 0.8261 | 23 | 0.8061 | 0.8261 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:cross_lingual | mrr | 0.3478 | 23 | 0.3496 | 0.3696 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:duplicate_flood | recall_at_10 | 0.7500 | 6 | 0.8133 | 0.8333 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:duplicate_flood | mrr | 1.0000 | 6 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:exact_term | recall_at_10 | 1.0000 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:exact_term | mrr | 1.0000 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | recall_at_10 | 0.8393 | 28 | 0.8193 | 0.8393 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:general | mrr | 0.8333 | 28 | 0.8371 | 0.8571 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:identifier_near_miss | recall_at_10 | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:identifier_near_miss | mrr | 1.0000 | 9 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:implicit_condition | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:implicit_condition | mrr | 1.0000 | 7 | 0.9086 | 0.9286 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:injection | mrr | 0.5667 | 5 | 0.4200 | 0.4400 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 5 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:injection_evasive | mrr | 0.7000 | 5 | 0.1867 | 0.2067 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.5000 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:multi_turn | mrr | 0.3490 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | recall_at_10 | 1.0000 | 14 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:injection_evasive | mrr | 0.8929 | 14 | 0.6967 | 0.7167 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | recall_at_10 | 0.9643 | 28 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_step_calc | mrr | 0.8036 | 28 | 0.7865 | 0.8065 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | recall_at_10 | 0.6250 | 16 | 0.4800 | 0.5000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:multi_turn | mrr | 0.4656 | 16 | 0.2987 | 0.3187 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:no_answer | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:no_answer | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:off_topic_context | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
+| G4 (fail) | category | category:partial_answer | recall_at_10 | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:partial_answer | mrr | 1.0000 | 7 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:scanned | recall_at_10 | 1.0000 | 14 | 0.9086 | 0.9286 | 0.0200 | n/a | pass |
-| G4 (fail) | category | category:scanned | mrr | 0.9048 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:scanned | mrr | 0.9018 | 14 | 0.8729 | 0.8929 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:selective_filter | recall_at_10 | 0.5000 | 8 | 0.6050 | 0.6250 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:selective_filter | mrr | 0.5000 | 8 | 0.5217 | 0.5417 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:small_talk | recall_at_10 | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
 | G4 (fail) | category | category:small_talk | mrr | n/a | 0 | n/a | n/a | n/a | n/a | not_gated (no_baseline_slice) |
-| G4 (fail) | category | category:table | recall_at_10 | 0.5385 | 13 | 0.9800 | 1.0000 | 0.0200 | n/a | fail |
-| G4 (fail) | category | category:table | mrr | 0.5000 | 13 | 0.8262 | 0.8462 | 0.0200 | n/a | fail |
+| G4 (fail) | category | category:stale_version | recall_at_10 | 1.0000 | 10 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:stale_version | mrr | 0.9000 | 10 | 0.6300 | 0.6500 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | recall_at_10 | 1.0000 | 16 | 0.9800 | 1.0000 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:table | mrr | 0.8854 | 16 | 0.8550 | 0.8750 | 0.0200 | n/a | pass |
 | G4 (fail) | category | category:table_split | recall_at_10 | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
-| G4 (fail) | category | category:table_split | mrr | 0.8333 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:table_split | mrr | 1.0000 | 3 | 0.9800 | 1.0000 | 0.0200 | n/a | not_gated (n_below_8) |
+| G4 (fail) | category | category:templated_collection | recall_at_10 | 0.4828 | 58 | 0.4110 | 0.4310 | 0.0200 | n/a | pass |
+| G4 (fail) | category | category:templated_collection | mrr | 0.3545 | 58 | 0.3707 | 0.3907 | 0.0200 | n/a | fail |
 | G4 (fail) | category | category:typo | recall_at_10 | 0.3333 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
 | G4 (fail) | category | category:typo | mrr | 0.1667 | 3 | 0.3133 | 0.3333 | 0.0200 | n/a | not_gated (n_below_8) |
-| G5 (pass) | total_p95 | retrieval_total |  | 33.0000 | 263 | 2000.0000 | n/a | n/a | n/a | pass |
-| G5 (pass) | rerank_p95 | rerank |  | 0.0000 | 263 | 600.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | total_p95 | retrieval_total |  | 42.0000 | 561 | 2000.0000 | n/a | n/a | n/a | pass |
+| G5 (pass) | rerank_p95 | rerank |  | 0.0000 | 561 | 600.0000 | n/a | n/a | n/a | pass |
 
 ## legacy (legacy): pass
 
-### prechunked: run 655196b3-0c0b-4bc9-aa54-dc954e329da1, run_config_hash 87b61a3eb219a6a87632c97d5a34fb7c1dcc730abb0ca2250b1f137097eacb72, report sha256 cc56f5eb1f6ebc01f06267dfc2a599d6ec01c8878cd3d5212845df3aa0ac7a24
+### prechunked: run 6fdadf1d-5292-46c0-a3b0-d9ed0165ee21, run_config_hash 0ca45ac4cfe789158d2f32dba3ad962c32da3549171283a1201f5e49928cb70e, report sha256 a2d7482e563183bdf4f13e3aaebcf82dcc77a780ba242b2fdab7bf4df1915f2a
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | G6 (pass) | paired_all_zero |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass |
 
-### ingest: run 2f5f7b2c-5fca-4c07-8b1d-6d95cb887cc4, run_config_hash fe268dbb9f94b6a346212ba24070a8f487db77f056dfc337c0f1ae53afec95d7, report sha256 f8c86c2f3ac6ac39cf35bc80064512bca2b77b54b0419c8c2c2e8283e4cb9343
+### ingest: run 0ab3666c-da33-4d01-ac69-e3c0a1f0ec2e, run_config_hash 0a890aafd3bc9682dc2c33b3ea217f81ac8ed0e4793a067768b79f48799c5748, report sha256 c90c73cb665fcdfd5f15e71a15d01c314f64f680b00929fd833852f16da934f8
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -1187,25 +1382,25 @@ Git sha: 12598da41b7a6eaaead8fcf93309240e65fedf2e; evaluated at: not recorded
 Status: pass
 - two-tenant matrix: single-tenant True, multi-tenant True
 - negative checks fail as designed: drop_top_candidate True, max_results 1 True
-- drop_top_candidate under v2-default (prechunked): exit 10, gate passed=False, offenders=42, mismatches=0, overall mrr margin 0.4182
-- max_results 1 under v2-default (prechunked): exit 10, gate passed=False, offenders=11, mismatches=0
+- drop_top_candidate under v2-default (prechunked): exit 10, gate passed=False, offenders=42, mismatches=0, overall mrr margin 0.4956
+- max_results 1 under v2-default (prechunked): exit 10, gate passed=False, offenders=13, mismatches=0
 - control (plain v2-default, prechunked) against the same scratch baseline: exit 0, gate passed=True
-- drop_top_candidate under v2-default (ingest): exit 10, gate passed=False, offenders=39, mismatches=0, overall mrr margin 0.4566
+- drop_top_candidate under v2-default (ingest): exit 11 (the absolute gate also fails), gate passed=False, offenders=42, mismatches=0, overall mrr margin 0.5433
 - max_results 1 under v2-default (ingest): exit 10, gate passed=False, offenders=18, mismatches=0
 - control (plain v2-default, ingest) against the same scratch baseline: exit 0, gate passed=True
-- negative checks are gated against scratch baselines recorded with rag_eval.baseline record-reports from three v2-default runs per mode under eval/out/p41r-neg (not committed), without --allow-spread in both modes; the pr-smoke.yml jq conditions are applied to each gate.json
-- two-tenant matrix under the D-01 values: node --test name pattern 'under the D-01 values: multi-tenant' exit 0, 'under the D-01 values: single-tenant' exit 0 (keyless and with the fixture key)
+- negative checks are gated against scratch baselines recorded with rag_eval.baseline record-reports from three v2-default runs per mode under eval/out/p41g and eval/out/p41g-det (not committed), without --allow-spread in both modes; the pr-smoke.yml jq conditions are applied to each gate.json
+- two-tenant matrix under the D-01 values: node --test name pattern 'under the D-01 values: multi-tenant' exit 0 (3 cases, including the 04.1-18 exact_id and evidence-read foreign-tenant cases), 'under the D-01 values: single-tenant' exit 0 (keyless and with the fixture key)
 
 ## Floor (D-04)
 
 Chosen: none (neither floor passes: no flip (D-13))
 
-- legacy_rule: fail, score 0.6342, configurations v2-default, v2-default-no-cells, v2-default-hosted-fake, v2-default-hosted-fake-no-cells
+- legacy_rule: fail, score 0.9980, configurations v2-default, v2-default-no-cells, v2-default-hosted-fake, v2-default-hosted-fake-no-cells
   - v2-default failed
   - v2-default-no-cells failed
   - v2-default-hosted-fake failed
   - v2-default-hosted-fake-no-cells failed
-- similarity: fail, score 0.6099, configurations v2-default-similarity-floor, v2-default-similarity-floor-no-cells, v2-default-similarity-floor-hosted-fake, v2-default-similarity-floor-hosted-fake-no-cells
+- similarity: fail, score 0.9919, configurations v2-default-similarity-floor, v2-default-similarity-floor-no-cells, v2-default-similarity-floor-hosted-fake, v2-default-similarity-floor-hosted-fake-no-cells
   - v2-default-similarity-floor failed
   - v2-default-similarity-floor-no-cells failed
   - v2-default-similarity-floor-hosted-fake failed
@@ -1218,17 +1413,17 @@ Chosen: none (neither fallback passes: no flip (D-13))
 - local_bm25: fail, score n/a, configurations v2-default, v2-default-no-cells
   - v2-default failed
   - v2-default-no-cells failed
-  - v2-default vs v2-default-fallback-none (prechunked) overall recall_at_10: 0.5893 vs 0.5693 (none 0.5893 - band 0.0200) pass
-  - v2-default vs v2-default-fallback-none (prechunked) overall mrr: 0.5301 vs 0.5036 (none 0.5236 - band 0.0200) pass
+  - v2-default vs v2-default-fallback-none (prechunked) overall recall_at_10: 0.7267 vs 0.7131 (none 0.7331 - band 0.0200) pass
+  - v2-default vs v2-default-fallback-none (prechunked) overall mrr: 0.6437 vs 0.6189 (none 0.6389 - band 0.0200) pass
   - v2-default vs v2-default-fallback-none (prechunked) category:cross_lingual recall_at_10: 0.4286 vs 0.4086 (none 0.4286 - band 0.0200) pass
-  - v2-default vs v2-default-fallback-none (ingest) overall recall_at_10: 0.6644 vs 0.6444 (none 0.6644 - band 0.0200) pass
-  - v2-default vs v2-default-fallback-none (ingest) overall mrr: 0.5973 vs 0.5620 (none 0.5820 - band 0.0200) pass
+  - v2-default vs v2-default-fallback-none (ingest) overall recall_at_10: 0.7515 vs 0.7483 (none 0.7683 - band 0.0200) pass
+  - v2-default vs v2-default-fallback-none (ingest) overall mrr: 0.6749 vs 0.6512 (none 0.6712 - band 0.0200) pass
   - v2-default vs v2-default-fallback-none (ingest) category:cross_lingual recall_at_10: 0.3913 vs 0.3713 (none 0.3913 - band 0.0200) pass
-  - v2-default-no-cells vs v2-default-fallback-none-no-cells (prechunked) overall recall_at_10: 0.5893 vs 0.5693 (none 0.5893 - band 0.0200) pass
-  - v2-default-no-cells vs v2-default-fallback-none-no-cells (prechunked) overall mrr: 0.5301 vs 0.5036 (none 0.5236 - band 0.0200) pass
+  - v2-default-no-cells vs v2-default-fallback-none-no-cells (prechunked) overall recall_at_10: 0.7267 vs 0.7131 (none 0.7331 - band 0.0200) pass
+  - v2-default-no-cells vs v2-default-fallback-none-no-cells (prechunked) overall mrr: 0.6437 vs 0.6189 (none 0.6389 - band 0.0200) pass
   - v2-default-no-cells vs v2-default-fallback-none-no-cells (prechunked) category:cross_lingual recall_at_10: 0.4286 vs 0.4086 (none 0.4286 - band 0.0200) pass
-  - v2-default-no-cells vs v2-default-fallback-none-no-cells (ingest) overall recall_at_10: 0.6644 vs 0.6444 (none 0.6644 - band 0.0200) pass
-  - v2-default-no-cells vs v2-default-fallback-none-no-cells (ingest) overall mrr: 0.5973 vs 0.5620 (none 0.5820 - band 0.0200) pass
+  - v2-default-no-cells vs v2-default-fallback-none-no-cells (ingest) overall recall_at_10: 0.7515 vs 0.7483 (none 0.7683 - band 0.0200) pass
+  - v2-default-no-cells vs v2-default-fallback-none-no-cells (ingest) overall mrr: 0.6749 vs 0.6512 (none 0.6712 - band 0.0200) pass
   - v2-default-no-cells vs v2-default-fallback-none-no-cells (ingest) category:cross_lingual recall_at_10: 0.3913 vs 0.3713 (none 0.3913 - band 0.0200) pass
 - none: fail, score n/a, configurations v2-default-fallback-none, v2-default-fallback-none-no-cells
   - v2-default-fallback-none failed

@@ -37,6 +37,9 @@ interface TraceBody {
 type RpcCall = { fn: string; args: Record<string, unknown> };
 type Shares = Record<string, number> | 'database';
 
+/** The train-43 prechunked fixture floor (D-32): fixed here so translate-slot routing is tested apart from the fitted floor. */
+const XLG_PINNED_FLOOR = 0.1410906862942342;
+
 let prepared: InProcessEval;
 let fake: FakeQueryLlm;
 let depsModule: typeof import('../../src/lib/rag/deps.ts');
@@ -105,6 +108,10 @@ before(async () => {
     deploymentMode: 'single-tenant',
     envOverrides: { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', RAG_QUERY_LAYER: 'true', RAG_QUERY_TRANSLATE: 'true' },
   });
+  // Owner decision D-32 (04.1-CONTEXT, 2026-11-28): this file tests translate-slot routing, not the refusal threshold, so its runs pin
+  // the eval similarity floor to the train-43 prechunked value instead of the fitted fixture floor, which moves with the golden set.
+  const floorModule = await import('../../src/lib/rag/refusal/floor.ts');
+  floorModule.setEvalScoreCalibration({ context_threshold: XLG_PINNED_FLOOR });
   const { resetRetrievalBackendForTests } = await import('../../src/lib/rag/backend/registry.ts');
   const { verifyV2Startup, resetV2StartupForTests } = await import('../../src/lib/rag/v2/startup.ts');
   depsModule = await import('../../src/lib/rag/deps.ts');

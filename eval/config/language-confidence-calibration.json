@@ -2,12 +2,12 @@
   "bins": [
     {
       "confident": true,
-      "correct": 100,
+      "correct": 99,
       "length_bucket": "short",
-      "n": 100,
+      "n": 99,
       "script_class": "single",
       "source": "calibrated",
-      "value": 0.9902
+      "value": 0.9901
     },
     {
       "confident": true,
@@ -20,9 +20,9 @@
     },
     {
       "confident": true,
-      "correct": 237,
+      "correct": 238,
       "length_bucket": "medium",
-      "n": 239,
+      "n": 240,
       "script_class": "single",
       "source": "calibrated",
       "value": 0.9876
@@ -110,11 +110,11 @@
     }
   ],
   "detector": "heuristic",
-  "generated_at": "2026-11-28T01:30:30Z",
+  "generated_at": "2026-11-28T11:38:01Z",
   "inputs": [
     {
       "path": "eval/fixtures/golden.jsonl",
-      "sha256": "4266ed0765cf42cfaaf1c96319e07595a4ce50bd88752e2807cb962592064436"
+      "sha256": "04a242609f896eb8b901503391519bdd1fdc36f95ad920cdba86c71eaf0b5341"
     },
     {
       "path": "eval/fixtures/domain/golden.jsonl",

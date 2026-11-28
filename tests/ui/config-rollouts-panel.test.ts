@@ -341,3 +341,36 @@ describe('Rollouts panel', () => {
     for (const name of ['title', 'description', 'alert', 'content', 'status']) expect(html).toContain(`data-rollouts-${name}`);
   });
 });
+
+describe('UI review 07 fixes', () => {
+  it('M-2: below 768px only Language (with Measure stacked under it) and Candidate now with the verdict stay as columns', async () => {
+    const ctx = setup({ replies: { [LIST]: { ok: true, status: 200, body: listBody() } } });
+    await ctx.panel.mount();
+    const table = (ctx.root.querySelector('[data-rollouts-card]') as FakeElement).querySelector('table') as FakeElement;
+    const cols = table.querySelectorAll('th').filter((th) => th.getAttribute('scope') === 'col');
+    const visible = cols.filter((th) => !/(^|\s)hidden(\s|$)/.test(th.className)).map(text);
+    expect(visible).toEqual(['Language', 'Candidate now']);
+    const first = table.querySelectorAll('tbody tr')[0] as FakeElement;
+    const stacked = first.querySelector('[data-rollouts-measure-stacked]') as FakeElement;
+    expect(stacked).toBeTruthy();
+    expect(stacked.className).toContain('md:hidden');
+    expect(text(stacked).length).toBeGreaterThan(0);
+    const verdict = first.querySelector('[data-rollouts-verdict-stacked]') as FakeElement;
+    expect(verdict.className).toContain('md:hidden');
+    expect(text(verdict)).toContain('Holds');
+  });
+
+  it('M-3: invalid form fields get the error tint and the message is error-styled with an icon', async () => {
+    const ctx = setup({ replies: { [LIST]: { ok: true, status: 200, body: listBody([activeEntry()]) } } });
+    await ctx.panel.mount();
+    button(ctx.root, 'New rollout').click();
+    button(ctx.root, 'Start rollout').click();
+    await settle();
+    const candidate = ctx.doc.getElementById('rollouts-form-candidate') as FakeElement;
+    expect(candidate.getAttribute('aria-invalid')).toBe('true');
+    expect(candidate.className).toMatch(/\b(input|textarea)-error\b/);
+    const message = ctx.doc.getElementById('rollouts-form-candidate-error') as FakeElement;
+    expect(message.className).toContain('text-error');
+    expect(message.querySelector('i')).toBeTruthy();
+  });
+});

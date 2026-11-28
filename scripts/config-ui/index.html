@@ -6551,6 +6551,14 @@
                                                 <p class="label-text-alt text-base-content max-w-prose mt-1" id="rag-lexical-df-mode-needs-dup-clusters" role="status" data-rag-i18n="RAG_LEXICAL_DF_MODE.needsDupClusters" hidden>Duplicate clusters are off, so <code class="font-mono text-xs" translate="no">cluster</code> has no effect and BM25 counts every chunk. Turn on <code class="font-mono text-xs" translate="no">RAG_DUP_CLUSTERS</code> to use it.</p>
                                             </div>
                                             <div class="form-control">
+                                                <label class="label" for="RAG_RERANK_LOCAL_STATS"><span class="label-text"><span data-rag-i18n="RAG_RERANK_LOCAL_STATS.label">Local reranker statistics</span> (<span translate="no">RAG_RERANK_LOCAL_STATS</span>)</span></label>
+                                                <select id="RAG_RERANK_LOCAL_STATS" name="RAG_RERANK_LOCAL_STATS" autocomplete="off" translate="no" aria-describedby="rag-rerank-local-stats-help" class="select select-bordered w-full max-w-xs">
+                                                    <option value="pool" selected>pool</option>
+                                                    <option value="tenant">tenant</option>
+                                                </select>
+                                                <p class="label-text-alt text-base-content/70 max-w-prose mt-1" id="rag-rerank-local-stats-help" data-rag-i18n="RAG_RERANK_LOCAL_STATS.help">Where the local BM25 reranker takes document frequency and length from. <code class="font-mono text-xs" translate="no">pool</code> uses the rerank candidates. <code class="font-mono text-xs" translate="no">tenant</code> uses the tenant&#8217;s lexical statistics (build them with <code class="font-mono text-xs" translate="no">npm run rag:lexstats -- enable</code>); tenants without ready statistics keep pool statistics. Needs <code class="font-mono text-xs" translate="no">RAG_PIPELINE=v2</code>.</p>
+                                            </div>
+                                            <div class="form-control">
                                                 <label class="label" for="RAG_RERANKER"><span class="label-text">Reranker</span></label>
                                                 <select id="RAG_RERANKER" name="RAG_RERANKER" translate="no" aria-describedby="rag-reranker-help" class="select select-bordered w-full">
                                                     <option value="none" selected>none</option>

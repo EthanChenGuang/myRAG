@@ -1,0 +1,484 @@
+diff --git a/src/lib/rag/v2/pipeline.ts b/src/lib/rag/v2/pipeline.ts
+index ba25dcbd..d9319957 100644
+--- a/src/lib/rag/v2/pipeline.ts
++++ b/src/lib/rag/v2/pipeline.ts
+@@ -383,6 +383,7 @@ export async function runV2Pipeline(
+         variants: query.variants,
+         dedupeCounts: search.dedupeCounts,
+         queryContext: query.queryContext,
++        access,
+         finalTopK:
+           profile === 'voice'
+             ? (validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT)
+diff --git a/src/lib/rag/v2/stages/rank.ts b/src/lib/rag/v2/stages/rank.ts
+index 741b4942..d9d2e33c 100644
+--- a/src/lib/rag/v2/stages/rank.ts
++++ b/src/lib/rag/v2/stages/rank.ts
+@@ -35,6 +35,8 @@ import { effectiveTuningParams } from '../tuning-params';
+ import { guardNearMisses } from '../../retrieval/identifiers';
+ import { extractChunkIdentifiers } from '../../identifiers/extract';
+ import type { ContextRerankInput } from './context';
++import { fetchAssemblyRows } from '../../context/fetch-rows';
++import type { ScopeAccessFilter } from '../../tenant/access';
+ 
+ export interface RankStagesInput {
+   input: RunRetrievalInput;
+@@ -51,6 +53,8 @@ export interface RankStagesInput {
+   dedupeCounts?: DedupeCounts;
+   /** The query analysis of the query stage; the legacy_rule floor replays the legacy search with it (default context when absent). */
+   queryContext?: TemporalQueryContext;
++  /** The request's access filter; the legacy_rule evidence read uses it (absent: off). */
++  access?: ScopeAccessFilter;
+   /** Query layer only (D-06): rerank and refusal read the plan's standalone query and Candidate.standaloneSimilarity. */
+   queryPlan?: QueryPlan | null;
+   /** D-07: sub-question coverage over the final top-k (retrieval-params `sub_question_coverage`). */
+@@ -123,6 +127,8 @@ interface RefusalOutcome {
+   gate: RefusalRecord;
+   /** legacy_rule only: how many fused hits the legacy pool rule admitted. */
+   poolSize?: number;
++  /** legacy_rule only: how many documents the evidence read returned; absent when no read happened. */
++  evidenceRead?: number;
+ }
+ 
+ function denseLegIndex(variants: QueryVariant[] | undefined): number {
+@@ -215,11 +221,43 @@ function floorSimilarity(row: FusedHit, standalone: boolean): number | null {
+   return standalone ? (row.standaloneSimilarity ?? 0) : row.hit.similarity;
+ }
+ 
+-function applyRefusal(
++interface RefusalOptions {
++  /** legacy_rule only: read the pool members' whole document text when nothing else kept a member (the stage path, never the skip path). */
++  evidence: boolean;
++  signal: AbortSignal;
++}
++
++/**
++ * legacy_rule evidence: the whole documents.content of the pool members' documents, read through the row fetch legacy assembles
++ * from (the ids come from the request's own scoped hits, under the request's access filter). Legacy's query-term rule reads this text.
++ */
++async function legacyEvidenceText(ctx: RankStagesInput, members: FusedHit[], signal: AbortSignal): Promise<Map<string, string>> {
++  const adminClient = getRagDeps().adminClient();
++  if (!adminClient) throw new Error('[RAG Refusal] admin client unavailable');
++  const rows = await fetchAssemblyRows(
++    members.map((row) => ({
++      chunk_id: row.hit.chunkId,
++      document_id: row.hit.documentId,
++      content: row.hit.content,
++      similarity: row.hit.similarity ?? 0,
++      metadata: row.hit.metadata,
++    })),
++    { adminClient, signal, access: ctx.access ?? { mode: 'off' } },
++  );
++  const wanted = new Set(members.map((row) => row.hit.documentId));
++  const out = new Map<string, string>();
++  for (const [id, doc] of rows.documents) {
++    if (wanted.has(id) && typeof doc.content === 'string') out.set(id, doc.content);
++  }
++  return out;
++}
++
++async function applyRefusal(
+   ctx: RankStagesInput,
+   fusedHits: FusedHit[],
+   rerankGate: RerankGateState,
+-): RefusalOutcome {
++  options: RefusalOptions,
++): Promise<RefusalOutcome> {
+   const { config, profile, embedding, queryLanguage } = ctx;
+   const standalone = Boolean(ctx.queryPlan);
+   const query = ctx.queryPlan ? ctx.queryPlan.standalone : ctx.input.query;
+@@ -242,20 +280,27 @@ function applyRefusal(
+ 
+   if (config.v2.refusalFloor === 'legacy_rule') {
+     const members = legacyPoolMembers(ctx, fusedHits);
+-    const record =
+-      members.length === 0 && fusedHits.length > 0
+-        ? emptyLegacyPool(bestDenseSimilarity(fusedHits))
+-        : legacyRuleFloor({
+-            floors: LEGACY_KEEP_FLOORS,
+-            terms: legacyQueryTerms(query),
+-            candidates: members.map((row) => ({
+-              similarity: floorSimilarity(row, standalone),
+-              hasImage: hitHasImage(row.hit),
+-              filename: row.hit.document.filename,
+-              text: `${row.hit.content} ${row.hit.document.contentPreview}`,
+-            })),
+-          });
+-    return { record, gate, poolSize: members.length };
++    if (members.length === 0 && fusedHits.length > 0) {
++      return { record: emptyLegacyPool(bestDenseSimilarity(fusedHits)), gate, poolSize: 0 };
++    }
++    const terms = legacyQueryTerms(query);
++    const judge = (textOf: (row: FusedHit) => string) =>
++      legacyRuleFloor({
++        floors: LEGACY_KEEP_FLOORS,
++        terms,
++        candidates: members.map((row) => ({
++          similarity: floorSimilarity(row, standalone),
++          hasImage: hitHasImage(row.hit),
++          filename: row.hit.document.filename,
++          text: textOf(row),
++        })),
++      });
++    const record = judge((row) => `${row.hit.content} ${row.hit.document.contentPreview}`);
++    if (record.decision !== 'refuse' || !options.evidence || terms.length === 0) return { record, gate, poolSize: members.length };
++    // Nothing kept a member on similarity, image, filename, chunk text or preview: judge the whole document text, as legacy does.
++    const evidence = await legacyEvidenceText(ctx, members, options.signal);
++    const full = judge((row) => evidence.get(row.hit.documentId) ?? '');
++    return { record: full.decision === 'answer' ? full : record, gate, poolSize: members.length, evidenceRead: evidence.size };
+   }
+ 
+   const calibration =
+@@ -474,8 +519,8 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
+     return { survivors: [...covered.topK, ...covered.pool], reserved: covered.reserved };
+   };
+ 
+-  const decide = () => {
+-    const refusal = applyRefusal(ctx, rankedHits, reranked.gate);
++  const decide = async (options: RefusalOptions) => {
++    const refusal = await applyRefusal(ctx, rankedHits, reranked.gate, options);
+     if (refusal.record.decision === 'refuse') return { ...refusal, survivors: [] as FusedHit[], reserved: 0 };
+     if (diversityOn) return { ...refusal, survivors: rankedHits, reserved: 0 };
+     return { ...refusal, ...reserve(rankedHits) };
+@@ -484,12 +529,15 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
+   const refused = await runStage(
+     spec('refusal', 'skip'),
+     signal,
+-    async () => decide(),
++    async (stageSignal) => decide({ evidence: true, signal: stageSignal }),
+     collector,
+     {
+       candidatesIn: rankedHits.length,
+-      counts: ({ record, reserved }): Record<string, number> => {
+-        const extra: Record<string, number> = coverageActive && !diversityOn ? { subq_reserved: reserved } : {};
++      counts: ({ record, reserved, evidenceRead }): Record<string, number> => {
++        const extra: Record<string, number> = {
++          ...(coverageActive && !diversityOn ? { subq_reserved: reserved } : {}),
++          ...(evidenceRead !== undefined ? { evidence_documents: evidenceRead } : {}),
++        };
+         if (record.decision === 'refuse') return { refused: 1, ...extra };
+         if (record.decision === 'answer') return { answered: 1, ...extra };
+         return { not_applied: 1, ...extra };
+@@ -507,7 +555,8 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
+     },
+   );
+ 
+-  const { record: decision, gate, survivors: refusalSurvivors } = refused.skipped ? decide() : refused.value;
++  // A skipped refusal stage (disabled, failed or timed out) decides without the evidence read, on the hits' own text.
++  const { record: decision, gate, survivors: refusalSurvivors } = refused.skipped ? await decide({ evidence: false, signal }) : refused.value;
+ 
+   // D-31, D-51: rerank, refusal, identifier guard, diversify, reservation. The guard reads each candidate's identifiers in memory.
+   let decided = refusalSurvivors;
+diff --git a/tests/rag/refusal/floor-policy.test.ts b/tests/rag/refusal/floor-policy.test.ts
+index 3400a4ab..aa6f343e 100644
+--- a/tests/rag/refusal/floor-policy.test.ts
++++ b/tests/rag/refusal/floor-policy.test.ts
+@@ -436,3 +436,194 @@ describe('legacy rule pool', () => {
+     expect(a.refusalStage?.detail).toBe('above_similarity_floor');
+   });
+ });
++
++interface DocumentRead {
++  table: string;
++  ids: string[];
++}
++
++/** An admin client whose documents table holds the given full texts; every read is recorded, and `fail` makes the documents read error. */
++function documentsAdmin(contents: Record<string, string>, options: { fail?: boolean } = {}) {
++  const reads: DocumentRead[] = [];
++  const client = {
++    from(table: string) {
++      const read: DocumentRead = { table, ids: [] };
++      const builder = {
++        select() {
++          return builder;
++        },
++        in(_column: string, values: string[]) {
++          read.ids = values;
++          return builder;
++        },
++        abortSignal() {
++          return builder;
++        },
++        then(onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) {
++          reads.push(read);
++          if (options.fail && table === 'documents') {
++            return Promise.resolve({ data: null, error: { message: 'sample failure' } }).then(onFulfilled, onRejected);
++          }
++          const data =
++            table === 'documents'
++              ? read.ids
++                  .filter((id) => id in contents)
++                  .map((id) => ({ id, filename: `${id}.md`, created_at: null, content: contents[id], metadata: null }))
++              : read.ids.map((id) => ({ id, metadata: null }));
++          return Promise.resolve({ data, error: null }).then(onFulfilled, onRejected);
++        },
++      };
++      return builder;
++    },
++  };
++  return { adminClient: () => client as never, reads, documentReads: () => reads.filter((row) => row.table === 'documents') };
++}
++
++async function rankWith(
++  env: Record<string, string>,
++  hits: FusedHit[],
++  admin: ReturnType<typeof documentsAdmin>,
++  options: { profile?: Profile; stageOverrides?: StageOverrides } = {},
++) {
++  installDeps({ ragEnv: () => env, adminClient: admin.adminClient });
++  const profile = options.profile ?? 'chat';
++  const signal = new AbortController().signal;
++  const collector = createTraceCollector({ profile, tenantKey: 's:default' });
++  const out = await runRankStages({
++    input: { scope, query: QUERY, profile, signal },
++    config: loadRagConfig(env),
++    profile,
++    embedding: { vector: [0.1], profile: null },
++    queryLanguage: 'en',
++    fusedHits: hits,
++    referenced: null,
++    signal,
++    collector,
++    stageOverrides: options.stageOverrides,
++  });
++  return { out, refusalStage: collector.stages().find((row) => row.name === 'refusal') };
++}
++
++const FILLER = 'neutral sample sentence about nothing in particular. '.repeat(6);
++const LONG_WITH_TERM = `${FILLER}The manual is kept in the second section.`;
++
++describe('legacy rule evidence read', () => {
++  beforeEach(() => {
++    resetCalibrationWarningsForTests();
++    vi.spyOn(console, 'log').mockImplementation(() => undefined);
++    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
++  });
++
++  afterEach(() => {
++    uninstallDeps();
++    resetRerankerFactoryForTests();
++    vi.restoreAllMocks();
++  });
++
++  it('a term found only beyond the preview of a pool member document answers, as legacy does', async () => {
++    expect(LONG_WITH_TERM.slice(0, 200)).not.toContain('manual');
++    const admin = documentsAdmin({ d0: LONG_WITH_TERM });
++    const hits = pool([{ similarity: 0.4, document: doc('notes.md', LONG_WITH_TERM.slice(0, 200)) }]);
++    const a = await rankWith(LEGACY_RULE, hits, admin);
++    expect(a.out.decision).toMatchObject({ decision: 'answer', reason: 'query_term_match', topScore: 0.4, threshold: 0.65 });
++    expect(admin.documentReads()).toHaveLength(1);
++    expect(admin.documentReads()[0]!.ids).toEqual(['d0']);
++    expect(a.refusalStage?.status).toBe('ok');
++    expect(a.refusalStage?.counts).toMatchObject({ answered: 1, evidence_documents: 1 });
++  });
++
++  it('a document without the term still refuses after the read', async () => {
++    const admin = documentsAdmin({ d0: `${FILLER}${FILLER}` });
++    const a = await rankWith(LEGACY_RULE, pool([{ similarity: 0.4, document: doc('notes.md', FILLER.slice(0, 200)) }]), admin);
++    expect(a.out.decision).toMatchObject({ decision: 'refuse', basis: 'similarity_floor' });
++    expect(admin.documentReads()).toHaveLength(1);
++  });
++
++  it('no read when a pool member already passes on similarity, image, filename or chunk text', async () => {
++    const admin = documentsAdmin({ d0: LONG_WITH_TERM, d1: LONG_WITH_TERM });
++    const cases: FusedHit[][] = [
++      pool([{ similarity: 0.7 }]),
++      pool([{ similarity: 0.4, document: doc('figure.png'), metadata: { image_url: 'https://storage.example.test/x.png' } }]),
++      pool([{ similarity: 0.4, document: doc('Manual-Notes.md') }]),
++      pool([{ similarity: 0.4 }, { similarity: 0.45, content: 'The manual arrives in two parts.' }]),
++    ];
++    for (const hits of cases) {
++      const a = await rankWith(LEGACY_RULE, hits, admin);
++      expect(a.out.decision.decision).toBe('answer');
++      expect(a.refusalStage?.counts?.evidence_documents).toBeUndefined();
++    }
++    expect(admin.documentReads()).toEqual([]);
++  });
++
++  it('no read under the similarity floor', async () => {
++    const admin = documentsAdmin({ d0: LONG_WITH_TERM });
++    const a = await rankWith(V2, pool([{ similarity: 0.4, document: doc('notes.md', LONG_WITH_TERM.slice(0, 200)) }]), admin);
++    expect(a.out.decision).toMatchObject({ decision: 'refuse' });
++    expect(admin.reads).toEqual([]);
++  });
++
++  it('no read when the rerank threshold gate applied', async () => {
++    const key = cellKey('cohere', 'fake-quality-v1', 'en', 'same');
++    const cells: ThresholdCells = new Map([
++      [
++        key,
++        {
++          key,
++          provider: 'cohere',
++          model: 'fake-quality-v1',
++          query_language: 'en',
++          pairing: 'same',
++          threshold: 0.6,
++          status: 'calibrated',
++          source: 'fixture',
++          tokenizer_version: LEXICAL_VERSION,
++          rerank_text_version: RERANK_TEXT_VERSION,
++        },
++      ],
++    ]);
++    vi.spyOn(thresholds, 'loadThresholds').mockReturnValue({ cells, configHash: null });
++    const reranker: Reranker = {
++      id: 'cohere',
++      model: 'fake-quality-v1',
++      scoreSemantics: 'calibrated',
++      supportedLanguages: rerankerSupportedLanguages('cohere'),
++      async rerank(_query, docs) {
++        return { scores: docs.map((_, index) => ({ index, score: 0.3 })) };
++      },
++    };
++    setRerankerFactoryForTests(() => reranker);
++    const env = { ...LEGACY_RULE, RAG_RERANKER: 'cohere', RAG_REFUSAL_THRESHOLD: 'true', COHERE_API_KEY: 'cohere-test-placeholder-key' };
++    const admin = documentsAdmin({ d0: LONG_WITH_TERM });
++    const a = await rankWith(env, pool([{ similarity: 0.4, document: doc('notes.md', LONG_WITH_TERM.slice(0, 200)) }]), admin, {
++      profile: 'eval',
++      stageOverrides: { retrievalOverrides: { rerankModel: 'fake-quality-v1' } },
++    });
++    expect(a.out.decision).toMatchObject({ decision: 'refuse', basis: 'rerank_threshold' });
++    expect(admin.documentReads()).toEqual([]);
++  });
++
++  it('a candidate outside the legacy pool is not judged on its document text', async () => {
++    const admin = documentsAdmin({ d0: LONG_WITH_TERM });
++    const below = pool([{ similarity: 0.3, document: doc('notes.md', LONG_WITH_TERM.slice(0, 200)) }]);
++    expect((await rankWith(LEGACY_RULE, below, admin)).out.decision).toMatchObject({ decision: 'refuse' });
++    const lexicalOnly = only({ 'lexical:0': 1 }, { similarity: 0.5, documentId: 'd0', document: doc('notes.md', LONG_WITH_TERM.slice(0, 200)) });
++    expect((await rankWith(LEGACY_RULE, [lexicalOnly], admin)).out.decision).toMatchObject({ decision: 'refuse' });
++    expect(admin.documentReads()).toEqual([]);
++  });
++
++  it('reads only the pool members documents, and answers only from them', async () => {
++    const admin = documentsAdmin({ d0: `${FILLER}${FILLER}`, d1: LONG_WITH_TERM });
++    const hits = pool([{ similarity: 0.4, document: doc('a.md', FILLER.slice(0, 200)) }, { similarity: 0.3, document: doc('b.md', LONG_WITH_TERM.slice(0, 200)) }]);
++    const a = await rankWith(LEGACY_RULE, hits, admin);
++    expect(a.out.decision).toMatchObject({ decision: 'refuse' });
++    expect(admin.documentReads().map((row) => row.ids)).toEqual([['d0']]);
++  });
++
++  it('a failed read skips the stage and decides on the hits text, never answering from the read', async () => {
++    const admin = documentsAdmin({ d0: LONG_WITH_TERM }, { fail: true });
++    const a = await rankWith(LEGACY_RULE, pool([{ similarity: 0.4, document: doc('notes.md', LONG_WITH_TERM.slice(0, 200)) }]), admin);
++    expect(a.refusalStage).toMatchObject({ status: 'skipped', reason: 'failed' });
++    expect(a.out.decision).toMatchObject({ decision: 'refuse', basis: 'similarity_floor' });
++    expect(admin.documentReads()).toHaveLength(1);
++  });
++});
+diff --git a/tests/rag/refusal/legacy-rule-parity.test.ts b/tests/rag/refusal/legacy-rule-parity.test.ts
+index 8665997f..f9353b3e 100644
+--- a/tests/rag/refusal/legacy-rule-parity.test.ts
++++ b/tests/rag/refusal/legacy-rule-parity.test.ts
+@@ -142,17 +142,52 @@ function fusedFromRows(rows: Row[]): FusedHit[] {
+       content: chunk.content,
+       metadata: chunk.metadata ?? {},
+       similarity: row.similarity,
+-      document: { filename: row.filename ?? `${row.id}.txt`, createdAt: null, metadata: {}, contentPreview: row.docText ?? 'neutral sample body' },
++      document: {
++        filename: row.filename ?? `${row.id}.txt`,
++        createdAt: null,
++        metadata: {},
++        contentPreview: (row.docText ?? 'neutral sample body').slice(0, 200),
++      },
+     });
+     return { hit: ranked, score: 1 / (60 + index + 1), ranks: { 'dense:0': index + 1 } };
+   });
+ }
+ 
++/** The documents table legacy assembles from: the whole document text of every row (hybrid_search_chunks returns 200 characters of it). */
++function documentsAdmin(rows: Row[]) {
++  const docs = documents(rows);
++  const client = {
++    from(table: string) {
++      let ids: string[] = [];
++      const builder = {
++        select: () => builder,
++        in(_column: string, values: string[]) {
++          ids = values;
++          return builder;
++        },
++        abortSignal: () => builder,
++        then(onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) {
++          const data =
++            table === 'documents'
++              ? ids.flatMap((id) => {
++                  const row = docs.get(id);
++                  return row ? [{ ...row, created_at: null, metadata: null }] : [];
++                })
++              : ids.map((id) => ({ id, metadata: null }));
++          return Promise.resolve({ data, error: null }).then(onFulfilled, onRejected);
++        },
++      };
++      return builder;
++    },
++  };
++  return () => client as never;
++}
++
+ async function v2Decision(
+-  c: Pick<Case, 'query' | 'context' | 'maxResults' | 'fallbackToLowerThreshold' | 'profile'> & { hits: FusedHit[] },
++  c: Pick<Case, 'query' | 'context' | 'maxResults' | 'fallbackToLowerThreshold' | 'profile'> & { hits: FusedHit[]; rows?: Row[] },
+   env: Record<string, string> = LEGACY_RULE,
+ ) {
+-  installDeps({ ragEnv: () => env });
++  installDeps({ ragEnv: () => env, ...(c.rows ? { adminClient: documentsAdmin(c.rows) } : {}) });
+   const signal = new AbortController().signal;
+   const collector = createTraceCollector({ profile: 'chat', tenantKey: 's:default' });
+   const extra = { queryContext: c.context ?? context() };
+@@ -198,6 +233,7 @@ function profileWith(scoreCalibration: Record<string, number>): EmbeddingProfile
+ }
+ 
+ const QUERY = 'where is the gadget catalogue';
++const FILLER = 'neutral sample sentence about nothing in particular. '.repeat(6);
+ 
+ const CASES: Case[] = [
+   { name: 'pool member above the text floor', query: QUERY, rows: [{ id: 'a', similarity: 0.7 }], expected: 'answer' },
+@@ -288,6 +324,36 @@ const CASES: Case[] = [
+     rows: [{ id: 'a', similarity: 0.18, filename: 'gadget-notes.md' }],
+     expected: 'refuse',
+   },
++  {
++    name: 'term in the document text beyond the 200-character preview',
++    query: QUERY,
++    rows: [{ id: 'a', similarity: 0.4, docText: `${FILLER}The catalogue lists every item.` }],
++    expected: 'answer',
++  },
++  {
++    name: 'term beyond the preview of the second pool member',
++    query: QUERY,
++    rows: [
++      { id: 'a', similarity: 0.5, docText: `${FILLER}${FILLER}` },
++      { id: 'b', similarity: 0.4, docText: `${FILLER}The catalogue lists every item.` },
++    ],
++    expected: 'answer',
++  },
++  {
++    name: 'term beyond the preview of a document below the pool threshold',
++    query: QUERY,
++    rows: [
++      { id: 'a', similarity: 0.5, docText: `${FILLER}${FILLER}` },
++      { id: 'b', similarity: 0.3, docText: `${FILLER}The catalogue lists every item.` },
++    ],
++    expected: 'refuse',
++  },
++  {
++    name: 'long documents without the term',
++    query: QUERY,
++    rows: [{ id: 'a', similarity: 0.5, docText: `${FILLER}${FILLER}` }],
++    expected: 'refuse',
++  },
+   {
+     name: 'empty legacy term from a long non-Latin word matches a pool member',
+     query: '\u5c0f\u90e8\u4ef6\u76ee\u5f55\u5728\u54ea\u91cc',
+@@ -318,7 +384,7 @@ describe('legacy parity', () => {
+     it(`legacy parity: ${c.name}`, async () => {
+       const legacy = await legacyDecision(c);
+       expect(legacy, 'legacy side').toBe(c.expected);
+-      const { out } = await v2Decision({ ...c, hits: fusedFromRows(c.rows) });
++      const { out } = await v2Decision({ ...c, hits: fusedFromRows(c.rows), rows: c.rows });
+       const v2 = out.decision.decision === 'refuse' ? 'refuse' : 'answer';
+       expect(v2, 'legacy_rule side').toBe(legacy);
+     });

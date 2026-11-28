@@ -74,6 +74,7 @@ const PURGE_LABELS = {
     "error.invalidReason": "The reason was not accepted. Choose a reason and, for Other, add a note.",
     "error.failed": "The purge did not finish. Open Purge records to see whether a record was written before trying again.",
     "error.recordGone": "This record no longer exists. The list was reloaded.",
+    "error.off": "Purge records are not available in this deployment: the feature is switched off, or the main app is a version without it. There is nothing to show here.",
     "reason.owner_request": "Requested by the content owner",
     "reason.added_in_error": "Added by mistake",
     "reason.retention_ended": "Retention period ended",
@@ -98,6 +99,8 @@ const PURGE_LABELS = {
     "store.page_images": "Page images",
     "store.uploaded_image": "Uploaded image",
     "store.sync_records": "Connector sync records",
+    "store.lexical_stats": "Keyword search statistics",
+    "store.golden_items": "Evaluation evidence and answer-check labels",
   },
   zh: {
     "panel.title": "清除记录",
@@ -169,6 +172,7 @@ const PURGE_LABELS = {
     "error.invalidReason": "原因未被接受。请选择原因；选择“其他”时请填写备注。",
     "error.failed": "彻底清除未完成。重试之前，请打开“清除记录”查看是否已写入记录。",
     "error.recordGone": "此记录已不存在。列表已重新加载。",
+    "error.off": "此部署中没有清除记录：该功能已关闭，或主应用的版本不包含此功能。此处没有可显示的内容。",
     "reason.owner_request": "内容所有者要求",
     "reason.added_in_error": "误添加",
     "reason.retention_ended": "保留期已结束",
@@ -193,6 +197,8 @@ const PURGE_LABELS = {
     "store.page_images": "页面图片",
     "store.uploaded_image": "上传的图片",
     "store.sync_records": "连接器同步记录",
+    "store.lexical_stats": "关键词检索统计",
+    "store.golden_items": "评估证据和答案检查标签",
   },
   it: {
     "panel.title": "Registro delle eliminazioni definitive",
@@ -264,6 +270,7 @@ const PURGE_LABELS = {
     "error.invalidReason": "Il motivo non è stato accettato. Scegli un motivo e, per Altro, aggiungi una nota.",
     "error.failed": "L'eliminazione definitiva non è terminata. Prima di riprovare, apri il registro per vedere se è stato scritto un record.",
     "error.recordGone": "Questo record non esiste più. L'elenco è stato ricaricato.",
+    "error.off": "Il registro delle eliminazioni definitive non è disponibile in questa distribuzione: la funzione è disattivata oppure l'app principale è una versione che non la include. Qui non c'è nulla da mostrare.",
     "reason.owner_request": "Richiesto dal titolare del contenuto",
     "reason.added_in_error": "Aggiunto per errore",
     "reason.retention_ended": "Periodo di conservazione terminato",
@@ -288,6 +295,8 @@ const PURGE_LABELS = {
     "store.page_images": "Immagini delle pagine",
     "store.uploaded_image": "Immagine caricata",
     "store.sync_records": "Record di sincronizzazione del connettore",
+    "store.lexical_stats": "Statistiche della ricerca per parole chiave",
+    "store.golden_items": "Evidenze di valutazione ed etichette di verifica delle risposte",
   },
 };
 
@@ -456,6 +465,19 @@ function purgeAppUrl(fallback) {
   return 'http://localhost:3000';
 }
 
+/** Below 768px each record stacks into one block, so the Check badge and Check again stay on screen. */
+const PURGE_STACK = {
+  table: 'max-md:block max-md:w-full',
+  head: 'max-md:hidden',
+  body: 'max-md:block',
+  row: 'max-md:flex max-md:flex-col max-md:gap-2 max-md:pt-3',
+  cell: 'max-md:block max-md:w-full max-md:max-w-none max-md:p-0',
+  label: 'md:hidden text-xs font-semibold mb-1',
+};
+const PURGE_SOLID_BUTTON = 'btn bg-base-100 text-base-content border-base-300 hover:bg-base-200';
+const PURGE_SELECT_FOCUS = 'focus-visible:[outline-color:var(--fallback-p,oklch(var(--p)/1))]';
+const PURGE_TOUCH = 'max-md:min-h-12';
+
 const PURGE_KNOWN_CODES = new Set(['not_found', 'invalid_request', 'read_only', 'purge_unavailable']);
 
 /** Maps a ragFetch result to the sentence of UI-SPEC 8.2. context: 'list' | 'purge' | 'verify'. */
@@ -475,6 +497,7 @@ function mapPurgeError(result, locale, context, appUrl) {
   } else {
     if (result && result.thrown) return context === 'list' ? { ...msg('list.unavailable'), kind: 'unavailable' } : { ...msg('error.network'), kind: 'network' };
     if (status === 401 || status === 403) return { ...msg('error.signIn', { appUrl: purgeAppUrl(appUrl) }), kind: 'auth' };
+    if (context === 'list' && status === 404) return { ...msg('error.off'), kind: 'off' };
     if (context === 'list' && status >= 500 && status < 600) return { ...msg('list.unavailable'), kind: 'unavailable' };
     if (context === 'verify' && status === 404) return { ...msg('error.recordGone'), reload: true };
     if (status === 503) return { ...msg('error.unavailable'), kind: 'unavailable' };
@@ -566,8 +589,8 @@ function purgeOpenTab(tab) {
 function purgeReceiptNode(view, locale, checkedAt) {
   const loc = purgeLoc(locale);
   const wrap = purgeEl('div', 'min-w-0');
-  const scroll = purgeEl('div', 'overflow-x-auto');
-  const table = purgeEl('table', 'table table-sm w-auto');
+  const scroll = purgeEl('div', 'overflow-x-auto max-w-full');
+  const table = purgeEl('table', 'table table-sm w-auto max-md:[&_th]:px-1.5 max-md:[&_td]:px-1.5');
   table.appendChild(purgeEl('caption', 'sr-only', view.caption));
   const thead = document.createElement('thead');
   const head = document.createElement('tr');
@@ -657,7 +680,7 @@ function openPurgeDialog(documentId, filename, source) {
   const reasonLabel = purgeEl('label', 'label');
   reasonLabel.setAttribute('for', uid + '-reason');
   reasonLabel.appendChild(purgeEl('span', 'label-text', t('dialog.reasonLabel')));
-  const select = purgeEl('select', 'select select-bordered select-sm w-full');
+  const select = purgeEl('select', 'select select-bordered select-sm w-full max-md:h-12 ' + PURGE_SELECT_FOCUS);
   select.id = uid + '-reason';
   select.setAttribute('name', 'reason_code');
   select.setAttribute('required', '');
@@ -930,6 +953,19 @@ class PurgePanel {
         this.view.replaceChildren(this.reloadAlert('alert alert-warning text-sm', mapped));
         return;
       }
+      if (mapped.kind === 'off') {
+        this.renderAlert(null);
+        this.loaded = false;
+        this.records = [];
+        this.refreshButton = null;
+        this.view.classList.remove('opacity-60');
+        const off = purgeEl('div', 'alert items-start text-left text-sm');
+        off.setAttribute('data-purge-off', '');
+        off.append(purgeIcon('bi-info-circle'), purgeEl('p', 'max-w-prose', mapped.message));
+        this.view.replaceChildren(off);
+        this.announce(mapped.message);
+        return;
+      }
       this.renderAlert(mapped);
       if (this.loaded) this.view.classList.add('opacity-60');
       else this.view.replaceChildren();
@@ -966,7 +1002,7 @@ class PurgePanel {
       code.setAttribute('lang', 'en');
       p.appendChild(code);
     }
-    const reload = purgeEl('button', 'btn btn-outline btn-sm', this.t('action.reload'));
+    const reload = purgeEl('button', PURGE_SOLID_BUTTON + ' btn-sm ' + PURGE_TOUCH, this.t('action.reload'));
     reload.type = 'button';
     reload.addEventListener('click', () => this.refresh());
     alert.append(p, reload);
@@ -1039,9 +1075,9 @@ class PurgePanel {
     region.setAttribute('tabindex', '0');
     region.setAttribute('role', 'region');
     region.setAttribute('aria-label', this.t('table.caption'));
-    const table = purgeEl('table', 'table table-sm');
+    const table = purgeEl('table', 'table table-sm ' + PURGE_STACK.table);
     table.appendChild(purgeEl('caption', 'sr-only', this.t('table.caption')));
-    const thead = document.createElement('thead');
+    const thead = purgeEl('thead', PURGE_STACK.head);
     const headRow = document.createElement('tr');
     for (const [key, cls] of [
       ['col.when', 'text-xs font-semibold'],
@@ -1056,7 +1092,7 @@ class PurgePanel {
     }
     thead.appendChild(headRow);
     table.appendChild(thead);
-    const tbody = document.createElement('tbody');
+    const tbody = purgeEl('tbody', PURGE_STACK.body);
     for (const record of this.records) this.renderRecord(tbody, record);
     table.appendChild(tbody);
     region.appendChild(table);
@@ -1094,12 +1130,14 @@ class PurgePanel {
 
   renderRecord(tbody, record, replace) {
     const view = buildPurgeRecordView(record, this.locale);
-    const data = document.createElement('tr');
+    const data = purgeEl('tr', PURGE_STACK.row);
     data.setAttribute('data-purge-record', view.id);
-    const when = purgeEl('td', 'text-sm align-top whitespace-nowrap');
+    const when = purgeEl('td', 'text-sm align-top whitespace-nowrap ' + PURGE_STACK.cell);
+    when.appendChild(purgeEl('div', PURGE_STACK.label, this.t('col.when')));
     if (view.when) when.appendChild(purgeTimeEl(view.when));
-    else when.textContent = '—';
-    const who = purgeEl('td', 'align-top min-w-0');
+    else when.appendChild(document.createTextNode('—'));
+    const who = purgeEl('td', 'align-top min-w-0 ' + PURGE_STACK.cell);
+    who.appendChild(purgeEl('div', PURGE_STACK.label, this.t('col.who')));
     const whoLine = purgeEl('div', 'text-sm break-words');
     if (view.who.kind === 'admin') {
       const template = this.t('who.admin');
@@ -1112,24 +1150,25 @@ class PurgePanel {
     reason.append(...this.reasonNodes(view));
     const doc = purgeEl('td', 'hidden lg:table-cell align-top');
     doc.append(...this.documentNodes(view));
-    const result = purgeEl('td', 'align-top');
+    const result = purgeEl('td', 'align-top ' + PURGE_STACK.cell);
+    result.appendChild(purgeEl('div', PURGE_STACK.label, this.t('col.result')));
     result.appendChild(this.badgeNode(view));
     data.append(when, who, reason, doc, result);
 
-    const detail = document.createElement('tr');
+    const detail = purgeEl('tr', PURGE_STACK.row);
     detail.setAttribute('data-purge-detail', view.id);
-    const cell = purgeEl('td', 'pt-0');
+    const cell = purgeEl('td', 'pt-0 ' + PURGE_STACK.cell + ' max-md:pb-3');
     cell.setAttribute('colspan', '5');
-    const line = purgeEl('div', 'flex flex-wrap items-start gap-2');
-    const details = purgeEl('details', 'min-w-0 flex-1');
+    const line = purgeEl('div', 'flex flex-wrap items-start gap-2 max-md:flex-col max-md:items-stretch');
+    const details = purgeEl('details', 'min-w-0 flex-1 max-md:w-full');
     if (this.openDetails.has(view.id)) details.setAttribute('open', '');
     details.addEventListener('toggle', () => {
       if (details.hasAttribute('open') || details.open) this.openDetails.add(view.id);
       else this.openDetails.delete(view.id);
     });
-    const summary = purgeEl('summary', 'cursor-pointer text-sm rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', this.t('action.details'));
+    const summary = purgeEl('summary', 'cursor-pointer text-sm rounded py-1 max-md:py-3 ' + PURGE_TOUCH + ' focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', this.t('action.details'));
     details.appendChild(summary);
-    const inner = purgeEl('div', 'mt-2 min-w-0');
+    const inner = purgeEl('div', 'mt-2 min-w-0 max-w-full');
     const narrow = purgeEl('div', 'md:hidden mb-2');
     narrow.append(...this.reasonNodes(view));
     const narrowDoc = purgeEl('div', 'lg:hidden mb-2');
@@ -1138,7 +1177,7 @@ class PurgePanel {
     if (view.receipt) inner.appendChild(purgeReceiptNode(view.receipt, this.locale, view.checkedAt));
     else inner.appendChild(purgeEl('p', 'text-sm', view.noCheck));
     details.appendChild(inner);
-    const check = purgeEl('button', 'btn btn-outline md:btn-sm ml-auto', this.t('action.verify'));
+    const check = purgeEl('button', 'btn btn-outline md:btn-sm ml-auto max-md:ml-0 max-md:self-start', this.t('action.verify'));
     check.type = 'button';
     check.setAttribute('aria-label', this.t('action.verifyAria', { id: view.idShort }));
     check.addEventListener('click', () => this.verify(view.id, check));
@@ -1247,6 +1286,7 @@ if (typeof window !== 'undefined') {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    purgeStoreLabel,
     PURGE_LABELS,
     purgeLabel,
     buildPurgeReceiptView,

@@ -1,0 +1,122 @@
+{
+  "d31_checklist": [
+    {
+      "evidence": "30-defaults: gate passed=True, paired all_zero=True; 30-defaults-ingest: gate passed=True, paired all_zero=True",
+      "letter": "a",
+      "passed": true
+    },
+    {
+      "evidence": "completeness vs single-pass: improved none, regressions none; targets measured: category:scoped_compound",
+      "letter": "b",
+      "passed": false
+    },
+    {
+      "evidence": "glossary entry eligible=True; tests passed: tests/rag/query/glossary-translate.test.ts, tests/rag/query/glossary-rewrite.test.ts, tests/rag/ingest-translate-glossary.test.ts",
+      "letter": "c",
+      "passed": true
+    },
+    {
+      "evidence": "30 detection cases (sha256 46a98551c0cf); tests passed: tests/rag/lang/detect-cases.test.ts, tests/rag/lang/resolve-query-language.test.ts",
+      "letter": "d",
+      "passed": true
+    },
+    {
+      "evidence": "pairs pair:en->it, pair:en->zh, pair:it->en, pair:it->zh, pair:zh->en, pair:zh->it; voice gates passed=True; query-stage voice p95 1 ms (budget 300 ms)",
+      "letter": "e",
+      "passed": true
+    },
+    {
+      "evidence": "speculative traced on 448 turns, model_route on 454; eligibility recorded; tests passed: tests/rag/query/speculative.test.ts, tests/rag/model-router.test.ts",
+      "letter": "f",
+      "passed": true
+    },
+    {
+      "evidence": "WhatsApp report passed=True; tests passed: tests/rag/query/history-fallback.test.ts, tests/whatsapp/history.test.ts",
+      "letter": "g",
+      "passed": true
+    },
+    {
+      "evidence": "8 unanswerable items refused out_of_scope; scope gate p95 0.269618 ms (budget 5 ms); false-refusal regressions ['category:context_overflow:false_refusal_rate', 'category:cross_lingual:false_refusal_rate', 'category:multi_turn:false_refusal_rate', 'category:typo:false_refusal_rate', 'language:en:false_refusal_rate', 'language:zh:false_refusal_rate', 'overall:false_refusal_rate', 'pair:en->zh:false_refusal_rate', 'pair:zh->en:false_refusal_rate']; off equal True; tests passed: tests/rag/scope/stage.test.ts",
+      "letter": "h",
+      "passed": false
+    },
+    {
+      "evidence": "written by rag_eval.compare query-additions from 12 arm runs",
+      "letter": "i",
+      "passed": true
+    }
+  ],
+  "decided_by": "rag_eval.compare query-additions",
+  "recorded_at": "2026-11-28T07:58:31Z",
+  "report_hash": "ca8f2edb069f5f2bb7e477aa43f0f94d88c29735e7e1aec29926ca4ebc06a16d",
+  "schema_version": 1,
+  "source": "fixture",
+  "switches": [
+    {
+      "eligible": false,
+      "improved_slices": [],
+      "name": "RAG_QUERY_DECOMPOSE",
+      "notes": "targets measured: category:scoped_compound",
+      "regressions": []
+    },
+    {
+      "eligible": false,
+      "improved_slices": [],
+      "name": "RAG_QUERY_DECOMPOSE_COMPLETENESS",
+      "notes": "targets measured: category:scoped_compound",
+      "regressions": []
+    },
+    {
+      "eligible": false,
+      "improved_slices": [],
+      "name": "RAG_QUERY_SUBQ_FILTERS",
+      "notes": "targets measured: category:scoped_compound",
+      "regressions": []
+    },
+    {
+      "eligible": true,
+      "improved_slices": [],
+      "name": "RAG_TRANSLATION_GLOSSARY",
+      "notes": "tests passed: tests/rag/query/glossary-translate.test.ts, tests/rag/query/glossary-rewrite.test.ts, tests/rag/ingest-translate-glossary.test.ts",
+      "regressions": []
+    },
+    {
+      "eligible": true,
+      "improved_slices": [],
+      "name": "RAG_SPECULATIVE_RETRIEVAL",
+      "notes": "all-turns pre-retrieval p95 36 ms vs 37 ms",
+      "regressions": []
+    },
+    {
+      "eligible": false,
+      "improved_slices": [],
+      "name": "RAG_MODEL_ROUTING",
+      "notes": "generation p95 162 ms vs 162 ms against the fixed quality model; answer correctness is a live judge run",
+      "regressions": []
+    },
+    {
+      "eligible": false,
+      "improved_slices": [],
+      "name": "RAG_SCOPE_GATE",
+      "notes": "correct refusals 0.962963 vs 0.962963; off equal to baseline: 30-defaults: gate passed=True, paired all_zero=True; 30-defaults-ingest: gate passed=True, paired all_zero=True",
+      "regressions": [
+        "category:context_overflow:false_refusal_rate",
+        "category:cross_lingual:false_refusal_rate",
+        "category:multi_turn:false_refusal_rate",
+        "category:typo:false_refusal_rate",
+        "language:en:false_refusal_rate",
+        "language:zh:false_refusal_rate",
+        "overall:false_refusal_rate",
+        "pair:en->zh:false_refusal_rate",
+        "pair:zh->en:false_refusal_rate"
+      ]
+    },
+    {
+      "eligible": false,
+      "improved_slices": [],
+      "name": "RAG_QUERY_VOICE_TRANSFORMS:translate",
+      "notes": "query-stage voice p95 1 ms (budget 300 ms)",
+      "regressions": []
+    }
+  ]
+}

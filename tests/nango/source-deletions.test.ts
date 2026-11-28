@@ -40,7 +40,8 @@ vi.mock('@/lib/rag', async () => {
   };
 });
 
-import { applySourceDeletions, loadSourceConnection, type SourceConnectionRow } from '@/lib/nango/source-deletions';
+import { applyDefaultDeletion, applySourceDeletions, loadSourceConnection, type SourceConnectionRow } from '@/lib/nango/source-deletions';
+import { logger } from '@/lib/logger';
 import { raiseSourceAlert } from '@/lib/nango/source-alerts';
 
 const OWNER: string = TWO_TENANT_IDS.userA;
@@ -233,5 +234,55 @@ describe('applySourceDeletions (D-03, D-08)', () => {
     expect(memory.ops.filter((op) => op.operation === 'update')).toEqual([
       { table: 'nango_connections', operation: 'update', filters: [{ kind: 'eq', column: 'id', value: connection(null).id }], values: { last_reconcile_status: 'paused' } },
     ]);
+  });
+});
+
+describe('legacy NULL-mode deletion logs ids only (06.3-SECURITY W4)', () => {
+  const NAME = 'Neutral-Name-Marker.bin';
+
+  function capture() {
+    const lines: unknown[][] = [];
+    for (const level of ['debug', 'info', 'warn', 'error'] as const) {
+      vi.spyOn(logger, level).mockImplementation((...args: unknown[]) => {
+        lines.push(args);
+      });
+    }
+    return lines;
+  }
+
+  function mentionsName(lines: unknown[][]): boolean {
+    return lines.some((args) => args.some((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg) ?? '').includes(NAME)));
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    state.pipeline = 'legacy';
+  });
+
+  it('a removed document and its sync record are logged without the file name', async () => {
+    const lines = capture();
+    const memory = createNangoMemoryAdmin({
+      nango_sync_records: [{ id: 'rec-w4', user_id: OWNER, connection_id: CONNECTION, file_id: 'f-w4', file_name: NAME, document_id: 'doc-w4', status: 'completed' }],
+      documents: [{ id: 'doc-w4', user_id: OWNER, source: 'nango' }],
+    });
+    const deleted = await applyDefaultDeletion(
+      { id: 'rec-w4', file_id: 'f-w4', file_name: NAME, document_id: 'doc-w4' } as never,
+      { supabaseAdmin: memory.admin as never, tenantKey: null, connectionId: CONNECTION, userId: OWNER },
+    );
+    expect(deleted).toBe(true);
+    expect(lines.length).toBeGreaterThan(0);
+    expect(mentionsName(lines)).toBe(false);
+  });
+
+  it('a failed removal is logged without the file name', async () => {
+    const lines = capture();
+    const failing = { from: () => { throw new Error(`boom ${NAME}`); } };
+    const deleted = await applyDefaultDeletion(
+      { id: 'rec-w4', file_id: 'f-w4', file_name: NAME, document_id: 'doc-w4' } as never,
+      { supabaseAdmin: failing as never, tenantKey: null, connectionId: CONNECTION, userId: OWNER },
+    );
+    expect(deleted).toBe(false);
+    expect(lines.length).toBeGreaterThan(0);
+    expect(mentionsName(lines)).toBe(false);
   });
 });

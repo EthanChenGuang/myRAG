@@ -572,3 +572,22 @@ describe('in-app connector grid (D-24, D-26)', () => {
     expect(off.connectorGridProviders()).toEqual(['google-drive', 'dropbox', 'notion', 'sharepoint-online', 'one-drive']);
   });
 });
+
+describe('UI review 06.3 fixes: SharePoint picker at 360px', () => {
+  it('site names wrap to two lines instead of truncating, and rows are 48px touch targets below 768px', async () => {
+    const fetchMock = standardFetch();
+    const loaded = loadContext(fetchMock.fn);
+    const picker = newPicker(loaded, 'sharepoint-online', { modeLabel: 'Soft delete' });
+    void picker.openPicker();
+    await flush();
+    const modal = modalOf(loaded);
+    const row = rowOf(modal, 'Site A');
+    const name = row.querySelector('[title]')!;
+    expect(name.className).not.toContain('truncate');
+    expect(name.className).toContain('line-clamp-2');
+    expect(name.className).toContain('break-words');
+    expect(row.querySelector('label')!.className).toContain('max-md:min-h-12');
+    const open = buttonByLabel(modal, 'Open site Site A');
+    expect(open.className).toContain('max-md:min-h-12');
+  });
+});

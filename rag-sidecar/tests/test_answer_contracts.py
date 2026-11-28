@@ -87,6 +87,10 @@ def test_citation_record_field_names_are_exactly_d01():
         {"strategy": "claude_citations"},
         {"quote": ""},
         {"quote": "", "withdrawn": False},
+        # 06.3-SECURITY W8: two code points minimum unless withdrawn.
+        {"quote": "x"},
+        {"quote": "\U0001F600"},
+        {"quote": "   "},
         {"unexpected": 1},
         {"withdrawn": True, "unexpected": 1},
     ],

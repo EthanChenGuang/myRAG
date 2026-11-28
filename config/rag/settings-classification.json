@@ -742,6 +742,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_RERANK_LOCAL_STATS",
+      "side": "query"
+    },
+    {
       "name": "RAG_RERANK_TIER_CHAT",
       "side": "query"
     },

@@ -751,3 +751,11 @@ def test_review_item_phase53_source_reasons_and_optional_trace_and_channel():
     for bad in ({"source": "mined"}, {"reasons": ["sampled"]}, {"trace_id": ""}):
         with pytest.raises(ValidationError):
             ReviewItem.model_validate(_review_item(**bad))
+
+
+def test_review_item_accepts_the_calc_reasons_mining_writes():
+    # 0984 rag_mine_failed_queries writes calc_mismatch and calc_unverified into rag_review_items.reasons.
+    item = ReviewItem.model_validate(_review_item(reasons=["calc_mismatch", "calc_unverified"]))
+    assert item.reasons == ["calc_mismatch", "calc_unverified"]
+    with pytest.raises(ValidationError):
+        ReviewItem.model_validate(_review_item(reasons=["calc_other"]))

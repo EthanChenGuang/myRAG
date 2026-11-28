@@ -12,7 +12,7 @@ import type { FakeLangChainTable } from '../../src/lib/rag/query/langchain/fake.
 import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, TerminologyImportRowSchema, type GoldenItem, type RagRunRequest, type RagTrace, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
-import { ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.mts';
+import { goldenInForceSha256, ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.mts';
 import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTableSplitTenant, type TableSplitTenant } from './table-split.mts';
 import { isTemplatedItem } from './templated-fixtures.mts';
 import { phase33BuildEnv, PHASE33_PROCESS_SWITCHES } from './templated-seed.mts';
@@ -170,6 +170,8 @@ export interface InProcessEval {
 
 export interface RunEvalOptions {
   goldenPath: string;
+  /** The fixture floor's golden check (prepareInProcessEval); defaults to the golden set in force for the fixture mode (04.1-18), null installs no floor. */
+  fixtureFloorGolden?: string | null;
   corpusDir: string;
   outDir: string;
   deploymentMode: DeploymentMode;
@@ -428,6 +430,11 @@ export async function prepareInProcessEval(options: {
   externalBackends?: readonly ExternalBackendId[];
   /** Test seams of prepareExternalBackends (writer recording, forced index state). */
   externalBackendTestHooks?: Pick<PrepareExternalBackendsOptions, 'wrapStore' | 'indexStateForTests'>;
+  /**
+   * The fixture floor: the sha256 of the golden set in force for the mode (the entry must have been fitted on it, or the run stops),
+   * null to install no floor (calibration runs), absent to read the entry unchecked (callers without a run golden file).
+   */
+  fixtureFloorGolden?: string | null;
 }): Promise<InProcessEval> {
   const {
     corpusDir,
@@ -704,7 +711,11 @@ export async function prepareInProcessEval(options: {
 
   const floorModule = await import('../../src/lib/rag/refusal/floor.ts');
   const { loadFixtureScoreCalibration } = await import('./fixture-floor.mts');
-  floorModule.setEvalScoreCalibration(loadFixtureScoreCalibration(fixtureMode === 'ingest' ? 'ingest' : 'prechunked'));
+  floorModule.setEvalScoreCalibration(
+    options.fixtureFloorGolden === null
+      ? null
+      : loadFixtureScoreCalibration(fixtureMode === 'ingest' ? 'ingest' : 'prechunked', { goldenSha256: options.fixtureFloorGolden }),
+  );
 
   return {
     POST: route.POST as unknown as InProcessEval['POST'],
@@ -979,6 +990,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     }
     if (runConfig.overrides) requestOptions.retrieval_overrides = runConfig.overrides;
     if (voiceEntry) requestOptions.entry_profile = 'voice';
+    if (runConfig.selectedModel !== undefined) requestOptions.selected_model = runConfig.selectedModel;
     if (runConfig.chunkingProfiles?.length) {
       if (baseUrl) throw new RunConfigError('[Eval Harness] chunking_profiles seed the fixture database only; a --base-url run cannot use them');
       if (fixtureMode !== 'ingest') throw new RunConfigError(CHUNKING_PROFILES_NEED_INGEST);
@@ -1095,6 +1107,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           corpusDir,
           deploymentMode,
           fixtureMode,
+          fixtureFloorGolden:
+            options.fixtureFloorGolden === undefined ? goldenInForceSha256(fixtureMode === 'ingest' ? 'ingest' : 'prechunked') : options.fixtureFloorGolden,
           allowedScopes: requestedScope ? [requestedScope] : [],
           embeddingProfileId,
           ingestFixture,
@@ -1337,6 +1351,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     ...(citations ? { citations: true } : {}),
     ...(groundedness ? { groundedness: true } : {}),
     ...(requestOptions.entry_profile ? { entry_profile: requestOptions.entry_profile } : {}),
+    ...(requestOptions.selected_model ? { selected_model: requestOptions.selected_model } : {}),
   };
   const embedder = baseUrl
     ? null

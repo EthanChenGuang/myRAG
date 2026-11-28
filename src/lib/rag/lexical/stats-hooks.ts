@@ -27,20 +27,23 @@ function logOnce(tenantKey: string, rpc: string, code: string): void {
   console.warn(`[Lexical Stats] ${hash} ${rpc} failed (${code}); the write is kept and the next publish, relex or rag:lexstats run catches up`);
 }
 
-async function lexicalScoring(config: Pick<RagConfig, 'v2'> | undefined): Promise<{ mode: string; dfMode: string }> {
+async function lexicalScoring(config: Pick<RagConfig, 'v2'> | undefined): Promise<{ mode: string; dfMode: string; rerankLocalStats: string }> {
   try {
     // Loaded on use: the fixture harness imports the write paths before the app environment is set.
-    const scoring = config
-      ? config.v2.lexicalScoring
-      : await Promise.all([import('../config'), import('../deps')]).then(([{ loadRagConfig }, { getRagDeps }]) => loadRagConfig(getRagDeps().ragEnv()).v2.lexicalScoring);
-    return { mode: scoring?.mode ?? 'ts_rank_cd', dfMode: scoring?.dfMode ?? 'raw' };
+    const v2 = config
+      ? config.v2
+      : await Promise.all([import('../config'), import('../deps')]).then(([{ loadRagConfig }, { getRagDeps }]) => loadRagConfig(getRagDeps().ragEnv()).v2);
+    const scoring = v2?.lexicalScoring;
+    return { mode: scoring?.mode ?? 'ts_rank_cd', dfMode: scoring?.dfMode ?? 'raw', rerankLocalStats: v2?.rerankLocalStats ?? 'pool' };
   } catch {
-    return { mode: 'ts_rank_cd', dfMode: 'raw' };
+    return { mode: 'ts_rank_cd', dfMode: 'raw', rerankLocalStats: 'pool' };
   }
 }
 
-async function scoringMode(config: Pick<RagConfig, 'v2'> | undefined): Promise<string> {
-  return (await lexicalScoring(config)).mode;
+/** D-17, 04.4-21 D-55: the statistics are kept fresh while bm25 scores the lexical leg or the local reranker reads them (tenant mode). */
+async function statsInUse(config: Pick<RagConfig, 'v2'> | undefined): Promise<boolean> {
+  const scoring = await lexicalScoring(config);
+  return scoring.mode === 'bm25' || scoring.rerankLocalStats === 'tenant';
 }
 
 /**
@@ -60,14 +63,15 @@ function adminOf(db: RpcClient): LexstatsDb {
 }
 
 /**
- * D-17: after a write that changed a tenant's member chunks, and only while RAG_LEXICAL_SCORING resolves to bm25, makes sure the tenant
+ * D-17: after a write that changed a tenant's member chunks, and only while RAG_LEXICAL_SCORING resolves to bm25 or the effective
+ * RAG_RERANK_LOCAL_STATS is tenant (04.4-21, rerankLocalStats), makes sure the tenant
  * keeps statistics (enable; a rebuild while the state is building) and folds its pending rows once (one compaction batch). Best effort:
  * it resolves within the timeout whatever happens, never throws, and logs a failure once per process and tenant-key hash with the rpc
  * name and code only (T-04.4-31). The calls it started keep running in the database after a timeout; the advisory lock in 0902 orders
  * them with any later caller.
  */
 export async function afterLexicalWrite(deps: LexicalWriteDeps, tenantKey: string): Promise<void> {
-  if ((await scoringMode(deps.config)) !== 'bm25') return;
+  if (!(await statsInUse(deps.config))) return;
   let db: RpcClient | null;
   try {
     db = deps.db();

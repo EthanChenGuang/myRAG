@@ -14,12 +14,13 @@ import pytest
 from rag_sidecar.contracts.retrieval import RefusalCalibrationConfig, RefusalThresholds
 
 from rag_eval.bounds import upper_bound
-from rag_eval.calibrate.refusal import FixtureScoreCalibration
+from rag_eval.calibrate.refusal import read_floor_file
 from rag_eval.sweep.retrieval import SweepResult
 
 REPO = Path(__file__).resolve().parents[2]
 THRESHOLDS = REPO / "eval" / "config" / "refusal-thresholds.json"
 FLOOR = REPO / "eval" / "config" / "fixture-score-calibration.json"
+INGEST_FLOOR = REPO / "eval" / "config" / "fixture-score-calibration.ingest.json"
 CALIBRATION = REPO / "eval" / "config" / "refusal-calibration.json"
 NOISE = REPO / "eval" / "config" / "noise.json"
 PARAMS = REPO / "eval" / "config" / "retrieval-params.json"
@@ -61,7 +62,7 @@ def build_outcome(rec_dir: Path, off_dir: Path) -> dict:
     golden = _golden()
     config = RefusalCalibrationConfig.model_validate_json(CALIBRATION.read_text(encoding="utf-8"))
     noise_floor = json.loads(NOISE.read_text(encoding="utf-8"))["floor"]
-    floor = FixtureScoreCalibration.model_validate_json(FLOOR.read_text(encoding="utf-8"))
+    floor = read_floor_file(FLOOR).modes["prechunked"]
     outcome: dict = {"schema_version": 1, "source": "fixture", "runs": {}, "dev": {}, "test": {}}
     for name, run_dir in zip(RUNS, (Path(rec_dir), Path(off_dir))):
         report = json.loads((run_dir / "report.json").read_text(encoding="utf-8"))
@@ -85,7 +86,7 @@ def build_outcome(rec_dir: Path, off_dir: Path) -> dict:
     rec, off = outcome["dev"]["v2_recommended"], outcome["dev"]["v2_all_off"]
     outcome["target_false_refusal"] = target
     outcome["noise_floor"] = noise_floor
-    outcome["fixture_floor"] = {"source": floor.source, "fixture_mode": floor.fixture_mode, **floor.score_calibration}
+    outcome["fixture_floor"] = {"source": "fixture", "fixture_mode": "prechunked", **floor.score_calibration}
     outcome["comparison"] = {
         "dev_correct_refusal_delta": rec["correct_refusal"] - off["correct_refusal"],
         "dev_correct_refusal_improved": rec["correct_refusal"] > off["correct_refusal"],
@@ -145,11 +146,15 @@ def test_each_language_has_a_calibrated_same_language_fixture_cell():
 
 
 def test_fixture_floor_is_a_calibrated_fixture_record_with_only_a_context_threshold():
-    floor = FixtureScoreCalibration.model_validate_json(FLOOR.read_text(encoding="utf-8"))
-    assert floor.source == "fixture" and floor.status == "calibrated"
-    assert list(floor.score_calibration) == ["context_threshold"]
-    assert 0 < floor.score_calibration["context_threshold"] < 0.65
-    assert floor.dev is not None and floor.dev.false_refusal_rate <= floor.target_false_refusal
+    for mode, path in (("prechunked", FLOOR), ("ingest", INGEST_FLOOR)):
+        floors = read_floor_file(path)
+        assert floors.source == "fixture" and sorted(floors.modes) == [mode]
+        floor = floors.modes[mode]
+        assert floor.status == "calibrated", mode
+        assert list(floor.score_calibration) == ["context_threshold"], mode
+        assert 0 < floor.score_calibration["context_threshold"] < 0.65, mode
+        assert floor.dev is not None and floor.dev.false_refusal_rate <= floor.target_false_refusal, mode
+        assert len(floor.golden_sha256) == 64, mode
 
 
 def test_sweep_result_is_a_fixture_run_on_dev_that_left_the_params_alone():
@@ -209,8 +214,12 @@ def test_xlg_03_stays_deferred_while_no_fixture_cross_cell_is_calibrated():
 
 
 def test_outcome_uses_the_committed_floor():
-    floor = FixtureScoreCalibration.model_validate_json(FLOOR.read_text(encoding="utf-8"))
-    assert _outcome()["fixture_floor"] == {"source": "fixture", "fixture_mode": floor.fixture_mode, **floor.score_calibration}
+    """The outcome records the prechunked floor it was built with; it must be the committed one when both share a golden set."""
+    floor = read_floor_file(FLOOR).modes["prechunked"]
+    outcome = _outcome()
+    assert outcome["fixture_floor"]["source"] == "fixture" and outcome["fixture_floor"]["fixture_mode"] == "prechunked"
+    if {run["golden_sha256"] for run in outcome["runs"].values()} == {floor.golden_sha256}:
+        assert outcome["fixture_floor"] == {"source": "fixture", "fixture_mode": "prechunked", **floor.score_calibration}
 
 
 if __name__ == "__main__":

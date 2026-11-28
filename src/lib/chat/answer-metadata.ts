@@ -15,6 +15,7 @@ import {
   type RefusalFeedbackRequest,
 } from '@/lib/rag-eval/contracts.generated';
 import { withLegacyChecksSentenceReasons, withLegacySentenceReasons } from '@/lib/answers/sentence-reason';
+import { citationQuoteAllowed } from '@/lib/citations/quote';
 
 export type { RagTurnMetadata };
 
@@ -115,9 +116,7 @@ function pickCitationFields(source: Record<string, unknown>): Omit<StreamAnswerM
   const picked: Omit<StreamAnswerMetadata, 'ragTraceId'> = {};
   const answerId = AnswerIdSchema.safeParse(source.answerId);
   if (answerId.success) picked.answerId = answerId.data;
-  const citations = validEntries(source.citations, CitationRecordSchema)?.filter(
-    (entry) => entry.quote.length > 0 || entry.withdrawn === true,
-  );
+  const citations = validEntries(source.citations, CitationRecordSchema)?.filter(citationQuoteAllowed);
   if (citations) picked.citations = citations;
   const strategy = StrategySchema.safeParse(source.citationStrategy);
   if (strategy.success) picked.citationStrategy = strategy.data;

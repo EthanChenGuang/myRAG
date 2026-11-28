@@ -513,6 +513,13 @@
               "version_conflict"
             ],
             "type": "string"
+          },
+          {
+            "enum": [
+              "calc_mismatch",
+              "calc_unverified"
+            ],
+            "type": "string"
           }
         ]
       },

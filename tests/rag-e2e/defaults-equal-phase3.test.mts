@@ -483,4 +483,10 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
     assert.equal(process.env.RAG_LEXICAL_DF_MODE, undefined, 'the run leaves RAG_LEXICAL_DF_MODE unset');
     assert.deepEqual(await queueRowCounts(LEXICAL_CLUSTER_TABLES), Object.fromEntries(LEXICAL_CLUSTER_TABLES.map((table) => [table, 0])));
   });
+
+  test('with default settings the local reranker resolves to pool statistics (04.4-20, D-54)', () => {
+    assert.equal(process.env.RAG_RERANK_LOCAL_STATS, undefined, 'the run leaves RAG_RERANK_LOCAL_STATS unset');
+    assert.equal(rag.loadRagConfig({}).v2.rerankLocalStats, 'pool');
+    assert.equal(rag.loadRagConfig({ RAG_PIPELINE: 'v2' }).v2.rerankLocalStats, 'pool');
+  });
 });

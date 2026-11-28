@@ -19,9 +19,10 @@ const DOC_ID = '00000000-0000-4000-8000-0000000004a1';
 const BM25_SIGNATURE =
   'rag_bm25_search_chunks(text,text,vector,text[],integer,date,date,text[],uuid[],text[],text[],text[],text,numeric,numeric,text,jsonb,boolean,text[],boolean,date,jsonb,text[],double precision,double precision,integer,text[],boolean,text)';
 const TRIGGER_FUNCTIONS = ['rag_lexstats_chunks_delete()', 'rag_lexstats_chunks_insert()', 'rag_lexstats_chunks_update()'];
-/** The thirteen callable functions of the phase: rag_lexical_dl (0900), the eight of 0902 (with the unguarded compaction body), the hook (0903), the search (0904), cluster enable and disable (0905). */
+/** The fourteen callable functions of the phase: rag_lexical_dl (0900), the eight of 0902 (with the unguarded compaction body), the hook (0903), the search (0904), cluster enable and disable (0905), the rerank statistics read (0906). */
 const RPC_SIGNATURES = [
   'rag_lexical_dl(tsvector)',
+  'rag_lexical_rerank_stats(text,text[],uuid[])',
   'rag_lexstats_check(text)',
   'rag_lexstats_cluster_disable(text)',
   'rag_lexstats_cluster_enable(text)',
@@ -63,6 +64,12 @@ function rpcCalls(tenant: string): Array<{ fn: string; body: Record<string, unkn
       body: { p_tenant_key: tenant, p_profile_id: LEGACY, p_query_embedding: null, p_lexical_tokens: ['w1'], p_lexical_limit: 5, p_df_mode: 'cluster' },
       sql: "SELECT * FROM public.rag_bm25_search_chunks(p_tenant_key => $1, p_profile_id => $2, p_query_embedding => NULL, p_lexical_tokens => $3::text[], p_lexical_limit => 5, p_df_mode => 'cluster')",
       params: [tenant, LEGACY, ['w1']],
+    },
+    {
+      fn: 'rag_lexical_rerank_stats',
+      body: { p_tenant_key: tenant, p_terms: ['w1'], p_chunk_ids: [] },
+      sql: "SELECT * FROM public.rag_lexical_rerank_stats($1, ARRAY['w1'], ARRAY[]::uuid[])",
+      params: [tenant],
     },
     { fn: 'rag_lexstats_status', body: { p_tenant_key: tenant }, sql: 'SELECT public.rag_lexstats_status($1)', params: [tenant] },
     { fn: 'rag_lexstats_check', body: { p_tenant_key: tenant }, sql: 'SELECT public.rag_lexstats_check($1)', params: [tenant] },
@@ -164,7 +171,7 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
            FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
           WHERE n.nspname = 'public'
             AND (p.proname LIKE 'rag\\_lexstats\\_%' OR p.proname LIKE 'rag\\_bm25\\_%'
-                 OR p.proname IN ('rag_lexical_dl', 'rag_purge_hook_lexical_stats')
+                 OR p.proname IN ('rag_lexical_dl', 'rag_lexical_rerank_stats', 'rag_purge_hook_lexical_stats')
                  OR p.proname ~ '^rag_lexical_(stats|df|corpus)')`,
       );
       const normalised = rows.rows.map((row) => ({ ...row, sig: row.sig.replace(/\bpublic\./g, '').replace(/\s*,\s*/g, ',') }));

@@ -27,6 +27,7 @@ const NEW_FUNCTIONS: Array<[string, string, unknown[]]> = [
   ['rag_purge_audit_list(uuid, integer, integer)', 'SELECT * FROM public.rag_purge_audit_list($1::uuid, 10, 0)', [crypto.randomUUID()]],
   ['rag_purge_audit_get(uuid, uuid)', 'SELECT * FROM public.rag_purge_audit_get($1::uuid, $2::uuid)', [crypto.randomUUID(), crypto.randomUUID()]],
   ['rag_purge_audit_pending(integer)', 'SELECT * FROM public.rag_purge_audit_pending(10)', []],
+  ['rag_purge_audit_recent(timestamptz, uuid, integer)', 'SELECT * FROM public.rag_purge_audit_recent(NULL, NULL, 10)', []],
   ['rag_purge_tombstone_exists(text, text, text)', "SELECT public.rag_purge_tombstone_exists('s:default', 'conn', 'file')", []],
 ];
 
@@ -41,6 +42,9 @@ for (const mode of MODES) {
     after(async () => {
       await world?.db.close();
     });
+
+    // Connector documents live in the owner's workspace (nangoOwnerScope): u:<owner> in multi-tenant mode, s:default in single.
+    const ownerTenantOf = () => (mode === 'multi-tenant' ? { key: `u:${world.tenantA.userId}`, userId: world.tenantA.userId, orgId: null } : world.tenantA);
 
     test('an unknown lineage and an other tenant lineage answer the same not_found and purge nothing', async () => {
       const unknown = await errorOf(() => purge(world.db, world.tenantA.key, crypto.randomUUID(), adminActor(world.adminA)));
@@ -66,23 +70,40 @@ for (const mode of MODES) {
     });
 
     test('a source_sync actor purges only nango versions of its own connection', async () => {
-      const own = await createConnection(world, world.tenantA);
-      const other = await createConnection(world, world.tenantA);
+      const ownerTenant = ownerTenantOf();
+      const own = await createConnection(world, ownerTenant);
+      const other = await createConnection(world, ownerTenant);
       const fileId = `file-${crypto.randomUUID().slice(0, 8)}`;
-      const seeded = await seedLineage(world, world.tenantA, { nango: { ...own, fileId } });
-      const upload = await seedLineage(world, world.tenantA);
+      const seeded = await seedLineage(world, ownerTenant, { nango: { ...own, fileId } });
+      const upload = await seedLineage(world, ownerTenant);
       const sync = reason('source_deleted');
-      assert.equal((await errorOf(() => purge(world.db, world.tenantA.key, seeded.lineageId, syncActor(other.connectionUuid), sync))).message, 'not_found');
-      assert.equal((await errorOf(() => purge(world.db, world.tenantA.key, seeded.lineageId, syncActor(crypto.randomUUID()), sync))).message, 'not_found');
-      assert.equal((await errorOf(() => purge(world.db, world.tenantA.key, upload.lineageId, syncActor(own.connectionUuid), sync))).message, 'not_found');
-      assert.equal((await errorOf(() => purge(world.db, world.tenantA.key, seeded.lineageId, syncActor(own.connectionUuid), reason('owner_request')))).code, '22023');
+      assert.equal((await errorOf(() => purge(world.db, ownerTenant.key, seeded.lineageId, syncActor(other.connectionUuid), sync))).message, 'not_found');
+      assert.equal((await errorOf(() => purge(world.db, ownerTenant.key, seeded.lineageId, syncActor(crypto.randomUUID()), sync))).message, 'not_found');
+      assert.equal((await errorOf(() => purge(world.db, ownerTenant.key, upload.lineageId, syncActor(own.connectionUuid), sync))).message, 'not_found');
+      assert.equal((await errorOf(() => purge(world.db, ownerTenant.key, seeded.lineageId, syncActor(own.connectionUuid), reason('owner_request')))).code, '22023');
       assert.equal(await count(world.db, 'SELECT count(*) AS n FROM documents WHERE lineage_id = $1', [seeded.lineageId]), 2);
 
-      const result = await purge(world.db, world.tenantA.key, seeded.lineageId, syncActor(own.connectionUuid), sync);
+      const result = await purge(world.db, ownerTenant.key, seeded.lineageId, syncActor(own.connectionUuid), sync);
       assert.equal(result.counts.documents, 2);
       assert.equal(result.counts.sync_records, 1);
       const audit = (await rows(world.db, 'SELECT actor_kind, actor_id, reason_code FROM rag_purge_audit WHERE id = $1', [result.audit_id]))[0];
       assert.deepEqual(audit, { actor_kind: 'source_sync', actor_id: own.connectionUuid, reason_code: 'source_deleted' });
+    });
+
+    test('a source_sync actor cannot purge in a tenant other than its connection owner tenant (06.3-SECURITY W3)', async (t) => {
+      if (mode !== 'multi-tenant') {
+        t.skip('single-tenant: every connection owner tenant is s:default');
+        return;
+      }
+      // The app resolves the owner tenant before it calls; this is the SQL-layer second check. Nango rows of the connection
+      // written into an organization tenant (the owner's u:<owner> is the only allowed one) must not be purged by its sync.
+      const own = await createConnection(world, world.tenantA);
+      const fileId = `file-${crypto.randomUUID().slice(0, 8)}`;
+      const seeded = await seedLineage(world, world.tenantA, { nango: { ...own, fileId } });
+      const refused = await errorOf(() => purge(world.db, world.tenantA.key, seeded.lineageId, syncActor(own.connectionUuid), reason('source_deleted')));
+      assert.equal(refused.message, 'not_found');
+      assert.equal(await count(world.db, 'SELECT count(*) AS n FROM documents WHERE lineage_id = $1', [seeded.lineageId]), 2);
+      assert.equal(await count(world.db, 'SELECT count(*) AS n FROM rag_purge_audit WHERE lineage_id = $1', [seeded.lineageId]), 0);
     });
 
     test('a key of the other deployment mode is refused by the tenant guard', async () => {
@@ -120,9 +141,10 @@ for (const mode of MODES) {
     });
 
     test('audit list and get show only administered tenants, with the provider of a source-sync connection; pending lists open records', async () => {
-      const connection = await createConnection(world, world.tenantA);
-      const synced = await seedLineage(world, world.tenantA, { nango: { ...connection, fileId: `file-${crypto.randomUUID().slice(0, 8)}` } });
-      const syncPurge = await purge(world.db, world.tenantA.key, synced.lineageId, syncActor(connection.connectionUuid), reason('source_deleted'));
+      const ownerTenant = ownerTenantOf();
+      const connection = await createConnection(world, ownerTenant);
+      const synced = await seedLineage(world, ownerTenant, { nango: { ...connection, fileId: `file-${crypto.randomUUID().slice(0, 8)}` } });
+      const syncPurge = await purge(world.db, ownerTenant.key, synced.lineageId, syncActor(connection.connectionUuid), reason('source_deleted'));
       const adminPurge = await purge(world.db, world.tenantA.key, (await seedLineage(world, world.tenantA)).lineageId, adminActor(world.adminA));
       let foreignAudit: string | null = null;
       if (world.tenantB) {
@@ -132,7 +154,7 @@ for (const mode of MODES) {
       const ids = listed.map((row) => row.id);
       assert.ok(ids.includes(syncPurge.audit_id) && ids.includes(adminPurge.audit_id));
       if (foreignAudit) assert.ok(!ids.includes(foreignAudit));
-      for (const row of listed) assert.equal(row.tenant_key, world.tenantA.key);
+      for (const row of listed) assert.ok([world.tenantA.key, ownerTenant.key].includes(String(row.tenant_key)), 'only administered tenants');
       const syncRow = listed.find((row) => row.id === syncPurge.audit_id);
       assert.match(String(syncRow?.connection_provider), /^provider-/);
       assert.equal(listed.find((row) => row.id === adminPurge.audit_id)?.connection_provider, null);
@@ -154,21 +176,94 @@ for (const mode of MODES) {
       assert.ok(!pending.some((row) => row.id === adminPurge.audit_id), 'an unfinished record with no pending path is not listed');
     });
 
+    test('rag_purge_audit_recent pages every recent purge once on a (started_at, id) cursor (06.3-SECURITY W7, 1015)', async () => {
+      const lineage = () => crypto.randomUUID();
+      const version = crypto.randomUUID();
+      // Five purges share one microsecond start, so only the id orders them; one is older than 7 days, one names no version,
+      // one is unfinished: none of those three is listed.
+      const tie = '2026-11-27T10:00:00.123456Z';
+      const listed: string[] = [];
+      for (let index = 0; index < 12; index += 1) {
+        const started = index < 5 ? tie : `2026-11-27T11:00:00.${String(index).padStart(6, '0')}Z`;
+        const id = (
+          await rows(
+            world.db,
+            `INSERT INTO rag_purge_audit (tenant_key, lineage_id, version_ids, actor_kind, actor_id, reason_code, started_at, finished_at)
+             VALUES ($1, $2::uuid, ARRAY[$3::uuid], 'admin', $4::uuid, 'owner_request', $5::timestamptz, now() - interval '1 hour') RETURNING id`,
+            [world.tenantA.key, lineage(), version, world.adminA, started],
+          )
+        )[0]?.id as string;
+        listed.push(id);
+      }
+      const excluded = (await rows(
+        world.db,
+        `INSERT INTO rag_purge_audit (tenant_key, lineage_id, version_ids, actor_kind, actor_id, reason_code, started_at, finished_at) VALUES
+           ($1, $2::uuid, ARRAY[$3::uuid], 'admin', $4::uuid, 'owner_request', now() - interval '9 days', now() - interval '8 days'),
+           ($1, $5::uuid, '{}'::uuid[], 'admin', $4::uuid, 'owner_request', now() - interval '2 hours', now() - interval '1 hour'),
+           ($1, $6::uuid, ARRAY[$3::uuid], 'admin', $4::uuid, 'owner_request', now() - interval '2 hours', NULL) RETURNING id`,
+        [world.tenantA.key, lineage(), version, world.adminA, lineage(), lineage()],
+      )).map((row) => String(row.id));
+
+      const seen: string[] = [];
+      let cursor: [string | null, string | null] = [null, null];
+      for (let page = 0; page < 200; page += 1) {
+        const got = await rows(world.db, 'SELECT id, cursor_started_at FROM public.rag_purge_audit_recent($1::timestamptz, $2::uuid, 5)', cursor);
+        seen.push(...got.map((row) => String(row.id)));
+        if (got.length < 5) break;
+        const last = got[got.length - 1];
+        assert.match(String(last?.cursor_started_at), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
+        cursor = [String(last?.cursor_started_at), String(last?.id)];
+      }
+      // The audit table is append-only and shared by the other tests of this world: check this test's rows and that no row repeats.
+      assert.equal(new Set(seen).size, seen.length, 'no purge is listed twice');
+      const ordered = [...listed.slice(0, 5)].sort().concat(listed.slice(5));
+      assert.deepEqual(seen.filter((id) => listed.includes(id)), ordered, 'every recent purge is listed once, in (started_at, id) order');
+      assert.equal(seen.filter((id) => excluded.includes(id)).length, 0, 'old, versionless and unfinished purges are not listed');
+      const tied = await rows(world.db, 'SELECT cursor_started_at FROM public.rag_purge_audit_recent($1::timestamptz, $2::uuid, 1000) WHERE id = $3::uuid', [
+        '2026-11-27T09:00:00Z',
+        crypto.randomUUID(),
+        listed[0],
+      ]);
+      assert.equal(tied[0]?.cursor_started_at, '2026-11-27T10:00:00.123456Z', 'the cursor keeps microseconds');
+
+      for (const args of [[null, crypto.randomUUID(), 5], ['2026-11-27T10:00:00Z', null, 5], [null, null, 0], [null, null, 1001]]) {
+        assert.equal((await errorOf(() => world.db.query('SELECT * FROM public.rag_purge_audit_recent($1::timestamptz, $2::uuid, $3)', args))).code, '22023');
+      }
+    });
+
+    test('1015 applies twice and keeps one definition of rag_purge_lineage and rag_purge_audit_recent, service_role only', async () => {
+      const sql = (await import('node:fs')).readFileSync('supabase/migrations/1015_purge_hardening.sql', 'utf8');
+      await world.db.exec(sql);
+      await world.db.exec(sql);
+      const defs = await rows(
+        world.db,
+        `SELECT p.proname, p.prosecdef, p.proconfig, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+                has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth, has_function_privilege('service_role', p.oid, 'EXECUTE') AS svc
+           FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'public' AND p.proname IN ('rag_purge_lineage', 'rag_purge_audit_recent') ORDER BY 1`,
+      );
+      assert.deepEqual(defs, [
+        { proname: 'rag_purge_audit_recent', prosecdef: false, proconfig: ['search_path=""'], anon: false, auth: false, svc: true },
+        { proname: 'rag_purge_lineage', prosecdef: true, proconfig: ['search_path=""'], anon: false, auth: false, svc: true },
+      ]);
+    });
+
     test('a tombstone exists only for an admin purge of that tenant, connection and source key', async () => {
-      const connection = await createConnection(world, world.tenantA);
+      const owner = ownerTenantOf();
+      const connection = await createConnection(world, owner);
       const fileId = `file-${crypto.randomUUID().slice(0, 8)}`;
-      const adminPurged = await seedLineage(world, world.tenantA, { nango: { ...connection, fileId } });
+      const adminPurged = await seedLineage(world, owner, { nango: { ...connection, fileId } });
       const syncFile = `file-${crypto.randomUUID().slice(0, 8)}`;
-      const syncPurged = await seedLineage(world, world.tenantA, { nango: { ...connection, fileId: syncFile } });
+      const syncPurged = await seedLineage(world, owner, { nango: { ...connection, fileId: syncFile } });
       const tombstone = async (key: string, conn: string, file: string) =>
         (await rows(world.db, 'SELECT public.rag_purge_tombstone_exists($1, $2, $3) AS t', [key, conn, file]))[0]?.t;
-      assert.equal(await tombstone(world.tenantA.key, connection.connectionId, fileId), false);
-      await purge(world.db, world.tenantA.key, adminPurged.lineageId, adminActor(world.adminA));
-      await purge(world.db, world.tenantA.key, syncPurged.lineageId, syncActor(connection.connectionUuid), reason('source_deleted'));
-      assert.equal(await tombstone(world.tenantA.key, connection.connectionId, fileId), true);
-      assert.equal(await tombstone(world.tenantA.key, connection.connectionId, syncFile), false);
-      assert.equal(await tombstone(world.tenantA.key, 'conn-other', fileId), false);
-      assert.equal(await tombstone(world.tenantA.key, connection.connectionId, 'file-other'), false);
+      assert.equal(await tombstone(owner.key, connection.connectionId, fileId), false);
+      await purge(world.db, owner.key, adminPurged.lineageId, adminActor(world.adminA));
+      await purge(world.db, owner.key, syncPurged.lineageId, syncActor(connection.connectionUuid), reason('source_deleted'));
+      assert.equal(await tombstone(owner.key, connection.connectionId, fileId), true);
+      assert.equal(await tombstone(owner.key, connection.connectionId, syncFile), false);
+      assert.equal(await tombstone(owner.key, 'conn-other', fileId), false);
+      assert.equal(await tombstone(owner.key, connection.connectionId, 'file-other'), false);
       if (world.tenantB) assert.equal(await tombstone(world.tenantB.key, connection.connectionId, fileId), false);
     });
 

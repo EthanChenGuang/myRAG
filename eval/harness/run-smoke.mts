@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { ingestModeGoldenPaths, mergeGoldenFiles, parseIngestRoutingFlags } from './ingest-mode.mts';
+import { goldenInForceSha256, ingestModeGoldenPaths, mergeGoldenFiles, parseIngestRoutingFlags } from './ingest-mode.mts';
 import { dropTableSplitItems } from './table-split.mts';
 import { dropTemplatedItems } from './templated-fixtures.mts';
 import { MEASUREMENT_PATH, resolveGatesMode } from './gate-mode.mts';
@@ -72,6 +72,7 @@ async function main(): Promise<number> {
       'golden-manifest': { type: 'string' },
       answers: { type: 'boolean', default: false },
       'no-answers': { type: 'boolean', default: false },
+      'no-fixture-floor': { type: 'boolean', default: false },
       'env-overlay': { type: 'string' },
       phase52: { type: 'boolean', default: false },
       'rag-mode': { type: 'string' },
@@ -273,6 +274,9 @@ async function main(): Promise<number> {
   const defaultGolden = fixtureMode === 'ingest' ? ingestModeGoldenPaths() : [DEFAULT_GOLDEN];
   const goldenFiles = values.golden !== undefined ? [path.resolve(values.golden)] : defaultGolden.map((file) => path.resolve(REPO_ROOT, file));
   const mergedGolden = mergeGoldenFiles(goldenFiles, path.join(outDir, 'golden.merged.jsonl'));
+  // The fixture floor of this mode must have been fitted on the golden set in force for it, also when --golden names a subset of it.
+  const fixtureFloorGolden = values['no-fixture-floor'] ? null : goldenInForceSha256(fixtureMode, REPO_ROOT);
+  if (fixtureFloorGolden === null) console.log('[Eval Harness] fixture floor: off for this run (--no-fixture-floor)');
   // table_split items run only against the isolated tenants of the inline ingest mode; other runs score without them.
   // templated_collection items likewise run only in the inline ingest mode, which loads the templated collection for them.
   const goldenPath =
@@ -323,6 +327,7 @@ async function main(): Promise<number> {
     ...(answers ? { answers: true } : {}),
     ...(ragMode ? { ragMode } : {}),
     ...(envOverlay && Object.keys(envOverlay.env).length > 0 ? { envOverlay: envOverlay.env } : {}),
+    fixtureFloorGolden,
   });
 
   if (result.cachePairsPath) {

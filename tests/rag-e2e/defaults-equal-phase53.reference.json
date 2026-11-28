@@ -1,5 +1,5 @@
 {
- "recorded_at_commit": "0e6fc3ea9d3c54bf0446b4b0a6cd8d9f5c0d3e99",
+ "recorded_at_commit": "af42c250148c3e364794da1aced0d0956a57c7db",
  "note": "Recorded with every Phase 5.3 switch unset (prechunked, single-tenant, fake citation generator). Ids, scores and answer hashes only; see the 05.3-48 SUMMARY for why this commit and not the pre-phase commit.",
  "switches": {
   "RAG_MONITOR": "unset",
@@ -409,24 +409,97 @@
   },
   {
    "item_id": "en-context-overflow-001",
-   "refused": true,
-   "refusal_reason": "no_relevant_context",
-   "answer_sha256": null,
-   "candidates": []
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "5ab1b1a7278b1dba63ee668f68f46c29c356306466a6c1c7bf2a91e70abcf207",
+   "candidates": [
+    {
+     "chunk_id": "2e4d81d1-c5f5-4ebb-910f-ed4bc582c494",
+     "final_score": 0.33638962018799723,
+     "similarity": 0.33638962018799723
+    }
+   ]
   },
   {
    "item_id": "en-context-overflow-002",
-   "refused": true,
-   "refusal_reason": "no_relevant_context",
-   "answer_sha256": null,
-   "candidates": []
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "5f7586c65ff561e2944f6238cd576236b0f70de9cb599ba5b3e095e6eb51743d",
+   "candidates": [
+    {
+     "chunk_id": "562aeeaf-d217-4b94-b74b-c83b6c3f0072",
+     "final_score": 0.42482865226698907,
+     "similarity": 0.42482865226698907
+    },
+    {
+     "chunk_id": "d9a7e551-e1ce-4f78-8331-d7b2aa79cc10",
+     "final_score": 0.3322210105914567,
+     "similarity": 0.3322210105914567
+    },
+    {
+     "chunk_id": "2e4d81d1-c5f5-4ebb-910f-ed4bc582c494",
+     "final_score": 0.32491291387054266,
+     "similarity": 0.32491291387054266
+    },
+    {
+     "chunk_id": "5a549b69-0620-485c-9046-043e6ab30b93",
+     "final_score": 0.32477262080386526,
+     "similarity": 0.32477262080386526
+    },
+    {
+     "chunk_id": "270417db-589f-4cff-a4e1-37e9a154f7b5",
+     "final_score": 0.3235247573404063,
+     "similarity": 0.3235247573404063
+    },
+    {
+     "chunk_id": "b22c4211-b874-4663-ae72-b7c4f32990ed",
+     "final_score": 0.3228051202327735,
+     "similarity": 0.3228051202327735
+    },
+    {
+     "chunk_id": "4ec1ab30-d9b8-44de-8d84-050dcca09bfa",
+     "final_score": 0.31985597126339427,
+     "similarity": 0.31985597126339427
+    },
+    {
+     "chunk_id": "aaf5b582-6750-45b8-a913-caebfd5432e4",
+     "final_score": 0.3146804102242121,
+     "similarity": 0.3146804102242121
+    },
+    {
+     "chunk_id": "2f725b39-d039-45a9-b609-d655f6bd7118",
+     "final_score": 0.3132837996599733,
+     "similarity": 0.3132837996599733
+    },
+    {
+     "chunk_id": "7f0e538e-59e8-4c71-8940-6009a4d62d46",
+     "final_score": 0.3121225348030199,
+     "similarity": 0.3121225348030199
+    },
+    {
+     "chunk_id": "dcbd3f68-3992-4198-8691-bba33f8db38f",
+     "final_score": 0.30916996163584676,
+     "similarity": 0.30916996163584676
+    },
+    {
+     "chunk_id": "412deee3-b6a6-4671-b75b-d1146ca6ff6f",
+     "final_score": 0.3059981536843882,
+     "similarity": 0.3059981536843882
+    }
+   ]
   },
   {
    "item_id": "en-context-overflow-003",
-   "refused": true,
-   "refusal_reason": "no_relevant_context",
-   "answer_sha256": null,
-   "candidates": []
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "6320c5e90ec3e58067dcf808c7f1cfb8ab074ad596c24ee9335fc517d553813e",
+   "candidates": [
+    {
+     "chunk_id": "d9a7e551-e1ce-4f78-8331-d7b2aa79cc10",
+     "final_score": 0.34490430872336786,
+     "similarity": 0.34490430872336786
+    }
+   ]
   },
   {
    "item_id": "en-context-overflow-004",
@@ -3126,24 +3199,97 @@
   },
   {
    "item_id": "it-context-overflow-001",
-   "refused": true,
-   "refusal_reason": "no_relevant_context",
-   "answer_sha256": null,
-   "candidates": []
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "4c9a8605a6b989e71dec6b79e0d3c655a05c10b73c4d51e20a424a4acfc451bf",
+   "candidates": [
+    {
+     "chunk_id": "4fdac340-b391-4163-9e88-69e512fa241c",
+     "final_score": 0.3570949264677965,
+     "similarity": 0.3570949264677965
+    }
+   ]
   },
   {
    "item_id": "it-context-overflow-002",
-   "refused": true,
-   "refusal_reason": "no_relevant_context",
-   "answer_sha256": null,
-   "candidates": []
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "a6f53a8167ddc2951b6fb006376b97d72d1737ac4757909e99b1b1451dd1081a",
+   "candidates": [
+    {
+     "chunk_id": "63ff04a7-4bef-4d70-921d-ba1b8592f529",
+     "final_score": 0.3852540166701327,
+     "similarity": 0.3852540166701327
+    },
+    {
+     "chunk_id": "074a6a59-f8c3-4029-b2eb-2185ab8b57ba",
+     "final_score": 0.3066778671661722,
+     "similarity": 0.3066778671661722
+    },
+    {
+     "chunk_id": "91d9fa55-db6f-4bc6-92f6-f180b5c20ea2",
+     "final_score": 0.3055351360037524,
+     "similarity": 0.3055351360037524
+    },
+    {
+     "chunk_id": "4fdac340-b391-4163-9e88-69e512fa241c",
+     "final_score": 0.3024616990181582,
+     "similarity": 0.3024616990181582
+    },
+    {
+     "chunk_id": "4aa58f15-636a-4ce5-af44-2231029f79dc",
+     "final_score": 0.2988582976197698,
+     "similarity": 0.2988582976197698
+    },
+    {
+     "chunk_id": "ef647c92-29a3-457d-a46d-c50d075800b4",
+     "final_score": 0.2966073817120709,
+     "similarity": 0.2966073817120709
+    },
+    {
+     "chunk_id": "c6abeae2-3893-4968-ae73-04d9d6dbd76c",
+     "final_score": 0.2942968904972161,
+     "similarity": 0.2942968904972161
+    },
+    {
+     "chunk_id": "dcf525ea-b19c-4c36-b1fe-1adc10d495e4",
+     "final_score": 0.29107493539974993,
+     "similarity": 0.29107493539974993
+    },
+    {
+     "chunk_id": "18c4dd2b-ff56-46d8-ac62-eec7269575cf",
+     "final_score": 0.2907093052978813,
+     "similarity": 0.2907093052978813
+    },
+    {
+     "chunk_id": "69d8652e-fd43-45ff-a447-92f5c216e7ee",
+     "final_score": 0.29032727018710425,
+     "similarity": 0.29032727018710425
+    },
+    {
+     "chunk_id": "5646dc97-4913-49d1-95ed-2a9c3db2ae55",
+     "final_score": 0.2831367484030831,
+     "similarity": 0.2831367484030831
+    },
+    {
+     "chunk_id": "f97b7d68-4a52-45ba-8915-2df2659920e3",
+     "final_score": 0.280019752989364,
+     "similarity": 0.280019752989364
+    }
+   ]
   },
   {
    "item_id": "it-context-overflow-003",
-   "refused": true,
-   "refusal_reason": "no_relevant_context",
-   "answer_sha256": null,
-   "candidates": []
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "a3e402d2137685e310cc120c2dcb4290d7531927836b55c7aa06fccdbf8a4696",
+   "candidates": [
+    {
+     "chunk_id": "ef647c92-29a3-457d-a46d-c50d075800b4",
+     "final_score": 0.3243210839268367,
+     "similarity": 0.3243210839268367
+    }
+   ]
   },
   {
    "item_id": "it-context-overflow-004",
@@ -6528,24 +6674,42 @@
   },
   {
    "item_id": "zh-context-overflow-001",
-   "refused": true,
-   "refusal_reason": "no_relevant_context",
-   "answer_sha256": null,
-   "candidates": []
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "b805b992121ca9e312373360d5108b007cfdaff6ca458b76c55ebc6c41ebd03e",
+   "candidates": [
+    {
+     "chunk_id": "4becfa75-35e8-46c0-b441-92339d66de86",
+     "final_score": 0.31682445654796876,
+     "similarity": 0.31682445654796876
+    }
+   ]
   },
   {
    "item_id": "zh-context-overflow-002",
-   "refused": true,
-   "refusal_reason": "no_relevant_context",
-   "answer_sha256": null,
-   "candidates": []
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "c49b90dc9263114ed9a68fd086be4e8ffbe1f18af42c5adc67ae74b9961f7b76",
+   "candidates": [
+    {
+     "chunk_id": "7a77f467-3f07-4222-9fcb-5990cdded18c",
+     "final_score": 0.35330257675806775,
+     "similarity": 0.35330257675806775
+    }
+   ]
   },
   {
    "item_id": "zh-context-overflow-003",
-   "refused": true,
-   "refusal_reason": "no_relevant_context",
-   "answer_sha256": null,
-   "candidates": []
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "62806e3dcc78f16bb3308c7ab15de947e42bb1d27ce26d1e56eedf2f564c9530",
+   "candidates": [
+    {
+     "chunk_id": "a5133f65-f685-477d-afc3-e960c2ec48b6",
+     "final_score": 0.34830759046632775,
+     "similarity": 0.34830759046632775
+    }
+   ]
   },
   {
    "item_id": "zh-context-overflow-004",

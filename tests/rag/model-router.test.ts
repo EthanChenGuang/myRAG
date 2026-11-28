@@ -5,7 +5,7 @@ import type { QueryClassification } from '@/lib/query-classifier';
 import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
 import { DEFAULT_ROUTING_FAST_MODEL, DEFAULT_ROUTING_QUALITY_MODEL, loadRagConfig, type ModelRoutingConfig } from '@/lib/rag/config';
 import { routeModel, resolveRequestedModel, type RouteModelInput } from '@/lib/rag/generation/model-router';
-import type { GateResult, GateRuleId } from '@/lib/rag/query/rewrite-gate';
+import { isLongQuery, type GateResult, type GateRuleId, type Lang } from '@/lib/rag/query/rewrite-gate';
 import { createCitationSession, type ContextBlock } from '@/lib/rag';
 import { preRetrievalCitations } from '@/lib/rag/generation/citations/strategy';
 
@@ -96,6 +96,78 @@ describe('routeModel (D-20)', () => {
     expect(auto).toEqual({ tier: 'quality', rule: 'invalid_routing_id', modelId: QUALITY });
     const both = routeModel(input({ ids: { fastModel: 'auto', qualityModel: 'auto' } }));
     expect(both.modelId).toBe(QUALITY);
+  });
+});
+
+/** The longest short query and the shortest long query built from `unit`, found with isLongQuery itself (no copied constant). */
+function r11Boundary(unit: string, lang: Lang, joiner: string): { short: string; long: string } {
+  let short = unit;
+  for (let n = 2; n < 400; n += 1) {
+    const candidate = Array.from({ length: n }, () => unit).join(joiner);
+    if (isLongQuery(candidate, lang)) return { short, long: candidate };
+    short = candidate;
+  }
+  throw new Error('no R11 boundary found');
+}
+
+describe('routeModel (D-20 revision 1: conversational with a retrieval hit)', () => {
+  const conversational = (overrides: Partial<RouteModelInput> = {}) =>
+    input({ classification: classification('conversational'), retrievalHit: true, ...overrides });
+
+  it('sends a short conversational turn with a retrieval hit to the fast model', () => {
+    expect(routeModel(conversational())).toEqual({ tier: 'fast', rule: 'conversational_lookup', modelId: FAST });
+  });
+
+  it('keeps the quality model for a conversational turn without a retrieval hit', () => {
+    expect(routeModel(conversational({ retrievalHit: false }))).toEqual({ tier: 'quality', rule: 'conversational_no_hit', modelId: QUALITY });
+    expect(routeModel(conversational({ retrievalHit: undefined }))).toEqual({ tier: 'quality', rule: 'conversational_no_hit', modelId: QUALITY });
+  });
+
+  it.each([
+    ['en', 'alpha', ' '],
+    ['it', 'valore', ' '],
+    ['zh', '值', ''],
+  ] as Array<[Lang, string, string]>)('applies the R11 length test at its boundary for %s', (lang, unit, joiner) => {
+    const { short, long } = r11Boundary(unit, lang, joiner);
+    const langGate: GateResult = { ...gate(), lang };
+    expect(routeModel(conversational({ gate: langGate, query: short }))).toEqual({ tier: 'fast', rule: 'conversational_lookup', modelId: FAST });
+    expect(routeModel(conversational({ gate: langGate, query: long }))).toEqual({ tier: 'quality', rule: 'long_query', modelId: QUALITY });
+  });
+
+  it.each([
+    ['gate_comparison', { gate: gate(['R3_COMPARISON']) }],
+    ['gate_elliptical', { gate: gate(['R5_ELLIPTICAL']) }],
+    ['gate_compound', { gate: gate(['R6_COMPOUND']) }],
+    ['gate_language_mismatch', { gate: gate(['R8_LANGUAGE_MISMATCH']) }],
+    ['decomposed', { plan: plan({ sub_questions: ['What is alpha?', 'What is beta?'] }) }],
+    [
+      'translated',
+      { plan: plan({ variants: [...plan().variants!, { kind: 'translated', language: 'zh', protected_ok: true, sub_question_index: null, text: '阿尔法的值是多少？' }] }) },
+    ],
+    ['large_context', { contextTokens: 2000 }],
+  ] as Array<[string, Partial<RouteModelInput>]>)('keeps the structural guard %s on the conversational path', (rule, overrides) => {
+    expect(routeModel(conversational(overrides))).toEqual({ tier: 'quality', rule, modelId: QUALITY });
+  });
+
+  it('leaves document_search turns unchanged whatever retrievalHit is', () => {
+    for (const retrievalHit of [true, false, undefined]) {
+      expect(routeModel(input({ retrievalHit }))).toEqual({ tier: 'fast', rule: 'simple_lookup', modelId: FAST });
+      expect(routeModel(input({ retrievalHit, contextTokens: 2000 })).rule).toBe('large_context');
+    }
+  });
+
+  it.each(['tool_required', 'complex', 'multi_step'] as Array<QueryClassification['category']>)(
+    'keeps not_document_search for %s whatever retrievalHit is',
+    (category) => {
+      for (const retrievalHit of [true, false]) {
+        expect(routeModel(input({ classification: classification(category), retrievalHit }))).toEqual({ tier: 'quality', rule: 'not_document_search', modelId: QUALITY });
+      }
+    },
+  );
+
+  it('keeps no_classification and checks the routing ids first', () => {
+    expect(routeModel(input({ classification: undefined, retrievalHit: true })).rule).toBe('no_classification');
+    expect(routeModel(conversational({ ids: { fastModel: 'auto', qualityModel: QUALITY } }))).toEqual({ tier: 'quality', rule: 'invalid_routing_id', modelId: QUALITY });
   });
 });
 

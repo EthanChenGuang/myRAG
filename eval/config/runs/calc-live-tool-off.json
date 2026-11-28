@@ -1,0 +1,8 @@
+{
+  "name": "calc-live-tool-off",
+  "env": {
+    "RAG_CALC_CHECK": "true",
+    "RAG_CALC_TOOL": "false"
+  },
+  "overrides": null
+}

@@ -73,6 +73,8 @@ MiningReason = Literal[
 ]
 # Phase 5.2 D-55: reasons written by the answer checks and by rag_enqueue_review_item (0944); never produced by weekly mining alone.
 CheckReviewReason = Literal["claim_unsupported", "output_guard", "version_conflict"]
+# Phase 5.2.1 calculation check (0950): reasons the answer check writes on rag_answer_records and mining (0984) carries into review items.
+CalcReviewReason = Literal["calc_mismatch", "calc_unverified"]
 ReviewItemReason = Literal[
     "feedback_negative",
     "refusal_disputed",
@@ -169,6 +171,13 @@ class RetrievalLogEntry(_LanguageSnapshot):
     source_opened_count: int = Field(default=0, ge=0, le=20)
     topk_redundancy: float | None = Field(
         default=None, ge=0, le=1, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
+    )
+    # RET-14 (Phase 6.3): the source recheck's checked and dropped candidate counts, set only when the recheck completed.
+    source_rechecked: int | None = Field(
+        default=None, ge=0, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
+    )
+    stale_index_drop: int | None = Field(
+        default=None, ge=0, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
     )
     created_at: Timestamp | None = None
 
@@ -294,7 +303,7 @@ class ReviewItem(_LanguageSnapshot):
     outcome: LogOutcome
     candidates: list[RetrievalLogCandidate] = Field(default_factory=list, max_length=MAX_LOG_CANDIDATES)
     retrieval_config_hash: str | None = Field(default=None, max_length=128)
-    reasons: list[ReviewItemReason | CheckReviewReason] = _unique(default_factory=list)
+    reasons: list[ReviewItemReason | CheckReviewReason | CalcReviewReason] = _unique(default_factory=list)
     source: ReviewItemSource | None = None
     occurrences: int = Field(default=1, ge=1)
     tags: list[ReviewTag] = Field(default_factory=list)

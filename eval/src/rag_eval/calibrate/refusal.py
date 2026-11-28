@@ -645,17 +645,71 @@ class SimilarityFloorFit(BaseModel):
     excluded_no_similarity: int = 0
 
 
+FixtureMode = Literal["prechunked", "ingest"]
+
+
 class FixtureScoreCalibration(BaseModel):
+    """The single-entry file shape (schema 1): still read, and upgraded to the per-mode map on the next write."""
+
     model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal[1] = 1
     source: Literal["fixture"] = "fixture"
-    fixture_mode: Literal["prechunked", "ingest"] = "prechunked"
+    fixture_mode: FixtureMode = "prechunked"
     status: Literal["calibrated", "uncalibrated", "insufficient_data"] = "uncalibrated"
     score_calibration: dict[str, float] = {}
     target_false_refusal: float = 0.05
     dev: RefusalMetricBlock | None = None
     golden_sha256: str = ""
+
+
+class FixtureFloorEntry(BaseModel):
+    """The fixture similarity floor of one fixture mode, with the hash of the golden file it was fitted on."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["calibrated", "uncalibrated", "insufficient_data"] = "uncalibrated"
+    score_calibration: dict[str, float] = {}
+    target_false_refusal: float = 0.05
+    dev: RefusalMetricBlock | None = None
+    golden_sha256: str = ""
+
+
+class FixtureScoreCalibrationFile(BaseModel):
+    """A fixture floor file (schema 2): eval/config/fixture-score-calibration.json holds the prechunked entry, .ingest.json the ingest one. Eval-only; production never reads it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[2] = 2
+    source: Literal["fixture"] = "fixture"
+    modes: dict[FixtureMode, FixtureFloorEntry] = {}
+
+
+def read_floor_file(path: Path) -> FixtureScoreCalibrationFile:
+    """The floor file in the per-mode shape; a missing file is empty and a schema-1 file is read as the entry of the mode it names."""
+    if not path.is_file():
+        return FixtureScoreCalibrationFile()
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise CalibrationError(f"{path} is not a valid fixture floor file: {exc}") from exc
+    try:
+        if isinstance(raw, dict) and raw.get("schema_version") == 1:
+            old = FixtureScoreCalibration.model_validate(raw)
+            entry = FixtureFloorEntry.model_validate(old.model_dump(exclude={"schema_version", "source", "fixture_mode"}))
+            return FixtureScoreCalibrationFile(modes={old.fixture_mode: entry})
+        return FixtureScoreCalibrationFile.model_validate(raw)
+    except ValueError as exc:
+        raise CalibrationError(f"{path} is not a valid fixture floor file: {exc}") from exc
+
+
+def write_floor_entry(path: Path, mode: FixtureMode, entry: FixtureFloorEntry) -> None:
+    """Writes the entry of one mode and keeps every other mode's entry as it was."""
+    current = read_floor_file(path)
+    modes = {**current.modes, mode: entry}
+    record = FixtureScoreCalibrationFile(modes={key: modes[key] for key in sorted(modes)})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_stable_json(record.model_dump(mode="json")), encoding="utf-8")
 
 
 def _best_dense(trace: RagTrace, image_floor: float) -> float | None:
@@ -744,6 +798,7 @@ class CalibrationResult(BaseModel):
     similarity_floor: SimilarityFloorFit | None = None
     floor_written: bool = False
     floor_path: str | None = None
+    floor_mode: FixtureMode | None = None
     notes: list[str] = []
 
 
@@ -1219,7 +1274,10 @@ def run_refusal_calibration(
     noise_path: Path | None = None,
     now: str | None = None,
     floor_path: Path | None = None,
+    write_floor: bool = False,
 ) -> CalibrationResult:
+    if write_floor and base_url:
+        raise CalibrationError("--write-floor writes the fixture floor only; a live run (--base-url) cannot write it")
     out_dir = Path(out)
     golden_path = Path(golden) if golden else DEFAULT_GOLDEN
     thresholds_file = Path(thresholds_path) if thresholds_path else THRESHOLDS_PATH
@@ -1252,7 +1310,13 @@ def run_refusal_calibration(
     forced_path.write_text(forced_text, encoding="utf-8")
 
     run = (runner or _default_runner)(
-        run_config=forced_path, golden=golden_path, out=out_dir / HARNESS_DIR, base_url=base_url, fixture_mode=fixture_mode
+        run_config=forced_path,
+        golden=golden_path,
+        out=out_dir / HARNESS_DIR,
+        base_url=base_url,
+        fixture_mode=fixture_mode,
+        # The fit reads pre-refusal similarities and rerank scores; the floor this run may write is never applied while fitting it.
+        fixture_floor=False,
     )
     notes.extend(getattr(run, "notes", []) or [])
     _assert_refusal_off(run.traces)
@@ -1302,11 +1366,13 @@ def run_refusal_calibration(
         write_config_atomically(thresholds_file, merged)
         result.thresholds_written = True
         result.thresholds_path = repo_relative(thresholds_file)
-        if source == "fixture":
-            mode: Literal["prechunked", "ingest"] = "ingest" if fixture_mode == "ingest" else "prechunked"
-            floor_file = Path(floor_path) if floor_path else _floor_path_for(mode)
-            floor_record = FixtureScoreCalibration(
-                fixture_mode=mode,
+    if (write or write_floor) and source == "fixture":
+        mode: FixtureMode = "ingest" if fixture_mode == "ingest" else "prechunked"
+        floor_file = Path(floor_path) if floor_path else _floor_path_for(mode)
+        write_floor_entry(
+            floor_file,
+            mode,
+            FixtureFloorEntry(
                 status=floor_fit.status,
                 score_calibration={"context_threshold": floor_fit.context_threshold}
                 if floor_fit.context_threshold is not None
@@ -1314,11 +1380,11 @@ def run_refusal_calibration(
                 target_false_refusal=floor_fit.target_false_refusal,
                 dev=floor_fit.dev,
                 golden_sha256=result.golden_sha256,
-            )
-            floor_file.parent.mkdir(parents=True, exist_ok=True)
-            floor_file.write_text(_stable_json(floor_record.model_dump(mode="json")), encoding="utf-8")
-            result.floor_written = True
-            result.floor_path = repo_relative(floor_file)
+            ),
+        )
+        result.floor_written = True
+        result.floor_path = repo_relative(floor_file)
+        result.floor_mode = mode
 
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / RESULT_NAME).write_text(_stable_json(result.model_dump(mode="json")), encoding="utf-8")

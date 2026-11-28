@@ -152,6 +152,31 @@ describe('afterLexicalWrite', () => {
     await afterLexicalWrite({ db: () => db }, KEY_A);
     expect(calls).toEqual([]);
   });
+
+  it('RAG_RERANK_LOCAL_STATS=tenant keeps the statistics fresh under ts_rank_cd too (04.4-21, D-55); pool adds no call', async () => {
+    const tenant = { v2: { lexicalScoring: { mode: 'ts_rank_cd', k1: 1.2, b: 0.75, dfMode: 'raw' }, rerankLocalStats: 'tenant' } } as unknown as Pick<RagConfig, 'v2'>;
+    const pool = { v2: { lexicalScoring: { mode: 'ts_rank_cd', k1: 1.2, b: 0.75, dfMode: 'raw' }, rerankLocalStats: 'pool' } } as unknown as Pick<RagConfig, 'v2'>;
+    const { db, calls } = recordingDb(enableAnswer('ready'));
+    await afterLexicalWrite({ db: () => db, config: tenant }, KEY_A);
+    expect(fns(calls)).toEqual(['rag_lexstats_enable', 'rag_lexstats_compact']);
+    calls.length = 0;
+    await afterLexicalWrite({ db: () => db, config: pool }, KEY_A);
+    expect(calls).toEqual([]);
+    setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: 'v2', RAG_RERANK_LOCAL_STATS: 'tenant' }) });
+    await afterLexicalWrite({ db: () => db }, KEY_A);
+    expect(fns(calls)).toEqual(['rag_lexstats_enable', 'rag_lexstats_compact']);
+    calls.length = 0;
+    setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: 'legacy', RAG_RERANK_LOCAL_STATS: 'tenant' }) });
+    await afterLexicalWrite({ db: () => db }, KEY_A);
+    expect(calls).toEqual([]);
+  });
+
+  it('tenant rerank statistics do not start the cluster follow-up (afterDupClusterWrite keeps its bm25 + cluster condition)', async () => {
+    const tenant = { v2: { lexicalScoring: { mode: 'ts_rank_cd', k1: 1.2, b: 0.75, dfMode: 'raw' }, rerankLocalStats: 'tenant' } } as unknown as Pick<RagConfig, 'v2'>;
+    const { db, calls } = recordingDb(enableAnswer('ready'));
+    expect(await afterDupClusterWrite({ db: () => db, config: tenant }, KEY_A)).toBe(false);
+    expect(calls).toEqual([]);
+  });
 });
 
 const PUBLISHED: PublishResult = { outcome: 'published', documentId: DOC, version: 2, supersededDocumentId: null };

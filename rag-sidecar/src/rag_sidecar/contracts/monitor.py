@@ -43,9 +43,19 @@ Count = Annotated[int, Field(ge=0)]
 Share = Annotated[float, Field(ge=0, le=1)]
 
 MonitorRuleKind = Literal[
-    "rate", "distribution", "latency", "judge_mean", "drift", "offline_online_gap", "language_drop"
+    "rate",
+    "distribution",
+    "latency",
+    "judge_mean",
+    "drift",
+    "offline_online_gap",
+    "language_drop",
+    "source_sync",
+    "stale_index_drop",
 ]
 # language_drop is the LANG-10 per-language rule (Phase 7 plan 07-46); the app evaluates it in src/lib/rag/monitor/language-drop.ts.
+# source_sync alerts are raised by the Phase 6.3 reconcile and deletion sync (D-10), not by a configured rule;
+# stale_index_drop is the Phase 6.3 daily rule over the retrieval log's source recheck counts (RET-14).
 MonitorRuleId = Literal[
     "refusal_rate",
     "zero_result_rate",
@@ -61,6 +71,11 @@ MonitorRuleId = Literal[
     "test_set_not_representative",
     "offline_online_gap",
     "language_drop",
+    "source_reconcile_paused",
+    "source_reconcile_overdue",
+    "source_reconcile_failed",
+    "source_reconcile_incomplete",
+    "stale_index_drop_rate",
 ]
 AlertSeverity = Literal["warning", "alert"]
 AlertStatus = Literal["open", "acknowledged", "resolved"]
@@ -143,7 +158,7 @@ class MonitorRule(_Contract):
             need("metric")
         if self.kind == "rate":
             need("baseline_min_sample", "ratio", "min_abs_delta", "min_z")
-        elif self.kind in ("distribution", "drift"):
+        elif self.kind in ("distribution", "drift", "stale_index_drop"):
             need("warn", "alert")
             if self.alert is not None and self.warn is not None and self.alert <= self.warn:
                 raise ValueError(f"rule {self.id}: alert must be above warn")
@@ -463,6 +478,15 @@ def default_monitor_alerts() -> MonitorAlertsConfig:
             budget_ratio=1.0,
         ),
         MonitorRule(id="online_judge_mean", kind="judge_mean", metric="online_judge_mean", min_sample=50, drop=0.10),
+        # RET-14: any stale candidate dropped by the source recheck is reported (warn: a rate above 0), alert at 5 percent.
+        MonitorRule(
+            id="stale_index_drop_rate",
+            kind="stale_index_drop",
+            metric="stale_index_drop",
+            min_sample=1,
+            warn=0.0,
+            alert=0.05,
+        ),
         MonitorRule(
             id="test_set_not_representative",
             kind="drift",

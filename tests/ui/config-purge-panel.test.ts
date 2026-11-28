@@ -395,3 +395,38 @@ describe('PurgePanel in a fake DOM', () => {
     expect(env.title.textContent).toBe('Registro delle eliminazioni definitive');
   });
 });
+
+describe('UI review 06.3 fixes', () => {
+  it('a list 404 shows the feature-off sentence in a neutral alert, in en, zh and it', async () => {
+    const { PURGE_LABELS } = loadModule() as unknown as { PURGE_LABELS: Record<string, Record<string, string>> };
+    for (const [language, loc] of [['en-US', 'en'], ['zh-CN', 'zh'], ['it-IT', 'it']] as const) {
+      const env = await mounted(() => ({ ok: false, status: 404, body: { error: 'Not found' } }), { language });
+      const off = env.root.querySelector('[data-purge-off]');
+      expect(off).toBeTruthy();
+      expect(off!.className).not.toContain('alert-error');
+      expect(off!.textContent).toContain(PURGE_LABELS[loc]!['error.off']);
+      expect(env.root.textContent).not.toContain('404');
+    }
+  });
+
+  it('Reload panel on the error alert is a solid base-100 button', async () => {
+    const env = await mounted(() => ({ ok: false, status: 500, body: {} }));
+    const reload = byText(env.alertHost, 'button', 'Reload panel')!;
+    expect(reload.className).not.toContain('btn-outline');
+    expect(reload.className).toContain('bg-base-100');
+  });
+
+  it('below 768px each record stacks with the Check badge and Check again in the flow', async () => {
+    const env = await mounted(() => ok(listBody([adminRecord()])));
+    const table = env.root.querySelector('table')!;
+    expect(table.className).toContain('max-md:block');
+    expect(table.querySelector('thead')!.className).toContain('max-md:hidden');
+    const [data, detail] = recordRows(env.root);
+    expect(data!.className).toContain('max-md:flex');
+    expect(detail!.className).toContain('max-md:flex');
+    const result = data!.children[4]!;
+    expect(result.className).toContain('max-md:block');
+    expect(result.children[0]!.textContent).toBe('Check');
+    expect(detail!.querySelector('summary')!.className).toContain('max-md:min-h-12');
+  });
+});

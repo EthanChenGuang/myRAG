@@ -15,6 +15,9 @@ const SCOPE_GATE_LABELS = {
     "status.loading": "Loading the scope gate…",
     "status.loaded": "Status loaded. Reference points: {points}. Examples: {examples}.",
     "error.unavailable": "The scope gate status is unavailable right now. Select Reload panel in a moment.",
+    "error.notAvailable": "The scope gate is not available on this deployment. Update the app, then reload.",
+    "status.notLoaded": "Status not loaded.",
+    "cell.recorded": "Recorded: {time}",
     "effect.heading": "In effect now",
     "effect.active": "The scope gate can skip retrieval in this workspace.",
     "effect.inactive": "Every question is still retrieved in this workspace.",
@@ -144,6 +147,9 @@ const SCOPE_GATE_LABELS = {
     "status.loading": "正在加载范围闸门…",
     "status.loaded": "状态已加载。参考点：{points}。示例：{examples}。",
     "error.unavailable": "范围闸门状态暂时不可用。请稍后选择“重新加载面板”。",
+    "error.notAvailable": "此部署中没有范围闸门。请更新应用，然后重新加载。",
+    "status.notLoaded": "状态未加载。",
+    "cell.recorded": "记录时间：{time}",
     "effect.heading": "当前生效情况",
     "effect.active": "在此工作区，范围闸门可以跳过检索。",
     "effect.inactive": "在此工作区，所有问题仍会进行检索。",
@@ -273,6 +279,9 @@ const SCOPE_GATE_LABELS = {
     "status.loading": "Caricamento del filtro di ambito…",
     "status.loaded": "Stato caricato. Punti di riferimento: {points}. Esempi: {examples}.",
     "error.unavailable": "Lo stato del filtro di ambito non è disponibile in questo momento. Seleziona Ricarica pannello tra poco.",
+    "error.notAvailable": "Il filtro di ambito non è disponibile in questa distribuzione. Aggiorna l’app, poi ricarica.",
+    "status.notLoaded": "Stato non caricato.",
+    "cell.recorded": "Registrato: {time}",
     "effect.heading": "In vigore ora",
     "effect.active": "In questo spazio di lavoro il filtro di ambito può saltare il recupero.",
     "effect.inactive": "In questo spazio di lavoro ogni domanda viene ancora recuperata.",
@@ -685,7 +694,7 @@ function scopeGateMapError(result, action) {
     if (status === 503) return { kind: 'failed', key: 'rebuild.failed' };
   }
   if (status === 503) return { kind: 'unavailable', key: 'error.unavailable' };
-  if (status === 404) return { kind: 'changed', key: 'error.changed' };
+  if (status === 404) return action === 'load' ? { kind: 'notAvailable', key: 'error.notAvailable' } : { kind: 'changed', key: 'error.changed' };
   if (status === 400) {
     const detail = Array.isArray(body.details) && body.details[0] && typeof body.details[0] === 'object' ? body.details[0] : null;
     return { kind: 'invalid', key: 'error.invalid', vars: { detail: detail && typeof detail.message === 'string' ? detail.message : err } };
@@ -1008,14 +1017,24 @@ class ScopeGatePanel {
           ? ui.ragUiSignInAlert(this.doc, this.locale, reload)
           : ui.ragUiAlert(this.doc, { tone: 'warning', icon: 'person-lock', body: [this.t('error.workspace')], actions: [ui.ragUiReloadButton(this.doc, this.locale, reload)] });
       this.alertHost.replaceChildren(alert);
-      this.announce(mapped.kind === 'signIn' ? ui.ragUiSharedLabel('error.signIn', this.locale) : this.t('error.workspace'), true);
+      this.announce(this.t('status.notLoaded'));
+      return;
+    }
+    if (mapped.kind === 'notAvailable') {
+      this.body = null;
+      this.blocks.replaceChildren();
+      this.updatedEl.textContent = '';
+      const alert = ui.ragUiAlert(this.doc, { tone: 'info', icon: 'info-circle', body: [this.t('error.notAvailable')], actions: [ui.ragUiReloadButton(this.doc, this.locale, reload)] });
+      alert.setAttribute('data-scope-gate-not-available', '');
+      this.alertHost.replaceChildren(alert);
+      this.announce(this.t('status.notLoaded'));
       return;
     }
     const message = mapped.kind === 'network' ? ui.ragUiSharedLabel('error.network', this.locale) : mapped.kind === 'unavailable' ? this.t('error.unavailable') : this.message(mapped);
     if (hadContent) ui.ragUiListBusy(this.blocks, true, true);
     else this.blocks.replaceChildren();
     this.alertHost.replaceChildren(ui.ragUiUnavailableAlert(this.doc, this.locale, message, reload));
-    this.announce(message, true);
+    this.announce(this.t('status.notLoaded'));
   }
 
   message(mapped) {
@@ -1254,8 +1273,14 @@ class ScopeGatePanel {
       const tbody = this.el('tbody');
       const n = (value) => (value === null ? null : this.el('p', { className: 'text-xs text-base-content/70', text: this.t('cell.n', { n: ui.ragUiFormatNumber(value, this.locale) }) }));
       for (const row of view.rows) {
-        const profile = this.el('th', { className: 'font-normal align-top', attrs: { scope: 'row' } }, [this.el('span', { className: 'font-mono text-xs break-all', text: row.profileId, attrs: { translate: 'no' } })]);
+        const profile = this.el('th', { className: 'font-normal align-top min-w-0', attrs: { scope: 'row' } }, [this.el('span', { className: 'font-mono text-xs break-all md:break-words md:[overflow-wrap:anywhere]', text: row.profileId, attrs: { translate: 'no' } })]);
         if (row.active) profile.appendChild(this.el('div', { className: 'mt-1' }, [this.badge({ tone: 'success', icon: 'check-circle', word: 'badge.inUse' })]));
+        if (row.recordedAt) {
+          const stacked = this.el('p', { className: 'max-lg:hidden xl:hidden text-xs text-base-content/70 mt-1', attrs: { 'data-scope-gate-recorded-stacked': '' } });
+          const [before, after] = this.t('cell.recorded').split('{time}');
+          stacked.append(this.doc.createTextNode(before || ''), this.time(row.recordedAt), this.doc.createTextNode(after || ''));
+          profile.appendChild(stacked);
+        }
         const mode = row.mode.label ? this.doc.createTextNode(this.t(row.mode.label)) : this.el('span', { className: 'font-mono text-xs break-all', text: row.mode.code, attrs: { translate: 'no' } });
         const status = this.el('div', { className: 'flex flex-wrap gap-1' }, [
           row.status.key
@@ -1277,7 +1302,7 @@ class ScopeGatePanel {
             this.el('td', { className: 'hidden md:table-cell text-right tabular-nums align-top', text: row.margin === null ? '—' : row.margin }),
             falseCell,
             this.el('td', { className: 'hidden lg:table-cell text-right tabular-nums align-top' }, [this.el('p', { text: row.correctRate === null ? '—' : row.correctRate }), n(row.correctN)]),
-            this.el('td', { className: 'hidden lg:table-cell align-top whitespace-nowrap' }, row.recordedAt ? [this.time(row.recordedAt)] : [this.el('span', { text: '—' })]),
+            this.el('td', { className: 'max-xl:hidden align-top whitespace-nowrap' }, row.recordedAt ? [this.time(row.recordedAt)] : [this.el('span', { text: '—' })]),
           ]),
         );
       }
@@ -1292,7 +1317,7 @@ class ScopeGatePanel {
             this.th('col.margin', 'hidden md:table-cell text-right'),
             this.th('col.falseRefusal', 'text-right'),
             this.th('col.correctRefusal', 'hidden lg:table-cell text-right'),
-            this.th('col.recorded', 'hidden lg:table-cell'),
+            this.th('col.recorded', 'max-xl:hidden'),
           ]),
         ]),
         tbody,

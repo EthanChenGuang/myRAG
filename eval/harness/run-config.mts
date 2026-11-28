@@ -26,6 +26,8 @@ export interface RunConfig {
   generatorModel?: string;
   /** Phase 6.2 D-16: every request runs through the voice entry point; absent for the default eval entry. */
   entryProfile?: 'voice';
+  /** Phase 6.2 D-19, D-20: the model selection (an id or auto) every answered request sends; absent keeps today's model. */
+  selectedModel?: string;
 }
 
 /** The Phase 5.1 SEC switches (D-14) and the values each accepts; keys, acks, regions and endpoints are never among them. */
@@ -48,7 +50,7 @@ const PHASE33_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
 };
 
 /**
- * The three Phase 4.4 lexical scoring variables (D-36). The mode is enumerated; k1 and b must be decimals inside the bounds the app
+ * The Phase 4.4 lexical scoring variables (D-36) and the local reranker statistics source (04.4-20, D-54). The mode is enumerated; k1 and b must be decimals inside the bounds the app
  * accepts (k1 0.5 to 3, b 0 to 1), because the app would warn and fall back to its default on any other value.
  */
 const PHASE44_SWITCH_VALUES: Readonly<Record<string, readonly string[] | null>> = {
@@ -56,6 +58,7 @@ const PHASE44_SWITCH_VALUES: Readonly<Record<string, readonly string[] | null>> 
   RAG_LEXICAL_BM25_K1: null,
   RAG_LEXICAL_BM25_B: null,
   RAG_LEXICAL_DF_MODE: ['raw', 'cluster'],
+  RAG_RERANK_LOCAL_STATS: ['pool', 'tenant'],
 };
 const PHASE44_DECIMAL_BOUNDS: Readonly<Record<string, readonly [number, number]>> = {
   RAG_LEXICAL_BM25_K1: [0.5, 3],
@@ -215,7 +218,7 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
 export const RUN_CONFIG_REJECT_MESSAGE =
   '[Eval Harness] run-config may only set RAG_PIPELINE, Phase 4 RAG_* switches, the Phase 5.1 SEC switches and the Phase 6 query-layer and semantic-cache switches';
 
-const TOP_LEVEL_KEYS = new Set(['name', 'env', 'overrides', 'chunking_profiles', 'generator_model', 'entry_profile']);
+const TOP_LEVEL_KEYS = new Set(['name', 'env', 'overrides', 'chunking_profiles', 'generator_model', 'entry_profile', 'selected_model']);
 const ENTRY_PROFILES = new Set(['eval', 'voice']);
 /** The trace contract's generator_model pattern. */
 const GENERATOR_MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
@@ -245,6 +248,7 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
     chunking_profiles: rawProfiles,
     generator_model: rawGeneratorModel,
     entry_profile: rawEntryProfile,
+    selected_model: rawSelectedModel,
   } = raw;
   if (typeof name !== 'string' || !NAME_RE.test(name)) {
     throw new RunConfigError(`[Eval Harness] run-config ${source} needs a name of lowercase letters, digits, dot, dash or underscore`);
@@ -322,6 +326,13 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
     throw new RunConfigError(`[Eval Harness] run-config ${source} entry_profile must be eval or voice`);
   }
 
+  if (rawSelectedModel !== undefined && (typeof rawSelectedModel !== 'string' || !GENERATOR_MODEL_RE.test(rawSelectedModel))) {
+    throw new RunConfigError(`[Eval Harness] run-config ${source} selected_model must be auto or a model id`);
+  }
+  if (rawSelectedModel !== undefined && rawEntryProfile === 'voice') {
+    throw new RunConfigError(`[Eval Harness] run-config ${source} selected_model needs an answered entry; the voice entry measures retrieval only`);
+  }
+
   return {
     name,
     env,
@@ -329,6 +340,7 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
     ...(chunkingProfiles ? { chunkingProfiles } : {}),
     ...(rawGeneratorModel !== undefined ? { generatorModel: rawGeneratorModel } : {}),
     ...(rawEntryProfile === 'voice' ? { entryProfile: 'voice' as const } : {}),
+    ...(rawSelectedModel !== undefined ? { selectedModel: rawSelectedModel } : {}),
   };
 }
 
