@@ -1067,3 +1067,4 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
   - MORNING (owner):
     - native review of 5 more zh/it items;
     - decide whether the main and q62 prechunked tenants should also record documents.language.
+- 01:24Z 06.3-28 DONE (exec/06.3-28 dfdee820: an incomplete listing never removes orphans; D-31 resolved) and archived; goes into train 42. No new plans are READY.
