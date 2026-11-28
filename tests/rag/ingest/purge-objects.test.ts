@@ -78,7 +78,18 @@ function rpcClient() {
           data = true;
           break;
         case 'rag_purge_audit_pending':
-          data = world.pendingRows;
+          // As 0726: pending or finished in the last 7 days, oldest started first, at most p_limit rows.
+          data = sortedAudit(world.pendingRows)
+            .filter((row) => (row.pending_object_paths as unknown[]).length > 0 || Date.parse(String(row.finished_at)) > Date.now() - 7 * 86_400_000)
+            .slice(0, Number(args.p_limit));
+          break;
+        case 'rag_purge_audit_recent':
+          // As 1015: finished in the last 7 days with versions, keyset on (started_at, id) after the cursor, at most p_limit rows.
+          data = sortedAudit(world.pendingRows)
+            .filter((row) => row.finished_at !== null && Date.parse(String(row.finished_at)) > Date.now() - 7 * 86_400_000)
+            .filter((row) => (row.version_ids as unknown[]).length > 0)
+            .filter((row) => args.p_after_started_at === null || auditKey(row) > `${new Date(String(args.p_after_started_at)).toISOString()}|${String(args.p_after_id)}`)
+            .slice(0, Number(args.p_limit));
           break;
         case 'rag_purge_scrub_chats':
           data = 1;
@@ -94,6 +105,16 @@ function rpcClient() {
       return request;
     },
   };
+}
+
+function auditKey(row: Row): string {
+  return `${new Date(String(row.started_at ?? row.finished_at)).toISOString()}|${String(row.id)}`;
+}
+
+function sortedAudit(rows: Row[]): Row[] {
+  return [...rows]
+    .map((row) => ({ ...row, started_at: row.started_at ?? row.finished_at }))
+    .sort((a, b) => (auditKey(a) < auditKey(b) ? -1 : auditKey(a) > auditKey(b) ? 1 : 0));
 }
 
 async function seedObjects(): Promise<void> {
@@ -287,6 +308,39 @@ describe('purge objects after commit (D-15, D-37)', () => {
     const scrubs = world.rpc.filter((call) => call.fn === 'rag_purge_scrub_chats');
     expect(scrubs).toHaveLength(1);
     expect(scrubs[0]?.args).toMatchObject({ p_tenant_key: TENANT, p_lineage_id: lineage, p_document_ids: [V1, V2] });
+  });
+
+  it('re-scrubs every recent purge exactly once behind a backlog of pending records (06.3-SECURITY W7)', async () => {
+    const base = Date.now() - 6 * 86_400_000;
+    const at = (ms: number) => new Date(ms).toISOString();
+    const old = Array.from({ length: 600 }, (_, index) => ({
+      id: crypto.randomUUID(),
+      tenant_key: TENANT,
+      lineage_id: crypto.randomUUID(),
+      version_ids: [V1],
+      pending_object_paths: ['original_files:x/'],
+      started_at: at(base - 30 * 86_400_000 + index),
+      finished_at: at(base - 30 * 86_400_000 + index + 1),
+      result: 'pending',
+    }));
+    const recent = Array.from({ length: 1500 }, (_, index) => ({
+      id: crypto.randomUUID(),
+      tenant_key: TENANT,
+      lineage_id: crypto.randomUUID(),
+      version_ids: [V1, V2],
+      pending_object_paths: [],
+      // Pairs share a start time, so the id breaks the tie of the cursor.
+      started_at: at(base + Math.floor(index / 2) * 1000),
+      finished_at: at(base + Math.floor(index / 2) * 1000 + 10),
+      result: 'verified',
+    }));
+    world.pendingRows = [...old, ...recent];
+    const result = await purge.rescrubRecentPurges({ signal: new AbortController().signal });
+    expect(result).toMatchObject({ ok: true, records: 1500 });
+    const scrubbed = world.rpc.filter((call) => call.fn === 'rag_purge_scrub_chats').map((call) => String(call.args.p_lineage_id));
+    expect(scrubbed).toHaveLength(1500);
+    expect(new Set(scrubbed).size).toBe(1500);
+    expect(new Set(scrubbed)).toEqual(new Set(recent.map((row) => row.lineage_id)));
   });
 
   it('still removes the objects and stores the check when the request is aborted while the purge commits', async () => {

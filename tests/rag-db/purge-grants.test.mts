@@ -66,23 +66,41 @@ for (const mode of MODES) {
     });
 
     test('a source_sync actor purges only nango versions of its own connection', async () => {
-      const own = await createConnection(world, world.tenantA);
-      const other = await createConnection(world, world.tenantA);
+      // Connector documents live in the owner's workspace (nangoOwnerScope): u:<owner> in multi-tenant mode, s:default in single.
+      const ownerTenant = mode === 'multi-tenant' ? { key: `u:${world.tenantA.userId}`, userId: world.tenantA.userId, orgId: null } : world.tenantA;
+      const own = await createConnection(world, ownerTenant);
+      const other = await createConnection(world, ownerTenant);
       const fileId = `file-${crypto.randomUUID().slice(0, 8)}`;
-      const seeded = await seedLineage(world, world.tenantA, { nango: { ...own, fileId } });
-      const upload = await seedLineage(world, world.tenantA);
+      const seeded = await seedLineage(world, ownerTenant, { nango: { ...own, fileId } });
+      const upload = await seedLineage(world, ownerTenant);
       const sync = reason('source_deleted');
-      assert.equal((await errorOf(() => purge(world.db, world.tenantA.key, seeded.lineageId, syncActor(other.connectionUuid), sync))).message, 'not_found');
-      assert.equal((await errorOf(() => purge(world.db, world.tenantA.key, seeded.lineageId, syncActor(crypto.randomUUID()), sync))).message, 'not_found');
-      assert.equal((await errorOf(() => purge(world.db, world.tenantA.key, upload.lineageId, syncActor(own.connectionUuid), sync))).message, 'not_found');
-      assert.equal((await errorOf(() => purge(world.db, world.tenantA.key, seeded.lineageId, syncActor(own.connectionUuid), reason('owner_request')))).code, '22023');
+      assert.equal((await errorOf(() => purge(world.db, ownerTenant.key, seeded.lineageId, syncActor(other.connectionUuid), sync))).message, 'not_found');
+      assert.equal((await errorOf(() => purge(world.db, ownerTenant.key, seeded.lineageId, syncActor(crypto.randomUUID()), sync))).message, 'not_found');
+      assert.equal((await errorOf(() => purge(world.db, ownerTenant.key, upload.lineageId, syncActor(own.connectionUuid), sync))).message, 'not_found');
+      assert.equal((await errorOf(() => purge(world.db, ownerTenant.key, seeded.lineageId, syncActor(own.connectionUuid), reason('owner_request')))).code, '22023');
       assert.equal(await count(world.db, 'SELECT count(*) AS n FROM documents WHERE lineage_id = $1', [seeded.lineageId]), 2);
 
-      const result = await purge(world.db, world.tenantA.key, seeded.lineageId, syncActor(own.connectionUuid), sync);
+      const result = await purge(world.db, ownerTenant.key, seeded.lineageId, syncActor(own.connectionUuid), sync);
       assert.equal(result.counts.documents, 2);
       assert.equal(result.counts.sync_records, 1);
       const audit = (await rows(world.db, 'SELECT actor_kind, actor_id, reason_code FROM rag_purge_audit WHERE id = $1', [result.audit_id]))[0];
       assert.deepEqual(audit, { actor_kind: 'source_sync', actor_id: own.connectionUuid, reason_code: 'source_deleted' });
+    });
+
+    test('a source_sync actor cannot purge in a tenant other than its connection owner tenant (06.3-SECURITY W3)', async (t) => {
+      if (mode !== 'multi-tenant') {
+        t.skip('single-tenant: every connection owner tenant is s:default');
+        return;
+      }
+      // The app resolves the owner tenant before it calls; this is the SQL-layer second check. Nango rows of the connection
+      // written into an organization tenant (the owner's u:<owner> is the only allowed one) must not be purged by its sync.
+      const own = await createConnection(world, world.tenantA);
+      const fileId = `file-${crypto.randomUUID().slice(0, 8)}`;
+      const seeded = await seedLineage(world, world.tenantA, { nango: { ...own, fileId } });
+      const refused = await errorOf(() => purge(world.db, world.tenantA.key, seeded.lineageId, syncActor(own.connectionUuid), reason('source_deleted')));
+      assert.equal(refused.message, 'not_found');
+      assert.equal(await count(world.db, 'SELECT count(*) AS n FROM documents WHERE lineage_id = $1', [seeded.lineageId]), 2);
+      assert.equal(await count(world.db, 'SELECT count(*) AS n FROM rag_purge_audit WHERE lineage_id = $1', [seeded.lineageId]), 0);
     });
 
     test('a key of the other deployment mode is refused by the tenant guard', async () => {

@@ -139,10 +139,30 @@ describe('listing completeness and the reconcile exports (D-07, D-31)', () => {
     }));
     const memory = createNangoMemoryAdmin({ nango_sync_records: records });
     state.memory = memory;
-    const removed = await removeOrphans(row('dropbox'), ['f1', 'f2'], 'scheduled');
+    const removed = await removeOrphans(row('dropbox'), ['f1', 'f2'], 'scheduled', { complete: true });
     expect(removed).toBe(1);
     expect((memory.tables.nango_sync_records ?? []).map((record) => record.file_id).sort()).toEqual(['f1', 'f2']);
     expect(memory.rpcs.map((call) => [call.args.p_origin, call.args.p_status])).toEqual([['scheduled', 'completed']]);
+  });
+
+  it('removeOrphans removes nothing when the caller does not say the listing is complete (06.3-SECURITY W2)', async () => {
+    const records = ['f1', 'f2', 'f3'].map((fileId) => ({
+      id: `rec-${fileId}`,
+      user_id: OWNER,
+      connection_id: CONNECTION_ID,
+      file_id: fileId,
+      file_name: `${fileId}.txt`,
+      document_id: null,
+      status: 'completed',
+    }));
+    for (const options of [undefined, {}, { complete: undefined }, { complete: 'yes' }]) {
+      const memory = createNangoMemoryAdmin({ nango_sync_records: records.map((record) => ({ ...record })) });
+      state.memory = memory;
+      const removed = await (removeOrphans as (...args: unknown[]) => Promise<number>)(row('dropbox'), ['f1'], 'scheduled', options);
+      expect(removed).toBe(0);
+      expect(memory.tables.nango_sync_records).toHaveLength(3);
+      expect(memory.rpcs.map((call) => call.args.p_status)).toEqual(['incomplete']);
+    }
   });
 
   it('removeOrphans removes nothing from an incomplete listing', async () => {
