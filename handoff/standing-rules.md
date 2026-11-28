@@ -85,3 +85,18 @@
 # Owner (2026-11-26 ~02:00Z): creating/changing environment variables (Vercel etc.) is also mine to do autonomously; don't ask.
 # Owner (2026-11-26 ~02:00Z): no PR per change. Bundle related changes: executors -> exec branches -> merge train PR (~8-10 plans). My own ad-hoc fixes (UI, ops) also go onto branches folded into the next train; separate PR only for an urgent production fix. Speed first.
 - (owner, repeated, 2026-11-26) Whenever asking the owner for a token / API key / any credential: always give the direct clickable URL where they create or copy it, in the same message as the request form.
+
+## 2026-11-28 ~00:55Z: owner asleep; autonomous run (owner's words: 在保证质量的前提下，用最快的速度完成这个项目)
+
+Allowed without asking:
+- dispatch and execute plans, quicks and verifications;
+- build trains;
+- merge train and hotfix PRs into main when every CI check is green;
+- deploy a myrag-medical-eval PREVIEW from main (the owner consented earlier).
+
+Still requires the owner in person (queue these for the morning):
+- prod Supabase SQL (connector switch plus owner desk);
+- prod Vercel deploy;
+- signatures and accepted risks;
+- credentials;
+- product decisions.

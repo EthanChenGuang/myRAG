@@ -991,3 +991,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 00:46Z quick-33-fixes DONE exec/quick-33-fixes 8c4a7c9ea -> t41. Migration 1011 (header-stamp INSERT guard). Covers G4 (400 unknown_attribute), G5 (org delete clears rule data), G9 baseline parity test, G10 hash test, G3 identifier+attribute e2e. Archived. MIGRATION MAP +1011.
 - 00:50Z Dispatched 06.3-09, 06.3-11, 06.3-12 and 06.3-13 (07xx numbers), and the train-41 builder (base t40; long branch list). Owner asked when to switch the DB connector to prod.
 - 00:52Z 07-37 DONE exec/07-37 79a068d6 -> t41 (forced source recheck for external backends; bounded stale repair). Archived. 06.3-14 dispatched from exec/07-37.
+- 00:55Z OWNER going to sleep; autonomous run authorized within quality rules (see standing-rules). Self-check every 20 min; morning summary queued.
