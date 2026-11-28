@@ -1644,3 +1644,11 @@ export async function syncAllUserConnections(userId: string): Promise<SyncStats[
 
     return results;
 }
+
+export async function listConnectionFiles(_connection: SourceConnectionRow): Promise<{ fileIds: string[]; complete: boolean }> {
+    return { fileIds: [], complete: true };
+}
+
+export async function removeOrphans(_connection: SourceConnectionRow, _currentFileIds: readonly string[], _origin: 'sync' | 'scheduled', _options: { complete?: boolean } = {}): Promise<number> {
+    return 0;
+}
