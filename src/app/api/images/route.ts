@@ -3,12 +3,14 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import {
   accessGroupsEnabled,
   accessTableFilter,
+  recomputeDirtyDupClusters,
   removeDocumentObjects,
   repairOwnerMembership,
   resolveAccessScope,
   resolveTenantScope,
   scopeAccessFilter,
   type RagAdminDb,
+  type TenantScope,
 } from '@/lib/rag';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 
@@ -37,6 +39,7 @@ interface Authorized {
   predicate: Predicate;
   /** D-15: the caller's access keys; null while the switch is off or for an access admin. */
   accessKeys: readonly string[] | null;
+  scope: TenantScope;
 }
 
 type AuthResult = { ok: true; value: Authorized } | { ok: false; response: Response };
@@ -129,7 +132,7 @@ async function authorize(request: NextRequest, requestedOrganizationId: unknown,
     if (!resolved.ok) return { ok: false, response: fail(503, 'access_groups_unavailable') };
     accessKeys = accessTableFilter(scopeAccessFilter(resolved.scope));
   }
-  return { ok: true, value: { admin, predicate, accessKeys } };
+  return { ok: true, value: { admin, predicate, accessKeys, scope } };
 }
 
 // GET: List the images in the caller's verified workspace
@@ -188,7 +191,7 @@ export async function DELETE(request: NextRequest): Promise<Response> {
 
     const auth = await authorize(request, requestedOrganization(request), true);
     if (!auth.ok) return auth.response;
-    const { admin, predicate, accessKeys } = auth.value;
+    const { admin, predicate, accessKeys, scope } = auth.value;
 
     const { data: doc, error: lookupError } = await applyAccess(
       applyPredicate(
@@ -221,6 +224,9 @@ export async function DELETE(request: NextRequest): Promise<Response> {
       console.error('[Images API] Document delete failed', { code: documentError.code });
       return fail(500, 'Failed to delete image');
     }
+
+    // DATA-21: the chunk delete marked the image's duplicate clusters dirty; switch-gated and never fails the delete.
+    await recomputeDirtyDupClusters(scope, { signal: request.signal });
 
     // Best effort and after the rows: a stored original or parse file of the image leaves the private bucket; a failure is logged only.
     if (typeof doc.tenant_key === 'string') await removeDocumentObjects({ tenantKey: doc.tenant_key, rows: [doc] });

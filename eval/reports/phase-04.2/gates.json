@@ -97,7 +97,7 @@
       ]
     },
     {
-      "decision": "ROADMAP-4.2-SC3",
+      "decision": "ROADMAP-4.2-SC5",
       "name": "table",
       "numbers": {
         "items": 3,
@@ -111,7 +111,7 @@
       ]
     },
     {
-      "decision": "ROADMAP-4.2-SC5",
+      "decision": "ROADMAP-4.2-SC3",
       "name": "versions",
       "numbers": {
         "items": 3,

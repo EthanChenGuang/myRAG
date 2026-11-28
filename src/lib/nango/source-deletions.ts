@@ -7,6 +7,7 @@ import { env } from '@/lib/env';
 import {
     nangoOwnerScope,
     queueConfigFromProcessEnv,
+    recomputeDirtyDupClusters,
     removeDocumentObjects,
     scopeKey,
     softDeleteLineage,
@@ -316,7 +317,8 @@ export async function deleteNangoLineages(
     supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
     tenantKey: string,
     connectionId: string,
-    fileId: string
+    fileId: string,
+    ownerUserId?: string
 ): Promise<boolean> {
     try {
         const lineages = await collectNangoLineageIds(supabaseAdmin, tenantKey, connectionId, fileId);
@@ -342,6 +344,13 @@ export async function deleteNangoLineages(
             .eq('tenant_key', tenantKey)
             .eq('source', 'nango');
         if (documentsError) throw documentsError;
+        // DATA-21: the chunk delete marked the lineages' duplicate clusters dirty; switch-gated and never fails the delete.
+        if (ownerUserId !== undefined) {
+            const owner = nangoOwnerScope({ ownerUserId });
+            if (owner.ok && scopeKey(owner.scope) === tenantKey) {
+                await recomputeDirtyDupClusters(owner.scope, { signal: AbortSignal.timeout(120_000) });
+            }
+        }
         // Best effort and after the rows: the originals and parse files of the removed versions leave the private bucket.
         await removeDocumentObjects({ tenantKey, rows: versionRows });
         return true;
@@ -371,7 +380,7 @@ export async function applyDefaultDeletion(record: SyncRecordRow, ctx: DefaultDe
         if (tenantKey !== null) {
             const removed = orphanUsesSoftDelete()
                 ? await softDeleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id, userId)
-                : await deleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id);
+                : await deleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id, userId);
             if (!removed) {
                 return deleted;
             }
