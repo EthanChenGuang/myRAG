@@ -109,6 +109,10 @@ export interface BackendLegsMeta {
   denseMode: 'ann' | 'exact' | null;
   /** External backends (D-10): store ids that failed re-validation in this request. */
   tenantValidationDropped?: number;
+  /** RET-05, RET-14: the external re-validation is the source recheck; counts only, the trace's stale_index_drop is `dropped`. */
+  sourceRecheck?: { checked: number; dropped: number };
+  /** The ids behind sourceRecheck, for the factory's per-request union and the stale repair; never traced or logged. */
+  sourceRecheckIds?: { checked: readonly string[]; dropped: readonly string[] };
   /** D-13, A-09: the exact-scan cutoff and iterative scan a keys access filter sent; absent when the configured values were sent. */
   accessExactCutoff?: number;
   accessIterativeScan?: 'off' | 'relaxed_order' | 'strict_order';

@@ -77,10 +77,18 @@ export function createExternalBackend(deps: ExternalBackendDeps): RetrievalBacke
       if (validated.dropped > 0) {
         logTenantValidationDropped(reader.target, validated.requested, validated.dropped, deps.securityLog);
       }
+      // RET-05, RET-14: this one call is also the source recheck; every id it dropped counts as stale_index_drop.
+      const checked = [...new Set(ids)];
+      const dropped = checked.filter((id) => !validated.chunks.has(id));
       return {
         dense: rebuildLeg(legs.dense, validated.chunks, 'dense'),
         lexical: rebuildLeg(legs.lexical, validated.chunks, 'lexical'),
-        meta: { denseMode: null, tenantValidationDropped: validated.dropped },
+        meta: {
+          denseMode: null,
+          tenantValidationDropped: validated.dropped,
+          sourceRecheck: { checked: checked.length, dropped: dropped.length },
+          sourceRecheckIds: { checked, dropped },
+        },
       };
     },
     async health(): Promise<BackendHealth> {
