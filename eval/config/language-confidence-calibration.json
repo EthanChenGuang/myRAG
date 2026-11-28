@@ -2,12 +2,12 @@
   "bins": [
     {
       "confident": true,
-      "correct": 92,
+      "correct": 98,
       "length_bucket": "short",
-      "n": 92,
+      "n": 98,
       "script_class": "single",
       "source": "calibrated",
-      "value": 0.9894
+      "value": 0.99
     },
     {
       "confident": true,
@@ -20,12 +20,12 @@
     },
     {
       "confident": true,
-      "correct": 221,
+      "correct": 235,
       "length_bucket": "medium",
-      "n": 223,
+      "n": 237,
       "script_class": "single",
       "source": "calibrated",
-      "value": 0.9867
+      "value": 0.9874
     },
     {
       "confident": true,
@@ -38,12 +38,12 @@
     },
     {
       "confident": true,
-      "correct": 212,
+      "correct": 225,
       "length_bucket": "long",
-      "n": 212,
+      "n": 225,
       "script_class": "single",
       "source": "calibrated",
-      "value": 0.9953
+      "value": 0.9956
     },
     {
       "confident": true,
@@ -110,11 +110,11 @@
     }
   ],
   "detector": "heuristic",
-  "generated_at": "2026-11-27T21:14:04Z",
+  "generated_at": "2026-11-27T22:59:31Z",
   "inputs": [
     {
       "path": "eval/fixtures/golden.jsonl",
-      "sha256": "dc812d5fa8c6a64cfc604e4e6211baa0adf1edab73d1df5c4aaecffd7c7d8eb6"
+      "sha256": "2a7757f408eef267e4f07ed4dd1297658a37d104ad2d5217b722697a6451f312"
     },
     {
       "path": "eval/fixtures/domain/golden.jsonl",

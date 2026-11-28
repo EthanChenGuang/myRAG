@@ -53,6 +53,8 @@ LATER_PHASE_TAGS = frozenset(
 )
 # Plan 05.3-15 adds implicit_condition and near-miss no-answer items under this tag; test_golden_phase53.py covers them.
 LATER_PHASE_TAGS = LATER_PHASE_TAGS | {"phase53_fixture"}
+# Plan 06.2-22 adds q62 tenant items under this tag; test_golden_phase62.py covers them.
+LATER_PHASE_TAGS = LATER_PHASE_TAGS | {"phase62"}
 # Plan 04.1.1-10 adds colloquial and no_answer term items under these ids; test_golden_terminology.py covers them.
 LATER_PHASE_ID = re.compile(r"^[a-z]+-(colloquial|no_answer)-term-\d{3}$")
 PRE_EXISTING_SHA256 = "78d15c174a16d1aad33814318f67cf1c9d71530813f80b777fd907e6307618dd"

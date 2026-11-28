@@ -18,6 +18,7 @@ FIXTURE_MANIFEST = REPO_ROOT / "eval/fixtures/golden.manifest.json"
 INGEST_GOLDEN = REPO_ROOT / "eval/fixtures/ingest/golden-ingest.jsonl"
 INGEST_MANIFEST = REPO_ROOT / "eval/fixtures/ingest/golden-ingest.manifest.json"
 CORPUS_DIR = REPO_ROOT / "eval/fixtures/corpus"
+Q62_CORPUS_DIR = REPO_ROOT / "eval/fixtures/q62-corpus"
 
 DAY1 = dt.date(2026, 1, 5)
 DAY2 = dt.date(2026, 1, 6)
@@ -333,10 +334,23 @@ def test_corpus_documents_keeps_every_version_of_a_lineage_filename():
 def test_stale_scan_of_the_committed_fixture_set_finds_nothing(capsys):
     items = load_golden(FIXTURE_GOLDEN)
     manifest = golden_set.load_manifest(FIXTURE_MANIFEST)
-    documents = golden_set.corpus_documents(load_corpus(CORPUS_DIR))
+    # The q62 tenant items of plan 06.2-22 quote eval/fixtures/q62-corpus (an isolated fixture tenant).
+    documents = golden_set.corpus_documents(load_corpus(CORPUS_DIR) + load_corpus(Q62_CORPUS_DIR))
     scanned, findings = golden_set.stale_scan_fixture(items, manifest, documents, today=DAY2)
     assert scanned is None
     assert findings == []
+
+
+def test_stale_scan_cli_default_corpus_covers_the_isolated_q62_documents(fixture_dir, capsys):
+    golden = fixture_dir / "golden.jsonl"
+    manifest_path = fixture_dir / "golden.manifest.json"
+    shutil.copy(FIXTURE_GOLDEN, golden)
+    shutil.copy(FIXTURE_MANIFEST, manifest_path)
+    before = manifest_path.read_text(encoding="utf-8")
+    code = golden_set.main(["stale-scan", "--golden", str(golden), "--manifest", str(manifest_path), "--date", "2026-01-06"])
+    assert code == 0
+    assert "0 newly stale" in capsys.readouterr().out
+    assert manifest_path.read_text(encoding="utf-8") == before
 
 
 def test_real_set_commands_refuse_a_fixture_set(fixture_dir, capsys, monkeypatch):
@@ -392,7 +406,8 @@ def test_committed_manifests_start_at_version_one_all_active():
     # manifest (plan 03.3-20) added the templated collection items and five no-answer items in its vocabulary; its version 7
     # (train 38) added the 57 items of plan 05.2.1-12 and two more no-answer items in the templated vocabulary (en-06, it-06),
     # which keep the gate's no-answer share at its minimum for en and it once both plans are in. Version 8 (train 39) added
-    # only the two no-answer items 05.2.1-17 had made for the same purpose (en-08, it-07). Every item is still active.
+    # only the two no-answer items 05.2.1-17 had made for the same purpose (en-08, it-07). Version 7 of the fixture manifest
+    # and version 9 of the ingest manifest added only the 33 q62 tenant items of plan 06.2-22 (tag phase62). Every item is still active.
     golden = load_golden(FIXTURE_GOLDEN)
     phase42 = sorted(item.id for item in golden if "phase42" in item.tags)
     phase53 = sorted(item.id for item in golden if "phase53_fixture" in item.tags)
@@ -405,6 +420,8 @@ def test_committed_manifests_start_at_version_one_all_active():
     phase521 = sorted(item.id for item in golden if item.category in ("multi_step_calc", "context_overflow"))
     assert len(phase42) == 36 and len(conversational) == 6 and len(phase53) == 25 and len(phase52) == 48
     assert len(phase521) == 57
+    phase62 = sorted(item.id for item in golden if "phase62" in item.tags)
+    assert len(phase62) == 33
     ingest = load_golden(INGEST_GOLDEN)
     train38_no_answer = ["ingest-tpl-no-answer-en-06", "ingest-tpl-no-answer-it-06"]
     train39_no_answer = ["ingest-tpl-no-answer-en-08", "ingest-tpl-no-answer-it-07"]
@@ -416,15 +433,17 @@ def test_committed_manifests_start_at_version_one_all_active():
     assert len(templated) == 83
     for path in (FIXTURE_MANIFEST, INGEST_MANIFEST):
         manifest = golden_set.load_manifest(path)
-        expected = 8 if path == INGEST_MANIFEST else 6
+        expected = 9 if path == INGEST_MANIFEST else 7
         assert manifest.version == expected
         assert [entry.version for entry in manifest.changelog] == list(range(1, expected + 1))
         if path == INGEST_MANIFEST:
             assert sorted(manifest.changelog[5].added) == templated and not manifest.changelog[5].changed
             assert sorted(manifest.changelog[6].added) == sorted(phase521 + train38_no_answer) and not manifest.changelog[6].changed
             assert sorted(manifest.changelog[7].added) == train39_no_answer and not manifest.changelog[7].changed
+            assert sorted(manifest.changelog[8].added) == phase62 and not manifest.changelog[8].changed
         else:
             assert sorted(manifest.changelog[5].added) == phase521 and not manifest.changelog[5].changed
+            assert sorted(manifest.changelog[6].added) == phase62 and not manifest.changelog[6].changed
         assert sorted(manifest.changelog[1].added) == phase42
         assert not manifest.changelog[1].changed
         assert sorted(manifest.changelog[2].changed) == conversational

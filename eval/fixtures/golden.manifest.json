@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "set_id": "fixture",
-  "version": 6,
+  "version": 7,
   "items": [
     {
       "id": "en-ambiguous-001",
@@ -362,6 +362,33 @@
       "stale_since": null,
       "retire_reason": null,
       "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "en-glossary-001",
+      "item_sha256": "a38f6fb9a3e9052fc2180766b42a673b8e6b8fa639032d5e57863d4f884404a1",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-glossary-002",
+      "item_sha256": "f09ee0ed6c88ab36869e3c8630430447c3057e91af9215a8c076b5f5bb0a499a",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-glossary-003",
+      "item_sha256": "36de7854f7332ee8c8aa7743afa3dcdefe982c873186a74e1d8d6b4307920851",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
     },
     {
       "id": "en-identifier-near-miss-001",
@@ -895,6 +922,42 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "en-no-answer-018",
+      "item_sha256": "92d65b338fe44c8815f75b7f5737249f66c6e062c8d80edc50811d9c5875681d",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-no-answer-019",
+      "item_sha256": "8eba8230bd8573de9b2f1653212802a0f989fd569a53189f6f4d9b80c8bb4d5b",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-no-answer-020",
+      "item_sha256": "8275cd500a479f8a8bdae94361b541196a06ea02951993fd4d4a0f56ee56e856",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-no-answer-021",
+      "item_sha256": "92dea46a832b6f99a0136ab925eb134ef385003e658565150780ad76ca101f72",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "en-no_answer-term-001",
       "item_sha256": "5391c8de708da44a073ca52702e546fd9491a239d782c5e0c9857078daf49ea1",
       "status": "active",
@@ -992,6 +1055,33 @@
       "stale_since": null,
       "retire_reason": null,
       "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "en-scoped-compound-001",
+      "item_sha256": "a44c2ca74ff270db4d63a6e8236864fe92586b9d4bafd4de909c6773314497c5",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-scoped-compound-002",
+      "item_sha256": "8f0a0edb24f0342b4c6b9b9588351140526587c9a22e278dc4d9fb663d88dcc0",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "en-scoped-compound-003",
+      "item_sha256": "0f6707c1ccc566e4cc274703ecc19ba7d1ff46f7b961cf63a26eb1255f68196e",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
     },
     {
       "id": "en-selective-filter-001",
@@ -1525,6 +1615,33 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "it-glossary-001",
+      "item_sha256": "d35f5e894ba65644a25a46f690399bdca559d7be8df7f43a1980bf194cd1675c",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-glossary-002",
+      "item_sha256": "90c55676f9a78d71c7794ad04e514fbe5e9b53d0008afb57fd4e3c32f9df1129",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-glossary-003",
+      "item_sha256": "7e670e5c613c5eaca56adc78e341053587f776132ef6d131c7242f0f842f3a08",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "it-identifier-near-miss-001",
       "item_sha256": "846cfc601167a4c167d959c058d48926ede916c896277d5b224572cd2e15b1ad",
       "status": "active",
@@ -2047,6 +2164,42 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "it-no-answer-019",
+      "item_sha256": "e7f75ceeac344727381a8b832d3a582c6a5a7cc85b37a6412175a7b5c27d70d2",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-no-answer-020",
+      "item_sha256": "b7b013ea8b17c2438fee603f883af9614c7be0179702ebf23f84be4027f7c73d",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-no-answer-021",
+      "item_sha256": "2fa6f1dc7c8c946bb5d45270e776d4c9a9929562e7089e965ba8c90d9198f091",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-no-answer-022",
+      "item_sha256": "dce0065836f34a46b1509399899151877115559d61db982b4e4c509c508c5b00",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "it-no_answer-term-001",
       "item_sha256": "ce8f9e0f98f39ecdbf138edda290a26f729ffa84005e0eb745719c2631dcbf25",
       "status": "active",
@@ -2144,6 +2297,60 @@
       "stale_since": null,
       "retire_reason": null,
       "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "it-scoped-compound-001",
+      "item_sha256": "3e723b2f195c71c67655b533899f1b1aab0b33eb70c73d18a53ee18074e57a3a",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-scoped-compound-002",
+      "item_sha256": "e5fec917cb89324f39fe0809af18131299790e15f9176c4b77e6f9d046268554",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-scoped-compound-003",
+      "item_sha256": "db2bcd571e8dd89ca8058b347b545964f8b55e895430ae03372e678f22b3398e",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-scoped-compound-004",
+      "item_sha256": "19e2dbcf9ff3eca0376179f694bb9d572c41d3c93f2204e6ea3d195433113e2b",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-scoped-compound-005",
+      "item_sha256": "d78a339f86e0fcebd02ce5cf060696a1d7f7083eee91c5bb5938def113ba7cdf",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "it-scoped-compound-006",
+      "item_sha256": "d4bb9a7ed11311e57f99d800aa74ba3f361c5542b648a7eed9a3c38865280ee3",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
     },
     {
       "id": "it-selective-filter-001",
@@ -2956,6 +3163,33 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "zh-glossary-001",
+      "item_sha256": "415f09f53b26eacd25dc008ef25f4d7c4d4c28c12086d514068b0570d8a96ff7",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-glossary-002",
+      "item_sha256": "455ecf6368ca8e94368cec375f0d8ea81076aaf64b514d815e7ff404a709c5d8",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-glossary-003",
+      "item_sha256": "0579c3cadf3f11cbba1ef756e721e90f8866812bdb37b5c5428f97c6a9b4f0b7",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "zh-identifier-near-miss-001",
       "item_sha256": "694d2ec60104d6770347f077f9490f2c0bd460176feb96fc6b072c1255ba31ba",
       "status": "active",
@@ -3478,6 +3712,42 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "zh-no-answer-018",
+      "item_sha256": "6345a384422c5b2cda2e759956736e6962f19c90b9411334371095dfe387cd1c",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-no-answer-019",
+      "item_sha256": "493c04e7ef31151d6de1bdeb7a01344c41c831cf2db50e263bc0e67d246bb96e",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-no-answer-020",
+      "item_sha256": "5969ae93b8a81f64bd9b938ffab34aa1a0565da3648ef92efac5a1527cad7a20",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-no-answer-021",
+      "item_sha256": "4f1577479701590dd59acc136855706e5323346cb44c9208cdb70ebf54c28d12",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "zh-no_answer-term-001",
       "item_sha256": "0bc87bdfec5e3cf6cf91bbf8fd14a58eef6f0237cada24a9a07df1ff1d033ea2",
       "status": "active",
@@ -3575,6 +3845,33 @@
       "stale_since": null,
       "retire_reason": null,
       "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "zh-scoped-compound-001",
+      "item_sha256": "43fb5ccb8278373b8f62c2054b0d492ce18355480e5e1f463bd6694facad10f2",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-scoped-compound-002",
+      "item_sha256": "7c7187ed28622274da7ee63c0ab9d59163a3973a3958c1cfcf61b81c839ca125",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-scoped-compound-003",
+      "item_sha256": "9945f4b8963531f96fe2f086cac468a6353afe4f444305bb9d50966ddf6286e9",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
     },
     {
       "id": "zh-selective-filter-001",
@@ -4194,7 +4491,49 @@
       "changed": [],
       "retired": [],
       "stale": []
+    },
+    {
+      "version": 7,
+      "date": "2026-11-27",
+      "added": [
+        "en-glossary-001",
+        "en-glossary-002",
+        "en-glossary-003",
+        "en-no-answer-018",
+        "en-no-answer-019",
+        "en-no-answer-020",
+        "en-no-answer-021",
+        "en-scoped-compound-001",
+        "en-scoped-compound-002",
+        "en-scoped-compound-003",
+        "it-glossary-001",
+        "it-glossary-002",
+        "it-glossary-003",
+        "it-no-answer-019",
+        "it-no-answer-020",
+        "it-no-answer-021",
+        "it-no-answer-022",
+        "it-scoped-compound-001",
+        "it-scoped-compound-002",
+        "it-scoped-compound-003",
+        "it-scoped-compound-004",
+        "it-scoped-compound-005",
+        "it-scoped-compound-006",
+        "zh-glossary-001",
+        "zh-glossary-002",
+        "zh-glossary-003",
+        "zh-no-answer-018",
+        "zh-no-answer-019",
+        "zh-no-answer-020",
+        "zh-no-answer-021",
+        "zh-scoped-compound-001",
+        "zh-scoped-compound-002",
+        "zh-scoped-compound-003"
+      ],
+      "changed": [],
+      "retired": [],
+      "stale": []
     }
   ],
-  "manifest_sha256": "d63859d6cf6985a7d7d929ee29c9482e25b54581b0748a12771f3ea71cd4fa63"
+  "manifest_sha256": "e9ee5ea86298c6e703c885b2c9bcb93344b341dbd71f7d8ed9c1edc7c324396d"
 }
