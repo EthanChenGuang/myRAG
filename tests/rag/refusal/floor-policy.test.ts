@@ -508,3 +508,206 @@ describe('legacy rule pool', () => {
     expect(a.refusalStage?.detail).toBe('above_similarity_floor');
   });
 });
+
+interface DocumentRead {
+  table: string;
+  ids: string[];
+}
+
+/** An admin client whose documents table holds the given full texts; every read is recorded, and `fail` makes the documents read error. */
+function documentsAdmin(contents: Record<string, string>, options: { fail?: boolean } = {}) {
+  const reads: DocumentRead[] = [];
+  const client = {
+    from(table: string) {
+      const read: DocumentRead = { table, ids: [] };
+      const builder = {
+        select() {
+          return builder;
+        },
+        in(_column: string, values: string[]) {
+          read.ids = values;
+          return builder;
+        },
+        abortSignal() {
+          return builder;
+        },
+        then(onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) {
+          reads.push(read);
+          if (options.fail && table === 'documents') {
+            return Promise.resolve({ data: null, error: { message: 'sample failure' } }).then(onFulfilled, onRejected);
+          }
+          const data =
+            table === 'documents'
+              ? read.ids
+                  .filter((id) => id in contents)
+                  .map((id) => ({ id, filename: `${id}.md`, created_at: null, content: contents[id], metadata: null }))
+              : read.ids.map((id) => ({ id, metadata: null }));
+          return Promise.resolve({ data, error: null }).then(onFulfilled, onRejected);
+        },
+      };
+      return builder;
+    },
+  };
+  return { adminClient: () => client as never, reads, documentReads: () => reads.filter((row) => row.table === 'documents') };
+}
+
+async function rankWith(
+  env: Record<string, string>,
+  hits: FusedHit[],
+  admin: ReturnType<typeof documentsAdmin>,
+  options: { profile?: Profile; stageOverrides?: StageOverrides } = {},
+) {
+  installDeps({ ragEnv: () => env, adminClient: admin.adminClient });
+  const profile = options.profile ?? 'chat';
+  const signal = new AbortController().signal;
+  const collector = createTraceCollector({ profile, tenantKey: 's:default' });
+  const out = await runRankStages({
+    input: { scope, query: QUERY, profile, signal },
+    config: loadRagConfig(env),
+    profile,
+    embedding: { vector: [0.1], profile: null },
+    queryLanguage: 'en',
+    fusedHits: hits,
+    referenced: null,
+    signal,
+    collector,
+    stageOverrides: options.stageOverrides,
+  });
+  return { out, refusalStage: collector.stages().find((row) => row.name === 'refusal') };
+}
+
+const FILLER = 'neutral sample sentence about nothing in particular. '.repeat(6);
+const LONG_WITH_TERM = `${FILLER}The manual is kept in the second section.`;
+
+describe('legacy rule evidence read', () => {
+  beforeEach(() => {
+    resetCalibrationWarningsForTests();
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    uninstallDeps();
+    resetRerankerFactoryForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('a term found only beyond the preview of a pool member document answers, as legacy does', async () => {
+    expect(LONG_WITH_TERM.slice(0, 200)).not.toContain('manual');
+    const admin = documentsAdmin({ d0: LONG_WITH_TERM });
+    const hits = pool([{ similarity: 0.4, document: doc('notes.md', LONG_WITH_TERM.slice(0, 200)) }]);
+    const a = await rankWith(LEGACY_RULE, hits, admin);
+    expect(a.out.decision).toMatchObject({ decision: 'answer', reason: 'query_term_match', topScore: 0.4, threshold: 0.65 });
+    expect(admin.documentReads()).toHaveLength(1);
+    expect(admin.documentReads()[0]!.ids).toEqual(['d0']);
+    expect(a.refusalStage?.status).toBe('ok');
+    expect(a.refusalStage?.counts).toMatchObject({ answered: 1, evidence_documents: 1 });
+  });
+
+  it('a document without the term still refuses after the read', async () => {
+    const admin = documentsAdmin({ d0: `${FILLER}${FILLER}` });
+    const a = await rankWith(LEGACY_RULE, pool([{ similarity: 0.4, document: doc('notes.md', FILLER.slice(0, 200)) }]), admin);
+    expect(a.out.decision).toMatchObject({ decision: 'refuse', basis: 'similarity_floor' });
+    expect(admin.documentReads()).toHaveLength(1);
+  });
+
+  it('no read when a pool member already passes on similarity, image, filename or chunk text', async () => {
+    const admin = documentsAdmin({ d0: LONG_WITH_TERM, d1: LONG_WITH_TERM });
+    const cases: FusedHit[][] = [
+      pool([{ similarity: 0.7 }]),
+      pool([{ similarity: 0.4, document: doc('figure.png'), metadata: { image_url: 'https://storage.example.test/x.png' } }]),
+      pool([{ similarity: 0.4, document: doc('Manual-Notes.md') }]),
+      pool([{ similarity: 0.4 }, { similarity: 0.45, content: 'The manual arrives in two parts.' }]),
+    ];
+    for (const hits of cases) {
+      const a = await rankWith(LEGACY_RULE, hits, admin);
+      expect(a.out.decision.decision).toBe('answer');
+      expect(a.refusalStage?.counts?.evidence_documents).toBeUndefined();
+    }
+    expect(admin.documentReads()).toEqual([]);
+  });
+
+  it('no read under the similarity floor', async () => {
+    const admin = documentsAdmin({ d0: LONG_WITH_TERM });
+    const a = await rankWith(V2, pool([{ similarity: 0.4, document: doc('notes.md', LONG_WITH_TERM.slice(0, 200)) }]), admin);
+    expect(a.out.decision).toMatchObject({ decision: 'refuse' });
+    expect(admin.reads).toEqual([]);
+  });
+
+  it('no read when the rerank threshold gate applied', async () => {
+    const key = cellKey('cohere', 'fake-quality-v1', 'en', 'same');
+    const cells: ThresholdCells = new Map([
+      [
+        key,
+        {
+          key,
+          provider: 'cohere',
+          model: 'fake-quality-v1',
+          query_language: 'en',
+          pairing: 'same',
+          threshold: 0.6,
+          status: 'calibrated',
+          source: 'fixture',
+          tokenizer_version: LEXICAL_VERSION,
+          rerank_text_version: RERANK_TEXT_VERSION,
+        },
+      ],
+    ]);
+    vi.spyOn(thresholds, 'loadThresholds').mockReturnValue({ cells, configHash: null });
+    const reranker: Reranker = {
+      id: 'cohere',
+      model: 'fake-quality-v1',
+      scoreSemantics: 'calibrated',
+      supportedLanguages: rerankerSupportedLanguages('cohere'),
+      async rerank(_query, docs) {
+        return { scores: docs.map((_, index) => ({ index, score: 0.3 })) };
+      },
+    };
+    setRerankerFactoryForTests(() => reranker);
+    const env = { ...LEGACY_RULE, RAG_RERANKER: 'cohere', RAG_REFUSAL_THRESHOLD: 'true', COHERE_API_KEY: 'cohere-test-placeholder-key' };
+    const admin = documentsAdmin({ d0: LONG_WITH_TERM });
+    const a = await rankWith(env, pool([{ similarity: 0.4, document: doc('notes.md', LONG_WITH_TERM.slice(0, 200)) }]), admin, {
+      profile: 'eval',
+      stageOverrides: { retrievalOverrides: { rerankModel: 'fake-quality-v1' } },
+    });
+    expect(a.out.decision).toMatchObject({ decision: 'refuse', basis: 'rerank_threshold' });
+    expect(admin.documentReads()).toEqual([]);
+  });
+
+  it('a candidate outside the legacy pool is not judged on its document text', async () => {
+    const admin = documentsAdmin({ d0: LONG_WITH_TERM });
+    const below = pool([{ similarity: 0.3, document: doc('notes.md', LONG_WITH_TERM.slice(0, 200)) }]);
+    expect((await rankWith(LEGACY_RULE, below, admin)).out.decision).toMatchObject({ decision: 'refuse' });
+    const lexicalOnly = only({ 'lexical:0': 1 }, { similarity: 0.5, documentId: 'd0', document: doc('notes.md', LONG_WITH_TERM.slice(0, 200)) });
+    expect((await rankWith(LEGACY_RULE, [lexicalOnly], admin)).out.decision).toMatchObject({ decision: 'refuse' });
+    expect(admin.documentReads()).toEqual([]);
+  });
+
+  it('reads only the pool members documents, and answers only from them', async () => {
+    const admin = documentsAdmin({ d0: `${FILLER}${FILLER}`, d1: LONG_WITH_TERM });
+    const hits = pool([{ similarity: 0.4, document: doc('a.md', FILLER.slice(0, 200)) }, { similarity: 0.3, document: doc('b.md', LONG_WITH_TERM.slice(0, 200)) }]);
+    const a = await rankWith(LEGACY_RULE, hits, admin);
+    expect(a.out.decision).toMatchObject({ decision: 'refuse' });
+    expect(admin.documentReads().map((row) => row.ids)).toEqual([['d0']]);
+  });
+
+  it('a pool that holds an exact_id member reads nothing', async () => {
+    const admin = documentsAdmin({ d0: LONG_WITH_TERM, dx: LONG_WITH_TERM });
+    const hits = [
+      ...pool([{ similarity: 0.4, document: doc('notes.md', LONG_WITH_TERM.slice(0, 200)) }]),
+      only({ exact_id: 1 }, { similarity: 1, content: 'sample passage', document: doc('other.md', FILLER.slice(0, 200)) }),
+    ];
+    const a = await rankWith(LEGACY_RULE, hits, admin);
+    expect(a.out.decision).toMatchObject({ decision: 'answer', reason: 'above_similarity_floor' });
+    expect(a.refusalStage?.counts?.evidence_documents).toBeUndefined();
+    expect(admin.documentReads()).toEqual([]);
+  });
+
+  it('a failed read skips the stage and decides on the hits text, never answering from the read', async () => {
+    const admin = documentsAdmin({ d0: LONG_WITH_TERM }, { fail: true });
+    const a = await rankWith(LEGACY_RULE, pool([{ similarity: 0.4, document: doc('notes.md', LONG_WITH_TERM.slice(0, 200)) }]), admin);
+    expect(a.refusalStage).toMatchObject({ status: 'skipped', reason: 'failed' });
+    expect(a.out.decision).toMatchObject({ decision: 'refuse', basis: 'similarity_floor' });
+    expect(admin.documentReads()).toHaveLength(1);
+  });
+});

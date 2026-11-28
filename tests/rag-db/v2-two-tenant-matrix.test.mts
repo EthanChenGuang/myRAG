@@ -894,6 +894,69 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     }
   });
 
+  test('two-tenant matrix under the D-01 values: multi-tenant, a query term beyond the preview of a tenant B document gives tenant A nothing', async () => {
+    const term = 'zorvexquill';
+    const question = `the elk and owl met by the old fen ${term}`;
+    const chunkText = 'Elk met owl. Later a fox and a hen sat in the hay by the pond and the old mill.';
+    const filler = 'Plain sample prose that names no subject at all and repeats itself. '.repeat(4);
+    assert.ok(filler.length > 200, 'the term sits beyond the 200-character preview');
+    const inserted: Record<'a' | 'b', { documentId: string; chunkId: string }> = {
+      a: { documentId: crypto.randomUUID(), chunkId: crypto.randomUUID() },
+      b: { documentId: crypto.randomUUID(), chunkId: crypto.randomUUID() },
+    };
+    for (const label of ['a', 'b'] as const) {
+      const owner = tenant(label);
+      const { documentId, chunkId } = inserted[label];
+      const filename = `v2-evidence-${label}.md`;
+      const content = label === 'b' ? `${filler}${term} closes the note.` : `${filler}It closes the note.`;
+      await db().query(
+        'INSERT INTO documents (id, filename, content, metadata, user_id, organization_id, created_at, doc_type) VALUES ($1, $2, $3, $4::jsonb, $5, $6, now(), $7)',
+        [documentId, filename, content, JSON.stringify({ relpath: `two-tenant-v2/${filename}` }), owner.userId, owner.organizationId, 'general'],
+      );
+      await db().query(
+        `INSERT INTO document_chunks (id, document_id, content, embedding, lexical_text, chunk_index, metadata, organization_id, created_at, chunk_kind, content_hash)
+         VALUES ($1, $2, $3, $4::vector, $5, 0, $6::jsonb, $7, now(), 'text', $8)`,
+        [
+          chunkId,
+          documentId,
+          chunkText,
+          `[${embedText(chunkText).join(',')}]`,
+          chunkText.toLowerCase(),
+          JSON.stringify({ name: filename }),
+          owner.organizationId,
+          crypto.createHash('sha256').update(chunkText, 'utf8').digest('hex'),
+        ],
+      );
+    }
+    const env = { ...D01_ENV, COHERE_API_KEY: '' };
+    try {
+      depsModule.setRagDepsForTests({ ragEnv: () => env, adminClient: () => adminClient });
+      configModule.resetRagConfigForTests();
+      for (const profile of ['chat', 'embed', 'eval'] as Profile[]) {
+        const asker = await retrieve(await scopeFor(profile, 'a'), profile, question);
+        const where = `D-01 evidence ${profile}/a`;
+        await assertOwnRows('a', asker.result, where);
+        assertNoForeignText('a', { result: asker.result, stages: asker.result.stages }, where);
+        const askerRefusal = stage(asker.result, 'refusal');
+        assert.ok(chunkIdsOf(asker.result).length === 0 || !chunkIdsOf(asker.result).includes(inserted.b.chunkId), `${where}: no tenant B chunk`);
+        assert.equal(askerRefusal?.counts?.refused, 1, `${where}: refused (${askerRefusal?.detail})`);
+        assert.ok((askerRefusal?.counts?.evidence_documents ?? 0) <= 1, `${where}: the read returned the caller document only`);
+
+        const owner = await retrieve(await scopeFor(profile, 'b'), profile, question);
+        const ownerWhere = `D-01 evidence ${profile}/b`;
+        await assertOwnRows('b', owner.result, ownerWhere);
+        const ownerRefusal = stage(owner.result, 'refusal');
+        assert.equal(ownerRefusal?.counts?.answered, 1, `${ownerWhere}: answered (${ownerRefusal?.detail})`);
+        assert.ok((ownerRefusal?.counts?.evidence_documents ?? 0) >= 1, `${ownerWhere}: answered through the evidence read`);
+      }
+    } finally {
+      await db().query('DELETE FROM document_chunks WHERE id = ANY($1::uuid[])', [[inserted.a.chunkId, inserted.b.chunkId]]);
+      await db().query('DELETE FROM documents WHERE id = ANY($1::uuid[])', [[inserted.a.documentId, inserted.b.documentId]]);
+      depsModule.setRagDepsForTests({ ragEnv: () => allOnEnv, adminClient: () => adminClient });
+      configModule.resetRagConfigForTests();
+    }
+  });
+
   test('two-tenant matrix under the implicit defaults: multi-tenant, nothing set, with and without the CI languages, every profile serves legacy inside the caller tenant', async () => {
     const hybrid = () => rpcCalls().filter((call) => call.path.endsWith('/rpc/hybrid_search_chunks')).length;
     let ownCandidates = 0;

@@ -150,7 +150,12 @@ function fusedFromRows(rows: Row[]): FusedHit[] {
       content: chunk.content,
       metadata: chunk.metadata ?? {},
       similarity: row.similarity,
-      document: { filename: row.filename ?? `${row.id}.txt`, createdAt: null, metadata: {}, contentPreview: row.docText ?? 'neutral sample body' },
+      document: {
+        filename: row.filename ?? `${row.id}.txt`,
+        createdAt: null,
+        metadata: {},
+        contentPreview: (row.docText ?? 'neutral sample body').slice(0, 200),
+      },
     });
     return { hit: ranked, score: 1 / (60 + index + 1), ranks: { 'dense:0': index + 1 } };
   });
@@ -174,7 +179,7 @@ function fusedWithExact(rows: Row[], exact: Row[]): FusedHit[] {
         content: chunk.content,
         metadata: chunk.metadata ?? {},
         similarity: 1,
-        document: { filename: row.filename ?? `${row.id}.txt`, createdAt: null, metadata: {}, contentPreview: row.docText ?? 'neutral sample body' },
+        document: { filename: row.filename ?? `${row.id}.txt`, createdAt: null, metadata: {}, contentPreview: (row.docText ?? 'neutral sample body').slice(0, 200) },
       }),
       score: 1 / (60 + index + 1),
       ranks: { exact_id: index + 1 },
@@ -185,11 +190,41 @@ function fusedWithExact(rows: Row[], exact: Row[]): FusedHit[] {
   return fused;
 }
 
+/** The documents table legacy assembles from: the whole document text of every row (hybrid_search_chunks returns 200 characters of it). */
+function documentsAdmin(rows: Row[]) {
+  const docs = documents(rows);
+  const client = {
+    from(table: string) {
+      let ids: string[] = [];
+      const builder = {
+        select: () => builder,
+        in(_column: string, values: string[]) {
+          ids = values;
+          return builder;
+        },
+        abortSignal: () => builder,
+        then(onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) {
+          const data =
+            table === 'documents'
+              ? ids.flatMap((id) => {
+                  const row = docs.get(id);
+                  return row ? [{ ...row, created_at: null, metadata: null }] : [];
+                })
+              : ids.map((id) => ({ id, metadata: null }));
+          return Promise.resolve({ data, error: null }).then(onFulfilled, onRejected);
+        },
+      };
+      return builder;
+    },
+  };
+  return () => client as never;
+}
+
 async function v2Decision(
-  c: Pick<Case, 'query' | 'context' | 'maxResults' | 'fallbackToLowerThreshold' | 'profile'> & { hits: FusedHit[] },
+  c: Pick<Case, 'query' | 'context' | 'maxResults' | 'fallbackToLowerThreshold' | 'profile'> & { hits: FusedHit[]; rows?: Row[] },
   env: Record<string, string> = LEGACY_RULE,
 ) {
-  installDeps({ ragEnv: () => env });
+  installDeps({ ragEnv: () => env, ...(c.rows ? { adminClient: documentsAdmin(c.rows) } : {}) });
   const signal = new AbortController().signal;
   const collector = createTraceCollector({ profile: 'chat', tenantKey: 's:default' });
   const extra = { queryContext: c.context ?? context() };
@@ -235,6 +270,7 @@ function profileWith(scoreCalibration: Record<string, number>): EmbeddingProfile
 }
 
 const QUERY = 'where is the gadget catalogue';
+const FILLER = 'neutral sample sentence about nothing in particular. '.repeat(6);
 
 const CASES: Case[] = [
   { name: 'pool member above the text floor', query: QUERY, rows: [{ id: 'a', similarity: 0.7 }], expected: 'answer' },
@@ -326,6 +362,36 @@ const CASES: Case[] = [
     expected: 'refuse',
   },
   {
+    name: 'term in the document text beyond the 200-character preview',
+    query: QUERY,
+    rows: [{ id: 'a', similarity: 0.4, docText: `${FILLER}The catalogue lists every item.` }],
+    expected: 'answer',
+  },
+  {
+    name: 'term beyond the preview of the second pool member',
+    query: QUERY,
+    rows: [
+      { id: 'a', similarity: 0.5, docText: `${FILLER}${FILLER}` },
+      { id: 'b', similarity: 0.4, docText: `${FILLER}The catalogue lists every item.` },
+    ],
+    expected: 'answer',
+  },
+  {
+    name: 'term beyond the preview of a document below the pool threshold',
+    query: QUERY,
+    rows: [
+      { id: 'a', similarity: 0.5, docText: `${FILLER}${FILLER}` },
+      { id: 'b', similarity: 0.3, docText: `${FILLER}The catalogue lists every item.` },
+    ],
+    expected: 'refuse',
+  },
+  {
+    name: 'long documents without the term',
+    query: QUERY,
+    rows: [{ id: 'a', similarity: 0.5, docText: `${FILLER}${FILLER}` }],
+    expected: 'refuse',
+  },
+  {
     name: 'empty legacy term from a long non-Latin word matches a pool member',
     query: '\u5c0f\u90e8\u4ef6\u76ee\u5f55\u5728\u54ea\u91cc',
     rows: [{ id: 'a', similarity: 0.4 }],
@@ -384,7 +450,11 @@ describe('legacy parity', () => {
     it(`legacy parity: ${c.name}`, async () => {
       const legacy = await legacyDecision(c);
       expect(legacy, 'legacy side').toBe(c.expected);
-      const { out } = await v2Decision({ ...c, hits: c.exact ? fusedWithExact(c.rows, c.exact) : fusedFromRows(c.rows) });
+      const { out } = await v2Decision({
+        ...c,
+        hits: c.exact ? fusedWithExact(c.rows, c.exact) : fusedFromRows(c.rows),
+        rows: [...c.rows, ...(c.exact ?? [])],
+      });
       const v2 = out.decision.decision === 'refuse' ? 'refuse' : 'answer';
       expect(v2, 'legacy_rule side').toBe(legacy);
     });
