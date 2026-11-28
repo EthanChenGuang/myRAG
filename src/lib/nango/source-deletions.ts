@@ -569,7 +569,7 @@ export async function applyDefaultDeletion(record: SyncRecordRow, ctx: DefaultDe
                 logger.error('Nango', `Failed to delete document ${record.document_id}`, docDeleteError);
                 // Continue with other deletions even if one fails
             } else {
-                logger.debug('Nango', `Deleted document: ${record.file_name} (${record.document_id})`);
+                logger.debug('Nango', 'Deleted document', { documentId: record.document_id, syncRecordId: record.id });
             }
         }
 
@@ -584,11 +584,11 @@ export async function applyDefaultDeletion(record: SyncRecordRow, ctx: DefaultDe
             logger.error('Nango', `Failed to delete sync record ${record.id}`, syncDeleteError);
         } else {
             deleted = true;
-            logger.debug('Nango', `Deleted sync record for: ${record.file_name}`);
+            logger.debug('Nango', 'Deleted sync record', { syncRecordId: record.id });
         }
 
     } catch (recordError) {
-        logger.error('Nango', `Error deleting orphaned record ${record.file_name}`, recordError);
+        logger.error('Nango', 'Error deleting orphaned record', { syncRecordId: record.id, error: recordError instanceof Error ? recordError.name : 'unknown' });
         // Continue with other deletions
     }
     return deleted;
