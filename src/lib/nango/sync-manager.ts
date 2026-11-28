@@ -301,7 +301,7 @@ async function deleteOrphanedDocuments(
     currentFileIds: Set<string>,
     supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
     connection?: SourceConnectionRow | null,
-    listing: { complete?: boolean; origin?: 'sync' | 'scheduled' } = {}
+    listing: { complete?: boolean; origin?: 'sync' | 'scheduled'; outcome?: { paused: boolean } } = {}
 ): Promise<number> {
     if (!supabaseAdmin) {
         throw new Error('Supabase admin client not available');
@@ -353,6 +353,7 @@ async function deleteOrphanedDocuments(
             complete,
             admin: supabaseAdmin,
         });
+        if (listing.outcome) listing.outcome.paused = guard.paused;
 
         if (records.length === 0) {
             logger.debug('Nango', 'No existing sync records found - nothing to delete');
@@ -1787,11 +1788,12 @@ export async function removeOrphans(
     connection: SourceConnectionRow,
     currentFileIds: Iterable<string>,
     origin: 'sync' | 'scheduled',
-    options: { complete?: boolean; admin?: SupabaseAdmin } = {}
+    options: { complete?: boolean; admin?: SupabaseAdmin; outcome?: { paused: boolean } } = {}
 ): Promise<number> {
     const supabaseAdmin = options.admin ?? getSupabaseAdmin();
     return deleteOrphanedDocuments(connection.connection_id, connection.user_id, new Set(currentFileIds), supabaseAdmin, connection, {
         complete: options.complete ?? true,
         origin,
+        ...(options.outcome ? { outcome: options.outcome } : {}),
     });
 }
