@@ -54,7 +54,7 @@
           "type": "array"
         },
         "name": {
-          "pattern": "^RAG_[A-Z0-9_]{1,64}$",
+          "pattern": "^RAG_[A-Z0-9_]{1,64}(?::[a-z][a-z0-9_]{0,31})?$",
           "title": "Name",
           "type": "string"
         },

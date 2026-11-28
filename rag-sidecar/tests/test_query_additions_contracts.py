@@ -351,6 +351,15 @@ def test_decision_record():
     )
 
 
+def test_decision_record_switch_names_take_an_optional_value_suffix():
+    """06.2-39: a list-valued switch is decided per added value, e.g. RAG_QUERY_VOICE_TRANSFORMS:translate (D-16)."""
+    decision = _symbol("query_additions", "SwitchDecision")
+    assert decision.model_validate({"name": "RAG_QUERY_VOICE_TRANSFORMS:translate", "eligible": False})
+    assert decision.model_validate({"name": "RAG_QUERY_DECOMPOSE", "eligible": True})
+    for bad in ("RAG_QUERY_VOICE_TRANSFORMS:", "RAG_X:Translate", "RAG_X:a:b", "rag_x", "RAG_X:a-b"):
+        assert _rejects(decision, {"name": bad, "eligible": False}), bad
+
+
 # --- golden.py ----------------------------------------------------------------------------------------------------
 
 
