@@ -14,6 +14,7 @@ import { FIXTURE_USER_ID, createEmptyFixtureDatabase } from '../../eval/harness/
  */
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const MIGRATION = 'supabase/migrations/1008_attribute_resolver.sql';
+const ACCESS_MIGRATION = 'supabase/migrations/1010_attribute_resolver_access.sql';
 
 const ORG_A = '00000000-0000-4000-8000-000000100801';
 const ORG_B = '00000000-0000-4000-8000-000000100802';
@@ -24,7 +25,18 @@ const KEY_B = `o:${ORG_B}`;
 const SOURCE = 'config_upload';
 const LEGACY_EMBED_PROFILE = 'openai-3-small-1536';
 
-const FUNCTIONS = ['rag_attribute_filter_values(text, integer)', 'rag_attribute_documents(text, jsonb, integer)'];
+const FUNCTIONS = [
+  'rag_attribute_filter_values(text, integer, text[], boolean)',
+  'rag_attribute_documents(text, jsonb, integer, text[], boolean)',
+];
+const OLD_SIGNATURES = ['rag_attribute_filter_values(text, integer)', 'rag_attribute_documents(text, jsonb, integer)'];
+const VALUES_ACCESS_SQL =
+  'SELECT key, value FROM rag_attribute_filter_values(p_tenant_key => $1, p_limit => $2, p_access_keys => $3::text[], p_access_all => $4)';
+const DOCS_ACCESS_SQL =
+  'SELECT document_id FROM rag_attribute_documents(p_tenant_key => $1, p_filters => $2::jsonb, p_limit => $3, p_access_keys => $4::text[], p_access_all => $5)';
+const GROUP_KEY = 'g:00000000-0000-4000-8000-000000101001';
+const OUTSIDER_KEYS = ['all', 'u:00000000-0000-4000-8000-000000101002'];
+const MEMBER_KEYS = ['all', 'u:00000000-0000-4000-8000-000000101003', GROUP_KEY];
 const VALUES_SQL = 'SELECT * FROM rag_attribute_filter_values(p_tenant_key => $1, p_limit => $2)';
 const DOCS_SQL = 'SELECT document_id FROM rag_attribute_documents(p_tenant_key => $1, p_filters => $2::jsonb, p_limit => $3)';
 
@@ -299,9 +311,112 @@ for (const mode of ['multi-tenant', 'single-tenant'] as const) {
   });
 }
 
+/**
+ * Quick task attribute-access (migration 1010): both resolver functions take the access filter of the other retrieval RPCs. Without keys
+ * they answer what 1008 answered; with keys, a document whose labels do not overlap them contributes no value and no id.
+ */
+for (const mode of ['multi-tenant', 'single-tenant'] as const) {
+  describe(`attribute resolver access filter (${mode})`, () => {
+    let db: PGlite;
+    let a: Tenant;
+    const ids: Record<string, string> = {};
+
+    const values = async (keys: string[] | null, all = false): Promise<string[]> =>
+      (await rows(db, VALUES_ACCESS_SQL, [a.key, 1000, keys, all])).map((row) => `${String(row.key)}=${String(row.value)}`);
+    const documents = async (filters: unknown, keys: string[] | null, all = false): Promise<string[]> =>
+      (await rows(db, DOCS_ACCESS_SQL, [a.key, JSON.stringify(filters), 100, keys, all])).map((row) => String(row.document_id));
+
+    async function enforced<T>(run: () => Promise<T>): Promise<T> {
+      await db.exec('BEGIN');
+      try {
+        await db.query('UPDATE public.rag_access_group_settings SET enforced = true');
+        return await run();
+      } finally {
+        await db.exec('ROLLBACK');
+      }
+    }
+
+    before(async () => {
+      ({ db, a } = await database(mode));
+      ids.open = await document(db, a, { alpha_code: 'open-1', beta_list: ['shared-v'] });
+      ids.restricted = await document(db, a, { alpha_code: 'closed-1', beta_list: ['shared-v', 'only-closed'] });
+      await rows(db, 'UPDATE public.documents SET access_groups = $2::text[] WHERE id = $1', [ids.restricted, [GROUP_KEY]]);
+    });
+
+    after(async () => {
+      await db?.close();
+    });
+
+    test('exactly one overload of each function, with the access parameters; the 1008 signatures are gone', async () => {
+      for (const signature of OLD_SIGNATURES) {
+        assert.equal((await rows(db, 'SELECT to_regprocedure($1) AS oid', [`public.${signature}`]))[0]?.oid, null, `${signature} still exists`);
+      }
+      const overloads = await rows(
+        db,
+        `SELECT p.proname AS name, count(*)::int AS n FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
+           AND p.proname IN ('rag_attribute_filter_values', 'rag_attribute_documents') GROUP BY 1 ORDER BY 1`,
+      );
+      assert.deepEqual(overloads.map((row) => [row.name, row.n]), [['rag_attribute_documents', 1], ['rag_attribute_filter_values', 1]]);
+    });
+
+    test('no keys: the answer of 1008 (the restricted document is included)', async () => {
+      assert.deepEqual((await rows(db, VALUES_SQL, [a.key, 1000])).map((row) => `${String(row.key)}=${String(row.value)}`).sort(), [
+        'alpha_code=closed-1',
+        'alpha_code=open-1',
+        'beta_list=only-closed',
+        'beta_list=shared-v',
+      ]);
+      assert.deepEqual(await resolve(db, a.key, { beta_list: ['shared-v'] }), sorted([ids.open, ids.restricted]));
+      assert.deepEqual(await values(null), await values(null, true));
+    });
+
+    test('outsider keys: no value and no id of the restricted document', async () => {
+      assert.deepEqual((await values(OUTSIDER_KEYS)).sort(), ['alpha_code=open-1', 'beta_list=shared-v']);
+      assert.deepEqual(await documents({ beta_list: ['shared-v'] }, OUTSIDER_KEYS), [ids.open]);
+      assert.deepEqual(await documents({ alpha_code: ['closed-1'] }, OUTSIDER_KEYS), []);
+      assert.deepEqual(await documents({ beta_list: ['only-closed'] }, OUTSIDER_KEYS), []);
+    });
+
+    test('member keys and admin_all: the restricted document is visible', async () => {
+      for (const [keys, all] of [[MEMBER_KEYS, false], [['all'], true]] as const) {
+        assert.deepEqual((await values([...keys], all)).sort(), ['alpha_code=closed-1', 'alpha_code=open-1', 'beta_list=only-closed', 'beta_list=shared-v']);
+        assert.deepEqual(await documents({ beta_list: ['shared-v'] }, [...keys], all), sorted([ids.open, ids.restricted]));
+        assert.deepEqual(await documents({ alpha_code: ['closed-1'] }, [...keys], all), [ids.restricted]);
+      }
+    });
+
+    test('an unknown key is still unknown_attribute for any caller', async () => {
+      const failed = await failure(db, DOCS_ACCESS_SQL, [a.key, JSON.stringify({ epsilon_unknown: ['v'] }), 10, OUTSIDER_KEYS, false]);
+      assert.match(failed?.message ?? '', /^unknown_attribute/);
+    });
+
+    test('guard: no keys while enforcement is on raises access_scope_required; empty or NULL-holding keys raise access_keys_empty', async () => {
+      const inSavepoint = async <T,>(run: () => Promise<T>): Promise<T> => {
+        await db.exec('SAVEPOINT guard_case');
+        try {
+          return await run();
+        } finally {
+          await db.exec('ROLLBACK TO SAVEPOINT guard_case');
+        }
+      };
+      await enforced(async () => {
+        const v = await inSavepoint(() => failure(db, VALUES_ACCESS_SQL, [a.key, 10, null, false]));
+        const d = await inSavepoint(() => failure(db, DOCS_ACCESS_SQL, [a.key, JSON.stringify({ alpha_code: ['open-1'] }), 10, null, false]));
+        assert.deepEqual([v?.message, v?.code, d?.message, d?.code], ['access_scope_required', '42501', 'access_scope_required', '42501']);
+        assert.deepEqual((await values(OUTSIDER_KEYS)).sort(), ['alpha_code=open-1', 'beta_list=shared-v']);
+      });
+      for (const keys of [[], ['all', null]]) {
+        const v = await failure(db, VALUES_ACCESS_SQL, [a.key, 10, keys, false]);
+        const d = await failure(db, DOCS_ACCESS_SQL, [a.key, JSON.stringify({ alpha_code: ['open-1'] }), 10, keys, false]);
+        assert.deepEqual([v?.message, v?.code, d?.message, d?.code], ['access_keys_empty', '22023', 'access_keys_empty', '22023']);
+      }
+    });
+  });
+}
+
 describe('migration 1008 catalog and idempotence', () => {
   for (const mode of ['multi-tenant', 'single-tenant'] as const) {
-    test(`${mode}: INVOKER, STABLE, empty search_path, service_role only, the GIN index, and applying 1008 again leaves the schema unchanged`, async () => {
+    test(`${mode}: INVOKER, STABLE, empty search_path, service_role only, the GIN index, and applying 1010 (or 1008 then 1010) again leaves the schema unchanged`, async () => {
       const db = (await createEmptyFixtureDatabase({ deploymentMode: mode })).db;
       try {
         for (const signature of FUNCTIONS) {
@@ -336,8 +451,11 @@ describe('migration 1008 catalog and idempotence', () => {
             ),
           );
         const first = await dump();
+        await db.exec(fs.readFileSync(path.join(REPO_ROOT, ACCESS_MIGRATION), 'utf8'));
+        assert.equal(await dump(), first, 'applying 1010 again changed the schema');
         await db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION), 'utf8'));
-        assert.equal(await dump(), first);
+        await db.exec(fs.readFileSync(path.join(REPO_ROOT, ACCESS_MIGRATION), 'utf8'));
+        assert.equal(await dump(), first, 're-running 1008 then 1010 left a second overload');
         const hybrid = fs.readFileSync(path.join(REPO_ROOT, MIGRATION), 'utf8');
         assert.doesNotMatch(hybrid, /^[^-]*FUNCTION public\.hybrid_search_chunks/m);
       } finally {

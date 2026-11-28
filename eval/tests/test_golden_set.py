@@ -391,7 +391,8 @@ def test_committed_manifests_start_at_version_one_all_active():
     # fixture manifest added only the 57 multi_step_calc and context_overflow items of plan 05.2.1-12. Version 6 of the ingest
     # manifest (plan 03.3-20) added the templated collection items and five no-answer items in its vocabulary; its version 7
     # (train 38) added the 57 items of plan 05.2.1-12 and two more no-answer items in the templated vocabulary (en-06, it-06),
-    # which keep the gate's no-answer share at its minimum for en and it once both plans are in. Every item is still active.
+    # which keep the gate's no-answer share at its minimum for en and it once both plans are in. Version 8 (train 39) added
+    # only the two no-answer items 05.2.1-17 had made for the same purpose (en-08, it-07). Every item is still active.
     golden = load_golden(FIXTURE_GOLDEN)
     phase42 = sorted(item.id for item in golden if "phase42" in item.tags)
     phase53 = sorted(item.id for item in golden if "phase53_fixture" in item.tags)
@@ -406,16 +407,22 @@ def test_committed_manifests_start_at_version_one_all_active():
     assert len(phase521) == 57
     ingest = load_golden(INGEST_GOLDEN)
     train38_no_answer = ["ingest-tpl-no-answer-en-06", "ingest-tpl-no-answer-it-06"]
-    templated = sorted(item.id for item in ingest if item.id.startswith("ingest-tpl-") and item.id not in train38_no_answer)
+    train39_no_answer = ["ingest-tpl-no-answer-en-08", "ingest-tpl-no-answer-it-07"]
+    templated = sorted(
+        item.id
+        for item in ingest
+        if item.id.startswith("ingest-tpl-") and item.id not in train38_no_answer + train39_no_answer
+    )
     assert len(templated) == 83
     for path in (FIXTURE_MANIFEST, INGEST_MANIFEST):
         manifest = golden_set.load_manifest(path)
-        expected = 7 if path == INGEST_MANIFEST else 6
+        expected = 8 if path == INGEST_MANIFEST else 6
         assert manifest.version == expected
         assert [entry.version for entry in manifest.changelog] == list(range(1, expected + 1))
         if path == INGEST_MANIFEST:
             assert sorted(manifest.changelog[5].added) == templated and not manifest.changelog[5].changed
             assert sorted(manifest.changelog[6].added) == sorted(phase521 + train38_no_answer) and not manifest.changelog[6].changed
+            assert sorted(manifest.changelog[7].added) == train39_no_answer and not manifest.changelog[7].changed
         else:
             assert sorted(manifest.changelog[5].added) == phase521 and not manifest.changelog[5].changed
         assert sorted(manifest.changelog[1].added) == phase42

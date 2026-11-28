@@ -95,6 +95,18 @@ describe('eval-only fixture score calibration', () => {
     expect(floorsFromCalibration(evalFloorCalibration('eval'))).toEqual({ text: 0.12, image: LEGACY_IMAGE_FLOOR });
   });
 
+  it('applies it to the voice profile only for the eval route voice entry (Phase 6.2 D-16)', () => {
+    setEvalScoreCalibration({ context_threshold: 0.12 });
+    expect(evalFloorCalibration('voice', { evalEntry: true })).toEqual({ context_threshold: 0.12 });
+    expect(evalFloorCalibration('voice', { evalEntry: false })).toBeNull();
+    expect(evalFloorCalibration('voice')).toBeNull();
+    for (const profile of ['chat', 'embed', 'media']) {
+      expect(evalFloorCalibration(profile, { evalEntry: true })).toBeNull();
+    }
+    resetEvalScoreCalibration();
+    expect(evalFloorCalibration('voice', { evalEntry: true })).toBeNull();
+  });
+
   it('is absent until installed and after a reset', () => {
     expect(evalFloorCalibration('eval')).toBeNull();
     setEvalScoreCalibration({ context_threshold: 0.12 });

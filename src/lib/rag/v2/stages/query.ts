@@ -148,6 +148,8 @@ function intersectIds(a: readonly string[] | null, b: readonly string[] | null):
 export async function runAttributeResolveStage(args: {
   standalone: string;
   scope: TenantScope;
+  /** The request's access filter; absent reads scopeAccessFilter(scope). */
+  access?: ScopeAccessFilter;
   explicit: Record<string, readonly string[]> | undefined;
   mode: 'hard' | 'soft';
   spec: StageSpec;
@@ -161,7 +163,10 @@ export async function runAttributeResolveStage(args: {
     async (stageSignal): Promise<AttributeStageOutcome> => {
       let resolution: AttributeResolution;
       try {
-        resolution = await resolveAttributeFilter(args.scope, args.standalone, explicitPresent ? args.explicit : null, { signal: stageSignal });
+        resolution = await resolveAttributeFilter(args.scope, args.standalone, explicitPresent ? args.explicit : null, {
+          signal: stageSignal,
+          access: args.access ?? scopeAccessFilter(args.scope),
+        });
       } catch (error) {
         if (error instanceof AttributeFilterError) return { kind: 'rejected' };
         if (stageSignal.aborted) throw error;
@@ -260,7 +265,7 @@ function terminologyVariant(standalone: string, outcome: TerminologyOutcome, lan
   return { text, language, kind: 'terminology', legs: 'dense' };
 }
 
-const PROTECTED_KINDS: ReadonlySet<QueryVariantKind> = new Set(['original', 'condensed', 'translated', 'sub_question']);
+const PROTECTED_KINDS: ReadonlySet<QueryVariantKind> = new Set(['original', 'condensed', 'history_fallback', 'translated', 'sub_question']);
 const MULTI_QUERY_KINDS: ReadonlySet<QueryVariantKind> = new Set(['expanded', 'hyde']);
 
 /** D-31 (3): the cuts are counts on the stage's own record; the record was written before the variant list was final. */
@@ -333,6 +338,7 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
     attributeOutcome = await runAttributeResolveStage({
       standalone,
       scope,
+      access: ctx.access ?? scopeAccessFilter(scope),
       explicit: input.retrievalFilters?.attributes,
       mode: attributeMode,
       spec: attrSpec,

@@ -45,9 +45,8 @@ for (const mode of MODES) {
       }
     }
 
-    // Optional functions present on trunk that do not filter yet: rag_cache_check (plan 04.3-12, 0931) and 1008's attribute resolver
-    // (rag_attribute_filter_values, rag_attribute_documents; 1008 runs after 0933, so a later file must redefine them). Until each takes
-    // the access parameters it is an expected finding, and the complete-catalog case removes it (an absent optional function is not checked).
+    // Optional functions that once did not filter: rag_cache_check (0931 now filters) and 1008's attribute resolver (1010 redefines it with
+    // the access parameters). None is expected any more; a name that reappears here without the access parameters fails the first case.
     const PENDING = ['rag_attribute_documents', 'rag_attribute_filter_values', 'rag_cache_check'];
 
     async function unfilteredPending(): Promise<string[]> {
@@ -75,15 +74,23 @@ for (const mode of MODES) {
       if (corpusDir) fs.rmSync(corpusDir, { recursive: true, force: true });
     });
 
-    test('the migrated catalog names only the pending functions that do not filter yet', async () => {
-      const answer = await readiness();
-      const pending = await unfilteredPending();
-      assert.deepEqual(pending.filter((name) => !PENDING.includes(name)), []);
-      assert.equal(answer.ready, pending.length === 0);
-      assert.deepEqual(
-        pairs(answer).sort(),
-        pending.flatMap((name) => [`function_missing_access_parameters:${name}`, `function_missing_guard:${name}`]).sort(),
-      );
+    test('the migrated catalog is ready: every optional function, the 1008 attribute resolver included, filters', async () => {
+      assert.deepEqual(await unfilteredPending(), []);
+      assert.deepEqual(await readiness(), { ready: true, reasons: [], objects: [] });
+    });
+
+    test('the 1008 signatures without the access parameters are named by readiness (re-run of 1008 without 1010)', async () => {
+      const migration = fs.readFileSync(path.join(process.cwd(), 'supabase/migrations/1008_attribute_resolver.sql'), 'utf8');
+      const answer = await inRollback(migration.replace(/^\s*(BEGIN|COMMIT);\s*$/gm, ''), readiness);
+      assert.equal(answer.ready, false);
+      assert.deepEqual(pairs(answer).sort(), [
+        'function_missing_access_parameters:rag_attribute_documents',
+        'function_missing_access_parameters:rag_attribute_filter_values',
+        'function_missing_guard:rag_attribute_documents',
+        'function_missing_guard:rag_attribute_filter_values',
+        'function_overloaded:rag_attribute_documents',
+        'function_overloaded:rag_attribute_filter_values',
+      ]);
     });
 
     test('a complete catalog is ready with no reasons', async () => {

@@ -33,6 +33,8 @@ export const PHASE4_VARIANT_LIMITS: Readonly<VariantLimits> = Object.freeze({ ca
 export const QUERY_LAYER_VARIANT_ORDER: readonly QueryVariantKind[] = Object.freeze([
   'original',
   'condensed',
+  // D-23: deterministic, not an LLM variant; it stands in for the condensed query and counts toward max_searches only.
+  'history_fallback',
   'translated',
   'sub_question',
   // D-31: the deterministic terminology variant stands first in the multi-query group.

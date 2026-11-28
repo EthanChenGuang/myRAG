@@ -1416,3 +1416,83 @@ $r21_service_role_only$;
 
 NOTIFY pgrst, 'reload schema';
 ```
+
+## Train 39: 0982, 0983, 0985, 1010 and 0410 r22 delta (to apply after train 38 is live)
+
+Branch `ci/merge-train-39`, built on `ci/merge-train-38` a6b83f83 (PR #135), with `origin/main` a0c5ca17 (#135 merged) merged in before the PR. Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+Merged with `--no-ff` in phase order; each exec branch carries its SUMMARY. `exec/03.3-25` and `exec/06.2-27` have no SUMMARY yet and were not merged.
+
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/05.2.1-17` | 05.2.1 calculation tool in the eval route, scripted calc fakes and run configs | none |
+| `exec/06.2-15` | 06.2 scope-gate storage, functions and invalidation triggers | 0982, 0983; 0410 entries |
+| `exec/06.2-17` | 06.2 glossary enforcement in document translation | 0985 |
+| `exec/06.2-18` | 06.2 scope-centroid build service, post-publish hook and `rag:scope-centroids` CLI | none (brings 06.2-15) |
+| `exec/06.2-20` | 06.2 `history_fallback` variant when condense is skipped | none (brings 06.2-17) |
+| `exec/06.2-21` | 06.2 `scope_gate` stage in the v2 pipeline, cache store bypass and eval trace (brings 06.2-15, -18) | none new |
+| `exec/quick-attribute-access` | the 1008 attribute resolver takes the access filter | 1010; 0410 entries |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0982_scope_gate_tables.sql` | New tables `rag_scope_centroids`, `rag_scope_negative_examples` (RLS on, no policy). **DROP:** five CHECK constraints `IF EXISTS`, re-added. After 0981. |
+| 2 | `0983_scope_gate_functions.sql` | Scope-gate functions (INVOKER, service_role only) and DEFINER statement-trigger functions. **DROP:** every `rag_scope_centroids_*` trigger `IF EXISTS`, re-created. After 0982. |
+| 3 | `0985_translation_gap_glossary_reason.sql` | **DROP:** `chunk_translation_gaps_reason_check` `IF EXISTS`, re-added with `glossary_term_lost` (widens only). Needs 0820. |
+| 4 | `1010_attribute_resolver_access.sql` | **DROP:** every overload of `rag_attribute_filter_values` and `rag_attribute_documents` by catalog lookup; re-created with `p_access_keys text[] DEFAULT NULL, p_access_all boolean DEFAULT false`. After 1008. After it `rag_access_readiness()` is ready. |
+| 5 | 0410 r22 delta | Grants only; run last. +10 guarded entries: `rag_scope_centroids_invalidate` and the seven `rag_scope_centroids_on_*` trigger functions (06.2-15 lock fix 03a8e696), the two 1010 signatures. |
+
+Follow-up (orchestrator decision on the access sentinel): `rag_scope_centroids_rebuild` is EXEMPT as a service-role rebuild of derived tenant-level centroids whose output is used only as an in/out scope score. Review whether restricted chunks should shape scope centroids before RAG_SCOPE_GATE and access groups are both on.
+
+Apply the SQL before deploying the train-39 app; the new parameters have defaults. Checked on PGlite, both modes: the train-38 migration set, then the combined file applied twice; `rag_access_readiness()` ready, exactly one overload of each attribute resolver, no anon/authenticated EXECUTE on any function the train adds. The combined file is `sql/train39-live.sql` on `ops/owner-actions`. The delta:
+
+```sql
+-- ==== 0410 r22 delta (the lines train 39 adds to supabase/migrations/0410_security_definer_rpc_grants.sql)
+DO $r22_service_role_only$
+BEGIN
+  -- 0983 (Phase 6.2, 06.2-15): scope-gate invalidation helper and trigger functions, service_role only.
+  IF to_regprocedure('public.rag_scope_centroids_invalidate(text[], text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_invalidate(text[], text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_invalidate(text[], text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_centroids_on_documents_insert()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_documents_insert() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_documents_insert() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_centroids_on_documents_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_documents_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_documents_update() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_centroids_on_documents_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_documents_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_documents_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_centroids_on_chunks_insert()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_chunks_insert() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_chunks_insert() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_centroids_on_chunks_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_chunks_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_chunks_update() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_centroids_on_chunks_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_chunks_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_chunks_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_scope_centroids_on_chunk_embeddings_change()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_scope_centroids_on_chunk_embeddings_change() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_scope_centroids_on_chunk_embeddings_change() TO service_role;
+  END IF;
+  -- Migration 1010: the attribute resolver with the access filter (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_attribute_filter_values(text, integer, text[], boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_attribute_filter_values(text, integer, text[], boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_attribute_filter_values(text, integer, text[], boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_attribute_documents(text, jsonb, integer, text[], boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_attribute_documents(text, jsonb, integer, text[], boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_attribute_documents(text, jsonb, integer, text[], boolean) TO service_role;
+  END IF;
+END
+$r22_service_role_only$;
+```

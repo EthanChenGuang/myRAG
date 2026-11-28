@@ -43,3 +43,14 @@ export async function scopeFromIngestionJob(
   if (match[1] === 'u') return mintScope('personal', id, null);
   return mintScope('org', null, id);
 }
+/**
+ * Mint the scope of a tenant key the server already holds (a stored job, translation or document row), never one from a request. Null for
+ * a malformed key. The deployment mode is checked in SQL by rag_assert_tenant_key on every read made with the scope.
+ */
+export function scopeForStoredTenantKey(tenantKey: string): TenantScope | null {
+  if (tenantKey === 's:default') return mintScope('single', null, null);
+  const match = TENANT_KEY_RE.exec(tenantKey);
+  if (!match || !match[1] || !match[2]) return null;
+  const id = match[2].toLowerCase();
+  return match[1].toLowerCase() === 'u' ? mintScope('personal', id, null) : mintScope('org', null, id);
+}

@@ -1199,6 +1199,13 @@ function monitorCoverageView(report, locale) {
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // Panel
 
+const MONITOR_PANEL_STATUS =
+  typeof ragPanelSetStatus === 'function'
+    ? ragPanelSetStatus
+    : typeof require !== 'undefined'
+      ? require('./panel-status.js').ragPanelSetStatus
+      : null;
+
 class MonitorPanel {
   constructor(root, deps) {
     const d = deps || {};
@@ -1268,8 +1275,12 @@ class MonitorPanel {
     return new Set();
   }
 
-  setStatus(message, isError) {
-    MONITOR_GATES.gatesUiStatus(this.hosts.status, message, isError);
+  setStatus(message, isError, options) {
+    const render = () => {
+      MONITOR_GATES.gatesUiStatus(this.hosts.status, message, isError);
+    };
+    if (MONITOR_PANEL_STATUS) MONITOR_PANEL_STATUS(this.hosts.status, render, isError, options);
+    else render();
   }
 
   request(path, init, timeoutMs) {
@@ -1956,7 +1967,7 @@ class MonitorPanel {
       li.parentNode.insertBefore(fresh, li);
       li.remove();
     }
-    this.setStatus(this.t('ack.done'));
+    this.setStatus(this.t('ack.done'), false, { toast: true });
     const resolveButton = fresh.querySelectorAll('button').find((b) => b.textContent === this.t('action.resolve'));
     if (resolveButton) resolveButton.focus();
     this.refreshBanner();
@@ -1990,7 +2001,7 @@ class MonitorPanel {
       const siblings = this.listEl.querySelectorAll('article');
       const nextArticle = siblings[siblings.indexOf(article) + 1] || siblings[siblings.indexOf(article) - 1] || null;
       if (li) li.remove();
-      this.setStatus(this.t('resolve.done'));
+      this.setStatus(this.t('resolve.done'), false, { toast: true });
       if (this.list.alerts.length === 0 && index >= 0) this.renderAlerts();
       const target = nextArticle ? nextArticle.querySelector('h4') : this.hosts.status;
       if (target && typeof target.focus === 'function') target.focus();
@@ -2001,7 +2012,7 @@ class MonitorPanel {
         li.parentNode.insertBefore(fresh, li);
         li.remove();
       }
-      this.setStatus(this.t('resolve.done'));
+      this.setStatus(this.t('resolve.done'), false, { toast: true });
       const heading = fresh.querySelector('h4');
       if (heading) heading.focus();
     }
@@ -2029,7 +2040,7 @@ class MonitorPanel {
     const { gatesUiNumber } = MONITOR_GATES;
     const count = (v) => gatesUiNumber(monitorFinite(v) ? v : 0, this.locale);
     await this.loadAlerts(false, { force: true, quiet: true });
-    this.setStatus(this.t('run.done', { days: count(body.days_aggregated), opened: count(body.alerts_opened), updated: count(body.alerts_updated) }));
+    this.setStatus(this.t('run.done', { days: count(body.days_aggregated), opened: count(body.alerts_opened), updated: count(body.alerts_updated) }), false, { toast: true });
     this.refreshBanner();
   }
 
@@ -2198,7 +2209,7 @@ class MonitorPanel {
   async copyIds(ids) {
     try {
       await this.clipboard.writeText(ids.join('\n'));
-      this.setStatus(this.t('copy.done'));
+      this.setStatus(this.t('copy.done'), false, { toast: true });
     } catch {
       this.setStatus(MONITOR_GATES.gatesUiMessage('error.generic', this.locale, { status: 'clipboard' }), true);
     }
@@ -2292,7 +2303,7 @@ class MonitorPanel {
     if (secrets && typeof secrets.delete === 'function') secrets.delete(MONITOR_WEBHOOK_NAME);
     if (typeof window !== 'undefined' && window.configManager && window.configManager.savedConfig) window.configManager.savedConfig[MONITOR_WEBHOOK_NAME] = '';
     this.renderWebhookState();
-    this.setStatus(this.t('webhook.removed'));
+    this.setStatus(this.t('webhook.removed'), false, { toast: true });
     if (this.hosts.status && typeof this.hosts.status.focus === 'function') this.hosts.status.focus();
   }
 

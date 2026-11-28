@@ -259,7 +259,7 @@ function applyRefusal(
   }
 
   const calibration =
-    evalFloorCalibration(profile) ?? embedding.profile?.scoreCalibration ?? LEGACY_PROFILE.scoreCalibration;
+    evalFloorCalibration(profile, { evalEntry: ctx.input.evalEntry === true }) ?? embedding.profile?.scoreCalibration ?? LEGACY_PROFILE.scoreCalibration;
   const floors = floorsFromCalibration(calibration as Record<string, unknown>);
   const record = similarityFloor({
     floors,

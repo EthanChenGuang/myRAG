@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "set_id": "fixture-ingest",
-  "version": 7,
+  "version": 8,
   "items": [
     {
       "id": "en-ambiguous-001",
@@ -1822,6 +1822,15 @@
       "last_reviewed_at": "2026-11-27"
     },
     {
+      "id": "ingest-tpl-no-answer-en-08",
+      "item_sha256": "fe468aafd61fc14c96a38a8b9b40e2db2e6dbf1d4e56dc07ecca2fafa8d914d9",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
       "id": "ingest-tpl-no-answer-it-03",
       "item_sha256": "7b76ad8f398f7431bd9ea5ecabc6d0e0989ead9957844fd2f970af086320e6f2",
       "status": "active",
@@ -1842,6 +1851,15 @@
     {
       "id": "ingest-tpl-no-answer-it-06",
       "item_sha256": "981cb3729cf7e17a3b558cecb574d041e4a85f847f00e7dd7464a4502fc87f00",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "ingest-tpl-no-answer-it-07",
+      "item_sha256": "cc241653e9be6d69bfd9b76c0bc841e5c5a36d549869c877ba789acae458bda7",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -5663,7 +5681,18 @@
       "changed": [],
       "retired": [],
       "stale": []
+    },
+    {
+      "version": 8,
+      "date": "2026-11-27",
+      "added": [
+        "ingest-tpl-no-answer-en-08",
+        "ingest-tpl-no-answer-it-07"
+      ],
+      "changed": [],
+      "retired": [],
+      "stale": []
     }
   ],
-  "manifest_sha256": "42f7ed48711c340a96c71f4649ea625b5f648f053eb23e0aa5daceb3676e577b"
+  "manifest_sha256": "eab66064693b5845cccb6b31718479bb0f813e13776c3e7fef8507c468de6a27"
 }

@@ -248,7 +248,9 @@ def _evaluate(request):
     for step in request.steps:
         args = [values[name] for name in step.args]
         if step.op == "add":
-            result = sum(args, Fraction(0))
+            # The shared evaluator's add is binary (src/lib/rag/calc/operations.ts); sum takes any number of values and lists.
+            assert len(args) == 2, step.id
+            result = args[0] + args[1]
         elif step.op == "subtract":
             result = args[0] - args[1]
         elif step.op == "multiply":
@@ -260,7 +262,7 @@ def _evaluate(request):
         elif step.op == "max":
             result = max(args)
         elif step.op == "sum":
-            result = sum(args[0], Fraction(0))
+            result = sum((item for arg in args for item in (arg if isinstance(arg, list) else [arg])), Fraction(0))
         elif step.op == "cap_each":
             result = [min(value, args[1]) for value in args[0]]
         elif step.op == "percentage":

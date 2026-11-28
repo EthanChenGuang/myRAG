@@ -168,3 +168,38 @@ export async function loadTenantGlossary(scope: TenantScope, options: LoadGlossa
     return null;
   }
 }
+
+/**
+ * D-14 (rewriting): the glossary source surfaces present in `text`, as written there, for every target language of the pairs whose
+ * source is `sourceLanguage` (requiredTranslations over all targets). The post-checks require them verbatim in a same-language
+ * rewrite; they are never protected tokens of the gate, so the semantic-cache bypass set is unchanged. Pure; logs nothing.
+ */
+export function glossarySourceSurfaces(text: string, sourceLanguage: string, glossary: GlossaryInput): string[] {
+  const pairs = pairsOf(glossary);
+  if (pairs.length === 0 || text === '') return [];
+  const targets = [...new Set(pairs.filter((pair) => pair.sourceLanguage === sourceLanguage).map((pair) => pair.targetLanguage))];
+  if (targets.length === 0) return [];
+  const mapped = normalizedWithOffsets(text);
+  const spans: Array<{ start: number; end: number }> = [];
+  for (const target of targets) {
+    if (!mapped) continue;
+    for (const match of sourceMatcher(pairs, sourceLanguage, target).match(mapped.normalized)) {
+      spans.push({ start: mapped.offsets[match.start]!, end: mapped.offsets[match.end]! });
+    }
+  }
+  if (!mapped) {
+    // No offset map: keep only the surfaces that appear verbatim, so the check never asks for a spelling the text lacks.
+    const verbatim = requiredFor(text, sourceLanguage, targets, pairs).flatMap((item) => item.sources.filter((source) => text.includes(source)));
+    return [...new Set(verbatim)];
+  }
+  const out: string[] = [];
+  for (const span of spans.sort((a, b) => a.start - b.start)) {
+    const surface = text.slice(span.start, span.end);
+    if (surface.trim() !== '' && !out.includes(surface)) out.push(surface);
+  }
+  return out;
+}
+
+function requiredFor(text: string, sourceLanguage: string, targets: readonly string[], pairs: readonly GlossaryPair[]): RequiredTranslation[] {
+  return targets.flatMap((target) => requiredTranslations(text, sourceLanguage, target, pairs));
+}

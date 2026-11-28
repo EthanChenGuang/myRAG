@@ -16,6 +16,9 @@ import {
   scheduleSecurityEvent,
   scopeAccessFilter,
   createTraceCollector,
+  defaultQueryContext,
+  untaggedVoiceContext,
+  type VoiceResult,
   awaitPreGenerationDelay,
   traceCacheState,
   type TraceCollector,
@@ -64,6 +67,16 @@ import {
   readAnswerConfig,
   type AnswerTextPipelineResult,
   type AnswerTurn,
+  buildAliasMap,
+  buildCalculateTool,
+  createCalcTraceHolder,
+  createCitationLabeler,
+  mayOfferCalc,
+  runCalcChecks,
+  shouldOfferCalcTool,
+  turnCanUseTools,
+  observeCalc,
+  type CalcObserved,
 } from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest, type RagTrace } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
@@ -78,6 +91,7 @@ import {
 } from '@/lib/rag-eval/trace';
 import {
   evalGroundednessRequest,
+  evalModelToolCapability,
   generateEvalAnswerDetailed,
   isGPTGeneratorModel,
   resolveEvalPromptTemplate,
@@ -220,13 +234,21 @@ function toStageOverrides(options: RagRunRequest['options']): StageOverrides | u
   };
 }
 
-type RefusalReason = 'no_relevant_context' | 'below_threshold' | 'below_similarity_floor' | 'injection_filtered' | typeof IDENTIFIER_NOT_FOUND;
+type RefusalReason =
+  | 'no_relevant_context'
+  | 'below_threshold'
+  | 'below_similarity_floor'
+  | 'injection_filtered'
+  | 'out_of_scope'
+  | typeof IDENTIFIER_NOT_FOUND;
 
 function refusalReasonOf(result: RetrievalResult, refused: boolean): RefusalReason | null {
   if (!refused) return null;
   // D-09, A-3: the check dropped everything that would have reached the generator.
   if (result.status === 'empty' && result.reason === 'injection_filtered') return 'injection_filtered';
   if (result.status === 'empty' && result.reason === IDENTIFIER_NOT_FOUND) return IDENTIFIER_NOT_FOUND;
+  // Phase 6.2 D-26: the scope gate skipped retrieval.
+  if (result.status === 'empty' && result.skipReason === 'out_of_scope') return 'out_of_scope';
   const record = result.refusal;
   if (record?.decision === 'refuse') {
     const reason: string = record.reason;
@@ -457,6 +479,19 @@ function errorDetail(error: unknown): string {
 interface EvalAnswerRuleOptions {
   mode: string;
   webSearchOffered: boolean;
+  /** Phase 5.2.1 D-70, D-72: set only when the calculation is offered on this turn. */
+  calculation?: { mode: 'tool' | 'trailing_block' } | null;
+}
+
+type EvalCalcOffer = { mode: 'tool' | 'trailing_block'; aliases: ReadonlySet<string>; stripMarkers: boolean };
+
+/** Phase 5.2.1 D-65: RAG_CALC_TOOL through the one answer-config reader. */
+function calcToolSwitchOn(config: object): boolean {
+  return (config as { readonly calcTool?: unknown }).calcTool === true;
+}
+
+function calcCheckSwitchOn(config: object): boolean {
+  return (config as { readonly calcCheck?: unknown }).calcCheck === true;
 }
 
 /** D-09 and D-10 in the eval: the direct Claude call; a failure before any text falls back to chunk-alias once. */
@@ -575,6 +610,38 @@ function evalCacheTraceState(result: RetrievalResult): EvalTraceCacheState | und
   return 'miss';
 }
 
+type EvalKeptChunk = RagTrace['kept'][number];
+
+/** Phase 6.2 D-16, P-26: the voice results in rank order as the trace's kept list, named by their document title. */
+function voiceKept(results: readonly VoiceResult[]): EvalKeptChunk[] {
+  return results.map((row, index) => ({
+    chunk_id: row.chunk_id,
+    document_id: row.document_id,
+    document_name: voiceDocumentName(row),
+    content: row.content,
+    similarity: row.similarity,
+    kept_by: row.rerankScore !== undefined ? 'rerank' : 'similarity',
+    rank: index + 1,
+  }));
+}
+
+function voiceDocumentName(row: VoiceResult): string {
+  const metadata = row.metadata ?? {};
+  for (const value of [metadata.document_title, metadata.filename, metadata.name]) {
+    if (typeof value === 'string' && value.trim() !== '') return value;
+  }
+  return row.document_id;
+}
+
+function voiceUsedDocuments(results: readonly VoiceResult[]): RagTrace['used_documents'] {
+  const seen = new Map<string, RagTrace['used_documents'][number]>();
+  for (const row of results) {
+    if (seen.has(row.document_id)) continue;
+    seen.set(row.document_id, { document_id: row.document_id, name: voiceDocumentName(row), similarity: row.similarity, image_url: row.image_url ?? null });
+  }
+  return [...seen.values()];
+}
+
 export async function POST(req: NextRequest) {
   const requestReceivedAt = Date.now();
   const access = checkEvalAccess(req.headers, {
@@ -612,9 +679,13 @@ export async function POST(req: NextRequest) {
   // closed with status error and the run answers its existing retrieval failure (D-10).
   const resolvedAccess = await resolveAccessScope({ scope: scoped.scope, identity: { kind: 'eval', userId }, signal: req.signal });
   const scope = resolvedAccess.ok ? resolvedAccess.scope : scoped.scope;
+  // Phase 6.2 D-16, T-06.2-73: the voice entry runs the voice profile under the eval scope; it never reads a voice token and
+  // applies no eval-only override, filter, cache or answer option (those are honoured for the eval profile only).
+  const voiceEntry = options?.entry_profile === 'voice';
+  const entryProfile = voiceEntry ? 'voice' : 'eval';
 
   let retrievalFilters: RetrievalFilterInput | undefined;
-  if (options?.retrieval_filters) {
+  if (options?.retrieval_filters && !voiceEntry) {
     const filtersParsed = parseRetrievalFilters(toFilterBody(options.retrieval_filters));
     if (!filtersParsed.ok) {
       return NextResponse.json({ success: false, error: 'Invalid request data', details: filtersParsed.details }, { status: 400 });
@@ -635,18 +706,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid request data', details: bindingOverrides.details }, { status: 400 });
   }
 
-  const stageOverrides = toStageOverrides(options);
-  const collector = createTraceCollector({ profile: 'eval', tenantKey: scopeKey(scope) });
+  const stageOverrides = voiceEntry ? undefined : toStageOverrides(options);
+  const collector = createTraceCollector({ profile: entryProfile, tenantKey: scopeKey(scope) });
   // D-16: the request conversation is the history; D-09: classified once at entry, and only while the query layer is on.
   const history = (conversation ?? []).map((turn) => ({ role: turn.role, content: turn.content }));
   const classification = env.RAG_QUERY_LAYER === 'true' ? classifyQuery(query) : undefined;
 
   try {
-    const generatorModel = includeAnswer ? resolveGeneratorModel(options?.generator_model) : null;
+    const generatorModel = includeAnswer && !voiceEntry ? resolveGeneratorModel(options?.generator_model) : null;
     const isGPTModel = generatorModel !== null && isGPTGeneratorModel(generatorModel);
     // D-05: an eval run has the citations capability only when it asks for it, and only when an answer is generated.
     const generationConfig = readGenerationConfig();
     const citationRecheck = evalCitationRecheck(scope);
+    // 05.2.1 D-71: per-request facts, so a calculation turn can keep the citation strategy off the direct Claude path
+    const claudeFacts: ClaudeTurnFacts = { ...EVAL_CLAUDE_FACTS };
     const citationSession =
       generatorModel !== null && options?.citations === true
         ? createCitationSession({
@@ -655,7 +728,7 @@ export async function POST(req: NextRequest) {
             modelId: generatorModel,
             language: detectLanguage(query) ?? 'en',
             config: { ...generationConfig, citations: true },
-            facts: EVAL_CLAUDE_FACTS,
+            facts: claudeFacts,
             ...(citationRecheck ? { recheck: citationRecheck } : {}),
           })
         : null;
@@ -671,10 +744,16 @@ export async function POST(req: NextRequest) {
             ragMode,
           })
         : null;
-    const answerRuleOptions: EvalAnswerRuleOptions = { mode: ragMode, webSearchOffered: false };
+    let answerRuleOptions: EvalAnswerRuleOptions = { mode: ragMode, webSearchOffered: false };
+    // Phase 5.2.1 D-65, D-66: a turn that may get the calculation labels its blocks, so chunk operands can name an alias
+    const calcMayBeOffered =
+      answerTurn !== null && calcToolSwitchOn(answerTurn.config) && mayOfferCalc(query, answerTurn.answerLanguage);
+    const retrievalLabeler = citationSession?.labeler ?? (calcMayBeOffered ? createCitationLabeler() : undefined);
+    const calcHolder = createCalcTraceHolder();
+    let calcOffer: EvalCalcOffer | null = null;
 
     // D-37/D-38: the key parts of an eval lookup; the pipeline derives the eval entry profile, so no entry reaches chat or embed.
-    const cacheOverride = cacheOverrideOn(options);
+    const cacheOverride = !voiceEntry && cacheOverrideOn(options);
     const cacheContext: RetrievalCacheContext | undefined = cacheOverride
       ? {
           generatorModel: generatorModel ?? resolveGeneratorModel(options?.generator_model),
@@ -688,22 +767,26 @@ export async function POST(req: NextRequest) {
     const result = await runRetrieval({
       scope,
       query,
-      profile: 'eval',
-      options: {
-        // Unset: each pipeline applies RAG_FINAL_RESULT_COUNT itself (legacy) or keeps its own final top-k (v2).
-        ...(options?.max_results != null ? { maxResults: options.max_results } : {}),
-        isGPTModel,
-        ragMode,
-        webSearchEnabled: false,
-        ...(options?.degrade ? { degrade: options.degrade } : {}),
-        ...(options?.embedding_profile ? { embeddingProfile: options.embedding_profile } : {}),
-        ...bindingOverrides.value,
-      },
+      profile: entryProfile,
+      // The voice route passes only the match count; unset, each pipeline keeps its own default.
+      options: voiceEntry
+        ? { ...(options?.max_results != null ? { maxResults: options.max_results } : {}) }
+        : {
+            // Unset: each pipeline applies RAG_FINAL_RESULT_COUNT itself (legacy) or keeps its own final top-k (v2).
+            ...(options?.max_results != null ? { maxResults: options.max_results } : {}),
+            isGPTModel,
+            ragMode,
+            webSearchEnabled: false,
+            ...(options?.degrade ? { degrade: options.degrade } : {}),
+            ...(options?.embedding_profile ? { embeddingProfile: options.embedding_profile } : {}),
+            ...bindingOverrides.value,
+          },
       signal: req.signal,
       trace: collector,
+      ...(voiceEntry ? { evalEntry: true as const } : {}),
       ...(stageOverrides ? { stageOverrides } : {}),
       ...(retrievalFilters ? { retrievalFilters } : {}),
-      ...(citationSession?.labeler ? { citationLabeler: citationSession.labeler } : {}),
+      ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
       ...(history.length > 0 ? { history } : {}),
       ...(classification ? { classification } : {}),
       ...(cacheContext ? { cacheContext } : {}),
@@ -716,7 +799,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'retrieval failed', reason: result.reason }, { status: 500 });
       }
       const assembled = result.stages.find((stage) => stage.name === 'assemble');
-      if (result.queryContext === null || (assembled && assembled.status !== 'ok' && assembled.status !== 'disabled')) {
+      if ((result.queryContext === null && !voiceEntry) || (assembled && assembled.status !== 'ok' && assembled.status !== 'disabled')) {
         console.error('[RAG Eval] retrieval incomplete:', { status: result.status, reason: result.reason });
         return NextResponse.json({ error: 'retrieval failed', reason: result.reason }, { status: 500 });
       }
@@ -725,6 +808,8 @@ export async function POST(req: NextRequest) {
       const documentNames = new Map<string, string>();
       for (const doc of result.usedDocuments) documentNames.set(doc.id, doc.filename || doc.name);
       for (const chunk of result.kept) documentNames.set(chunk.document_id, chunk.document_name);
+      const voiceResults = voiceEntry ? (result.voice?.results ?? []) : null;
+      for (const row of voiceResults ?? []) documentNames.set(row.document_id, voiceDocumentName(row));
       const textBlocks = (result.blocks ?? []).filter((block) => !block.isImage);
       // D-37: the eval turn's allow evidence; the eval offers no webSearch tool and no tool results
       const guardSources = {
@@ -739,8 +824,12 @@ export async function POST(req: NextRequest) {
       let answer: string | null = null;
       let finishReason: string | null = null;
       let answerChain: AnswerTextPipelineResult | null = null;
+      const calcRun: { outcome: ReturnType<typeof runCalcChecks> | null } = { outcome: null };
+      let calcObserved: CalcObserved | null = null;
       const cacheHit = isCacheHitResult(result) ? result.cacheHit : undefined;
-      const serverRefused = cacheHit ? cacheHit.answer.is_refusal : result.refusalCandidate || result.refusal?.decision === 'refuse';
+      const serverRefused = cacheHit
+        ? cacheHit.answer.is_refusal
+        : result.refusalCandidate || result.refusal?.decision === 'refuse' || (voiceResults !== null && voiceResults.length === 0);
       if (cacheHit) {
         if (includeAnswer) answer = cacheHit.answer.answer_text;
       } else if (generatorModel !== null && !serverRefused) {
@@ -749,7 +838,37 @@ export async function POST(req: NextRequest) {
         await awaitPreGenerationDelay();
         collector.markGenerationStart();
         const generationStart = collector.now();
+        // Phase 5.2.1 D-70, D-72: the chat route's offer decision; the mode follows the tool rule, a fake registry may declare it
+        let calcMode: 'tool' | 'trailing_block' | null = null;
+        if (calcMayBeOffered && answerTurn && result.context.length > 0) {
+          const decision = shouldOfferCalcTool({
+            question: query,
+            blockTexts: textBlocks.map((block) => block.text),
+            language: answerTurn.answerLanguage,
+          });
+          if (decision.offer) {
+            const canUseTools =
+              evalModelToolCapability(generatorModel) ?? turnCanUseTools({ provider: env.NEXT_PUBLIC_AI_PROVIDER, modelId: generatorModel });
+            calcMode = canUseTools ? 'tool' : 'trailing_block';
+            claudeFacts.calculation = true;
+            console.log('[Calc]', { offered: true, mode: calcMode, reason: decision.reason });
+          }
+        }
         citationSession?.attach(result);
+        if (calcMode) {
+          let aliases: ReadonlySet<string> = new Set<string>();
+          if (citationSession?.strategy) {
+            aliases = citationSession.aliases();
+          } else {
+            try {
+              aliases = buildAliasMap(result.blocks, result.usedDocuments).aliases;
+            } catch {
+              console.warn('[Calc]', { offered: true, aliases: 'unavailable' });
+            }
+          }
+          calcOffer = { mode: calcMode, aliases, stripMarkers: !citationSession?.strategy };
+          answerRuleOptions = { ...answerRuleOptions, calculation: { mode: calcMode } };
+        }
         const answerLanguage = answerLanguageOptions(result);
         // Phase 5.2 D-30: decided once, before the composer, with the chat route's rule (the eval request sets no limit of its own)
         if (answerTurn && answerTurn.config.maxOutputTokens.kind !== 'off') {
@@ -794,6 +913,15 @@ export async function POST(req: NextRequest) {
               decorateSystemPrompt,
               ...(answerLanguage ? { answerLanguage } : {}),
               outputCap: answerTurn?.outputCapDecision() ?? null,
+              ...(calcOffer
+                ? {
+                    calc: {
+                      mode: calcOffer.mode,
+                      holder: calcHolder,
+                      ...(calcOffer.mode === 'tool' ? { tool: buildCalculateTool({ aliases: calcOffer.aliases, holder: calcHolder }) } : {}),
+                    },
+                  }
+                : {}),
             });
             answer = generated.text;
             finishReason = generated.finishReason;
@@ -807,16 +935,51 @@ export async function POST(req: NextRequest) {
         }
         // Phase 5.2 RESEARCH Pitfall 21: the eval does not stream, so the whole-text twin of the chain runs on the answer:
         // sentinel, output guard, then the notices as a final paragraph (D-16, D-35, D-11, D-33). Off: the answer is untouched.
+        const modelText = answer;
         if (answerTurn?.config.anyNonDefault && answer !== null) {
           answerTurn.setGuardSources(guardSources);
+          const calcLanguage = answerTurn.answerLanguage;
+          // Phase 5.2.1 D-73: RAG_CALC_CHECK on an answer that was offered the calculation, as the chat route's stream-end check
+          const calcCheck =
+            calcOffer && calcCheckSwitchOn(answerTurn.config) && calcLanguage !== null
+              ? (rawText: string) => {
+                  const outcome = runCalcChecks({
+                    traces: calcHolder.traces(),
+                    invalid: calcHolder.invalid(),
+                    offered: true,
+                    rawText,
+                    blocks: textBlocks.filter((block) => block.alias).map((block) => ({ alias: block.alias ?? '', text: block.text })),
+                    question: query,
+                    answerLanguage: calcLanguage,
+                  });
+                  calcRun.outcome = outcome;
+                  return outcome.notices;
+                }
+              : null;
           answerChain = applyAnswerPipelineToText(answer, {
             refusalText: answerTurn.sentinelRefusalText(answerRuleOptions.webSearchOffered),
             finishReason,
             language: answerTurn.answerLanguage,
             channel: 'eval',
             guard: answerTurn.guardPolicy(),
+            // D-72: the trailing block in block mode; in tool mode only the marker stripping, when it is needed
+            ...(calcOffer?.mode === 'trailing_block'
+              ? { calcBlock: { onTrace: calcHolder.recordBlock, stripMarkers: calcOffer.stripMarkers } }
+              : calcOffer?.stripMarkers
+                ? { calcBlock: { stripMarkers: true } }
+                : {}),
+            ...(calcCheck ? { calcCheck } : {}),
           });
           answer = answerChain.text;
+        }
+        // D-77: what the answer showed of a calculation, recorded on every generated answer, with the check on or off
+        if (modelText !== null) {
+          calcObserved = observeCalc({
+            rawText: answerChain?.calcBlock?.rawText ?? modelText,
+            traces: calcHolder.traces(),
+            aliases: calcOffer?.aliases ?? citationSession?.aliases() ?? new Set<string>(),
+            language: answerTurn?.answerLanguage ?? detectLanguage(modelText) ?? detectLanguage(query) ?? null,
+          });
         }
         // The eval answer is generated whole, so its first text is the full answer
         if (answer !== null && answer.length > 0) collector.markFirstTextDelta();
@@ -887,7 +1050,7 @@ export async function POST(req: NextRequest) {
       const cacheState = cacheOverride ? evalCacheTraceState(result) : undefined;
 
       const retrievalStrategy = result.stages.find((stage) => stage.name === 'search')?.detail ?? 'unknown';
-      const queryContext = result.queryContext;
+      const queryContext = result.queryContext ?? defaultQueryContext();
       const stageCounts = stageCountsOf(result.stages);
       const v2Result = result.retrievalConfigHash !== undefined;
       const injection = injectionTraceOf(result, documentNames);
@@ -950,7 +1113,7 @@ export async function POST(req: NextRequest) {
           ...(chunk.legs !== undefined ? { legs: chunk.legs } : {}),
           ...(chunk.language !== undefined ? { language: chunk.language } : {}),
         })),
-        kept: result.kept.map(({ dupClusterId, alsoIn: _alsoIn, isCurrent, documentVersion, ...chunk }, index) => ({
+        kept: voiceResults ? voiceKept(voiceResults) : result.kept.map(({ dupClusterId, alsoIn: _alsoIn, isCurrent, documentVersion, ...chunk }, index) => ({
           ...chunk,
           ...(dupClusterId ? { dup_cluster_id: dupClusterId } : {}),
           ...(isCurrent !== undefined ? { is_current: isCurrent } : {}),
@@ -959,19 +1122,25 @@ export async function POST(req: NextRequest) {
         })),
         ...(redundancy !== null ? { topk_redundancy: redundancy } : {}),
         ...(identifierTrace ? { identifier: identifierTrace } : {}),
-        used_documents: result.usedDocuments.map((doc) => ({
-          document_id: doc.id,
-          name: doc.name,
-          similarity: doc.similarity ?? null,
-          image_url: doc.image_url ?? null,
-        })),
-        context: result.context,
+        used_documents: voiceResults
+          ? voiceUsedDocuments(voiceResults)
+          : result.usedDocuments.map((doc) => ({
+              document_id: doc.id,
+              name: doc.name,
+              similarity: doc.similarity ?? null,
+              image_url: doc.image_url ?? null,
+            })),
+        context: voiceResults ? (result.voice?.context ?? untaggedVoiceContext(voiceResults)) : result.context,
         refused,
         refusal_reason: refusalReasonOf(result, refused),
         ...(v2Result ? v2TraceFields(result) : {}),
         ...(v2Result && backendTrace ? { retrieval_backend: backendTrace } : {}),
         ...(v2Result ? (attributeFilterTrace(result.stages, currentAttributeFilterMode()) ?? {}) : {}),
         ...(Object.keys(stageCounts).length > 0 ? { stage_counts: stageCounts } : {}),
+        // Phase 6.2 D-26, D-21, D-23: scores, timings and counts only, each absent while its stage did not run.
+        ...(result.scopeGate ? { scope_gate: result.scopeGate } : {}),
+        ...(result.searchesCounted !== undefined ? { searches_counted: result.searchesCounted } : {}),
+        ...(result.speculative ? { speculative: result.speculative } : {}),
         ...(injection ? { injection } : {}),
         ...(result.versionConflict ? { version_conflict: versionConflictTrace(result.versionConflict, mixedVersions) } : {}),
         answer,
@@ -985,6 +1154,8 @@ export async function POST(req: NextRequest) {
         ...(cacheState ? { cache: cacheState } : {}),
         ...answerRulesFields,
         ...(accessMode ? { access: { mode: accessMode, violations: accessCheck?.violations ?? 0 } } : {}),
+        ...(calcRun.outcome ? { calc: calcRun.outcome.checks, review_reasons: calcRun.outcome.reviewReasons } : {}),
+        ...(calcObserved ? { calc_observed: calcObserved } : {}),
         stage_latency_ms: collector.toStageLatency(),
         stage_status: collector.toStageStatus(),
         effective_config: effectiveConfig,
