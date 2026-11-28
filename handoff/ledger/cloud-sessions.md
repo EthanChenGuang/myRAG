@@ -1006,3 +1006,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - OWNER signatures pending: AR-06-01..05.
   - Archived.
 - 01:06Z 06.3-14 DONE d0d6a445 (tests only; 07-37 already wired it) -> t41. Archived.
+- 01:07Z PR #139 train 39 opened (2821bfc8; main merged in; train39-live.sql still current). Subscribed. Merge when green; t40 then merges main.
