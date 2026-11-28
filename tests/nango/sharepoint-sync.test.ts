@@ -5,7 +5,7 @@ import { startFakeGraph, type FakeGraph } from '../helpers/fake-graph';
 
 const raiseSourceAlert = vi.hoisted(() => vi.fn(async () => 'connection_status' as const));
 const processDocumentWithMetadata = vi.hoisted(() => vi.fn(async () => 'doc-new'));
-const state = vi.hoisted(() => ({ admin: null as unknown }));
+const state = vi.hoisted(() => ({ admin: null as unknown, tombstoned: new Set<string>(), tombstoneFails: false }));
 
 vi.mock('@/lib/nango/source-alerts', () => ({ raiseSourceAlert }));
 vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: () => state.admin }));
@@ -30,6 +30,9 @@ vi.mock('@/lib/rag', async () => {
     softDeleteLineage: vi.fn(async (_scope: unknown, lineageId: string) => ({ ok: true, outcome: 'deleted', lineageId, jobId: null })),
     removeDocumentObjects: vi.fn(async () => undefined),
     queueConfigFromProcessEnv: () => ({ ingestAsync: false }),
+    isPurgeTombstoned: vi.fn(async (_scope: unknown, _connectionId: string, fileId: string) =>
+      state.tombstoneFails ? { ok: false, reason: 'unavailable' } : { ok: true, tombstoned: state.tombstoned.has(fileId) },
+    ),
   };
 });
 
@@ -119,6 +122,8 @@ afterEach(async () => {
   await running?.close();
   delete process.env.NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED;
   state.admin = null;
+  state.tombstoned = new Set();
+  state.tombstoneFails = false;
 });
 
 const syncRecordIds = (memory: ReturnType<typeof createNangoMemoryAdmin>) =>
@@ -162,6 +167,40 @@ describe('SharePoint delta apply (D-21, D-22, D-40)', () => {
     expect(newRecord.metadata).toMatchObject({ drive_id: DRIVE, etag: '"{00000000-0000-0000-0000-0000000000a1},1"' });
     expect(storedToken(memory)).toMatchObject({ delta_link: `${START}?token=delta-0002`, next_link: null });
     expect(result.committedDrives).toEqual([DRIVE]);
+  });
+
+  it('skips an admin-purged item (D-35): no sync record, no download, no ingest, counted withdrawn, link committed', async () => {
+    graph = await startFakeGraph();
+    graph.respondOnce(STORED, deltaBody([item('item-purged', 'item-root', 'c1'), item('item-new', 'item-root', 'a1')]));
+    state.tombstoned.add('item-purged');
+    const memory = createNangoMemoryAdmin(
+      { nango_connections: [connectionRow({ drives: [{ id: DRIVE, name: 'Library A' }] })], rag_source_delta_tokens: [token(STORED)] },
+      { storeWrites: true },
+    );
+    const h = hooks();
+    const result = await syncSharePointConnection(CONNECTION, memory.admin as never, h, { transport: graph.transport() });
+    expect(result.processed).toBe(1);
+    expect(result.withdrawn).toBe(1);
+    const calls = processDocumentWithMetadata.mock.calls as unknown as Array<[string, Buffer, Row]>;
+    expect(calls.map((call) => call[2].sourceFileId)).toEqual(['item-new']);
+    expect((h.fetchContent as unknown as { mock: { calls: Array<[string, string, Row]> } }).mock.calls.map((call) => call[2].id)).toEqual(['item-new']);
+    expect(syncRecordIds(memory)).toEqual(['item-new']);
+    expect(result.committedDrives).toEqual([DRIVE]);
+  });
+
+  it('a failed tombstone lookup skips the item and leaves the link uncommitted (fail closed)', async () => {
+    graph = await startFakeGraph();
+    graph.respondOnce(STORED, deltaBody([item('item-new', 'item-root', 'a1')]));
+    state.tombstoneFails = true;
+    const memory = createNangoMemoryAdmin(
+      { nango_connections: [connectionRow({ drives: [{ id: DRIVE, name: 'Library A' }] })], rag_source_delta_tokens: [token(STORED)] },
+      { storeWrites: true },
+    );
+    const result = await syncSharePointConnection(CONNECTION, memory.admin as never, hooks(), { transport: graph.transport() });
+    expect(processDocumentWithMetadata).not.toHaveBeenCalled();
+    expect(syncRecordIds(memory)).toEqual([]);
+    expect(result.committedDrives).toEqual([]);
+    expect(storedToken(memory)).toMatchObject({ delta_link: STORED });
   });
 
   it('commits no link when a removal fails', async () => {
