@@ -45,6 +45,13 @@ class TsxCoverageTest(unittest.TestCase):
         errors = self.run_check(["a.test.mts"], ["npx vitest run"])
         self.assertEqual(len(errors), 1)
 
+    def test_glob_given_to_the_shard_planner_counts(self):
+        errors = self.run_check(
+            ["a.test.mts", "b.test.mts"],
+            ["files=$(node scripts/ci/test-shards.mjs --shard=${{ matrix.shard }} tests/*.test.mts)\nnode --import tsx --test $files"],
+        )
+        self.assertEqual(errors, [])
+
     def test_glob_in_another_command_does_not_count(self):
         errors = self.run_check(["a.test.mts"], ["echo tests/*.test.mts"])
         self.assertEqual(len(errors), 1)
@@ -516,10 +523,41 @@ class TsJobsTest(unittest.TestCase):
                 step["run"] = "npx vitest run --shard=1/2"
         self.assertTrue(any("ts-vitest must pass --shard=" in e for e in self.errors_for(jobs)))
 
+    def test_node_index_sharding_instead_of_the_planner_is_reported(self):
+        jobs = self.jobs()
+        for step in jobs["ts-db"]["steps"]:
+            if "tests/rag-db/" in str(step.get("run", "")):
+                step["run"] = "node --import tsx --test --test-shard=${{ matrix.shard }} tests/rag-db/*.test.mts"
+        self.assertTrue(any("ts-db must pass scripts/ci/test-shards.mjs --shard=" in e for e in self.errors_for(jobs)))
+
+    def test_an_unsharded_tsx_job_is_reported(self):
+        jobs = self.jobs()
+        del jobs["ts-tsx"]["strategy"]
+        self.assertTrue(any("ts-tsx must list its shards" in e for e in self.errors_for(jobs)))
+
+    def test_a_dropped_shard_planner_self_test_is_reported(self):
+        jobs = self.jobs()
+        jobs["ts-checks"]["steps"] = [s for s in jobs["ts-checks"]["steps"] if "test-shards.node-test" not in str(s.get("run", ""))]
+        self.assertTrue(any("scripts/tests/test-shards.node-test.mjs" in e for e in self.errors_for(jobs)))
+
     def test_a_long_timeout_is_reported(self):
         jobs = self.jobs()
         jobs["ts-tsx"]["timeout-minutes"] = 60
         self.assertTrue(any("ts-tsx must set timeout-minutes" in e for e in self.errors_for(jobs)))
+
+    def test_ts_db_may_take_up_to_its_own_cap_but_not_more(self):
+        jobs = self.jobs()
+        jobs["ts-db"]["timeout-minutes"] = 40
+        self.assertFalse(any("ts-db must set timeout-minutes" in e for e in self.errors_for(jobs)))
+        jobs["ts-db"]["timeout-minutes"] = 41
+        self.assertTrue(any("ts-db must set timeout-minutes <= 40" in e for e in self.errors_for(jobs)))
+        jobs["ts-db"].pop("timeout-minutes")
+        self.assertTrue(any("ts-db must set timeout-minutes" in e for e in self.errors_for(jobs)))
+
+    def test_the_ts_db_cap_does_not_raise_the_other_jobs(self):
+        jobs = self.jobs()
+        jobs["ts-vitest"]["timeout-minutes"] = 40
+        self.assertTrue(any("ts-vitest must set timeout-minutes <= 25" in e for e in self.errors_for(jobs)))
 
     def test_the_root_ratchet_is_reported(self):
         jobs = self.jobs()
