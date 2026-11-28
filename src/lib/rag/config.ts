@@ -220,6 +220,8 @@ export interface LexicalScoringConfig {
   /** Effective: cluster only with bm25 effective and RAG_DUP_CLUSTERS on (D-45). */
   dfMode: LexicalDfMode;
 }
+/** D-54: pool computes local_bm25 df and avgdl over the rerank pool (today); tenant reads the tenant's lexical statistics (plan 04.4-21). */
+export type RerankLocalStatsMode = 'pool' | 'tenant';
 export const LEXICAL_SCORING_DEFAULTS: Readonly<LexicalScoringConfig> = Object.freeze({ mode: 'ts_rank_cd', k1: 1.2, b: 0.75, dfMode: 'raw' });
 export type BgeM3Serving = 'hosted' | 'sidecar';
 /** Which OpenAI-compatible host answers hosted BGE-M3 calls; openrouter pins its upstream to DeepInfra. */
@@ -266,6 +268,8 @@ export interface V2Config {
   lexicalTranslation: boolean;
   /** D-05: effective scoring of the lexical leg; bm25 only with RAG_PIPELINE=v2 and RAG_LEXICAL_SEARCH=true. */
   lexicalScoring: LexicalScoringConfig;
+  /** D-54, D-55: effective; tenant only with RAG_PIPELINE=v2. */
+  rerankLocalStats: RerankLocalStatsMode;
   /** D-15: the terminology stage; acts only inside the v2 graph. */
   terminology: boolean;
   /** D-18: the dense terminology variant; requires terminology, never in voice (see terminologyDenseFor). */
@@ -400,6 +404,7 @@ export interface RagEnvInput {
   RAG_LEXICAL_BM25_K1?: string;
   RAG_LEXICAL_BM25_B?: string;
   RAG_LEXICAL_DF_MODE?: string;
+  RAG_RERANK_LOCAL_STATS?: string;
   RAG_VERSION_SCOPE?: string;
   RAG_EMBED_VERSION_SCOPE?: string;
   RAG_TABLE_LOOKUP?: string;
@@ -783,6 +788,17 @@ function parseLexicalDfMode(env: RagEnvInput, scoring: LexicalScoringMode, dupCl
     return 'raw';
   }
   return 'cluster';
+}
+
+/** D-54, D-55: an invalid value is pool; tenant needs RAG_PIPELINE=v2, otherwise pool. */
+function parseRerankLocalStats(env: RagEnvInput, pipeline: 'legacy' | 'v2', warnings: string[]): RerankLocalStatsMode {
+  const requested = parseNamedChoice<RerankLocalStatsMode>('RAG_RERANK_LOCAL_STATS', env.RAG_RERANK_LOCAL_STATS, ['pool', 'tenant'], 'pool', warnings);
+  if (requested !== 'tenant') return 'pool';
+  if (pipeline !== 'v2') {
+    problem(warnings, 'rerank-local-stats-needs-v2', 'RAG_RERANK_LOCAL_STATS=tenant needs RAG_PIPELINE=v2; using pool', { RAG_PIPELINE: pipeline });
+    return 'pool';
+  }
+  return 'tenant';
 }
 
 function parseOnOff(raw: string | undefined, name: string, warnings: string[]): boolean {
@@ -1349,6 +1365,7 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_LEXICAL_BM25_K1 ?? '',
     env.RAG_LEXICAL_BM25_B ?? '',
     env.RAG_LEXICAL_DF_MODE ?? '',
+    env.RAG_RERANK_LOCAL_STATS ?? '',
     env.RAG_VERSION_SCOPE ?? '',
     env.RAG_EMBED_VERSION_SCOPE ?? '',
     env.RAG_TABLE_LOOKUP ?? '',
@@ -1486,6 +1503,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     exactScanCutoff: parseNonNegativeInt(env.RAG_EXACT_SCAN_CUTOFF, 0, 100_000, 'exact-scan-cutoff', warnings),
     lexicalTranslation: gate.monolingual ? false : parseBooleanSwitch(env.RAG_LEXICAL_TRANSLATION, false, 'lexical-translation', warnings),
     lexicalScoring: parseLexicalScoring(env, pipeline, lexicalSearch, warnings),
+    rerankLocalStats: parseRerankLocalStats(env, pipeline, warnings),
     terminology,
     terminologyDense: parseTerminologyDense(env, terminology, warnings),
     terminologyMining: parseBooleanSwitch(env.RAG_TERMINOLOGY_MINING, false, 'terminology-mining', warnings),

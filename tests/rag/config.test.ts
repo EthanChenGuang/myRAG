@@ -50,6 +50,7 @@ const PHASE42_V2_FIELDS = [
   'attributeFilter',
   'lexicalQuantity',
   'lexicalScoring',
+  'rerankLocalStats',
 ];
 
 function withoutPhase42(v2: object): Record<string, unknown> {

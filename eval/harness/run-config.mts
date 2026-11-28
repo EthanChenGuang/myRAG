@@ -48,7 +48,7 @@ const PHASE33_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
 };
 
 /**
- * The three Phase 4.4 lexical scoring variables (D-36). The mode is enumerated; k1 and b must be decimals inside the bounds the app
+ * The Phase 4.4 lexical scoring variables (D-36) and the local reranker statistics source (04.4-20, D-54). The mode is enumerated; k1 and b must be decimals inside the bounds the app
  * accepts (k1 0.5 to 3, b 0 to 1), because the app would warn and fall back to its default on any other value.
  */
 const PHASE44_SWITCH_VALUES: Readonly<Record<string, readonly string[] | null>> = {
@@ -56,6 +56,7 @@ const PHASE44_SWITCH_VALUES: Readonly<Record<string, readonly string[] | null>> 
   RAG_LEXICAL_BM25_K1: null,
   RAG_LEXICAL_BM25_B: null,
   RAG_LEXICAL_DF_MODE: ['raw', 'cluster'],
+  RAG_RERANK_LOCAL_STATS: ['pool', 'tenant'],
 };
 const PHASE44_DECIMAL_BOUNDS: Readonly<Record<string, readonly [number, number]>> = {
   RAG_LEXICAL_BM25_K1: [0.5, 3],
