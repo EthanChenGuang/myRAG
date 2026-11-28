@@ -101,6 +101,8 @@ export interface StartRebuildInput {
   startedBy: string | null;
   /** Time budget of this call; work left over continues on the next start of the same run. */
   deadlineMs?: number;
+  /** LANG-11: select the language-addition groups (und, scanned, out of date) instead of the mechanism's own comparison. */
+  selection?: 'language_add';
 }
 
 export type StartRebuildStatus = 'dry_run' | 'nothing' | 'command' | 'started';
@@ -115,6 +117,8 @@ export interface StartRebuildResult {
   resumed?: boolean;
   /** True while documents of the run are still to be submitted: call start again to continue. */
   more?: boolean;
+  /** language_add only: selected documents per group. */
+  groups?: Record<'und' | 'scanned' | 'stale', number>;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -563,4 +567,8 @@ export async function rollbackRebuild(runId: string, actor: string | null, deps:
   const superseded = rows.filter((row) => text(row, 'outcome') === 'superseded').length;
   console.log('[Rebuild] run rolled back', { runId, restored: restored.length, superseded });
   return { restored, superseded };
+}
+
+export async function loadLanguageAddCandidates(_db: RpcClient, _signal: AbortSignal, _tenantKey: string | null = null): Promise<import('./plan').LanguageAddCandidate[]> {
+  return [];
 }

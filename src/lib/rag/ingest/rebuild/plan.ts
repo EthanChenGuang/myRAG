@@ -173,3 +173,15 @@ export function planRebuild(mechanism: RebuildableMechanism, selection: RebuildS
     }
   }
 }
+
+export type LanguageAddGroup = 'und' | 'scanned' | 'stale';
+export interface LanguageAddCandidate extends RebuildCandidate {
+  hasUnd: boolean;
+  scanned: boolean;
+}
+export interface LanguageAddSelection extends RebuildSelection {
+  groups: Record<LanguageAddGroup, number>;
+}
+export function selectLanguageAdd(_candidates: readonly LanguageAddCandidate[], _proposal: Record<string, string>): LanguageAddSelection {
+  return { documents: [], withoutFingerprint: 0, groups: { und: 0, scanned: 0, stale: 0 } };
+}
