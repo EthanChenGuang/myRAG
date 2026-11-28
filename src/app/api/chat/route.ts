@@ -2997,6 +2997,7 @@ Context:
         query: userQuery,
         classification: queryClassification,
         plan: retrievalResult.queryPlan,
+        retrievalHit: knowledgeContextAttached && retrievalResult.kept.length > 0 && context.trim().length > 0,
         contextTokens: knowledgeContextAttached ? countTokens(context) : 0,
         params: effectiveQueryParams('chat'),
         ids: modelRouting,

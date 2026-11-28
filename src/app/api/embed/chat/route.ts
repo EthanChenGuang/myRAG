@@ -683,6 +683,7 @@ export async function POST(request: NextRequest) {
           query: queryText,
           classification,
           plan: result.queryPlan,
+          retrievalHit: !smallTalkTurn && result.kept.length > 0 && context.trim().length > 0,
           contextTokens: countTokens(context),
           params: effectiveQueryParams('embed'),
           ids: modelRouting,
