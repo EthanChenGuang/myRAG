@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RetrievalLogEntrySchema } from '@/lib/rag-eval/contracts.generated';
 import { buildRetrievalLogRow, type BuildRetrievalLogRowInput } from '@/lib/rag/feedback-loop/retrieval-log';
-import { calibratedQueryLanguageConfidence, loadLanguageConfidenceCalibration } from '@/lib/rag/lang/confidence';
+import { calibratedQueryLanguageConfidence, lengthBucketOf, loadLanguageConfidenceCalibration } from '@/lib/rag/lang/confidence';
 import { detectLanguageWithConfidence } from '@/lib/rag/lang/detect';
 import type { RetrievalResult } from '@/lib/rag/types';
 
@@ -29,6 +29,15 @@ function result(overrides: Partial<RetrievalResult> = {}): RetrievalResult {
     logOutcome: { value: 'unknown', answerLanguage: null },
     ...overrides,
   };
+}
+
+function committedEnBinValue(): number {
+  const calibration = loadLanguageConfidenceCalibration();
+  if (!calibration) throw new Error('committed language confidence calibration is missing');
+  const bucket = lengthBucketOf(EN_DETECTED, calibration.length_buckets);
+  const bin = calibration.bins.find((entry) => entry.confident && entry.length_bucket === bucket && entry.script_class === 'single');
+  if (!bin || bin.source !== 'calibrated') throw new Error(`no calibrated bin for a confident single-script ${bucket} query`);
+  return bin.value;
 }
 
 function input(overrides: Partial<BuildRetrievalLogRowInput> = {}): BuildRetrievalLogRowInput {
@@ -84,7 +93,7 @@ describe('query-language confidence in the FBK-01 row (RAG_LANG_CONFIDENCE)', ()
       expect(RetrievalLogEntrySchema.safeParse(row).success).toBe(true);
     }
     const en = buildRetrievalLogRow(input({ languageConfidence: 'calibrated' }));
-    expect(en.query_language_confidence).toBe(0.9867);
+    expect(en.query_language_confidence).toBe(committedEnBinValue());
     expect(buildRetrievalLogRow(input({ query: '12345 678', languageConfidence: 'calibrated' })).query_language_confidence).toBeNull();
     expect(
       buildRetrievalLogRow(input({ result: result({ queryLanguage: 'it' }), languageConfidence: 'calibrated' })).query_language_confidence,
@@ -93,7 +102,7 @@ describe('query-language confidence in the FBK-01 row (RAG_LANG_CONFIDENCE)', ()
 
   it('reads RAG_LANG_CONFIDENCE from the RAG config when the caller passes no mode', () => {
     vi.stubEnv('RAG_LANG_CONFIDENCE', 'calibrated');
-    expect(buildRetrievalLogRow(input()).query_language_confidence).toBe(0.9867);
+    expect(buildRetrievalLogRow(input()).query_language_confidence).toBe(committedEnBinValue());
     vi.stubEnv('RAG_LANG_CONFIDENCE', 'mapped');
     expect(buildRetrievalLogRow(input()).query_language_confidence).toBe(1);
   });
