@@ -154,6 +154,8 @@ export interface NangoFileRecord {
   web_url?: string;
   /** Dropbox: the shared folder that holds the file (files/list_folder sharing_info.parent_shared_folder_id). */
   parent_shared_folder_id?: string;
+  /** A provider revision tag when the listing reports one (Dropbox `rev`), stored as documents.source_etag (D-07). */
+  etag?: string;
 }
 
 /**

@@ -205,6 +205,7 @@ export const CONTENT_TABLE_READERS = [
   { path: 'src/app/api/ai-to-rag/route.ts', reason: 'writer: legacy document and chunk inserts (LEGACY_WRITERS)' },
   { path: 'src/lib/supabase.ts', reason: 'writer: legacy storeDocument insert and its rollback delete (LEGACY_WRITERS)' },
   { path: 'src/lib/nango/sync-manager.ts', reason: 'service code: connector sync bookkeeping and deletes by id; returns no content to a caller' },
+  { path: 'src/lib/nango/source-deletions.ts', reason: 'service code: source deletions by connector identity inside the owner tenant (moved from sync-manager.ts); returns no content to a caller' },
   { path: 'scripts/rag/check-url-metadata.js', reason: 'operator tool: service-role diagnostics run by an operator' },
 ];
 const CONTENT_TABLE_RE = new RegExp(String.raw`\.from\s*(?:<[^>()]*>)?\s*\(\s*(['"\`])(?:${CONTENT_TABLES.join('|')})\1`, 'g');
