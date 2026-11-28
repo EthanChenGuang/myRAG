@@ -1140,3 +1140,6 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
   - MORNING (owner): fill the null prices in config/rag/price-table.json before the 07-33 decide.
   - Lesson: eval outputs a later plan needs must be committed, not left in a gitignored eval/out.
 - 03:48Z PR #137 round 2 pushed (df75bb65). Product audit: every legacy write goes through service_role, so there is no blocker. Full rag-db, all 12 shards, 0 failures. Session archived. Waiting for CI.
+- 04:01Z 07-30 DONE (exec/07-30, check-release-defaults.mjs in pr-smoke; 19 defaults match) and archived; queued for train 43.
+  - Told t41 to stop running rag-db locally, merge main eb85c07f and open its PR. Confirmed W-1 (RAG_CONFIG_GATE is RAG-affecting).
+  - MORNING (owner, for 07-33): in the 07-25 fixture record, the incumbent for the 5 DFLT vars is the 04.1 CANDIDATE (v2, lexical on, auto, threshold on, legacy_rule), not the shipped Phase 4 values. So stage-B b.incumbent measured the candidate. 07-33 must decide which incumbent it measures; adopting the candidate is a flip.
