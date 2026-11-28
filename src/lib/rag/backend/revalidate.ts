@@ -1,10 +1,13 @@
 import { logger } from '@/lib/logger';
+import type { ScopeAccessFilter } from '../tenant/access-filter';
 import type { TenantScope } from '../tenant/scope';
 import { RetrievalBackendError, rpcRows, type RpcClient } from './supabase-rpc';
 import { canonicalTenantKey } from './tenant-key';
 import type { RankedHit } from './types';
 
 export const VALIDATE_RPC = 'rag_validate_chunks';
+/** SEC-12 (07-39, 0742): rag_validate_chunks restricted to chunks and documents whose access_groups overlap the caller's keys. */
+export const VALIDATE_GROUPS_RPC = 'rag_validate_chunks_for_groups';
 export const MAX_VALIDATE_IDS = 500;
 
 export interface ValidatedChunkRow {
@@ -68,26 +71,30 @@ export function logTenantValidationDropped(backend: string, requested: number, d
 /**
  * D-10, isolation layer 2: one rag_validate_chunks call through the admin client keeps exactly the ids that are current, ready, in the
  * caller's tenant and hold a vector in the profile, and hydrates them from Supabase. The tenant key comes from the scope only. There is
- * no switch: every external result passes through here.
+ * no switch: every external result passes through here. SEC-12: with a keys access filter (RAG_DOC_ACCESS_GROUPS on) the call is
+ * rag_validate_chunks_for_groups with exactly those keys; modes off and admin_all (and no filter) keep the plain call and its arguments.
  */
 export async function revalidateChunks(
   scope: TenantScope,
   ids: readonly string[],
-  opts: { client: RpcClient | null; profileId: string; signal: AbortSignal },
+  opts: { client: RpcClient | null; profileId: string; signal: AbortSignal; access?: ScopeAccessFilter },
 ): Promise<RevalidateResult> {
   const tenantKey = canonicalTenantKey(scope);
+  const groups = opts.access?.mode === 'keys' ? [...new Set(opts.access.keys)] : null;
+  const rpc = groups === null ? VALIDATE_RPC : VALIDATE_GROUPS_RPC;
+  if (groups !== null && groups.length === 0) throw new RetrievalBackendError(rpc, 'access_keys_missing');
   const unique = [...new Set(ids)];
-  if (unique.length > MAX_VALIDATE_IDS) throw new RetrievalBackendError(VALIDATE_RPC, 'too_many_ids');
-  if (!opts.client) throw new RetrievalBackendError(VALIDATE_RPC, 'admin_unavailable');
+  if (unique.length > MAX_VALIDATE_IDS) throw new RetrievalBackendError(rpc, 'too_many_ids');
+  if (!opts.client) throw new RetrievalBackendError(rpc, 'admin_unavailable');
   if (unique.length === 0) return { chunks: new Map(), requested: 0, dropped: 0 };
 
-  const response = await opts.client
-    .rpc(VALIDATE_RPC, { p_tenant_key: tenantKey, p_ids: unique, p_profile_id: opts.profileId })
-    .abortSignal(opts.signal);
+  const args: Record<string, unknown> = { p_tenant_key: tenantKey, p_ids: unique, p_profile_id: opts.profileId };
+  if (groups !== null) args.p_access_groups = groups;
+  const response = await opts.client.rpc(rpc, args).abortSignal(opts.signal);
   opts.signal.throwIfAborted();
   if (response.error) {
-    logger.error('RAG Backend', 'rag_validate_chunks failed', { rpc: VALIDATE_RPC, code: response.error.code ?? null });
-    throw new RetrievalBackendError(VALIDATE_RPC, response.error.code ?? 'rpc_error');
+    logger.error('RAG Backend', `${rpc} failed`, { rpc, code: response.error.code ?? null });
+    throw new RetrievalBackendError(rpc, response.error.code ?? 'rpc_error');
   }
 
   const wanted = new Set(unique);

@@ -1,3 +1,4 @@
+import type { ScopeAccessFilter } from '@/lib/rag/tenant/access-filter';
 import type { RetrievalFilters } from '@/lib/rag/backend/types';
 import type { TenantScope } from '@/lib/rag/tenant/scope';
 
@@ -61,6 +62,11 @@ export interface StoreSearchRequest {
   lexicalLimit: number;
   filters: RetrievalFilters;
   signal: AbortSignal;
+  /**
+   * SEC-12 (07-39): scopeAccessFilter(scope). In mode keys the store matches access_groups against any of the keys on every leg; modes
+   * off and admin_all (and absent, which is what the external backend sends for them) leave the store request as today's.
+   */
+  access?: ScopeAccessFilter;
 }
 
 export interface StoreScanPoint {

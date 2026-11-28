@@ -39,6 +39,9 @@ const GA = `g:${ACCESS_IDS.groupA}`;
 const UA = `u:${ACCESS_IDS.memberA}`;
 const OUTSIDER = `u:${ACCESS_IDS.outsider}`;
 const ACCESS_CLAUSE_KEY = 'access_groups';
+/** The scope's keys as minted (sorted), which is the order the adapters send. */
+const MEMBER_KEYS = ['all', UA, GA].sort();
+const OPEN_KEYS = ['all', OUTSIDER].sort();
 
 function orgScope(userId: string): TenantScope {
   return mintScope('org', userId, ACCESS_IDS.org);
@@ -317,7 +320,7 @@ describe('Qdrant legs follow the request access (byte-identical when off)', () =
   it('mode keys adds the group clause to both searches', async () => {
     const filter = scopeAccessFilter(SCOPES.member());
     const body = JSON.parse(await recordedBody(filter)) as { searches: QdrantQueryNode[] };
-    for (const search of body.searches) expect(search.filter?.must).toEqual(expect.arrayContaining([accessClause(['all', UA, GA])]));
+    for (const search of body.searches) expect(search.filter?.must).toEqual(expect.arrayContaining([accessClause(MEMBER_KEYS)]));
   });
 });
 
@@ -346,7 +349,7 @@ describe('revalidateChunks access modes', () => {
     expect(calls).toEqual([
       {
         fn: 'rag_validate_chunks_for_groups',
-        args: { p_tenant_key: canonicalTenantKey(scope), p_ids: ids, p_profile_id: PROFILE_ID, p_access_groups: ['all', UA, GA] },
+        args: { p_tenant_key: canonicalTenantKey(scope), p_ids: ids, p_profile_id: PROFILE_ID, p_access_groups: MEMBER_KEYS },
       },
     ]);
   });
@@ -386,8 +389,8 @@ describe.each<Kind>(['qdrant', 'weaviate'])('%s backend respects the caller\'s g
     await ctx?.close();
   });
 
-  it('declares accessFilter: true', () => {
-    expect(backend.accessFilter).toBe(true);
+  it('declares capabilities.accessFilter: true', () => {
+    expect(backend.capabilities?.accessFilter).toBe(true);
   });
 
   it('a caller with all only gets all-documents; a group member also gets g:<GA>; each re-validated with exactly its keys', async () => {
@@ -399,8 +402,8 @@ describe.each<Kind>(['qdrant', 'weaviate'])('%s backend respects the caller\'s g
       new Set([ACCESS_IDS.chunkOpen, ACCESS_IDS.chunkRestricted, ACCESS_IDS.chunkPrivate]),
     );
     expect(calls.map((c) => [c.fn, c.args.p_access_groups])).toEqual([
-      ['rag_validate_chunks_for_groups', ['all', OUTSIDER]],
-      ['rag_validate_chunks_for_groups', ['all', UA, GA]],
+      ['rag_validate_chunks_for_groups', OPEN_KEYS],
+      ['rag_validate_chunks_for_groups', MEMBER_KEYS],
     ]);
   });
 
@@ -436,7 +439,7 @@ describe.each<Kind>(['qdrant', 'weaviate'])('%s backend respects the caller\'s g
       expect(batches).toHaveLength(1);
       const searches = (batches[0].body as { searches: QdrantQueryNode[] }).searches;
       expect(searches).toHaveLength(2);
-      for (const search of searches) expect(search.filter?.must).toEqual(expect.arrayContaining([accessClause(['all', OUTSIDER])]));
+      for (const search of searches) expect(search.filter?.must).toEqual(expect.arrayContaining([accessClause(OPEN_KEYS)]));
     });
 
     it('layer 2 holds when the store ignores the filter: the restricted rows are dropped by group-aware re-validation', async () => {
@@ -470,7 +473,7 @@ describe.each<Kind>(['qdrant', 'weaviate'])('%s backend respects the caller\'s g
       expect(keyed.map((c) => c.op).sort()).toEqual(['bm25', 'nearVector']);
       for (const call of keyed) {
         expect(call.tenant).not.toBeNull();
-        expect(groupFilters(call.args)).toEqual([{ operator: 'ContainsAny', value: ['all', UA, GA] }]);
+        expect(groupFilters(call.args)).toEqual([{ operator: 'ContainsAny', value: MEMBER_KEYS }]);
       }
       for (const scope of [SCOPES.admin(), SCOPES.off()]) {
         weaviateFake.calls.length = 0;

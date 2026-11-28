@@ -1,6 +1,6 @@
 import type { StoreHit, StoreLegs, StoreSearchRequest } from '../../sync/stores/types';
 import type { TenantScope } from '../../tenant/scope';
-import { createExternalBackend, type ExternalStoreReader } from '../external';
+import { assertExternalAccess, createExternalBackend, type ExternalStoreReader } from '../external';
 import type { SecurityLogSink } from '../revalidate';
 import { RetrievalBackendError, type RpcClient } from '../supabase-rpc';
 import { canonicalTenantKey, isCanonicalTenantKey, weaviateCollectionName, weaviateTenantName } from '../tenant-key';
@@ -106,6 +106,21 @@ export function buildWeaviateFilter(col: WeaviateTenantCollection, filters: Retr
   return and(parts);
 }
 
+/**
+ * SEC-12 (07-39): in mode keys the access_groups containsAny filter over the caller's keys joins the native filters on both legs,
+ * inside the tenant handle. Without it (modes off and admin_all) the filter is today's.
+ */
+export function withAccessGroups(
+  col: WeaviateTenantCollection,
+  where: WeaviateFilterValue | undefined,
+  access: StoreSearchRequest['access'],
+): WeaviateFilterValue | undefined {
+  if (access === undefined || access.mode !== 'keys') return where;
+  if (access.keys.length === 0) throw new RetrievalBackendError('weaviate.search', 'access_keys_missing');
+  const groups = col.filter.byProperty('access_groups').containsAny([...new Set(access.keys)]);
+  return where === undefined ? groups : and([groups, where]);
+}
+
 function abortReason(signal: AbortSignal): unknown {
   return signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
 }
@@ -158,7 +173,7 @@ export async function searchWeaviateLegs(source: WeaviateClientSource, req: Stor
   const client = await resolveClient(source);
   signal.throwIfAborted();
   const col = tenantCollection(client, req.scope, req.profileId);
-  const where = buildWeaviateFilter(col, req.filters);
+  const where = withAccessGroups(col, buildWeaviateFilter(col, req.filters), req.access);
   const tokens = req.lexicalTokens.filter((token) => typeof token === 'string' && token.trim().length > 0);
   const dense =
     req.denseVector && req.denseVector.length > 0 && req.denseLimit > 0
@@ -249,12 +264,12 @@ export function createWeaviateBackend(deps: WeaviateBackendDeps): RetrievalBacke
   });
   return {
     id: 'weaviate',
-    search(req) {
-      try {
-        assertWeaviateRequestSupported(req);
-      } catch (error) {
-        return Promise.reject(error);
-      }
+    // SEC-12 (07-39): both legs carry the caller's access keys in mode keys; re-validation re-checks them.
+    capabilities: { accessFilter: true },
+    async search(req) {
+      assertWeaviateRequestSupported(req);
+      // req.access must equal scopeAccessFilter(req.scope): the caller's groups come only from the server-resolved scope.
+      await assertExternalAccess(req, 'weaviate.search');
       return inner.search(req);
     },
     health: () => inner.health(),
