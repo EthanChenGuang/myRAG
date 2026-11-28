@@ -926,3 +926,8 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 00:06Z plan-41-18-revise DONE (eae2433c): D-28 revision plus 5 tasks; Task 2b refits both floors. Accepted. exec 04.1-18-r2 dispatched. why.py note: the old 04.1-18 stop SUMMARY makes it look done until r2 renames it. Archived.
 - 00:07Z quick-52-fixes DONE exec/quick-52-fixes 6d8953d8 -> train 41. Covers B1/B2 (refusals cached and logged as refusals), the output-guard parse, the new eval-harness-import boundary rule, and 05.2-LIVE.md (owner checklist). Archived.
 - 00:08Z docs-agents-rebuild DONE exec/docs-agents-rebuild f51b2343 -> train 41 (after rbm and quick-41). TRAIN NOTE: once quick-41 is in the same train, drop the 'once quick-41 is merged' qualifier from AGENTS.md. Archived.
+- 00:10Z CLEANUP (owner asked):
+  - All completed sessions were already archived.
+  - RULE SLIP: I archived fix/ci-timeouts (SUMMARY 2682a364 was pushed) while its shard verification was still running. Unarchived it and asked it to finish the checks and report.
+  - Nudged term-rpc-hardening (idle 76 min) and the 3.2 verify (idle 2 h) to rerun stalled background suites in the foreground.
+  - Still running: verify 6.1/6, 07-37, 06.2-41, and the rest of the in-flight list.
