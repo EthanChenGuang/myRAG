@@ -213,10 +213,15 @@ from rag_eval.phase42_gate import (  # noqa: E402
     versions_gate,
 )
 from rag_eval.phase_compare import RunOutput  # noqa: E402
+from rag_eval.phase_compare import with_min_gate_n
 from rag_eval.profile_compare import baseline_from_report  # noqa: E402
 from rag_eval.report import build_report  # noqa: E402
 
-NOISE = NoiseConfig.model_validate_json((REPO_ROOT / "eval" / "config" / "noise.json").read_text(encoding="utf-8"))
+# These tests check the noise-band arithmetic on small synthetic slices; min_gate_n=1 gates every slice.
+# The min_gate_n rule itself (default 10, owner decision 2026-11-28) is tested in test_min_gate_n.py.
+NOISE = with_min_gate_n(
+    NoiseConfig.model_validate_json((REPO_ROOT / "eval" / "config" / "noise.json").read_text(encoding="utf-8")), 1
+)
 # The calibration result the refusal-cell rule tests were written against, frozen when plan 05.3-15 re-calibrated the
 # fixture (golden set version 2); the committed result now lives in eval/reports/refusal-calibration-fixture/.
 CALIBRATION = REPO_ROOT / "eval" / "tests" / "data" / "refusal-calibration-result.pre-05.3-15.json"
@@ -559,6 +564,7 @@ def _spec_with(tmp_path):
     payload = json.loads(spec.model_dump_json())
     payload["baselines"] = {"prechunked": str(baseline_path), "ingest": str(baseline_path)}
     payload["calibration_result"] = str(CALIBRATION)
+    payload["no_slice_drop_rule"] = {"version": 2, "min_gate_n": 1}
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
 

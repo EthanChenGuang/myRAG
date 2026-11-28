@@ -23,6 +23,12 @@ SPECS = {
     "phase44-comparison.json": phase44_gate.Phase44GateSpec,
     "phase33-gates.json": phase33_gate.Phase33GatesSpec,
     "phase52-comparison.json": phase_compare.SwitchComparisonSpec,
+    "phase4-comparison.json": phase_compare.ComparisonSpec,
+    "phase33-comparison.json": phase_compare.SwitchComparisonSpec,
+    "phase5-comparison.json": phase_compare.SwitchComparisonSpec,
+    "phase51-comparison.json": phase_compare.SwitchComparisonSpec,
+    "phase5.1.1-comparison.json": phase_compare.SwitchComparisonSpec,
+    "phase6-comparison.json": phase_compare.SwitchComparisonSpec,
 }
 
 

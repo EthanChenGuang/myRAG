@@ -56,11 +56,16 @@ from rag_eval.phase_compare import (
     translation_rule,
     xlg03_verdict,
 )
+from rag_eval.phase_compare import with_min_gate_n
 from rag_eval.profile_compare import baseline_from_report
 from rag_eval.report import build_report
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-NOISE = NoiseConfig.model_validate_json((REPO_ROOT / "eval" / "config" / "noise.json").read_text(encoding="utf-8"))
+# These tests check the noise-band arithmetic on small synthetic slices; min_gate_n=1 gates every slice.
+# The min_gate_n rule itself (default 10, owner decision 2026-11-28) is tested in test_min_gate_n.py.
+NOISE = with_min_gate_n(
+    NoiseConfig.model_validate_json((REPO_ROOT / "eval" / "config" / "noise.json").read_text(encoding="utf-8")), 1
+)
 SPEC = REPO_ROOT / "eval" / "config" / "phase4-comparison.json"
 SWEEP = REPO_ROOT / "eval" / "reports" / "chunking-sweep.json"
 DECISION = REPO_ROOT / "eval" / "decisions" / "chunking" / "contract_legal.json"
