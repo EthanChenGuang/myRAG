@@ -4,8 +4,8 @@ import type { PGlite } from '@electric-sql/pglite';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 
 /**
- * 0921 (Phase 4.3) adds access_groups CHECK constraints to documents and document_chunks. RLS still lets an owner write those rows as
- * `authenticated`, so the constraints must be evaluable by that role: they state the rule inline instead of calling the service_role-only
+ * 0921 (Phase 4.3) adds access_groups CHECK constraints to documents and document_chunks. RLS still lets an owner update those rows as
+ * `authenticated` (inserts are service-role only since 0991), so the constraints must be evaluable by that role: they state the rule inline instead of calling the service_role-only
  * rag_access_keys_valid. Default arrays pass, invalid keys still violate the constraint, and the function itself stays service_role only.
  * Since 0923 (04.3-04) a client cannot change documents.access_groups at all (access_groups_server_only); server writes set labels.
  */
@@ -65,8 +65,10 @@ for (const mode of MODES) {
       ]);
     });
 
-    test('an owner inserts and updates a document and its chunk with the default access groups', async () => {
-      await asOwner(db, async () => {
+    test('a server-written document and chunk take the default access groups, and the owner updates them', async () => {
+      // UF-1 (0991): client roles cannot INSERT documents or chunks; the app writes them with the service role.
+      await db.exec('SET ROLE service_role');
+      try {
         await db.query('INSERT INTO documents (id, filename, content, user_id) VALUES ($1, $2, $3, $4)', [DOC, 'owned.md', 'body', OWNER]);
         await db.query('INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index) VALUES ($1, $2, $3, $4, 0)', [
           CHUNK,
@@ -74,6 +76,10 @@ for (const mode of MODES) {
           'chunk body',
           ZERO_VECTOR,
         ]);
+      } finally {
+        await db.exec('RESET ROLE');
+      }
+      await asOwner(db, async () => {
         const doc = await db.query('UPDATE documents SET filename = $2 WHERE id = $1 RETURNING id', [DOC, 'renamed.md']);
         assert.equal(doc.rows.length, 1, 'the owner policy allows the document update');
         await db.query('UPDATE document_chunks SET content = $2 WHERE id = $1', [CHUNK, 'edited chunk body']);

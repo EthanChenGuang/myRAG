@@ -1689,14 +1689,6 @@ CREATE POLICY "Users can view documents" ON documents
   );
 
 DROP POLICY IF EXISTS "Users can create documents" ON documents;
-CREATE POLICY "Users can create documents" ON documents
-  FOR INSERT WITH CHECK (
-    -- Personal upload
-    (user_id = auth.uid() AND organization_id IS NULL)
-    OR
-    -- Organizational upload (must be member)
-    (organization_id IS NOT NULL AND is_org_member(organization_id, auth.uid()))
-  );
 
 DROP POLICY IF EXISTS "Users can delete documents" ON documents;
 CREATE POLICY "Users can delete documents" ON documents
@@ -1736,17 +1728,6 @@ CREATE POLICY "Users can view chunks" ON document_chunks
   );
 
 DROP POLICY IF EXISTS "Users can create chunks" ON document_chunks;
-CREATE POLICY "Users can create chunks" ON document_chunks
-  FOR INSERT WITH CHECK (
-    -- Personal chunks
-    document_id IN (
-      SELECT id FROM documents
-      WHERE user_id = auth.uid() AND organization_id IS NULL
-    )
-    OR
-    -- Organizational chunks
-    (organization_id IS NOT NULL AND is_org_member(organization_id, auth.uid()))
-  );
 
 DROP POLICY IF EXISTS "Users can delete chunks" ON document_chunks;
 CREATE POLICY "Users can delete chunks" ON document_chunks
@@ -6347,6 +6328,39 @@ CREATE TRIGGER rag_guard_ingest_state
     'status', 'is_current', 'version', 'tenant_key', 'document_id', 'provisional', 'doc_type', 'doc_date', 'language', 'source',
     'chunk_kind', 'content_hash', 'parser_used', 'embedding_text_version'
   );
+
+-- 0991 (UF-1): client roles cannot INSERT into documents or document_chunks; every app writer uses the service role.
+CREATE OR REPLACE FUNCTION public.rag_guard_direct_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  IF current_user IN ('service_role', 'postgres', 'supabase_admin') THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'rows of %.% cannot be inserted by role %', TG_TABLE_SCHEMA, TG_TABLE_NAME, current_user
+    USING ERRCODE = '42501';
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_guard_direct_insert() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_guard_direct_insert() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_guard_direct_insert ON public.documents;
+CREATE TRIGGER rag_guard_direct_insert
+  BEFORE INSERT ON public.documents
+  FOR EACH ROW EXECUTE FUNCTION public.rag_guard_direct_insert();
+
+DROP TRIGGER IF EXISTS rag_guard_direct_insert ON public.document_chunks;
+CREATE TRIGGER rag_guard_direct_insert
+  BEFORE INSERT ON public.document_chunks
+  FOR EACH ROW EXECUTE FUNCTION public.rag_guard_direct_insert();
+
+DROP POLICY IF EXISTS "Authenticated users insert own documents" ON public.documents;
+DROP POLICY IF EXISTS "Authenticated users insert chunks of own documents" ON public.document_chunks;
+DROP POLICY IF EXISTS "Users can create documents" ON public.documents;
+DROP POLICY IF EXISTS "Users can create chunks" ON public.document_chunks;
 
 COMMIT;
 
