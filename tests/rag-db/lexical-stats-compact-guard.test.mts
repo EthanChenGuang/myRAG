@@ -149,7 +149,7 @@ for (const mode of MODES) {
     async function rowsOf(key: string): Promise<string> {
       const parts: unknown[] = [];
       for (const table of STATS_TABLES) {
-        parts.push((await db.query(`SELECT * FROM public.${table} WHERE tenant_key = $1 ORDER BY 1, 2`, [key])).rows.map((r) => ({ ...r, created_at: null, enabled_at: null })));
+        parts.push((await db.query<Record<string, unknown>>(`SELECT * FROM public.${table} WHERE tenant_key = $1 ORDER BY 1, 2`, [key])).rows.map((r) => ({ ...r, created_at: null, enabled_at: null })));
       }
       return JSON.stringify(parts);
     }
