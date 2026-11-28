@@ -80,6 +80,72 @@
       "title": "BudgetedLatency",
       "type": "object"
     },
+    "CalcRates": {
+      "additionalProperties": false,
+      "description": "D-77, D-78: the calculation rates of one population of multi_step_calc items, per language and category.\n\nnumeric_correctness: the stated number within the item's tolerance of the expected value. numeric_correctness_effective:\nthe stated number, or the value of a calc_corrected notice. paraphrase_consistency: per paraphrase group, every member\ngives the same effective number (n counts groups). steps_listed_rate, calc_used_rate, calc_not_verified_rate and\ncalc_review_rate read calc_observed, calc and review_reasons.",
+      "properties": {
+        "calc_not_verified_rate": {
+          "$ref": "#/$defs/AnswerRuleMetric"
+        },
+        "calc_review_rate": {
+          "$ref": "#/$defs/AnswerRuleMetric"
+        },
+        "calc_used_rate": {
+          "$ref": "#/$defs/AnswerRuleMetric"
+        },
+        "items": {
+          "minimum": 0,
+          "title": "Items",
+          "type": "integer"
+        },
+        "numeric_correctness": {
+          "$ref": "#/$defs/AnswerRuleMetric"
+        },
+        "numeric_correctness_effective": {
+          "$ref": "#/$defs/AnswerRuleMetric"
+        },
+        "paraphrase_consistency": {
+          "$ref": "#/$defs/AnswerRuleMetric"
+        },
+        "steps_listed_rate": {
+          "$ref": "#/$defs/AnswerRuleMetric"
+        }
+      },
+      "required": [
+        "items",
+        "numeric_correctness",
+        "numeric_correctness_effective",
+        "paraphrase_consistency",
+        "steps_listed_rate",
+        "calc_used_rate",
+        "calc_not_verified_rate",
+        "calc_review_rate"
+      ],
+      "title": "CalcRates",
+      "type": "object"
+    },
+    "CalcReport": {
+      "additionalProperties": false,
+      "description": "D-77, D-78: multi_step_calc metrics from the trace records; all_items scores every item (a refused or unanswered\nitem scores 0), evidence_in_context only the items whose gold evidence reached the kept context.",
+      "properties": {
+        "all_items": {
+          "$ref": "#/$defs/CalcRates"
+        },
+        "evidence_in_context": {
+          "$ref": "#/$defs/CalcRates"
+        },
+        "evidence_in_context_rate": {
+          "$ref": "#/$defs/AnswerRuleMetric"
+        }
+      },
+      "required": [
+        "evidence_in_context_rate",
+        "all_items",
+        "evidence_in_context"
+      ],
+      "title": "CalcReport",
+      "type": "object"
+    },
     "DateRangeFilter": {
       "additionalProperties": false,
       "properties": {
@@ -701,6 +767,44 @@
         "state"
       ],
       "title": "NativeReviewBacklogEntry",
+      "type": "object"
+    },
+    "OverflowReport": {
+      "additionalProperties": false,
+      "description": "D-88: context_overflow metrics of a run with the prompt budget on, from prompt_budget, answer_error and the kept\ncontext. overflow_error_rate: an answer_error (window exceeded, question not last, prompt_budget_exceeded).\nhistory_before_documents_rate: no document dropped while a history turn was kept. must_keep_rate: every must_keep span\nin the kept context. budget_trace_rate: prompt_budget with its parts and dropped_documents on the trace.",
+      "properties": {
+        "budget_trace_rate": {
+          "$ref": "#/$defs/AnswerRuleMetric"
+        },
+        "history_before_documents_rate": {
+          "$ref": "#/$defs/AnswerRuleMetric"
+        },
+        "items": {
+          "minimum": 0,
+          "title": "Items",
+          "type": "integer"
+        },
+        "must_keep_rate": {
+          "$ref": "#/$defs/AnswerRuleMetric"
+        },
+        "overflow_error_rate": {
+          "$ref": "#/$defs/AnswerRuleMetric"
+        },
+        "pipeline": {
+          "minLength": 1,
+          "title": "Pipeline",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pipeline",
+        "items",
+        "overflow_error_rate",
+        "history_before_documents_rate",
+        "must_keep_rate",
+        "budget_trace_rate"
+      ],
+      "title": "OverflowReport",
       "type": "object"
     },
     "QueryBudgetMsOverride": {
@@ -2618,6 +2722,9 @@
       "title": "By Strategy",
       "type": "object"
     },
+    "calc": {
+      "$ref": "#/$defs/CalcReport"
+    },
     "citation_coverage": {
       "anyOf": [
         {
@@ -2829,6 +2936,9 @@
     "overall": {
       "$ref": "#/$defs/SliceMetrics"
     },
+    "overflow": {
+      "$ref": "#/$defs/OverflowReport"
+    },
     "pre_generation": {
       "additionalProperties": {
         "$ref": "#/$defs/StageLatency"
@@ -2892,6 +3002,11 @@
     },
     "run_config_hash": {
       "title": "Run Config Hash",
+      "type": "string"
+    },
+    "run_config_name": {
+      "minLength": 1,
+      "title": "Run Config Name",
       "type": "string"
     },
     "run_id": {

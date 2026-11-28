@@ -160,6 +160,48 @@ class AnswerRulesReport(_Contract):
     truncation_rate: AnswerRuleMetric | None = _optional_rule_metric()
 
 
+class CalcRates(_Contract):
+    """D-77, D-78: the calculation rates of one population of multi_step_calc items, per language and category.
+
+    numeric_correctness: the stated number within the item's tolerance of the expected value. numeric_correctness_effective:
+    the stated number, or the value of a calc_corrected notice. paraphrase_consistency: per paraphrase group, every member
+    gives the same effective number (n counts groups). steps_listed_rate, calc_used_rate, calc_not_verified_rate and
+    calc_review_rate read calc_observed, calc and review_reasons.
+    """
+
+    items: int = Field(ge=0)
+    numeric_correctness: AnswerRuleMetric
+    numeric_correctness_effective: AnswerRuleMetric
+    paraphrase_consistency: AnswerRuleMetric
+    steps_listed_rate: AnswerRuleMetric
+    calc_used_rate: AnswerRuleMetric
+    calc_not_verified_rate: AnswerRuleMetric
+    calc_review_rate: AnswerRuleMetric
+
+
+class CalcReport(_Contract):
+    """D-77, D-78: multi_step_calc metrics from the trace records; all_items scores every item (a refused or unanswered
+    item scores 0), evidence_in_context only the items whose gold evidence reached the kept context."""
+
+    evidence_in_context_rate: AnswerRuleMetric
+    all_items: CalcRates
+    evidence_in_context: CalcRates
+
+
+class OverflowReport(_Contract):
+    """D-88: context_overflow metrics of a run with the prompt budget on, from prompt_budget, answer_error and the kept
+    context. overflow_error_rate: an answer_error (window exceeded, question not last, prompt_budget_exceeded).
+    history_before_documents_rate: no document dropped while a history turn was kept. must_keep_rate: every must_keep span
+    in the kept context. budget_trace_rate: prompt_budget with its parts and dropped_documents on the trace."""
+
+    pipeline: str = Field(min_length=1)
+    items: int = Field(ge=0)
+    overflow_error_rate: AnswerRuleMetric
+    history_before_documents_rate: AnswerRuleMetric
+    must_keep_rate: AnswerRuleMetric
+    budget_trace_rate: AnswerRuleMetric
+
+
 InjectionConfigLabel = Literal["all_off", "recommended", "tagging_only", "other"]
 
 
@@ -315,6 +357,12 @@ class EvalReport(_Contract):
     injection: InjectionReport | None = None
     answer_rules: AnswerRulesReport | None = Field(
         default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    # Phase 5.2.1 (D-77, D-78, D-88); absent on reports recorded before it and on runs without the items' traces.
+    calc: CalcReport | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    overflow: OverflowReport | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    run_config_name: str | None = Field(
+        default=None, min_length=1, exclude_if=_omit_none, json_schema_extra=omit_none_schema
     )
     query_layer: QueryLayerReport | None = None
     semantic_cache: SemanticCacheReport | None = None

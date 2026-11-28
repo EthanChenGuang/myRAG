@@ -1334,3 +1334,296 @@ def test_topk_redundancy_reads_the_app_trace_value_when_present():
     assert cluster_only.topk_redundancy == 0.25
     (from_app,) = score_items([clustered.model_copy(update={"topk_redundancy": 0.125})], [item])
     assert from_app.topk_redundancy == 0.125
+
+
+# Plan 05.2.1-23: calculation and overflow metrics (D-77, D-78, D-88) on the committed fixture items.
+
+from rag_eval.golden_io import load_golden  # noqa: E402
+from rag_eval.metrics import calc_metrics, overflow_metrics  # noqa: E402
+from rag_eval.paths import REPO_ROOT  # noqa: E402
+
+P521_GOLDEN = {item.id: item for item in load_golden(REPO_ROOT / "eval/fixtures/golden.jsonl")}
+CALC_IDS = sorted(item.id for item in P521_GOLDEN.values() if item.category == "multi_step_calc")
+OVERFLOW_IDS = sorted(item.id for item in P521_GOLDEN.values() if item.category == "context_overflow")
+CAP_GROUP = ["en-multi-step-calc-001", "en-multi-step-calc-002", "en-multi-step-calc-003"]
+
+
+def _calc(traces, golden):
+    report = calc_metrics(traces, golden)
+    assert report is not None, "no calc report"
+    return report
+
+
+def _overflow(traces, golden):
+    report = overflow_metrics(traces, golden)
+    assert report is not None, "no overflow report"
+    return report
+
+
+def _evidence(item_id: str) -> list[tuple[str, str]]:
+    return [(span.document, span.quote) for span in P521_GOLDEN[item_id].gold_evidence]
+
+
+def _with(trace: RagTrace, **fields) -> RagTrace:
+    return RagTrace.model_validate({**trace.model_dump(mode="json"), **fields})
+
+
+def _calc_trace(
+    item_id: str,
+    stated: str | None,
+    *,
+    check: str | None = None,
+    recomputed: str | None = None,
+    reason: str | None = None,
+    notice: bool | None = None,
+    steps: bool = True,
+    origin: str | None = "tool",
+    kept: list[tuple[str, str]] | None = None,
+    refused: bool = False,
+) -> RagTrace:
+    base = _trace(item_id, [] if refused else (kept if kept is not None else _evidence(item_id)), refused=refused)
+    if refused:
+        return base
+    fields: dict = {
+        "answer": f"counted total: {stated}" if stated is not None else "counted total",
+        "calc_observed": {"stated": stated, "steps_listed": steps, "tool_used": origin == "tool", "origin": origin},
+    }
+    if check is not None:
+        record: dict = {"status": check, "stated": stated, "origin": origin, "unit": "pell"}
+        if check == "not_verified":
+            record = {"status": check, "stated": stated, "reason": reason or "operand_not_located"}
+            fields["review_reasons"] = ["calc_unverified"]
+        else:
+            record.update({"recomputed": recomputed or stated, "trace_hash": "a" * 64})
+            fields["review_reasons"] = ["calc_mismatch"] if check == "corrected" else []
+        fields["calc"] = [record]
+        if notice if notice is not None else check == "corrected":
+            fields["notices"] = [{"kind": "calc_corrected", "text": f"rechecked: {recomputed}", "language": "en"}]
+    return _with(base, **fields)
+
+
+def _expected(item_id: str) -> str:
+    calc = P521_GOLDEN[item_id].calc
+    assert calc is not None
+    return calc.expected_value
+
+
+def _follow_traces() -> list[RagTrace]:
+    return [_calc_trace(item_id, _expected(item_id), check="verified") for item_id in CALC_IDS]
+
+
+def _value(metric, slice_name: str = "overall"):
+    cell = metric.overall if slice_name == "overall" else metric.by_language[slice_name.split(":", 1)[1]]
+    return cell.value, cell.n
+
+
+def test_calc_metrics_are_one_when_every_item_states_the_expected_value():
+    report = _calc(_follow_traces(), list(P521_GOLDEN.values()))
+    assert report is not None
+    for rates in (report.all_items, report.evidence_in_context):
+        assert rates.items == len(CALC_IDS)
+        for name in ("numeric_correctness", "numeric_correctness_effective", "paraphrase_consistency", "steps_listed_rate", "calc_used_rate"):
+            assert _value(getattr(rates, name))[0] == 1.0, name
+        assert _value(rates.calc_not_verified_rate)[0] == 0.0
+        assert _value(rates.calc_review_rate)[0] == 0.0
+    assert set(report.all_items.numeric_correctness.by_language) == {"en", "it", "zh"}
+    assert report.all_items.numeric_correctness.by_category == {"multi_step_calc": report.all_items.numeric_correctness.overall}
+    assert _value(report.all_items.paraphrase_consistency) == (1.0, 15)
+
+
+def test_calc_a_corrected_wrong_number_is_effectively_correct_but_not_correct():
+    expected = _expected(CAP_GROUP[0])
+    traces = [_calc_trace(CAP_GROUP[0], "40", check="corrected", recomputed=expected)]
+    rates = _calc(traces, list(P521_GOLDEN.values())).all_items
+    assert _value(rates.numeric_correctness) == (0.0, 1)
+    assert _value(rates.numeric_correctness_effective) == (1.0, 1)
+    assert _value(rates.calc_review_rate) == (1.0, 1)
+    without_notice = [_calc_trace(CAP_GROUP[0], "40", check="corrected", recomputed=expected, notice=False)]
+    assert _value(_calc(without_notice, list(P521_GOLDEN.values())).all_items.numeric_correctness_effective) == (0.0, 1)
+
+
+def test_calc_stated_value_is_compared_within_the_tolerance_as_exact_decimals():
+    item = P521_GOLDEN[CAP_GROUP[0]]
+    loose = item.model_copy(update={"calc": item.calc.model_copy(update={"tolerance": "0.5"})})
+    golden = [loose]
+    assert _value(_calc([_calc_trace(item.id, "105.5")], golden).all_items.numeric_correctness)[0] == 1.0
+    assert _value(_calc([_calc_trace(item.id, "105.51")], golden).all_items.numeric_correctness)[0] == 0.0
+    assert _value(_calc([_calc_trace(item.id, "104.5")], golden).all_items.numeric_correctness)[0] == 1.0
+
+
+def test_calc_paraphrase_group_with_one_differing_number_is_inconsistent():
+    expected = _expected(CAP_GROUP[0])
+    traces = [_calc_trace(CAP_GROUP[0], expected), _calc_trace(CAP_GROUP[1], expected), _calc_trace(CAP_GROUP[2], str(int(expected) + 1))]
+    rates = _calc(traces, list(P521_GOLDEN.values())).all_items
+    assert _value(rates.paraphrase_consistency) == (0.0, 1)
+    corrected = traces[:2] + [_calc_trace(CAP_GROUP[2], str(int(expected) + 1), check="corrected", recomputed=expected)]
+    assert _value(_calc(corrected, list(P521_GOLDEN.values())).all_items.paraphrase_consistency) == (1.0, 1)
+
+
+def test_calc_refused_or_evidence_less_items_score_zero_in_all_items_and_leave_the_evidence_population():
+    expected = _expected(CAP_GROUP[0])
+    traces = [
+        _calc_trace(CAP_GROUP[0], expected),
+        _calc_trace(CAP_GROUP[1], None, refused=True),
+        _calc_trace(CAP_GROUP[2], "40", origin=None, steps=False, kept=[(DOC, "unrelated filler paragraph")]),
+    ]
+    report = _calc(traces, list(P521_GOLDEN.values()))
+    assert _value(report.evidence_in_context_rate) == (pytest.approx(1 / 3), 3)
+    assert report.all_items.items == 3 and report.evidence_in_context.items == 1
+    assert _value(report.all_items.numeric_correctness) == (pytest.approx(1 / 3), 3)
+    assert _value(report.all_items.steps_listed_rate) == (pytest.approx(1 / 3), 3)
+    assert _value(report.all_items.calc_used_rate) == (pytest.approx(1 / 3), 3)
+    assert _value(report.all_items.paraphrase_consistency) == (0.0, 1)
+    assert _value(report.evidence_in_context.numeric_correctness) == (1.0, 1)
+    assert report.evidence_in_context.paraphrase_consistency.overall.n == 0
+
+
+def test_calc_not_verified_and_review_rates_read_the_check_records():
+    traces = [
+        _calc_trace(CAP_GROUP[0], _expected(CAP_GROUP[0]), check="not_verified", reason="operand_not_located"),
+        _calc_trace(CAP_GROUP[1], _expected(CAP_GROUP[1]), check="verified"),
+    ]
+    rates = _calc(traces, list(P521_GOLDEN.values())).all_items
+    assert _value(rates.calc_not_verified_rate) == (0.5, 2)
+    assert _value(rates.calc_review_rate) == (0.5, 2)
+
+
+def test_calc_metrics_ignore_other_categories_and_runs_without_answers():
+    golden = list(P521_GOLDEN.values())
+    assert calc_metrics([_trace("en-partial-answer-001", [])], golden) is None
+    assert calc_metrics([_trace(CAP_GROUP[0], _evidence(CAP_GROUP[0]))], golden) is None
+    report = _calc([_calc_trace(CAP_GROUP[0], _expected(CAP_GROUP[0])), _trace("en-partial-answer-001", [])], golden)
+    assert report.all_items.items == 1
+
+
+def _budget(*, dropped_documents: int = 0, dropped_history_turns: int = 0, status: str = "ok") -> dict:
+    return {
+        "parts": {"system": 700, "rules": 0, "tools": 0, "history": 0, "question": 30, "documents": 1500, "reserve": 512},
+        "estimated_raw_total": 2000,
+        "window": 4096,
+        "window_source": "model",
+        "context_length_unknown": False,
+        "estimator": {"encoding": "cl100k_base", "family": "fixture", "factor": 1.3, "factor_source": "measured"},
+        "dropped_documents": dropped_documents,
+        "dropped_history_turns": dropped_history_turns,
+        "near_limit": False,
+        "overflow_mode": "truncate",
+        "status": status,
+        "standalone_kept": False,
+    }
+
+
+def _must_keep(item_id: str) -> list[tuple[str, str]]:
+    spec = P521_GOLDEN[item_id].overflow
+    assert spec is not None
+    return [(span.document, span.quote) for span in spec.must_keep]
+
+
+def _overflow_trace(item_id: str, *, kept: list[tuple[str, str]] | None = None, budget: dict | None = None, error: str | None = None, pipeline: str = "v2", refused: bool = False) -> RagTrace:
+    base = _trace(item_id, [] if refused else (kept if kept is not None else _must_keep(item_id)), refused=refused)
+    payload = base.model_dump(mode="json")
+    payload["effective_config"]["rag_env"] = {"RAG_PIPELINE": pipeline, "RAG_PROMPT_BUDGET": "true"}
+    if budget is not None:
+        payload["prompt_budget"] = budget
+    if error is not None:
+        payload["answer_error"] = error
+    return RagTrace.model_validate(payload)
+
+
+def _history_turns(item_id: str) -> int:
+    return sum(1 for turn in P521_GOLDEN[item_id].conversation if turn.role == "user")
+
+
+def _clean_overflow() -> list[RagTrace]:
+    traces = []
+    for item_id in OVERFLOW_IDS:
+        turns = _history_turns(item_id)
+        traces.append(_overflow_trace(item_id, budget=_budget(dropped_documents=3, dropped_history_turns=turns)))
+    return traces
+
+
+def test_overflow_metrics_on_a_clean_run():
+    report = _overflow(_clean_overflow(), list(P521_GOLDEN.values()))
+    assert report is not None
+    assert report.pipeline == "v2" and report.items == len(OVERFLOW_IDS)
+    assert _value(report.overflow_error_rate) == (0.0, 12)
+    for name in ("history_before_documents_rate", "must_keep_rate", "budget_trace_rate"):
+        assert _value(getattr(report, name)) == (1.0, 12), name
+    assert set(report.must_keep_rate.by_language) == {"en", "it", "zh"}
+
+
+def test_overflow_a_long_history_item_that_dropped_a_document_while_keeping_a_turn_fails_history_before_documents():
+    item_id = "en-context-overflow-003"
+    assert P521_GOLDEN[item_id].overflow.kind == "long_history"
+    turns = _history_turns(item_id)
+    kept_turn = [_overflow_trace(item_id, budget=_budget(dropped_documents=2, dropped_history_turns=turns - 1))]
+    assert _value(_overflow(kept_turn, list(P521_GOLDEN.values())).history_before_documents_rate) == (0.0, 1)
+    all_dropped = [_overflow_trace(item_id, budget=_budget(dropped_documents=2, dropped_history_turns=turns))]
+    assert _value(_overflow(all_dropped, list(P521_GOLDEN.values())).history_before_documents_rate) == (1.0, 1)
+    no_document_dropped = [_overflow_trace(item_id, budget=_budget(dropped_documents=0, dropped_history_turns=1))]
+    assert _value(_overflow(no_document_dropped, list(P521_GOLDEN.values())).history_before_documents_rate) == (1.0, 1)
+
+
+def test_overflow_a_ranked_evidence_item_missing_one_must_keep_quote_fails_must_keep():
+    item_id = "en-context-overflow-002"
+    spans = _must_keep(item_id)
+    assert P521_GOLDEN[item_id].overflow.kind == "ranked_evidence" and len(spans) == 2
+    missing = [_overflow_trace(item_id, kept=spans[:1], budget=_budget(dropped_documents=7))]
+    assert _value(_overflow(missing, list(P521_GOLDEN.values())).must_keep_rate) == (0.0, 1)
+    refused = [_overflow_trace(item_id, budget=_budget(), refused=True)]
+    assert _value(_overflow(refused, list(P521_GOLDEN.values())).must_keep_rate) == (0.0, 1)
+
+
+def test_overflow_errors_and_missing_budget_traces_are_counted():
+    golden = list(P521_GOLDEN.values())
+    first, second = OVERFLOW_IDS[:2]
+    traces = [
+        _overflow_trace(first, budget=_budget(status="exceeded"), error="prompt_budget_exceeded"),
+        _overflow_trace(second, budget=None),
+    ]
+    report = _overflow(traces, golden)
+    assert _value(report.overflow_error_rate) == (0.5, 2)
+    assert _value(report.budget_trace_rate) == (0.5, 2)
+    assert _value(report.history_before_documents_rate) == (0.5, 2)
+    order = [_overflow_trace(first, budget=_budget(), error="question_not_last")]
+    assert _value(_overflow(order, golden).overflow_error_rate) == (1.0, 1)
+
+
+def test_overflow_metrics_need_a_budget_run_and_ignore_other_categories():
+    golden = list(P521_GOLDEN.values())
+    assert overflow_metrics([_overflow_trace(OVERFLOW_IDS[0], budget=None)], golden) is None
+    traces = _clean_overflow() + [_with(_trace("en-partial-answer-001", []), prompt_budget=_budget())]
+    assert _overflow(traces, golden).items == len(OVERFLOW_IDS)
+    legacy = [_overflow_trace(OVERFLOW_IDS[0], budget=_budget(), pipeline="legacy")]
+    assert _overflow(legacy, golden).pipeline == "legacy"
+
+
+def test_calc_and_overflow_blocks_are_in_the_report_and_its_markdown():
+    from test_report_runner import _manifest
+
+    from rag_sidecar.contracts.eval_run import RunConfigRecord
+    from rag_eval.report import _render_markdown, build_report
+
+    golden = [P521_GOLDEN[item_id] for item_id in CALC_IDS + OVERFLOW_IDS]
+    traces = _follow_traces() + _clean_overflow()
+    manifest = _manifest().model_copy(update={"run_config": RunConfigRecord(name="calc-tool-follow")})
+    report = build_report(manifest, score_items(traces, golden), golden, traces, supported_languages=("zh", "en", "it"))
+    assert report.calc is not None and report.overflow is not None
+    assert report.run_config_name == "calc-tool-follow"
+    markdown = _render_markdown(report)
+    calc_section = markdown.split("## Calculation (Phase 5.2.1)", 1)[1].split("\n## ", 1)[0]
+    assert "| numeric_correctness_effective | all_items | language:en |" in calc_section
+    assert "| paraphrase_consistency | evidence_in_context | overall |" in calc_section
+    overflow_section = markdown.split("## Prompt budget overflow (Phase 5.2.1)", 1)[1].split("\n## ", 1)[0]
+    assert "| must_keep_rate | v2 | language:zh |" in overflow_section
+
+
+def test_reports_without_calc_or_overflow_traces_carry_neither_key():
+    from test_report_runner import _manifest
+
+    from rag_eval.report import build_report
+
+    golden = [P521_GOLDEN["en-partial-answer-001"]]
+    traces = [_trace("en-partial-answer-001", [])]
+    dumped = json.loads(build_report(_manifest(), score_items(traces, golden), golden, traces).model_dump_json())
+    assert "calc" not in dumped and "overflow" not in dumped and "run_config_name" not in dumped

@@ -14,9 +14,11 @@ from rag_sidecar.contracts.languages import LANGUAGE_CODES, get_language_pack, t
 from rag_sidecar.contracts.report import (
     AnswerRuleMetric,
     AnswerRulesReport,
+    CalcReport,
     GroundednessLabelCounts,
     ItemResult,
     MetricValue,
+    OverflowReport,
     QuestionKind,
     SliceMetrics,
     TableSplitItemRow,
@@ -1161,3 +1163,13 @@ def allowlisted_link_kept(trace: RagTrace, item: GoldenItem) -> float:
     links = [url for span in item.gold_evidence for url in _urls(span.quote)]
     answer = fold_literal(trace.answer or "")
     return 1.0 if links and all(fold_literal(url) in answer for url in links) else 0.0
+
+
+def calc_metrics(traces: list[RagTrace], golden: list[GoldenItem]) -> CalcReport | None:
+    """D-77, D-78: the multi_step_calc metrics of a run that generated answers; None without such traces."""
+    return None
+
+
+def overflow_metrics(traces: list[RagTrace], golden: list[GoldenItem]) -> OverflowReport | None:
+    """D-88: the context_overflow metrics of a run with the prompt budget on; None without prompt_budget traces."""
+    return None
