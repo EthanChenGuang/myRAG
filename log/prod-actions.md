@@ -173,3 +173,12 @@
 - storage.buckets has no `chat-attachments` bucket on prod.
 - storage.objects has 0 objects under `chat-attachments/extracted-images/`.
 - Nothing to delete on prod. No write.
+
+## 2026-11-28 ~09:45 UTC: PROD (ppvywaxrycaxrtrrditl) NF-1 0989 APPLIED and verified (owner said "跑", chose option A: owner desk applies)
+- Applied the BEGIN..COMMIT block of .planning/quick/261127-nf1-shared-chats-rls/prod-apply.sql as nf1_0989_chats_shared_rls. md5 dd424865da75f1f4ecf8aeacbf7cd77f matches the file block.
+- Before: the SELECT policy "Users can view chats" referenced shared.
+- After:
+  - Four own-row policies; no chats policy mentions shared; RLS is on.
+  - anon sees 0 shared rows (probe rolled back).
+  - Prod has 0 shared chats with a share_id, so no share link exists to open in the browser.
+- No data rows were written.
