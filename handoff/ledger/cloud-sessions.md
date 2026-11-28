@@ -992,3 +992,8 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 00:50Z Dispatched 06.3-09, 06.3-11, 06.3-12 and 06.3-13 (07xx numbers), and the train-41 builder (base t40; long branch list). Owner asked when to switch the DB connector to prod.
 - 00:52Z 07-37 DONE exec/07-37 79a068d6 -> t41 (forced source recheck for external backends; bounded stale repair). Archived. 06.3-14 dispatched from exec/07-37.
 - 00:55Z OWNER going to sleep; autonomous run authorized within quality rules (see standing-rules). Self-check every 20 min; morning summary queued.
+- 00:58Z PR #135 (train 38) MERGED -> main a0c5ca17 (30/30 green).
+  - Merged main into fix/composer-comet (bb615462, PR #136; CI re-running) and fix/uf1-direct-insert (19c7cd7c).
+  - Opened PR #137 (UF-1 hotfix), subscribed. Unsubscribed #135.
+  - Told the NF-1 executor to merge main and finish; told the t39 builder to merge main and open its PR.
+  - MORNING QUEUE: switch the connector to prod; owner desk applies train38-live.sql, then 0989 (NF-1) and 0991 (UF-1) once those PRs merge; then ask about the prod deploy.
