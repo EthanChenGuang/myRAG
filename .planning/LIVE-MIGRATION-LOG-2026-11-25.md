@@ -1419,7 +1419,7 @@ NOTIFY pgrst, 'reload schema';
 
 ## Train 39: 0982, 0983, 0985, 1010 and 0410 r22 delta (to apply after train 38 is live)
 
-Branch `ci/merge-train-39`, built on `ci/merge-train-38` a6b83f83 (PR #135, not yet in `origin/main`). Nothing below has been applied live yet. Production is multi-tenant.
+Branch `ci/merge-train-39`, built on `ci/merge-train-38` a6b83f83 (PR #135), with `origin/main` a0c5ca17 (#135 merged) merged in before the PR. Nothing below has been applied live yet. Production is multi-tenant.
 
 ### Merged plans
 Merged with `--no-ff` in phase order; each exec branch carries its SUMMARY. `exec/03.3-25` and `exec/06.2-27` have no SUMMARY yet and were not merged.

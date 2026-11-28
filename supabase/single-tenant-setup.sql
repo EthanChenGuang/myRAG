@@ -911,7 +911,7 @@ CREATE POLICY "Users can delete their own folders"
 DROP POLICY IF EXISTS "Users can view their own chats" ON chats;
 CREATE POLICY "Users can view their own chats"
   ON chats FOR SELECT
-  USING (((SELECT auth.uid()) = user_id) OR (shared = true));
+  USING ((SELECT auth.uid()) = user_id);
 
 DROP POLICY IF EXISTS "Users can insert their own chats" ON chats;
 CREATE POLICY "Users can insert their own chats"
@@ -928,10 +928,8 @@ CREATE POLICY "Users can delete their own chats"
   ON chats FOR DELETE
   USING ((SELECT auth.uid()) = user_id);
 
+-- Shared chats are read only by the service-role share page and route (by share_id), never through client RLS (NF-1).
 DROP POLICY IF EXISTS "Allow public access to shared chats" ON chats;
-CREATE POLICY "Allow public access to shared chats"
-  ON chats FOR SELECT
-  USING (shared = true);
 
 -- Subscription policies
 DROP POLICY IF EXISTS "Users can view their own subscription" ON subscriptions;
