@@ -34,6 +34,7 @@ import {
   createEnhancedRAGPrompt,
   answerStructureFor,
   answerStructureStage,
+  decomposedAnswerEffective,
   decomposedAnswerFor,
   type DecomposedAnswerInput,
   isOutOfScopeResult,
@@ -2480,6 +2481,8 @@ Context:
             webSearch: webSearchEnabled,
             mcpTools: useMcpForRequest || isHandlingMultiStep || lastAssistantHasToolCall(rawMessages),
             chatId: typeof data?.chatId === 'string' ? data.chatId : null,
+            // 06.2 G2: the decomposed-answer block enters the key only when this route passes it to the prompt
+            ...(decomposedAnswerEffective() ? { decomposedAnswer: true } : {}),
           }
         : undefined;
 

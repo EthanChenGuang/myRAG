@@ -28,6 +28,7 @@ import {
   bodyNamesAccessGroups,
   resolveAccessScope,
   answerStructureFor,
+  decomposedAnswerEffective,
   decomposedAnswerFor,
   type AnswerStructure,
   type DecomposedAnswerInput,
@@ -890,6 +891,8 @@ export async function POST(req: NextRequest) {
           webSearch: false,
           mcpTools: false,
           chatId: null,
+          // 06.2 G2: the decomposed-answer block enters the key only when this route passes it to the prompt
+          ...(decomposedAnswerEffective() ? { decomposedAnswer: true } : {}),
         }
       : undefined;
 

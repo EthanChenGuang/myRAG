@@ -9,7 +9,8 @@ interface DecomposedTurnResult {
   blocks?: readonly ContextBlock[];
 }
 
-function decomposedAnswerEffective(): boolean {
+/** GEN-13: whether an entry point passes the decomposed-answer block to the prompt (the cacheContext flag follows it, 06.2 G2). */
+export function decomposedAnswerEffective(): boolean {
   try {
     return loadRagConfig(getRagDeps().ragEnv()).queryAdditions.effective.decomposedAnswer;
   } catch {
