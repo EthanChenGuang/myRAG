@@ -31,9 +31,10 @@ vi.mock('@/lib/rag', async () => {
 });
 
 import { applySourceDeletions, loadSourceConnection, type SourceConnectionRow } from '@/lib/nango/source-deletions';
+import { raiseSourceAlert } from '@/lib/nango/source-alerts';
 
-const OWNER = TWO_TENANT_IDS.userA;
-const OTHER = TWO_TENANT_IDS.userB;
+const OWNER: string = TWO_TENANT_IDS.userA;
+const OTHER: string = TWO_TENANT_IDS.userB;
 const CONNECTION = 'conn-unit';
 const TENANT = `u:${OWNER}`;
 
@@ -184,5 +185,15 @@ describe('applySourceDeletions (D-03, D-08)', () => {
     const memory = createNangoMemoryAdmin(seed(['file-a']).tables, { rpc: () => ({ data: null, error: { code: 'PGRST202', message: 'missing' } }) });
     const result = await applySourceDeletions(connection('soft'), ['file-a'], 'change_feed', { admin: memory.admin as never });
     expect(result.removed).toBe(1);
+  });
+
+  it('raiseSourceAlert records the state on the connection row (no OBS-03 source rule yet)', async () => {
+    const memory = seed([]);
+    const stored = await raiseSourceAlert(connection(null), 'paused', { candidates: 6, total: 10 }, { admin: memory.admin as never });
+    expect(stored).toBe('connection_status');
+    expect(memory.tables.nango_connections?.[0]?.last_reconcile_status).toBe('paused');
+    expect(memory.ops.filter((op) => op.operation === 'update')).toEqual([
+      { table: 'nango_connections', operation: 'update', filters: [{ kind: 'eq', column: 'id', value: connection(null).id }], values: { last_reconcile_status: 'paused' } },
+    ]);
   });
 });

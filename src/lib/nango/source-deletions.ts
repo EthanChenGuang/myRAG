@@ -2,6 +2,8 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
 import { nangoPipeline } from './document-adapter';
 import type { DeletionMode, DeletionOrigin } from './change-feed';
+import { raiseSourceAlert } from './source-alerts';
+import { env } from '@/lib/env';
 import {
     nangoOwnerScope,
     queueConfigFromProcessEnv,
@@ -213,8 +215,29 @@ export async function applySourceDeletions(
         });
         result.failed = records.length;
     } else {
-        // The unset mode joins this entry point with applyDefaultDeletion (Task 2); until then nothing is removed here.
-        result.failed = records.length;
+        // Unified: lineages are removed inside the tenant of the connection owner only. An owner that cannot be a tenant
+        // deletes nothing.
+        let tenantKey: string | null = null;
+        let refused = false;
+        if (nangoPipeline() === 'unified') {
+            tenantKey = connectionTenantKey(connection);
+            refused = tenantKey === null;
+        }
+        if (refused) {
+            logger.error('Nango', 'Source deletion skipped: owner scope refused');
+            result.failed = records.length;
+        } else {
+            for (const record of records) {
+                const removed = await applyDefaultDeletion(record, {
+                    supabaseAdmin: admin,
+                    tenantKey,
+                    connectionId: connection.connection_id,
+                    userId: connection.user_id,
+                });
+                if (removed) result.removed++;
+                else result.failed++;
+            }
+        }
     }
 
     if (origin === 'change_feed') {
@@ -328,14 +351,134 @@ export async function deleteNangoLineages(
     }
 }
 
-export function parseMaxDeleteShare(_raw: string | undefined): number {
-    return Number.NaN;
+export interface DefaultDeletionContext {
+    supabaseAdmin: SupabaseAdmin;
+    /** The owner's tenant under the unified pipeline; null under legacy (the sync record's document id is deleted). */
+    tenantKey: string | null;
+    connectionId: string;
+    userId: string;
 }
 
-export function shouldPauseListingRemoval(_orphans: number, _total: number, _share: number): boolean {
-    return false;
+/**
+ * The unset deletion mode (D-08, D-28): the body of today's orphan loop, moved unchanged. Under unified the lineage is
+ * soft-deleted (async on) or deleted with every version (async off); under legacy the document the sync record names.
+ * Returns true when the sync record was deleted.
+ */
+export async function applyDefaultDeletion(record: SyncRecordRow, ctx: DefaultDeletionContext): Promise<boolean> {
+    const { supabaseAdmin, tenantKey, connectionId, userId } = ctx;
+    let deleted = false;
+    try {
+        if (tenantKey !== null) {
+            const removed = orphanUsesSoftDelete()
+                ? await softDeleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id, userId)
+                : await deleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id);
+            if (!removed) {
+                return deleted;
+            }
+        } else if (record.document_id) {
+            // Delete the document if it exists (CASCADE will handle chunks)
+            const { error: docDeleteError } = await supabaseAdmin
+                .from('documents')
+                .delete()
+                .eq('id', record.document_id)
+                .eq('user_id', userId) // Safety: ensure user owns the document
+                .eq('source', 'nango'); // Safety: only delete Nango-sourced documents
+
+            if (docDeleteError) {
+                logger.error('Nango', `Failed to delete document ${record.document_id}`, docDeleteError);
+                // Continue with other deletions even if one fails
+            } else {
+                logger.debug('Nango', `Deleted document: ${record.file_name} (${record.document_id})`);
+            }
+        }
+
+        // Delete the sync record
+        const { error: syncDeleteError } = await supabaseAdmin
+            .from('nango_sync_records')
+            .delete()
+            .eq('id', record.id)
+            .eq('user_id', userId); // Safety: ensure user owns the record
+
+        if (syncDeleteError) {
+            logger.error('Nango', `Failed to delete sync record ${record.id}`, syncDeleteError);
+        } else {
+            deleted = true;
+            logger.debug('Nango', `Deleted sync record for: ${record.file_name}`);
+        }
+
+    } catch (recordError) {
+        logger.error('Nango', `Error deleting orphaned record ${record.file_name}`, recordError);
+        // Continue with other deletions
+    }
+    return deleted;
 }
 
-export async function guardListingRemoval(_input: Record<string, unknown>): Promise<{ paused: boolean }> {
+/** Pause floor (D-09): a removal of fewer documents than this is never paused, so a 1-of-2 removal goes through. */
+export const MASS_DELETE_FLOOR = 5;
+const DEFAULT_MAX_DELETE_SHARE = 0.3;
+let warnedShare = false;
+
+/** RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE: a number above 0 and at most 1; anything else is the default 0.3. */
+export function parseMaxDeleteShare(raw: string | undefined): number {
+    const trimmed = typeof raw === 'string' ? raw.trim() : '';
+    const value = trimmed === '' ? Number.NaN : Number(trimmed);
+    return Number.isFinite(value) && value > 0 && value <= 1 ? value : DEFAULT_MAX_DELETE_SHARE;
+}
+
+function maxDeleteShare(): number {
+    const raw = env.RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE as string | undefined;
+    const share = parseMaxDeleteShare(raw);
+    if (!warnedShare && raw !== undefined && raw.trim() !== '' && share === DEFAULT_MAX_DELETE_SHARE && Number(raw) !== DEFAULT_MAX_DELETE_SHARE) {
+        warnedShare = true;
+        logger.warn('RAG Config', 'RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE is not a number in (0, 1]; using 0.3');
+    }
+    return share;
+}
+
+export function shouldPauseListingRemoval(orphans: number, total: number, share: number): boolean {
+    return orphans >= MASS_DELETE_FLOOR && orphans > share * total;
+}
+
+export interface ListingGuardInput {
+    connection: SourceConnectionRow;
+    orphanFileIds: readonly string[];
+    /** The connection's sync records the listing was compared with. */
+    totalRecords: number;
+    listedCount?: number;
+    /** sync: inside a sync; scheduled: the scheduled source reconcile (plan 06.3-11). */
+    origin: 'sync' | 'scheduled';
+    complete: boolean;
+    /** Defaults to RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE. */
+    share?: number;
+    admin?: SupabaseAdmin;
+}
+
+/**
+ * The mass-delete pause of D-09 for full-listing removals. A listing diff that would remove more than the share of the
+ * connection's sync records and at least the floor removes nothing: it records an awaiting_confirmation run with the
+ * candidate file ids and raises a source alert. Otherwise it records the run (completed, or incomplete when the
+ * listing was cut) and lets the caller remove. Bookkeeping failures are logged and never change the decision.
+ */
+export async function guardListingRemoval(input: ListingGuardInput): Promise<{ paused: boolean }> {
+    const admin = resolveAdmin(input.admin);
+    const share = input.share ?? maxDeleteShare();
+    const orphans = input.orphanFileIds.length;
+    const tenantKey = connectionTenantKey(input.connection);
+    const counts: ReconcileRunCounts = {
+        ...(input.listedCount !== undefined ? { listed: input.listedCount } : {}),
+        total: input.totalRecords,
+        candidates: orphans,
+    };
+    if (shouldPauseListingRemoval(orphans, input.totalRecords, share)) {
+        logger.warn(SOURCE_RECONCILE, 'Listing removal paused for confirmation', {
+            connectionId: input.connection.id,
+            candidates: orphans,
+            total: input.totalRecords,
+        });
+        await recordReconcileRun(admin, input.connection, tenantKey, input.origin, 'awaiting_confirmation', counts, input.orphanFileIds);
+        await raiseSourceAlert(input.connection, 'paused', { candidates: orphans, total: input.totalRecords }, { admin });
+        return { paused: true };
+    }
+    await recordReconcileRun(admin, input.connection, tenantKey, input.origin, input.complete ? 'completed' : 'incomplete', counts);
     return { paused: false };
 }

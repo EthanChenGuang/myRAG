@@ -4,10 +4,12 @@ import { nangoPipeline, processDocumentWithMetadata } from './document-adapter';
 import { fetchFileContent } from './file-fetcher';
 import { notionWorkspaceId, syncSourcePermissions, type PermissionSyncSummary } from './permission-sync';
 import {
-    DELETION_BATCH_SIZE,
-    deleteNangoLineages,
-    orphanUsesSoftDelete,
-    softDeleteNangoLineages,
+    applySourceDeletions,
+    deletionModeOf,
+    guardListingRemoval,
+    loadSourceConnection,
+    type SourceConnectionRow,
+    type SyncRecordRow,
 } from './source-deletions';
 import { PROVIDER_CONFIG, type NangoFileRecord, type SupportedProvider, type SyncStats } from './types';
 import { env } from '@/lib/env';
@@ -248,29 +250,32 @@ async function fetchGoogleDriveFiles(
  * Delete documents that no longer exist in the source (Google Drive)
  * This handles the case where files are deleted from Google Drive
  * and we need to clean up our database to stay in sync.
+ * The listing diff goes through the mass-delete pause (D-09) and then the one deletion entry point (D-03). A connection
+ * with an explicit deletion mode removes nothing from an incomplete listing (D-31); the unset mode keeps today's paths.
  */
 async function deleteOrphanedDocuments(
     connectionId: string,
     userId: string,
     currentFileIds: Set<string>,
-    supabaseAdmin: ReturnType<typeof getSupabaseAdmin>
+    supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+    connection?: SourceConnectionRow | null,
+    listing: { complete?: boolean; origin?: 'sync' | 'scheduled' } = {}
 ): Promise<number> {
     if (!supabaseAdmin) {
         throw new Error('Supabase admin client not available');
     }
 
     let deletedCount = 0;
+    const complete = listing.complete ?? true;
 
     // Unified: lineages are removed inside the tenant of the connection owner only. An owner that cannot be a tenant
     // deletes nothing.
-    let tenantKey: string | null = null;
     if (nangoPipeline() === 'unified') {
         const owner = nangoOwnerScope({ ownerUserId: userId });
         if (!owner.ok) {
             logger.error('Nango', `Orphan deletion skipped: owner scope refused (${owner.reason})`);
             return 0;
         }
-        tenantKey = scopeKey(owner.scope);
     }
 
     try {
@@ -287,71 +292,53 @@ async function deleteOrphanedDocuments(
             throw fetchError;
         }
 
-        if (!syncRecords || syncRecords.length === 0) {
+        const source = connection ?? (await loadSourceConnection(supabaseAdmin, connectionId, userId));
+        if (!source || source.user_id !== userId) {
+            logger.error('Nango', `Orphan deletion skipped: connection row not found for ${connectionId}`);
+            return 0;
+        }
+        const records = (syncRecords ?? []) as SyncRecordRow[];
+
+        // Find orphaned records (files that exist in our DB but not in Google Drive anymore)
+        const orphanedRecords = records.filter((record: { file_id: string }) => !currentFileIds.has(record.file_id));
+
+        const guard = await guardListingRemoval({
+            connection: source,
+            orphanFileIds: orphanedRecords.map((record) => record.file_id),
+            totalRecords: records.length,
+            listedCount: currentFileIds.size,
+            origin: listing.origin ?? 'sync',
+            complete,
+            admin: supabaseAdmin,
+        });
+
+        if (records.length === 0) {
             logger.debug('Nango', 'No existing sync records found - nothing to delete');
             return 0;
         }
-
-        // Find orphaned records (files that exist in our DB but not in Google Drive anymore)
-        const orphanedRecords = syncRecords.filter((record: { file_id: string }) => !currentFileIds.has(record.file_id));
 
         if (orphanedRecords.length === 0) {
             logger.debug('Nango', 'No orphaned documents found - all synced files still exist in source');
             return 0;
         }
 
+        if (guard.paused) {
+            return 0;
+        }
+        if (!complete && deletionModeOf(source) !== null) {
+            logger.error('Nango', 'Orphan deletion skipped: the listing is incomplete');
+            return 0;
+        }
+
         logger.info('Nango', `Found ${orphanedRecords.length} orphaned documents to delete`);
 
-        // Process deletions in batches to avoid timeouts
-        for (let i = 0; i < orphanedRecords.length; i += DELETION_BATCH_SIZE) {
-            const batch = orphanedRecords.slice(i, i + DELETION_BATCH_SIZE);
-
-            for (const record of batch) {
-                try {
-                    if (tenantKey !== null) {
-                        const removed = orphanUsesSoftDelete()
-                            ? await softDeleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id, userId)
-                            : await deleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id);
-                        if (!removed) {
-                            continue;
-                        }
-                    } else if (record.document_id) {
-                        // Delete the document if it exists (CASCADE will handle chunks)
-                        const { error: docDeleteError } = await supabaseAdmin
-                            .from('documents')
-                            .delete()
-                            .eq('id', record.document_id)
-                            .eq('user_id', userId) // Safety: ensure user owns the document
-                            .eq('source', 'nango'); // Safety: only delete Nango-sourced documents
-
-                        if (docDeleteError) {
-                            logger.error('Nango', `Failed to delete document ${record.document_id}`, docDeleteError);
-                            // Continue with other deletions even if one fails
-                        } else {
-                            logger.debug('Nango', `Deleted document: ${record.file_name} (${record.document_id})`);
-                        }
-                    }
-
-                    // Delete the sync record
-                    const { error: syncDeleteError } = await supabaseAdmin
-                        .from('nango_sync_records')
-                        .delete()
-                        .eq('id', record.id)
-                        .eq('user_id', userId); // Safety: ensure user owns the record
-
-                    if (syncDeleteError) {
-                        logger.error('Nango', `Failed to delete sync record ${record.id}`, syncDeleteError);
-                    } else {
-                        deletedCount++;
-                        logger.debug('Nango', `Deleted sync record for: ${record.file_name}`);
-                    }
-
-                } catch (recordError) {
-                    logger.error('Nango', `Error deleting orphaned record ${record.file_name}`, recordError);
-                    // Continue with other deletions
-                }
-            }
-        }
+        const result = await applySourceDeletions(
+            source,
+            orphanedRecords.map((record) => record.file_id),
+            'reconcile',
+            { admin: supabaseAdmin, records: orphanedRecords }
+        );
+        deletedCount = result.removed;
 
         logger.info('Nango', `Successfully deleted ${deletedCount} orphaned documents`);
         return deletedCount;
@@ -371,7 +358,8 @@ async function syncGoogleDriveDocuments(
     userId: string,
     supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
     folderId?: string | null,
-    skipOrphanDeletion: boolean = false
+    skipOrphanDeletion: boolean = false,
+    sourceConnection?: SourceConnectionRow
 ): Promise<SyncStats & { fileIds?: string[]; listingComplete?: boolean }> {
     const stats: SyncStats & { fileIds?: string[]; listingComplete?: boolean } = { processed: 0, failed: 0, skipped: 0, deleted: 0, failClosed: 0 };
 
@@ -405,7 +393,9 @@ async function syncGoogleDriveDocuments(
                     connectionId,
                     userId,
                     currentFileIds,
-                    supabaseAdmin
+                    supabaseAdmin,
+                    sourceConnection,
+                    { complete: true }
                 );
             } else {
                 logger.error('Nango', `Orphan deletion skipped: the listing of folder ${folderId} is incomplete`);
@@ -1230,11 +1220,19 @@ export async function syncDocumentsForConnection(
         // Get the user_id and sync settings from the connection record
         // connection_id is unique, so this is the one row that binds the connection to its owner. The owner is read here and
         // nowhere else: not from the webhook body, the request or Nango metadata. A missing row or a failed lookup stops the sync.
-        const { data: connRecord, error: connError } = await supabaseAdmin
+        let { data: connRecord, error: connError } = await supabaseAdmin
             .from('nango_connections')
-            .select('user_id, sync_folder_id, sync_folder_name, sync_file_ids, sync_file_names')
+            .select('id, user_id, provider, deletion_mode, sync_folder_id, sync_folder_name, sync_file_ids, sync_file_names')
             .eq('connection_id', connectionId)
             .single();
+        if (connError && (connError as { code?: string }).code === '42703') {
+            // Migration 0720 not applied yet: read the columns of before, the unset deletion mode applies.
+            ({ data: connRecord, error: connError } = await supabaseAdmin
+                .from('nango_connections')
+                .select('id, user_id, sync_folder_id, sync_folder_name, sync_file_ids, sync_file_names')
+                .eq('connection_id', connectionId)
+                .single());
+        }
 
         if (connError || !connRecord || typeof connRecord.user_id !== 'string' || connRecord.user_id === '') {
             throw new Error(`Connection not found: ${connectionId}`);
@@ -1249,6 +1247,13 @@ export async function syncDocumentsForConnection(
         }
         const folderId = connRecord.sync_folder_id;
         const fileIds = connRecord.sync_file_ids;
+        const sourceConnection: SourceConnectionRow = {
+            id: String(connRecord.id ?? ''),
+            connection_id: connectionId,
+            user_id: userId,
+            provider: typeof connRecord.provider === 'string' ? connRecord.provider : provider,
+            deletion_mode: typeof connRecord.deletion_mode === 'string' ? connRecord.deletion_mode : null,
+        };
 
         // Enhanced debug logging to trace the issue
         logger.debug('Nango', `Connection record: folderId="${folderId}", fileIds=${JSON.stringify(fileIds)}`);
@@ -1267,7 +1272,7 @@ export async function syncDocumentsForConnection(
                 for (const folderIdItem of fileIds) {
                     try {
                         // Skip orphan deletion for individual folders - we'll do it once at the end
-                        const folderStats = await syncGoogleDriveDocuments(connectionId, userId, supabaseAdmin, folderIdItem, true);
+                        const folderStats = await syncGoogleDriveDocuments(connectionId, userId, supabaseAdmin, folderIdItem, true, sourceConnection);
                         combinedStats.processed += folderStats.processed;
                         combinedStats.failed += folderStats.failed;
                         combinedStats.skipped += folderStats.skipped;
@@ -1288,7 +1293,7 @@ export async function syncDocumentsForConnection(
                 // the files of a folder that failed or was cut short are not in the set and would be deleted as orphans.
                 if (listingsComplete) {
                     const allFileIdsSet = new Set(allFileIds);
-                    combinedStats.deleted = await deleteOrphanedDocuments(connectionId, userId, allFileIdsSet, supabaseAdmin);
+                    combinedStats.deleted = await deleteOrphanedDocuments(connectionId, userId, allFileIdsSet, supabaseAdmin, sourceConnection, { complete: true });
                 } else {
                     logger.error('Nango', 'Orphan deletion skipped: a Google Drive folder listing was incomplete');
                 }
@@ -1303,7 +1308,7 @@ export async function syncDocumentsForConnection(
             }
 
             // Single folder mode (backwards compatibility)
-            return await syncGoogleDriveDocuments(connectionId, userId, supabaseAdmin, folderId);
+            return await syncGoogleDriveDocuments(connectionId, userId, supabaseAdmin, folderId, false, sourceConnection);
         }
 
         // Notion-specific sync
@@ -1379,7 +1384,7 @@ export async function syncDocumentsForConnection(
 
             // Build set of current file IDs for deletion detection
             const currentFileIds = new Set(allFiles.map(f => f.id));
-            combinedStats.deleted = await deleteOrphanedDocuments(connectionId, userId, currentFileIds, supabaseAdmin);
+            combinedStats.deleted = await deleteOrphanedDocuments(connectionId, userId, currentFileIds, supabaseAdmin, sourceConnection, { complete: true });
 
             // Filter to supported file types
             const supportedFiles = allFiles.filter(file => provider === 'notion' || isSupportedFile(file.name));
@@ -1485,7 +1490,9 @@ export async function syncDocumentsForConnection(
             connectionId,
             userId,
             currentFileIds,
-            supabaseAdmin
+            supabaseAdmin,
+            sourceConnection,
+            { complete: true }
         );
 
         // Filter to supported file types
