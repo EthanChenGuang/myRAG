@@ -10,9 +10,8 @@ const ROOT = process.cwd();
 const CORPUS_DIR = path.join(ROOT, 'eval/fixtures/corpus');
 const HARNESS = path.join(ROOT, 'eval/harness/templated-fixtures.mts');
 /**
- * The ingest-mode build hash (corpusSha256) of this small plain build without the 03.3-20 code: measured on plan 05.2.1-12's
- * branch (its six calc and overflow documents are in the corpus) when train 37 was merged into 05.2.1-17. On 03.3-20's own
- * base, before those documents, it was 28d34c32….
+ * The ingest-mode build hash (corpusSha256) of this small plain build without the templated option. Measured on the base commit of
+ * plan 03.3-20 (28d34c32...), re-measured on merge train 38 after the six 05.2.1-12 corpus documents (same value on CI and locally).
  */
 const PLAIN_CORPUS_SHA256 = '6580084feeee66787a5754e24ff7abbf02b88040856ee1fbb1fc84a82c4df0ef';
 const RESTRICTED = ['tpl-family-zh-01', 'tpl-family-en-01', 'tpl-family-it-01', 'tpl-variants-zh', 'tpl-variants-en', 'tpl-variants-it'];
