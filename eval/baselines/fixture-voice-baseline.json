@@ -11,9 +11,9 @@
       "approved"
     ]
   },
-  "golden_manifest_sha256": "0969d8b8085d0adbbb667873c0cca5ed834c5c46d57261344242bd4bd0be2ccb",
-  "golden_set_version": 9,
-  "golden_sha256": "543d8adf320c2ebf7c1b78c7e44da2adc71f297929bd9615b13d9b323f160945",
+  "golden_manifest_sha256": "0e23f5a9213fd0a5f082e02b1671469bbe72fd87b4747adb9b9c6601626b2766",
+  "golden_set_version": 10,
+  "golden_sha256": "6b9e270761c7b8071fd6d7ff3c0e480ce6163ad6376a454e54cd693d63c5d337",
   "items": {
     "en-ambiguous-001": {
       "correct_refusal_rate": [
@@ -702,9 +702,9 @@
         0.0
       ],
       "mrr": [
-        0.25,
-        0.25,
-        0.25
+        1.0,
+        1.0,
+        1.0
       ],
       "recall_at_10": [
         1.0,
@@ -4407,9 +4407,9 @@
         0.0
       ],
       "mrr": [
-        0.3333333333333333,
-        0.3333333333333333,
-        0.3333333333333333
+        1.0,
+        1.0,
+        1.0
       ],
       "recall_at_10": [
         1.0,
@@ -4434,9 +4434,9 @@
         0.0
       ],
       "mrr": [
-        0.5,
-        0.5,
-        0.5
+        1.0,
+        1.0,
+        1.0
       ],
       "recall_at_10": [
         1.0,
@@ -9419,14 +9419,14 @@
         1.0
       ],
       "recall_at_10": [
-        0.5,
-        0.5,
-        0.5
+        1.0,
+        1.0,
+        1.0
       ],
       "recall_at_5": [
-        0.5,
-        0.5,
-        0.5
+        1.0,
+        1.0,
+        1.0
       ]
     },
     "zh-context-overflow-003": {
@@ -12537,25 +12537,25 @@
     "stage_timeouts_ms": null,
     "user_id": null
   },
-  "run_config_hash": "37eec17b76bf3d73814fb14297365d495ef606d176199bad9039f54e6940bbb9",
+  "run_config_hash": "8878c3199ae1dae382cb3fbdaff4114b9b2ebcca2136131bd50b0008c7666c62",
   "runs": [
     {
-      "created_at": "2026-11-28T08:42:10Z",
-      "git_sha": "b99abcba4bd12aad57edd88f83d57fdc73d89330",
-      "run_config_hash": "37eec17b76bf3d73814fb14297365d495ef606d176199bad9039f54e6940bbb9",
-      "run_id": "cbd4df97-24d1-4743-9d7a-efb90c604886"
+      "created_at": "2026-11-28T09:09:45Z",
+      "git_sha": "16e5e5fd05ddd06f5e9efa5b8266a79c2a24b7a5",
+      "run_config_hash": "8878c3199ae1dae382cb3fbdaff4114b9b2ebcca2136131bd50b0008c7666c62",
+      "run_id": "3563d9c0-4f8a-402b-a0d4-b8fed7db130f"
     },
     {
-      "created_at": "2026-11-28T08:43:14Z",
-      "git_sha": "b99abcba4bd12aad57edd88f83d57fdc73d89330",
-      "run_config_hash": "37eec17b76bf3d73814fb14297365d495ef606d176199bad9039f54e6940bbb9",
-      "run_id": "cfbedc9b-7d28-46ed-8c6e-4a27c1db430f"
+      "created_at": "2026-11-28T09:10:47Z",
+      "git_sha": "16e5e5fd05ddd06f5e9efa5b8266a79c2a24b7a5",
+      "run_config_hash": "8878c3199ae1dae382cb3fbdaff4114b9b2ebcca2136131bd50b0008c7666c62",
+      "run_id": "2f348a6e-a94f-4878-90c8-ee2f10131bce"
     },
     {
-      "created_at": "2026-11-28T08:44:18Z",
-      "git_sha": "b99abcba4bd12aad57edd88f83d57fdc73d89330",
-      "run_config_hash": "37eec17b76bf3d73814fb14297365d495ef606d176199bad9039f54e6940bbb9",
-      "run_id": "d27c7e76-34d3-4bfb-9342-9837c03bdaff"
+      "created_at": "2026-11-28T09:11:51Z",
+      "git_sha": "16e5e5fd05ddd06f5e9efa5b8266a79c2a24b7a5",
+      "run_config_hash": "8878c3199ae1dae382cb3fbdaff4114b9b2ebcca2136131bd50b0008c7666c62",
+      "run_id": "d4a4dcac-1f8b-408c-942d-b9beea359ff0"
     }
   ],
   "schema_version": 1,
@@ -12842,12 +12842,12 @@
         "spread": 0.0
       },
       "mrr": {
-        "mean": 0.787037037037037,
+        "mean": 1.0,
         "n": 9,
         "runs": [
-          0.787037037037037,
-          0.787037037037037,
-          0.787037037037037
+          1.0,
+          1.0,
+          1.0
         ],
         "spread": 0.0
       },
@@ -14046,12 +14046,12 @@
         "spread": 0.0
       },
       "mrr": {
-        "mean": 0.7800766283524904,
+        "mean": 0.7886973180076627,
         "n": 87,
         "runs": [
-          0.7800766283524904,
-          0.7800766283524904,
-          0.7800766283524904
+          0.7886973180076627,
+          0.7886973180076627,
+          0.7886973180076627
         ],
         "spread": 0.0
       },
@@ -14118,12 +14118,12 @@
         "spread": 0.0
       },
       "mrr": {
-        "mean": 0.733739837398374,
+        "mean": 0.7479674796747968,
         "n": 82,
         "runs": [
-          0.733739837398374,
-          0.733739837398374,
-          0.733739837398374
+          0.7479674796747968,
+          0.7479674796747968,
+          0.7479674796747968
         ],
         "spread": 0.0
       },
@@ -14242,12 +14242,12 @@
         "spread": 0.0
       },
       "mrr": {
-        "mean": 0.7794444444444444,
+        "mean": 0.7874305555555555,
         "n": 240,
         "runs": [
-          0.7794444444444444,
-          0.7794444444444444,
-          0.7794444444444444
+          0.7874305555555555,
+          0.7874305555555555,
+          0.7874305555555555
         ],
         "spread": 0.0
       },
