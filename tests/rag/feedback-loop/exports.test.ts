@@ -33,6 +33,7 @@ const CHUNK_Z = '00000000-0000-4000-8000-0000000073e3';
 const TEXT_X = 'Synthetic test-split sentence about the sample widget.';
 const TEXT_Y = 'Synthetic dev-split sentence about the sample gadget.';
 const TEXT_Z = 'Synthetic unsplit sentence about the sample gizmo.';
+const ADMIN = '00000000-0000-4000-8000-0000000000a1';
 
 let db: PGlite;
 const calls: string[] = [];
@@ -202,7 +203,7 @@ function assertMinimal(lines: unknown[]) {
 
 describe('exportTraining (D-17)', () => {
   it('emits one valid pair per labelled training item of the tenant only', async () => {
-    const pairs = await exportTraining(admin(), TENANT_A);
+    const pairs = await exportTraining(admin(), TENANT_A, ADMIN);
     for (const pair of pairs) expect(TrainingPairSchema.safeParse(pair).success).toBe(true);
     const itemIds = pairs.map((pair) => pair.review_item_id).sort();
     expect(itemIds).toEqual([ids.training, ids.trainingCapped, ids.trainingTest, ids.trainingDev, ids.trainingUnsplit, ids.goldenUnsplit].sort());
@@ -217,7 +218,7 @@ describe('exportTraining (D-17)', () => {
   });
 
   it('puts confirmed negatives first, then uncited candidates above the lowest positive, other documents first', async () => {
-    const pair = (await exportTraining(admin(), TENANT_A)).find((entry) => entry.review_item_id === ids.training)!;
+    const pair = (await exportTraining(admin(), TENANT_A, ADMIN)).find((entry) => entry.review_item_id === ids.training)!;
     expect(pair.positive).toEqual({ chunk_id: CHUNK_A, document_id: DOC_A, quote: 'the sample component restarts' });
     expect(pair.hard_negatives!.map((negative) => [negative.chunk_id, negative.confirmed])).toEqual([
       [MANY_A_CHUNKS[2], true],
@@ -231,7 +232,7 @@ describe('exportTraining (D-17)', () => {
   });
 
   it('caps hard negatives at 10 and every confirmed negative comes from not_relevant_chunk_ids', async () => {
-    const pairs = await exportTraining(admin(), TENANT_A);
+    const pairs = await exportTraining(admin(), TENANT_A, ADMIN);
     const capped = pairs.find((entry) => entry.review_item_id === ids.trainingCapped)!;
     expect(capped.hard_negatives).toHaveLength(10);
     expect(capped.hard_negatives![0]).toMatchObject({ chunk_id: MANY_A_CHUNKS[18], confirmed: true });
@@ -247,7 +248,7 @@ describe('exportTraining (D-17)', () => {
   });
 
   it('marks held_out when the positive document is evidence of a test-split or unsplit golden item, train for dev', async () => {
-    const pairs = await exportTraining(admin(), TENANT_A);
+    const pairs = await exportTraining(admin(), TENANT_A, ADMIN);
     const split = (id: string) => pairs.find((entry) => entry.review_item_id === id)!;
     expect(split(ids.trainingTest).split).toBe('held_out');
     expect(split(ids.trainingTest).document_group).toBe('group-x');
@@ -259,7 +260,7 @@ describe('exportTraining (D-17)', () => {
   });
 
   it('leakage guard: no document used by a test-split golden item is the positive of a train pair', async () => {
-    const pairs = await exportTraining(admin(), TENANT_A);
+    const pairs = await exportTraining(admin(), TENANT_A, ADMIN);
     const testDocs = new Set<string>();
     const { rows } = await db.query<{ label: { evidence?: Array<{ document_id: string }> } }>(
       "SELECT label FROM rag_review_items WHERE tenant_key = $1 AND 'golden' = ANY(triage) AND (split = 'test' OR split IS NULL)",
@@ -273,7 +274,7 @@ describe('exportTraining (D-17)', () => {
 
 describe('exportDictionary (D-17)', () => {
   it('aggregates terms by language, observed term, canonical term and relation for the tenant only', async () => {
-    const candidates = await exportDictionary(admin(), TENANT_A);
+    const candidates = await exportDictionary(admin(), TENANT_A, ADMIN);
     for (const entry of candidates) expect(DictionaryCandidateSchema.safeParse(entry).success).toBe(true);
     const abbreviation = candidates.find((entry) => entry.relation === 'abbreviation')!;
     expect(abbreviation).toMatchObject({ tenant_key: TENANT_A, language: 'en', observed_term: 'cfg', canonical_term: 'configuration', occurrences: 5 });
@@ -289,7 +290,7 @@ describe('exportDictionary (D-17)', () => {
 
 describe('exportGolden (D-20)', () => {
   it('returns labelled golden items of the tenant with current chunk text re-read under that tenant', async () => {
-    const lines = await exportGolden(admin(), TENANT_A);
+    const lines = await exportGolden(admin(), TENANT_A, ADMIN);
     for (const line of lines) expect(GoldenExportLineSchema.safeParse(line).success).toBe(true);
     expect(lines.map((line) => line.id)).toEqual([ids.goldenUnsplit]);
     const [line] = lines;
@@ -308,7 +309,7 @@ describe('exportGolden (D-20)', () => {
   });
 
   it('never returns another tenant golden item', async () => {
-    const lines = await exportGolden(admin(), TENANT_B);
+    const lines = await exportGolden(admin(), TENANT_B, ADMIN);
     expect(lines.map((line) => line.id)).toEqual([ids.trainingOtherTenant]);
     expect(lines[0].evidence[0]).toMatchObject({ chunk_id: CHUNK_B, quote_verified: true, chunk_text: TEXT_B });
   });
