@@ -393,6 +393,8 @@ export async function prepareInProcessEval(options: {
    * list seeds nothing. A caller-built ingestFixture is seeded only when it holds no layer of these rows yet.
    */
   terminologySeed?: readonly import('./pglite-supabase.mts').TerminologySeedRow[];
+  /** sha256 of the run's golden file: the fixture floor entry of the mode must have been fitted on it, or the run stops. */
+  goldenSha256?: string;
 }): Promise<InProcessEval> {
   const {
     corpusDir,
@@ -559,7 +561,9 @@ export async function prepareInProcessEval(options: {
 
   const floorModule = await import('../../src/lib/rag/refusal/floor.ts');
   const { loadFixtureScoreCalibration } = await import('./fixture-floor.mts');
-  floorModule.setEvalScoreCalibration(loadFixtureScoreCalibration(fixtureMode === 'ingest' ? 'ingest' : 'prechunked'));
+  floorModule.setEvalScoreCalibration(
+    loadFixtureScoreCalibration(fixtureMode === 'ingest' ? 'ingest' : 'prechunked', { goldenSha256: options.goldenSha256 }),
+  );
 
   return {
     POST: route.POST as unknown as InProcessEval['POST'],
@@ -870,6 +874,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           corpusDir,
           deploymentMode,
           fixtureMode,
+          goldenSha256: sha256File(goldenPath),
           allowedScopes: requestedScope ? [requestedScope] : [],
           embeddingProfileId,
           ingestFixture,
