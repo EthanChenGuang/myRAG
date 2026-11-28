@@ -38,6 +38,7 @@
     "rag:vector-sync": "tsx src/lib/rag/sync/cli.ts vector-sync",
     "rag:reconcile": "tsx src/lib/rag/sync/cli.ts reconcile",
     "rag:rollout": "tsx src/lib/rag/rollout/cli.ts",
+    "rag:languages": "tsx src/lib/rag/lang/cli.ts",
     "rag:red-team": "tsx eval/harness/run-red-team.mts",
     "test": "vitest run",
     "test-rag": "tsx eval/harness/run-smoke.mts",
