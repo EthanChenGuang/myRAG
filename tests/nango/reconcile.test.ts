@@ -22,6 +22,7 @@ vi.mock('@/lib/rag', async () => {
     scopeKey: scopeModule.scopeKey,
     softDeleteLineage: vi.fn(async (_scope: unknown, lineageId: string) => ({ ok: true, outcome: 'deleted', lineageId, jobId: null })),
     removeDocumentObjects: vi.fn(async () => undefined),
+    recomputeDirtyDupClusters: vi.fn(async () => ({ ok: true, skipped: true })),
     queueConfigFromProcessEnv: () => ({ ingestAsync: false }),
   };
 });

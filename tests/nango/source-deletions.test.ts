@@ -14,6 +14,7 @@ const softDeleteLineage = vi.hoisted(() =>
   ),
 );
 const removeDocumentObjects = vi.hoisted(() => vi.fn(async () => undefined));
+const recomputeDirtyDupClusters = vi.hoisted(() => vi.fn(async (_scope: unknown, _options?: unknown) => ({ ok: true as const, skipped: false as const })));
 
 vi.mock('@/lib/nango/document-adapter', () => ({ nangoPipeline: () => state.pipeline, processDocumentWithMetadata: vi.fn() }));
 vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: () => null }));
@@ -26,6 +27,7 @@ vi.mock('@/lib/rag', async () => {
     scopeKey: scopeModule.scopeKey,
     softDeleteLineage,
     removeDocumentObjects,
+    recomputeDirtyDupClusters,
     queueConfigFromProcessEnv: () => ({ ingestAsync: state.ingestAsync }),
   };
 });
@@ -83,6 +85,7 @@ describe('applySourceDeletions (D-03, D-08)', () => {
     state.softOk = true;
     softDeleteLineage.mockClear();
     removeDocumentObjects.mockClear();
+    recomputeDirtyDupClusters.mockClear();
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -96,6 +99,17 @@ describe('applySourceDeletions (D-03, D-08)', () => {
     expect(records(memory)).toEqual(['file-b']);
     expect(documents(memory)).toEqual(['doc-file-b']);
     expect(softDeleteLineage).not.toHaveBeenCalled();
+    // DATA-21: the hard delete recomputes the dirty duplicate clusters inside the connection owner's tenant only
+    expect(recomputeDirtyDupClusters).toHaveBeenCalledTimes(1);
+    const [scope] = recomputeDirtyDupClusters.mock.calls[0] as unknown as [Record<string, unknown>];
+    expect(JSON.stringify(scope)).toContain(OWNER);
+  });
+
+  it('the soft delete leaves the duplicate clusters to the soft-delete path (no recompute here)', async () => {
+    state.ingestAsync = true;
+    const memory = seed(['file-a']);
+    await applySourceDeletions(connection(null), ['file-a'], 'change_feed', { admin: memory.admin as never });
+    expect(recomputeDirtyDupClusters).not.toHaveBeenCalled();
   });
 
   it('the unset mode under unified/async on soft-deletes, as today', async () => {

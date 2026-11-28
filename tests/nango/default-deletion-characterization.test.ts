@@ -199,6 +199,7 @@ async function replay(c: Case): Promise<Recording> {
     scopeKey: scopeModule.scopeKey,
     softDeleteLineage,
     removeDocumentObjects,
+    recomputeDirtyDupClusters: async () => ({ ok: true, skipped: true }),
     queueConfigFromProcessEnv: () => ({ ingestAsync: c.ingestAsync }),
   }));
   const { syncDocumentsForConnection } = await import('@/lib/nango/sync-manager');
