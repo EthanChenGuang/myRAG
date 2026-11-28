@@ -222,19 +222,27 @@ async function assertSettled(db: PGlite, tenantKey: string, label: string): Prom
   assert.deepEqual(await counters(db, tenantKey, 'chunks_cluster'), await recomputeUnits(db, tenantKey), `${label}: chunks_cluster counters`);
 }
 
+const seen = { pending: 0, marker: 0 };
+
+/** The cluster rows staged since the previous call (rows are never deleted here, so the invariants keep holding). */
 async function stagedCluster(db: PGlite): Promise<{ pending: Row[]; markers: Row[] }> {
   const pending = (
-    await db.query<Row>(
-      `SELECT tenant_key, chunking_profile_id, language, sign::int AS sign, lexemes, dl FROM public.rag_lexical_stats_pending
-        WHERE corpus = 'chunks_cluster' ORDER BY id`,
+    await db.query<Row & { id: number }>(
+      `SELECT id::int AS id, tenant_key, chunking_profile_id, language, sign::int AS sign, lexemes, dl FROM public.rag_lexical_stats_pending
+        WHERE corpus = 'chunks_cluster' AND id > $1 ORDER BY id`,
+      [seen.pending],
     )
   ).rows;
-  const markers = (await db.query<Row>('SELECT tenant_key, dup_cluster_id FROM public.rag_lexical_cluster_dirty ORDER BY id')).rows;
-  return { pending, markers };
+  const markers = (
+    await db.query<Row & { id: number }>('SELECT id::int AS id, tenant_key, dup_cluster_id FROM public.rag_lexical_cluster_dirty WHERE id > $1 ORDER BY id', [seen.marker])
+  ).rows;
+  await markSeen(db);
+  return { pending: pending.map(({ id: _id, ...rest }) => rest), markers: markers.map(({ id: _id, ...rest }) => rest) };
 }
 
-async function clearStaged(db: PGlite): Promise<void> {
-  await db.exec("DELETE FROM public.rag_lexical_stats_pending WHERE corpus = 'chunks_cluster'; DELETE FROM public.rag_lexical_cluster_dirty;");
+async function markSeen(db: PGlite): Promise<void> {
+  seen.pending = (await db.query<{ n: number }>('SELECT COALESCE(max(id), 0)::int AS n FROM public.rag_lexical_stats_pending')).rows[0]!.n;
+  seen.marker = (await db.query<{ n: number }>('SELECT COALESCE(max(id), 0)::int AS n FROM public.rag_lexical_cluster_dirty')).rows[0]!.n;
 }
 
 function sorted(rows: Row[]): Row[] {
@@ -377,12 +385,15 @@ for (const mode of MODES) {
         await db.query('UPDATE public.document_chunks SET is_current = false WHERE id = $1', [ids[4]]);
         await db.query('DELETE FROM public.rag_dup_clusters WHERE id = $1', [cluster]);
         await db.query('DELETE FROM public.document_chunks WHERE id = $1', [ids[1]]);
-        return (
-          await db.query<Row>(
-            `SELECT tenant_key, corpus, chunking_profile_id, language, sign::int AS sign, lexemes, dl FROM public.rag_lexical_stats_pending
-              WHERE corpus = 'chunks' ORDER BY id`,
-          )
-        ).rows;
+        // Rows are staged in chunk-id order and the ids are random, so the comparison is on the sorted rows.
+        return sorted(
+          (
+            await db.query<Row>(
+              `SELECT tenant_key, corpus, chunking_profile_id, language, sign::int AS sign, lexemes, dl FROM public.rag_lexical_stats_pending
+                WHERE corpus = 'chunks' ORDER BY id`,
+            )
+          ).rows,
+        );
       };
       let withCluster = false;
       const newRaw = await scenario();
@@ -418,19 +429,14 @@ for (const mode of MODES) {
 
     test('one passage copied into 30 documents and clustered with rag_dup_assign: df 30 under chunks, df 1 under chunks_cluster', async () => {
       await enableCluster(db, tenantA);
-      const passage = 'w1 w2 w3 w4 w5 w6';
+      const passage = 'w31 w32 w33 w34 w35 w36';
       const ids: string[] = [];
       for (let i = 0; i < 30; i++) {
         const docId = await createDocument(db, FIXTURE_USER_ID);
         ids.push(...(await insertChunks(db, docId, [{ text: passage }, { text: words(100 + i, 4) }])).slice(0, 1));
       }
-      const assigned = await rpc<{ cluster_id: string }>(db, '(public.rag_dup_assign($1, $2::uuid[], NULL)).cluster_id', [tenantA, ids]).catch(async () => {
-        // Fallback when the fixture has no active embedding profile: the cluster is assigned directly.
-        const cluster = await newCluster(db, tenantA);
-        await setCluster(db, ids, cluster);
-        return { cluster_id: cluster } as never;
-      });
-      assert.ok(assigned);
+      const assigned = await rpc<string>(db, '(public.rag_dup_assign($1, $2::uuid[], NULL)).cluster_id', [tenantA, ids]);
+      assert.match(assigned, /^[0-9a-f-]{36}$/);
       assert.equal(await count(db, 'document_chunks', 'id = ANY ($1::uuid[]) AND dup_cluster_id IS NOT NULL', [ids]), 30);
       await assertSettled(db, tenantA, '30 copies');
 
@@ -458,6 +464,7 @@ for (const mode of MODES) {
 
     test('staging: each old/new state pair stages exactly the rows of the D-47 table', async () => {
       await enableCluster(db, tenantA);
+      await markSeen(db);
       const docId = await createDocument(db, FIXTURE_USER_ID);
       const A = await newCluster(db, tenantA);
       const B = await newCluster(db, tenantA);
@@ -474,7 +481,6 @@ for (const mode of MODES) {
       const mark = (id: string) => ({ tenant_key: tenantA, dup_cluster_id: id });
       const staged = async () => {
         const out = await stagedCluster(db);
-        await clearStaged(db);
         return {
           pending: sorted(out.pending.map((r) => ({ ...r, lexemes: [...(r.lexemes as string[])].sort() }))),
           markers: sorted(out.markers),
@@ -490,7 +496,7 @@ for (const mode of MODES) {
       await db.query("UPDATE public.document_chunks SET chunking_profile_id = 'probe-profile' WHERE id = $1", [loose]);
       assert.deepEqual(await staged(), want([minus(1), { ...plus(1), chunking_profile_id: 'probe-profile' }], []), 'profile change');
       await db.query("UPDATE public.document_chunks SET chunking_profile_id = 'legacy' WHERE id = $1", [loose]);
-      await clearStaged(db);
+      await markSeen(db);
       await db.query('UPDATE public.document_chunks SET lexical_text = $2 WHERE id = $1', [inA, t(6)]);
       assert.deepEqual(await staged(), want([], [mark(A)]), 'member in A, vector changed');
       await setCluster(db, [joined!], B);
@@ -585,11 +591,14 @@ for (const mode of MODES) {
       assertClusterClean(await check(db, tenantA), 'mid-backlog after a join');
       await assertSettled(db, tenantA, 'compacted');
 
-      await db.query("UPDATE public.rag_lexical_df SET df = df + 1 WHERE tenant_key = $1 AND corpus = 'chunks_cluster' AND lexeme = 'w1'", [tenantA]);
+      const target = (
+        await db.query<{ lexeme: string }>("SELECT min(lexeme) AS lexeme FROM public.rag_lexical_df WHERE tenant_key = $1 AND corpus = 'chunks_cluster'", [tenantA])
+      ).rows[0]!.lexeme;
+      await db.query("UPDATE public.rag_lexical_df SET df = df + 1 WHERE tenant_key = $1 AND corpus = 'chunks_cluster' AND lexeme = $2", [tenantA, target]);
       const corrupt = await check(db, tenantA);
       assert.ok(Number(corrupt.cluster_df_diff) > 0);
       assert.equal(corrupt.clean, false);
-      await db.query("UPDATE public.rag_lexical_df SET df = df - 1 WHERE tenant_key = $1 AND corpus = 'chunks_cluster' AND lexeme = 'w1'", [tenantA]);
+      await db.query("UPDATE public.rag_lexical_df SET df = df - 1 WHERE tenant_key = $1 AND corpus = 'chunks_cluster' AND lexeme = $2", [tenantA, target]);
       await db.query('UPDATE public.rag_lexical_cluster_units SET chunk_id = $2 WHERE tenant_key = $1', [tenantA, crypto.randomUUID()]);
       const ledgerCorrupt = await check(db, tenantA);
       assert.ok(Number(ledgerCorrupt.cluster_ledger_diff) > 0);
@@ -682,7 +691,7 @@ for (const mode of MODES) {
           const parts: unknown[] = [];
           for (const table of STATS_TABLES) {
             const cols = table === 'rag_lexical_stats_pending' ? 'corpus, chunking_profile_id, language, sign, lexemes, dl' : table === 'rag_lexical_cluster_dirty' ? 'dup_cluster_id' : '*';
-            parts.push((await db.query(`SELECT ${cols} FROM public.${table} WHERE tenant_key = $1 ORDER BY 1, 2`, [tenantB])).rows);
+            parts.push(sorted((await db.query<Row>(`SELECT ${cols} FROM public.${table} WHERE tenant_key = $1`, [tenantB])).rows));
           }
           return JSON.stringify(parts);
         };

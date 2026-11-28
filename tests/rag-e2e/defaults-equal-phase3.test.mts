@@ -401,7 +401,7 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
     assert.deepEqual(await queueRowCounts(LEXICAL_STATS_TABLES), Object.fromEntries(LEXICAL_STATS_TABLES.map((table) => [table, 0])));
   });
 
-  test('at the end of the run, with default settings, the cluster marker and ledger tables hold no row (04.4-16, D-44)', { skip: 'enabled by 04.4-16 Task 2 once 0905 creates the tables' }, async () => {
+  test('at the end of the run, with default settings, the cluster marker and ledger tables hold no row (04.4-16, D-44)', async () => {
     assert.equal(process.env.RAG_LEXICAL_DF_MODE, undefined, 'the run leaves RAG_LEXICAL_DF_MODE unset');
     assert.deepEqual(await queueRowCounts(LEXICAL_CLUSTER_TABLES), Object.fromEntries(LEXICAL_CLUSTER_TABLES.map((table) => [table, 0])));
   });
