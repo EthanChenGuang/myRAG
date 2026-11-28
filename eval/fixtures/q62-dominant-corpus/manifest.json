@@ -1,0 +1,7 @@
+{
+  "description": "Plan 06.2-41: an isolated fixture tenant dominated by zh (8 of 10 documents), with one en and one it document, so the XLG-01 share rule raises R8 and enables translate for en and it questions. No scope vocabulary and no glossary rows.",
+  "language_counts": { "zh": 8, "en": 1, "it": 1 },
+  "vocabulary": [],
+  "document_scopes": {},
+  "glossary": []
+}

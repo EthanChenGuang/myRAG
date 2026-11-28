@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, test } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import { scanText } from '@/lib/rag/security/injection-rules';
-import { isQ62Item } from '../../eval/harness/q62-fixtures.mts';
+import { isIsolatedQ62Item } from '../../eval/harness/q62-fixtures.mts';
 import { loadCorpus, type CorpusDocument, type CorpusLanguage } from '../../eval/harness/corpus.mts';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { loadFixtureScoreCalibration } from '../../eval/harness/fixture-floor.mts';
@@ -403,7 +403,7 @@ describe('isolation and score bands', () => {
       // Items written on the Phase 5.2 documents (plan 05.2-29) are not existing items.
       .filter(({ line }) => ![...line.matchAll(/"document": ?"([^"]+)"/g)].some((match) => NEW_FILE_RE.test(match[1])))
       // The 06.2-22 items run only against the isolated q62 fixture tenant, which holds none of these documents.
-      .filter(({ item }) => !isQ62Item(item as unknown as { category: string; tags?: string[] }))
+      .filter(({ item }) => !isIsolatedQ62Item(item as unknown as { category: string; tags?: string[] }))
       .map(({ item }) => item);
     const changed: string[] = [];
     for (const item of items) {
