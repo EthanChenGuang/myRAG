@@ -1202,3 +1202,4 @@ Signatures were NOT covered by this; they are asked for separately.
   - 5.1.1 O-5 (D-16) and O-4 (SameSite=Lax confirmed).
 - S14 (T-04.4-09, rag_lexstats_compact_tenant unguarded) NOT accepted. A guard fix is to be dispatched.
 - 07:17Z Owner said 'run prod SQL first'. Handed the owner desk session_01X342smENMnyrGEa4FK53eB the sequence: t38, t39, 0989, 0991, t40, t41 (t42/t43 not merged yet). EVAL rehearsal first (EVAL is at t37), then an owner backup, the connector switch to the prod org, and prod with owner confirmation at each step.
+- 07:21Z Planner DONE (exec/plan-d20-and-44c 9d1e7e7d): new 06.2-43 (D-20 gap) and 04.4-20/21/22 (plan C). 06.2-30 now depends on 06.2-43. Accepted the 3 interpretations. Asked it to confirm the 2nd decision batch and mark the 07 retired plans. Next: plan-check, then execute 06.2-43 and 04.4-20.
