@@ -99,7 +99,7 @@ function defaultOpenRouterConfig(): BgeM3Config {
   return { apiKey: env.OPENROUTER_API_KEY ?? '', baseUrl: BGE_M3_OPENROUTER_BASE_URL };
 }
 
-/** The upstream OpenRouter reports in its `provider` field; absent means the response did not say. */
+/** The upstream OpenRouter reports in its `provider` field; absent means the response did not say, which is refused. */
 function upstreamOf(response: unknown): string | null {
   const value = (response as { provider?: unknown } | null)?.provider;
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
@@ -267,8 +267,8 @@ export function createBgeM3Provider(options: BgeM3ProviderOptions = {}): Embeddi
 
       if (viaOpenRouter) {
         const upstream = upstreamOf(response);
-        if (upstream !== null && upstream.toLowerCase() !== BGE_M3_OPENROUTER_UPSTREAM.toLowerCase()) {
-          throw new EmbeddingProfileMismatch('model', `${OPENROUTER_HOST}:${upstream}`, `${OPENROUTER_HOST}:${BGE_M3_OPENROUTER_UPSTREAM}`);
+        if (upstream === null || upstream.toLowerCase() !== BGE_M3_OPENROUTER_UPSTREAM.toLowerCase()) {
+          throw new EmbeddingProfileMismatch('model', `${OPENROUTER_HOST}:${upstream ?? 'none'}`, `${OPENROUTER_HOST}:${BGE_M3_OPENROUTER_UPSTREAM}`);
         }
       }
 
