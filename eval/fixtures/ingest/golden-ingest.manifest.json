@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "set_id": "fixture-ingest",
-  "version": 12,
+  "version": 13,
   "items": [
     {
       "id": "en-ambiguous-001",
@@ -977,7 +977,7 @@
     },
     {
       "id": "en-off-topic-context-002",
-      "item_sha256": "cccddece7788cab9e60d839a4e9d3350f105d6d8d2b038ab76a59b0916816a0c",
+      "item_sha256": "3794c3ef7a50d3bce1aeaa15d6fc6ee8a1ea4c423f3813218bed5b0f64808324",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -6148,7 +6148,17 @@
       ],
       "retired": [],
       "stale": []
+    },
+    {
+      "version": 13,
+      "date": "2026-11-28",
+      "added": [],
+      "changed": [
+        "en-off-topic-context-002"
+      ],
+      "retired": [],
+      "stale": []
     }
   ],
-  "manifest_sha256": "992b4d95d9ed3a566b2dd251d32fd6f563f341a6c72bdff35fcce3720db061f8"
+  "manifest_sha256": "4fab9eb34cbc15f7a26c9302ef35c4f781d652d3625ee08050761e4329bcec7c"
 }

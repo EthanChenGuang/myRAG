@@ -415,7 +415,8 @@ def test_committed_manifests_start_at_version_one_all_active():
     # phase62 and dominant_language). Version 9 of the fixture manifest and version 11 of the ingest manifest
     # (owner decision 2026-11-28, quick-41-p52-band) changed only en-off-topic-context-002's score band. Version 10 of the fixture manifest and version 12 of the ingest
     # manifest (quick 5221-mustkeep, owner decision 1a, 2026-11-28) changed only the nine context_overflow items -001 to
-    # -003 per language. Every item is still active.
+    # -003 per language. Version 11 of the fixture manifest and version 13 of the ingest manifest (owner decision D-32,
+    # 2026-11-28, train 44) changed en-off-topic-context-002 back to above_threshold. Every item is still active.
     golden = load_golden(FIXTURE_GOLDEN)
     phase42 = sorted(item.id for item in golden if "phase42" in item.tags)
     phase53 = sorted(item.id for item in golden if "phase53_fixture" in item.tags)
@@ -446,11 +447,12 @@ def test_committed_manifests_start_at_version_one_all_active():
     assert len(templated) == 83
     for path in (FIXTURE_MANIFEST, INGEST_MANIFEST):
         manifest = golden_set.load_manifest(path)
-        expected = 12 if path == INGEST_MANIFEST else 10
+        expected = 13 if path == INGEST_MANIFEST else 11
         assert manifest.version == expected
         assert [entry.version for entry in manifest.changelog] == list(range(1, expected + 1))
-        assert manifest.changelog[-2].changed == ["en-off-topic-context-002"] and not manifest.changelog[-2].added
-        assert sorted(manifest.changelog[-1].changed) == mustkeep_fix and not manifest.changelog[-1].added
+        assert manifest.changelog[-3].changed == ["en-off-topic-context-002"] and not manifest.changelog[-3].added
+        assert sorted(manifest.changelog[-2].changed) == mustkeep_fix and not manifest.changelog[-2].added
+        assert manifest.changelog[-1].changed == ["en-off-topic-context-002"] and not manifest.changelog[-1].added
         if path == INGEST_MANIFEST:
             assert sorted(manifest.changelog[5].added) == templated and not manifest.changelog[5].changed
             assert sorted(manifest.changelog[6].added) == sorted(phase521 + train38_no_answer) and not manifest.changelog[6].changed
