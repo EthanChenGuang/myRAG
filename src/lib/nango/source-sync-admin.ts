@@ -59,7 +59,7 @@ async function callRpc(
     try {
         signal?.throwIfAborted();
         let request = client.rpc(fn as never, args as never) as unknown as {
-            abortSignal?: (s: AbortSignal) => unknown;
+            abortSignal?: (_signal: AbortSignal) => unknown;
         } & PromiseLike<{ data: unknown; error: { message?: unknown; code?: unknown } | null }>;
         if (signal && typeof request.abortSignal === 'function') request = request.abortSignal(signal) as typeof request;
         const { data, error } = await request;
