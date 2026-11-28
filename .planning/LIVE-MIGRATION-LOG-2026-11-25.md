@@ -1557,3 +1557,55 @@ Apply the SQL before deploying the train-40 app. Checked on PGlite (multi-tenant
 - `tests/rag-db/access-catalog-sentinel.test.mts`: EXEMPT entries for the 06.3 functions (see above).
 - 06.3-02 `RAG_SOURCE_RECHECK` is a generated RAG Modes row (07-20 manifest), so `config-source-sync-fields.test.ts` asserts the manifest entry instead of a hand-written select.
 - `ingestion-schema` "applying 0351 twice ..." and `phase32-columns-checks` "applying 0801 a second time ..." failed on train 39 at c6f1b3f76 and pass on origin/main 021b640b (fixed there); after merging main, both re-run 0986 after 0933, since 0986 redefines 0933's `rag_access_readiness`.
+
+## Train 42: 0728 (re-run), 0729, 0905, 0935, 0932 (re-run), 0936, 0938, 0992, 0746 and 0410 r24 delta (to apply after train 41 is live)
+
+Branch `ci/merge-train-42`, built on `ci/merge-train-41` 945f2672, with `origin/ci/merge-train-41` merged forward at 6fc5abc2f and ccdb82821 (PR #141), then `origin/main` e6afe8a2 merged in after #141 landed. Live SQL: `sql/train42-live.sql` on `ops/owner-actions`.
+
+### Merged plans
+Merged with `--no-ff`; each branch carries its SUMMARY. The eight of the original list went in the order given; the orchestrator's additions followed.
+
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/06.3-29` | 06.3 purge daily cap (contains 06.3-16/17/18/21/22 and t40) | 0729; 0410 entries |
+| `exec/06.3-28` | 06.3 | none new |
+| `exec/04.4-17` | 04.4 `p_df_mode` (contains 04.4-16, 04.2-40, quick-min-gate-n) | 0905, 0935 (empty placeholder), 0936, 0938 |
+| `exec/06.2-38` | 06.2 scope-gate admin route (contains 06.2-26, 06.2-41) | none |
+| `exec/06.2-35` | 06.2 Auto routing after retrieval (contains 06.2-29) | none |
+| `exec/07-44` | 07 | none |
+| `exec/quick-06-cache-gaps` | semantic-cache gaps | none |
+| `exec/quick-61-gaps` | fine-tune purge hook | 0992 |
+| `exec/06.2-28` | 06.2 scope-gate Config UI panel | none |
+| `exec/04.4-19` | 04.4 cluster gate report (contains 04.4-18) | none |
+| `exec/06.3-23` | 06.3 deletion canary | none |
+| `exec/07-25` | 07 external-backends harness, W-5, provisional release defaults | none |
+
+Not merged (owner decision pending): `exec/05.2.1-23`, `exec/04.1-18-r2`, 06.2-30.
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0728_purge_foreign_stores.sql` | Re-run: the inventory lists the six lexical statistics relations. Additive, idempotent. No DROP. |
+| 2 | `0729_source_purge_daily_cap.sql` | `rag_source_purge_daily_usage` (RLS on, no policy) and reserve/release/hold (DEFINER, service_role only). No DROP. |
+| 3 | `0905_lexical_cluster_df.sql` | Cluster DF tables and functions. **DROP:** the two new tables' tenant-key guard triggers, re-created. |
+| 4 | `0935_bm25_search_cluster_df.sql` | Empty placeholder. |
+| 5 | `0932_access_bm25_search.sql` | Re-run before 0936 so the file applies twice (0936 stops with 55000 while the 0938 signature is in place). |
+| 6 | `0936_identifier_document_filter.sql` | **DROP:** every overload of the four search functions by catalog lookup, re-created. |
+| 7 | `0938_bm25_search_df_mode.sql` | **DROP:** every overload of `rag_bm25_search_chunks`, re-created with `p_df_mode text DEFAULT 'raw'`. |
+| 8 | `0992_rag_purge_hook_finetune.sql` | Fine-tune purge hook. **DROP:** two `embedding_model_versions` CHECK constraints, re-added wider. |
+| 9 | `0746_purge_lexical_stats.sql` | `rag_purge_lineage` and `rag_purge_verify` redefined from 0727 (purge folds lexical statistics; verify reports `lexical_stats`). No DROP. |
+| 10 | 0410 r24 delta | Grants only; the three `rag_source_purge_*` functions. |
+
+Rehearsed on PGlite from a train-41 database (0410 and 0728 at their train-41 text), two passes in each mode: both apply, every verify query holds, the schema equals a fresh train-42 build (0 differences).
+
+### Train notes (fixes made on the train)
+- `tests/nango/reconcile.test.ts`: one `recomputeDirtyDupClusters` mock (06.3-29 and t41 both added it, TS1117).
+- `eval/fixtures/translation-table.json`: the six 06.2-41 `xl-dom-*` cross_lingual items get their zh translation (from `query-llm/transforms.json`); translation-seam failed on the exec branches.
+- `tests/legacy-post-filter-sentinel.test.ts`: `let isGPTModel` (06.2-35); the named differential and characterization tests pass unchanged.
+- `tests/eval-route-query-layer.test.ts`: the 06.2-38 scope-gate status field `queryLayer: config.queryLayer.enabled` is not an override builder.
+- 07-25 merge: `toStageRetrievalOverrides` maps `leg_weights.domain` again; external backends seed the dominant-language tenant; the run-config allow-list test includes `RAG_LEXICAL_DF_MODE` (04.4-17 had added it without the test).
+- Re-run order 0932 → 0936 → 0938 in `ingestion-schema`, `phase32-columns-checks`, `phase32-migrations-apply` and `table-lookup` (they re-ran 0936 alone and hit its 55000 precheck).
+- 04.4-07 purge hand-off (orchestrator decision): migration 0746 plus six 0728 inventory rows; failing-first tests in `lexical-cluster-df`.
+- `eval/harness/pglite-supabase.mts`: `seedRunLexicalStats` also seeds the isolated q62 and dominant-language tenants (the 4.4 gate's bm25 run stopped on `lexical_stats_not_ready`).
+- `tests/rag-e2e/defaults-equal-phase53.reference.json` re-recorded: 446 items unchanged, 8 added (06.2-41).
+- Gates: phase 4.2 FAIL (diversity: colloquial MRR under MMR 0.3344 < 0.3352, n=21); phase 4.4 FAIL (ingest scanned R@10 0.9286, n=14, known). Recorded as measured.
